@@ -118,10 +118,10 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 	maxSize := archiveOptInt64(opts, "max_size", archiveDefaultMaxSize)
 
 	if p := sandbox.FromContext(ctx); p != nil {
-		if err := p.CheckRead(src); err != nil {
+		if err := p.CheckReadCtx(ctx, src); err != nil {
 			return nil, fmt.Errorf("archive.uncompress: %w", err)
 		}
-		if err := p.CheckWrite(dest); err != nil {
+		if err := p.CheckWriteCtx(ctx, dest); err != nil {
 			return nil, fmt.Errorf("archive.uncompress: %w", err)
 		}
 	}
@@ -191,10 +191,10 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 	followSymlinks := archiveOptBool(opts, "follow_symlinks", false)
 
 	if p := sandbox.FromContext(ctx); p != nil {
-		if err := p.CheckRead(src); err != nil {
+		if err := p.CheckReadCtx(ctx, src); err != nil {
 			return nil, fmt.Errorf("archive.compress: %w", err)
 		}
-		if err := p.CheckWrite(dest); err != nil {
+		if err := p.CheckWriteCtx(ctx, dest); err != nil {
 			return nil, fmt.Errorf("archive.compress: %w", err)
 		}
 	}
@@ -320,7 +320,7 @@ func compressCollect(ctx context.Context, src string, followSymlinks bool, polic
 				return fmt.Errorf("follow symlink %s: %w", path, err)
 			}
 			if policy != nil {
-				if err := policy.CheckRead(resolved); err != nil {
+				if err := policy.CheckReadCtx(ctx, resolved); err != nil {
 					return fmt.Errorf("symlink target denied by sandbox: %s", resolved)
 				}
 			}
@@ -331,7 +331,7 @@ func compressCollect(ctx context.Context, src string, followSymlinks bool, polic
 			path = resolved
 		}
 		if policy != nil && !fi.IsDir() {
-			if err := policy.CheckRead(path); err != nil {
+			if err := policy.CheckReadCtx(ctx, path); err != nil {
 				return fmt.Errorf("archive.compress: %w", err)
 			}
 		}

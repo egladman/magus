@@ -48,9 +48,10 @@ func BuildPolicy(workspace string, userExtras, spellExtras []filesystem.Rule, ex
 		FS:        filesystem.Ruleset{Rules: rules},
 		Env:       env.Allowlist{Allow: envAllow, Globs: envGlobs},
 	}
-	kept, _ := p.Env.Scrub(os.Environ())
+	kept, dropped := p.Env.Scrub(os.Environ())
 	slices.Sort(kept)
 	p.BaseEnv = kept
+	p.EnvDropped = dropped
 	return p
 }
 

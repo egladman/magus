@@ -100,7 +100,7 @@ func hashHex(newHash func() hash.Hash, data string) string {
 func hashFile(ctx context.Context, label string, newHash func() hash.Hash, path string) (string, error) {
 	path = resolvePath(ctx, path)
 	if p := sandbox.FromContext(ctx); p != nil {
-		if err := p.CheckRead(path); err != nil {
+		if err := p.CheckReadCtx(ctx, path); err != nil {
 			return "", fmt.Errorf("%s: %w", label, err)
 		}
 	}

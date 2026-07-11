@@ -22,10 +22,11 @@ var ErrUnsupported = errors.New("sandbox: kernel sandbox unsupported on this hos
 // Policy is the runtime sandbox policy attached to a context and consulted by spell bindings.
 // Immutable after construction; safe for concurrent reads. A nil Policy disables all checks.
 type Policy struct {
-	Workspace string             // absolute symlink-resolved workspace root
-	FS        filesystem.Ruleset // allowlist for CheckRead/CheckWrite/CheckExec
-	Env       env.Allowlist      // allowlist of inheritable env-var names
-	BaseEnv   []string           // frozen pre-scrubbed env snapshot (prevents cross-run mutation)
+	Workspace  string             // absolute symlink-resolved workspace root
+	FS         filesystem.Ruleset // allowlist for CheckRead/CheckWrite/CheckExec
+	Env        env.Allowlist      // allowlist of inheritable env-var names
+	BaseEnv    []string           // frozen pre-scrubbed env snapshot (prevents cross-run mutation)
+	EnvDropped []string           // names withheld from BaseEnv by the allowlist, recorded for the env-dropped metric
 }
 
 // CheckRead reports whether the policy permits a read of path; nil Policy permits everything.
@@ -52,6 +53,29 @@ func (p *Policy) CheckExec(path string) error {
 		return nil
 	}
 	return p.FS.CheckExec(path)
+}
+
+// CheckReadCtx is CheckRead plus a binding-layer metric recording the allow/deny
+// decision to the MetricsRecorder on ctx. Use it at the ctx-carrying fs/archive/crypto
+// binding sites so magus's own read checks are counted (see RecordCheck).
+func (p *Policy) CheckReadCtx(ctx context.Context, path string) error {
+	err := p.CheckRead(path)
+	RecordCheck(ctx, "read", err)
+	return err
+}
+
+// CheckWriteCtx is CheckWrite plus the binding-layer write-decision metric.
+func (p *Policy) CheckWriteCtx(ctx context.Context, path string) error {
+	err := p.CheckWrite(path)
+	RecordCheck(ctx, "write", err)
+	return err
+}
+
+// CheckExecCtx is CheckExec plus the binding-layer exec-decision metric.
+func (p *Policy) CheckExecCtx(ctx context.Context, path string) error {
+	err := p.CheckExec(path)
+	RecordCheck(ctx, "exec", err)
+	return err
 }
 
 // ScrubEnv returns environ filtered to the allowlist, plus dropped names. A nil Policy is a no-op.

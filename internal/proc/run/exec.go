@@ -98,12 +98,15 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		if err != nil {
 			resolved = name // let exec.Cmd surface the real lookup error
 		}
-		if err := policy.CheckExec(resolved); err != nil {
+		if err := policy.CheckExecCtx(ctx, resolved); err != nil {
 			sandbox.EmitDenyHint("ro", resolved)
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
 	c.Env = childEnv(policy, opts.Env)
+	// Count the env vars this sandbox withheld from the child (magus's own allowlist
+	// scrub, not a kernel action); attributed to the current step's project.
+	sandbox.RecordEnvDropped(ctx, policy)
 	if opts.Stdin != "" {
 		c.Stdin = strings.NewReader(opts.Stdin)
 	}

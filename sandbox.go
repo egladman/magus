@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
@@ -51,17 +52,22 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 	}
 
 	union := sandbox.UnionPolicies(policies...)
-	if err := sandbox.Apply(union); err != nil {
+	start := time.Now()
+	err := sandbox.Apply(union)
+	secs := time.Since(start).Seconds()
+	if err != nil {
 		if errors.Is(err, sandbox.ErrUnsupported) {
 			slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
 				"kernel landlock unavailable; multi-workspace daemon running with interpreter-level checks only"),
 				"reason", err.Error())
 			sandboxapply.MarkAppliedExternally(union.Fingerprint())
+			sandboxapply.RecordApply(ctx, secs, "unsupported", "union", union)
 			return nil
 		}
 		return fmt.Errorf("magus: apply union sandbox: %w", err)
 	}
 	sandboxapply.MarkAppliedExternally(union.Fingerprint())
+	sandboxapply.RecordApply(ctx, secs, "applied", "union", union)
 	slog.InfoContext(ctx, "magus: applied union landlock ruleset",
 		"workspaces", len(roots),
 		"fingerprint", union.Fingerprint())

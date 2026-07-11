@@ -29,7 +29,7 @@ func allowLabel(target string) string {
 // (read/exec) or "rw" (write); rw needs the extra mode command.
 func denyHint(mode, target string) string {
 	label := allowLabel(target)
-	cmd := fmt.Sprintf("sandbox blocked access to %s — allow it with:\n"+
+	cmd := fmt.Sprintf("sandbox blocked access to %s; allow it with:\n"+
 		"        magus config set key=sandbox.allow.%s.path,value=%s", target, label, target)
 	if mode == "rw" {
 		cmd += fmt.Sprintf("\n        magus config set key=sandbox.allow.%s.mode,value=rw", label)

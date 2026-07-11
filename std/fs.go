@@ -231,7 +231,7 @@ func FsGlob(ctx context.Context, pattern string) ([]string, error) {
 	allowed := matches[:0]
 	for _, m := range matches {
 		// The sandbox sees the absolute match; the caller sees it relative to base.
-		if p != nil && p.CheckRead(m) != nil {
+		if p != nil && p.CheckReadCtx(ctx, m) != nil {
 			continue
 		}
 		if base != "" {
@@ -489,7 +489,7 @@ func checkRead(ctx context.Context, path string) error {
 	if p == nil {
 		return nil
 	}
-	if err := p.CheckRead(path); err != nil {
+	if err := p.CheckReadCtx(ctx, path); err != nil {
 		sandbox.EmitDenyHint("ro", path)
 		return types.DiagnosticErrorf(types.PathReadDenied, "fs read denied: %s", path)
 	}
@@ -503,7 +503,7 @@ func checkWrite(ctx context.Context, path string) error {
 	if p == nil {
 		return nil
 	}
-	if err := p.CheckWrite(path); err != nil {
+	if err := p.CheckWriteCtx(ctx, path); err != nil {
 		sandbox.EmitDenyHint("rw", path)
 		return types.DiagnosticErrorf(types.PathWriteDenied, "fs write denied: %s", path)
 	}
