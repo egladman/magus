@@ -75,7 +75,7 @@ func BenchmarkApplyEnv_SomeSet(b *testing.B) {
 	b.Setenv("MAGUS_DRY_RUN", "true")
 	b.Setenv("MAGUS_CACHE_SIZE_MB", "512")
 	b.Setenv("MAGUS_LOG_FORMAT", "json")
-	b.Setenv("MAGUS_FLAKE_ENABLED", "false")
+	b.Setenv("MAGUS_VOLATILITY_ENABLED", "false")
 	b.Setenv("MAGUS_CI_MAX_SHARDS", "8")
 	b.Setenv("MAGUS_GRAPH_DIRECTION", "upstream")
 	b.Setenv("MAGUS_TELEMETRY_ENABLED", "true")

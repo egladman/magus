@@ -24,8 +24,8 @@ func TestRunOptions(t *testing.T) {
 	assert.Equal(t, "main", r.BaseRef)
 	WithSpellFilter("go")(&r)
 	assert.Equal(t, "go", r.Spell)
-	WithNoFlakeRetry()(&r)
-	assert.True(t, r.NoFlakeRetry, "WithNoFlakeRetry: NoFlakeRetry = false, want true")
+	WithNoVolatilityRetry()(&r)
+	assert.True(t, r.NoVolatilityRetry, "WithNoVolatilityRetry: NoVolatilityRetry = false, want true")
 }
 
 func TestWithWrite_SetsWriteCharm(t *testing.T) {

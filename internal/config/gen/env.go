@@ -49,26 +49,26 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.CI.RunnerPoolBudget = n
 		}
 	}
-	if v := getenv("MAGUS_FLAKE_ENABLED"); v != "" {
-		cfg.Flake.Enabled = parseBoolEnv(v, cfg.Flake.Enabled)
+	if v := getenv("MAGUS_VOLATILITY_ENABLED"); v != "" {
+		cfg.Volatility.Enabled = parseBoolEnv(v, cfg.Volatility.Enabled)
 	}
-	if v := getenv("MAGUS_FLAKE_BOOTSTRAP_SAMPLES"); v != "" {
+	if v := getenv("MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
-			cfg.Flake.BootstrapSamples = n
+			cfg.Volatility.BootstrapSamples = n
 		}
 	}
-	if v := getenv("MAGUS_FLAKE_MIN_SAMPLES"); v != "" {
+	if v := getenv("MAGUS_VOLATILITY_MIN_SAMPLES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
-			cfg.Flake.MinSamples = n
+			cfg.Volatility.MinSamples = n
 		}
 	}
-	if v := getenv("MAGUS_FLAKE_THRESHOLD"); v != "" {
+	if v := getenv("MAGUS_VOLATILITY_THRESHOLD"); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.Flake.Threshold = f
+			cfg.Volatility.Threshold = f
 		}
 	}
-	if v := getenv("MAGUS_FLAKE_ANNOTATE_GHA"); v != "" {
-		cfg.Flake.AnnotateGHA = parseBoolEnv(v, cfg.Flake.AnnotateGHA)
+	if v := getenv("MAGUS_VOLATILITY_ANNOTATE_GHA"); v != "" {
+		cfg.Volatility.AnnotateGHA = parseBoolEnv(v, cfg.Volatility.AnnotateGHA)
 	}
 	if v := getenv("MAGUS_GRAPH_DIRECTION"); v != "" {
 		cfg.Graph.Direction = v

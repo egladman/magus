@@ -32,19 +32,19 @@ func TestHistorySchemaLock(t *testing.T) {
 		Projects: map[string]map[string]Stats{
 			"services/api": {
 				"ci": {
-					P75Ms:       12_000,
-					Samples:     10,
-					LastUpdated: time.Now(),
-					Recent:      []int64{11_000, 12_000, 13_000},
-					HitCount:    8,
-					MissCount:   2,
-					HitRate:     0.8,
-					PassCount:   7,
-					FailCount:   1,
-					FlakeCount:  2,
+					P75Ms:         12_000,
+					Samples:       10,
+					LastUpdated:   time.Now(),
+					Recent:        []int64{11_000, 12_000, 13_000},
+					HitCount:      8,
+					MissCount:     2,
+					HitRate:       0.8,
+					PassCount:     7,
+					FailCount:     1,
+					VolatileCount: 2,
 					RecentOutcomes: []Outcome{
 						{Result: "pass", AffectedByDiff: true, DurationMs: 11_000, At: time.Now(), Attempts: 1},
-						{Result: "flake", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2},
+						{Result: "volatile", AffectedByDiff: false, DurationMs: 22_000, At: time.Now(), Attempts: 2},
 					},
 				},
 			},
@@ -90,7 +90,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		"hit_rate":        true, // float64 — hit_count/(hit_count+miss_count); derived aggregate, no new surface
 		"pass_count":      true, // int — rolling count of passing runs; safe integer counter, no source content
 		"fail_count":      true, // int — rolling count of failing runs; safe integer counter, no source content
-		"flake_count":     true, // int — rolling count of flaky runs (fail→pass); safe integer counter
+		"volatile_count":  true, // int — rolling count of volatile runs (fail→pass); safe integer counter
 		"recent_outcomes": true, // []Outcome — per-run result enum + timing + bool; see Outcome allowlist below
 	}
 	for path, targets := range projects {
@@ -103,7 +103,7 @@ func TestHistorySchemaLock(t *testing.T) {
 
 	// Lock the Outcome sub-schema (entries in recent_outcomes).
 	allowedOutcome := map[string]bool{
-		"result":      true, // string enum: "pass"|"fail"|"flake" — no source content
+		"result":      true, // string enum: "pass"|"fail"|"volatile" — no source content
 		"affected":    true, // bool — whether project was in the VCS diff's affected set; no source content
 		"duration_ms": true, // int64 — wall-clock timing; same safety profile as p75_ms
 		"at":          true, // ISO timestamp of when the run completed; same safety profile as last_updated
@@ -251,8 +251,8 @@ func TestHistory_PredictDuration_coldStart(t *testing.T) {
 	assert.Equal(t, 60*time.Second, got, "raw p75")
 }
 
-// TestHistoryV3LoadsIntoV4 verifies that a v3 history file (no flake fields)
-// loads cleanly into the v4 schema and flake counts default to zero.
+// TestHistoryV3LoadsIntoV4 verifies that a v3 history file (no volatility fields)
+// loads cleanly into the v4 schema and volatility counts default to zero.
 func TestHistoryV3LoadsIntoV4(t *testing.T) {
 	const v3JSON = `{
 		"version": 3,
@@ -279,7 +279,7 @@ func TestHistoryV3LoadsIntoV4(t *testing.T) {
 	st := h.Projects["services/api"]["ci"]
 	assert.Zero(t, st.PassCount, "v3→v4: expected zero pass count")
 	assert.Zero(t, st.FailCount, "v3→v4: expected zero fail count")
-	assert.Zero(t, st.FlakeCount, "v3→v4: expected zero flake count")
+	assert.Zero(t, st.VolatileCount, "v3→v4: expected zero volatile count")
 	assert.Empty(t, st.RecentOutcomes, "v3→v4: expected empty RecentOutcomes")
 	// Duration prediction should still work correctly.
 	got := h.PredictDuration("services/api", "ci", nil)

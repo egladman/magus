@@ -197,12 +197,12 @@ The at-a-glance daemon state derived from the pool: **healthy** when the pool is
 reporting, **degraded** when it reports an error, **down** when there is no pool.
 The dashboard color-codes each state. See [daemon.md](daemon.md).
 
-### Flake
+### Volatility
 
-A target that fails once and passes on rerun (also **flaky**), as opposed to a
+A target that fails once and passes on rerun is **volatile**, as opposed to a
 regression that started failing and stays failing. magus keeps per-target
-pass/fail history and a Wilson-score flake rate to tell them apart and auto-retry
-the noise. See [flaky-builds.md](flaky-builds.md).
+pass/fail history and a Wilson-score volatility rate to tell them apart and
+auto-retry the noise. See [volatility.md](volatility.md).
 
 ## Insight and knowledge
 

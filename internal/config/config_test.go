@@ -14,10 +14,10 @@ import (
 
 // Note: ApplyEnv tests moved to internal/config/gen/env_test.go.
 
-func TestDefaults_FlakeEnabled(t *testing.T) {
+func TestDefaults_VolatilityEnabled(t *testing.T) {
 	t.Parallel()
 	cfg := Defaults()
-	assert.True(t, cfg.Flake.Enabled, "Defaults().Flake.Enabled should be true")
+	assert.True(t, cfg.Volatility.Enabled, "Defaults().Volatility.Enabled should be true")
 }
 
 // TestSave_Concurrent verifies that 10 goroutines concurrently calling Save

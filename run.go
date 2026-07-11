@@ -17,8 +17,8 @@ import (
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/audit"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/ci/flake"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
@@ -39,18 +39,18 @@ type RunOption func(*run)
 
 // run is the accumulated state of a Run/CI/RunAffected call.
 type run struct {
-	DryRun       bool
-	Charms       []string       // execution charms propagated via context; "rw" enables mutating targets
-	Report       *report.Writer // caller-owned; caller closes; mutually exclusive with ReportWriter
-	ReportWriter io.Writer      // run engine wraps this in its own Writer
-	NoFlakeRetry bool
-	BaseRef      string
-	Race         bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
-	RaceReplay   bool     // MGS4003 determinism replay; orthogonal to Race
-	Spell        string   // when set, restricts execution to this spell; unmatched projects are skipped
-	Step         bool     // forces Concurrency=1; StepGate comes from ctx
-	ExtraArgs    []string // forwarded to spells via project.WithExtraArgs
-	Normalizer   types.TargetNameNormalizer
+	DryRun            bool
+	Charms            []string       // execution charms propagated via context; "rw" enables mutating targets
+	Report            *report.Writer // caller-owned; caller closes; mutually exclusive with ReportWriter
+	ReportWriter      io.Writer      // run engine wraps this in its own Writer
+	NoVolatilityRetry bool
+	BaseRef           string
+	Race              bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
+	RaceReplay        bool     // MGS4003 determinism replay; orthogonal to Race
+	Spell             string   // when set, restricts execution to this spell; unmatched projects are skipped
+	Step              bool     // forces Concurrency=1; StepGate comes from ctx
+	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
+	Normalizer        types.TargetNameNormalizer
 }
 
 // WithDryRun prints what would run without invoking any handler.
@@ -68,8 +68,8 @@ func WithCharms(charms ...string) RunOption {
 	return func(o *run) { o.Charms = append(o.Charms, charms...) }
 }
 
-// WithNoFlakeRetry disables the flake auto-retry logic.
-func WithNoFlakeRetry() RunOption { return func(o *run) { o.NoFlakeRetry = true } }
+// WithNoVolatilityRetry disables the volatility auto-retry logic.
+func WithNoVolatilityRetry() RunOption { return func(o *run) { o.NoVolatilityRetry = true } }
 
 // WithBaseRef overrides MAGUS_VCS_BASE_REF for RunAffected invocations.
 func WithBaseRef(ref string) RunOption { return func(o *run) { o.BaseRef = ref } }
@@ -424,11 +424,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	handlerOf := make(map[string]TargetHandler, len(stages))
 	active := make(map[string]struct{})
 	declaredCharms := map[string]struct{}{}
-	trackFlake := false
+	trackVolatile := false
 	for _, st := range stages {
 		handlerOf[st.target] = st.handler
-		if firstTargetPolicy(st.projects, st.target).RetryOnFlake {
-			trackFlake = true
+		if firstTargetPolicy(st.projects, st.target).RetryOnVolatile {
+			trackVolatile = true
 		}
 		for _, p := range st.projects {
 			step := m.buildStep(p, st.target)
@@ -515,11 +515,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		)
 	}
 
-	var flakeRT *flake.Runtime
-	if trackFlake && m.cfg.Flake.Enabled && !opts.NoFlakeRetry {
-		flakeRT = m.buildFlakeRuntime(ctx)
-		if flakeRT != nil {
-			ctx = flake.WithRuntime(ctx, flakeRT)
+	var volatilityRT *volatility.Runtime
+	if trackVolatile && m.cfg.Volatility.Enabled && !opts.NoVolatilityRetry {
+		volatilityRT = m.buildVolatilityRuntime(ctx)
+		if volatilityRT != nil {
+			ctx = volatility.WithRuntime(ctx, volatilityRT)
 		}
 	}
 
@@ -613,9 +613,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		return err
 	}, cacheOpts...)
 
-	if flakeRT != nil {
-		if err := flakeRT.Save(ctx); err != nil {
-			slog.Warn("magus: failed to save flake history", "err", err)
+	if volatilityRT != nil {
+		if err := volatilityRT.Save(ctx); err != nil {
+			slog.Warn("magus: failed to save volatility history", "err", err)
 		}
 	}
 
@@ -801,8 +801,8 @@ func checkOutputOverlap(steps []cache.Step, target string, w *report.Writer) {
 	}
 }
 
-// buildFlakeRuntime returns a flake.Runtime for the current run, or nil when history cannot be loaded.
-func (m *Magus) buildFlakeRuntime(ctx context.Context) *flake.Runtime {
+// buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when history cannot be loaded.
+func (m *Magus) buildVolatilityRuntime(ctx context.Context) *volatility.Runtime {
 	var h forecast.History
 	if err := h.Load(ctx, m.cfg.HistoryPath); err != nil {
 		return nil
@@ -811,7 +811,7 @@ func (m *Magus) buildFlakeRuntime(ctx context.Context) *flake.Runtime {
 	if res, err := m.Affected(ctx, ""); err == nil {
 		affected = res.Affected
 	}
-	return flake.NewRuntime(&h, m.cfg.HistoryPath, m.flakeConfig(), affected)
+	return volatility.NewRuntime(&h, m.cfg.HistoryPath, m.volatilityConfig(), affected)
 }
 
 // runTarget executes name on every spell in p under an audit that warns on out-of-dispatch writes.
@@ -824,30 +824,30 @@ func runTarget(ctx context.Context, p *types.Project, name string) error {
 	return err
 }
 
-// invokeSpell executes one spell; when a flake.Runtime is present, failures are eligible for auto-retry.
+// invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.
 func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Spell) error {
 	req := types.InvokeRequest{Target: name, Dir: p.Dir}
-	rt := flake.RuntimeFromContext(ctx)
+	rt := volatility.RuntimeFromContext(ctx)
 	if rt == nil {
 		_, err := s.Invoke(ctx, req)
 		return err
 	}
 
-	flakeTarget := s.Name() + "/" + name
+	volatileTarget := s.Name() + "/" + name
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
 	_, err := s.Invoke(ctx, req)
 	result := "pass"
 	attempts := 1
-	decision := flake.Decision{}
+	decision := volatility.Decision{}
 
 	if err != nil {
-		decision = rt.Decide(p.Path, flakeTarget, affected)
+		decision = rt.Decide(p.Path, volatileTarget, affected)
 		if decision.Retry {
 			_, err2 := s.Invoke(ctx, req)
 			attempts = 2
 			if err2 == nil {
-				result = "flake"
+				result = "volatile"
 				err = nil
 			} else {
 				result = "fail"
@@ -858,7 +858,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 		}
 	}
 
-	rt.Record(p.Path, flakeTarget, forecast.Outcome{
+	rt.Record(p.Path, volatileTarget, forecast.Outcome{
 		Result:         result,
 		AffectedByDiff: affected,
 		DurationMs:     time.Since(start).Milliseconds(),
@@ -868,18 +868,18 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 
 	if rw := report.WriterFromContext(ctx); rw != nil && decision.Retry {
 		status := "retry_failed"
-		if result == "flake" {
-			status = "retried_flake"
-		} else if rt.IsRegression(p.Path, flakeTarget) {
+		if result == "volatile" {
+			status = "retried_volatile"
+		} else if rt.IsRegression(p.Path, volatileTarget) {
 			status = "suspected_regression"
 		}
-		_ = report.Record(rw, report.FlakeCall{
-			Project:     p.Path,
-			Target:      flakeTarget,
-			Status:      status,
-			Attempts:    attempts,
-			RetryReason: string(decision.Reason),
-			FlakeScore:  rt.Score(p.Path, flakeTarget),
+		_ = report.Record(rw, report.VolatilityCall{
+			Project:         p.Path,
+			Target:          volatileTarget,
+			Status:          status,
+			Attempts:        attempts,
+			RetryReason:     string(decision.Reason),
+			VolatilityScore: rt.Score(p.Path, volatileTarget),
 		})
 	}
 

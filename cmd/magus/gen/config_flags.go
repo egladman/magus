@@ -25,11 +25,11 @@ var ConfigFlags = []ConfigFlag{
 	{"cache-remote-insecure", "MAGUS_CACHE_REMOTE_INSECURE", "bool"},
 	{"ci-max-shards", "MAGUS_CI_MAX_SHARDS", "int"},
 	{"ci-runner-pool-budget", "MAGUS_CI_RUNNER_POOL_BUDGET", "int"},
-	{"flake-enabled", "MAGUS_FLAKE_ENABLED", "bool"},
-	{"flake-bootstrap-samples", "MAGUS_FLAKE_BOOTSTRAP_SAMPLES", "int"},
-	{"flake-min-samples", "MAGUS_FLAKE_MIN_SAMPLES", "int"},
-	{"flake-threshold", "MAGUS_FLAKE_THRESHOLD", "float64"},
-	{"flake-annotate-gha", "MAGUS_FLAKE_ANNOTATE_GHA", "bool"},
+	{"volatility-enabled", "MAGUS_VOLATILITY_ENABLED", "bool"},
+	{"volatility-bootstrap-samples", "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES", "int"},
+	{"volatility-min-samples", "MAGUS_VOLATILITY_MIN_SAMPLES", "int"},
+	{"volatility-threshold", "MAGUS_VOLATILITY_THRESHOLD", "float64"},
+	{"volatility-annotate-gha", "MAGUS_VOLATILITY_ANNOTATE_GHA", "bool"},
 	{"graph-direction", "MAGUS_GRAPH_DIRECTION", "string"},
 	{"graph-spell", "MAGUS_GRAPH_SPELL", "string"},
 	{"graph-depth", "MAGUS_GRAPH_DEPTH", "int"},
@@ -83,11 +83,11 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.BoolVar(&cfg.Cache.Remote.Insecure, "cache-remote-insecure", cfg.Cache.Remote.Insecure, "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are")
 	fs.IntVar(&cfg.CI.MaxShards, "ci-max-shards", cfg.CI.MaxShards, "MAGUS_CI_MAX_SHARDS")
 	fs.IntVar(&cfg.CI.RunnerPoolBudget, "ci-runner-pool-budget", cfg.CI.RunnerPoolBudget, "MAGUS_CI_RUNNER_POOL_BUDGET")
-	fs.BoolVar(&cfg.Flake.Enabled, "flake-enabled", cfg.Flake.Enabled, "MAGUS_FLAKE_ENABLED")
-	fs.IntVar(&cfg.Flake.BootstrapSamples, "flake-bootstrap-samples", cfg.Flake.BootstrapSamples, "MAGUS_FLAKE_BOOTSTRAP_SAMPLES")
-	fs.IntVar(&cfg.Flake.MinSamples, "flake-min-samples", cfg.Flake.MinSamples, "MAGUS_FLAKE_MIN_SAMPLES")
-	fs.Float64Var(&cfg.Flake.Threshold, "flake-threshold", cfg.Flake.Threshold, "MAGUS_FLAKE_THRESHOLD")
-	fs.BoolVar(&cfg.Flake.AnnotateGHA, "flake-annotate-gha", cfg.Flake.AnnotateGHA, "MAGUS_FLAKE_ANNOTATE_GHA")
+	fs.BoolVar(&cfg.Volatility.Enabled, "volatility-enabled", cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED")
+	fs.IntVar(&cfg.Volatility.BootstrapSamples, "volatility-bootstrap-samples", cfg.Volatility.BootstrapSamples, "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES")
+	fs.IntVar(&cfg.Volatility.MinSamples, "volatility-min-samples", cfg.Volatility.MinSamples, "MAGUS_VOLATILITY_MIN_SAMPLES")
+	fs.Float64Var(&cfg.Volatility.Threshold, "volatility-threshold", cfg.Volatility.Threshold, "MAGUS_VOLATILITY_THRESHOLD")
+	fs.BoolVar(&cfg.Volatility.AnnotateGHA, "volatility-annotate-gha", cfg.Volatility.AnnotateGHA, "MAGUS_VOLATILITY_ANNOTATE_GHA")
 	fs.StringVar(&cfg.Graph.Direction, "graph-direction", cfg.Graph.Direction, "MAGUS_GRAPH_DIRECTION")
 	fs.StringVar(&cfg.Graph.Spell, "graph-spell", cfg.Graph.Spell, "MAGUS_GRAPH_SPELL")
 	fs.IntVar(&cfg.Graph.Depth, "graph-depth", cfg.Graph.Depth, "MAGUS_GRAPH_DEPTH")
@@ -110,7 +110,7 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.BoolVar(&cfg.Knowledge.VCS.Enabled, "knowledge-vcs-enabled", cfg.Knowledge.VCS.Enabled, "MAGUS_KNOWLEDGE_VCS_ENABLED")
 	fs.IntVar(&cfg.Knowledge.VCS.MaxCommits, "knowledge-vcs-max-commits", cfg.Knowledge.VCS.MaxCommits, "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits. 0 uses a")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).")
-	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by flake detection,")
+	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")
 	fs.BoolVar(&cfg.AssumeInteractive, "assume-interactive", cfg.AssumeInteractive, "MAGUS_ASSUME_INTERACTIVE: AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.")
 	fs.BoolVar(&cfg.Sandbox.Enabled, "sandbox-enabled", cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED")

@@ -45,16 +45,16 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	flagArgs, extraArgs := splitOnDashDash(rest)
 
 	var (
-		timeout      *time.Duration
-		shardID      *string
-		nShards      *int
-		noFlakeRetry *bool
-		raceFlag     *string
-		graphView    *bool
-		upstream     *bool
-		graphDepth   *int
-		step         *bool
-		live         *bool
+		timeout           *time.Duration
+		shardID           *string
+		nShards           *int
+		noVolatilityRetry *bool
+		raceFlag          *string
+		graphView         *bool
+		upstream          *bool
+		graphDepth        *int
+		step              *bool
+		live              *bool
 
 		noDefaultCharms *bool
 	)
@@ -66,7 +66,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			nShardsDefault, _ = strconv.Atoi(s)
 		}
 		nShards = fs.Int("n-shards", nShardsDefault, "Total shard count for this CI matrix run; paired with --shard")
-		noFlakeRetry = fs.Bool("no-flake-retry", false, "Disable flake auto-retry for this run (used by magus affected --bisect)")
+		noVolatilityRetry = fs.Bool("no-volatility-retry", false, "Disable volatility auto-retry for this run (used by magus affected --bisect)")
 		raceFlag = fs.String("race", "", raceFormatHelp)
 		graphView = fs.Bool("graph", false, "Render the dependency graph for the selected scope instead of executing")
 		upstream = fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
@@ -192,8 +192,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
-	if *noFlakeRetry {
-		runOpts = append(runOpts, magus.WithNoFlakeRetry())
+	if *noVolatilityRetry {
+		runOpts = append(runOpts, magus.WithNoVolatilityRetry())
 	}
 	race, err := resolveRace(*raceFlag)
 	if err != nil {

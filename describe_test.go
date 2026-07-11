@@ -315,7 +315,7 @@ func TestDescribeTarget_WithSpellAndPolicy(t *testing.T) {
 	reg.RegisterProject(
 		".",
 		WithSpell(spellName),
-		WithTarget("my-target", RetryOnFlake()),
+		WithTarget("my-target", RetryOnVolatile()),
 	)
 	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 
@@ -331,9 +331,9 @@ func TestDescribeTarget_WithSpellAndPolicy(t *testing.T) {
 	// EffectiveClaims must be non-empty (spell declared claims).
 	assert.NotEmpty(t, e.Spells[0].EffectiveClaims, "DescribeTarget: Spells[0].EffectiveClaims is empty, expected \"**/*.zzz\"")
 
-	// Policy must be present with the flake-retry flag set.
-	require.NotNil(t, e.Policy, "DescribeTarget: Policy is nil, want TrackFlake=true")
-	assert.True(t, e.Policy.RetryOnFlake, "DescribeTarget: Policy.RetryOnFlake = false, want true")
+	// Policy must be present with the volatility-retry flag set.
+	require.NotNil(t, e.Policy, "DescribeTarget: Policy is nil, want TrackVolatile=true")
+	assert.True(t, e.Policy.RetryOnVolatile, "DescribeTarget: Policy.RetryOnVolatile = false, want true")
 }
 
 func TestDescribeEvaluatedProjects_Shape(t *testing.T) {

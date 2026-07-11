@@ -8,15 +8,15 @@ import (
 	"os"
 	"time"
 
-	"github.com/egladman/magus/internal/ci/flake"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
 // affectedBisect implements `magus affected --bisect <project> [flags]`.
 //
-// It reads flake history to confirm a suspected regression exists, finds the
+// It reads volatility history to confirm a suspected regression exists, finds the
 // last known-passing commit from the recorded outcome timestamps, then drives
 // the active VCS's bisect to pinpoint the culprit commit. Prints culprit SHA
 // + subject + author to stdout; does NOT post PR comments or @mention anyone.
@@ -58,18 +58,18 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	}
 
 	// Verify a regression is actually suspected.
-	cfg := flake.Config{
-		Enabled:          globalCfg.Flake.Enabled,
-		BootstrapSamples: globalCfg.Flake.BootstrapSamples,
-		MinSamples:       globalCfg.Flake.MinSamples,
-		Threshold:        globalCfg.Flake.Threshold,
+	cfg := volatility.Config{
+		Enabled:          globalCfg.Volatility.Enabled,
+		BootstrapSamples: globalCfg.Volatility.BootstrapSamples,
+		MinSamples:       globalCfg.Volatility.MinSamples,
+		Threshold:        globalCfg.Volatility.Threshold,
 	}
-	rt := flake.NewRuntime(&h, "", cfg, nil)
+	rt := volatility.NewRuntime(&h, "", cfg, nil)
 	if !rt.IsRegression(projectPath, *target) {
 		stats := rt.Stats(projectPath, *target)
-		fmt.Fprintf(os.Stderr, "bisect: need ≥%d outcomes, flake score < %.0f%%, and two consecutive affected failures\n",
+		fmt.Fprintf(os.Stderr, "bisect: need ≥%d outcomes, volatility score < %.0f%%, and two consecutive affected failures\n",
 			cfg.MinSamples, cfg.Threshold*100)
-		fmt.Fprintf(os.Stderr, "bisect: outcomes recorded: %d, flake score: %.1f%%\n",
+		fmt.Fprintf(os.Stderr, "bisect: outcomes recorded: %d, volatility score: %.1f%%\n",
 			len(stats.RecentOutcomes), rt.Score(projectPath, *target)*100)
 		return fmt.Errorf("bisect: no confirmed regression detected for %q/%q", projectPath, *target)
 	}
@@ -88,13 +88,13 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("bisect: find vcs root: %w", err)
 	}
 
-	// Build the bisect run command. Disable flake retry so bisect sees raw
+	// Build the bisect run command. Disable volatility retry so bisect sees raw
 	// failures, and scope to the project under test.
 	self, err := os.Executable()
 	if err != nil {
 		self = "magus"
 	}
-	testCmd := fmt.Sprintf("%s run %s --no-flake-retry %s", self, *target, projectPath)
+	testCmd := fmt.Sprintf("%s run %s --no-volatility-retry %s", self, *target, projectPath)
 
 	// Determine the good commit.
 	opts := types.BisectOptions{

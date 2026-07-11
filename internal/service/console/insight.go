@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/egladman/magus/internal/ci/flake"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,14 +82,14 @@ func (s *Service) computeInsight(ctx context.Context) (types.InsightView, error)
 	return types.InsightView{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}, nil
 }
 
-// Flake reports per-(project, target) flakiness read from the shared runtime-history file
+// Volatility reports per-(project, target) volatility read from the shared runtime-history file
 // (config.HistoryPath). It is a pure file read plus the Wilson-score compute: no shell-out,
 // no workspace graph, so it works even when the service holds no Magus. A missing or unset
 // history file yields an empty report carrying just the configured threshold. Targets are
 // sorted by (project, target) for a deterministic response body.
-func (s *Service) Flake(ctx context.Context) (types.FlakeReport, error) {
-	cfg := s.flakeConfig()
-	report := types.FlakeReport{Threshold: cfg.Threshold}
+func (s *Service) Volatility(ctx context.Context) (types.VolatilityReport, error) {
+	cfg := s.volatilityConfig()
+	report := types.VolatilityReport{Threshold: cfg.Threshold}
 
 	path := s.config.HistoryPath
 	if path == "" {
@@ -97,23 +97,23 @@ func (s *Service) Flake(ctx context.Context) (types.FlakeReport, error) {
 	}
 	var hist forecast.History
 	if err := hist.Load(ctx, path); err != nil {
-		return types.FlakeReport{}, err
+		return types.VolatilityReport{}, err
 	}
-	rt := flake.NewRuntime(&hist, path, cfg, nil)
+	rt := volatility.NewRuntime(&hist, path, cfg, nil)
 	for project, targets := range hist.Projects {
 		for target := range targets {
 			st := rt.Stats(project, target)
 			sc := rt.Score(project, target)
-			report.Targets = append(report.Targets, types.FlakeTarget{
-				Project:  project,
-				Target:   target,
-				Score:    sc,
-				Flaky:    sc >= cfg.Threshold,
-				Pass:     st.PassCount,
-				Fail:     st.FailCount,
-				Flake:    st.FlakeCount,
-				Samples:  len(st.RecentOutcomes),
-				LastPass: rt.LastPassTime(project, target),
+			report.Targets = append(report.Targets, types.VolatilityTarget{
+				Project:       project,
+				Target:        target,
+				Score:         sc,
+				Volatile:      sc >= cfg.Threshold,
+				Pass:          st.PassCount,
+				Fail:          st.FailCount,
+				VolatileCount: st.VolatileCount,
+				Samples:       len(st.RecentOutcomes),
+				LastPass:      rt.LastPassTime(project, target),
 			})
 		}
 	}
@@ -126,13 +126,13 @@ func (s *Service) Flake(ctx context.Context) (types.FlakeReport, error) {
 	return report, nil
 }
 
-// flakeConfig mirrors magus.Magus.flakeConfig (which is unexported) so the console can score
-// history without reaching into the root package: the same Flake config fields drive both.
-func (s *Service) flakeConfig() flake.Config {
-	return flake.Config{
-		Enabled:          s.config.Flake.Enabled,
-		BootstrapSamples: s.config.Flake.BootstrapSamples,
-		MinSamples:       s.config.Flake.MinSamples,
-		Threshold:        s.config.Flake.Threshold,
+// volatilityConfig mirrors magus.Magus.volatilityConfig (which is unexported) so the console can
+// score history without reaching into the root package: the same Volatility config fields drive both.
+func (s *Service) volatilityConfig() volatility.Config {
+	return volatility.Config{
+		Enabled:          s.config.Volatility.Enabled,
+		BootstrapSamples: s.config.Volatility.BootstrapSamples,
+		MinSamples:       s.config.Volatility.MinSamples,
+		Threshold:        s.config.Volatility.Threshold,
 	}
 }

@@ -12,12 +12,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// insightSource is the narrow consumer contract the insight and flake handlers need from the
-// console service: assemble the VCS-history lenses and the runtime-history flake read. It is
+// insightSource is the narrow consumer contract the insight and volatility handlers need from the
+// console service: assemble the VCS-history lenses and the runtime-history volatility read. It is
 // satisfied by *console.Service; the handler package holds no concrete service.
 type insightSource interface {
 	Insight(ctx context.Context) (types.InsightView, error)
-	Flake(ctx context.Context) (types.FlakeReport, error)
+	Volatility(ctx context.Context) (types.VolatilityReport, error)
 }
 
 // InsightHandler serves GET /api/v1/insight: the four VCS-history lenses (hotspots, affinity,
@@ -51,28 +51,28 @@ func (h *InsightHandler) serve(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, view)
 }
 
-// FlakeHandler serves GET /api/v1/flake: per-(project, target) flakiness as JSON
-// (types.FlakeReport), read from the shared runtime-history file and scored in-daemon. It is
+// VolatilityHandler serves GET /api/v1/volatility: per-(project, target) volatility as JSON
+// (types.VolatilityReport), read from the shared runtime-history file and scored in-daemon. It is
 // a pure file read, so it does not require a workspace.
-type FlakeHandler struct {
+type VolatilityHandler struct {
 	handler.Base
 	src insightSource
 }
 
-// NewFlakeHandler returns the GET /api/v1/flake handler reading from src.
-func NewFlakeHandler(src insightSource, log *slog.Logger) *FlakeHandler {
-	h := &FlakeHandler{src: src}
+// NewVolatilityHandler returns the GET /api/v1/volatility handler reading from src.
+func NewVolatilityHandler(src insightSource, log *slog.Logger) *VolatilityHandler {
+	h := &VolatilityHandler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
 
-func (h *FlakeHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *VolatilityHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if !allowGet(w, r) {
 		return
 	}
-	report, err := h.src.Flake(r.Context())
+	report, err := h.src.Volatility(r.Context())
 	if err != nil {
-		http.Error(w, "flake error: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "volatility error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, report)

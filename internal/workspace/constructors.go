@@ -139,9 +139,9 @@ func FailOnDrift() TargetOption {
 	return func(t *types.Target) { t.FailOnDrift = true }
 }
 
-// RetryOnFlake returns a TargetOption that enables flake detection and auto-retry.
-func RetryOnFlake() TargetOption {
-	return func(t *types.Target) { t.RetryOnFlake = true }
+// RetryOnVolatile returns a TargetOption that enables volatility detection and auto-retry.
+func RetryOnVolatile() TargetOption {
+	return func(t *types.Target) { t.RetryOnVolatile = true }
 }
 
 // SkipCache returns a TargetOption that opts the target out of the cache, so magus

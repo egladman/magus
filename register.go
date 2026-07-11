@@ -106,8 +106,8 @@ func FailOnDrift() TargetOption { return workspace.FailOnDrift() }
 // Exclusive runs the target alone — no other target runs concurrently while it does.
 func Exclusive() TargetOption { return workspace.Exclusive() }
 
-// RetryOnFlake enables flake detection and auto-retry for this target.
-func RetryOnFlake() TargetOption { return workspace.RetryOnFlake() }
+// RetryOnVolatile enables volatility detection and auto-retry for this target.
+func RetryOnVolatile() TargetOption { return workspace.RetryOnVolatile() }
 
 // WithTarget attaches a behavioural policy to the named target; multiple calls are merged.
 func WithTarget(name string, opts ...TargetOption) ProjectOption {

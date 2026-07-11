@@ -22,12 +22,12 @@ func writeHistory(t *testing.T, h forecast.History) string {
 	return path
 }
 
-// flakeConfigFixture is a config with a low-sample flake threshold so a handful of recorded
+// volatilityConfigFixture is a config with a low-sample volatility threshold so a handful of recorded
 // outcomes is enough to produce a non-zero Wilson score.
-func flakeConfigFixture(historyPath string) config.Config {
+func volatilityConfigFixture(historyPath string) config.Config {
 	return config.Config{
 		HistoryPath: historyPath,
-		Flake: config.Flake{
+		Volatility: config.Volatility{
 			Enabled:          true,
 			BootstrapSamples: 4,
 			MinSamples:       4,
@@ -36,15 +36,15 @@ func flakeConfigFixture(historyPath string) config.Config {
 	}
 }
 
-func TestServiceFlake(t *testing.T) {
+func TestServiceVolatility(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	outcomes := []forecast.Outcome{
 		{Result: "pass", At: now.Add(-3 * time.Hour)},
-		{Result: "flake", At: now.Add(-2 * time.Hour)},
+		{Result: "volatile", At: now.Add(-2 * time.Hour)},
 		{Result: "pass", At: now.Add(-1 * time.Hour)},
 		{Result: "fail", At: now},
 	}
-	st := forecast.Stats{PassCount: 2, FailCount: 1, FlakeCount: 1, RecentOutcomes: outcomes, LastUpdated: now}
+	st := forecast.Stats{PassCount: 2, FailCount: 1, VolatileCount: 1, RecentOutcomes: outcomes, LastUpdated: now}
 	hist := forecast.History{
 		Version: forecast.HistoryVersion,
 		Projects: map[string]map[string]forecast.Stats{
@@ -52,9 +52,9 @@ func TestServiceFlake(t *testing.T) {
 			"proj/a": {"test": st},
 		},
 	}
-	svc := NewService(nil, flakeConfigFixture(writeHistory(t, hist)), types.StatusBase{}, "1.0.0")
+	svc := NewService(nil, volatilityConfigFixture(writeHistory(t, hist)), types.StatusBase{}, "1.0.0")
 
-	report, err := svc.Flake(context.Background())
+	report, err := svc.Volatility(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 0.01, report.Threshold)
 	require.Len(t, report.Targets, 2)
@@ -67,16 +67,16 @@ func TestServiceFlake(t *testing.T) {
 	assert.Equal(t, "test", got.Target)
 	assert.Equal(t, 2, got.Pass)
 	assert.Equal(t, 1, got.Fail)
-	assert.Equal(t, 1, got.Flake)
+	assert.Equal(t, 1, got.VolatileCount)
 	assert.Equal(t, 4, got.Samples)
-	assert.Equal(t, now.Add(-1*time.Hour), got.LastPass, "last pass is the most recent pass/flake outcome")
+	assert.Equal(t, now.Add(-1*time.Hour), got.LastPass, "last pass is the most recent pass/volatile outcome")
 	assert.Greater(t, got.Score, 0.0, "4 samples at MinSamples=4 produce a non-zero Wilson score")
-	assert.True(t, got.Flaky, "score exceeds the 0.01 threshold")
+	assert.True(t, got.Volatile, "score exceeds the 0.01 threshold")
 }
 
-func TestServiceFlakeNoHistoryPath(t *testing.T) {
-	svc := NewService(nil, config.Config{Flake: config.Flake{Threshold: 0.2}}, types.StatusBase{}, "1.0.0")
-	report, err := svc.Flake(context.Background())
+func TestServiceVolatilityNoHistoryPath(t *testing.T) {
+	svc := NewService(nil, config.Config{Volatility: config.Volatility{Threshold: 0.2}}, types.StatusBase{}, "1.0.0")
+	report, err := svc.Volatility(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 0.2, report.Threshold)
 	assert.Empty(t, report.Targets, "no history path yields an empty target list, not an error")

@@ -14,18 +14,18 @@ import (
 
 // fakeInsightSource is an insightSource returning canned values or a fixed error.
 type fakeInsightSource struct {
-	view       types.InsightView
-	report     types.FlakeReport
-	insightErr error
-	flakeErr   error
+	view          types.InsightView
+	report        types.VolatilityReport
+	insightErr    error
+	volatilityErr error
 }
 
 func (f fakeInsightSource) Insight(context.Context) (types.InsightView, error) {
 	return f.view, f.insightErr
 }
 
-func (f fakeInsightSource) Flake(context.Context) (types.FlakeReport, error) {
-	return f.report, f.flakeErr
+func (f fakeInsightSource) Volatility(context.Context) (types.VolatilityReport, error) {
+	return f.report, f.volatilityErr
 }
 
 // --- InsightHandler ---
@@ -86,20 +86,20 @@ func TestInsightHandler_OptionsNoContent(t *testing.T) {
 	}
 }
 
-// --- FlakeHandler ---
+// --- VolatilityHandler ---
 
-func TestFlakeHandler_Returns200WithJSON(t *testing.T) {
-	src := fakeInsightSource{report: types.FlakeReport{
+func TestVolatilityHandler_Returns200WithJSON(t *testing.T) {
+	src := fakeInsightSource{report: types.VolatilityReport{
 		Threshold: 0.05,
-		Targets:   []types.FlakeTarget{{Project: "p", Target: "test", Score: 0.1, Flaky: true}},
+		Targets:   []types.VolatilityTarget{{Project: "p", Target: "test", Score: 0.1, Volatile: true}},
 	}}
-	h := NewFlakeHandler(src, nil)
+	h := NewVolatilityHandler(src, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/flake", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/volatility", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	var out types.FlakeReport
+	var out types.VolatilityReport
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
 	}
@@ -108,19 +108,19 @@ func TestFlakeHandler_Returns200WithJSON(t *testing.T) {
 	}
 }
 
-func TestFlakeHandler_ErrorReturns500(t *testing.T) {
-	h := NewFlakeHandler(fakeInsightSource{flakeErr: errors.New("read boom")}, nil)
+func TestVolatilityHandler_ErrorReturns500(t *testing.T) {
+	h := NewVolatilityHandler(fakeInsightSource{volatilityErr: errors.New("read boom")}, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/flake", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/volatility", nil))
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", w.Code)
 	}
 }
 
-func TestFlakeHandler_MethodNotAllowed(t *testing.T) {
-	h := NewFlakeHandler(fakeInsightSource{}, nil)
+func TestVolatilityHandler_MethodNotAllowed(t *testing.T) {
+	h := NewVolatilityHandler(fakeInsightSource{}, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/v1/flake", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/v1/volatility", nil))
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("want 405, got %d", w.Code)
 	}

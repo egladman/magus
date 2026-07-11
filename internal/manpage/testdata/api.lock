@@ -14,11 +14,6 @@ config daemon.socket
 config daemon.workspaces
 config default_charms
 config dry_run
-config flake.annotate_gha
-config flake.bootstrap_samples
-config flake.enabled
-config flake.min_samples
-config flake.threshold
 config graph.depth
 config graph.direction
 config graph.roots
@@ -52,6 +47,11 @@ config telemetry.service_name
 config vcs.base_ref
 config vcs.enabled
 config vcs.name
+config volatility.annotate_gha
+config volatility.bootstrap_samples
+config volatility.enabled
+config volatility.min_samples
+config volatility.threshold
 flag affected/base
 flag affected/bisect
 flag affected/depth

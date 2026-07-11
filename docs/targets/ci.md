@@ -61,7 +61,7 @@ cache:
       - "<base64 Ed25519 public key>" # magus config cache key generate
 ```
 
-A complementary defense is to open the cache **read-only on untrusted refs**: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and flake detector read it): restore always, save only from trusted pushes.
+A complementary defense is to open the cache **read-only on untrusted refs**: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and volatility detector read it): restore always, save only from trusted pushes.
 
 ```yaml
 # PRs replay the cache and see main's history, but write neither

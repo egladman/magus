@@ -23,7 +23,7 @@ const (
 	TypeGraphBuild            = "graph.build"
 	TypeGraphQuery            = "graph.query"
 	TypeGraphError            = "graph.error"
-	TypeFlake                 = "flake"
+	TypeVolatility            = "volatile"
 	TypeShardSetup            = "shard.setup"
 	TypeShardTotal            = "shard.total"
 	TypeRaceDetected          = "race.detected"
@@ -72,14 +72,14 @@ type GraphError struct {
 	Message string `json:"error"`
 }
 
-// FlakeCall records a flakiness outcome; emitted when a retry was triggered or regression suspected.
-type FlakeCall struct {
-	Project     string  `json:"project"`
-	Target      string  `json:"target"`
-	Status      string  `json:"status"` // "retried_flake" | "retry_failed" | "suspected_regression"
-	Attempts    int     `json:"attempts"`
-	RetryReason string  `json:"retry_reason,omitempty"` // "bootstrap" | "unaffected_failure" | "predicted_flake"
-	FlakeScore  float64 `json:"flake_score,omitempty"`
+// VolatilityCall records a volatility outcome; emitted when a retry was triggered or regression suspected.
+type VolatilityCall struct {
+	Project         string  `json:"project"`
+	Target          string  `json:"target"`
+	Status          string  `json:"status"` // "retried_volatile" | "retry_failed" | "suspected_regression"
+	Attempts        int     `json:"attempts"`
+	RetryReason     string  `json:"retry_reason,omitempty"` // "bootstrap" | "unaffected_failure" | "predicted_volatile"
+	VolatilityScore float64 `json:"volatility_score,omitempty"`
 }
 
 // ShardSetup is one observation of per-shard fixed cost (job start → first project start); consumed by the CI forecaster.
@@ -144,7 +144,7 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
 	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
 	reflect.TypeOf(GraphError{}):            TypeGraphError,
-	reflect.TypeOf(FlakeCall{}):             TypeFlake,
+	reflect.TypeOf(VolatilityCall{}):        TypeVolatility,
 	reflect.TypeOf(ShardSetup{}):            TypeShardSetup,
 	reflect.TypeOf(ShardTotal{}):            TypeShardTotal,
 	reflect.TypeOf(RaceDetected{}):          TypeRaceDetected,

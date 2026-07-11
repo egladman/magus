@@ -9,18 +9,18 @@ import (
 	"github.com/egladman/magus/internal/config"
 )
 
-func TestApplyEnv_FlakeEnabledTrue(t *testing.T) {
-	t.Setenv("MAGUS_FLAKE_ENABLED", "true")
+func TestApplyEnv_VolatilityEnabledTrue(t *testing.T) {
+	t.Setenv("MAGUS_VOLATILITY_ENABLED", "true")
 	cfg := config.Defaults()
 	ApplyEnv(&cfg, os.Getenv)
-	assert.True(t, cfg.Flake.Enabled, "MAGUS_FLAKE_ENABLED=true: Flake.Enabled should be true")
+	assert.True(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=true: Volatility.Enabled should be true")
 }
 
-func TestApplyEnv_FlakeEnabledFalse(t *testing.T) {
-	t.Setenv("MAGUS_FLAKE_ENABLED", "false")
+func TestApplyEnv_VolatilityEnabledFalse(t *testing.T) {
+	t.Setenv("MAGUS_VOLATILITY_ENABLED", "false")
 	cfg := config.Defaults()
 	ApplyEnv(&cfg, os.Getenv)
-	assert.False(t, cfg.Flake.Enabled, "MAGUS_FLAKE_ENABLED=false: Flake.Enabled should be false")
+	assert.False(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=false: Volatility.Enabled should be false")
 }
 
 func TestApplyEnvToConfig(t *testing.T) {

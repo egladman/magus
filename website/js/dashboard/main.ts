@@ -28,7 +28,7 @@ import { runningTargetsTile } from "./tiles/runningTargets";
 import { workspacesTile } from "./tiles/workspaces";
 import { versionsTile } from "./tiles/versions";
 import { ganttTile } from "./tiles/gantt";
-import { flakePlaceholderTile } from "./tiles/placeholders";
+import { volatilityPlaceholderTile } from "./tiles/placeholders";
 import "../nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -115,13 +115,13 @@ function mountTiles(): void {
   const versions = versionsTile();
   host.append(versions.el);
 
-  // The live execution timeline (fed by Status.runs). The flake column is still a
+  // The live execution timeline (fed by Status.runs). The volatility column is still a
   // deferred seam - see tiles/placeholders.ts for the source it waits on.
   const gantt = ganttTile();
-  const flake = flakePlaceholderTile();
-  host.append(gantt.el, flake.el);
+  const volatility = volatilityPlaceholderTile();
+  host.append(gantt.el, volatility.el);
 
-  tiles = [...single, runningTargets, workspaces, versions, gantt, flake];
+  tiles = [...single, runningTargets, workspaces, versions, gantt, volatility];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
   store.subscribe(renderChrome);

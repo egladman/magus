@@ -249,7 +249,7 @@ const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved 
 	"dispatch plan for a specific path:target pair: the workspace-rooted source and " +
 	"output globs that feed the cache key, the spells that will fire (with " +
 	"target-specific sources and effective claims after weight/add/remove resolution), " +
-	"and any behavioural policy (CheckClean, TrackFlake, Exclusive)."
+	"and any behavioural policy (CheckClean, TrackVolatile, Exclusive)."
 
 // EvaluatedSpellEntry is one spell's contribution to an evaluated target.
 type EvaluatedSpellEntry struct {
@@ -318,7 +318,7 @@ type EvaluatedTargetEntry struct {
 	DependsOn []string              `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string              `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpellEntry `json:"spells,omitempty"     yaml:"spells,omitempty"`
-	Policy    *Target               `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/FailOnDrift/RetryOnFlake)
+	Policy    *Target               `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/FailOnDrift/RetryOnVolatile)
 	Exclusive bool                  `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
 }
 

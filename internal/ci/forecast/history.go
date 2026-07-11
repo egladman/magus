@@ -12,8 +12,8 @@
 //	Stats:        p75_ms(int64), samples(int), last_updated(time), recent([]int64),
 //	              buckets(map[string]BucketStats), hit_count(int), miss_count(int),
 //	              hit_rate(float64), pass_count(int), fail_count(int),
-//	              flake_count(int), recent_outcomes([]Outcome)
-//	Outcome:      result(string: "pass"|"fail"|"flake"), affected(bool),
+//	              volatile_count(int), recent_outcomes([]Outcome)
+//	Outcome:      result(string: "pass"|"fail"|"volatile"), affected(bool),
 //	              duration_ms(int64), at(time), attempts(int)
 //
 // DO NOT add: source code, file contents, hashes, env vars, secrets, tokens,
@@ -40,7 +40,7 @@ import (
 )
 
 // HistoryVersion is the on-disk schema version.
-// v4 adds PassCount/FailCount/FlakeCount/RecentOutcomes; all prior versions load cleanly.
+// v4 adds PassCount/FailCount/VolatileCount/RecentOutcomes; all prior versions load cleanly.
 const HistoryVersion = 4
 
 // SampleWindow is the rolling window for duration percentiles (100 runs ≈ 5 CI days).
@@ -49,7 +49,7 @@ const SampleWindow = 100
 // HitWindow is the rolling window for hit/miss counts; smaller so hit rates adapt faster.
 const HitWindow = 50
 
-// OutcomeWindow is the maximum per-run outcomes retained for flakiness scoring.
+// OutcomeWindow is the maximum per-run outcomes retained for volatility scoring.
 const OutcomeWindow = 100
 
 // hitColdStart is the minimum hit+miss observations before PredictDuration applies the hit-rate discount.
@@ -94,7 +94,7 @@ type BucketStats struct {
 	HitRate   float64 `json:"hit_rate"`
 }
 
-// Stats is one (project, target) rolling store: duration percentiles (v1+), hit rates (v3+), flakiness (v4+).
+// Stats is one (project, target) rolling store: duration percentiles (v1+), hit rates (v3+), volatility (v4+).
 type Stats struct {
 	P75Ms       int64                  `json:"p75_ms"`
 	Samples     int                    `json:"samples"`
@@ -104,14 +104,14 @@ type Stats struct {
 	HitCount    int                    `json:"hit_count"`
 	MissCount   int                    `json:"miss_count"`
 	HitRate     float64                `json:"hit_rate"`
-	// v4+: flakiness tracking
+	// v4+: volatility tracking
 	PassCount      int       `json:"pass_count,omitempty"`
 	FailCount      int       `json:"fail_count,omitempty"`
-	FlakeCount     int       `json:"flake_count,omitempty"`
+	VolatileCount  int       `json:"volatile_count,omitempty"`
 	RecentOutcomes []Outcome `json:"recent_outcomes,omitempty"`
 }
 
-// Outcome is one recorded test-run result; result is "pass", "fail", or "flake".
+// Outcome is one recorded test-run result; result is "pass", "fail", or "volatile".
 type Outcome struct {
 	Result         string    `json:"result"`
 	AffectedByDiff bool      `json:"affected"`

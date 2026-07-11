@@ -72,7 +72,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 		GraphBuild{Nodes: 120, DurationMs: 8},
 		GraphQuery{Op: "affected", Nodes: 120, Seeds: 3, Strategy: "reverse", ResultCount: 12, DurationMs: 4},
 		GraphError{Op: "build", Message: "cycle"},
-		FlakeCall{Project: "svc-a", Target: "test", Status: "retried_flake", Attempts: 2, RetryReason: "predicted_flake"},
+		VolatilityCall{Project: "svc-a", Target: "test", Status: "retried_volatile", Attempts: 2, RetryReason: "predicted_volatile"},
 		ShardSetup{Shard: "0", NShards: 4, DurationMs: 230},
 		ShardTotal{Shard: "0", NShards: 4, DurationMs: 78321},
 	}
@@ -88,7 +88,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 	wantTypes := []string{
 		TypeTargetResult, TypeTargetResult, TypeTargetResult,
 		TypeGraphBuild, TypeGraphQuery, TypeGraphError,
-		TypeFlake, TypeShardSetup, TypeShardTotal,
+		TypeVolatility, TypeShardSetup, TypeShardTotal,
 	}
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {

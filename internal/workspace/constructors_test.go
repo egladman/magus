@@ -51,12 +51,12 @@ func TestWithTarget_CheckClean(t *testing.T) {
 	assert.True(t, pol.FailOnDrift)
 }
 
-func TestWithTarget_TrackFlake(t *testing.T) {
+func TestWithTarget_TrackVolatile(t *testing.T) {
 	p := &types.Project{Path: "."}
-	opt := WithTarget("build", RetryOnFlake())
+	opt := WithTarget("build", RetryOnVolatile())
 	require.NoError(t, opt(p))
 	pol := p.TargetPolicies["build"]
-	assert.True(t, pol.RetryOnFlake)
+	assert.True(t, pol.RetryOnVolatile)
 }
 
 func TestWithTarget_Slots(t *testing.T) {

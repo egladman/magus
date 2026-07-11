@@ -24,7 +24,7 @@ daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
 
 When no daemon is running the line reads `daemon: off`, with no error and no hang. Drop `--compact` for the full grid view when you have a wider pane to spare.
 
-## Step through a target to diagnose a flaky build
+## Step through a target to diagnose a volatile build
 
 `magus run --step` pauses before every subprocess and lets you inspect state, skip commands, or open a REPL mid-run. Concurrency is forced to 1, so commands execute one at a time:
 

@@ -14,7 +14,7 @@ import (
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/ci/flake"
+	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/depgraph"
@@ -486,12 +486,12 @@ func (m *Magus) Close() error {
 	return m.buzzPoolReg.Close()
 }
 
-func (m *Magus) flakeConfig() flake.Config {
-	return flake.Config{
-		Enabled:          m.cfg.Flake.Enabled,
-		BootstrapSamples: m.cfg.Flake.BootstrapSamples,
-		MinSamples:       m.cfg.Flake.MinSamples,
-		Threshold:        m.cfg.Flake.Threshold,
+func (m *Magus) volatilityConfig() volatility.Config {
+	return volatility.Config{
+		Enabled:          m.cfg.Volatility.Enabled,
+		BootstrapSamples: m.cfg.Volatility.BootstrapSamples,
+		MinSamples:       m.cfg.Volatility.MinSamples,
+		Threshold:        m.cfg.Volatility.Threshold,
 	}
 }
 

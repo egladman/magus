@@ -73,7 +73,7 @@ func BenchmarkRecord_mixed(b *testing.B) {
 	hit := TargetResult{Status: "ok", CacheHit: true, Project: "a", Target: "build", DurationMs: 1}
 	miss := TargetResult{Status: "ok", Project: "a", Target: "build", DurationMs: 1}
 	gq := GraphQuery{Op: "affected", Nodes: 100, Seeds: 3, ResultCount: 5, DurationMs: 1}
-	flk := FlakeCall{Project: "a", Target: "test", Status: "retried_flake", Attempts: 2}
+	flk := VolatilityCall{Project: "a", Target: "test", Status: "retried_volatile", Attempts: 2}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		switch i % 10 {

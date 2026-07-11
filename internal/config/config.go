@@ -13,25 +13,25 @@ import (
 
 // Config is the top-level magus configuration.
 type Config struct {
-	Cache     Cache     `yaml:"cache"`
-	CI        CI        `yaml:"ci"`
-	Flake     Flake     `yaml:"flake"`
-	Graph     Graph     `yaml:"graph"`
-	Watch     Watch     `yaml:"watch"`
-	Telemetry Telemetry `yaml:"telemetry"`
-	Daemon    Daemon    `yaml:"daemon"`
-	VCS       VCS       `yaml:"vcs"`
-	MCP       MCP       `yaml:"mcp"`
-	Bridge    Bridge    `yaml:"bridge"`
-	Report    Report    `yaml:"report"`
-	Log       Log       `yaml:"log"`
-	Hints     Hints     `yaml:"hints"`
-	Knowledge Knowledge `yaml:"knowledge"`
+	Cache      Cache      `yaml:"cache"`
+	CI         CI         `yaml:"ci"`
+	Volatility Volatility `yaml:"volatility"`
+	Graph      Graph      `yaml:"graph"`
+	Watch      Watch      `yaml:"watch"`
+	Telemetry  Telemetry  `yaml:"telemetry"`
+	Daemon     Daemon     `yaml:"daemon"`
+	VCS        VCS        `yaml:"vcs"`
+	MCP        MCP        `yaml:"mcp"`
+	Bridge     Bridge     `yaml:"bridge"`
+	Report     Report     `yaml:"report"`
+	Log        Log        `yaml:"log"`
+	Hints      Hints      `yaml:"hints"`
+	Knowledge  Knowledge  `yaml:"knowledge"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `yaml:"concurrency" validate:"gte=0" cli:"short=j"`
 
-	// HistoryPath is the path to the runtime-history JSON used by flake detection,
+	// HistoryPath is the path to the runtime-history JSON used by volatility detection,
 	// CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json.
 	HistoryPath string `yaml:"history_path"`
 
@@ -162,12 +162,12 @@ type CI struct {
 	RunnerPoolBudget int `yaml:"runner_pool_budget" validate:"gte=0"` // GHA matrix-level concurrency cap; 0 = no cap
 }
 
-// Flake controls flakiness detection and auto-retry for test runs.
-type Flake struct {
+// Volatility controls volatility detection and auto-retry for test runs.
+type Volatility struct {
 	Enabled          bool    `yaml:"enabled"`
 	BootstrapSamples int     `yaml:"bootstrap_samples" validate:"gte=0"` // outcomes below which all failures retry once
 	MinSamples       int     `yaml:"min_samples" validate:"gte=0"`       // minimum outcomes before Wilson-score gates retry
-	Threshold        float64 `yaml:"threshold" validate:"gte=0,lte=1"`   // Wilson lower-bound above which a project+target is flaky
+	Threshold        float64 `yaml:"threshold" validate:"gte=0,lte=1"`   // Wilson lower-bound above which a project+target is volatile
 	AnnotateGHA      bool    `yaml:"annotate_gha"`                       // emit ::warning annotations and GITHUB_STEP_SUMMARY table
 }
 
@@ -303,7 +303,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_LOG_FORMAT", "log.format", "pretty", "Output format: pretty, plain, text, or json"},
 		{"MAGUS_LOG_LEVEL", "log.level", "info", "Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table)"},
 		{"MAGUS_CONCURRENCY", "concurrency", "min(NumCPU,8)", "Maximum number of concurrently running per-project build steps"},
-		{"MAGUS_HISTORY_PATH", "history_path", "$XDG_STATE_HOME/magus/history/v1.json", "Path to the runtime-history JSON shared by flake detection, the CI forecaster, graph timing, and bisect"},
+		{"MAGUS_HISTORY_PATH", "history_path", "$XDG_STATE_HOME/magus/history/v1.json", "Path to the runtime-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect"},
 		{"MAGUS_DRY_RUN", "dry_run", "false", "When 1 or true, print what would run without executing anything"},
 		{"MAGUS_DEFAULT_CHARMS", "default_charms", "", "Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run"},
 		{"MAGUS_VCS_ENABLED", "vcs.enabled", "true", "Master switch for VCS-driven affected detection; false makes affected fall back to all projects"},
@@ -332,11 +332,11 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server started alongside the daemon"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},
-		{"MAGUS_FLAKE_ENABLED", "flake.enabled", "true", "Master switch for flakiness detection and auto-retry; false disables all retry logic"},
-		{"MAGUS_FLAKE_BOOTSTRAP_SAMPLES", "flake.bootstrap_samples", "20", "Number of outcomes below which all failures are retried once (bootstrap phase)"},
-		{"MAGUS_FLAKE_MIN_SAMPLES", "flake.min_samples", "20", "Minimum outcomes required before Wilson-score flake rate gates retry decisions"},
-		{"MAGUS_FLAKE_THRESHOLD", "flake.threshold", "0.05", "Wilson lower-bound flake rate above which a project+target is considered flaky"},
-		{"MAGUS_FLAKE_ANNOTATE_GHA", "flake.annotate_gha", "true", "When true, emit ::warning annotations and flake summary to $GITHUB_STEP_SUMMARY"},
+		{"MAGUS_VOLATILITY_ENABLED", "volatility.enabled", "true", "Master switch for volatility detection and auto-retry; false disables all retry logic"},
+		{"MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES", "volatility.bootstrap_samples", "20", "Number of outcomes below which all failures are retried once (bootstrap phase)"},
+		{"MAGUS_VOLATILITY_MIN_SAMPLES", "volatility.min_samples", "20", "Minimum outcomes required before Wilson-score volatility rate gates retry decisions"},
+		{"MAGUS_VOLATILITY_THRESHOLD", "volatility.threshold", "0.05", "Wilson lower-bound volatility rate above which a project+target is considered volatile"},
+		{"MAGUS_VOLATILITY_ANNOTATE_GHA", "volatility.annotate_gha", "true", "When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY"},
 		{"MAGUS_REPORT_FILTER", "report.filter", "", "Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query)"},
 		{"MAGUS_SANDBOX_ENABLED", "sandbox.enabled", "false", "When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
 		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
@@ -348,7 +348,7 @@ func Defaults() Config {
 	return Config{
 		CI:          CI{MaxShards: 8},
 		HistoryPath: DefaultHistoryPath(),
-		Flake: Flake{
+		Volatility: Volatility{
 			Enabled:          true,
 			BootstrapSamples: 20,
 			MinSamples:       20,

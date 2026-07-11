@@ -41,7 +41,7 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 // runHistoryImport folds one or more runtime-history JSON files into --history
 // (created if absent), freshest-wins per (project, target). Passing several files
 // merges them: this is how the per-shard histories of one sharded CI run combine
-// into the single history the next run's forecaster and flake detector read. Each
+// into the single history the next run's forecaster and volatility detector read. Each
 // input is the history `magus run` wrote; there is no separate "merge" mode.
 func runHistoryImport(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history import", flag.ContinueOnError)

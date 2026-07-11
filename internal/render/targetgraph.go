@@ -622,8 +622,8 @@ func policyNotes(p *types.Target) []string {
 	if p.FailOnDrift {
 		out = append(out, "fail-on-drift (fails if the tree is dirty afterward)")
 	}
-	if p.RetryOnFlake {
-		out = append(out, "flake-tracked (retries a flaky failure)")
+	if p.RetryOnVolatile {
+		out = append(out, "volatility-tracked (retries a volatile failure)")
 	}
 	if p.SkipCache {
 		out = append(out, "uncached (always runs)")

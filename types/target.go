@@ -96,7 +96,7 @@ func NormalizeCharmName(name string) string {
 //   - As a work-unit it carries identity: Path/Name/Charms/Files describe which
 //     project x target to run and against which changed files.
 //   - As a policy bag it carries per-target execution policy
-//     (SkipCache/Exclusive/FailOnDrift/RetryOnFlake). When used purely as policy
+//     (SkipCache/Exclusive/FailOnDrift/RetryOnVolatile). When used purely as policy
 //     (Project.TargetPolicies values, EvaluatedTargetEntry.Policy) only the policy
 //     fields are meaningful; the identity fields are unset/ignored.
 type Target struct {
@@ -106,13 +106,13 @@ type Target struct {
 	Files  []string // changed files within project; populated by affected expansion
 
 	// Per-target execution policy. SkipCache, Exclusive, and Slots are author-facing,
-	// serialized into the Buzz object Target. FailOnDrift and RetryOnFlake are CI-only
+	// serialized into the Buzz object Target. FailOnDrift and RetryOnVolatile are CI-only
 	// hooks set via the Go registration API, excluded from the Buzz object (buzz:"-").
-	SkipCache    bool `json:"skipCache,omitempty"`             // opt out of the cache: always run, never replay/snapshot
-	Exclusive    bool `json:"exclusive,omitempty"`             // run alone: no other target runs concurrently
-	Slots        int  `json:"slots,omitempty"`                 // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
-	FailOnDrift  bool `json:"failOnDrift,omitempty" buzz:"-"`  // fail the run if the working tree is dirty after this target (drift gate)
-	RetryOnFlake bool `json:"retryOnFlake,omitempty" buzz:"-"` // route through flake detection + auto-retry
+	SkipCache       bool `json:"skipCache,omitempty"`                // opt out of the cache: always run, never replay/snapshot
+	Exclusive       bool `json:"exclusive,omitempty"`                // run alone: no other target runs concurrently
+	Slots           int  `json:"slots,omitempty"`                    // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
+	FailOnDrift     bool `json:"failOnDrift,omitempty" buzz:"-"`     // fail the run if the working tree is dirty after this target (drift gate)
+	RetryOnVolatile bool `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
 }
 
 // String returns the canonical "path:target" form.

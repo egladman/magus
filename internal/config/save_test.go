@@ -18,7 +18,7 @@ func TestSave_AllValueTypes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "magus.yaml")
 	for _, c := range []struct{ key, value string }{
 		{"hints.enabled", "false"},                              // *bool
-		{"flake.threshold", "0.25"},                             // float64
+		{"volatility.threshold", "0.25"},                        // float64
 		{"daemon.idle_ttl", "30m"},                              // time.Duration
 		{"telemetry.headers", "{Authorization: Bearer xyz}"},    // map[string]string
 		{"sandbox.allow.homebin.path", "/home/user/.local/bin"}, // slice-of-struct (by name)
@@ -31,7 +31,7 @@ func TestSave_AllValueTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cfg.Hints.Enabled)
 	assert.False(t, *cfg.Hints.Enabled, "hints.enabled should be false")
-	assert.Equal(t, 0.25, cfg.Flake.Threshold)
+	assert.Equal(t, 0.25, cfg.Volatility.Threshold)
 	assert.Equal(t, 30*time.Minute, cfg.Daemon.IdleTTL)
 	assert.Equal(t, "Bearer xyz", cfg.Telemetry.Headers["Authorization"])
 
@@ -53,7 +53,7 @@ func TestKnownKeys(t *testing.T) {
 	want := map[string]bool{
 		"cache.dir": true, "cache.size_mb": true, "cache.immutable": true, "cache.remote.trusted_keys": true, "cache.remote.insecure": true,
 		"ci.max_shards": true, "ci.runner_pool_budget": true,
-		"flake.enabled": true, "flake.bootstrap_samples": true, "flake.min_samples": true, "flake.annotate_gha": true, "flake.threshold": true,
+		"volatility.enabled": true, "volatility.bootstrap_samples": true, "volatility.min_samples": true, "volatility.annotate_gha": true, "volatility.threshold": true,
 		"daemon.idle_ttl": true,
 		"hints.enabled":   true, "mcp.enabled": true, "vcs.enabled": true,
 		"telemetry.headers": true, "telemetry.sample_ratio": true,

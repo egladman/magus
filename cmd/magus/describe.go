@@ -566,8 +566,8 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				if pol.FailOnDrift {
 					fmt.Printf("  fail_on_drift")
 				}
-				if pol.RetryOnFlake {
-					fmt.Printf("  retry_on_flake")
+				if pol.RetryOnVolatile {
+					fmt.Printf("  retry_on_volatile")
 				}
 				if pol.SkipCache {
 					fmt.Printf("  skip_cache")
@@ -756,8 +756,8 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			if e.Policy.FailOnDrift {
 				fmt.Printf("  fail_on_drift")
 			}
-			if e.Policy.RetryOnFlake {
-				fmt.Printf("  retry_on_flake")
+			if e.Policy.RetryOnVolatile {
+				fmt.Printf("  retry_on_volatile")
 			}
 			if e.Policy.SkipCache {
 				fmt.Printf("  skip_cache")

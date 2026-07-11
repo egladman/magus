@@ -1,6 +1,6 @@
-// Package flake provides Wilson-score flakiness prediction and auto-retry for magus test runs.
+// Package volatility provides Wilson-score volatility prediction and auto-retry for magus test runs.
 // Failures on unaffected projects are always retried regardless of history.
-package flake
+package volatility
 
 import (
 	"context"
@@ -14,12 +14,12 @@ import (
 // contextKey is an unexported type for context values to avoid collisions.
 type contextKey struct{}
 
-// Config controls flake-detection behaviour.
+// Config controls volatility-detection behaviour.
 type Config struct {
 	Enabled          bool    // when false, skip all retry and recording logic
 	BootstrapSamples int     // outcomes below which all failures are retried unconditionally
 	MinSamples       int     // minimum outcomes before Score returns a non-zero value
-	Threshold        float64 // Wilson lower-bound flake rate above which a target is retried
+	Threshold        float64 // Wilson lower-bound volatility rate above which a target is retried
 }
 
 // DefaultConfig returns sensible defaults matching the plan.
@@ -38,7 +38,7 @@ type RetryReason string
 const (
 	ReasonBootstrap         RetryReason = "bootstrap"
 	ReasonUnaffectedFailure RetryReason = "unaffected_failure"
-	ReasonPredictedFlake    RetryReason = "predicted_flake"
+	ReasonPredictedVolatile RetryReason = "predicted_volatile"
 	ReasonSkip              RetryReason = "skip"
 	ReasonDisabled          RetryReason = "disabled"
 )
@@ -57,26 +57,26 @@ func shouldRetry(s forecast.Stats, affected bool, cfg Config) Decision {
 		return Decision{Retry: true, Reason: ReasonBootstrap}
 	}
 
-	// Unaffected failure: strong prior on flakiness regardless of score.
+	// Unaffected failure: strong prior on volatility regardless of score.
 	if !affected {
 		return Decision{Retry: true, Reason: ReasonUnaffectedFailure}
 	}
 
-	// Predicted flake: history says this is likely flaky.
+	// Predicted volatile: history says this is likely volatile.
 	if score(s, cfg) >= cfg.Threshold {
-		return Decision{Retry: true, Reason: ReasonPredictedFlake}
+		return Decision{Retry: true, Reason: ReasonPredictedVolatile}
 	}
 
 	return Decision{Retry: false, Reason: ReasonSkip}
 }
 
-// score returns the Wilson lower-bound flake rate (z=1.96, 95% CI); 0 below MinSamples.
+// score returns the Wilson lower-bound volatility rate (z=1.96, 95% CI); 0 below MinSamples.
 func score(s forecast.Stats, cfg Config) float64 {
-	total := s.PassCount + s.FailCount + s.FlakeCount
+	total := s.PassCount + s.FailCount + s.VolatileCount
 	if total < cfg.MinSamples {
 		return 0
 	}
-	p := float64(s.FlakeCount) / float64(total)
+	p := float64(s.VolatileCount) / float64(total)
 	n := float64(total)
 	const z = 1.96
 	z2 := z * z
@@ -94,7 +94,7 @@ func isSuspectedRegression(s forecast.Stats, cfg Config) bool {
 		return false
 	}
 	if score(s, cfg) >= cfg.Threshold {
-		return false // known flake, not a regression
+		return false // known volatile, not a regression
 	}
 	n := len(s.RecentOutcomes)
 	if n < 2 {
@@ -109,7 +109,7 @@ func isSuspectedRegression(s forecast.Stats, cfg Config) bool {
 func lastPassTime(s forecast.Stats) time.Time {
 	for i := len(s.RecentOutcomes) - 1; i >= 0; i-- {
 		o := s.RecentOutcomes[i]
-		if o.Result == "pass" || o.Result == "flake" {
+		if o.Result == "pass" || o.Result == "volatile" {
 			return o.At
 		}
 	}
@@ -121,24 +121,24 @@ func recordOutcome(s forecast.Stats, o forecast.Outcome) forecast.Stats {
 	if len(s.RecentOutcomes) > forecast.OutcomeWindow {
 		s.RecentOutcomes = s.RecentOutcomes[len(s.RecentOutcomes)-forecast.OutcomeWindow:]
 	}
-	pass, fail, flakeCount := 0, 0, 0
+	pass, fail, volatileCount := 0, 0, 0
 	for _, ro := range s.RecentOutcomes {
 		switch ro.Result {
 		case "pass":
 			pass++
 		case "fail":
 			fail++
-		case "flake":
-			flakeCount++
+		case "volatile":
+			volatileCount++
 		}
 	}
 	s.PassCount = pass
 	s.FailCount = fail
-	s.FlakeCount = flakeCount
+	s.VolatileCount = volatileCount
 	return s
 }
 
-// Runtime holds per-run flake state; safe for concurrent use.
+// Runtime holds per-run volatility state; safe for concurrent use.
 type Runtime struct {
 	mu       sync.Mutex
 	history  *forecast.History
@@ -208,7 +208,7 @@ func (rt *Runtime) IsRegression(projectPath, target string) bool {
 	return isSuspectedRegression(s, rt.cfg)
 }
 
-// Score returns the Wilson lower-bound flake score for (projectPath, target).
+// Score returns the Wilson lower-bound volatility score for (projectPath, target).
 func (rt *Runtime) Score(projectPath, target string) float64 {
 	rt.mu.Lock()
 	s := rt.stats(projectPath, target)
@@ -252,7 +252,7 @@ func (rt *Runtime) Stats(projectPath, target string) forecast.Stats {
 	return rt.stats(projectPath, target)
 }
 
-// Config returns the flake configuration this runtime was built with.
+// Config returns the volatility configuration this runtime was built with.
 func (rt *Runtime) Config() Config { return rt.cfg }
 
 // WithRuntime stores rt in ctx so testProject can retrieve it.
