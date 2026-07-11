@@ -18,11 +18,13 @@
   <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
+  <!-- console.css: the shared console-app chrome (app bar + launcher), loaded by all three daemon apps. -->
+  <link rel="stylesheet" href="../console.css">
   <script src="../theme.js"></script>
   <link rel="stylesheet" href="graph.css">
 </head>
 <body>
-  <!-- site-nav --><!-- injected at build time by renderGraph() in scribe.buzz; edit renderSiteNav there -->
+  <!-- console-chrome --><!-- injected at build time by renderGraph() in scribe.buzz; the graph explorer wears the shared console app bar (renderConsoleChrome), not the docs nav -->
 
   <main class="container-fluid">
     <h1 class="pg-title">Graph Explorer</h1>
