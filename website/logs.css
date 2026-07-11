@@ -331,20 +331,9 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
   justify-content: center; min-height: 100%; box-sizing: border-box;
 }
 .log-empty[hidden] { display: none; }
-.log-empty-icon { width: 3rem; height: 3rem; color: var(--pico-muted-border-color); margin-bottom: 0.9rem; }
-.log-empty-title { color: var(--pico-color); font-weight: 600; font-size: 1.15rem; margin: 0 0 0.35rem; }
-.log-empty-sub { margin: 0 0 1.4rem; max-width: 34rem; }
-.log-empty-ways { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; width: 100%; max-width: 34rem; margin-inline: auto; text-align: left; }
-.log-empty-way {
-  display: flex; flex-direction: column; gap: 0.45rem;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--syntax-panel-bg);
-}
-.log-empty-way-label { color: var(--pico-color); font-weight: 600; font-size: 0.85rem; }
-.log-empty-cmd { margin: 0; }
-.log-empty-way .log-empty-cmd code { font-size: 0.8em; }
-.log-empty-hint { font-size: 0.78rem; color: var(--pico-muted-color); }
+/* Inner empty-state pieces (icon/title/sub/ways/way/hint) are shared - see .console-empty-*
+   in console.css. The log viewer's "way" cards use the syntax-panel tint, not the card bg. */
+.log-empty .console-empty-way { background: var(--syntax-panel-bg); }
 .log-noscript { padding: 1.5rem; color: var(--pico-muted-color); }
 
 /* "Loading a log by URL" disclosure: the SAME treatment as the graph page's
@@ -387,5 +376,4 @@ main .url-help > summary:not([role]), main .url-help[open] > summary:not([role])
   .log-actions { width: 100%; margin-left: 0; }
   .log-search { flex: 1 1 auto; }
   .log-app .file-bar .log-search input { flex: 1 1 auto; width: auto; }
-  .log-empty-ways { grid-template-columns: 1fr; }
 }

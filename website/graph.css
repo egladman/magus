@@ -208,25 +208,9 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
   background: var(--pico-background-color);
 }
 .graph-empty-state[hidden] { display: none; }
-.graph-empty-icon { width: 3rem; height: 3rem; color: var(--pico-muted-border-color); margin-bottom: 0.9rem; }
-.graph-empty-title { color: var(--pico-color); font-weight: 600; font-size: 1.15rem; margin: 0 0 0.35rem; }
-.graph-empty-sub { margin: 0 0 1.4rem; max-width: 34rem; }
-.graph-empty-ways {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
-  width: 100%; max-width: 34rem; margin-inline: auto; text-align: left;
-}
-.graph-empty-way {
-  display: flex; flex-direction: column; gap: 0.45rem;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--pico-card-background-color);
-}
-.graph-empty-way-label { color: var(--pico-color); font-weight: 600; font-size: 0.85rem; }
-.graph-empty-cmd { margin: 0; }
-.graph-empty-cmd code { font-size: 0.8em; }
-.graph-empty-hint { font-size: 0.78rem; color: var(--pico-muted-color); }
+/* Inner empty-state pieces (icon/title/sub/ways/way/hint) are shared - see .console-empty-*
+   in console.css. Only the container above and this demo button are graph-specific. */
 .graph-empty-demo { width: auto; margin: 0; align-self: flex-start; padding: 0.3rem 0.8rem; font-size: 0.85rem; }
-@media (max-width: 640px) { .graph-empty-ways { grid-template-columns: 1fr; } }
 
 /* Cold state (nothing loaded): collapse the app to just the empty-state prompt at its NATURAL
    height, instead of a full-viewport-tall empty panel. :has() detects the visible empty state

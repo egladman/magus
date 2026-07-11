@@ -187,3 +187,26 @@
 
 /* Mobile: drop the least-important item (the mode note) before the bar can crowd. */
 @media (max-width: 480px) { .status-mode { display: none; } }
+
+/* Shared empty-state prompt (log viewer + graph explorer): an icon over a title + sub, then
+   a two-up grid of "ways" to get content loaded. These inner pieces were byte-identical across
+   the two apps, so they live here; each app keeps only its own CONTAINER (position/height, the
+   .log-empty / .graph-empty-state hooks) and any way-card background override. */
+.console-empty-icon { width: 3rem; height: 3rem; color: var(--pico-muted-border-color); margin-bottom: 0.9rem; }
+.console-empty-title { color: var(--pico-color); font-weight: 600; font-size: 1.15rem; margin: 0 0 0.35rem; }
+.console-empty-sub { margin: 0 0 1.4rem; max-width: 34rem; }
+.console-empty-ways {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+  width: 100%; max-width: 34rem; margin-inline: auto; text-align: left;
+}
+.console-empty-way {
+  display: flex; flex-direction: column; gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+}
+.console-empty-way-label { color: var(--pico-color); font-weight: 600; font-size: 0.85rem; }
+.console-empty-cmd { margin: 0; }
+.console-empty-cmd code { font-size: 0.8em; }
+.console-empty-hint { font-size: 0.78rem; color: var(--pico-muted-color); }
+@media (max-width: 640px) { .console-empty-ways { grid-template-columns: 1fr; } }
