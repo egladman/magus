@@ -254,6 +254,30 @@
 #ref-drawer dd { margin-bottom: 0.5rem; }
 #ref-drawer pre, #ref-drawer code { white-space: pre-wrap; overflow-wrap: anywhere; }
 #ref-drawer table { display: block; overflow-x: auto; }
+
+/* Inline docs browsing: a fetched page's article renders in .ref-docview with a back bar; while a
+   doc is open the search + reference sections hide. Lets you look up docs without leaving the app. */
+.ref-docview { display: none; }
+/* Out-specify the `.js #ref-drawer .ref-section { display:block }` reveal rule (same specificity
+   otherwise) so browsing genuinely hides the reference sections + search. */
+.js #ref-drawer.browsing .page-tools,
+.js #ref-drawer.browsing .ref-section { display: none; }
+#ref-drawer.browsing .ref-docview { display: block; }
+.ref-docview-bar {
+  position: sticky; top: 0; z-index: 1; background: var(--pico-card-background-color);
+  margin-bottom: 0.5rem; padding-bottom: 0.4rem;
+}
+/* Bare button: reset Pico's white --pico-color (see .ref-pin) so hover firms up, never vanishes. */
+.ref-doc-back {
+  width: auto; margin: 0; padding: 0.2rem 0.5rem; font-size: 0.82rem;
+  background: none; border: 0; box-shadow: none; cursor: pointer;
+  --pico-color: var(--pico-contrast); color: var(--pico-muted-color);
+}
+.ref-doc-back:hover { color: var(--pico-contrast); }
+.ref-doc { font-size: 0.9rem; }
+.ref-doc h1 { font-size: 1.25rem; }
+.ref-doc :is(h2, h3, h4) { font-size: 1.02rem; margin-top: 1.1rem; }
+.ref-doc img { max-width: 100%; height: auto; }
 /* Pinned: the panel docks and the page reflows to make room (no backdrop - the content stays
    visible and usable beside the panel). Pico sets body{width:100%}, so shrink the body's width by
    the panel width; the fixed panel (viewport-relative) fills the strip on the right where the body
