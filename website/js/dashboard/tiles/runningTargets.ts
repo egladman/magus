@@ -10,8 +10,7 @@ export function runningTargetsTile(): Tile {
   const card = new Card("running-targets", "Running");
   // The tile-count chip lives in the head; reuse the note slot styled as a count.
   const count = h("span", "tile-count", "0");
-  const headNote = card.el.querySelector(".tile-note");
-  if (headNote) headNote.replaceWith(count);
+  card.noteNode().replaceWith(count);
   const list = h("ul", "row-list");
   const empty = h("p", "row-empty", "Pool is idle.");
   card.body.append(list, empty);
@@ -29,7 +28,7 @@ export function runningTargetsTile(): Tile {
       if (c.step) bits.push(c.step);
       const t = relTime(c.startTime);
       if (t) bits.push(t);
-      const meta = h("span", "row-meta", bits.join(" · "));
+      const meta = h("span", "row-meta", bits.join(" - "));
       row.append(cmd, meta);
       list.append(row);
     }

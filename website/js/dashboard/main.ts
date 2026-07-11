@@ -152,11 +152,11 @@ function onLiveOpen(host: string): void {
 function onLiveError(host: string): void {
   failCount++;
   if (everConnected) {
-    setConn({ state: "disconnected", detail: failCount >= DISCONNECT_GRACE ? undefined : "reconnecting" });
+    setConn({ state: "disconnected", detail: failCount >= DISCONNECT_GRACE ? "disconnected" : "reconnecting" });
   } else if (failCount >= DISCONNECT_GRACE) {
-    setConn({ state: "disconnected" });
+    setConn({ state: "disconnected", detail: "disconnected" });
     showResume(host, true);
-    transport.stopStatusReconnect(); // stop hammering a daemon that isn't there
+    transport.stop(); // give up: tear down all feeds so nothing hammers an absent daemon
   } else {
     setConn({ state: "connecting" });
   }
@@ -256,10 +256,11 @@ function boot(): void {
 
   // No link in the URL: optimistically resume the last daemon we connected to.
   const saved = savedDaemon();
-  if (saved && validateLiveHost(saved)) {
+  const savedHost = saved ? validateLiveHost(saved) : null;
+  if (savedHost) {
     setText("dash-connect-title", "Reconnecting...");
-    setText("dash-connect-sub", "Resuming your last daemon at " + saved + ".");
-    connectLive(saved);
+    setText("dash-connect-sub", "Resuming your last daemon at " + savedHost + ".");
+    connectLive(savedHost); // the normalized host, matching the #live= and resume-form paths
     return;
   }
   setConn({ state: "none" });

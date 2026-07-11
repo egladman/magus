@@ -56,12 +56,19 @@ export class DashboardTransport {
   private insightAbort: AbortController | null = null;
   private insightTimer: ReturnType<typeof setInterval> | null = null;
 
+  // stopped is a permanent give-up latch. Once set (by stop()), no feed reschedules:
+  // the status reconnect, the metrics retry, and the insight poll all bail while it is
+  // true, so a never-connected resume that gives up stops hammering an absent daemon
+  // entirely. connect() clears it before starting a fresh set of feeds.
+  private stopped = false;
+
   constructor(store: Store<DashboardState>, cb: TransportCallbacks) {
     this.store = store;
     this.cb = cb;
   }
 
   connect(host: string): void {
+    this.stopped = false;
     this.disconnect();
     this.connectStatus(host);
     this.startMetrics(host);
@@ -73,6 +80,15 @@ export class DashboardTransport {
     if (this.statusRetry) { clearTimeout(this.statusRetry); this.statusRetry = null; }
     this.stopMetrics();
     this.stopInsight();
+  }
+
+  // stop is the permanent give-up: it tears down all three feeds (status SSE, metrics
+  // stream, and the insight poll, each with its retry timer) and latches `stopped` so
+  // nothing reschedules. Used when a never-connected resume abandons the host, so NO
+  // request loop runs against a daemon that isn't there. connect() clears the latch.
+  stop(): void {
+    this.stopped = true;
+    this.disconnect();
   }
 
   // ---- status SSE ----------------------------------------------------------
@@ -107,18 +123,11 @@ export class DashboardTransport {
   }
 
   private scheduleStatusReconnect(host: string): void {
-    if (this.statusRetry) return;
+    if (this.stopped || this.statusRetry) return;
     this.statusRetry = setTimeout(() => {
       this.statusRetry = null;
       if (this.statusAbort && !this.statusAbort.signal.aborted) this.connectStatus(host);
     }, RECONNECT_MS);
-  }
-
-  // stopStatusReconnect halts the status reconnect loop (used by main when a
-  // never-connected resume gives up, so it stops hammering an absent daemon).
-  stopStatusReconnect(): void {
-    if (this.statusRetry) { clearTimeout(this.statusRetry); this.statusRetry = null; }
-    this.stopMetrics();
   }
 
   private onStatus(st: Status): void {
@@ -167,7 +176,7 @@ export class DashboardTransport {
   }
 
   private scheduleMetricsRetry(host: string): void {
-    if (this.metricsRetry) return;
+    if (this.stopped || this.metricsRetry) return;
     this.metricsRetry = setTimeout(() => {
       this.metricsRetry = null;
       if (this.metricsAbort && !this.metricsAbort.signal.aborted) void this.runMetrics(host, this.metricsAbort.signal);
@@ -198,6 +207,7 @@ export class DashboardTransport {
   }
 
   private async fetchInsight(): Promise<void> {
+    if (this.stopped) return;
     const host = this.insightHost;
     if (!host) return;
     if (this.insightAbort) this.insightAbort.abort();

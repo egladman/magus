@@ -1,10 +1,9 @@
 // daemon.ts - the ONE audited module for talking to a loopback magus daemon.
 //
-// Three tool pages (dashboard, graph explorer, log viewer) all connect to a
-// running daemon the same way, and the security-critical pieces used to be
-// copy-pasted across all three (validateLiveHost 3x, consumeLiveToken 3x,
-// getLiveToken 3x, fetchSSE 3x). They now live here, imported once, so the
-// loopback lock and the shared token keys have a single source of truth.
+// Two tool pages (the dashboard and the graph explorer) import these security-
+// critical helpers, which used to be copy-pasted between them (validateLiveHost,
+// consumeLiveToken, getLiveToken, fetchSSE). They live here, imported once, so the
+// loopback lock and the shared token keys have a single home.
 //
 // What this module owns:
 //   - the LOOPBACK LOCK: validateLiveHost() - the pure host check that makes the
@@ -12,15 +11,17 @@
 //     fetch is built from its normalized return, never from the raw fragment.
 //   - the SHARED TOKEN: consumeLiveToken/getLiveToken over the "magus-live-token"
 //     (session or, if remembered, local) and "magus-live-remember" keys - one
-//     token any tool page reuses when it hands off to another.
+//     token a tool page reuses when it hands off to another.
 //   - the STREAM CLIENTS: fetchSSE() (fetch-based SSE so the bearer token can ride
 //     an Authorization header, which EventSource cannot send) and the ConnectRPC
-//     transport helper (bearer interceptor + createConnectTransport), plus a
-//     reconnecting SSE wrapper with a single connection-state callback.
+//     transport helper (bearer interceptor + createConnectTransport). This module
+//     does NOT own reconnect orchestration: each page hand-rolls its own loop on
+//     top of fetchSSE (the dashboard's lives in dashboard/transport.ts), since
+//     their backoff and teardown differ.
 //
 // Nothing here has a top-level side effect, so a page that imports only the
-// primitives (graph/log) is tree-shaken clear of the ConnectRPC transport code
-// the dashboard needs.
+// primitives is tree-shaken clear of the ConnectRPC transport code the dashboard
+// needs.
 
 import { createConnectTransport } from "@connectrpc/connect-web";
 import type { Interceptor, Transport } from "@connectrpc/connect";
@@ -193,7 +194,7 @@ export async function fetchSSE(
 // ---- ConnectRPC transport --------------------------------------------------
 
 // makeBearerInterceptor stamps the shared bearer token on every ConnectRPC request.
-export function makeBearerInterceptor(token: string | null): Interceptor {
+function makeBearerInterceptor(token: string | null): Interceptor {
   return (next) => async (req) => {
     if (token) req.header.set("Authorization", "Bearer " + token);
     return await next(req);
@@ -210,73 +211,9 @@ export function createDaemonTransport(host: string, token: string | null = getLi
   });
 }
 
-// ---- reconnecting SSE ------------------------------------------------------
+// ---- connection state ------------------------------------------------------
 
+// ConnState is the connection lifecycle a page reflects into its UI. Each page
+// drives its own reconnect loop (see the module header); this is the shared
+// vocabulary for the resulting state.
 export type ConnState = "connecting" | "connected" | "disconnected";
-
-export interface ReconnectingSSEOptions {
-  url: string;
-  onEvent: (type: string, data: string) => void;
-  onState?: (state: ConnState) => void;
-  // token override; defaults to the shared getLiveToken().
-  token?: string | null;
-  // reconnect delay in ms (fixed); default 3000.
-  reconnectMs?: number;
-}
-
-// ReconnectingSSE wraps fetchSSE with an AbortController, a fixed reconnect timer,
-// and a single connection-state callback. The dashboard's two live feeds (status
-// SSE and the metrics Connect stream) each drive their own instance / loop; the
-// graph explorer and log viewer keep their bespoke reconnect orchestration and use
-// fetchSSE directly, since their backoff and teardown differ.
-export class ReconnectingSSE {
-  private opts: ReconnectingSSEOptions;
-  private abort: AbortController | null = null;
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  private stopped = false;
-
-  constructor(opts: ReconnectingSSEOptions) {
-    this.opts = opts;
-  }
-
-  start(): void {
-    this.stopped = false;
-    this.connect();
-  }
-
-  private connect(): void {
-    if (this.stopped) return;
-    if (this.abort) this.abort.abort();
-    this.abort = new AbortController();
-    this.opts.onState?.("connecting");
-    const headers = authHeaders(this.opts.token ?? getLiveToken());
-    void fetchSSE(
-      this.opts.url,
-      headers,
-      this.opts.onEvent,
-      () => this.onError(),
-      this.abort.signal,
-      () => this.opts.onState?.("connected"),
-    );
-  }
-
-  private onError(): void {
-    if (this.stopped) return;
-    this.opts.onState?.("disconnected");
-    this.schedule();
-  }
-
-  private schedule(): void {
-    if (this.timer || this.stopped) return;
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      if (!this.stopped) this.connect();
-    }, this.opts.reconnectMs ?? 3000);
-  }
-
-  stop(): void {
-    this.stopped = true;
-    if (this.abort) { this.abort.abort(); this.abort = null; }
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-  }
-}

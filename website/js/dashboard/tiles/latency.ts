@@ -28,10 +28,9 @@ export function latencyTile(): Tile {
   const note = h("span");
   note.append(h("span", "lg lg-p50", "p50"), h("span", "lg lg-p95", "p95"), h("span", "lg lg-p99", "p99"), document.createTextNode(" "));
   note.append(glossaryLink("Percentile", { label: "percentiles" }));
-  card.setNote("");
-  // setNote takes a string; append the rich note directly instead.
-  const noteHost = card.el.querySelector(".tile-note");
-  if (noteHost) noteHost.replaceChildren(note);
+  // The note is rich (swatch legend + glossary link), not a plain string, so populate
+  // the note node directly instead of via setNote.
+  card.noteNode().replaceChildren(note);
 
   const gridEl = h("div", "chart-grid");
   for (const k of LAT_KEYS) {
@@ -68,7 +67,7 @@ export function latencyTile(): Tile {
     }
     charts[k].setData(aligned(d));
     readouts[k].textContent =
-      `count ${fmtCount(lat.count)}  ·  p50 ${fmtDur(lat.p50)}  ·  p95 ${fmtDur(lat.p95)}  ·  p99 ${fmtDur(lat.p99)}  ·  max ${fmtDur(lat.max)}`;
+      `count ${fmtCount(lat.count)} - p50 ${fmtDur(lat.p50)} - p95 ${fmtDur(lat.p95)} - p99 ${fmtDur(lat.p99)} - max ${fmtDur(lat.max)}`;
   }
 
   const onResize = resizeAll;

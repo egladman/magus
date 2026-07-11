@@ -52,11 +52,6 @@ export function tsMillis(ts: Timestamp | undefined): number {
   return Number(ts.seconds) * 1000 + Math.floor((ts.nanos || 0) / 1e6);
 }
 
-export function tsSeconds(ts: Timestamp | undefined): number {
-  if (!ts) return Date.now() / 1000;
-  return Number(ts.seconds) + (ts.nanos || 0) / 1e9;
-}
-
 export function relTime(ts: Timestamp | undefined): string {
   if (!ts) return "";
   const secs = Math.max(0, Math.round((Date.now() - tsMillis(ts)) / 1000));
@@ -120,7 +115,6 @@ export interface TargetRunView {
 export interface RunView {
   inv: string;
   trigger: string;
-  startedMs: number;
   targets: TargetRunView[];
 }
 
@@ -163,7 +157,6 @@ function mapRun(r: Run): RunView {
   return {
     inv: r.inv || "",
     trigger: r.trigger || "",
-    startedMs: r.startedAt ? tsMillis(r.startedAt) : Date.now(),
     targets: (r.targets || []).map(mapTargetRun),
   };
 }

@@ -8,8 +8,7 @@ import { Card, h, type Tile } from "./card";
 export function workspacesTile(): Tile {
   const card = new Card("workspaces", "Workspaces", { term: "Workspace", label: "workspaces" });
   const count = h("span", "tile-count", "0");
-  const headNote = card.el.querySelector(".tile-note");
-  if (headNote) headNote.replaceWith(count);
+  card.noteNode().replaceWith(count);
   const list = h("ul", "row-list");
   const empty = h("p", "row-empty", "No workspaces loaded.");
   card.body.append(list, empty);

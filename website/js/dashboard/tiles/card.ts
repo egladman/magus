@@ -95,8 +95,12 @@ export class Card {
     this.noteEl.textContent = text;
   }
 
-  isRevealed(): boolean {
-    return !this.el.classList.contains("collapsed");
+  // noteNode exposes the header note element for a tile that needs a RICH note (child
+  // nodes, a swatch legend, a glossary link) or wants to swap the slot for a differently
+  // styled chip. Prefer setNote for a plain string; reach for this only when the note is
+  // more than text. Returned so callers do not have to querySelector past the card shell.
+  noteNode(): HTMLElement {
+    return this.noteEl;
   }
 }
 
