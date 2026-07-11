@@ -274,7 +274,15 @@
   --pico-color: var(--pico-contrast); color: var(--pico-muted-color);
 }
 .ref-doc-back:hover { color: var(--pico-contrast); }
-.ref-doc { font-size: 0.9rem; }
+/* The browsed doc sits in the same gray-outlined tinted panel as an expanded reference section
+   (.disclosure-body), so reading a doc feels like the rest of the panel. */
+.ref-doc {
+  font-size: 0.9rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--syntax-panel-bg);
+}
 .ref-doc h1 { font-size: 1.25rem; }
 .ref-doc :is(h2, h3, h4) { font-size: 1.02rem; margin-top: 1.1rem; }
 .ref-doc img { max-width: 100%; height: auto; }

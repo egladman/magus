@@ -15,9 +15,13 @@
   const search = document.querySelector(".page-tools");
   if (search) drawer.appendChild(search);
 
-  // Then relocate the page's reference sections, in document order. CSS hides them inline
+  // Then relocate the page's reference sections, in document order, and expand them by default so
+  // they read as content, not folded-away toggles (still collapsible). CSS hides them inline
   // (.js .ref-section) and reveals them once inside (#ref-drawer .ref-section).
-  document.querySelectorAll(".ref-section").forEach((s) => drawer.appendChild(s));
+  document.querySelectorAll(".ref-section").forEach((s) => {
+    drawer.appendChild(s);
+    if (s instanceof HTMLDetailsElement) s.open = true;
+  });
 
   // --- inline docs browsing ------------------------------------------------
   // A docs link clicked inside the drawer (a search result, or a link within an already-open doc)
@@ -28,7 +32,7 @@
   const backBtn = document.createElement("button");
   backBtn.type = "button";
   backBtn.className = "ref-doc-back";
-  backBtn.textContent = "← Reference";
+  backBtn.textContent = "← Back";
   const docBody = document.createElement("div");
   docBody.className = "ref-doc";
   const docBar = document.createElement("div");
