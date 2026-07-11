@@ -210,3 +210,42 @@
 .console-empty-cmd code { font-size: 0.8em; }
 .console-empty-hint { font-size: 0.78rem; color: var(--pico-muted-color); }
 @media (max-width: 640px) { .console-empty-ways { grid-template-columns: 1fr; } }
+
+/* Reference drawer: a right-side slide-out panel holding a console app's reference material
+   (query/filter syntax, views, display options, how-to). Native docs-app pattern; shared across
+   the console apps. A page marks its reference blocks .ref-section, adds a .ref-trigger, and the
+   #ref-drawer + #ref-backdrop; ref-drawer.js relocates the sections in and wires open/close. */
+.ref-trigger-row { display: flex; justify-content: flex-end; margin: 0.3rem 0 0.6rem; }
+.ref-trigger {
+  width: auto; margin: 0; display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.7rem; font-size: 0.8rem;
+}
+.ref-trigger svg { width: 1em; height: 1em; }
+.ref-backdrop {
+  position: fixed; inset: 0; z-index: 49; background: rgba(0, 0, 0, 0.28);
+  opacity: 0; visibility: hidden; transition: opacity 0.2s ease;
+}
+.ref-backdrop.open { opacity: 1; visibility: visible; }
+.ref-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: min(440px, 92vw);
+  background: var(--pico-card-background-color); border-left: 1px solid var(--pico-muted-border-color);
+  box-shadow: -8px 0 28px rgba(0, 0, 0, 0.16);
+  transform: translateX(100%); transition: transform 0.24s ease;
+  overflow-y: auto; overscroll-behavior: contain; padding: 0.9rem 1.05rem 2rem;
+}
+.ref-drawer.open { transform: translateX(0); }
+.ref-drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; margin-bottom: 0.6rem; padding-bottom: 0.4rem;
+  background: var(--pico-card-background-color);
+}
+.ref-drawer-title { margin: 0; font-size: 0.95rem; }
+.ref-drawer-close {
+  width: auto; margin: 0; padding: 0.1rem 0.5rem; font-size: 1.2rem; line-height: 1;
+  background: none; border: 0; color: var(--pico-muted-color); cursor: pointer;
+}
+.ref-drawer-close:hover { color: var(--pico-color); }
+/* Reference sections are inline for no-JS; with JS, ref-drawer.js relocates them into the drawer,
+   so hide them until they land there (no flash at the top of the page), then show them in-drawer. */
+.js .ref-section { display: none; }
+.js #ref-drawer .ref-section { display: block; }

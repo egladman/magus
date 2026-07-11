@@ -9,6 +9,7 @@
 // esbuild resolves each to its .ts source. Modules not yet converted are still .js
 // and resolve directly; the mix is fine (allowJs + esbuild bundle both).
 import "./nav.js";
+import "./ref-drawer.js";
 import "./toc.js";
 import "./search.js";
 import "./anchors.js";
