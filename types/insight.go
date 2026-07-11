@@ -110,6 +110,17 @@ type Trend struct {
 	Delta   int    `json:"delta"   yaml:"delta"`
 }
 
+// InsightView bundles the four VCS-history lenses without the knowledge-graph axis.
+// It is what the console serves at GET /api/v1/insight: the same per-lens outputs the
+// CLI produces, computed in-daemon from one bounded git-log scan. GraphStats is omitted
+// deliberately - the console read is scan-only and never touches the knowledge graph.
+type InsightView struct {
+	Hotspots  HotspotOutput   `json:"hotspots"  yaml:"hotspots"`
+	Affinity  AffinityOutput  `json:"affinity"  yaml:"affinity"`
+	Ownership OwnershipOutput `json:"ownership" yaml:"ownership"`
+	Trend     TrendOutput     `json:"trend"     yaml:"trend"`
+}
+
 // InsightReport bundles every lens for the combined `magus insight report` (the
 // committable Markdown doc and its -o json form). GraphStats is the knowledge-
 // graph axis (`magus graph stats`), embedded so the report spans both axes.

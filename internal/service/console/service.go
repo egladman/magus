@@ -8,6 +8,8 @@ package console
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
@@ -33,10 +35,17 @@ type Service struct {
 	// StatusReport.Runs empty.
 	runsFn func() []types.StatusRun
 
+	// Insight cache: an assembled InsightView reused for insightTTL so repeated dashboard
+	// polls collapse onto one git-log scan. The mutex also serializes cold-cache assembly.
+	insightMu    sync.Mutex
+	insightCache *insightEntry
+	insightTTL   time.Duration
+
 	// Test seams. Production leaves these nil; the real Magus / daemon socket is used.
 	statusReportFn   func(ctx context.Context) types.StatusReport
 	knowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
 	describeGraphFn  func() types.TargetGraphOutput
+	insightFn        func(ctx context.Context) (types.InsightView, error)
 }
 
 // Option customizes a Service. The With* options inject test seams and the explicit
@@ -65,6 +74,24 @@ func WithDescribeGraphFn(fn func() types.TargetGraphOutput) Option {
 	return func(s *Service) { s.describeGraphFn = fn }
 }
 
+// WithInsightFn replaces the workspace lens computation behind Insight. Tests pass this to
+// drive the cache without a real workspace or git history.
+func WithInsightFn(fn func(ctx context.Context) (types.InsightView, error)) Option {
+	return func(s *Service) { s.insightFn = fn }
+}
+
+// WithInsightTTL overrides how long an assembled InsightView is reused before the git-log
+// scan runs again. Zero disables caching (every call recomputes); negative is treated as
+// zero. Production leaves it at defaultInsightTTL.
+func WithInsightTTL(d time.Duration) Option {
+	return func(s *Service) {
+		if d < 0 {
+			d = 0
+		}
+		s.insightTTL = d
+	}
+}
+
 // WithRuns supplies the daemon's live-run source (RunRegistry.Snapshot). The status
 // report then carries the per-target execution state of every adopted run, on both the GET
 // and the SSE frame. Only the daemon sets this; a plain CLI status query omits it.
@@ -77,7 +104,7 @@ func WithRuns(fn func() []types.StatusRun) Option {
 // and the running magus version. m may be nil only when every graph/status path is
 // overridden by a With* seam (tests).
 func NewService(m *magus.Magus, cfg config.Config, base types.StatusBase, version string, opts ...Option) *Service {
-	s := &Service{magus: m, config: cfg, statusBase: base, version: version}
+	s := &Service{magus: m, config: cfg, statusBase: base, version: version, insightTTL: defaultInsightTTL}
 	for _, o := range opts {
 		o(s)
 	}
