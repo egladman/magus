@@ -70,8 +70,9 @@ main.container-fluid {
   grid-template-columns: 18rem 1fr;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
-  height: calc(100svh - 12rem);
-  min-height: 460px;
+  /* Same height as the log viewer's .panel (logs.css) so the two app panes match. */
+  height: calc(100svh - 12.5rem);
+  min-height: 420px;
   border: 1px solid var(--pico-muted-border-color);
   border-radius: var(--pico-border-radius);
   overflow: hidden;
@@ -324,15 +325,16 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
    tracked summary label over a bordered, tinted panel (--syntax-panel-bg) that
    expands beneath it. The body is wrapped so only the content gets panel chrome. */
 .query-help, .url-help, .display-help { margin: 0.3rem 0 var(--pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
-.query-help > summary:not([role]), .url-help > summary:not([role]), .display-help > summary:not([role]) {
+.query-help > summary:not([role]), .url-help > summary:not([role]), .display-help > summary:not([role]), .views-panel > summary:not([role]) {
   width: fit-content; cursor: pointer;
   color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.05em;
 }
 main .query-help > summary:not([role]), main .query-help[open] > summary:not([role]),
 main .url-help > summary:not([role]), main .url-help[open] > summary:not([role]),
-main .display-help > summary:not([role]), main .display-help[open] > summary:not([role]) { color: var(--pico-muted-color); }
-.query-help[open] > summary, .url-help[open] > summary, .display-help[open] > summary { margin-bottom: 0.5rem; }
+main .display-help > summary:not([role]), main .display-help[open] > summary:not([role]),
+main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([role]) { color: var(--pico-muted-color); }
+.query-help[open] > summary, .url-help[open] > summary, .display-help[open] > summary, .views-panel[open] > summary { margin-bottom: 0.5rem; }
 .disclosure-body {
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--pico-muted-border-color);
@@ -397,16 +399,11 @@ main .display-help > summary:not([role]), main .display-help[open] > summary:not
 /* A curated, hard-capped set of questions (max 7), each a button named by the
    question it answers; active state is set by JS (.view-active class). The panel
    mirrors the reference disclosures below - an uppercase section label over a
-   tinted body panel (.disclosure-body) - but stays open, because these questions
-   are suggestions we want visible. The buttons are pill "suggestion chips" with a
-   leading chevron, so they read as tappable actions rather than inert labels. */
+   tinted body panel (.disclosure-body). It is a <details> collapsed by default: the
+   questions operate on a loaded graph, so they fold away while nothing is loaded and
+   the explorer auto-opens the panel (replaceGraph) when a graph arrives. The buttons
+   are pill "suggestion chips" with a leading chevron, reading as tappable actions. */
 .views-panel { margin: 0.3rem 0 var(--pad); }
-/* Shared uppercase section label (matches the disclosure summaries). */
-.section-heading {
-  width: fit-content; margin: 0 0 0.4rem;
-  color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.05em;
-}
 /* Lead-in that frames the chips as suggestions ("questions you might ask"), not a
    toolbar of commands - so a first-time visitor reads them as starting points. */
 .views-hint { margin: 0 0 0.55rem; color: var(--pico-muted-color); font-size: 0.8rem; line-height: 1.45; }

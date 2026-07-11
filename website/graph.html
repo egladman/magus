@@ -33,8 +33,8 @@
          (uppercase section label over a tinted body panel) but always open: these
          questions are suggestions we want visible, not tucked behind a toggle. The
          buttons read as tappable suggestion chips (pill + chevron), not inert text. -->
-    <section class="views-panel" aria-label="Ask the graph a question">
-      <p class="section-heading">Ask</p>
+    <details class="views-panel" id="ask-panel">
+      <summary>Ask</summary>
       <div class="disclosure-body">
         <p class="views-hint">Questions you might ask about a workspace. Click one to explore, or write your own query below.</p>
         <div class="views-body">
@@ -47,7 +47,7 @@
         <button type="button" id="clear-view-btn" class="view-clear" hidden>Clear</button>
         </div>
       </div>
-    </section>
+    </details>
 
     <details class="query-help">
       <summary>Query syntax and views</summary>

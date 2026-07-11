@@ -1350,6 +1350,10 @@ function replaceGraph(data, statusMsg) {
   // A locally opened/dropped file supersedes whatever provenance badge was
   // showing for the graph that loaded at boot.
   updateSnapshotBadge(null);
+  // A graph is now loaded, so the "Ask" panel (a <details> collapsed while nothing is
+  // loaded) is worth opening - the questions operate on the loaded graph.
+  const askPanel = el("ask-panel");
+  if (askPanel) askPanel.open = true;
   // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
   // path is unchanged; the targets path is converted client-side.
   const flavor = detectFlavor(data);
