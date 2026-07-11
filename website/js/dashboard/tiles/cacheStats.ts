@@ -1,20 +1,17 @@
 // cacheStats.ts - the pool-wide cache KPI strip (hits / misses / hit-rate / size /
-// errors), read from the live status frame. A bare stat strip, not a bordered tile,
-// so it stays a dense full-width readout. The Cache term is deep-linked via a small
-// caption row (the strip has no tile heading of its own).
+// errors), read from the live status frame. A standard bordered, collapsible tile so it
+// matches its half-width partner (the pool tile) and the sibling cache readouts, instead
+// of the bare borderless strip it used to be. The heading term link is intentionally
+// omitted (title alone) to avoid a "Local cache cache" stutter; the glossary hover-def
+// planned for every card head will reattach the definition uniformly later.
 
 import type { DashboardState, CacheView } from "../state";
 import { fmtBytes, fmtCount, fmtPct } from "../state";
-import { glossaryLink } from "../../lib/glossary";
 import { StatStrip } from "./widgets";
-import { h, type Tile } from "./card";
+import { Card, type Tile } from "./card";
 
 export function cacheStatsTile(): Tile {
-  const root = h("section", "stat-section");
-  const cap = h("p", "stat-caption");
-  cap.append(document.createTextNode("Local "));
-  cap.append(glossaryLink("Cache", { label: "cache" }));
-  cap.append(document.createTextNode(" activity"));
+  const card = new Card("cache-local", "Local cache", { note: "hits / misses this session" });
   const strip = new StatStrip([
     { key: "hits", label: "Cache hits", accent: "hit" },
     { key: "misses", label: "Cache misses", accent: "miss" },
@@ -22,7 +19,7 @@ export function cacheStatsTile(): Tile {
     { key: "size", label: "Cache size", accent: "size" },
     { key: "errors", label: "Errors", accent: "err" },
   ]);
-  root.append(cap, strip.el);
+  card.body.append(strip.el);
 
   function render(c: CacheView): void {
     strip.set("hits", fmtCount(c.hits));
@@ -33,7 +30,7 @@ export function cacheStatsTile(): Tile {
   }
 
   return {
-    el: root,
+    el: card.el,
     update(s: DashboardState) { if (s.status) render(s.status.cache); },
     destroy() {},
   };
