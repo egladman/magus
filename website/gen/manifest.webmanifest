@@ -1,10 +1,13 @@
 {
   "name": "magus",
   "short_name": "magus",
+  "id": "/magus/",
+  "lang": "en",
   "description": "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.",
   "start_url": "/magus/",
   "scope": "/magus/",
   "display": "standalone",
+  "categories": ["developer", "utilities"],
   "background_color": "#ffffff",
   "theme_color": "#3178c6",
   "icons": [

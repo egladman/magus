@@ -50,7 +50,7 @@
         <li><a href="download/">Download</a></li>
         <li><a href="tour/">Tour</a></li>
         <li><a href="playground/">Playground</a></li>
-        <li><a href="graph/">Graph</a></li>
+        <li><a href="dashboard/">Dashboard</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
@@ -65,12 +65,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#development" title="Development">Development</a><ul><li><a href="#project-layout" title="Project layout">Project layout</a></li><li><a href="#the-web-and-daemon-stack" title="The web and daemon stack">The web and daemon stack</a></li></ul></li></ul>
+        <ul><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#optional-browser-ui" title="Optional browser UI">Optional browser UI</a></li><li><a href="#development" title="Development">Development</a><ul><li><a href="#project-layout" title="Project layout">Project layout</a></li><li><a href="#the-web-and-daemon-stack" title="The web and daemon stack">The web and daemon stack</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">5 min read</small>
     <article>
 <h1 id="magus">magus</h1>
 <p align="center">
@@ -94,6 +94,21 @@
 </ul>
 <h2 id="install">Install</h2>
 <p>magus ships as a single self-contained binary. See the <a href="download/">Download guide</a>.</p>
+<h2 id="optional-browser-ui">Optional browser UI</h2>
+<p>magus is fully featured from the terminal - everything here is optional. Alongside the CLI, it can drive three read-only browser surfaces:</p>
+<blockquote>
+<p><strong>See it first:</strong> <a href="https://eli.gladman.cc/magus/dashboard/#demo" rel="noopener noreferrer" target="_blank" data-external>open the live demo</a> - no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all three apps in demo mode. Everything below runs against your own daemon instead.</p>
+</blockquote>
+<ul>
+<li><strong><a href="https://eli.gladman.cc/magus/dashboard/" rel="noopener noreferrer" target="_blank" data-external>Dashboard</a></strong> - live daemon health, the concurrency pool, running targets, and cache activity.</li>
+<li><strong><a href="https://eli.gladman.cc/magus/graph/" rel="noopener noreferrer" target="_blank" data-external>Graph explorer</a></strong> - navigate targets, spells, and their dependency graph (<code>magus graph open</code>).</li>
+<li><strong><a href="https://eli.gladman.cc/magus/logs/" rel="noopener noreferrer" target="_blank" data-external>Log viewer</a></strong> - read or stream any past run's captured output (<code>magus query output &lt;ref&gt; --open</code>).</li>
+</ul>
+<p>These are complementary add-ons, not a runtime you depend on. Two things set them apart architecturally:</p>
+<ul>
+<li><strong>The binary serves no HTML.</strong> magus never embeds a web server that ships a UI. The pages are a separate static site (built under <a href="https://github.com/egladman/magus/tree/main/website/gen" rel="noopener noreferrer" target="_blank" data-external><code>website/gen/</code></a>, hosted at <a href="https://eli.gladman.cc/magus/" rel="noopener noreferrer" target="_blank" data-external>eli.gladman.cc/magus</a>, or self-hosted from any file server). All the daemon exposes is a small read-only API over loopback (<code>/api/v1/...</code>) plus the MCP endpoint - no page serving, no write routes.</li>
+<li><strong>Your data never leaves your machine.</strong> The hosted page talks only to <code>127.0.0.1</code>/<code>[::1]</code> - a loopback lock the page enforces before any request - or receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: the daemon runs fine without it (<code>bridge.enabled: false</code>), and a binary built without <code>-tags mcp</code> has no browser API at all. See the <a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Console reference</a>.</li>
+</ul>
 <hr>
 <h2 id="development">Development</h2>
 <p>For the full contributor reference - the <a href="https://eli.gladman.cc/magus/development/contributing/" rel="noopener noreferrer" target="_blank" data-external>Contributing guide</a>, per-project target catalogs (run order + dependency graphs), and the config reference - see the <a href="https://eli.gladman.cc/magus/development/" rel="noopener noreferrer" target="_blank" data-external>Development page</a>.</p>
@@ -169,7 +184,7 @@ composition   internal/daemon       assembles the daemon HTTP server from all of
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="search/">Search</a> &middot; <a href="public/">Files</a></small>
-    <small class="footer-group"><a href="graph/">Graph</a> &middot; <a href="playground/">Playground</a> &middot; <a href="tour/">Tour</a></small>
+    <small class="footer-group"><a href="dashboard/">Dashboard</a> &middot; <a href="playground/">Playground</a> &middot; <a href="tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="main.js"></script>

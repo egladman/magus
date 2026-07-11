@@ -31,6 +31,21 @@ Full docs live at **[eli.gladman.cc/magus](https://eli.gladman.cc/magus/)**.[^do
 
 magus ships as a single self-contained binary. See the [Download guide](docs/download.md).
 
+## Optional browser UI
+
+magus is fully featured from the terminal - everything here is optional. Alongside the CLI, it can drive three read-only browser surfaces:
+
+> **See it first:** [open the live demo](https://eli.gladman.cc/magus/dashboard/#demo) - no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all three apps in demo mode. Everything below runs against your own daemon instead.
+
+- **[Dashboard](https://eli.gladman.cc/magus/dashboard/)** - live daemon health, the concurrency pool, running targets, and cache activity.
+- **[Graph explorer](https://eli.gladman.cc/magus/graph/)** - navigate targets, spells, and their dependency graph (`magus graph open`).
+- **[Log viewer](https://eli.gladman.cc/magus/logs/)** - read or stream any past run's captured output (`magus query output <ref> --open`).
+
+These are complementary add-ons, not a runtime you depend on. Two things set them apart architecturally:
+
+- **The binary serves no HTML.** magus never embeds a web server that ships a UI. The pages are a separate static site (built under [`website/gen/`](https://github.com/egladman/magus/tree/main/website/gen), hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/), or self-hosted from any file server). All the daemon exposes is a small read-only API over loopback (`/api/v1/...`) plus the MCP endpoint - no page serving, no write routes.
+- **Your data never leaves your machine.** The hosted page talks only to `127.0.0.1`/`[::1]` - a loopback lock the page enforces before any request - or receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: the daemon runs fine without it (`bridge.enabled: false`), and a binary built without `-tags mcp` has no browser API at all. See the [Console reference](https://eli.gladman.cc/magus/console/).
+
 ---
 
 ## Development
