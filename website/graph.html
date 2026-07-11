@@ -34,7 +34,7 @@
          docs search bar. They stay inline (visible) for no-JS. -->
     <!-- Views panel - question-first navigation (max 7 modes). Moved into the reference drawer at load. -->
     <details class="views-panel ref-section" id="ask-panel">
-      <summary>Ask</summary>
+      <summary>Ask a question</summary>
       <div class="disclosure-body">
         <p class="views-hint">Questions you might ask about a workspace. Click one to explore, or write your own query below.</p>
         <div class="views-body">
@@ -50,7 +50,7 @@
     </details>
 
     <details class="query-help ref-section">
-      <summary>Query syntax and views</summary>
+      <summary>Views</summary>
       <div class="disclosure-body">
       <p>Each view answers a developer question. The search box speaks the same grammar as <code>magus query</code>. Click an example to run it.</p>
       <table class="views-table">
@@ -63,6 +63,12 @@
           <tr><td>What's dead?</td><td><button type="button" class="view-btn q-example lens-btn" data-view="orphans" data-lens="orphans">orphans</button></td><td><code>magus query -kind:project</code></td></tr>
         </tbody>
       </table>
+      </div>
+    </details>
+
+    <details class="query-help ref-section">
+      <summary>Search syntax</summary>
+      <div class="disclosure-body">
       <p>The filter box speaks the same grammar as <code>magus query</code>. Terms are combined with AND and matched case-insensitively.</p>
       <dl>
         <dt><button type="button" class="q-example" data-q="render"><code>render</code></button></dt>
@@ -92,7 +98,7 @@
     </details>
 
     <details class="display-help ref-section">
-      <summary>Display</summary>
+      <summary>Layout and colors</summary>
       <div class="disclosure-body">
         <p class="control-label">Layout</p>
         <div class="layout-mode-row">

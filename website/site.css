@@ -178,14 +178,17 @@ html {
    the warm "run/try" CTAs. Resting state is muted gray; hover/focus firm up to the
    full text color so they never feel disabled. */
 .nav-toggle,
-#theme-toggle {
+#theme-toggle,
+.ref-trigger {
   border-color: var(--pico-muted-border-color);
   color: var(--pico-muted-color);
 }
 .nav-toggle:hover,
 .nav-toggle:focus-visible,
 #theme-toggle:hover,
-#theme-toggle:focus-visible {
+#theme-toggle:focus-visible,
+.ref-trigger:hover,
+.ref-trigger:focus-visible {
   border-color: var(--pico-color);
   color: var(--pico-color);
 }
