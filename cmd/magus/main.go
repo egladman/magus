@@ -60,6 +60,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -583,6 +584,13 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 // startMCPWithDaemon. Same process, sequential, so the write happens-before the read.
 var daemonProvider observability.Provider
 
+// daemonRuns is the daemon's live-run registry: a capture handler folded into every adopted
+// dispatch's journal, tracking per-target execution state. startMultiWorkspaceDaemon builds
+// it and threads it onto each dispatch's context; startMCPWithDaemon hands its Snapshot to
+// the console service so /api/v1/status and the status SSE report active runs. Same process,
+// sequential, so the write happens-before the reads.
+var daemonRuns *console.RunRegistry
+
 // startMultiWorkspaceDaemon starts the stable multi-workspace proc server for `magus server start`.
 // When cfg.Daemon.Workspaces is non-empty it eagerly loads declared workspaces and applies landlock.
 func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
@@ -612,6 +620,10 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		sharedTel, _ = observability.New(ctx, observability.Config{})
 	}
 	daemonProvider = sharedTel
+
+	// The live-run registry taps every adopted dispatch (threaded onto its context below) and
+	// backs the dashboard's active-runs view via the console service.
+	daemonRuns = console.NewRunRegistry()
 
 	declared := resolveDeclaredWorkspaces(cfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
 	reg := newWSRegistry(ctx, lim, ttl, sharedTel)
@@ -650,6 +662,10 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 				}
 				root = r
 			}
+			// Fold this adopted run's journal into the live-run registry so the dashboard
+			// sees its per-target execution state. BeginInvocation (in run/affected) reads
+			// the sink off the context and attaches it as an extra capture handler.
+			hctx = console.WithRunSink(hctx, daemonRuns)
 			return reg.dispatch(hctx, root, rc, args)
 		},
 		WorkspaceLister: reg.status,

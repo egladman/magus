@@ -24,6 +24,40 @@ message Status {
   Health health = 1;
   Pool pool = 2;        // live concurrency; absent when no daemon/pool is running
   string magus_version = 3;
+  repeated Run active_runs = 4; // runs the daemon is executing right now (adopted dispatches)
+}
+
+// Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`
+// dispatch, keyed by its invocation id. It carries the per-target execution state a
+// dashboard renders as a live run row, so the SAME status stream that shows the pool
+// also shows what each run's targets are doing.
+message Run {
+  string inv = 1;                             // invocation id (inv...); deep-links to the run's live log
+  string trigger = 2;                         // how the run was spawned: run | affected | ci | ...
+  google.protobuf.Timestamp started_at = 3;   // when the invocation opened
+  repeated TargetRun targets = 4;             // per-target execution state within this run
+}
+
+// TargetRun is the execution state of one target within a Run. It advances QUEUED ->
+// RUNNING -> PASSED|FAILED|CACHED as the run emits journal events; a finished target
+// carries its output reference and wall-clock duration.
+message TargetRun {
+  // State is where a target sits in its lifecycle.
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    QUEUED = 1;   // scheduled, not yet started
+    RUNNING = 2;  // a subprocess is executing
+    PASSED = 3;   // finished successfully
+    FAILED = 4;   // finished with an error
+    CACHED = 5;   // satisfied from cache (no work run)
+  }
+  string project = 1;                         // repo-relative project path
+  string target = 2;                          // target name (as the CLI spells it)
+  State state = 3;
+  google.protobuf.Timestamp started_at = 4;   // when the target began running (unset while QUEUED)
+  google.protobuf.Timestamp ended_at = 5;     // when the target finished (unset while active)
+  string output_ref = 6;                      // output reference, once finished
+  int64 duration_ms = 7;                      // wall-clock duration in ms, once finished
 }
 
 // Pool is the live concurrency pool - the slots and the work occupying them.

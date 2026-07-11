@@ -28,6 +28,11 @@ type Service struct {
 	version      string
 	daemonSocket string
 
+	// activeRunsFn returns the daemon's live runs, folded onto the status report. Nil when
+	// this service is not backed by a daemon run registry (a plain CLI status query), leaving
+	// StatusReport.ActiveRuns empty.
+	activeRunsFn func() []types.StatusRun
+
 	// Test seams. Production leaves these nil; the real Magus / daemon socket is used.
 	statusReportFn   func(ctx context.Context) types.StatusReport
 	knowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
@@ -60,6 +65,13 @@ func WithDescribeGraphFn(fn func() types.TargetGraphOutput) Option {
 	return func(s *Service) { s.describeGraphFn = fn }
 }
 
+// WithActiveRuns supplies the daemon's live-run source (RunRegistry.Snapshot). The status
+// report then carries the per-target execution state of every adopted run, on both the GET
+// and the SSE frame. Only the daemon sets this; a plain CLI status query omits it.
+func WithActiveRuns(fn func() []types.StatusRun) Option {
+	return func(s *Service) { s.activeRunsFn = fn }
+}
+
 // NewService builds a Service from the opened workspace (m), its resolved config, the
 // static status base (telemetry/cache/build fields the bridge cannot compute itself),
 // and the running magus version. m may be nil only when every graph/status path is
@@ -81,6 +93,18 @@ func (s *Service) Version() string { return s.version }
 // StatusReportFn when set (tests), otherwise queried from the daemon socket; a query
 // failure is reported as PoolError rather than an error return, matching `magus status`.
 func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
+	out := s.statusReport(ctx)
+	// Live runs come from this daemon's in-process run registry (not the pool query), so
+	// they ride the same report whether the pool is assembled from a seam or a socket query.
+	if s.activeRunsFn != nil {
+		out.ActiveRuns = s.activeRunsFn()
+	}
+	return out
+}
+
+// statusReport assembles the base report (telemetry/cache/build plus live pool), before the
+// daemon's live runs are folded on by StatusReport.
+func (s *Service) statusReport(ctx context.Context) types.StatusReport {
 	if s.statusReportFn != nil {
 		return s.statusReportFn(ctx)
 	}

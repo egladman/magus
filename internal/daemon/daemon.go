@@ -27,18 +27,34 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
+	"github.com/egladman/magus/types"
 )
 
 // Daemon assembles and runs the daemon HTTP server from a set of MCP server
 // options. It satisfies magus.Daemon.
 type Daemon struct {
-	opts mcp.Options
+	opts       mcp.Options
+	activeRuns func() []types.StatusRun
+}
+
+// Option customizes a Daemon.
+type Option func(*Daemon)
+
+// WithActiveRuns supplies the daemon's live-run source (the run registry's Snapshot). When
+// set, /api/v1/status and the status SSE frame carry the per-target execution state of every
+// adopted run alongside the pool - the same status surface, more live state.
+func WithActiveRuns(fn func() []types.StatusRun) Option {
+	return func(d *Daemon) { d.activeRuns = fn }
 }
 
 // New returns a Daemon that will serve the MCP endpoint (plus health routes and
 // the web bridge) described by opts.
-func New(opts mcp.Options) *Daemon {
-	return &Daemon{opts: opts}
+func New(opts mcp.Options, options ...Option) *Daemon {
+	d := &Daemon{opts: opts}
+	for _, o := range options {
+		o(d)
+	}
+	return d
 }
 
 // Serve starts the daemon HTTP server, blocking until ctx is cancelled or the
@@ -133,8 +149,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 
 			// The console service is pure application logic; the three route handlers below
-			// hold narrow interfaces satisfied by it and own all wire encoding.
-			svc := console.NewService(opts.Magus, opts.Config, opts.StatusBase, opts.Version)
+			// hold narrow interfaces satisfied by it and own all wire encoding. When a live-run
+			// source is set, the status report also carries the daemon's active runs.
+			var svcOpts []console.Option
+			if s.activeRuns != nil {
+				svcOpts = append(svcOpts, console.WithActiveRuns(s.activeRuns))
+			}
+			svc := console.NewService(opts.Magus, opts.Config, opts.StatusBase, opts.Version, svcOpts...)
 
 			// CORS allows the hosted explorer origin plus the two loopback origins derived
 			// from the server port. Metrics streaming is off in production (no snapshot fn).

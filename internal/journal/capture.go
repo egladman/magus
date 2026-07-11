@@ -82,6 +82,11 @@ func Emit(ctx context.Context, e Event) {
 	LoggerFromContext(ctx).LogAttrs(ctx, slog.LevelInfo, e.Text, slog.Any(eventAttr, e))
 }
 
+// EventFromRecord extracts the [Event] a capture record carries, and whether it was present.
+// It lets a slog.Handler outside this package (e.g. the daemon's live-run registry) fold the
+// same typed events the file and broadcaster handlers consume, without re-parsing JSON.
+func EventFromRecord(r slog.Record) (Event, bool) { return eventFrom(r) }
+
 // eventFrom extracts the [Event] a capture record carries, and whether it was present.
 func eventFrom(r slog.Record) (Event, bool) {
 	var (

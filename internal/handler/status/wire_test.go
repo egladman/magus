@@ -96,3 +96,39 @@ func TestEncodeStatusEventRoundTrip(t *testing.T) {
 	assert.Equal(t, int32(4), got.GetPool().GetCapacity())
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, got.GetHealth())
 }
+
+// TestStatusProtoMapsActiveRuns maps the daemon's live runs and their per-target execution
+// state onto the wire message's active_runs - the same status frame that carries the pool.
+func TestStatusProtoMapsActiveRuns(t *testing.T) {
+	started := time.UnixMilli(1_000)
+	execAt := time.UnixMilli(2_000)
+	doneAt := time.UnixMilli(5_000)
+	r := types.StatusReport{
+		ActiveRuns: []types.StatusRun{{
+			Inv:       "inv1a2b3c",
+			Trigger:   "run",
+			StartedAt: started,
+			Targets: []types.StatusTargetRun{
+				{Project: "svc/api", Target: "build", State: types.TargetRunPassed, StartedAt: execAt, EndedAt: doneAt, OutputRef: "refcafef00d", DurationMs: 3_000},
+				{Project: "svc/api", Target: "test", State: types.TargetRunRunning, StartedAt: execAt},
+				{Project: "svc/web", Target: "lint", State: types.TargetRunCached, StartedAt: doneAt, EndedAt: doneAt, OutputRef: "refbeef"},
+			},
+		}},
+	}
+	s := statusReportToProto(r, "v1")
+
+	require.Len(t, s.GetActiveRuns(), 1)
+	run := s.GetActiveRuns()[0]
+	assert.Equal(t, "inv1a2b3c", run.GetInv())
+	assert.Equal(t, "run", run.GetTrigger())
+	assert.Equal(t, int64(1_000), run.GetStartedAt().AsTime().UnixMilli())
+
+	require.Len(t, run.GetTargets(), 3)
+	assert.Equal(t, statusv1.TargetRun_PASSED, run.GetTargets()[0].GetState())
+	assert.Equal(t, "refcafef00d", run.GetTargets()[0].GetOutputRef())
+	assert.Equal(t, int64(3_000), run.GetTargets()[0].GetDurationMs())
+	assert.Equal(t, int64(5_000), run.GetTargets()[0].GetEndedAt().AsTime().UnixMilli())
+	assert.Equal(t, statusv1.TargetRun_RUNNING, run.GetTargets()[1].GetState())
+	assert.Nil(t, run.GetTargets()[1].GetEndedAt()) // still running: no end
+	assert.Equal(t, statusv1.TargetRun_CACHED, run.GetTargets()[2].GetState())
+}

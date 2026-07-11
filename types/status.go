@@ -23,6 +23,42 @@ type StatusReport struct {
 	Build     BuildStatus     `json:"build" yaml:"build"`
 	Pool      *StatusOutput   `json:"pool,omitempty" yaml:"pool,omitempty"`
 	PoolError string          `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
+	// ActiveRuns are the invocations the daemon is executing right now (adopted
+	// dispatches), each with its per-target execution state. Empty when nothing is
+	// running or when reported by a process that is not the daemon.
+	ActiveRuns []StatusRun `json:"active_runs,omitempty" yaml:"active_runs,omitempty"`
+}
+
+// TargetRunState is where a target sits in its lifecycle within a run. Values match the
+// magus.status.v1.TargetRun.State enum names (lowercased) so the JSON and the wire agree.
+type TargetRunState string
+
+const (
+	TargetRunQueued  TargetRunState = "queued"
+	TargetRunRunning TargetRunState = "running"
+	TargetRunPassed  TargetRunState = "passed"
+	TargetRunFailed  TargetRunState = "failed"
+	TargetRunCached  TargetRunState = "cached"
+)
+
+// StatusRun is one in-flight invocation the daemon has adopted, keyed by its invocation id,
+// carrying the per-target execution state a dashboard renders as a live run.
+type StatusRun struct {
+	Inv       string            `json:"inv" yaml:"inv"`
+	Trigger   string            `json:"trigger,omitempty" yaml:"trigger,omitempty"`
+	StartedAt time.Time         `json:"started_at,omitempty" yaml:"started_at,omitempty"`
+	Targets   []StatusTargetRun `json:"targets,omitempty" yaml:"targets,omitempty"`
+}
+
+// StatusTargetRun is the execution state of one target within a StatusRun.
+type StatusTargetRun struct {
+	Project    string         `json:"project,omitempty" yaml:"project,omitempty"`
+	Target     string         `json:"target,omitempty" yaml:"target,omitempty"`
+	State      TargetRunState `json:"state" yaml:"state"`
+	StartedAt  time.Time      `json:"started_at,omitempty" yaml:"started_at,omitempty"`
+	EndedAt    time.Time      `json:"ended_at,omitempty" yaml:"ended_at,omitempty"`
+	OutputRef  string         `json:"output_ref,omitempty" yaml:"output_ref,omitempty"`
+	DurationMs int64          `json:"duration_ms,omitempty" yaml:"duration_ms,omitempty"`
 }
 
 // BuildStatus reports optional features compiled into the magus binary via build tags.

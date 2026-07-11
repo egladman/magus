@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -225,9 +226,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	cwd, _ := os.Getwd()
 	liveBC, stopLive := beginLive(ctx, *live)
 	defer stopLive()
+	// An adopted run (dispatched by the daemon) also feeds the daemon's live-run registry,
+	// carried on ctx; a plain CLI run has no sink, so this is empty there.
+	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
 		Verb: "run", Args: args, Cwd: cwd, Trigger: trigger,
-	}, version, liveHandlers(liveBC)...)
+	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
 
 	if targetName == "ci" {

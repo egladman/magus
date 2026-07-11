@@ -39,7 +39,48 @@ func statusReportToProto(r types.StatusReport, magusVersion string) *statusv1.St
 			s.Pool.Cache = agg
 		}
 	}
+	for _, run := range r.ActiveRuns {
+		s.ActiveRuns = append(s.ActiveRuns, runToProto(run))
+	}
 	return s
+}
+
+// runToProto maps one live run and its per-target execution state onto the wire message.
+func runToProto(r types.StatusRun) *statusv1.Run {
+	out := &statusv1.Run{
+		Inv:       r.Inv,
+		Trigger:   r.Trigger,
+		StartedAt: tsFromTime(r.StartedAt),
+	}
+	for _, t := range r.Targets {
+		out.Targets = append(out.Targets, &statusv1.TargetRun{
+			Project:    t.Project,
+			Target:     t.Target,
+			State:      targetStateToProto(t.State),
+			StartedAt:  tsFromTime(t.StartedAt),
+			EndedAt:    tsFromTime(t.EndedAt),
+			OutputRef:  t.OutputRef,
+			DurationMs: t.DurationMs,
+		})
+	}
+	return out
+}
+
+func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
+	switch s {
+	case types.TargetRunQueued:
+		return statusv1.TargetRun_QUEUED
+	case types.TargetRunRunning:
+		return statusv1.TargetRun_RUNNING
+	case types.TargetRunPassed:
+		return statusv1.TargetRun_PASSED
+	case types.TargetRunFailed:
+		return statusv1.TargetRun_FAILED
+	case types.TargetRunCached:
+		return statusv1.TargetRun_CACHED
+	default:
+		return statusv1.TargetRun_STATE_UNSPECIFIED
+	}
 }
 
 // EncodeStatusEvent marshals a status snapshot to base64(protobuf) for a StreamStatus

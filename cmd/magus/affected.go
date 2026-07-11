@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -273,9 +274,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	cwd, _ := os.Getwd()
 	liveBC, stopLive := beginLive(ctx, *live)
 	defer stopLive()
+	// An adopted affected run (dispatched by the daemon) also feeds the daemon's live-run
+	// registry, carried on ctx; a plain CLI run has no sink, so this is empty there.
+	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
 		Verb: "affected", Args: args, Cwd: cwd, Trigger: trigger,
-	}, version, liveHandlers(liveBC)...)
+	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
 
 	if target == "ci" {

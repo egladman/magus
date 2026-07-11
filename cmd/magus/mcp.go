@@ -94,6 +94,13 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	// so the health handlers query this daemon, not whatever a per-request
 	// discovery scan happens to find.
 	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
+	// The live-run registry (built by startMultiWorkspaceDaemon) backs the dashboard's
+	// active-runs view. It is nil for a bridge started without the multi-workspace daemon;
+	// WithActiveRuns then goes unset and the status report simply omits active runs.
+	var daemonOpts []daemon.Option
+	if daemonRuns != nil {
+		daemonOpts = append(daemonOpts, daemon.WithActiveRuns(daemonRuns.Snapshot))
+	}
 	m.SetDaemon(daemon.New(internalmcp.Options{
 		Magus:      m,
 		Logger:     slog.Default(),
@@ -112,7 +119,7 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 			"/readyz":  healthHTTPHandler(probeReadiness, status),
 			"/healthz": healthHTTPHandler(probeLiveness, status),
 		},
-	}))
+	}, daemonOpts...))
 	go func() {
 		err := m.ServeDaemon(ctx)
 		if err != nil && ctx.Err() == nil {
