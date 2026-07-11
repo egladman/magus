@@ -51,45 +51,73 @@
         <div class="file-bar-id">
           <span id="log-ref-label" class="id-label" hidden></span>
           <span id="log-ref" class="name"></span>
-          <span id="offline-badge" class="offline-badge" hidden aria-live="polite">offline - everything on this page is local</span>
-          <span id="log-status" class="badge"></span>
         </div>
         <div class="log-toolbar">
-          <div class="log-search">
-            <input id="log-search" type="text" placeholder="search output" aria-label="Search the log" spellcheck="false" autocomplete="off" enterkeyhint="search">
-            <span id="search-count" class="search-count" aria-live="polite"></span>
+          <div class="log-filter">
+            <input id="log-filter" type="text" placeholder="Filter: status:fail  target:mm  <text>" aria-label="Filter the log" spellcheck="false" autocomplete="off" enterkeyhint="search">
+            <span class="log-filter-help" tabindex="0" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">?</span>
           </div>
+          <!-- Grouped, wrapping toolbar: clusters by use case (Live / View / Time / Clipboard /
+               Open) so it reads as chunks and wraps cluster-by-cluster instead of one long row. -->
           <div class="log-actions">
-          <button id="pause-btn" class="outline" type="button" aria-pressed="false" title="Pause auto-scroll to pin the view while the run streams" hidden>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg><span class="btn-label">Pause</span>
-          </button>
-          <button id="timeline-btn" class="outline" type="button" aria-pressed="false" title="Show the invocation as a trace waterfall (targets and steps on a shared time axis)" hidden>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="20" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/></svg><span class="btn-label">Timeline</span>
-          </button>
-          <button id="view-toggle" class="outline" type="button" aria-pressed="false" title="Toggle between the pretty view and the raw captured text">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span class="btn-label">Raw</span>
-          </button>
-          <button id="fold-all-btn" class="outline" type="button" title="Collapse or expand every section" hidden>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg><span class="btn-label">Collapse all</span>
-          </button>
-          <button id="copy-all-btn" class="outline" type="button" title="Copy the whole log to the clipboard">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="btn-label">Copy</span>
-          </button>
-          <button id="copy-cmd-btn" class="outline" type="button" title="Copy a `magus query` command that fetches this exact output (hand it to an agent)" hidden>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span class="btn-label">Copy command</span>
-          </button>
-          <button id="share-btn" class="outline" type="button" title="Copy a shareable link to this log (the output rides the link fragment; nothing is uploaded)" disabled>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="btn-label">Share</span>
-          </button>
-          <button id="graph-btn" class="outline" type="button" title="Open this target's node in the knowledge graph explorer (new tab)" hidden>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="btn-label">Open in graph</span>
-          </button>
-          <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the viewer to fill the screen">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg><span class="btn-label">Fullscreen</span>
-          </button>
+          <div class="btn-group" aria-label="Live">
+            <button id="pause-btn" class="outline" type="button" aria-pressed="false" title="Pause auto-scroll to pin the view while the run streams" disabled>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg><span class="btn-label">Pause</span>
+            </button>
+          </div>
+          <div class="btn-group" aria-label="View">
+            <button id="timeline-btn" class="outline" type="button" aria-pressed="false" title="Show the invocation as a trace waterfall (targets and steps on a shared time axis)" disabled>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="20" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/></svg><span class="btn-label">Timeline</span>
+            </button>
+            <button id="view-toggle" class="outline" type="button" aria-pressed="false" title="Toggle between the pretty view and the raw captured text">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span class="btn-label">Raw</span>
+            </button>
+            <button id="fold-all-btn" class="outline" type="button" title="Collapse or expand every section" disabled>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg><span class="btn-label">Collapse all</span>
+            </button>
+          </div>
+          <!-- Time range: a wall-clock scoper (built invocation-agnostic so it scales to multiple
+               invocations) plus the brush focus-window readout + reset. Only meaningful on the
+               timeline, so disabled outside waterfall mode. -->
+          <div class="btn-group log-timerange" id="log-timerange" aria-label="Time range">
+            <select id="time-range" class="time-range-select" aria-label="Time range" title="Scope the view to a wall-clock window (spans multiple invocations once supported); or drag across the waterfall to focus a window" disabled>
+              <option value="all">Full run</option>
+              <option value="5">Last 5s</option>
+              <option value="30">Last 30s</option>
+              <option value="60">Last 1m</option>
+              <option value="300">Last 5m</option>
+              <option value="900">Last 15m</option>
+              <option value="custom" hidden>Custom</option>
+            </select>
+            <span id="focus-window" class="focus-window" hidden aria-live="polite"></span>
+            <button id="focus-reset" class="outline focus-reset" type="button" title="Reset to the full run" hidden><span class="btn-label">Reset</span></button>
+          </div>
+          <div class="btn-group" aria-label="Clipboard">
+            <button id="copy-all-btn" class="outline" type="button" title="Copy the whole log to the clipboard">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="btn-label">Copy</span>
+            </button>
+            <button id="copy-cmd-btn" class="outline" type="button" title="Copy a `magus query` command that fetches this exact output (hand it to an agent)" disabled>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span class="btn-label">Copy command</span>
+            </button>
+            <button id="share-btn" class="outline" type="button" title="Copy a shareable link to this log (the output rides the link fragment; nothing is uploaded)" disabled>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="btn-label">Share</span>
+            </button>
+          </div>
+          <div class="btn-group" aria-label="Open">
+            <button id="graph-btn" class="outline" type="button" title="Open this target's node in the knowledge graph explorer (new tab)" disabled>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="btn-label">Open in graph</span>
+            </button>
+            <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the viewer to fill the screen">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg><span class="btn-label">Fullscreen</span>
+            </button>
+          </div>
           </div>
         </div>
       </header>
+
+      <!-- Parsed-filter echo: the live "here is how your filter parsed" chip row, reusing the
+           docs search page's .search-chips/.qchip styling (site.css). Hidden until you type. -->
+      <div id="filter-chips" class="search-chips log-filter-chips" hidden aria-hidden="true"></div>
 
       <div class="log-scroll" id="log-scroll" tabindex="0">
         <div class="log-body" id="log-body" aria-label="Captured output"></div>
@@ -121,6 +149,14 @@
           <p><strong>The log viewer needs JavaScript.</strong> It decodes the output from the link fragment in your browser. Enable JavaScript, or <a href="../download/">install magus</a> and run <code>magus query output &lt;ref&gt;</code> to print the output in your terminal.</p>
         </div>
       </noscript>
+
+      <!-- Bottom status bar (dashboard-style): the run's live/done state and event count live
+           here at the foot of the panel, out of the top toolbar. -->
+      <footer class="log-statusbar" aria-label="Log status">
+        <span id="log-status" class="badge"></span>
+        <span id="log-count" class="badge count" hidden></span>
+        <span id="offline-badge" class="offline-badge" hidden aria-live="polite">offline - everything on this page is local</span>
+      </footer>
     </section>
 
     <details class="url-help">

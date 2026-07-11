@@ -42,9 +42,10 @@ function setRefIdentity(value, labeled) {
 const bodyEl = el("log-body");
 const emptyEl = el("log-empty");
 const panelEl = document.querySelector(".panel");
-if (bodyEl && scrollEl) {
-  init();
-}
+// init() is invoked at the BOTTOM of this module (see the final line), after every top-level
+// `let` (pretty/timeline/filterParsed/...) has initialized. Calling it here would run
+// loadFromURL()'s synchronous setFilter() before `let filterParsed = parseQuery("")` executes,
+// and that later initializer would then clobber the loaded #q= filter back to empty.
 
 function init() {
   wireControls();
@@ -102,6 +103,14 @@ function viewerParams() {
 async function loadFromURL() {
   const params = viewerParams();
   const ref = params.ref || "";
+  // Apply a shared #q= filter (the graph explorer's convention, read via the shared parseHash)
+  // BEFORE any mode renders, and seed the filter box. It combines with #ref/#data/#live/#demo,
+  // so a deep link like `#demo&q=status:fail` lands already narrowed.
+  const q = parseHash().q || "";
+  setFilter(q);
+  renderFilterChips();
+  const filterEl = el("log-filter");
+  if (filterEl) filterEl.value = q;
   // The shared bare `#demo` fragment (wantsDemo, from lib/daemon - the same trigger the
   // dashboard and graph explorer use) enters the daemon-free showcase: a synthetic run
   // streams in with a live-filling waterfall.
@@ -200,6 +209,15 @@ let pretty = true;
 // the log/section view. Only offered when the loaded Journal carries enough timing to plot
 // (see buildSpans); a pasted/text log has none, so the Timeline button stays hidden.
 let timeline = false;
+// filterQuery is the raw filter string (mirrored to the #q= fragment); filterParsed is its
+// parsed form ({groups, texts, empty}). It narrows the pretty view (hides non-matching lines /
+// target groups) and dims the waterfall's non-matching spans. See parseQuery for the grammar.
+let filterQuery = "";
+let filterParsed = parseQuery("");
+// focusWin is the active time-range focus, {a, b} in absolute ms, or null for the full run.
+// Set by dragging (brush) across the waterfall or by the wall-clock preset picker. It is a
+// plain time window over events, so it is invocation-agnostic and extends to multi-invocation.
+let focusWin = null;
 
 // rawLines holds the pure captured output (reconstructed from a Journal's output events)
 // so the RAW view shows exactly what `magus query <ref>` prints. null in heuristic (text)
@@ -236,17 +254,17 @@ function finishLoad(ref, statusMsg) {
   render();
   setStatus(statusMsg);
   const foldBtn = el("fold-all-btn");
-  if (foldBtn) foldBtn.hidden = timeline || model.titled === 0 || !pretty;
+  if (foldBtn) foldBtn.disabled = timeline || model.titled === 0 || !pretty;
   const copyBtn = el("copy-all-btn");
   if (copyBtn) copyBtn.disabled = false;
   const cmdBtn = el("copy-cmd-btn");
-  if (cmdBtn) cmdBtn.hidden = !currentRef;
+  if (cmdBtn) cmdBtn.disabled = !currentRef;
   const shareBtn = el("share-btn");
   if (shareBtn) shareBtn.disabled = false;
   // "Open in graph" only makes sense with a real ref AND a target the graph knows about
   // (a project + target from the result event); hide it otherwise.
   const graphBtn = el("graph-btn");
-  if (graphBtn) graphBtn.hidden = !graphTarget();
+  if (graphBtn) graphBtn.disabled = !graphTarget();
 }
 
 // buildModelFromEvents turns an event stream (a whole Journal's events, or the live events
@@ -282,7 +300,11 @@ function buildModelFromEvents(events, invocation) {
   if (preamble.length) sections.push({ title: null, lines: preamble });
   for (const g of order) {
     const title = groupTitle(g);
-    sections.push({ title, lines: [title, ...g.body] });
+    // meta carries the structured (label, status) the filter matches target:/status: against,
+    // so it need not re-parse them out of the rendered title. "" status (no result yet) reads
+    // as "running". Preamble sections have no meta and so never match a target:/status: term.
+    const label = (g.project && g.project !== "." ? g.project + ":" : "") + (g.target || "output");
+    sections.push({ title, lines: [title, ...g.body], meta: { label, status: statusName(g.result ? g.result.status : Status.UNSPECIFIED) || "running" } });
   }
   const titled = sections.filter((s) => s.title !== null).length;
   const summary =
@@ -447,10 +469,19 @@ function renderWaterfall() {
   }
 
   const total = spans.t1 - spans.t0;
+  // dom is the visible time domain: the focus window (clamped to the run) when set, else the
+  // full run. drawWfAxis/drawWfRow scale to dom, so a focus window zooms the waterfall.
+  const dom = focusFor(spans);
+  const q = filterParsed;
+  const filtering = !q.empty;
+  const outOfWin = (s, e) => focusWin && (e < dom.t0 || s > dom.t1);
   const caption = document.createElement("p");
   caption.className = "wf-caption";
   const nt = spans.targets.length;
-  caption.textContent = nt + (nt === 1 ? " target" : " targets") + " over " + durMsText(total);
+  const nMatch = filtering ? spans.targets.filter((t) => targetRelevant(q, t)).length : nt;
+  caption.textContent = nt + (nt === 1 ? " target" : " targets") + " over " + durMsText(total) +
+    (filtering ? " - " + nMatch + " matching" : "") +
+    (focusWin ? " - focused to " + durMsText(dom.t1 - dom.t0) : "");
   bodyEl.appendChild(caption);
 
   let rows = 0;
@@ -464,18 +495,114 @@ function renderWaterfall() {
   root.setAttribute("role", "img");
   root.setAttribute("aria-label", "Invocation trace waterfall");
 
-  drawWfAxis(root, spans, h);
+  drawWfAxis(root, dom, h);
 
   let y = WF_AXIS_H + 2;
   for (const t of spans.targets) {
-    drawWfRow(root, { label: t.label, s: t.s, e: t.e, status: t.status, step: false }, y, spans);
+    // Dim non-matching (filter) OR out-of-window (time focus) spans instead of removing them,
+    // so the row layout stays stable and the waterfall reads as a focused view.
+    const tRelevant = targetRelevant(q, t);
+    const tDim = (filtering && !tRelevant) || outOfWin(t.s, t.e);
+    drawWfRow(root, { label: t.label, s: t.s, e: t.e, status: t.status, step: false, dim: tDim }, y, dom);
     y += WF_ROW_H;
     for (const st of t.steps) {
-      drawWfRow(root, { label: st.label, s: st.s, e: st.e, status: "", step: true }, y, spans);
+      const sRelevant = tRelevant && (q.texts.length === 0 || matchAllTexts(q, st.label) || matchAllTexts(q, t.label));
+      const sDim = (filtering && !sRelevant) || outOfWin(st.s, st.e);
+      drawWfRow(root, { label: st.label, s: st.s, e: st.e, status: "", step: true, dim: sDim }, y, dom);
       y += WF_ROW_H;
     }
   }
+  attachWfBrush(root, dom, h);
   bodyEl.appendChild(root);
+  updateFocusUI(spans);
+}
+
+// focusFor clamps the active focus window to the run's span, or returns the full domain.
+function focusFor(spans) {
+  if (!focusWin) return { t0: spans.t0, t1: spans.t1 };
+  const t0 = Math.max(spans.t0, Math.min(focusWin.a, focusWin.b));
+  const t1 = Math.min(spans.t1, Math.max(focusWin.a, focusWin.b));
+  return t1 - t0 >= 1 ? { t0, t1 } : { t0: spans.t0, t1: spans.t1 };
+}
+
+// attachWfBrush lets you drag horizontally across the waterfall to set a focus window (the
+// Datadog trace-zoom gesture). It converts client x -> SVG x -> time via the current domain,
+// draws a selection rect, and on release sets focusWin and re-renders. A tiny drag is a no-op.
+function attachWfBrush(root, dom, h) {
+  let sx = null, rect = null;
+  const toTime = (clientX) => {
+    const r = root.getBoundingClientRect();
+    const svgX = (clientX - r.left) * (WF_VIEW_W / r.width);
+    const frac = (svgX - WF_LABEL_W) / WF_PLOT_W;
+    return dom.t0 + Math.min(1, Math.max(0, frac)) * (dom.t1 - dom.t0);
+  };
+  const svgXOf = (clientX) => {
+    const r = root.getBoundingClientRect();
+    return Math.min(WF_VIEW_W, Math.max(WF_LABEL_W, (clientX - r.left) * (WF_VIEW_W / r.width)));
+  };
+  root.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    sx = ev.clientX;
+    rect = wfSvg("rect");
+    rect.setAttribute("class", "wf-brush");
+    rect.setAttribute("y", "0");
+    rect.setAttribute("height", String(h));
+    const x = svgXOf(sx);
+    rect.setAttribute("x", String(x)); rect.setAttribute("width", "0");
+    root.appendChild(rect);
+    root.setPointerCapture(ev.pointerId);
+  });
+  root.addEventListener("pointermove", (ev) => {
+    if (sx === null || !rect) return;
+    const a = svgXOf(sx), b = svgXOf(ev.clientX);
+    rect.setAttribute("x", String(Math.min(a, b)));
+    rect.setAttribute("width", String(Math.abs(b - a)));
+  });
+  const finish = (ev) => {
+    if (sx === null) return;
+    const a = toTime(sx), b = toTime(ev.clientX);
+    sx = null; if (rect) { rect.remove(); rect = null; }
+    if (Math.abs(b - a) < (dom.t1 - dom.t0) * 0.01) return; // too small: treat as a click
+    focusWin = { a: Math.min(a, b), b: Math.max(a, b) };
+    const sel = el("time-range"); if (sel) sel.value = "custom";
+    render();
+  };
+  root.addEventListener("pointerup", finish);
+  root.addEventListener("pointercancel", () => { sx = null; if (rect) { rect.remove(); rect = null; } });
+}
+
+// updateFocusUI reflects the focus window into the readout + reset, and enables the time-range
+// picker only in waterfall mode (where a time window is meaningful).
+function updateFocusUI(spans) {
+  const sel = el("time-range");
+  const win = el("focus-window");
+  const reset = el("focus-reset");
+  const active = timeline && spans && spans.targets && spans.targets.length > 0;
+  if (sel) sel.disabled = !active;
+  if (win) {
+    if (focusWin && active) { const d = focusFor(spans); win.textContent = durMsText(d.t1 - d.t0) + " window"; win.hidden = false; }
+    else win.hidden = true;
+  }
+  if (reset) reset.hidden = !(focusWin && active);
+}
+
+// clearFocus resets to the full run.
+function clearFocus() {
+  focusWin = null;
+  const sel = el("time-range"); if (sel) sel.value = "all";
+  if (model) render();
+}
+
+// applyTimeRange sets the focus window from a wall-clock preset (seconds back from the latest
+// event), or clears it for "all". Invocation-agnostic: it is a window over event time.
+function applyTimeRange(value) {
+  if (value === "all" || value === "custom") { if (value === "all") focusWin = null; if (model) render(); return; }
+  const secs = Number(value);
+  const src = waterfallSource();
+  const spans = buildSpans(src.events, src.invocation);
+  if (!spans.targets.length || !Number.isFinite(secs)) return;
+  focusWin = { a: spans.t1 - secs * 1000, b: spans.t1 };
+  if (model) render();
 }
 
 function drawWfAxis(root, sp, h) {
@@ -510,10 +637,11 @@ function drawWfAxis(root, sp, h) {
 
 function drawWfRow(root, row, y, sp) {
   const dur = row.e - row.s;
+  const dim = row.dim ? " wf-dim" : ""; // dimmed when the filter excludes this span
   const label = wfSvg("text");
   label.setAttribute("x", String(row.step ? 20 : 6));
   label.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
-  label.setAttribute("class", "wf-label " + (row.step ? "wf-step-label" : "wf-target-label"));
+  label.setAttribute("class", "wf-label " + (row.step ? "wf-step-label" : "wf-target-label") + dim);
   label.textContent = wfTrunc(row.label || "-", row.step ? 30 : 26);
   const lt = wfSvg("title");
   lt.textContent = row.label + " (" + durMsText(dur) + ")";
@@ -529,7 +657,7 @@ function drawWfRow(root, row, y, sp) {
   rect.setAttribute("width", Math.max(2, x2 - x1).toFixed(2));
   rect.setAttribute("height", String(bh));
   rect.setAttribute("rx", "2");
-  rect.setAttribute("class", "wf-bar" + (row.step ? " wf-step" : "") + (row.status ? " status-" + row.status : ""));
+  rect.setAttribute("class", "wf-bar" + (row.step ? " wf-step" : "") + (row.status ? " status-" + row.status : "") + dim);
   const rt = wfSvg("title");
   rt.textContent = row.label + " - " + durMsText(dur);
   rect.appendChild(rt);
@@ -540,7 +668,7 @@ function drawWfRow(root, row, y, sp) {
     const d = wfSvg("text");
     d.setAttribute("x", String(WF_VIEW_W - 2));
     d.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
-    d.setAttribute("class", "wf-dur");
+    d.setAttribute("class", "wf-dur" + dim);
     d.setAttribute("text-anchor", "end");
     d.textContent = durMsText(dur);
     root.appendChild(d);
@@ -577,7 +705,7 @@ function connectLive(params) {
   setRefIdentity("live", false);
   const pauseBtn = el("pause-btn");
   if (pauseBtn) {
-    pauseBtn.hidden = false;
+    pauseBtn.disabled = false;
     setBtnLabel(pauseBtn, "Pause");
     pauseBtn.setAttribute("aria-pressed", "false");
   }
@@ -628,7 +756,7 @@ function scheduleLiveRender() {
     setLiveStatus(liveAbort && liveAbort.signal.aborted ? "done" : "streaming");
     updateTimelineControl();
     const foldBtn = el("fold-all-btn");
-    if (foldBtn) foldBtn.hidden = timeline || model.titled === 0 || !pretty;
+    if (foldBtn) foldBtn.disabled = timeline || model.titled === 0 || !pretty;
     const copyBtn = el("copy-all-btn");
     if (copyBtn) copyBtn.disabled = false;
     const shareBtn = el("share-btn");
@@ -642,9 +770,13 @@ function setLiveStatus(state) {
   if (!pill) return;
   const n = liveEvents.length;
   const labels = { connecting: "connecting...", streaming: "live", done: "done", disconnected: "disconnected" };
-  pill.textContent = (labels[state] || state) + (n ? " - " + n + " events" : "");
+  // State and event count are SEPARATE pills (no hyphen delimiter) - the state reads like the
+  // dashboard's status pill, the count sits beside it as its own label.
+  pill.textContent = labels[state] || state;
   pill.classList.toggle("err", state === "disconnected");
   pill.classList.toggle("live", state === "streaming" || state === "connecting");
+  const countEl = el("log-count");
+  if (countEl) { countEl.textContent = n ? n + " events" : ""; countEl.hidden = !n; }
 }
 
 function base64ToBytes(b64) {
@@ -807,6 +939,138 @@ function humanBytes(n) {
   return (n / 1024 / 1024).toFixed(1) + " MB";
 }
 
+// --- Filter (#q=) -------------------------------------------------------------
+// A pragmatic, log-shaped query (NOT the graph's node grammar): whitespace-split terms combined
+// with AND, case-insensitive. A `key:value` term with a known key is a field filter; anything
+// else is free text. Fields:
+//   target:<substr>  - the event's target label (project:target) contains substr  (group-level)
+//   status:pass|fail|cached|running - the target's result status                  (group-level)
+//   step:<substr>    - an EXEC command / output line contains substr              (line-level)
+//   <bare text>      - same as step: matches command / output text                (line-level)
+// Group-level terms keep or drop a whole target group; line-level terms narrow to matching
+// lines. The result serializes to the #q= fragment so a filtered view is shareable and
+// deep-linkable (the dashboard/graph will build #q=-filtered log links).
+function parseQuery(q) {
+  const groups = [];
+  const texts = [];
+  for (const tok of (q || "").trim().split(/\s+/)) {
+    if (!tok) continue;
+    const ci = tok.indexOf(":");
+    if (ci > 0) {
+      const key = tok.slice(0, ci).toLowerCase();
+      const val = tok.slice(ci + 1).toLowerCase();
+      if (val && (key === "target" || key === "status")) { groups.push({ key, value: val }); continue; }
+      if (val && key === "step") { texts.push(val); continue; }
+      // Unknown key (or empty value): fall through and treat the whole token as free text.
+    }
+    texts.push(tok.toLowerCase());
+  }
+  return { groups, texts, empty: groups.length === 0 && texts.length === 0 };
+}
+
+// setFilter records a new filter string and its parsed form; render()/renderWaterfall read the
+// module-level filterParsed, so every mode (static, live, demo) filters through the one path.
+function setFilter(q) {
+  filterQuery = (q || "").trim();
+  filterParsed = parseQuery(filterQuery);
+}
+
+// matchGroup tests the group-level terms (target:/status:) against a target's label + status.
+function matchGroup(q, label, status) {
+  const lab = (label || "").toLowerCase();
+  const st = (status || "").toLowerCase();
+  for (const g of q.groups) {
+    if (g.key === "target" && !lab.includes(g.value)) return false;
+    if (g.key === "status" && !st.includes(g.value)) return false;
+  }
+  return true;
+}
+
+// matchAllTexts tests that a string contains EVERY free-text/step term (AND).
+function matchAllTexts(q, str) {
+  const s = (str || "").toLowerCase();
+  for (const t of q.texts) if (!s.includes(t)) return false;
+  return true;
+}
+
+// sectionMeta returns a target section's {label, status} for filtering: the structured meta
+// attached by buildModelFromEvents when present, else derived from a heuristic section's title.
+function sectionMeta(sec) {
+  if (sec.meta) return sec.meta;
+  return { label: stripAnsi(sec.title || ""), status: statusToken(sec.title || "") || "running" };
+}
+
+// targetRelevant tests whether a waterfall target span matches the filter (used to decide which
+// rows stay bright vs dim, and for the caption's match count).
+function targetRelevant(q, t) {
+  if (q.empty) return true;
+  if (!matchGroup(q, t.label, t.status || "running")) return false;
+  return q.texts.length === 0 || matchAllTexts(q, t.label) || t.steps.some((s) => matchAllTexts(q, s.label));
+}
+
+// setQueryFragment mirrors the active filter to #q= via replaceState (no history spam),
+// preserving every OTHER fragment part (#ref/#data/#live/#demo, the #L line token). Clearing
+// the filter drops the q= part entirely.
+function setQueryFragment(query) {
+  const kept = [];
+  for (const part of location.hash.replace(/^#/, "").split("&")) {
+    if (!part) continue;
+    const eq = part.indexOf("=");
+    const key = eq < 0 ? part : part.slice(0, eq);
+    if (key === "q") continue;
+    kept.push(part);
+  }
+  if (query) kept.push("q=" + encodeURIComponent(query));
+  const frag = kept.join("&");
+  history.replaceState(null, "", location.pathname + location.search + (frag ? "#" + frag : ""));
+}
+
+// renderFilterChips echoes the parsed filter under the bar as chips - fields as bordered
+// pills, free text as plain chips, joined by "AND" connectives - so you can SEE how the query
+// was interpreted, the same "how your query parsed" cue the docs search page shows. Reuses
+// site.css's .search-chips/.qchip/.qop classes verbatim.
+function renderFilterChips() {
+  const host = el("filter-chips");
+  if (!host) return;
+  host.textContent = "";
+  if (filterParsed.empty) { host.hidden = true; return; }
+  const parts = filterParsed.groups.map((g) => ({ field: g.key, value: g.value }))
+    .concat(filterParsed.texts.map((t) => ({ text: t })));
+  parts.forEach((p, i) => {
+    if (i > 0) {
+      const op = document.createElement("span");
+      op.className = "qop";
+      op.textContent = "AND";
+      host.appendChild(op);
+    }
+    const chip = document.createElement("span");
+    if (p.field !== undefined) {
+      chip.className = "qchip qchip-field";
+      const b = document.createElement("b");
+      b.textContent = p.field;
+      chip.appendChild(b);
+      chip.appendChild(document.createTextNode(":" + p.value));
+    } else {
+      chip.className = "qchip";
+      chip.textContent = p.text;
+    }
+    host.appendChild(chip);
+  });
+  host.hidden = false;
+}
+
+// applyFilterFromInput is the debounced input handler: record the filter, sync #q=, echo the
+// parsed chips, drop any stale search highlights (the DOM is rebuilt), and re-render.
+function applyFilterFromInput(value) {
+  setFilter(value);
+  setQueryFragment(filterQuery);
+  renderFilterChips();
+  clearMarks();
+  const cnt = el("search-count");
+  if (cnt) cnt.textContent = "";
+  if (model) render();
+}
+
 function render() {
   bodyEl.textContent = "";
   bodyEl.classList.toggle("raw", !pretty && !timeline);
@@ -828,13 +1092,42 @@ function render() {
     return;
   }
 
+  // The active filter narrows the pretty view: non-matching lines and whole target groups are
+  // hidden. lineNo still advances over hidden rows so line numbers (and #L links) stay stable.
+  const q = filterParsed;
+  const filtering = !q.empty;
+  let shown = 0;
+
   let lineNo = 0;
   for (const sec of model.sections) {
     if (sec.title === null) {
-      // Preamble / flat log: render lines directly, no fold head.
-      for (const raw of sec.lines) bodyEl.appendChild(renderLine(raw, ++lineNo));
+      // Preamble / flat log: no target/status, so any group-level term excludes it; with only
+      // text terms, keep matching lines; unfiltered, keep all.
+      for (const raw of sec.lines) {
+        const n = ++lineNo;
+        const keep = !filtering || (q.groups.length === 0 && matchAllTexts(q, stripAnsi(raw)));
+        if (keep) { bodyEl.appendChild(renderLine(raw, n)); shown++; }
+      }
       continue;
     }
+
+    // Filter this target group: drop it entirely if a group-level term excludes it, or if text
+    // terms match neither its title nor any body line. showAllBody is true when the group is
+    // kept for its title/status (show the whole group); otherwise only matching lines show.
+    const bodyLinesAll = sec.lines.slice(1);
+    let showAllBody = true;
+    if (filtering) {
+      const meta = sectionMeta(sec);
+      const noText = q.texts.length === 0;
+      const titleHit = noText || matchAllTexts(q, stripAnsi(sec.title));
+      const anyBody = noText || bodyLinesAll.some((l) => matchAllTexts(q, stripAnsi(l)));
+      if (!(matchGroup(q, meta.label, meta.status) && (titleHit || anyBody))) {
+        lineNo += sec.lines.length; // advance numbering past the hidden head + body
+        continue;
+      }
+      showAllBody = titleHit;
+    }
+
     const secEl = document.createElement("div");
     secEl.className = "log-section";
 
@@ -910,10 +1203,23 @@ function render() {
 
     const linesWrap = document.createElement("div");
     linesWrap.className = "log-lines";
-    for (const raw of bodyLines) linesWrap.appendChild(renderLine(raw, ++lineNo));
+    for (const raw of bodyLines) {
+      const n = ++lineNo;
+      if (!filtering || showAllBody || matchAllTexts(q, stripAnsi(raw))) {
+        linesWrap.appendChild(renderLine(raw, n));
+        shown++;
+      }
+    }
 
     secEl.append(head, linesWrap);
     bodyEl.appendChild(secEl);
+    shown++; // the visible head row
+  }
+  if (filtering && shown === 0) {
+    const note = document.createElement("p");
+    note.className = "filter-empty";
+    note.textContent = "No lines match the filter.";
+    bodyEl.appendChild(note);
   }
   applyLineHighlight();
 }
@@ -1270,7 +1576,7 @@ function setLineFragment(start, end) {
 function updateTimelineControl() {
   const tlBtn = el("timeline-btn");
   const ok = timelineAvailable();
-  if (tlBtn) tlBtn.hidden = !ok;
+  if (tlBtn) tlBtn.disabled = !ok;
   // Fall back to the log view when the loaded log has no timing (a text/pasted log). During
   // the #demo reveal the first frame may briefly precede any target span, so keep the mode on.
   if (!ok && timeline && !demoActive) timeline = false;
@@ -1280,7 +1586,10 @@ function updateTimelineControl() {
   }
   // The pretty/raw toggle is meaningless in the waterfall; hide it while timeline is on.
   const viewBtn = el("view-toggle");
-  if (viewBtn) viewBtn.hidden = timeline;
+  if (viewBtn) viewBtn.disabled = timeline;
+  // The time range only applies to the waterfall; renderWaterfall refreshes the readout when
+  // it draws, but when NOT in timeline mode nothing else does, so disable the picker here.
+  if (!timeline) updateFocusUI(null);
 }
 
 // --- Controls -----------------------------------------------------------------
@@ -1372,10 +1681,31 @@ function wireControls() {
       if (ev.key === "Enter") { ev.preventDefault(); setActiveMark(activeMark + (ev.shiftKey ? -1 : 1)); }
     });
   }
-  // "/" focuses search, like less/vim; ignored while typing in a field.
+  // "/" focuses the filter, like less/vim; ignored while typing in a field.
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "/" && searchEl && !isTyping(ev.target)) { ev.preventDefault(); searchEl.focus(); }
+    const focusEl = el("log-filter") || searchEl;
+    if (ev.key === "/" && focusEl && !isTyping(ev.target)) { ev.preventDefault(); focusEl.focus(); }
   });
+
+  // Filter box: debounced live-filter that narrows both views and syncs the #q= fragment.
+  const filterEl = el("log-filter");
+  if (filterEl) {
+    let ft;
+    filterEl.addEventListener("input", () => {
+      clearTimeout(ft);
+      ft = setTimeout(() => applyFilterFromInput(filterEl.value), 150);
+    });
+    // Escape clears the filter (and the #q= fragment) for a quick reset.
+    filterEl.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); filterEl.value = ""; applyFilterFromInput(""); }
+    });
+  }
+
+  // Time range: the wall-clock preset picker and the brushed-window reset.
+  const timeSel = el("time-range");
+  if (timeSel) timeSel.addEventListener("change", () => applyTimeRange(timeSel.value));
+  const focusResetBtn = el("focus-reset");
+  if (focusResetBtn) focusResetBtn.addEventListener("click", clearFocus);
 
   const pauseBtn = el("pause-btn");
   if (pauseBtn) {
@@ -1404,7 +1734,7 @@ function rawTextPlain() {
 
 function wireFullscreen() {
   const btn = el("fullscreen-btn");
-  if (!btn || !panelEl || !panelEl.requestFullscreen) { if (btn) btn.hidden = true; return; }
+  if (!btn || !panelEl || !panelEl.requestFullscreen) { if (btn) btn.disabled = true; return; }
   btn.addEventListener("click", () => {
     if (document.fullscreenElement) document.exitFullscreen();
     else panelEl.requestFullscreen();
@@ -1437,6 +1767,9 @@ function setStatus(msg, isErr) {
   if (!statusEl) return;
   statusEl.textContent = msg || "";
   statusEl.classList.toggle("err", !!isErr);
+  // The separate live event-count pill is a live-mode thing; keep it out of ref/error status.
+  const countEl = el("log-count");
+  if (countEl) { countEl.textContent = ""; countEl.hidden = true; }
 }
 
 function copyToClipboard(text, btn) {
@@ -1451,4 +1784,10 @@ function copyToClipboard(text, btn) {
   } else {
     done(false);
   }
+}
+
+// Boot last: every module-level `let` above is now initialized, so loadFromURL()'s setFilter()
+// (for a #q= deep link) will not be clobbered by a later initializer.
+if (bodyEl && scrollEl) {
+  init();
 }

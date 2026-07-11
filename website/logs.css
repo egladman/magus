@@ -45,39 +45,89 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 }
 .file-bar-id { display: flex; align-items: center; gap: 0.6rem; min-height: 1.25rem; }
 .log-toolbar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+/* Source + status as outlined pills (the dashboard's label idiom, e.g. its "healthy" pill),
+   so the identity strip reads as distinct little labels instead of hyphen-delimited text - the
+   pill borders do the separating. Not uppercased: a ref id is long and reads best in its own
+   case. */
 .file-bar .name {
   font-family: var(--pico-font-family-monospace);
   color: var(--pico-color); font-weight: 600;
+  padding: 0.06rem 0.5rem; border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
 }
 /* "Reference ID:" prefix before the ref value: muted label text, not the mono/bold of the
    ref itself, so the id reads as the emphasized part. Hidden when there is no ref. */
 .file-bar-id .id-label { color: var(--pico-muted-color); font-weight: 400; }
 .file-bar-id .id-label[hidden] { display: none; }
-.file-bar .badge { font-size: 0.72rem; color: var(--pico-muted-color); }
-/* The status pill sits at the right edge of the identity strip (opposite the ref). */
-.file-bar-id .badge { margin-left: auto; }
-.file-bar .badge.err { color: var(--pico-del-color); }
-.file-bar .badge.ok { color: var(--pico-ins-color); }
-/* Live-stream connection pill: a green dot + label while a run streams in. */
-.file-bar .badge.live { color: var(--pico-ins-color); font-weight: 600; }
-.file-bar .badge.live::before {
+/* Bottom status bar: a slim footer at the foot of the panel (the dashboard's status-bar
+   idiom) holding the run's live/done state and event count as outlined pills. */
+.log-statusbar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.22rem 0.6rem; min-height: 1.7rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  background: var(--pico-card-sectioning-background-color);
+}
+.log-statusbar .badge {
+  font-size: 0.7rem; color: var(--pico-muted-color);
+  padding: 0.06rem 0.5rem; border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius); white-space: nowrap;
+}
+.log-statusbar .badge.err { color: var(--pico-del-color); border-color: var(--pico-del-color); }
+.log-statusbar .badge.ok { color: var(--pico-ins-color); border-color: var(--pico-ins-color); }
+/* Live-stream pill: a green dot + label while a run streams in. */
+.log-statusbar .badge.live { color: var(--pico-ins-color); border-color: var(--pico-ins-color); font-weight: 600; }
+.log-statusbar .badge.live::before {
   content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.35em;
   border-radius: 50%; background: var(--pico-ins-color); vertical-align: middle;
 }
 .offline-badge { font-size: 0.72rem; color: var(--pico-muted-color); }
 
 .log-actions {
-  margin-left: auto; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
+  margin-left: auto; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;
 }
-/* Toolbar buttons: an icon + a text label, squared to match the rest of this UI (the
-   search field, badges, and section chips are all border-radius:0). On narrow screens
-   the labels drop so the toolbar becomes icon-only (see the 900px query below). */
+/* Each use-case cluster is a flex item, so the toolbar wraps cluster-by-cluster (never
+   splitting a group). A hairline + a little breathing room separates adjacent clusters. */
+.log-actions .btn-group { display: inline-flex; align-items: center; gap: 0.3rem; width: auto; }
+/* Keep buttons at content width - Pico stretches flex children in some contexts. */
+.log-actions .btn-group > button { flex: 0 0 auto; }
+.log-actions .btn-group + .btn-group {
+  margin-left: 0.15rem; padding-left: 0.45rem; border-left: 1px solid var(--pico-muted-border-color);
+}
+/* Time-range cluster: the wall-clock preset picker (invocation-agnostic), plus the brushed
+   focus-window readout and its reset. */
+.time-range-select {
+  width: auto; margin: 0; padding: 0.1rem 1.4rem 0.1rem 0.5rem; min-height: 1.7rem;
+  font-size: 0.72rem; border-radius: var(--pico-border-radius); background-position: right 0.4rem center;
+}
+.time-range-select:disabled { opacity: 0.42; cursor: not-allowed; }
+.focus-window { font-size: 0.68rem; color: var(--pico-muted-color); white-space: nowrap; }
+.focus-reset { font-size: 0.68rem; }
+/* Brush selection rectangle drawn over the waterfall while dragging a focus window. */
+.wf-brush { fill: var(--pico-primary); fill-opacity: 0.14; stroke: var(--pico-primary); stroke-opacity: 0.5; }
+.wf-svg { cursor: crosshair; }
+/* Toolbar buttons: an icon + a text label, subtly rounded to match Pico (like the filter
+   field, badges, and section chips). On narrow screens the labels drop so the toolbar
+   becomes icon-only (see the 900px query below). */
 .file-bar button {
-  width: auto; margin: 0; padding: 0.2rem 0.55rem;
-  font-size: 0.72rem; line-height: 1.3; border-radius: 0;
-  display: inline-flex; align-items: center; gap: 0.32rem;
+  width: auto; margin: 0; padding: 0.2rem 0.6rem;
+  /* Match the filter input's height so the toolbar reads as one row of equal-height controls. */
+  min-height: 1.7rem;
+  font-size: 0.72rem; line-height: 1.3; border-radius: var(--pico-border-radius);
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.32rem;
 }
 .file-bar .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+/* Disabled controls gray out in place rather than disappearing, so the toolbar never
+   reflows as buttons become (in)applicable (e.g. Raw is disabled in waterfall mode, not
+   hidden). */
+.file-bar button:disabled { opacity: 0.42; cursor: not-allowed; }
+/* Pressed toggles (Timeline in waterfall mode, Raw in raw mode) read as depressed: a primary
+   tint plus an inset shadow, so the active mode is visible at a glance. */
+.file-bar button[aria-pressed="true"]:not(:disabled) {
+  background: var(--pico-primary-focus);
+  border-color: var(--pico-primary);
+  color: var(--pico-primary);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
 
 /* Search box in the file bar. Squared off (no Pico pill/rounded corners) to match
    the site's angular search field and the rest of this UI. */
@@ -96,6 +146,31 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 /* Squared + no inherited pill cap (site.css rounds the docs search count); this one is
    plain inline text showing the match position. */
 .search-count { font-size: 0.7rem; color: var(--pico-muted-color); min-width: 3.2em; text-align: right; border-radius: 0; }
+
+/* Filter box: the single query bar (it narrows both views and syncs #q=), Pico-rounded, plus
+   a small "?" help chip whose title tooltip documents the grammar. */
+.log-filter { display: flex; align-items: center; gap: 0.3rem; flex: 0 0 auto; width: fit-content; max-width: 100%; }
+.log-app .file-bar .log-filter input {
+  flex: 0 0 auto;
+  width: clamp(11rem, 24vw, 16rem); margin: 0; padding: 0.2rem 0.5rem;
+  font-size: 0.74rem; min-height: 1.7rem; height: auto; border-radius: var(--pico-border-radius);
+}
+/* The "?" help chip is a passive indicator, NOT a role=button (that made Pico paint it a
+   solid blue oval); a plain bordered circle whose title tooltip carries the grammar. */
+.log-filter-help {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.2rem; height: 1.2rem; border-radius: 50%; cursor: help; background: none;
+  border: 1px solid var(--pico-muted-border-color);
+  color: var(--pico-muted-color); font-size: 0.68rem; font-weight: 700; user-select: none;
+}
+.log-filter-help:hover, .log-filter-help:focus-visible { color: var(--pico-color); border-color: var(--pico-primary); }
+
+/* The parsed-filter chip row sits under the toolbar, inset to the panel padding, with a
+   hairline separating it from the header. */
+.log-filter-chips { margin: 0; padding: 0.4rem 0.6rem; border-top: 1px solid var(--pico-muted-border-color); }
+
+/* Shown in the pretty view when the active filter matches nothing. */
+.filter-empty { padding: 1.5rem var(--log-pad); text-align: center; color: var(--pico-muted-color); }
 
 /* The scrolling region that holds the rendered log (or the empty state). */
 .log-scroll {
@@ -145,7 +220,7 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 .log-section-head:hover .sec-actions, .log-section-head:focus-visible .sec-actions { opacity: 1; }
 .log-section-head .sec-btn {
   width: auto; margin: 0; padding: 0.05rem 0.4rem;
-  font-size: 0.66rem; line-height: 1.3; border-radius: 0;
+  font-size: 0.66rem; line-height: 1.3; border-radius: var(--pico-border-radius);
 }
 .log-section.collapsed .log-lines { display: none; }
 
@@ -157,12 +232,12 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 .log-section.status-cached { box-shadow: inset 3px 0 0 var(--pico-muted-border-color); }
 
 /* Status badge: the "[pass]"/"[fail]" bracket token promoted to a colored chip
-   (squared, uppercase) - the embellishment over raw brackets. */
+   (Pico-rounded, uppercase) - the embellishment over raw brackets. */
 .log-badge {
   display: inline-block; margin-right: 0.55em; padding: 0 0.4em;
   font-size: 0.66rem; font-weight: 700; line-height: 1.5;
   text-transform: uppercase; letter-spacing: 0.04em;
-  border-radius: 0; color: #fff; vertical-align: baseline;
+  border-radius: var(--pico-border-radius); color: #fff; vertical-align: baseline;
 }
 .badge-pass { background: var(--pico-ins-color); }
 .badge-fail, .badge-error { background: var(--pico-del-color); }
@@ -235,6 +310,12 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 .wf-bar.status-pass { fill: var(--pico-ins-color); }
 .wf-bar.status-fail { fill: var(--pico-del-color); }
 .wf-bar.status-cached { fill: var(--pico-muted-border-color); }
+/* Filter dim: spans the filter excludes fade back so the matching ones stand out, while the
+   row layout and time axis stay put (a focused view, the graph explorer's dimming idiom). */
+.wf-dim { opacity: 0.18; }
+/* Step bars carry their own opacity (.wf-bar.wf-step), which out-specifies .wf-dim; this
+   more specific selector re-asserts the dim so excluded step bars actually fade. */
+.wf-bar.wf-step.wf-dim { opacity: 0.12; }
 .wf-empty { padding: 2rem; text-align: center; color: var(--pico-muted-color); }
 
 /* Empty state: a centered prompt with an icon and the two ways to get a log here
@@ -290,8 +371,10 @@ main .url-help > summary:not([role]), main .url-help[open] > summary:not([role])
 /* Below the tool-page breakpoint the toolbar drops its labels and becomes icon-only,
    so the buttons don't wrap or crowd out the search field (mirrors the graph page). */
 @media (max-width: 900px) {
+  /* Collapsed toolbar: labels drop, leaving square icon buttons (width == the shared control
+     height) - the same square icon-button aesthetic as the site nav's toggles. */
   .log-actions .btn-label { display: none; }
-  .file-bar button { padding: 0.25rem 0.4rem; }
+  .file-bar button { width: 1.7rem; padding: 0; }
 }
 /* On small screens the action cluster wraps under the search field; give it room, let the
    search grow to fill its row, and stack the two empty-state cards. */
