@@ -16,14 +16,17 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"net/url"
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/file/watch"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
+	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
 )
 
 // Daemon assembles and runs the daemon HTTP server from a set of MCP server
@@ -155,6 +158,34 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
 			// Wrap every /api/ route with rebind + header-only bearer auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
+
+			// Derived-metrics Connect service for the /dashboard. Mounted only when the
+			// bridge Magus collects metrics locally. The daemon shares one provider across
+			// its bridge Magus and every per-workspace registry Magus (WithProvider), so this
+			// collector sees the counts those builds actually recorded; a disabled/export-only
+			// provider yields no collector and the mount is skipped. The Connect route lives at its own /magus.metrics.v1.*
+			// prefix (not under /api/), so it gets the same rebind + bearer + CORS guards
+			// applied directly rather than via the bridge mux.
+			if coll, ok := opts.Magus.MetricsCollector(); ok {
+				metricsSvc := metricshandler.NewService(coll, svc)
+				metricsSvc.Start(ctx)
+				mPath, mHandler := metricsv1connect.NewMetricsServiceHandler(metricsSvc)
+
+				// The dashboard is a cross-origin browser client (served from the hosted site),
+				// so the DNS-rebind accept-list must include the site origin, not just loopback.
+				// Widen a COPY of allowed for this route only; /mcp and /api keep their loopback
+				// posture. CORS wraps BearerGuard (not the reverse) so the browser's tokenless
+				// OPTIONS preflight is answered here rather than 401'd by the bearer check; the
+				// actual POST still carries and is verified against the bearer token.
+				metricsAllowed := allowed
+				if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
+					metricsAllowed = allowed.Allow(u.Host)
+				}
+				httpServer.Handle(mPath, httpx.GuardRebind(metricsAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, mHandler))))
+				log.Info("[BRIDGE] metrics service mounted", slog.String("path", mPath))
+			} else {
+				log.Info("[BRIDGE] metrics service off (workspace not collecting metrics)")
+			}
 			log.Info("[BRIDGE] web bridge mounted", slog.String("addr", addr.String()))
 		}
 	}

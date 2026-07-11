@@ -57,6 +57,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/types"
@@ -576,6 +577,12 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 	}
 }
 
+// daemonProvider is the single observability provider the daemon shares between its
+// per-workspace registry and its bridge Magus. startMultiWorkspaceDaemon builds it once
+// (it runs before the `server start` command handler); serverStart then hands it to
+// startMCPWithDaemon. Same process, sequential, so the write happens-before the read.
+var daemonProvider observability.Provider
+
 // startMultiWorkspaceDaemon starts the stable multi-workspace proc server for `magus server start`.
 // When cfg.Daemon.Workspaces is non-empty it eagerly loads declared workspaces and applies landlock.
 func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
@@ -590,8 +597,24 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		ttl = defaultIdleTTL
 	}
 
+	// Build the ONE observability provider the whole daemon shares: every per-workspace
+	// registry Magus AND the bridge Magus (startMCPWithDaemon) adopt this same instance via
+	// WithProvider, so a build routed to any workspace records into the same instruments the
+	// /dashboard reads, and workspace eviction never discards accumulated counters. The
+	// provider is owned by the daemon process, not any workspace, and is never shut down
+	// (magus.Close does not touch it), so sharing it carries no double-shutdown hazard. On
+	// init failure fall back to a disabled provider so the daemon still starts.
+	telCfg := observability.ConfigFromTelemetry(cfg.Telemetry, version, "")
+	telCfg.LocalCollect = true
+	sharedTel, terr := observability.New(ctx, telCfg)
+	if terr != nil {
+		slog.Warn("daemon: telemetry init failed; dashboard metrics disabled", slog.String("error", terr.Error()))
+		sharedTel, _ = observability.New(ctx, observability.Config{})
+	}
+	daemonProvider = sharedTel
+
 	declared := resolveDeclaredWorkspaces(cfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
-	reg := newWSRegistry(ctx, lim, ttl)
+	reg := newWSRegistry(ctx, lim, ttl, sharedTel)
 	reg.setDeclared(declared)
 
 	// The daemon hosts shared services so they stay warm across separate `magus run`

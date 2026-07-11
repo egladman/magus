@@ -66,7 +66,8 @@ type Magus struct {
 	wsReg *WorkspaceRegistry
 
 	tel            observability.Provider
-	metricsCollect bool // daemon: build an always-on local metrics collector for the dashboard
+	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
+	metricsCollect bool                   // daemon: build an always-on local metrics collector for the dashboard
 
 	daemon Daemon
 }
@@ -217,6 +218,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		m.limOnce.Do(func() { m.lim = o.Limiter })
 	}
 	m.metricsCollect = o.MetricsCollect
+	m.injectedTel = o.Provider
 	if o.Registry != nil {
 		m.wsReg = o.Registry
 	} else {
@@ -357,13 +359,24 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	cfgOpts = append(cfgOpts, cache.WithSilent(m.cfg.Log.IsSilent()))
 	cfgOpts = append(cfgOpts, cache.WithCollapse(collapseOnSuccess(m.cfg.Log)))
 	// Build the telemetry provider before the cache so a wired remote backend can
-	// be instrumented as it is attached. Init failure falls back to a no-op.
-	telCfg := observability.ConfigFromTelemetry(m.cfg.Telemetry, "", m.ws.Root)
-	telCfg.LocalCollect = m.metricsCollect // daemon: record metrics even when export is off
-	tel, err := observability.New(ctx, telCfg)
-	if err != nil {
-		slog.Warn("magus: telemetry init failed; falling back to no-op", "err", err)
-		tel, _ = observability.New(ctx, observability.Config{})
+	// be instrumented as it is attached. When the caller injected a shared provider
+	// (WithProvider), adopt it verbatim and skip construction: the daemon shares ONE
+	// provider across its bridge Magus and every per-workspace registry Magus, so a
+	// build routed to any workspace feeds the same instruments the dashboard reads,
+	// and workspace eviction never discards the accumulated counters. Otherwise build
+	// one here; init failure falls back to a no-op.
+	var tel observability.Provider
+	if m.injectedTel != nil {
+		tel = m.injectedTel
+	} else {
+		telCfg := observability.ConfigFromTelemetry(m.cfg.Telemetry, "", m.ws.Root)
+		telCfg.LocalCollect = m.metricsCollect // daemon: record metrics even when export is off
+		built, err := observability.New(ctx, telCfg)
+		if err != nil {
+			slog.Warn("magus: telemetry init failed; falling back to no-op", "err", err)
+			built, _ = observability.New(ctx, observability.Config{})
+		}
+		tel = built
 	}
 	m.tel = tel
 	// A magusfile may wire a remote cache backend via magus.cache.remote(<spell>);
@@ -411,6 +424,12 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 }
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
+
+// Telemetry returns this workspace's observability provider (nil on an Inspect workspace,
+// which builds no cache and no provider). When several Magus instances were opened with a
+// shared provider via [WithProvider] this returns that same instance, so metrics recorded
+// through one are visible through another's [Magus.MetricsCollector].
+func (m *Magus) Telemetry() observability.Provider { return m.tel }
 
 func (m *Magus) Where(dir string) (*types.Project, bool) {
 	return project.Where(m.ws, dir)

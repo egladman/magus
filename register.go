@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -30,6 +31,16 @@ func WithLoadedConfig(cfg config.Config) Option {
 // snapshots to the /dashboard via [Magus.MetricsSnapshot]. The CLI leaves it off.
 func WithMetricsCollection() Option {
 	return workspace.WithMetricsCollection()
+}
+
+// WithProvider injects an already-constructed observability provider so several Magus
+// instances (a daemon's bridge Magus plus each per-workspace registry Magus) share ONE set
+// of OTel instruments and one metrics collector. The provider is owned by the daemon
+// process, not any single workspace, so workspace eviction never discards accumulated
+// metrics. It supersedes [WithMetricsCollection]: Open adopts the injected provider instead
+// of constructing its own.
+func WithProvider(p observability.Provider) Option {
+	return workspace.WithProvider(p)
 }
 
 // WorkspaceRegistry holds project-option overrides and target policies for a single Open.

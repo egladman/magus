@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
 )
 
@@ -93,6 +94,18 @@ func (m *Magus) MetricsSnapshot(ctx context.Context) ([]byte, error) {
 		return nil, nil
 	}
 	return m.tel.Snapshot(ctx)
+}
+
+// MetricsCollector returns a narrow accessor over this workspace's in-process metrics
+// ManualReader for the daemon's derived-dashboard aggregation, or (nil, false) when metrics
+// collection was not enabled at Open (the CLI default). Unlike [Magus.MetricsSnapshot] (OTLP
+// bytes for external export), this reads raw metricdata - histogram buckets and counters -
+// with no exporter hop and without exposing the generated dashboard proto here.
+func (m *Magus) MetricsCollector() (*observability.Collector, bool) {
+	if m.tel == nil {
+		return nil, false
+	}
+	return observability.CollectorFrom(m.tel)
 }
 
 // CacheDir returns the resolved workspace cache directory - the same location the

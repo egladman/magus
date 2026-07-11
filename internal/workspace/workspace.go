@@ -18,6 +18,7 @@ package workspace
 import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,6 +29,10 @@ type Load struct {
 	Limiter        *cache.Limiter
 	Registry       *WorkspaceRegistry
 	MetricsCollect bool // build an always-on local metrics collector (daemon dashboard feed)
+	// Provider injects an already-constructed observability provider so several Magus
+	// instances share one set of OTel instruments and one metrics collector. When set it
+	// takes precedence over MetricsCollect (Open skips observability.New and adopts it).
+	Provider observability.Provider
 }
 
 // Option configures Open or Inspect.
@@ -48,6 +53,16 @@ func WithLimiter(lim *cache.Limiter) Option {
 // snapshots to the /dashboard. The CLI leaves it unset to keep one-shot runs a true no-op.
 func WithMetricsCollection() Option {
 	return func(o *Load) { o.MetricsCollect = true }
+}
+
+// WithProvider injects an already-constructed observability provider so several Magus
+// instances (a daemon's bridge plus each of its per-workspace registry Magus) share ONE
+// set of OTel instruments and one metrics collector. The provider is owned by the caller
+// (the daemon process), not by any single workspace, so workspace eviction never discards
+// accumulated metrics. It supersedes WithMetricsCollection: Open adopts the injected
+// provider instead of constructing its own.
+func WithProvider(p observability.Provider) Option {
+	return func(o *Load) { o.Provider = p }
 }
 
 // ProjectOption mutates a Project at registration time; a non-nil error aborts Open.

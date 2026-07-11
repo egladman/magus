@@ -66,7 +66,8 @@ type Provider interface {
 	RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64)                         // magus.pool.wait.duration + inflight+n
 	RecordPoolRelease(ctx context.Context, n int64)                                           // inflight-n
 	// Snapshot returns the current metrics as standard OTLP protobuf, or (nil, nil) when this
-	// provider is not collecting locally. The daemon relays it to the /dashboard.
+	// provider is not collecting locally. OTLP is the export format for real monitoring
+	// backends; it is never put on the dashboard's wire.
 	Snapshot(ctx context.Context) ([]byte, error)
 	Shutdown(ctx context.Context) error
 }

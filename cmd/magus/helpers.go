@@ -86,7 +86,11 @@ var (
 	inspectRootOverride string
 )
 
-func loadMagus(ctx context.Context, rootOverride string) (*magus.Magus, error) {
+// loadMagus opens (once) the process's singleton workspace handle. extra Options apply only
+// to the first, memoizing call - the daemon serve path passes magus.WithMetricsCollection()
+// so the bridge Magus feeds the /dashboard, while one-shot CLI callers pass none and stay a
+// true no-op.
+func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) (*magus.Magus, error) {
 	if m, ok := magusFromContext(ctx); ok { // daemon-adopted handlers bypass the singleton
 		return m, nil
 	}
@@ -104,6 +108,7 @@ func loadMagus(ctx context.Context, rootOverride string) (*magus.Magus, error) {
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
+		opts = append(opts, extra...)
 		magusValue, magusErr = magus.Open(ctx, root, opts...)
 		stop()
 	})

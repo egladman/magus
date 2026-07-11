@@ -68,7 +68,10 @@ func serverStart(ctx context.Context, args []string) error {
 	// connect without a separate process. No-op when mcp.enabled=false.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	startMCPWithDaemon(ctx, cancel)
+	// daemonProvider was built by startMultiWorkspaceDaemon (which runs before this
+	// command handler) so the bridge Magus shares the same OTel instruments the
+	// per-workspace builds record into.
+	startMCPWithDaemon(ctx, cancel, daemonProvider)
 
 	<-ctx.Done()
 	return nil

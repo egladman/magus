@@ -42,9 +42,12 @@ func CORS(origin string) func(http.Handler) http.Handler {
 // answering the OPTIONS preflight here so a route handler never touches CORS itself. It is
 // the multi-origin sibling of CORS: the browser bridge allows the hosted explorer origin plus
 // the two loopback origins derived from the server port, so an empty allow-list disables CORS
-// entirely. Empty origins are ignored. On a matched preflight it advertises the GET, OPTIONS
-// methods, allows the Authorization and Content-Type headers, and honors Chrome's Private
-// Network Access probe (Access-Control-Request-Private-Network).
+// entirely. Empty origins are ignored. On a matched preflight it advertises the GET, POST,
+// OPTIONS methods, allows the Authorization and Content-Type headers plus the Connect
+// protocol headers the browser Connect client sends (Connect-Protocol-Version,
+// Connect-Timeout-Ms), and honors Chrome's Private Network Access probe
+// (Access-Control-Request-Private-Network). POST and the Connect headers are needed by the
+// dashboard's Connect MetricsService calls; the GET bridge routes ignore the widened list.
 func CORSAllow(origins ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]bool, len(origins))
 	for _, o := range origins {
@@ -58,8 +61,8 @@ func CORSAllow(origins ...string) func(http.Handler) http.Handler {
 			if origin != "" && allowed[origin] {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Vary", "Origin")
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-				w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 				if r.Header.Get("Access-Control-Request-Private-Network") == "true" {
 					w.Header().Set("Access-Control-Allow-Private-Network", "true")
 				}

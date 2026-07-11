@@ -8,8 +8,10 @@ import (
 	"net/netip"
 	"os"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/daemon"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/observability"
 )
 
 // mcpAddrPort parses the MCP address from config, falling back to
@@ -56,7 +58,7 @@ func mcpCmd(_ context.Context, _ []string) error {
 // cancel is the CancelFunc for the daemon's context; it is called if ServeHTTP
 // exits for any reason other than ctx cancellation, so the daemon shuts down
 // rather than continuing to run with MCP unavailable.
-func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc) {
+func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel observability.Provider) {
 	if globalCfg.MCP.Enabled != nil && !*globalCfg.MCP.Enabled {
 		return
 	}
@@ -65,7 +67,17 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc) {
 		slog.Error("[AGENT] skipping: invalid MCP address", slog.String("error", err.Error()))
 		return
 	}
-	m, err := loadMagus(ctx, "")
+	// The bridge Magus MUST share the daemon's single provider (WithProvider) so the
+	// /dashboard derived metrics (GetMetrics / StreamMetrics) read the counters that
+	// per-workspace registry builds actually recorded - not this bridge's own empty
+	// ManualReader. If no shared provider was supplied (bridge started without the
+	// multi-workspace daemon), fall back to a bridge-local collector so the endpoint is
+	// still non-empty; one-shot CLI runs leave metrics off entirely.
+	metricsOpt := magus.WithMetricsCollection()
+	if tel != nil {
+		metricsOpt = magus.WithProvider(tel)
+	}
+	m, err := loadMagus(ctx, "", metricsOpt)
 	if err != nil {
 		slog.Warn("[AGENT] skipping: workspace unavailable", slog.String("error", err.Error()))
 		return

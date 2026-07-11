@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -32,7 +33,7 @@ type wsEntry struct {
 	inflight   int          // in-flight dispatches holding m; guarded by wsRegistry.mu
 }
 
-func (e *wsEntry) load(_ context.Context, lim *cache.Limiter) {
+func (e *wsEntry) load(_ context.Context, lim *cache.Limiter, tel observability.Provider) {
 	e.once.Do(func() {
 		now := time.Now()
 		e.lastAccess.Store(now.UnixNano())
@@ -41,14 +42,20 @@ func (e *wsEntry) load(_ context.Context, lim *cache.Limiter) {
 			e.loadErr = fmt.Errorf("daemon: load config %s: %w", e.root, err)
 			return
 		}
+		// Warm daemon workspaces record OTel metrics so the /dashboard can read live
+		// cache/pool/target numbers as OTLP. Every workspace shares the daemon's single
+		// provider (WithProvider), so counts survive eviction and the bridge Magus reads
+		// them; only if none was supplied do we build a per-workspace collector.
+		metricsOpt := magus.WithMetricsCollection()
+		if tel != nil {
+			metricsOpt = magus.WithProvider(tel)
+		}
 		// context.Background(): workspace goroutines must outlive individual RPC contexts.
 		m, err := magus.Open(
 			context.Background(), e.root,
 			magus.WithLoadedConfig(cfg),
 			workspace.WithLimiter(lim),
-			// Warm daemon workspaces record OTel metrics so the /dashboard can read live
-			// cache/pool/target numbers as OTLP; one-shot CLI runs leave this off.
-			magus.WithMetricsCollection(),
+			metricsOpt,
 		)
 		if err != nil {
 			e.loadErr = fmt.Errorf("daemon: open workspace %s: %w", e.root, err)
@@ -81,19 +88,21 @@ type wsRegistry struct {
 	entries  map[string]*wsEntry
 	declared map[string]struct{} // nil/empty = legacy lazy mode (any workspace admissible)
 	lim      *cache.Limiter
+	tel      observability.Provider // shared with the bridge Magus; owned by the daemon, outlives evictions
 	ttl      time.Duration
 	now      func() time.Time // injectable for tests
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
 }
 
-func newWSRegistry(ctx context.Context, lim *cache.Limiter, ttl time.Duration) *wsRegistry {
+func newWSRegistry(ctx context.Context, lim *cache.Limiter, ttl time.Duration, tel observability.Provider) *wsRegistry {
 	if ttl <= 0 {
 		ttl = defaultIdleTTL
 	}
 	r := &wsRegistry{
 		entries: make(map[string]*wsEntry),
 		lim:     lim,
+		tel:     tel,
 		ttl:     ttl,
 		now:     time.Now,
 		stopCh:  make(chan struct{}),
@@ -179,7 +188,7 @@ func (r *wsRegistry) acquire(ctx context.Context, root string) (*wsEntry, error)
 	}
 	r.mu.Unlock()
 
-	e.load(ctx, r.lim)
+	e.load(ctx, r.lim, r.tel)
 	if e.loadErr != nil {
 		// Remove failed entry so it can be retried after TTL eviction.
 		r.mu.Lock()

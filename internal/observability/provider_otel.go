@@ -54,7 +54,7 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 
 	// The meter provider always carries a capturing reader (for on-demand OTLP snapshots the
 	// dashboard reads) plus, when telemetry is enabled, the external OTLP push reader.
-	mp, mShutdown, capT, err := newMeterProvider(ctx, cfg, res)
+	mp, mShutdown, capT, manual, err := newMeterProvider(ctx, cfg, res)
 	if err != nil {
 		return nil, err
 	}
@@ -209,6 +209,7 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 	return &otelProvider{
 		mp:              mp,
 		capture:         capT,
+		manual:          manual,
 		mShutdown:       mShutdown,
 		tShutdown:       tShutdown,
 		tracer:          tracer,
@@ -234,6 +235,7 @@ type otelProvider struct {
 	mu        sync.Mutex
 	mp        *sdkmetric.MeterProvider // for ForceFlush in Snapshot
 	capture   *captureTransport        // captures OTLP bytes; nil when not collecting locally
+	manual    *sdkmetric.ManualReader  // in-process Collect for Derived; no export hop
 	mShutdown func(context.Context) error
 	tShutdown func(context.Context) error
 	tracer    trace.Tracer
@@ -414,14 +416,17 @@ func newTracerProvider(ctx context.Context, cfg Config, res *resource.Resource) 
 	return tp, tp.Shutdown, nil
 }
 
-func newMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context) error, *captureTransport, error) {
+func newMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context) error, *captureTransport, *sdkmetric.ManualReader, error) {
 	// The capturing reader is always present: it yields on-demand OTLP snapshots for the
 	// dashboard without a network hop (see collector.go). ForceFlush drives it.
 	capReader, capT, err := newCaptureReader(ctx)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("observability: capture reader: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("observability: capture reader: %w", err)
 	}
-	opts := []sdkmetric.Option{sdkmetric.WithResource(res), sdkmetric.WithReader(capReader)}
+	// The manual reader backs Derived: an in-process Collect of metricdata (histogram buckets
+	// and counters) with no exporter hop, which the dashboard aggregation reads on demand.
+	manual := sdkmetric.NewManualReader()
+	opts := []sdkmetric.Option{sdkmetric.WithResource(res), sdkmetric.WithReader(capReader), sdkmetric.WithReader(manual)}
 
 	// The external push exporter is added only when telemetry export is enabled.
 	if cfg.Enabled {
@@ -447,11 +452,11 @@ func newMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) (
 			exp, err = otlpmetricgrpc.New(ctx, gopts...)
 		}
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("observability: metric exporter: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("observability: metric exporter: %w", err)
 		}
 		opts = append(opts, sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(30*time.Second))))
 	}
 
 	mp := sdkmetric.NewMeterProvider(opts...)
-	return mp, mp.Shutdown, capT, nil
+	return mp, mp.Shutdown, capT, manual, nil
 }

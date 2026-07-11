@@ -17,8 +17,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
 )
 
@@ -709,4 +711,67 @@ func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
 	t.Setenv(signingKeyEnv, "not!base64!")
 	_, err = remoteCacheSigningOpts([]string{pub}, false)
 	assert.Error(t, err, "malformed signing key was accepted")
+}
+
+// TestSharedProviderVisibleAcrossMagus proves the /dashboard data-flow invariant: when two
+// Magus instances are opened with ONE shared observability provider (WithProvider), a metric
+// recorded through one is visible via the other's MetricsCollector. This is exactly what lets
+// the daemon's bridge Magus read the counters that separate per-workspace registry builds
+// record. Without a shared provider each Magus has its own ManualReader and the bridge
+// collector reads zeros - the bug this feature fixes.
+func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
+	ctx := context.Background()
+
+	// One provider, LocalCollect on (as the daemon builds it), shared by both workspaces.
+	tel, err := observability.New(ctx, observability.Config{LocalCollect: true})
+	require.NoError(t, err)
+
+	mkWS := func() string {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
+			[]byte("export fun build(args: [str]) > void {}\n"), 0o644))
+		return root
+	}
+
+	mBuild, err := Open(ctx, mkWS(), WithProvider(tel))
+	require.NoError(t, err)
+	defer func() { _ = mBuild.Close() }()
+
+	mBridge, err := Open(ctx, mkWS(), WithProvider(tel))
+	require.NoError(t, err)
+	defer func() { _ = mBridge.Close() }()
+
+	// Both workspaces adopted the SAME provider instance rather than building their own.
+	assert.True(t, tel == mBuild.Telemetry(), "build workspace did not adopt the injected provider")
+	assert.True(t, tel == mBridge.Telemetry(), "bridge workspace did not adopt the injected provider")
+
+	// Record a target run through the "build" workspace's provider (as a per-workspace
+	// registry build would)...
+	mBuild.Telemetry().RecordTargetRun(ctx, 0.5,
+		observability.Attr{Key: "magus.target", Value: "build"},
+		observability.Attr{Key: "outcome", Value: "success"},
+	)
+
+	// ...and read it back through the "bridge" workspace's collector (as the dashboard does).
+	coll, ok := mBridge.MetricsCollector()
+	require.True(t, ok, "shared local-collect provider must yield a collector")
+
+	rm, err := coll.Collect(ctx)
+	require.NoError(t, err)
+
+	var targetRuns int64
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "magus.target.runs" {
+				continue
+			}
+			sum, isSum := m.Data.(metricdata.Sum[int64])
+			require.True(t, isSum, "magus.target.runs should be an int64 sum")
+			for _, dp := range sum.DataPoints {
+				targetRuns += dp.Value
+			}
+		}
+	}
+	assert.Equal(t, int64(1), targetRuns,
+		"a target run recorded via one Magus must be visible through the other's shared-provider collector")
 }

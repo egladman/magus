@@ -45,6 +45,26 @@ func GuardRebind(allowed AllowedSet, next http.Handler) http.Handler {
 	})
 }
 
+// Allow returns a copy of a that additionally accepts the given hostname, for a
+// deliberately trusted cross-origin caller such as the hosted site the dashboard is served
+// from. The receiver is not mutated (its names map is copied), so widening one route's
+// accept-list never leaks into the shared set used by /mcp or the /api bridge. An empty or
+// port-only host is ignored.
+func (a AllowedSet) Allow(host string) AllowedSet {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	names := make(map[string]struct{}, len(a.names)+1)
+	for k := range a.names {
+		names[k] = struct{}{}
+	}
+	if host != "" {
+		names[host] = struct{}{}
+	}
+	return AllowedSet{extra: a.extra, names: names}
+}
+
 // AllowedHosts builds the AllowedSet for GuardRebind from the server's
 // already-parsed bind address. Loopback addresses are handled dynamically by
 // isAllowedHost via IsLoopback(), so they need no explicit entry. When addr
