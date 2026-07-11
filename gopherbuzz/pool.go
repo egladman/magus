@@ -301,7 +301,7 @@ func (p *Pool) execute(ctx context.Context, name string, ancestors []string) err
 	if err != nil {
 		return fmt.Errorf("buzzpool: worker: %w", err)
 	}
-	defer p.releaseWorker(w)
+	defer p.releaseWorker(ctx, w)
 
 	ctx = withBuzzAncestors(ctx, append(ancestors, name))
 
@@ -335,26 +335,50 @@ func (p *Pool) acquireWorker(ctx context.Context) (*poolWorker, error) {
 		w := p.idle[n-1]
 		p.idle[n-1] = nil
 		p.idle = p.idle[:n-1]
+		idle := len(p.idle)
 		p.mu.Unlock()
+		if obs := poolObserverFrom(ctx); obs != nil {
+			obs.SessionAcquire(ctx, true, idle)
+		}
 		return w, nil
 	}
 	p.mu.Unlock()
+	// No idle session: a cold checkout. Report the miss before warming; newWorker
+	// then reports the warm cost (idle is 0 - nothing was idle to leave behind).
+	if obs := poolObserverFrom(ctx); obs != nil {
+		obs.SessionAcquire(ctx, false, 0)
+	}
 	return p.newWorker(ctx)
 }
 
-func (p *Pool) releaseWorker(w *poolWorker) {
+func (p *Pool) releaseWorker(ctx context.Context, w *poolWorker) {
 	p.mu.Lock()
-	if !p.closed && len(p.idle) < p.capacity {
+	retained := !p.closed && len(p.idle) < p.capacity
+	if retained {
 		p.idle = append(p.idle, w)
-		p.mu.Unlock()
+	}
+	idle := len(p.idle)
+	p.mu.Unlock()
+
+	obs := poolObserverFrom(ctx)
+	if retained {
+		if obs != nil {
+			obs.SessionRelease(ctx, false, idle)
+		}
 		return
 	}
-	p.mu.Unlock()
 	_ = w.sess.Close()
+	if obs != nil {
+		obs.SessionRelease(ctx, true, idle)
+	}
 }
 
 func (p *Pool) newWorker(ctx context.Context) (*poolWorker, error) {
+	start := time.Now()
 	sess, targets, err := p.newSession(ctx)
+	if obs := poolObserverFrom(ctx); obs != nil {
+		obs.SessionWarm(ctx, time.Since(start), err)
+	}
 	if err != nil {
 		return nil, err
 	}

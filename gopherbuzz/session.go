@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egladman/gopherbuzz/ast"
 	vmpackage "github.com/egladman/gopherbuzz/vm"
@@ -34,6 +35,15 @@ type Session struct {
 	curVM    *vmpackage.VM
 	stepHook func(vmpackage.StepEvent, vmpackage.DebugFrame)
 	stepMask vmpackage.StepMask
+	// compileObserver, if set, is notified of this session's compile phase timings
+	// (parse/check/compile) and import resolutions. nil in normal runs; the
+	// per-phase fire is guarded by a nil check, so an unobserved session compiles
+	// unchanged. See SetCompileObserver.
+	compileObserver CompileObserver
+	// faultHook, if set, is applied to each VM this session runs (via enter), so a
+	// recovered VM panic or a host-callable error raised as a throw is reported.
+	// nil in normal runs; gated exactly like stepHook. See SetFaultHook.
+	faultHook func(vmpackage.FaultKind)
 	// searchPaths is the ordered list of path templates searched when an import
 	// statement names a module not yet bound in the session. Each template holds
 	// `?` (replaced with the import path) and may reference environment variables
@@ -456,8 +466,22 @@ func (s *Session) enter(vm *vmpackage.VM) func() {
 	if s.stepHook != nil {
 		vm.SetStepHook(s.stepMask, s.stepHook)
 	}
+	if s.faultHook != nil {
+		vm.SetFaultHook(s.faultHook)
+	}
 	return func() { s.curVM = prev }
 }
+
+// SetCompileObserver attaches obs, notified as this session compiles source
+// (parse/check/compile phase timings) and resolves imports. Pass nil to detach.
+// With none set the session compiles unchanged, adding no cost.
+func (s *Session) SetCompileObserver(obs CompileObserver) { s.compileObserver = obs }
+
+// SetFaultHook installs cb to fire when a VM executing this session's code faults
+// (see vm.FaultKind: a recovered internal panic, or a host callable error raised
+// as a throw). It is applied to each VM the session runs, gated exactly like the
+// debugger step hook, so an unset hook costs nothing. Pass nil to detach.
+func (s *Session) SetFaultHook(cb func(vmpackage.FaultKind)) { s.faultHook = cb }
 
 // Eval compiles and runs code against the session's shared scope and returns the
 // program's result value (the value of a trailing `return <expr>`, else Null).
@@ -531,12 +555,17 @@ func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
 	}
 	// DebugLines so magus.pry() / the REPL can report a paused frame's line and
 	// drive line-level stepping; the cost is one parallel int32 slice per chunk.
-	return CompileWith(prog, CompileOptions{
+	compileStart := time.Now()
+	chunk, err := CompileWith(prog, CompileOptions{
 		SharedGlobals:   true,
 		DebugLines:      true,
 		PromoteTopLevel: s.promoteTopLevel,
 		ImportedTypes:   s.importedTypes,
 	})
+	if obs := s.compileObserver; obs != nil {
+		obs.Phase(PhaseCompile, time.Since(compileStart), err)
+	}
+	return chunk, err
 }
 
 // checkShared parses and type-checks code against the session's shared scope,
@@ -546,7 +575,11 @@ func (s *Session) compileShared(code string) (*vmpackage.Chunk, error) {
 // them all for the editor. A parse error comes back separately as parseErr, since
 // type-checking has no tree to run against when parsing fails.
 func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeError, parseErr error) {
+	parseStart := time.Now()
 	prog, err := parseModed(code, !s.embedded)
+	if obs := s.compileObserver; obs != nil {
+		obs.Phase(PhaseParse, time.Since(parseStart), err)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -566,7 +599,16 @@ func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeEr
 		}
 		globals = append(globals, name)
 	}
-	return prog, checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importPrivateHint()), nil
+	checkStart := time.Now()
+	errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importPrivateHint())
+	if obs := s.compileObserver; obs != nil {
+		var firstErr error
+		if len(errs) > 0 {
+			firstErr = errs[0] // typeError satisfies error; report the first, as compileShared does
+		}
+		obs.Phase(PhaseCheck, time.Since(checkStart), firstErr)
+	}
+	return prog, errs, nil
 }
 
 // Diagnostic is a positioned diagnostic for editor tooling. Line and Col are
@@ -672,119 +714,138 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 		if !ok {
 			continue
 		}
-		// `buzz:<name>` is upstream Buzz's package-manager scheme for a built-in
-		// stdlib module (`import "buzz:os"`), disambiguating it from a package or
-		// file import. gopherbuzz registers the stdlib under bare names, so strip
-		// the scheme and resolve/bind as if the bare name was imported; the
-		// original spelling is kept for diagnostics.
-		resolvePath := strings.TrimPrefix(imp.Path, "buzz:")
-		parts := strings.Split(resolvePath, "/")
-		basename := parts[len(parts)-1]
-
-		// Determine the bound name used to detect "already loaded":
-		// for aliased imports use the alias, else use the basename.
-		boundName := basename
-		if imp.Alias != "" && imp.Alias != "_" {
-			boundName = imp.Alias
+		start := time.Now()
+		outcome, err := s.resolveImport(imp)
+		if obs := s.compileObserver; obs != nil {
+			obs.Import(imp.Path, outcome, time.Since(start), err)
 		}
-		if _, bound := s.env.Get(boundName); bound {
-			continue
-		}
-
-		// Host-provided synthetic modules (e.g. "magus/extra") resolve before
-		// any filesystem search and bind directly under the import's name.
-		if v, ok := s.syntheticModules[resolvePath]; ok {
-			s.env.Define(boundName, v)
-			continue
-		}
-
-		// Host-provided source modules ship as embedded .buzz source so the
-		// importer can use their exported object/enum types. They flat-merge
-		// like a file import; the loadedPaths guard (keyed by import path)
-		// prevents a second exec.
-		if src, ok := s.sourceModules[resolvePath]; ok {
-			key := "source:" + resolvePath
-			if s.loadedPaths[key] {
-				continue
-			}
-			s.loadedPaths[key] = true
-			s.collectImportedModule(boundName, src)
-			exports, err := s.execImport(s.ctx, src)
-			if err != nil {
-				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
-			}
-			s.bindNamespaceObject(boundName, exports)
-			if ns := s.declaredNamespace(src); ns != nil {
-				if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-
-		// A host module resolver (e.g. local magus spells: `import "spells/hello"`)
-		// gets first refusal on path-style imports, ahead of the file search.
-		if s.moduleResolver != nil {
-			if v, ok := s.moduleResolver(resolvePath); ok {
-				s.env.Define(boundName, v)
-				continue
-			}
-		}
-
-		path := s.findIncludeFile(resolvePath)
-		if path == "" {
-			// Nothing resolved this import: not an already-bound name, a synthetic
-			// or source module, the host module resolver, or a .buzz file on the
-			// search path. Binding nothing would let the unresolved name surface
-			// later as a disconnected "undefined" error, or silently no-op if it is
-			// never referenced, so fail here at the import that is actually wrong.
-			return fmt.Errorf("buzz: import %q: module not found", imp.Path)
-		}
-		abs, err := filepath.Abs(path)
 		if err != nil {
-			return fmt.Errorf("buzz: import %q: resolve path: %w", imp.Path, err)
-		}
-		if s.loadedPaths[abs] {
-			continue
-		}
-		s.loadedPaths[abs] = true
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
-		}
-
-		if imp.Alias != "" && imp.Alias != "_" {
-			// Aliased import: exec in an isolated sub-session so the file's
-			// globals don't leak into the parent env. Collect the new globals
-			// and expose them as a map bound under the alias.
-			if err := s.loadImportAsAlias(imp.Path, string(data), imp.Alias); err != nil {
-				return err
-			}
-		} else {
-			// Flat import: merge file's globals directly into this env, and
-			// collect its exported types and functions so the importer can name
-			// them (Exec only merges runtime values, not type declarations).
-			s.collectImportedModule(boundName, string(data))
-			exports, err := s.execImport(s.ctx, string(data))
-			if err != nil {
-				return fmt.Errorf("buzz: import %q: %w", imp.Path, err)
-			}
-			// Also bind a namespace object under the basename so upstream-Buzz
-			// qualified access (`regex\reCompile`) resolves the same export the
-			// splat above bound unqualified (`reCompile`). gopherbuzz accepts both.
-			s.bindNamespaceObject(boundName, exports)
-			// And, when the file declares `namespace a\b\c`, bind its exports
-			// under that full path too, matching upstream Buzz exactly (and
-			// erroring on a duplicate namespace instead of failing downstream).
-			if ns := s.declaredNamespace(string(data)); ns != nil {
-				if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
-					return err
-				}
-			}
+			return err
 		}
 	}
 	return nil
+}
+
+// resolveImport resolves one import statement, binding whatever it names into the
+// session and returning how it resolved (for a CompileObserver). It preserves the
+// exact resolution order loadFileImports drove inline before instrumentation: an
+// already-bound name, then a synthetic module, a source module, the host module
+// resolver, and finally a .buzz file on the search path. Every `continue` in the
+// old loop is a `return <outcome>, nil` here; every error return carries the
+// outcome it failed under.
+func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
+	// `buzz:<name>` is upstream Buzz's package-manager scheme for a built-in
+	// stdlib module (`import "buzz:os"`), disambiguating it from a package or
+	// file import. gopherbuzz registers the stdlib under bare names, so strip
+	// the scheme and resolve/bind as if the bare name was imported; the
+	// original spelling is kept for diagnostics.
+	resolvePath := strings.TrimPrefix(imp.Path, "buzz:")
+	parts := strings.Split(resolvePath, "/")
+	basename := parts[len(parts)-1]
+
+	// Determine the bound name used to detect "already loaded":
+	// for aliased imports use the alias, else use the basename.
+	boundName := basename
+	if imp.Alias != "" && imp.Alias != "_" {
+		boundName = imp.Alias
+	}
+	if _, bound := s.env.Get(boundName); bound {
+		return ImportBound, nil
+	}
+
+	// Host-provided synthetic modules (e.g. "magus/extra") resolve before
+	// any filesystem search and bind directly under the import's name.
+	if v, ok := s.syntheticModules[resolvePath]; ok {
+		s.env.Define(boundName, v)
+		return ImportSynthetic, nil
+	}
+
+	// Host-provided source modules ship as embedded .buzz source so the
+	// importer can use their exported object/enum types. They flat-merge
+	// like a file import; the loadedPaths guard (keyed by import path)
+	// prevents a second exec.
+	if src, ok := s.sourceModules[resolvePath]; ok {
+		key := "source:" + resolvePath
+		if s.loadedPaths[key] {
+			return ImportBound, nil
+		}
+		s.loadedPaths[key] = true
+		s.collectImportedModule(boundName, src)
+		exports, err := s.execImport(s.ctx, src)
+		if err != nil {
+			return ImportSource, fmt.Errorf("buzz: import %q: %w", imp.Path, err)
+		}
+		s.bindNamespaceObject(boundName, exports)
+		if ns := s.declaredNamespace(src); ns != nil {
+			if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
+				return ImportSource, err
+			}
+		}
+		return ImportSource, nil
+	}
+
+	// A host module resolver (e.g. local magus spells: `import "spells/hello"`)
+	// gets first refusal on path-style imports, ahead of the file search.
+	if s.moduleResolver != nil {
+		if v, ok := s.moduleResolver(resolvePath); ok {
+			s.env.Define(boundName, v)
+			return ImportResolver, nil
+		}
+	}
+
+	path := s.findIncludeFile(resolvePath)
+	if path == "" {
+		// Nothing resolved this import: not an already-bound name, a synthetic
+		// or source module, the host module resolver, or a .buzz file on the
+		// search path. Binding nothing would let the unresolved name surface
+		// later as a disconnected "undefined" error, or silently no-op if it is
+		// never referenced, so fail here at the import that is actually wrong.
+		return ImportNotFound, fmt.Errorf("buzz: import %q: module not found", imp.Path)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ImportFile, fmt.Errorf("buzz: import %q: resolve path: %w", imp.Path, err)
+	}
+	if s.loadedPaths[abs] {
+		return ImportBound, nil
+	}
+	s.loadedPaths[abs] = true
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ImportFile, fmt.Errorf("buzz: import %q: %w", imp.Path, err)
+	}
+
+	if imp.Alias != "" && imp.Alias != "_" {
+		// Aliased import: exec in an isolated sub-session so the file's
+		// globals don't leak into the parent env. Collect the new globals
+		// and expose them as a map bound under the alias.
+		if err := s.loadImportAsAlias(imp.Path, string(data), imp.Alias); err != nil {
+			return ImportFile, err
+		}
+		return ImportFile, nil
+	}
+	// Flat import: merge file's globals directly into this env, and
+	// collect its exported types and functions so the importer can name
+	// them (Exec only merges runtime values, not type declarations).
+	s.collectImportedModule(boundName, string(data))
+	exports, err := s.execImport(s.ctx, string(data))
+	if err != nil {
+		return ImportFile, fmt.Errorf("buzz: import %q: %w", imp.Path, err)
+	}
+	// Also bind a namespace object under the basename so upstream-Buzz
+	// qualified access (`regex\reCompile`) resolves the same export the
+	// splat above bound unqualified (`reCompile`). gopherbuzz accepts both.
+	s.bindNamespaceObject(boundName, exports)
+	// And, when the file declares `namespace a\b\c`, bind its exports
+	// under that full path too, matching upstream Buzz exactly (and
+	// erroring on a duplicate namespace instead of failing downstream).
+	if ns := s.declaredNamespace(string(data)); ns != nil {
+		if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
+			return ImportFile, err
+		}
+	}
+	return ImportFile, nil
 }
 
 // collectImportedModule parses a flat-imported module's source and records its

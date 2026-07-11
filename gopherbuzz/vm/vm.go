@@ -119,6 +119,12 @@ type VM struct {
 	stepHook func(StepEvent, DebugFrame)
 	stepMask StepMask
 	lastLine int // last source line a StepLine event fired for; 0 = none yet
+	// faultHook, if set, is notified when this VM faults: FaultPanic for a Go panic
+	// recovered in Exec, FaultHostError for a host callable error raised as a throw.
+	// nil in every normal run, so the single `if vm.faultHook != nil` guard at each
+	// fault site is a perfectly-predicted not-taken branch off the hot path, exactly
+	// like stepHook. Set/cleared only between runs, never concurrently with Exec.
+	faultHook func(FaultKind)
 	// strScratch is a reusable byte buffer for OpBuildStr string interpolation.
 	// It is grown to the largest interpolation seen and never shrunk, so a loop
 	// that builds strings reuses one backing array instead of allocating a fresh
@@ -323,6 +329,9 @@ func (vm *VM) checkCancel() error {
 func (vm *VM) Exec() (retVal Value, rerr error) {
 	defer func() {
 		if r := recover(); r != nil {
+			if vm.faultHook != nil {
+				vm.faultHook(FaultPanic)
+			}
 			rerr = fmt.Errorf("buzz: internal error: %v", r)
 		}
 	}()
@@ -2067,13 +2076,21 @@ func (vm *VM) buildObjectVal(typeName string, fieldCount int, env *Env, mut bool
 // context cancellation), which must keep propagating to the embedder.
 // Callers must refresh their cached frame/code pointers on true.
 func (vm *VM) raiseHostError(err error) bool {
-	if len(vm.catchStack) == 0 {
-		return false
-	}
+	// Filter control-flow sentinels first: a fiber yield or a context cancellation
+	// must keep propagating to the embedder and is not a fault. (Reordered ahead of
+	// the catch-stack check below; both branches still return false, so the raise
+	// decision is unchanged - only the fault hook now sees genuine host errors.)
 	if _, ok := err.(*yieldSignal); ok {
 		return false
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	// A genuine host error, whether or not a handler catches it below.
+	if vm.faultHook != nil {
+		vm.faultHook(FaultHostError)
+	}
+	if len(vm.catchStack) == 0 {
 		return false
 	}
 	entry := vm.catchStack[len(vm.catchStack)-1]
@@ -2189,6 +2206,15 @@ func (vm *VM) ClearStepHook() {
 	vm.stepHook = nil
 	vm.stepMask = 0
 }
+
+// SetFaultHook installs cb to fire when this VM faults (see FaultKind). It is nil
+// in every normal run; the single `if vm.faultHook != nil` guard at each fault
+// site costs nothing when unset. Set/cleared only between runs, never
+// concurrently with Exec.
+func (vm *VM) SetFaultHook(cb func(FaultKind)) { vm.faultHook = cb }
+
+// ClearFaultHook removes any installed fault hook.
+func (vm *VM) ClearFaultHook() { vm.faultHook = nil }
 
 // DebugFrames returns the active call stack, innermost first.
 func (vm *VM) DebugFrames() []DebugFrame {
