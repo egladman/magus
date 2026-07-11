@@ -9,8 +9,14 @@
   const backdrop = document.getElementById("ref-backdrop");
   if (!drawer || !backdrop) return;
 
-  // Relocate the page's reference sections into the drawer, in document order. CSS hides them
-  // inline (.js .ref-section) and reveals them once inside (#ref-drawer .ref-section).
+  // Pull the injected docs search bar (.page-tools, built by search.js) up into the drawer first,
+  // so it sits at the top - "quick search" lives in the reference panel, not the app's page body.
+  // search.js is imported before this module (see main.ts) so the element already exists.
+  const search = document.querySelector(".page-tools");
+  if (search) drawer.appendChild(search);
+
+  // Then relocate the page's reference sections, in document order. CSS hides them inline
+  // (.js .ref-section) and reveals them once inside (#ref-drawer .ref-section).
   document.querySelectorAll(".ref-section").forEach((s) => drawer.appendChild(s));
 
   const triggers = document.querySelectorAll(".ref-trigger");

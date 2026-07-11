@@ -9,9 +9,10 @@
 // esbuild resolves each to its .ts source. Modules not yet converted are still .js
 // and resolve directly; the mix is fine (allowJs + esbuild bundle both).
 import "./nav.js";
-import "./ref-drawer.js";
 import "./toc.js";
 import "./search.js";
+// ref-drawer runs AFTER search so it can pull the search bar (.page-tools) into the drawer.
+import "./ref-drawer.js";
 import "./anchors.js";
 import "./code-copy.js";
 import "./syntax-highlight.js";

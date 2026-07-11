@@ -34,34 +34,29 @@
           <li class="app-cell"><a href="../dashboard/"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="13" x2="9" y2="18"/></svg><span>Dashboard</span></a></li>
           <li class="app-cell"><a href="../logs/"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg><span>Log viewer</span></a></li>
           <li class="app-cell"><a href="../playground/"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 7 9 12 5 17"/><line x1="12" y1="17" x2="19" y2="17"/></svg><span>Playground</span></a></li>
-          <li class="app-cell"><a href="../documentation/"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg><span>Documentation</span></a></li>
+          <li class="app-cell"><a href="../documentation/"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Documentation</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
     </nav>
   </header>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <h2 class="ref-drawer-title">Reference</h2>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
 <!-- injected at build time by renderGraph() in scribe.buzz; the graph explorer wears the shared console app bar (renderConsoleChrome), not the docs nav -->
 
   <main class="container-fluid">
 
-    <!-- Reference drawer: a right-side slide-out holding the reference blocks below (Ask, Query
-         syntax and views, Display, Loading a graph by URL). Each is marked .ref-section and moved
-         into #ref-drawer by ref-drawer.js at load; they stay inline (visible) for no-JS. -->
-    <div class="ref-trigger-row">
-      <button type="button" class="ref-trigger outline" aria-controls="ref-drawer" aria-expanded="false">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg>
-        Reference
-      </button>
-    </div>
-    <div class="ref-backdrop" id="ref-backdrop"></div>
-    <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
-      <div class="ref-drawer-head">
-        <h2 class="ref-drawer-title">Reference</h2>
-        <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
-      </div>
-    </aside>
-
+    <!-- The reference blocks below (Ask, Query syntax and views, Display, Loading a graph by URL)
+         are each marked .ref-section; ref-drawer.js moves them into the shared #ref-drawer (emitted
+         by the console chrome, opened from the nav-bar Reference button) at load, along with the
+         docs search bar. They stay inline (visible) for no-JS. -->
     <!-- Views panel - question-first navigation (max 7 modes). Moved into the reference drawer at load. -->
     <details class="views-panel ref-section" id="ask-panel">
       <summary>Ask</summary>

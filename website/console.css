@@ -215,12 +215,14 @@
    (query/filter syntax, views, display options, how-to). Native docs-app pattern; shared across
    the console apps. A page marks its reference blocks .ref-section, adds a .ref-trigger, and the
    #ref-drawer + #ref-backdrop; ref-drawer.js relocates the sections in and wires open/close. */
-.ref-trigger-row { display: flex; justify-content: flex-end; margin: 0.3rem 0 0.6rem; }
+/* The trigger is an icon button in the app bar, next to the theme toggle. */
 .ref-trigger {
-  width: auto; margin: 0; display: inline-flex; align-items: center; gap: 0.4rem;
-  padding: 0.35rem 0.7rem; font-size: 0.8rem;
+  width: auto; margin: 0; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0.4rem 0.55rem;
 }
-.ref-trigger svg { width: 1em; height: 1em; }
+.ref-trigger svg { display: block; }
+/* The docs search bar, once relocated into the drawer, sits flush at the top. */
+#ref-drawer .page-tools { margin: 0 0 0.85rem; }
 .ref-backdrop {
   position: fixed; inset: 0; z-index: 49; background: rgba(0, 0, 0, 0.28);
   opacity: 0; visibility: hidden; transition: opacity 0.2s ease;
