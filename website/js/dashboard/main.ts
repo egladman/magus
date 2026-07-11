@@ -27,7 +27,8 @@ import { sandboxTile } from "./tiles/sandbox";
 import { runningTargetsTile } from "./tiles/runningTargets";
 import { workspacesTile } from "./tiles/workspaces";
 import { versionsTile } from "./tiles/versions";
-import { ganttPlaceholderTile, flakePlaceholderTile } from "./tiles/placeholders";
+import { ganttTile } from "./tiles/gantt";
+import { flakePlaceholderTile } from "./tiles/placeholders";
 import "../nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -114,9 +115,9 @@ function mountTiles(): void {
   const versions = versionsTile();
   host.append(versions.el);
 
-  // Deferred seams (Wave 3b): a live execution timeline and the flake column. Inert
-  // today; see tiles/placeholders.ts for the wire contracts they wait on.
-  const gantt = ganttPlaceholderTile();
+  // The live execution timeline (fed by Status.runs). The flake column is still a
+  // deferred seam - see tiles/placeholders.ts for the source it waits on.
+  const gantt = ganttTile();
   const flake = flakePlaceholderTile();
   host.append(gantt.el, flake.el);
 

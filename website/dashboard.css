@@ -178,6 +178,33 @@ body.dash-native { margin: 0; }
 .util-ramp i:nth-child(4) { opacity: 0.8; }
 .util-ramp i:nth-child(5) { opacity: 1; }
 
+/* Live execution timeline (gantt). One SVG scales to the tile via its viewBox; bar
+   geometry rides presentation attributes (x/width/y), fills come from the .gantt-bar
+   state classes so light/dark and the fixed accent palette carry over. Tall runs scroll
+   inside the tile rather than squishing. */
+.gantt-scroll { max-height: 340px; overflow-y: auto; margin: 0.1rem 0 0.4rem; }
+.gantt-svg { display: block; width: 100%; height: auto; }
+.gantt-axis-line { stroke: var(--pico-muted-border-color); stroke-width: 1; }
+.gantt-grid { stroke: var(--pico-muted-border-color); stroke-width: 0.5; stroke-dasharray: 2 3; opacity: 0.6; }
+.gantt-axis-label { fill: var(--pico-muted-color); font-size: 8px; font-family: var(--pico-font-family-monospace); }
+.gantt-run-label { fill: var(--pico-muted-color); font-size: 9px; font-weight: 600; font-family: var(--pico-font-family-monospace); }
+.gantt-target-label { fill: var(--pico-color); font-size: 10px; font-family: var(--pico-font-family-monospace); }
+.gantt-bar { stroke: var(--pico-muted-border-color); stroke-width: 0.5; }
+.gantt-bar.running { fill: var(--c-info); }
+.gantt-bar.queued  { fill: var(--c-miss); fill-opacity: 0.55; }
+.gantt-bar.passed  { fill: var(--c-hit); }
+.gantt-bar.failed  { fill: var(--c-err); }
+.gantt-bar.cached  { fill: var(--c-info); fill-opacity: 0.35; }
+.gantt-bar.unspecified { fill: var(--pico-muted-color); }
+.gantt-link { cursor: pointer; }
+.gantt-link:hover .gantt-bar { stroke: var(--c-info); stroke-width: 1.5; }
+.gantt-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.7rem; color: var(--pico-muted-color); }
+.gantt-legend .lg-running { color: var(--c-info); } .gantt-legend .lg-running::before { background: var(--c-info); }
+.gantt-legend .lg-queued { color: var(--c-miss); } .gantt-legend .lg-queued::before { background: var(--c-miss); opacity: 0.55; }
+.gantt-legend .lg-passed { color: var(--c-hit); } .gantt-legend .lg-passed::before { background: var(--c-hit); }
+.gantt-legend .lg-failed { color: var(--c-err); } .gantt-legend .lg-failed::before { background: var(--c-err); }
+.gantt-legend .lg-cached { color: var(--c-info); } .gantt-legend .lg-cached::before { background: var(--c-info); opacity: 0.35; }
+
 /* Two-up columns. */
 .dash-cols { display: grid; gap: var(--dash-gap); grid-template-columns: 1fr 1fr; }
 

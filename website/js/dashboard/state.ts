@@ -5,7 +5,9 @@
 // wire's bigint/Timestamp quirks, and gives every number one formatting home.
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { Health, type Status, type Pool } from "../gen/magus/status/v1/status_pb";
+import {
+  Health, TargetRun_State, type Status, type Pool, type Run, type TargetRun,
+} from "../gen/magus/status/v1/status_pb";
 import type {
   Snapshot, Latency, Remote, TargetStat, MCPToolStat, Buzz, Sandbox, Sample as ProtoSample,
 } from "../gen/magus/metrics/v1/metrics_pb";
@@ -92,14 +94,78 @@ export interface CacheView { hits: number; misses: number; errors: number; hitRa
 export interface RunningTargetView { args: string[]; step: string; startTime?: Timestamp; invocation: string; }
 export interface WorkspaceView { root: string; hits?: number; misses?: number; errors?: number; lastAccessTime?: Timestamp; }
 
+// A target's lifecycle state, as plain view-model strings that double as the gantt
+// tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
+// lockstep with magus.status.v1.TargetRun.State but stringly-typed so tiles never
+// import the proto enum.
+export type TargetState = "unspecified" | "queued" | "running" | "passed" | "failed" | "cached";
+
+// TargetRunView is one target's execution within a run: its state, its wall-clock
+// window (startMs unset while QUEUED, endMs unset while active), and, once finished,
+// the output reference the gantt bar deep-links to.
+export interface TargetRunView {
+  project: string;
+  target: string;
+  label: string;             // "project:target" (or just the target when project is empty)
+  state: TargetState;
+  terminal: boolean;         // passed | failed | cached
+  startMs: number | null;
+  endMs: number | null;
+  outputRef: string;
+  durationMs: number;
+}
+
+// RunView groups a run's targets under its invocation + trigger, the row-group the
+// live gantt draws.
+export interface RunView {
+  inv: string;
+  trigger: string;
+  startedMs: number;
+  targets: TargetRunView[];
+}
+
 export interface StatusView {
   health: HealthView;
   pool: PoolView;
   cache: CacheView;
   runningTargets: RunningTargetView[];
+  runs: RunView[];
   workspaces: WorkspaceView[];
   magusVersion: string;
   daemonVersion: string;
+}
+
+const TARGET_STATE: Record<number, TargetState> = {
+  [TargetRun_State.STATE_UNSPECIFIED]: "unspecified",
+  [TargetRun_State.QUEUED]: "queued",
+  [TargetRun_State.RUNNING]: "running",
+  [TargetRun_State.PASSED]: "passed",
+  [TargetRun_State.FAILED]: "failed",
+  [TargetRun_State.CACHED]: "cached",
+};
+
+function mapTargetRun(t: TargetRun): TargetRunView {
+  const state = TARGET_STATE[t.state] || "unspecified";
+  return {
+    project: t.project || "",
+    target: t.target || "",
+    label: t.project ? t.project + ":" + t.target : (t.target || ""),
+    state,
+    terminal: state === "passed" || state === "failed" || state === "cached",
+    startMs: t.startedAt ? tsMillis(t.startedAt) : null,
+    endMs: t.endedAt ? tsMillis(t.endedAt) : null,
+    outputRef: t.outputRef || "",
+    durationMs: Number(t.durationMs || 0),
+  };
+}
+
+function mapRun(r: Run): RunView {
+  return {
+    inv: r.inv || "",
+    trigger: r.trigger || "",
+    startedMs: r.startedAt ? tsMillis(r.startedAt) : Date.now(),
+    targets: (r.targets || []).map(mapTargetRun),
+  };
 }
 
 function mapCache(cache: Pool["cache"] | undefined): CacheView {
@@ -124,6 +190,7 @@ export function mapStatus(st: Status): StatusView {
     runningTargets: ((pool && pool.runningTargets) || []).map((c) => ({
       args: c.args || [], step: c.step || "", startTime: c.startTime, invocation: c.invocation || "",
     })),
+    runs: (st.runs || []).map(mapRun),
     workspaces: ((pool && pool.workspaces) || []).map((w) => ({
       root: w.root,
       hits: w.cache ? Number(w.cache.hits) : undefined,
