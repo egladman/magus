@@ -1,4 +1,4 @@
-// relative-time.js - render the provenance timestamps as relative ("3 days ago").
+// relative-time.ts - render the provenance timestamps as relative ("3 days ago").
 //
 // The "Last updated" line and every "Recent changes on this page" row carry a
 // <time datetime="..."> with an absolute rendered date. We swap the visible text
@@ -8,13 +8,13 @@
 // is no provenance strip.
 
 (function () {
-  var times = document.querySelectorAll(".page-provenance time[datetime]");
+  const times = document.querySelectorAll(".page-provenance time[datetime]");
   if (!times.length) return;
 
-  var MIN = 60, HOUR = 3600, DAY = 86400, WEEK = 604800, MONTH = 2629800, YEAR = 31557600;
+  const MIN = 60, HOUR = 3600, DAY = 86400, WEEK = 604800, MONTH = 2629800, YEAR = 31557600;
 
-  function relative(then, now) {
-    var s = Math.round((now - then) / 1000);
+  function relative(then: number, now: number): string {
+    const s = Math.round((now - then) / 1000);
     if (s < 45) return "just now";
     if (s < 90) return "a minute ago";
     if (s < HOUR) return Math.round(s / MIN) + " minutes ago";
@@ -30,13 +30,14 @@
     return Math.round(s / YEAR) + " years ago";
   }
 
-  var now = Date.now();
-  times.forEach(function (t) {
-    var iso = t.getAttribute("datetime");
-    var d = new Date(iso);
+  const now = Date.now();
+  times.forEach((t) => {
+    const iso = t.getAttribute("datetime");
+    if (!iso) return;
+    const d = new Date(iso);
     if (isNaN(d.getTime())) return;
     // Keep the absolute date reachable on hover; don't clobber an existing title.
-    if (!t.getAttribute("title")) t.setAttribute("title", t.textContent);
+    if (!t.getAttribute("title")) t.setAttribute("title", t.textContent ?? "");
     t.textContent = relative(d.getTime(), now);
   });
 })();

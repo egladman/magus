@@ -1,4 +1,4 @@
-// prefetch.js - warm the cache for internal links the reader is about to click.
+// prefetch.ts - warm the cache for internal links the reader is about to click.
 //
 // On mouseover / touchstart of any same-origin link (skipping anchors, alias
 // stubs, and the playground WASM route), inject a <link rel="prefetch"> once.
@@ -8,11 +8,11 @@
 
 (function () {
   if (typeof window === "undefined") return;
-  var origin = window.location.origin;
-  var seen = new Set();
+  const origin = window.location.origin;
+  const seen = new Set<string>();
 
-  function isPrefetchable(a) {
-    if (!a || !a.href) return false;
+  function isPrefetchable(a: HTMLAnchorElement): boolean {
+    if (!a.href) return false;
     if (a.target && a.target !== "_self") return false; // opens in a new tab
     if (a.hasAttribute("download")) return false;
     // Fragment-only or same-page link: nothing to fetch.
@@ -26,16 +26,18 @@
     return true;
   }
 
-  function prefetch(href) {
+  function prefetch(href: string): void {
     seen.add(href);
-    var link = document.createElement("link");
+    const link = document.createElement("link");
     link.rel = "prefetch";
     link.href = href;
     document.head.appendChild(link);
   }
 
-  function onHover(e) {
-    var a = e.target.closest && e.target.closest("a");
+  function onHover(e: Event): void {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    const a = t.closest("a");
     if (!a || !isPrefetchable(a)) return;
     prefetch(a.href);
   }

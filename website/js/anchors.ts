@@ -1,4 +1,4 @@
-// anchors.js - add a shareable link icon to each section heading.
+// anchors.ts - add a shareable link icon to each section heading.
 //
 // Every article heading already carries a slug id (from the markdown renderer).
 // This appends a small chain-link anchor to each h2-h6 inside the article.
@@ -9,13 +9,13 @@
 import { copyFeedback } from "./lib/clipboard.js";
 
 (function () {
-  var LINK =
+  const LINK =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>' +
     '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>';
 
-  document.querySelectorAll("article :is(h2, h3, h4, h5, h6)[id]").forEach(function (h) {
-    var a = document.createElement("a");
+  document.querySelectorAll("article :is(h2, h3, h4, h5, h6)[id]").forEach((h) => {
+    const a = document.createElement("a");
     a.className = "heading-anchor";
     a.href = "#" + h.id;
     a.setAttribute("aria-label", "Link to this section");
@@ -31,9 +31,7 @@ import { copyFeedback } from "./lib/clipboard.js";
     if (copyFeedback) {
       copyFeedback({
         el: a,
-        getText: function () {
-          return location.origin + location.pathname + location.search + "#" + h.id;
-        },
+        getText: () => location.origin + location.pathname + location.search + "#" + h.id,
         restIcon: LINK,
         restLabel: "Link to this section",
         doneLabel: "Link copied",
