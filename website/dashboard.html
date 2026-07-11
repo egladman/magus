@@ -45,112 +45,11 @@
   </header>
 
   <main class="dash-main">
-    <!-- Live panels (hidden until the first status frame arrives). -->
-    <div class="dash-panels" id="dash-panels" hidden>
-      <!-- Concurrency pool as an occupancy grid: one cube per slot, filled when in use,
-           dashed when a task is queued for it - an airplane-seating read of the pool. -->
-      <section class="tile pool-tile" data-card="pool">
-        <div class="tile-head"><button class="tile-collapse" type="button" data-card="pool" aria-label="Collapse card"></button><h2 class="tile-h">Pool</h2><span class="tile-note" id="pool-summary">0 / 0 slots</span></div>
-        <div class="slot-grid" id="slot-grid" aria-label="Concurrency slots"></div>
-        <div class="pool-legend">
-          <span class="lg lg-busy">in use</span>
-          <span class="lg lg-free">free</span>
-          <span class="lg lg-wait" id="wait-legend" hidden>waiting <span id="wait-count">0</span></span>
-        </div>
-      </section>
-
-      <!-- Pool utilization history: one square per sample, GitHub-contribution style.
-           Seeded from the metrics Backfill, then appended live from the status stream. -->
-      <section class="tile util-tile" data-card="util">
-        <div class="tile-head"><button class="tile-collapse" type="button" data-card="util" aria-label="Collapse card"></button><h2 class="tile-h">Pool utilization</h2><span class="tile-note" id="util-note">no samples yet</span></div>
-        <div class="util-grid" id="util-grid" aria-label="Pool utilization history"></div>
-        <div class="util-legend">
-          <span class="util-legend-scale">idle
-            <span class="util-ramp" aria-hidden="true"><i style="--u:0.06"></i><i style="--u:0.3"></i><i style="--u:0.55"></i><i style="--u:0.8"></i><i style="--u:1"></i></span>
-            full</span>
-          <span class="lg lg-queued">queued</span>
-        </div>
-      </section>
-
-      <!-- Stat strip: dense KPI tiles spanning the full width. -->
-      <section class="stat-strip">
-        <div class="stat" data-accent="hit"><span class="stat-k">Cache hits</span><span class="stat-v" id="stat-hits">0</span></div>
-        <div class="stat" data-accent="miss"><span class="stat-k">Cache misses</span><span class="stat-v" id="stat-misses">0</span></div>
-        <div class="stat" data-accent="rate"><span class="stat-k">Hit rate</span><span class="stat-v" id="stat-hitrate">-</span></div>
-        <div class="stat" data-accent="size"><span class="stat-k">Cache size</span><span class="stat-v" id="stat-size">-</span></div>
-        <div class="stat" data-accent="err"><span class="stat-k">Errors</span><span class="stat-v" id="stat-errors">0</span></div>
-      </section>
-
-      <!-- Cache hit-rate over time: derived from per-interval Sample diffs. -->
-      <section class="tile chart-tile" data-card="cache">
-        <div class="tile-head"><button class="tile-collapse" type="button" data-card="cache" aria-label="Collapse card"></button><h2 class="tile-h">Cache hit-rate</h2><span class="tile-note">per-interval hits / (hits + misses)</span></div>
-        <div class="chart-plot" id="chart-rate"></div>
-        <div class="chart-legend"><span class="lg lg-hit">hit rate</span></div>
-      </section>
-
-      <!-- Latency percentiles per operation family, from the metrics stream. Each chart
-           plots p50/p95/p99 over time with an exact current readout beside it. -->
-      <section class="tile latency-tile" data-card="latency">
-        <div class="tile-head"><button class="tile-collapse" type="button" data-card="latency" aria-label="Collapse card"></button><h2 class="tile-h">Latency</h2><span class="tile-note"><span class="lg lg-p50">p50</span><span class="lg lg-p95">p95</span><span class="lg lg-p99">p99</span></span></div>
-        <div class="chart-grid">
-          <figure class="chart">
-            <figcaption>Target execution</figcaption>
-            <div class="chart-plot" id="chart-target"></div>
-            <div class="chart-readout" id="ro-target">no data yet</div>
-          </figure>
-          <figure class="chart">
-            <figcaption>Cache op</figcaption>
-            <div class="chart-plot" id="chart-cacheop"></div>
-            <div class="chart-readout" id="ro-cacheop">no data yet</div>
-          </figure>
-          <figure class="chart">
-            <figcaption>Pool wait</figcaption>
-            <div class="chart-plot" id="chart-poolwait"></div>
-            <div class="chart-readout" id="ro-poolwait">no data yet</div>
-          </figure>
-          <figure class="chart">
-            <figcaption>Graph query</figcaption>
-            <div class="chart-plot" id="chart-graphquery"></div>
-            <div class="chart-readout" id="ro-graphquery">no data yet</div>
-          </figure>
-        </div>
-      </section>
-
-      <!-- Remote cache: outcome tallies plus transfer latency and volume. -->
-      <section class="tile remote-tile" data-card="remote">
-        <div class="tile-head"><button class="tile-collapse" type="button" data-card="remote" aria-label="Collapse card"></button><h2 class="tile-h">Remote cache</h2><span class="tile-note">get / put over the network</span></div>
-        <div class="stat-strip">
-          <div class="stat" data-accent="hit"><span class="stat-k">Hits</span><span class="stat-v" id="rem-hits">0</span></div>
-          <div class="stat" data-accent="miss"><span class="stat-k">Misses</span><span class="stat-v" id="rem-misses">0</span></div>
-          <div class="stat" data-accent="err"><span class="stat-k">Errors</span><span class="stat-v" id="rem-errors">0</span></div>
-          <div class="stat" data-accent="rate"><span class="stat-k">Hit rate</span><span class="stat-v" id="rem-rate">-</span></div>
-          <div class="stat" data-accent="size"><span class="stat-k">Transfer p50</span><span class="stat-v" id="rem-p50">-</span></div>
-          <div class="stat" data-accent="size"><span class="stat-k">Transfer p95</span><span class="stat-v" id="rem-p95">-</span></div>
-          <div class="stat" data-accent="info"><span class="stat-k">IO ops</span><span class="stat-v" id="rem-io">0</span></div>
-          <div class="stat" data-accent="info"><span class="stat-k">Bytes moved</span><span class="stat-v" id="rem-bytes">-</span></div>
-        </div>
-      </section>
-
-      <!-- Two-up: in-flight calls and loaded workspaces. -->
-      <div class="dash-cols">
-        <section class="tile calls-tile" data-card="calls">
-          <div class="tile-head"><button class="tile-collapse" type="button" data-card="calls" aria-label="Collapse card"></button><h2 class="tile-h">In-flight</h2><span class="tile-count" id="calls-count">0</span></div>
-          <ul class="row-list" id="calls-list"></ul>
-          <p class="row-empty" id="calls-empty">Pool is idle.</p>
-        </section>
-
-        <section class="tile ws-tile" data-card="workspaces">
-          <div class="tile-head"><button class="tile-collapse" type="button" data-card="workspaces" aria-label="Collapse card"></button><h2 class="tile-h">Workspaces</h2><span class="tile-count" id="ws-count">0</span></div>
-          <ul class="row-list" id="ws-list"></ul>
-          <p class="row-empty" id="ws-empty">No workspaces loaded.</p>
-        </section>
-      </div>
-
-      <footer class="dash-versions">
-        <span id="dash-magus-version"></span>
-        <span id="dash-daemon-version"></span>
-      </footer>
-    </div>
+    <!-- Live panels (hidden until the first status frame arrives). Every tile inside is
+         built in TypeScript (js/dashboard/tiles/*) and mounted here by main.ts - the tile
+         owns its own DOM subtree, so adding a metric family is a new tile module, not new
+         markup. This container is intentionally empty. -->
+    <div class="dash-panels" id="dash-panels" hidden></div>
 
     <!-- Connect state: shown until a live status frame arrives. -->
     <div class="dash-connect" id="dash-connect">

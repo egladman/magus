@@ -10,6 +10,11 @@
 
 import { fromBinary, toBinary, create } from "@bufbuild/protobuf";
 import { JournalSchema, EventSchema, Kind, Status } from "./gen/magus/viewer/v1/viewer_pb";
+// The loopback lock, the shared bearer token, and the fetch-based SSE reader are the
+// SAME security-critical helpers all three tool pages use; they live in one audited
+// module now instead of being copy-pasted here. Live-mode host is /events on the
+// ephemeral per-run server (not the daemon's /api/v1/events), but the helpers are identical.
+import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE } from "./lib/daemon";
 
 const el = (id) => document.getElementById(id);
 
@@ -393,84 +398,6 @@ function base64ToBytes(b64) {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
-}
-
-// validateLiveHost / consumeLiveToken / getLiveToken / fetchSSE mirror graph-explorer.js:
-// the live client is the same shape (loopback-only host, token in the fragment, fetch-based
-// SSE so the token rides an Authorization header). Page-local: the tool pages are separate
-// bundles, so the code is duplicated rather than shared.
-function validateLiveHost(hostPort) {
-  let u;
-  try {
-    u = new URL("http://" + hostPort);
-  } catch {
-    return null;
-  }
-  if (u.username || u.password) return null; // userinfo is never legitimate here
-  if (u.pathname !== "/" || u.search || u.hash) return null; // no extra segments
-  if (u.hostname !== "127.0.0.1" && u.hostname !== "::1" && u.hostname !== "[::1]") return null;
-  return u.host;
-}
-
-function consumeLiveToken(params) {
-  if (!params.token) return;
-  sessionStorage.setItem("magus-live-token", params.token);
-  // Strip the token out of the fragment (keeping the other fragment keys, e.g. live=), so the
-  // secret never lingers in the URL bar, history, or a copied link.
-  const kept = [];
-  for (const part of location.hash.replace(/^#/, "").split("&")) {
-    const eq = part.indexOf("=");
-    if (eq < 0 || part.slice(0, eq) === "token") continue;
-    kept.push(part);
-  }
-  history.replaceState(null, "", location.pathname + location.search + (kept.length ? "#" + kept.join("&") : ""));
-}
-
-function getLiveToken() {
-  return sessionStorage.getItem("magus-live-token") || null;
-}
-
-async function fetchSSE(url, headers, onEvent, onError, signal, onOpen) {
-  let response;
-  try {
-    response = await fetch(url, { headers, signal });
-  } catch (e) {
-    if (e.name === "AbortError") return;
-    onError(e);
-    return;
-  }
-  if (!response.ok) {
-    onError(new Error("HTTP " + response.status));
-    return;
-  }
-  if (onOpen) onOpen();
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buf = "";
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) {
-        onError(new Error("stream ended"));
-        return;
-      }
-      buf += value;
-      let boundary;
-      while ((boundary = buf.indexOf("\n\n")) >= 0) {
-        const chunk = buf.slice(0, boundary);
-        buf = buf.slice(boundary + 2);
-        if (!chunk.trim()) continue;
-        let eventType = "message";
-        let data = "";
-        for (const line of chunk.split("\n")) {
-          if (line.startsWith("event:")) eventType = line.slice(6).replace(/^ /, "").trim();
-          else if (line.startsWith("data:")) data = line.slice(5).replace(/^ /, "").trim();
-        }
-        onEvent(eventType, data);
-      }
-    }
-  } catch (e) {
-    if (e.name !== "AbortError") onError(e);
-  }
 }
 
 // looksLikeRef mirrors the CLI's cache.LooksLikeRef: the "copy as command" buttons

@@ -21,6 +21,11 @@ import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, f
 import { zoom as d3zoom, zoomIdentity } from "d3-zoom";
 import { drag as d3drag } from "d3-drag";
 import { select } from "d3-selection";
+// The loopback lock, the shared bearer token, and the fetch-based SSE reader used to
+// be copy-pasted into all three tool pages; they now live in one audited module.
+// (The ConnectRPC transport this module also exports is tree-shaken out here - the
+// graph explorer only uses these four primitives.)
+import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE } from "./lib/daemon";
 
 // The node kinds the graph can emit. Each gets a stable legend color via a CSS
 // custom property (--gk-<kind>) defined for both themes in graph.css, so the
@@ -2373,107 +2378,9 @@ function applyPreset(presetId) {
 
 // ---- Phase 9: live mode ----------------------------------------------------
 
-// validateLiveHost: the host in #live= MUST be literally 127.0.0.1 or [::1].
-// localhost, hostnames, and other IPs are rejected before any network request.
-// Parses hostPort as a REAL URL rather than splitting on the last ":" - a naive
-// split lets a URL-userinfo "@" smuggle an attacker host past the check (e.g.
-// "127.0.0.1:7391@evil.com" splits to host "127.0.0.1", but a browser fetching
-// "http://127.0.0.1:7391@evil.com" actually connects to evil.com and would send
-// it the bearer token). Returns the normalized "host:port" (brackets kept for
-// IPv6) on success, or null on any rejection. Every subsequent live-mode fetch
-// is built from this normalized value, never from the raw fragment string, so
-// this check is what makes the docs claim "data cannot leave your machine" verifiable.
-function validateLiveHost(hostPort) {
-  let u;
-  try {
-    u = new URL("http://" + hostPort);
-  } catch {
-    return null;
-  }
-  if (u.username || u.password) return null; // userinfo is never legitimate here
-  if (u.pathname !== "/" || u.search || u.hash) return null; // no extra segments
-  // Per the WHATWG URL spec, an IPv6 hostname serializes WITH brackets ("[::1]"),
-  // not without - accept both spellings in case that ever changes.
-  if (u.hostname !== "127.0.0.1" && u.hostname !== "::1" && u.hostname !== "[::1]") return null;
-  return u.host;
-}
-
-function consumeLiveToken(params) {
-  // Called once at boot. Strip ONLY the token from the fragment so it never
-  // persists in location, while keeping #live=host:port (and any other params,
-  // e.g. &flavor=targets) intact - a reload must stay in live mode.
-  // Store in sessionStorage by default; localStorage if checkbox is checked.
-  if (!params.token) return;
-  const remember = localStorage.getItem("magus-live-remember") === "1";
-  if (remember) {
-    localStorage.setItem("magus-live-token", params.token);
-  } else {
-    sessionStorage.setItem("magus-live-token", params.token);
-  }
-  const kept = [];
-  for (const k of Object.keys(params)) {
-    if (k === "token") continue;
-    kept.push(k + "=" + encodeURIComponent(params[k]));
-  }
-  const next = kept.length ? "#" + kept.join("&") : "#";
-  history.replaceState(null, "", location.pathname + location.search + next);
-}
-
-function getLiveToken() {
-  return sessionStorage.getItem("magus-live-token") || localStorage.getItem("magus-live-token") || null;
-}
-
-// fetchSSE: fetch-based Server-Sent Events reader. Does NOT use EventSource
-// because EventSource cannot send an Authorization header.
-// Reads response.body via TextDecoderStream, splits on \n\n, parses event:/data: lines.
-// Calls onOpen() once the stream is confirmed open (200 response, before the first
-// event), so the caller can reset reconnect backoff and refresh stale data. On
-// stream end or error, calls onError(err) for the caller to schedule reconnect.
-// An AbortError (liveConnect superseding this call, or teardown) is deliberately
-// silent in both the initial fetch and the read loop - it is not a connection
-// failure, and treating it as one would stack up redundant reconnect attempts.
-async function fetchSSE(url, headers, onEvent, onError, signal, onOpen) {
-  let response;
-  try {
-    response = await fetch(url, { headers, signal });
-  } catch (e) {
-    if (e.name === "AbortError") return;
-    onError(e);
-    return;
-  }
-  if (!response.ok) {
-    onError(new Error("HTTP " + response.status));
-    return;
-  }
-  if (onOpen) onOpen();
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buf = "";
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) { onError(new Error("stream ended")); return; }
-      buf += value;
-      let boundary;
-      while ((boundary = buf.indexOf("\n\n")) >= 0) {
-        const chunk = buf.slice(0, boundary);
-        buf = buf.slice(boundary + 2);
-        if (!chunk.trim()) continue;
-        let eventType = "message", data = "";
-        for (const line of chunk.split("\n")) {
-          // Tolerate both "event: graph" (SSE convention, space after colon) and
-          // "event:graph" (no space) - the field-name parse per the SSE spec only
-          // requires the colon; a single optional leading space in the value is
-          // stripped, and servers vary on whether they emit it.
-          if (line.startsWith("event:")) eventType = line.slice(6).replace(/^ /, "").trim();
-          else if (line.startsWith("data:")) data = line.slice(5).replace(/^ /, "").trim();
-        }
-        onEvent(eventType, data);
-      }
-    }
-  } catch (e) {
-    if (e.name !== "AbortError") onError(e);
-  }
-}
+// validateLiveHost, consumeLiveToken, getLiveToken, and fetchSSE now live in
+// ./lib/daemon (imported at the top of this file) - the ONE audited copy of the
+// loopback lock, the shared bearer token, and the fetch-based SSE reader.
 
 // capturePositions: before replacing the graph on a live refresh, record existing
 // node positions keyed by id so they can be applied to the new graph.

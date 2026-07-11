@@ -14,5 +14,7 @@
     "forceConsistentCasingInFileNames": true,
     "types": []
   },
-  "include": ["js/**/*.ts"]
+  "include": ["js/**/*.ts"],
+  "//exclude": "The *.test.ts loopback-lock test imports node:test / node:assert (validated by `pnpm run test` via node --test, not by tsc). It is excluded here so the type-check gate needs no @types/node; the tested function itself lives in daemon.ts and IS checked.",
+  "exclude": ["node_modules", "js/**/*.test.ts"]
 }

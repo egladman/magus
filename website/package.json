@@ -9,10 +9,11 @@
     "build-editor": "esbuild js/editor.js --bundle --minify --format=esm --outfile=gen/playground/editor.js",
     "build-graph-explorer": "esbuild js/graph-explorer.js --bundle --minify --format=esm --outfile=gen/graph/explorer.js",
     "build-log-viewer": "esbuild js/log-viewer.js --bundle --minify --format=esm --outfile=gen/logs/log-viewer.js",
-    "build-dashboard": "esbuild js/dashboard.ts --bundle --minify --format=esm --outfile=gen/dashboard/dashboard.js",
+    "build-dashboard": "esbuild js/dashboard/main.ts --bundle --minify --format=esm --outfile=gen/dashboard/dashboard.js",
     "build-mermaid": "esbuild js/vendor/mermaid.js --bundle --minify --format=esm --outfile=gen/assets/mermaid.js",
     "build-hljs": "esbuild js/vendor/hljs.js --bundle --minify --format=esm --outfile=gen/assets/hljs.js",
-    "typecheck": "tsgo --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "esbuild js/lib/daemon.test.ts --bundle --platform=node --format=esm --outfile=.testcache/daemon.test.mjs && node --test .testcache/daemon.test.mjs"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.9.0",
@@ -33,5 +34,8 @@
     "highlight.js": "11.11.1",
     "mermaid": "11.16.0",
     "uplot": "1.6.31"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
   }
 }

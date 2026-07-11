@@ -170,7 +170,13 @@ body.dash-native { margin: 0; }
 .util-legend { display: flex; align-items: center; gap: 1.2rem; font-size: 0.7rem; color: var(--pico-muted-color); }
 .util-legend-scale { display: inline-flex; align-items: center; gap: 0.35rem; }
 .util-ramp { display: inline-flex; gap: 2px; }
-.util-ramp i { width: 0.7em; height: 0.7em; border-radius: 2px; background: var(--c-info); opacity: var(--u); border: 1px solid var(--pico-muted-border-color); }
+.util-ramp i { width: 0.7em; height: 0.7em; border-radius: 2px; background: var(--c-info); border: 1px solid var(--pico-muted-border-color); }
+/* Ramp opacities by position (no inline styles): idle -> full. */
+.util-ramp i:nth-child(1) { opacity: 0.06; }
+.util-ramp i:nth-child(2) { opacity: 0.3; }
+.util-ramp i:nth-child(3) { opacity: 0.55; }
+.util-ramp i:nth-child(4) { opacity: 0.8; }
+.util-ramp i:nth-child(5) { opacity: 1; }
 
 /* Two-up columns. */
 .dash-cols { display: grid; gap: var(--dash-gap); grid-template-columns: 1fr 1fr; }
@@ -236,6 +242,60 @@ a.row .row-cmd::after { content: " \2197"; color: var(--c-info); font-size: 0.85
   .dash-launchers { grid-template-columns: 1fr; }
   .dash-brand-page { display: none; }
 }
+
+/* Glossary deep-link: a heading term links to its definition and opens in a new
+   tab. Reuses the site's external-link arrow convention (a trailing up-right arrow),
+   kept subtle so a linked heading still reads as a heading. */
+.gloss-link {
+  color: inherit; text-decoration: none;
+  border-bottom: 1px dotted var(--pico-muted-border-color);
+}
+.gloss-link:hover { color: var(--c-info); border-bottom-color: var(--c-info); }
+.gloss-link::after { content: " \2197"; font-size: 0.8em; color: var(--pico-muted-color); }
+.gloss-link:hover::after { color: var(--c-info); }
+
+/* Bare stat section (the cache KPI strip) - a caption row above a full-width strip,
+   no tile border since it is a dense readout, not a card. */
+.stat-section { display: flex; flex-direction: column; gap: 0.4rem; }
+.stat-caption { margin: 0; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
+
+/* Dense data tables (per-target, MCP tools). Header cells are sort buttons; the
+   active column shows an ascending/descending caret. The table scrolls inside its
+   own container so a wide table never scrolls the page body horizontally. */
+.table-wrap { overflow-x: auto; }
+.dash-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin: 0; }
+.dash-table th, .dash-table td {
+  padding: 0.3rem 0.5rem; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.dash-table th.num, .dash-table td.num { text-align: right; font-family: var(--pico-font-family-monospace); }
+.dash-table td.num { color: var(--pico-color); }
+.dash-table thead th { position: sticky; top: 0; background: var(--pico-card-background-color); }
+.th-sort {
+  margin: 0; padding: 0; width: auto; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--pico-muted-color); text-transform: uppercase;
+  letter-spacing: 0.03em; font-size: 0.66rem;
+}
+.th-sort:hover { color: var(--c-info); }
+.dash-table th[data-sort="desc"] .th-sort::after { content: " \25BE"; }
+.dash-table th[data-sort="asc"] .th-sort::after { content: " \25B4"; }
+.dash-table tbody tr:hover { background: var(--pico-card-sectioning-background-color); }
+
+/* Metric grid (Buzz, Sandbox): dense captioned groups of label + monospace value. */
+.metric-groups { display: flex; flex-direction: column; gap: 0.6rem; }
+.metric-caption { margin: 0 0 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
+.metric-grid { display: grid; gap: 0.4rem; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.metric {
+  display: flex; flex-direction: column; gap: 0.1rem; padding: 0.35rem 0.5rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-sectioning-background-color);
+}
+.metric-k { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color); }
+.metric-v { font-size: 0.95rem; font-weight: 600; font-family: var(--pico-font-family-monospace); color: var(--pico-color); }
+
+/* Deferred-seam tiles (Wave 3b): a muted note that reads as "coming soon". */
+.seam-note { margin: 0; font-size: 0.78rem; color: var(--pico-muted-color); }
+.tile[data-card="gantt"], .tile[data-card="flake"] { border-style: dashed; }
 
 /* uPlot base styles (vendored from uplot/dist/uPlot.min.css, MIT). Inlined here
    rather than imported in the TS entry: the dashboard's CSS is minified as a
