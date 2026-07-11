@@ -1,4 +1,4 @@
-// home-heading.js - relabel the home page's top heading at runtime.
+// home-heading.ts - relabel the home page's top heading at runtime.
 //
 // The landing page is rendered from README.md, whose first heading is "# magus",
 // so the article's <h1> reads "magus". On the home page (index.html) only, swap
@@ -8,8 +8,8 @@
 (function () {
   // Only the generated index.html (served at gen/'s root, as a directory URL, or
   // explicitly as .../index.html).
-  var onHome = /(^|\/)index\.html$/.test(location.pathname) || /\/$/.test(location.pathname);
+  const onHome = /(^|\/)index\.html$/.test(location.pathname) || /\/$/.test(location.pathname);
   if (!onHome) return;
-  var h1 = document.querySelector("main article h1");
-  if (h1 && h1.textContent.trim() === "magus") h1.textContent = "Readme";
+  const h1 = document.querySelector("main article h1");
+  if (h1 && h1.textContent?.trim() === "magus") h1.textContent = "Readme";
 })();

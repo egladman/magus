@@ -1,4 +1,4 @@
-// offline-badge.js - shows "offline - everything on this page is local" on the
+// offline-badge.ts - shows "offline - everything on this page is local" on the
 // graph and playground pages when navigator.onLine is false, clearing it on the
 // "online" event. Guards on its own #offline-badge element, so importing this
 // unconditionally from main.js (every page) is a no-op everywhere else - the
@@ -11,12 +11,14 @@
 
 (function () {
   if (typeof window === "undefined") return;
-  var badge = document.getElementById("offline-badge");
+  const badge = document.getElementById("offline-badge");
   if (!badge) return;
 
-  function apply() {
+  // A const arrow (not a hoisted function declaration) so the null-guard above
+  // narrows badge to non-null inside it.
+  const apply = (): void => {
     badge.hidden = navigator.onLine;
-  }
+  };
 
   window.addEventListener("online", apply);
   window.addEventListener("offline", apply);
