@@ -12,11 +12,11 @@ A wire-mapping subpackage `internal/handler/<name>` owns the over-the-wire conce
 of the protobuf package `magus.<name>.v1` and is NAMED to match it, so the two are
 trivially correlated:
 
-| handler subpackage             | proto package             | owns                                              |
-|--------------------------------|---------------------------|---------------------------------------------------|
-| `internal/handler/viewer`      | `magus.viewer.v1`         | domain-event -> proto mapping, fragment/SSE encode, the log-viewer live SSE server |
-| `internal/handler/status`      | `magus.status.v1`         | status-report -> proto mapping + encoder, the GET /api/v1/status and /api/v1/events handlers |
-| `internal/handler/graph`       | `magus.graph.v1`          | knowledge-graph -> proto mapping, the GET /api/v1/graph handler |
+| handler subpackage        | proto package     | owns                                                                                         |
+| ------------------------- | ----------------- | -------------------------------------------------------------------------------------------- |
+| `internal/handler/viewer` | `magus.viewer.v1` | domain-event -> proto mapping, fragment/SSE encode, the log-viewer live SSE server           |
+| `internal/handler/status` | `magus.status.v1` | status-report -> proto mapping + encoder, the GET /api/v1/status and /api/v1/events handlers |
+| `internal/handler/graph`  | `magus.graph.v1`  | knowledge-graph -> proto mapping, the GET /api/v1/graph handler                              |
 
 When you add a new wire contract `proto/magus/foo/v1`, its mapping goes in a new
 `internal/handler/foo` package - same name, no exceptions for the wire packages.

@@ -2,8 +2,7 @@
 title: output-reference diagnostics
 page_type: overview
 description: Landing page for MGS8xxx diagnostics that flag problems resolving a target-output reference id with magus query, such as a ref that aged out of the cache, an ambiguous prefix, or a malformed ref passed to a ref-only flag.
-tags:
-  [output refs, diagnostics, error codes, MGS8xxx, query, cache]
+tags: [output refs, diagnostics, error codes, MGS8xxx, query, cache]
 ---
 
 # Output-reference diagnostics
