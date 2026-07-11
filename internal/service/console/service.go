@@ -35,6 +35,11 @@ type Service struct {
 	// StatusReport.Runs empty.
 	runsFn func() []types.StatusRun
 
+	// servicesFn returns the daemon's hosted shared services, folded onto the status
+	// report. Nil when this service is not backed by a daemon service registry, leaving
+	// StatusReport.Services empty.
+	servicesFn func() []types.StatusService
+
 	// Insight cache: an assembled InsightView reused for insightTTL so repeated dashboard
 	// polls collapse onto one git-log scan. The mutex also serializes cold-cache assembly.
 	insightMu    sync.Mutex
@@ -99,6 +104,14 @@ func WithRuns(fn func() []types.StatusRun) Option {
 	return func(s *Service) { s.runsFn = fn }
 }
 
+// WithServices supplies the daemon's hosted-services source (service.Registry.Snapshot).
+// The status report then carries the long-running shared services the daemon is keeping
+// warm, on both the GET and the SSE frame. Only the daemon sets this; a plain CLI status
+// query omits it.
+func WithServices(fn func() []types.StatusService) Option {
+	return func(s *Service) { s.servicesFn = fn }
+}
+
 // NewService builds a Service from the opened workspace (m), its resolved config, the
 // static status base (telemetry/cache/build fields the bridge cannot compute itself),
 // and the running magus version. m may be nil only when every graph/status path is
@@ -125,6 +138,11 @@ func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
 	// they ride the same report whether the pool is assembled from a seam or a socket query.
 	if s.runsFn != nil {
 		out.Runs = s.runsFn()
+	}
+	// Hosted shared services come from this daemon's in-process service registry (not the
+	// pool query), folded on the same way live runs are.
+	if s.servicesFn != nil {
+		out.Services = s.servicesFn()
 	}
 	return out
 }

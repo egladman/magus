@@ -78,6 +78,9 @@ type StatusReply struct {
 	Queued        int         `json:"queued"`
 	Calls         []Call      `json:"calls,omitempty"`
 	Workspaces    []Workspace `json:"workspaces,omitempty"` // nil for per-process proc servers
+	// Services are the long-running shared services the daemon is hosting right now.
+	// Nil for a per-process proc server (no cross-invocation service host).
+	Services []types.StatusService `json:"services,omitempty"`
 }
 
 // Call describes a single adopted call currently executing.

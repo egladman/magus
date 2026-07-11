@@ -63,6 +63,7 @@ type Options struct {
 	Version         string                                         // "" disables version-skew check
 	Address         string                                         // "" → auto-generate in SockDir()
 	WorkspaceLister func() []Workspace                             // optional; used by daemon Status RPC
+	ServiceLister   func() []types.StatusService                   // optional; hosted-services snapshot for the daemon Status RPC
 	ServiceHost     ServiceHost                                    // optional; hosts shared services across invocations (daemon only)
 }
 
@@ -141,6 +142,7 @@ func New(opts Options) (*Server, error) {
 		lim:             lim,
 		version:         opts.Version,
 		workspaceLister: opts.WorkspaceLister,
+		serviceLister:   opts.ServiceLister,
 	}
 	srv := &Server{
 		ep:     ep,
@@ -337,6 +339,7 @@ type service struct {
 	lim             *cache.Limiter
 	version         string
 	workspaceLister func() []Workspace
+	serviceLister   func() []types.StatusService
 	serviceHost     ServiceHost
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
 	calls           sync.Map // uint64 id → *activeCall, for Status reporting
@@ -450,6 +453,9 @@ func (s *service) status(req StatusRequest, reply *StatusReply) error {
 	})
 	if s.workspaceLister != nil {
 		reply.Workspaces = s.workspaceLister()
+	}
+	if s.serviceLister != nil {
+		reply.Services = s.serviceLister()
 	}
 	return nil
 }

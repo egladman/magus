@@ -42,7 +42,23 @@ func statusReportToProto(r types.StatusReport, magusVersion string) *statusv1.St
 	for _, run := range r.Runs {
 		s.Runs = append(s.Runs, runToProto(run))
 	}
+	for _, svc := range r.Services {
+		s.Services = append(s.Services, serviceToProto(svc))
+	}
 	return s
+}
+
+// serviceToProto maps one hosted shared service onto the wire message.
+func serviceToProto(s types.StatusService) *statusv1.Service {
+	return &statusv1.Service{
+		Id:         s.ID,
+		Label:      s.Label,
+		Command:    s.Command,
+		Port:       s.Ports,
+		State:      s.State,
+		Dependents: int32(s.Dependents),
+		StartedAt:  tsFromTime(s.StartedAt),
+	}
 }
 
 // runToProto maps one live run and its per-target execution state onto the wire message.

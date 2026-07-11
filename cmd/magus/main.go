@@ -591,6 +591,12 @@ var daemonProvider observability.Provider
 // sequential, so the write happens-before the reads.
 var daemonRuns *console.RunRegistry
 
+// daemonServices is the daemon's shared-service registry. startMultiWorkspaceDaemon builds
+// it (as svcReg) and points this global at it so startMCPWithDaemon can hand its Snapshot to
+// the console service, surfacing hosted services on /api/v1/status alongside the pool and
+// runs. Same process, sequential, so the write happens-before the reads.
+var daemonServices *service.Registry
+
 // startMultiWorkspaceDaemon starts the stable multi-workspace proc server for `magus server start`.
 // When cfg.Daemon.Workspaces is non-empty it eagerly loads declared workspaces and applies landlock.
 func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
@@ -642,6 +648,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 			slog.Int("reaped", res.Reaped), slog.Int("left_running", res.Unreapable))
 	}
 	svcReg := service.New(service.ExecRunner{}, defaultServiceIdle, service.WithJournal(svcJournal))
+	daemonServices = svcReg // publish for startMCPWithDaemon's console wiring
 
 	if len(declared) > 0 {
 		if err := reg.preloadAndApplySandbox(ctx, declared); err != nil {
@@ -669,6 +676,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 			return reg.dispatch(hctx, root, rc, args)
 		},
 		WorkspaceLister: reg.status,
+		ServiceLister:   func() []types.StatusService { return serviceStatuses(svcReg) },
 		ServiceHost:     serviceHost{svcReg},
 		Context:         ctx,
 		Limiter:         lim,

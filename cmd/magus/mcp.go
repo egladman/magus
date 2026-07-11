@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/daemon"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/types"
 )
 
 // mcpAddrPort parses the MCP address from config, falling back to
@@ -100,6 +101,14 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	var daemonOpts []daemon.Option
 	if daemonRuns != nil {
 		daemonOpts = append(daemonOpts, daemon.WithRuns(daemonRuns.Snapshot))
+	}
+	// The hosted-services registry (built by startMultiWorkspaceDaemon) backs the
+	// dashboard's services view the same way daemonRuns backs its runs view. Nil for a
+	// bridge started without the multi-workspace daemon, leaving StatusReport.Services empty.
+	if daemonServices != nil {
+		daemonOpts = append(daemonOpts, daemon.WithServices(func() []types.StatusService {
+			return serviceStatuses(daemonServices)
+		}))
 	}
 	m.SetDaemon(daemon.New(internalmcp.Options{
 		Magus:      m,

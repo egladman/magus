@@ -33,3 +33,22 @@ func (h serviceHost) StopAll() int {
 	h.reg.Shutdown()
 	return n
 }
+
+// serviceStatuses adapts the registry's introspection snapshot (service.ServiceStatus)
+// to the status-wire shape (types.StatusService) the console and the Status RPC serve.
+func serviceStatuses(reg *service.Registry) []types.StatusService {
+	snap := reg.Snapshot()
+	out := make([]types.StatusService, 0, len(snap))
+	for _, s := range snap {
+		out = append(out, types.StatusService{
+			ID:         s.ID,
+			Label:      s.Label,
+			Command:    s.Command,
+			Ports:      s.Ports,
+			State:      s.State,
+			Dependents: s.Dependents,
+			StartedAt:  s.StartedAt,
+		})
+	}
+	return out
+}

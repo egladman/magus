@@ -33,8 +33,9 @@ import (
 // Daemon assembles and runs the daemon HTTP server from a set of MCP server
 // options. It satisfies magus.Daemon.
 type Daemon struct {
-	opts mcp.Options
-	runs func() []types.StatusRun
+	opts     mcp.Options
+	runs     func() []types.StatusRun
+	services func() []types.StatusService
 }
 
 // Option customizes a Daemon.
@@ -45,6 +46,13 @@ type Option func(*Daemon)
 // adopted run alongside the pool - the same status surface, more live state.
 func WithRuns(fn func() []types.StatusRun) Option {
 	return func(d *Daemon) { d.runs = fn }
+}
+
+// WithServices supplies the daemon's hosted-services source (the service registry's
+// Snapshot). When set, /api/v1/status and the status SSE frame carry the long-running
+// shared services the daemon is keeping warm alongside the pool and runs.
+func WithServices(fn func() []types.StatusService) Option {
+	return func(d *Daemon) { d.services = fn }
 }
 
 // New returns a Daemon that will serve the MCP endpoint (plus health routes and
@@ -154,6 +162,9 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			var svcOpts []console.Option
 			if s.runs != nil {
 				svcOpts = append(svcOpts, console.WithRuns(s.runs))
+			}
+			if s.services != nil {
+				svcOpts = append(svcOpts, console.WithServices(s.services))
 			}
 			svc := console.NewService(opts.Magus, opts.Config, opts.StatusBase, opts.Version, svcOpts...)
 

@@ -15,9 +15,12 @@ package service
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/serviceident"
 	"github.com/egladman/magus/types"
 )
 
@@ -63,6 +66,12 @@ type entry struct {
 	handle   Handle
 	startErr error
 
+	// svc and startedAt are the retained descriptor and start time for introspection
+	// (Snapshot). They are written once when the entry is created (before ready closes)
+	// and read only under r.mu, so they need no further synchronization.
+	svc       types.Service
+	startedAt time.Time
+
 	refs  int
 	idle  time.Duration
 	timer *time.Timer // pending idle reap while refs == 0; nil otherwise
@@ -97,7 +106,7 @@ func (r *Registry) Acquire(ctx context.Context, key string, s types.Service) (Ha
 		return e.handle, e.startErr
 	}
 	// This goroutine owns the start for a fresh entry.
-	e := &entry{ready: make(chan struct{}), idle: r.idleFor(s), refs: 1}
+	e := &entry{ready: make(chan struct{}), idle: r.idleFor(s), refs: 1, svc: s, startedAt: time.Now()}
 	r.entries[key] = e
 	r.mu.Unlock()
 
@@ -196,6 +205,98 @@ func (r *Registry) Held() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.entries)
+}
+
+// ServiceStatus is a point-in-time introspection view of one shared service the
+// registry is hosting, for the status wire / dashboard. It is derived from the
+// retained descriptor and live ref/idle state; it does not expose the Runner Handle.
+type ServiceStatus struct {
+	// ID is a short, stable identifier: the first hex chars of the registry key
+	// (the service fingerprint), enough to disambiguate in a dashboard.
+	ID string
+	// Label is a human name: image[:tag] for a recognized container run, else the
+	// process binary's basename.
+	Label string
+	// Command is the full process command, bin and args space-joined.
+	Command string
+	// Ports are the container-side published ports (from serviceident), empty when
+	// the command is not a recognized container run.
+	Ports []string
+	// State is one of "starting" (before ready), "running" (ready, with dependents),
+	// "idle" (ready, kept warm at zero dependents), or "failed" (start errored).
+	State string
+	// Dependents is the current reference count (targets holding this service).
+	Dependents int
+	// StartedAt is when the registry began starting this instance.
+	StartedAt time.Time
+}
+
+// Snapshot returns the live services the registry is hosting, sorted by ID for a
+// stable render. It reports each service's derived state, label, command, ports,
+// dependent count, and start time without disturbing supervision.
+func (r *Registry) Snapshot() []ServiceStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]ServiceStatus, 0, len(r.entries))
+	for key, e := range r.entries {
+		st := ServiceStatus{
+			ID:         shortServiceID(key),
+			Label:      serviceLabel(e.svc),
+			Command:    commandString(e.svc.Command),
+			Ports:      serviceident.Parse(e.svc.Command).Ports,
+			Dependents: e.refs,
+			StartedAt:  e.startedAt,
+		}
+		// ready is closed once Start has completed; select-default reads its state
+		// without blocking (Start runs outside this lock). handle/startErr are written
+		// before ready closes, so the closed branch may safely read startErr.
+		select {
+		case <-e.ready:
+			switch {
+			case e.startErr != nil:
+				st.State = "failed"
+			case e.refs > 0:
+				st.State = "running"
+			default:
+				st.State = "idle" // ready, no dependents: kept warm awaiting idle reap
+			}
+		default:
+			st.State = "starting"
+		}
+		out = append(out, st)
+	}
+	slices.SortFunc(out, func(a, b ServiceStatus) int { return strings.Compare(a.ID, b.ID) })
+	return out
+}
+
+// shortServiceID truncates a registry key (the service fingerprint) to a short,
+// dashboard-friendly identifier.
+func shortServiceID(key string) string {
+	const n = 12
+	if len(key) > n {
+		return key[:n]
+	}
+	return key
+}
+
+// serviceLabel derives a human name for a service: image[:tag] for a recognized
+// container run, else the process binary's basename.
+func serviceLabel(s types.Service) string {
+	if id := serviceident.Parse(s.Command); id.IsContainer() {
+		if id.Tag != "" {
+			return id.Image + ":" + id.Tag
+		}
+		return id.Image
+	}
+	return serviceident.Basename(s.Command.Bin)
+}
+
+// commandString renders a Command as its space-joined bin and args, for display.
+func commandString(c types.Command) string {
+	if len(c.Args) == 0 {
+		return c.Bin
+	}
+	return c.Bin + " " + strings.Join(c.Args, " ")
 }
 
 // idleFor resolves a service's idle window: its own Service.Idle override when it

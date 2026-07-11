@@ -27,6 +27,23 @@ type StatusReport struct {
 	// dispatches), each with its per-target execution state. Empty when nothing is
 	// running or when reported by a process that is not the daemon.
 	Runs []StatusRun `json:"runs,omitempty" yaml:"runs,omitempty"`
+	// Services are the long-running shared services the daemon is hosting right now,
+	// kept warm across invocations. Empty when none are held or when reported by a
+	// process that is not the daemon.
+	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`
+}
+
+// StatusService is one long-running shared service the daemon is hosting, surfaced on
+// the status wire so a dashboard can show what is running and how many targets depend
+// on it. It mirrors service.ServiceStatus (the registry's introspection view).
+type StatusService struct {
+	ID         string    `json:"id" yaml:"id"`
+	Label      string    `json:"label,omitempty" yaml:"label,omitempty"`
+	Command    string    `json:"command,omitempty" yaml:"command,omitempty"`
+	Ports      []string  `json:"ports,omitempty" yaml:"ports,omitempty"`
+	State      string    `json:"state,omitempty" yaml:"state,omitempty"` // starting | running | idle | failed
+	Dependents int       `json:"dependents,omitempty" yaml:"dependents,omitempty"`
+	StartedAt  time.Time `json:"started_at,omitempty" yaml:"started_at,omitempty"`
 }
 
 // TargetRunState is where a target sits in its lifecycle within a run. Values match the

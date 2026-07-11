@@ -352,3 +352,95 @@ func TestConcurrentAcquireStartsOnce(t *testing.T) {
 	assert.Equal(t, int32(0), errs.Load())
 	assert.Equal(t, 1, r.Held())
 }
+
+// portSvc is a container service with a published port, for exercising the derived
+// label/command/port fields of a Snapshot entry.
+func portSvc() types.Service {
+	return types.Service{Command: types.Command{Bin: "docker", Args: []string{"run", "-p", "5432:5432", "postgres:15"}}}
+}
+
+func TestSnapshotRunningEntry(t *testing.T) {
+	f := &fakeRunner{}
+	r := New(f, time.Hour)
+
+	_, err := r.Acquire(context.Background(), "fingerprintabcdef", portSvc())
+	require.NoError(t, err)
+
+	snap := r.Snapshot()
+	require.Len(t, snap, 1)
+	got := snap[0]
+	assert.False(t, got.StartedAt.IsZero(), "a started entry carries a start time")
+
+	got.StartedAt = time.Time{} // zeroed for a whole-struct compare of the derived fields
+	assert.Equal(t, ServiceStatus{
+		ID:         "fingerprinta", // first 12 chars of the key
+		Label:      "postgres:15",
+		Command:    "docker run -p 5432:5432 postgres:15",
+		Ports:      []string{"5432"},
+		State:      "running",
+		Dependents: 1,
+	}, got)
+}
+
+func TestSnapshotStateTransitions(t *testing.T) {
+	f := &fakeRunner{}
+	r := New(f, time.Hour) // long keep-warm so a released entry stays "idle"
+	ctx := context.Background()
+
+	_, _ = r.Acquire(ctx, "pg", portSvc())
+	_, _ = r.Acquire(ctx, "pg", portSvc()) // two dependents
+	require.Equal(t, 2, r.Snapshot()[0].Dependents)
+	assert.Equal(t, "running", r.Snapshot()[0].State)
+
+	r.Release("pg")
+	assert.Equal(t, "running", r.Snapshot()[0].State, "still one dependent")
+
+	r.Release("pg") // last dependent: kept warm at zero refs
+	s := r.Snapshot()
+	require.Len(t, s, 1)
+	assert.Equal(t, 0, s[0].Dependents)
+	assert.Equal(t, "idle", s[0].State)
+}
+
+func TestSnapshotStartingEntry(t *testing.T) {
+	sr := &slowRunner{entered: make(chan struct{}), proceed: make(chan struct{})}
+	r := New(sr, time.Hour)
+
+	go func() { _, _ = r.Acquire(context.Background(), "pg", portSvc()) }()
+	<-sr.entered // the entry is in the map but Start has not completed
+
+	s := r.Snapshot()
+	require.Len(t, s, 1)
+	assert.Equal(t, "starting", s[0].State, "before ready is closed the entry is starting")
+
+	close(sr.proceed) // let Start finish so the goroutine does not leak
+}
+
+func TestSnapshotNonContainerLabel(t *testing.T) {
+	f := &fakeRunner{}
+	r := New(f, time.Hour)
+
+	local := types.Service{Command: types.Command{Bin: "/usr/local/bin/myserver", Args: []string{"--port", "8080"}}}
+	_, err := r.Acquire(context.Background(), "local", local)
+	require.NoError(t, err)
+
+	s := r.Snapshot()
+	require.Len(t, s, 1)
+	assert.Equal(t, "myserver", s[0].Label, "non-container label falls back to the binary basename")
+	assert.Equal(t, "/usr/local/bin/myserver --port 8080", s[0].Command)
+	assert.Empty(t, s[0].Ports, "a non-container command has no derived ports")
+}
+
+func TestSnapshotSortedByID(t *testing.T) {
+	f := &fakeRunner{}
+	r := New(f, time.Hour)
+	ctx := context.Background()
+
+	_, _ = r.Acquire(ctx, "ccc", portSvc())
+	_, _ = r.Acquire(ctx, "aaa", portSvc())
+	_, _ = r.Acquire(ctx, "bbb", portSvc())
+
+	s := r.Snapshot()
+	require.Len(t, s, 3)
+	assert.Equal(t, []string{"aaa", "bbb", "ccc"}, []string{s[0].ID, s[1].ID, s[2].ID})
+}
