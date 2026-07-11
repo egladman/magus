@@ -1175,15 +1175,23 @@ article li {
 .site-footer {
   margin-top: 1.25rem;
   padding-bottom: 1.5rem;
-  /* Spread the two link clusters across the width so the footer reads as grouped
-     without a second row on desktop; the row-gap only matters once it wraps narrow. */
+  /* Center the link clusters and let them wrap as even, centered rows. The old
+     space-between spread pushed the clusters to the edges, so once a third cluster was
+     added it wrapped raggedly on narrow screens (two clusters stretched across one row,
+     the third stranded below). Centering wraps gracefully; on phones the clusters stack,
+     each a tidy centered line, so the dotted items within a cluster never column-wrap. */
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.25rem 1.5rem;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem 1.5rem;
+  text-align: center;
 }
 .footer-group {
   margin: 0;
+}
+@media (max-width: 40rem) {
+  .site-footer { flex-direction: column; gap: 0.35rem; }
 }
 .site-footer a {
   color: var(--pico-muted-color);
