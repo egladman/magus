@@ -9,12 +9,12 @@
 // target, so it is a no-op if the scaffold is absent (e.g. main.js loading on another page).
 
 import { fromBinary, toBinary, create } from "@bufbuild/protobuf";
-import { JournalSchema, EventSchema, Kind, Status } from "./gen/magus/viewer/v1/viewer_pb";
+import { JournalSchema, EventSchema, Kind, Status, Stream } from "./gen/magus/viewer/v1/viewer_pb";
 // The loopback lock, the shared bearer token, and the fetch-based SSE reader are the
 // SAME security-critical helpers all three tool pages use; they live in one audited
 // module now instead of being copy-pasted here. Live-mode host is /events on the
 // ephemeral per-run server (not the daemon's /api/v1/events), but the helpers are identical.
-import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE } from "./lib/daemon";
+import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, parseHash, wantsDemo } from "./lib/daemon";
 
 const el = (id) => document.getElementById(id);
 
@@ -102,6 +102,13 @@ function viewerParams() {
 async function loadFromURL() {
   const params = viewerParams();
   const ref = params.ref || "";
+  // The shared bare `#demo` fragment (wantsDemo, from lib/daemon - the same trigger the
+  // dashboard and graph explorer use) enters the daemon-free showcase: a synthetic run
+  // streams in with a live-filling waterfall.
+  if (wantsDemo(parseHash())) {
+    startDemo();
+    return;
+  }
   if (params.live) {
     connectLive(params);
     return;
@@ -189,6 +196,10 @@ let currentRef = "";
 let currentJournal = null;
 // pretty toggles the stylized structural view (default) vs the raw captured text.
 let pretty = true;
+// timeline toggles the trace-waterfall view (targets + steps on a shared time axis) over
+// the log/section view. Only offered when the loaded Journal carries enough timing to plot
+// (see buildSpans); a pasted/text log has none, so the Timeline button stays hidden.
+let timeline = false;
 
 // rawLines holds the pure captured output (reconstructed from a Journal's output events)
 // so the RAW view shows exactly what `magus query <ref>` prints. null in heuristic (text)
@@ -219,10 +230,13 @@ function finishLoad(ref, statusMsg) {
   currentRef = looksLikeRef(ref) ? ref : "";
   if (emptyEl) emptyEl.hidden = true;
   setRefIdentity(ref || "log", looksLikeRef(ref));
+  // Resolve the Timeline button (and reset the mode if the new log has no timing) before
+  // render() so a stale timeline=true from a previous log cannot try to plot a text log.
+  updateTimelineControl();
   render();
   setStatus(statusMsg);
   const foldBtn = el("fold-all-btn");
-  if (foldBtn) foldBtn.hidden = model.titled === 0 || !pretty;
+  if (foldBtn) foldBtn.hidden = timeline || model.titled === 0 || !pretty;
   const copyBtn = el("copy-all-btn");
   if (copyBtn) copyBtn.disabled = false;
   const cmdBtn = el("copy-cmd-btn");
@@ -252,7 +266,7 @@ function buildModelFromEvents(events, invocation) {
   }
   for (const ev of events) {
     if (ev.kind === Kind.OUTPUT || ev.kind === Kind.EXEC || ev.kind === Kind.RESULT) {
-      const key = ev.project + " " + ev.target;
+      const key = ev.project + " " + ev.target;
       let g = groups.get(key);
       if (!g) { g = { project: ev.project, target: ev.target, body: [], result: null }; groups.set(key, g); order.push(g); }
       if (ev.kind === Kind.EXEC) g.body.push("$ " + ev.text);
@@ -298,6 +312,241 @@ function durText(d) {
   return ms < 1000 ? Math.round(ms) + "ms" : (ms / 1000).toFixed(1) + "s";
 }
 
+// --- Trace waterfall (#data / live invocation) --------------------------------
+// A Datadog-style waterfall of the invocation: the magus OTel model is invocation=trace,
+// target-exec=span, step=child span. The magus.viewer.v1 wire format does NOT carry explicit
+// trace_id/span_id/parent_span_id (an Event has none - see proto), so the span tree is
+// reconstructed structurally from what the events DO carry: the Invocation's start/end frame
+// the axis; each (project,target) group is a target span (it ends at its RESULT event's time
+// and starts result.time - result.duration, the exact recorded run window); and the EXEC
+// events within a target are its step child-spans (each starts at its own time and ends at the
+// next EXEC in the same target, or the target's end). EXEC carries no explicit duration, so a
+// step's end is inferred from the next boundary - a best effort. When a target has no EXEC
+// events (or only RESULT timing survives), it degrades to a target-only bar with no children.
+const WF_NS = "http://www.w3.org/2000/svg";
+const WF_VIEW_W = 900;   // viewBox width; the SVG scales to the panel via its viewBox
+const WF_LABEL_W = 230;  // left gutter for span labels (indented for steps)
+const WF_RIGHT = 64;     // right gutter for the per-target duration text
+const WF_AXIS_H = 18;    // top strip for the time axis
+const WF_ROW_H = 20;     // one span row
+const WF_BAR_H = 11;     // a target bar
+const WF_STEP_BAR_H = 7; // a step (child-span) bar
+const WF_PLOT_W = WF_VIEW_W - WF_RIGHT - WF_LABEL_W;
+
+function wfSvg(tag) {
+  return document.createElementNS(WF_NS, tag);
+}
+
+// tsMs converts a protobuf Timestamp ({seconds: bigint, nanos: number}) to epoch millis, or
+// null when unset (e.g. a still-running invocation's end_time).
+function tsMs(ts) {
+  if (!ts) return null;
+  return Number(ts.seconds || 0n) * 1000 + Number(ts.nanos || 0) / 1e6;
+}
+
+// durMs converts a protobuf Duration to millis (0 when unset).
+function durMs(d) {
+  if (!d) return 0;
+  return Number(d.seconds || 0n) * 1000 + Number(d.nanos || 0) / 1e6;
+}
+
+// durMsText renders a raw millisecond span as "12ms" / "1.20s" (the axis/label sibling of
+// durText, which takes a Duration message).
+function durMsText(ms) {
+  if (ms < 1) return "0ms";
+  return ms < 1000 ? Math.round(ms) + "ms" : (ms / 1000).toFixed(ms < 10000 ? 2 : 1) + "s";
+}
+
+// wfTrunc keeps an SVG label inside its gutter (SVG <text> does not clip); the full text
+// rides a <title> tooltip.
+function wfTrunc(s, max) {
+  return s.length > max ? s.slice(0, max - 3) + "..." : s;
+}
+
+// waterfallSource returns the events + invocation the waterfall is built from: the loaded
+// Journal (the #data path) or, in live mode, the events seen so far.
+function waterfallSource() {
+  if (currentJournal) return { events: currentJournal.events || [], invocation: currentJournal.invocation };
+  return { events: liveEvents, invocation: liveInvocation };
+}
+
+// buildSpans reconstructs the {t0, t1, targets:[{label,status,ref,s,e,steps:[{label,s,e}]}]}
+// span tree from an event stream. See the section comment for how each span's window is
+// derived; returns an empty targets list when nothing carries plottable timing.
+function buildSpans(events, invocation) {
+  const groups = new Map();
+  const order = [];
+  let minT = Infinity;
+  let maxT = -Infinity;
+  for (const ev of events || []) {
+    const t = tsMs(ev.time);
+    if (t !== null) { if (t < minT) minT = t; if (t > maxT) maxT = t; }
+    if (ev.kind !== Kind.EXEC && ev.kind !== Kind.OUTPUT && ev.kind !== Kind.RESULT) continue;
+    const key = ev.project + " " + ev.target;
+    let g = groups.get(key);
+    if (!g) { g = { project: ev.project, target: ev.target, execs: [], result: null, first: null, last: null }; groups.set(key, g); order.push(g); }
+    if (t !== null) { if (g.first === null) g.first = t; g.last = t; }
+    if (ev.kind === Kind.EXEC) g.execs.push({ t, text: ev.text });
+    else if (ev.kind === Kind.RESULT) g.result = { t, dur: durMs(ev.duration), status: ev.status, ref: ev.ref };
+  }
+
+  const targets = [];
+  for (const g of order) {
+    let e = g.result && g.result.t !== null ? g.result.t : g.last;
+    let s = g.result && g.result.t !== null && g.result.dur > 0 ? g.result.t - g.result.dur : g.first;
+    if (s === null) continue; // no timing at all for this group; nothing to plot
+    if (e === null || e < s) e = s;
+    const label = (g.project && g.project !== "." ? g.project + ":" : "") + (g.target || "output");
+    const steps = [];
+    const timed = g.execs.filter((x) => x.t !== null);
+    for (let i = 0; i < timed.length; i++) {
+      const ss = timed[i].t;
+      const ee = i + 1 < timed.length ? timed[i + 1].t : e;
+      steps.push({ label: timed[i].text || "step", s: ss, e: Math.max(ss, ee) });
+    }
+    targets.push({ label, status: g.result ? statusName(g.result.status) : "", ref: g.result ? g.result.ref : "", s, e, steps });
+  }
+
+  // Axis: the invocation frame when present, else the observed event range. Target spans are
+  // always inside this window (wfTimeX clamps regardless), so a missing invocation timestamp
+  // just falls back to the data.
+  let t0 = tsMs(invocation && invocation.startTime);
+  let t1 = tsMs(invocation && invocation.endTime);
+  if (t0 === null) t0 = targets.length ? Math.min(minT, ...targets.map((t) => t.s)) : minT;
+  if (t1 === null) t1 = targets.length ? Math.max(maxT, ...targets.map((t) => t.e)) : maxT;
+  if (!isFinite(t0)) t0 = 0;
+  if (!isFinite(t1) || t1 <= t0) t1 = t0 + 1;
+  return { t0, t1, targets };
+}
+
+// timelineAvailable reports whether the loaded log carries enough timing to plot a waterfall
+// (at least one target span). Gates the Timeline toolbar button.
+function timelineAvailable() {
+  const src = waterfallSource();
+  if (!src.events || !src.events.length) return false;
+  return buildSpans(src.events, src.invocation).targets.length > 0;
+}
+
+function wfTimeX(t, sp) {
+  const span = sp.t1 - sp.t0 || 1;
+  const c = Math.min(sp.t1, Math.max(sp.t0, t));
+  return WF_LABEL_W + ((c - sp.t0) / span) * WF_PLOT_W;
+}
+
+// renderWaterfall draws the current invocation's span tree into the log body as inline SVG
+// (presentation attributes + CSS classes for color, no chart library, no external request).
+function renderWaterfall() {
+  const src = waterfallSource();
+  const spans = buildSpans(src.events, src.invocation);
+  if (!spans.targets.length) {
+    const p = document.createElement("p");
+    p.className = "wf-empty";
+    p.textContent = "This log has no timing data to plot as a waterfall.";
+    bodyEl.appendChild(p);
+    return;
+  }
+
+  const total = spans.t1 - spans.t0;
+  const caption = document.createElement("p");
+  caption.className = "wf-caption";
+  const nt = spans.targets.length;
+  caption.textContent = nt + (nt === 1 ? " target" : " targets") + " over " + durMsText(total);
+  bodyEl.appendChild(caption);
+
+  let rows = 0;
+  for (const t of spans.targets) rows += 1 + t.steps.length;
+  const h = WF_AXIS_H + rows * WF_ROW_H + 6;
+
+  const root = wfSvg("svg");
+  root.setAttribute("viewBox", "0 0 " + WF_VIEW_W + " " + h);
+  root.setAttribute("class", "wf-svg");
+  root.setAttribute("preserveAspectRatio", "xMinYMin meet");
+  root.setAttribute("role", "img");
+  root.setAttribute("aria-label", "Invocation trace waterfall");
+
+  drawWfAxis(root, spans, h);
+
+  let y = WF_AXIS_H + 2;
+  for (const t of spans.targets) {
+    drawWfRow(root, { label: t.label, s: t.s, e: t.e, status: t.status, step: false }, y, spans);
+    y += WF_ROW_H;
+    for (const st of t.steps) {
+      drawWfRow(root, { label: st.label, s: st.s, e: st.e, status: "", step: true }, y, spans);
+      y += WF_ROW_H;
+    }
+  }
+  bodyEl.appendChild(root);
+}
+
+function drawWfAxis(root, sp, h) {
+  const line = wfSvg("line");
+  line.setAttribute("x1", String(WF_LABEL_W));
+  line.setAttribute("x2", String(WF_VIEW_W - WF_RIGHT));
+  line.setAttribute("y1", String(WF_AXIS_H));
+  line.setAttribute("y2", String(WF_AXIS_H));
+  line.setAttribute("class", "wf-axis-line");
+  root.appendChild(line);
+  const total = sp.t1 - sp.t0;
+  const ticks = [[sp.t0, "0"], [sp.t0 + total / 2, durMsText(total / 2)], [sp.t1, durMsText(total)]];
+  for (const [t, txt] of ticks) {
+    const x = wfTimeX(t, sp);
+    const grid = wfSvg("line");
+    grid.setAttribute("x1", String(x));
+    grid.setAttribute("x2", String(x));
+    grid.setAttribute("y1", String(WF_AXIS_H));
+    grid.setAttribute("y2", String(h));
+    grid.setAttribute("class", "wf-grid");
+    root.appendChild(grid);
+    const label = wfSvg("text");
+    const atEnd = t === sp.t1;
+    label.setAttribute("x", String(atEnd ? x - 2 : x + 2));
+    label.setAttribute("y", "11");
+    label.setAttribute("class", "wf-axis-label");
+    if (atEnd) label.setAttribute("text-anchor", "end");
+    label.textContent = txt;
+    root.appendChild(label);
+  }
+}
+
+function drawWfRow(root, row, y, sp) {
+  const dur = row.e - row.s;
+  const label = wfSvg("text");
+  label.setAttribute("x", String(row.step ? 20 : 6));
+  label.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
+  label.setAttribute("class", "wf-label " + (row.step ? "wf-step-label" : "wf-target-label"));
+  label.textContent = wfTrunc(row.label || "-", row.step ? 30 : 26);
+  const lt = wfSvg("title");
+  lt.textContent = row.label + " (" + durMsText(dur) + ")";
+  label.appendChild(lt);
+  root.appendChild(label);
+
+  const x1 = wfTimeX(row.s, sp);
+  const x2 = wfTimeX(row.e, sp);
+  const bh = row.step ? WF_STEP_BAR_H : WF_BAR_H;
+  const rect = wfSvg("rect");
+  rect.setAttribute("x", x1.toFixed(2));
+  rect.setAttribute("y", String(y + (WF_ROW_H - bh) / 2));
+  rect.setAttribute("width", Math.max(2, x2 - x1).toFixed(2));
+  rect.setAttribute("height", String(bh));
+  rect.setAttribute("rx", "2");
+  rect.setAttribute("class", "wf-bar" + (row.step ? " wf-step" : "") + (row.status ? " status-" + row.status : ""));
+  const rt = wfSvg("title");
+  rt.textContent = row.label + " - " + durMsText(dur);
+  rect.appendChild(rt);
+  root.appendChild(rect);
+
+  // Duration text in the right gutter, target rows only (step rows would crowd it).
+  if (!row.step) {
+    const d = wfSvg("text");
+    d.setAttribute("x", String(WF_VIEW_W - 2));
+    d.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
+    d.setAttribute("class", "wf-dur");
+    d.setAttribute("text-anchor", "end");
+    d.textContent = durMsText(dur);
+    root.appendChild(d);
+  }
+}
+
 // --- Live streaming (#live=host:port&token=) ----------------------------------
 // A run started with `--live` prints a link to an ephemeral 127.0.0.1 SSE server. The viewer
 // connects (fetch-based SSE + bearer token, mirroring the graph explorer's live client),
@@ -308,6 +557,10 @@ let liveInvocation = null;
 let livePaused = false;
 let liveRenderQueued = false;
 let liveAbort = null;
+// demoTimer drives the #demo showcase's incremental reveal; demoActive marks the reveal in
+// progress so the Timeline control is not force-disabled between frames. Both cleared on stop.
+let demoTimer = null;
+let demoActive = false;
 
 function connectLive(params) {
   const host = validateLiveHost(params.live);
@@ -373,8 +626,9 @@ function scheduleLiveRender() {
     rawText = built.rawLines.join("\n");
     render();
     setLiveStatus(liveAbort && liveAbort.signal.aborted ? "done" : "streaming");
+    updateTimelineControl();
     const foldBtn = el("fold-all-btn");
-    if (foldBtn) foldBtn.hidden = model.titled === 0 || !pretty;
+    if (foldBtn) foldBtn.hidden = timeline || model.titled === 0 || !pretty;
     const copyBtn = el("copy-all-btn");
     if (copyBtn) copyBtn.disabled = false;
     const shareBtn = el("share-btn");
@@ -400,6 +654,141 @@ function base64ToBytes(b64) {
   return bytes;
 }
 
+// --- Demo mode (#demo) --------------------------------------------------------
+// A daemon-free showcase: synthesize a realistic single-invocation Journal (a `magus affected
+// ci` run over ~6 targets, one of which fails), then REVEAL its events incrementally so the
+// page feels like a live run streaming in. It reuses the live-stream buffer (liveEvents /
+// liveInvocation) and scheduleLiveRender end to end - the synthetic events are the SAME
+// magus.viewer.v1 Event messages the wire carries (built with create(EventSchema, ...)), so
+// buildModelFromEvents (pretty view), buildSpans, renderWaterfall, waterfallSource, and
+// updateTimelineControl all run exactly as they would for a real journal. No new render path,
+// no transport, nothing fetched.
+
+// demoTs / demoDur build protobuf Timestamp / Duration inits ({seconds: bigint, nanos}) from a
+// millisecond value, the shapes tsMs / durMs decode.
+function demoTs(ms) {
+  return { seconds: BigInt(Math.floor(ms / 1000)), nanos: Math.floor((ms % 1000) * 1e6) };
+}
+function demoDur(ms) {
+  return { seconds: BigInt(Math.floor(ms / 1000)), nanos: Math.floor((ms % 1000) * 1e6) };
+}
+
+// demoOutputFor returns a plausible stdout line for a synthesized EXEC command. The demo is
+// an easter egg themed as a Linux kernel build, so these echo authentic kbuild chatter.
+function demoOutputFor(cmd) {
+  if (cmd.startsWith("CC ")) return "  " + cmd;
+  if (cmd.startsWith("AR ")) return "  " + cmd;
+  if (cmd.startsWith("LD ")) return "  " + cmd;
+  if (cmd.startsWith("OBJCOPY")) return "  " + cmd;
+  if (cmd.startsWith("MODPOST")) return "  " + cmd;
+  if (cmd.startsWith("make")) return "  SYNC   include/config/auto.conf";
+  return "  " + cmd;
+}
+
+// synthDemoJournal builds the showcase Journal: a STARTED/SCOPE preamble, then per target a
+// set of EXEC step markers (each with an output line) staggered across the target's window and
+// a terminal RESULT (status + duration + a synthetic ref), then FINISHED. Start offsets and
+// durations overlap so the waterfall renders a real cascade; the Invocation start/end frame the
+// axis. It is an easter egg: the whole run is themed as a Linux kernel build (`make -j` over
+// the arch/mm/fs/net subsystems into vmlinux). drivers/net fails with a modpost undefined
+// symbol for the red span; arch/x86 is a fast incremental (cached) hit. Everything is
+// synthesized log TEXT only - no kernel source is copied, the lines are plausible fiction.
+function synthDemoJournal() {
+  const base = Date.now();
+  // [project, target, exec command lines (kbuild steps), status, start offset ms, duration ms]
+  const plan = [
+    { project: "arch/x86", target: "vmlinux", execs: ["SYNC .config", "CC arch/x86/kernel/cpu/common.o"], status: Status.CACHED, start: 0, dur: 60 },
+    { project: "kernel", target: "built-in", execs: ["CC kernel/sched/core.o", "CC kernel/fork.o", "AR kernel/built-in.a"], status: Status.PASS, start: 200, dur: 2600 },
+    { project: "mm", target: "built-in", execs: ["CC mm/page_alloc.o", "CC mm/slub.o", "AR mm/built-in.a"], status: Status.PASS, start: 350, dur: 2200 },
+    { project: "fs", target: "built-in", execs: ["CC fs/namei.o", "CC fs/ext4/inode.o", "AR fs/built-in.a"], status: Status.PASS, start: 600, dur: 3000 },
+    { project: "drivers/net", target: "built-in", execs: ["CC drivers/net/ethernet/intel/e1000/e1000_main.o", "MODPOST modules-only.symvers"], status: Status.FAIL, start: 1100, dur: 2400 },
+    { project: ".", target: "vmlinux", execs: ["LD vmlinux", "OBJCOPY arch/x86/boot/bzImage"], status: Status.PASS, start: 3700, dur: 1600 },
+  ];
+  const command = { verb: "run", args: ["vmlinux", "--", "make", "-j$(nproc)"], cwd: "/usr/src/linux", trigger: 1 };
+  const events = [];
+  events.push(create(EventSchema, { kind: Kind.STARTED, time: demoTs(base), command, magusVersion: "demo" }));
+  events.push(create(EventSchema, { kind: Kind.SCOPE, time: demoTs(base), text: "projects: arch/x86, kernel, mm, fs, drivers/net" }));
+
+  let maxEnd = 0;
+  let n = 0;
+  for (const p of plan) {
+    const start = base + p.start;
+    for (let i = 0; i < p.execs.length; i++) {
+      const at = start + Math.round((p.dur * i) / p.execs.length);
+      events.push(create(EventSchema, { kind: Kind.EXEC, time: demoTs(at), project: p.project, target: p.target, text: p.execs[i] }));
+      const out = demoOutputFor(p.execs[i]);
+      if (out) events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(at + 12), project: p.project, target: p.target, stream: Stream.STDOUT, text: out }));
+    }
+    const end = start + p.dur;
+    maxEnd = Math.max(maxEnd, end - base);
+    if (p.status === Status.FAIL) {
+      events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 8), project: p.project, target: p.target, stream: Stream.STDERR, text: "ERROR: modpost: \"e1000_probe\" [drivers/net/ethernet/intel/e1000/e1000.ko] undefined!" }));
+    }
+    if (p.status === Status.PASS && p.project === "." && p.target === "vmlinux") {
+      events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 8), project: p.project, target: p.target, stream: Stream.STDOUT, text: "Kernel: arch/x86/boot/bzImage is ready  (#1)" }));
+    }
+    const ref = "refd" + (n++).toString(16).padStart(6, "0");
+    events.push(create(EventSchema, { kind: Kind.RESULT, time: demoTs(end), project: p.project, target: p.target, status: p.status, ref, duration: demoDur(p.dur) }));
+  }
+  events.push(create(EventSchema, { kind: Kind.FINISHED, time: demoTs(base + maxEnd), level: "error" }));
+  // Reveal in time order so the pretty view and waterfall both cascade as events arrive.
+  events.sort((a, b) => (tsMs(a.time) || 0) - (tsMs(b.time) || 0));
+
+  const invocation = { id: "invdemo01", command, startTime: demoTs(base), endTime: demoTs(base + maxEnd), magusVersion: "demo" };
+  return create(JournalSchema, { invocation, events });
+}
+
+// startDemo enters the showcase: it frames the axis from the synthetic Invocation, opens the
+// waterfall, and streams the events in over a few seconds via the shared live buffer.
+function startDemo() {
+  const journal = synthDemoJournal();
+  const ordered = journal.events;
+
+  stopDemo();
+  demoActive = true;
+  liveEvents = [];
+  liveInvocation = journal.invocation; // frames the axis (start/end) and the command preamble
+  livePaused = false;
+  currentJournal = null; // waterfallSource then reads the live buffer, as in a real live run
+  timeline = true;       // open straight into the waterfall so it visibly fills in
+  currentRef = "";
+  if (emptyEl) emptyEl.hidden = true;
+  setRefIdentity("demo", false);
+  setLiveStatus("streaming");
+
+  // Prime the first frame with enough events that a target span exists immediately (so the
+  // waterfall is never momentarily empty): the STARTED/SCOPE preamble plus the first EXEC.
+  let i = 0;
+  const prime = Math.min(3, ordered.length);
+  for (; i < prime; i++) liveEvents.push(ordered[i]);
+  scheduleLiveRender();
+
+  const BATCH = 3;
+  const TICK_MS = 360;
+  demoTimer = window.setInterval(() => {
+    if (i >= ordered.length) {
+      // Everything is already revealed and rendered by the prior batch tick; just settle the
+      // status pill. (Re-rendering here would race scheduleLiveRender's rAF back to "streaming".)
+      stopDemo();
+      setLiveStatus("done");
+      return;
+    }
+    for (let k = 0; k < BATCH && i < ordered.length; k++) liveEvents.push(ordered[i++]);
+    scheduleLiveRender();
+  }, TICK_MS);
+
+  // Clear the reveal if the page is being torn down, so no timer fires after navigation.
+  window.addEventListener("pagehide", stopDemo, { once: true });
+}
+
+function stopDemo() {
+  if (demoTimer !== null) {
+    window.clearInterval(demoTimer);
+    demoTimer = null;
+  }
+  demoActive = false;
+}
+
 // looksLikeRef mirrors the CLI's cache.LooksLikeRef: the "copy as command" buttons
 // only make sense when the page was seeded by a real ref (not a pasted file name).
 function looksLikeRef(s) {
@@ -420,7 +809,13 @@ function humanBytes(n) {
 
 function render() {
   bodyEl.textContent = "";
-  bodyEl.classList.toggle("raw", !pretty);
+  bodyEl.classList.toggle("raw", !pretty && !timeline);
+  bodyEl.classList.toggle("wf-mode", timeline);
+  // Timeline view: a trace waterfall built from the events' timing, not the log text.
+  if (timeline) {
+    renderWaterfall();
+    return;
+  }
   // Raw view: the exact captured text, flat - line numbers + ANSI color, no folds,
   // no badges, no structural chrome. The pretty view (default) styles it below.
   if (!pretty) {
@@ -869,6 +1264,25 @@ function setLineFragment(start, end) {
   history.replaceState(null, "", location.pathname + location.search + "#" + kept.join("&"));
 }
 
+// updateTimelineControl shows/hides the Timeline button by whether the loaded log carries
+// plottable timing, forces the mode off when it does not (a new text log), and syncs the
+// button label + the sibling controls that do not apply in the waterfall view.
+function updateTimelineControl() {
+  const tlBtn = el("timeline-btn");
+  const ok = timelineAvailable();
+  if (tlBtn) tlBtn.hidden = !ok;
+  // Fall back to the log view when the loaded log has no timing (a text/pasted log). During
+  // the #demo reveal the first frame may briefly precede any target span, so keep the mode on.
+  if (!ok && timeline && !demoActive) timeline = false;
+  if (tlBtn) {
+    setBtnLabel(tlBtn, timeline ? "Log" : "Timeline");
+    tlBtn.setAttribute("aria-pressed", timeline ? "true" : "false");
+  }
+  // The pretty/raw toggle is meaningless in the waterfall; hide it while timeline is on.
+  const viewBtn = el("view-toggle");
+  if (viewBtn) viewBtn.hidden = timeline;
+}
+
 // --- Controls -----------------------------------------------------------------
 function wireControls() {
   const copyBtn = el("copy-all-btn");
@@ -911,6 +1325,25 @@ function wireControls() {
       if (model) render();
       const fold = el("fold-all-btn");
       if (fold) fold.hidden = !model || model.titled === 0 || !pretty;
+    });
+  }
+
+  // Timeline <-> log toggle. Switches the body between the trace waterfall and the log view;
+  // clears any active search (the waterfall has no searchable lines) and re-syncs the sibling
+  // controls (pretty/raw + fold) that do not apply while the waterfall is shown.
+  const timelineBtn = el("timeline-btn");
+  if (timelineBtn) {
+    timelineBtn.addEventListener("click", () => {
+      timeline = !timeline;
+      const searchEl = el("log-search");
+      if (searchEl) searchEl.value = "";
+      clearMarks();
+      const cnt = el("search-count");
+      if (cnt) cnt.textContent = "";
+      updateTimelineControl();
+      if (model) render();
+      const fold = el("fold-all-btn");
+      if (fold) fold.hidden = timeline || !model || model.titled === 0 || !pretty;
     });
   }
 

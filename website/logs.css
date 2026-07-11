@@ -218,6 +218,25 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 .log-body mark { background: color-mix(in srgb, var(--pico-primary) 32%, transparent); color: inherit; border-radius: 2px; }
 .log-body mark.active { background: var(--pico-primary); color: var(--pico-primary-inverse); }
 
+/* Trace waterfall: the invocation's spans (targets, and their step child-spans) on a shared
+   time axis, drawn as inline SVG so it stays offline + CSP-safe with no chart library. Colors
+   reuse the same status palette as the section accents/badges above; step bars are muted. */
+.log-body.wf-mode { padding: 0.6rem var(--log-pad); }
+.wf-caption { color: var(--pico-muted-color); font-size: 0.78rem; margin: 0 0 0.5rem; }
+.wf-svg { display: block; width: 100%; height: auto; }
+.wf-axis-line { stroke: var(--pico-muted-border-color); stroke-width: 1; }
+.wf-grid { stroke: var(--pico-muted-border-color); stroke-width: 1; opacity: 0.35; }
+.wf-axis-label, .wf-dur { fill: var(--pico-muted-color); font-size: 9px; font-family: var(--pico-font-family-monospace); }
+.wf-label { font-size: 10px; font-family: var(--pico-font-family-monospace); }
+.wf-target-label { fill: var(--log-head-fg); font-weight: 600; }
+.wf-step-label { fill: var(--pico-muted-color); }
+.wf-bar { fill: var(--pico-primary); }
+.wf-bar.wf-step { fill: var(--pico-muted-color); opacity: 0.7; }
+.wf-bar.status-pass { fill: var(--pico-ins-color); }
+.wf-bar.status-fail { fill: var(--pico-del-color); }
+.wf-bar.status-cached { fill: var(--pico-muted-border-color); }
+.wf-empty { padding: 2rem; text-align: center; color: var(--pico-muted-color); }
+
 /* Empty state: a centered prompt with an icon and the two ways to get a log here
    (a finished run, or a live one). No paste box - the viewer opens links, it isn't an editor. */
 .log-empty {
