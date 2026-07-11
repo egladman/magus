@@ -361,10 +361,96 @@ export function mapSample(s: ProtoSample): SampleView {
   };
 }
 
+// ---- insight view-model (on-demand JSON) -----------------------------------
+// GET /api/v1/insight returns types.InsightView as PLAIN JSON (json.Marshal, not
+// protobuf), so this axis has no generated proto: the wire shapes below mirror the
+// Go json tags exactly, and mapInsight folds them into camelCase view-models the
+// tiles read. Times arrive as RFC3339 strings (a zero time.Time serializes to the
+// year-0001 sentinel), so fmtDateStr renders them and treats the sentinel as blank.
+
+export function fmtDateStr(iso: string | undefined): string {
+  if (!iso) return "-";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t) || t <= 0) return "-"; // the 0001-01-01 zero-value parses negative
+  return new Date(t).toLocaleDateString();
+}
+
+// Raw wire shapes (snake_case json tags from types/*.go). Not exported: only the
+// mapped view-models below cross into tiles.
+interface HotspotNodeWire { path: string; churn?: number; authors?: number; blast_radius?: number; last_commit?: string; }
+interface HotspotWire { commits: number; since?: string; nodes: HotspotNodeWire[] | null; }
+interface CoChangeWire { a: string; b: string; count: number; hidden?: boolean; }
+interface AffinityWire { commits: number; pairs: CoChangeWire[] | null; }
+interface OwnershipWire { path: string; commits: number; authors: number; primary: string; primary_share: number; bus_factor_1?: boolean; stale?: boolean; }
+interface OwnershipOutWire { commits: number; projects: OwnershipWire[] | null; }
+interface TrendWire { path: string; recent: number; earlier: number; delta: number; }
+interface TrendOutWire { commits: number; projects: TrendWire[] | null; }
+interface VolatilityTargetWire { project: string; target: string; score: number; volatile?: boolean; pass: number; fail: number; volatile_count: number; samples: number; last_pass?: string; }
+interface VolatilityWire { threshold: number; targets: VolatilityTargetWire[] | null; }
+export interface InsightWire {
+  hotspots: HotspotWire;
+  affinity: AffinityWire;
+  ownership: OwnershipOutWire;
+  trend: TrendOutWire;
+  volatility: VolatilityWire | null;
+}
+
+export interface HotspotNodeView { name: string; churn: number; authors: number; blastRadius: number; lastCommit: string; }
+export interface AffinityPairView { a: string; b: string; count: number; hidden: boolean; }
+export interface OwnershipRowView { path: string; primary: string; primaryShare: number; authors: number; busFactor1: boolean; stale: boolean; }
+export interface TrendRowView { path: string; delta: number; recent: number; earlier: number; }
+export interface VolatilityRowView {
+  label: string; score: number; volatile: boolean;
+  pass: number; fail: number; volatileCount: number; samples: number; lastPass: string;
+}
+export interface VolatilityView { threshold: number; targets: VolatilityRowView[]; }
+
+export interface InsightView {
+  commits: number; // the git-history window shared by the four VCS lenses
+  hotspots: HotspotNodeView[];
+  affinity: AffinityPairView[];
+  ownership: OwnershipRowView[];
+  trend: TrendRowView[];
+  volatility: VolatilityView | null;
+}
+
+export function mapInsight(w: InsightWire): InsightView {
+  return {
+    commits: w.hotspots?.commits ?? 0,
+    hotspots: (w.hotspots?.nodes ?? []).map((n) => ({
+      name: n.path,
+      churn: n.churn ?? 0,
+      authors: n.authors ?? 0,
+      blastRadius: n.blast_radius ?? 0,
+      lastCommit: fmtDateStr(n.last_commit),
+    })),
+    affinity: (w.affinity?.pairs ?? []).map((p) => ({
+      a: p.a, b: p.b, count: p.count, hidden: !!p.hidden,
+    })),
+    ownership: (w.ownership?.projects ?? []).map((o) => ({
+      path: o.path, primary: o.primary || "-", primaryShare: o.primary_share,
+      authors: o.authors, busFactor1: !!o.bus_factor_1, stale: !!o.stale,
+    })),
+    trend: (w.trend?.projects ?? []).map((t) => ({
+      path: t.path, delta: t.delta, recent: t.recent, earlier: t.earlier,
+    })),
+    volatility: w.volatility ? {
+      threshold: w.volatility.threshold,
+      targets: (w.volatility.targets ?? []).map((v) => ({
+        label: v.project ? v.project + ":" + v.target : v.target,
+        score: v.score, volatile: !!v.volatile,
+        pass: v.pass, fail: v.fail, volatileCount: v.volatile_count,
+        samples: v.samples, lastPass: fmtDateStr(v.last_pass),
+      })),
+    } : null,
+  };
+}
+
 // ---- the store shape -------------------------------------------------------
 // One value published on every tick. Slices are filled independently: `status`
-// arrives on the SSE frame, `metrics`/`samples` on the Connect stream. Tiles read
-// only the slice they render. `liveHost` deep-links running calls into live logs.
+// arrives on the SSE frame, `metrics`/`samples` on the Connect stream, `insight`
+// on a polled on-demand JSON read. Tiles read only the slice they render.
+// `liveHost` deep-links running calls into live logs.
 
 export interface DashboardState {
   conn: ConnView;
@@ -372,8 +458,9 @@ export interface DashboardState {
   status: StatusView | null;
   metrics: MetricsView | null;
   samples: SampleView[];
+  insight: InsightView | null;
 }
 
 export function initialState(): DashboardState {
-  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [] };
+  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [], insight: null };
 }

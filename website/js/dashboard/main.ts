@@ -28,7 +28,7 @@ import { runningTargetsTile } from "./tiles/runningTargets";
 import { workspacesTile } from "./tiles/workspaces";
 import { versionsTile } from "./tiles/versions";
 import { ganttTile } from "./tiles/gantt";
-import { volatilityPlaceholderTile } from "./tiles/placeholders";
+import { insightSection } from "./tiles/insight";
 import "../nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -115,13 +115,17 @@ function mountTiles(): void {
   const versions = versionsTile();
   host.append(versions.el);
 
-  // The live execution timeline (fed by Status.runs). The volatility column is still a
-  // deferred seam - see tiles/placeholders.ts for the source it waits on.
+  // The live execution timeline (fed by Status.runs).
   const gantt = ganttTile();
-  const volatility = volatilityPlaceholderTile();
-  host.append(gantt.el, volatility.el);
+  host.append(gantt.el);
 
-  tiles = [...single, runningTargets, workspaces, versions, gantt, volatility];
+  // The Insight section: the five VCS/run-outcome lenses, fed by the on-demand
+  // /api/v1/insight poll. Its refresh button forces an out-of-band refetch.
+  const insight = insightSection(() => transport.refreshInsight());
+  host.append(insight.el);
+  for (const t of insight.tiles) host.append(t.el);
+
+  tiles = [...single, runningTargets, workspaces, versions, gantt, ...insight.tiles];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
   store.subscribe(renderChrome);

@@ -23,11 +23,16 @@ import {
 } from "../lib/daemon";
 import type { Store } from "../lib/store";
 import {
-  mapStatus, mapSnapshot, mapSample, type DashboardState, type SampleView,
+  mapStatus, mapSnapshot, mapSample, mapInsight,
+  type DashboardState, type SampleView, type InsightWire,
 } from "./state";
 
 const GRID_MAX = 7 * 52; // ~a GitHub year of columns; the rolling sample window
 const RECONNECT_MS = 3000;
+// Insight is an on-demand JSON read (GET /api/v1/insight), server-side cached ~10s.
+// Not on the status SSE: it is polled on a modest cadence, refetched on open and on a
+// manual refresh. The interval sits just above the server cache TTL so most polls hit it.
+const INSIGHT_POLL_MS = 20000;
 
 export interface TransportCallbacks {
   onStatusOpen(host: string): void;
@@ -47,6 +52,10 @@ export class DashboardTransport {
   private metricsAbort: AbortController | null = null;
   private metricsRetry: ReturnType<typeof setTimeout> | null = null;
 
+  private insightHost: string | null = null;
+  private insightAbort: AbortController | null = null;
+  private insightTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(store: Store<DashboardState>, cb: TransportCallbacks) {
     this.store = store;
     this.cb = cb;
@@ -56,12 +65,14 @@ export class DashboardTransport {
     this.disconnect();
     this.connectStatus(host);
     this.startMetrics(host);
+    this.startInsight(host);
   }
 
   disconnect(): void {
     if (this.statusAbort) { this.statusAbort.abort(); this.statusAbort = null; }
     if (this.statusRetry) { clearTimeout(this.statusRetry); this.statusRetry = null; }
     this.stopMetrics();
+    this.stopInsight();
   }
 
   // ---- status SSE ----------------------------------------------------------
@@ -161,6 +172,46 @@ export class DashboardTransport {
       this.metricsRetry = null;
       if (this.metricsAbort && !this.metricsAbort.signal.aborted) void this.runMetrics(host, this.metricsAbort.signal);
     }, RECONNECT_MS);
+  }
+
+  // ---- insight (on-demand JSON poll) ---------------------------------------
+  // An authed GET against the validated loopback host, decoded from PLAIN JSON (not
+  // protobuf) and mapped into the store. Polled on a modest cadence since it is
+  // server-side cached; refetched immediately on connect and on a manual refresh.
+
+  private startInsight(host: string): void {
+    this.stopInsight();
+    this.insightHost = host;
+    void this.fetchInsight();
+    this.insightTimer = setInterval(() => void this.fetchInsight(), INSIGHT_POLL_MS);
+  }
+
+  private stopInsight(): void {
+    this.insightHost = null;
+    if (this.insightAbort) { this.insightAbort.abort(); this.insightAbort = null; }
+    if (this.insightTimer) { clearInterval(this.insightTimer); this.insightTimer = null; }
+  }
+
+  // refreshInsight forces an out-of-band refetch (the section's refresh button).
+  refreshInsight(): void {
+    if (this.insightHost) void this.fetchInsight();
+  }
+
+  private async fetchInsight(): Promise<void> {
+    const host = this.insightHost;
+    if (!host) return;
+    if (this.insightAbort) this.insightAbort.abort();
+    this.insightAbort = new AbortController();
+    try {
+      const res = await fetch("http://" + host + "/api/v1/insight", {
+        headers: authHeaders(), signal: this.insightAbort.signal,
+      });
+      if (!res.ok) return; // keep the last insight on screen; the next poll retries
+      const raw = (await res.json()) as InsightWire;
+      this.store.set({ insight: mapInsight(raw) });
+    } catch {
+      // Network blip or abort: leave the prior insight in place; the poll retries.
+    }
   }
 
   // ---- sample history ------------------------------------------------------

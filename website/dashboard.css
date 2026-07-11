@@ -320,9 +320,20 @@ a.row .row-cmd::after { content: " \2197"; color: var(--c-info); font-size: 0.85
 .metric-k { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color); }
 .metric-v { font-size: 0.95rem; font-weight: 600; font-family: var(--pico-font-family-monospace); color: var(--pico-color); }
 
-/* Deferred-seam tiles (Wave 3b): a muted note that reads as "coming soon". */
-.seam-note { margin: 0; font-size: 0.78rem; color: var(--pico-muted-color); }
-.tile[data-card="gantt"], .tile[data-card="flake"] { border-style: dashed; }
+.tile[data-card="gantt"] { border-style: dashed; }
+
+/* Insight section band: a labeled divider above the five insight lens tiles, with a
+   manual refresh button (the lenses are an on-demand poll, not the live stream). */
+.insight-band { margin-top: 0.4rem; }
+.insight-band-head { display: flex; align-items: center; gap: 0.6rem; }
+.insight-band-title { font-size: 1.05rem; margin: 0; }
+.insight-band-sub { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--pico-muted-color); }
+.insight-refresh {
+  margin: 0 0 0 auto; padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-sectioning-background-color); color: var(--pico-color); cursor: pointer;
+}
+.insight-refresh:hover { color: var(--c-info); border-color: var(--c-info); }
 
 /* uPlot base styles (vendored from uplot/dist/uPlot.min.css, MIT). Inlined here
    rather than imported in the TS entry: the dashboard's CSS is minified as a
