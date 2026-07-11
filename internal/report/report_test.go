@@ -322,6 +322,10 @@ func TestCacheRunOptions(t *testing.T) {
 	// Both are target.result; the first run is a miss, the replay a hit.
 	assert.False(t, results[0].CacheHit, "first event cache_hit should be false (miss)")
 	assert.True(t, results[1].CacheHit, "second event cache_hit should be true (hit)")
+	// Both events carry the execution's output ref, threaded from cache.Result.Ref,
+	// so a downstream consumer (the MCP run tools) can fetch the captured output by ref.
+	assert.True(t, cache.LooksLikeRef(results[0].Ref), "miss event should carry an output ref, got %q", results[0].Ref)
+	assert.True(t, cache.LooksLikeRef(results[1].Ref), "hit event should carry an output ref, got %q", results[1].Ref)
 }
 
 func TestWriterContextRoundTrip(t *testing.T) {

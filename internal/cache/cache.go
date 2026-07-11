@@ -96,6 +96,7 @@ type Result struct {
 	Hit         bool
 	Duration    time.Duration
 	Outputs     []string // absolute paths written or replayed
+	Ref         string   // per-execution output reference id (see recordOutput); "" when the output store is absent or persistence failed
 }
 
 type runCtx struct {
@@ -347,6 +348,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 					slog.String("hash", shortHash(hash)),
 					slog.String("ref", ref),
 				)
+				result.Ref = ref
 				if rc.onHit != nil {
 					rc.onHit(&result)
 				}
@@ -373,6 +375,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		// The captured output is persisted verbatim under a ref so the exact failing
 		// output stays retrievable via `magus query ref`.
 		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, runErr)
+		result.Ref = ref
 		c.log.Error(
 			"cache.error",
 			slog.String("project", s.ProjectPath),
@@ -416,6 +419,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	result.Duration = time.Since(start)
 	c.misses.Add(1)
 	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil)
+	result.Ref = ref
 	c.log.Info(
 		"cache.miss",
 		slog.String("project", s.ProjectPath),
