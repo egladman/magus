@@ -41,18 +41,30 @@ var defaultAddrPort = netip.MustParseAddrPort(DefaultAddress)
 const serverInstructions = `You are connected to a magus workspace.
 magus is a build orchestrator for multi-language monorepos.
 
-Workflow:
-  1. magus_list_projects   — see what projects exist
-  2. magus_list_targets    — see available build targets per project
-  3. magus_run_target      — run build/test/lint/format/generate/ci
-  4. magus_run_affected    — run a target on only VCS-changed projects
-  5. magus_describe_project — explain why a project is affected by VCS changes
-  6. magus_doctor          — validate the workspace health
-  7. magus_status          — inspect the live concurrency pool
-  8. magus_affected_plan   — emit a CI shard plan for the affected set
-  9. magus_config_get      — view the resolved workspace config (read-only)
- 10. magus_tail_log        — retrieve the captured build log for a project
- 11. magus_where           — resolve a fuzzy project name to its absolute path
+Discover:
+  magus_describe          - list spells, targets, projects, workspaces, or mcp_tools
+  magus_where             - resolve a fuzzy project name to its absolute path
+  magus_config_get        - view the resolved workspace config (read-only)
+
+Run:
+  magus_run_target        - run build/test/lint/format/generate/ci
+  magus_run_affected      - run a target on only VCS-changed projects
+  magus_affected_plan     - emit a CI shard plan for the affected set
+  magus_affected_explain  - explain why a project is affected by VCS changes
+
+Inspect:
+  magus_doctor            - validate the workspace health
+  magus_status            - inspect the live concurrency pool
+  magus_tail_log          - retrieve the captured build log for a project
+  magus_output            - fetch a target-output blob by its reference id
+  magus_insight           - VCS history lenses (hotspots, ownership, trend)
+
+Knowledge graph:
+  magus_query             - search the target/spell/symbol graph
+  magus_explain           - explain a single node and its relationships
+  magus_path              - find a path between two graph nodes
+  magus_refs              - list files that reference a symbol
+  magus_stats             - summarize graph composition
 
 Config mutation is intentionally not exposed. Use the magus CLI for that.`
 

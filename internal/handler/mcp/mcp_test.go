@@ -2,10 +2,111 @@ package mcp
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"io"
+	"log/slog"
 	"testing"
 
+	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/observability"
 )
+
+// fakeTel records MCP calls for assertions. It embeds the wide Provider
+// interface so only RecordMCPCall needs an implementation; wrap touches no
+// other method, so the nil embedded value is never dereferenced.
+type fakeTel struct {
+	observability.Provider
+	calls []observability.MCPCall
+}
+
+func (f *fakeTel) RecordMCPCall(_ context.Context, c observability.MCPCall) {
+	f.calls = append(f.calls, c)
+}
+
+func quietLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func callRequest(name string, args map[string]any) mcplib.CallToolRequest {
+	var req mcplib.CallToolRequest
+	req.Params.Name = name
+	req.Params.Arguments = args
+	return req
+}
+
+func TestWrapRecordsMCPCall(t *testing.T) {
+	t.Parallel()
+
+	agentFn := func(context.Context) string { return "test-agent" }
+	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
+
+	t.Run("ok outcome sizes input and output", func(t *testing.T) {
+		tel := &fakeTel{}
+		const out = "hello world result"
+		h := wrap(quietLogger(), agentFn, nil, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+			return mcplib.NewToolResultText(out), nil
+		})
+
+		result, err := h(context.Background(), req)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.Len(t, tel.calls, 1)
+		got := tel.calls[0]
+		assert.Equal(t, "magus_query", got.Tool)
+		assert.Equal(t, "ok", got.Outcome)
+		assert.Positive(t, got.InputBytes)
+		assert.Equal(t, int64(len(out)), got.OutputBytes)
+		assert.GreaterOrEqual(t, got.Duration, 0.0)
+	})
+
+	t.Run("error outcome nil result contributes zero output", func(t *testing.T) {
+		tel := &fakeTel{}
+		h := wrap(quietLogger(), agentFn, nil, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+			return nil, errors.New("boom")
+		})
+
+		result, err := h(context.Background(), req)
+		require.Error(t, err)
+		assert.Nil(t, result)
+
+		require.Len(t, tel.calls, 1)
+		got := tel.calls[0]
+		assert.Equal(t, "magus_query", got.Tool)
+		assert.Equal(t, "error", got.Outcome)
+		assert.Positive(t, got.InputBytes)
+		assert.Zero(t, got.OutputBytes)
+	})
+
+	t.Run("nil telemetry is a no-op", func(t *testing.T) {
+		h := wrap(quietLogger(), agentFn, nil, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+			return mcplib.NewToolResultText("ok"), nil
+		})
+		result, err := h(context.Background(), req)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+}
+
+func TestSumTextBytes(t *testing.T) {
+	t.Parallel()
+
+	assert.Zero(t, sumTextBytes(nil))
+	assert.Equal(t, int64(len("abc")), sumTextBytes(mcplib.NewToolResultText("abc")))
+
+	multi := &mcplib.CallToolResult{
+		Content: []mcplib.Content{
+			mcplib.TextContent{Type: "text", Text: "ab"},
+			mcplib.ImageContent{Type: "image", Data: "ignored"},
+			mcplib.TextContent{Type: "text", Text: "cde"},
+		},
+	}
+	assert.Equal(t, int64(5), sumTextBytes(multi))
+}
 
 func TestParamString(t *testing.T) {
 	t.Parallel()

@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
 )
 
@@ -168,6 +169,14 @@ var (
 )
 
 func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, audit *auditLog) {
+	// The MCP tool ctx is not stamped with the telemetry provider, so grab the
+	// shared one here and close over it in wrap. Telemetry() returns a nil-safe
+	// disabledProvider when telemetry is off; a nil Magus (some test paths)
+	// leaves tel nil, which wrap guards against.
+	var tel observability.Provider
+	if opts.Magus != nil {
+		tel = opts.Magus.Telemetry()
+	}
 	byName := make(map[string]types.SpellDriver, len(Registry))
 	for _, t := range allMCPTools(opts) {
 		byName[t.Name()] = t
@@ -177,7 +186,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, audit, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, audit, tel, adapt(t)))
 	}
 }
 
@@ -185,8 +194,10 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 // call so the human watching magus's stderr can immediately see when an agent
 // triggered an operation. It also persists one auditEvent per call to the audit
 // log (best-effort; a nil audit log is a no-op) - the durable form of the banner
-// that a later /dashboard activity view reads.
-func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLog, fn handlerFn) server.ToolHandlerFunc {
+// that a later /dashboard activity view reads - and records the call to the
+// magus.mcp.tool.* metric family (attributed by tool + outcome only; never by
+// argument values or result content). A nil tel is a no-op.
+func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLog, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		agentID := agentFn(ctx)
 		toolName := req.Params.Name
@@ -226,6 +237,34 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 			reqLog.Info("[AGENT] tool done", slog.Duration("duration", dur))
 		}
 		audit.record(ev)
+		if tel != nil {
+			// INPUT = the serialized tool arguments (same bytes the audit record
+			// carries); OUTPUT = the total length of the result's text blocks.
+			// Attribute by tool + outcome only to keep cardinality bounded.
+			tel.RecordMCPCall(ctx, observability.MCPCall{
+				Tool:        toolName,
+				Outcome:     ev.Outcome,
+				InputBytes:  int64(len(ev.Args)),
+				OutputBytes: sumTextBytes(result),
+				Duration:    dur.Seconds(),
+			})
+		}
 		return result, err
 	}
+}
+
+// sumTextBytes totals the character length of every text block in a tool
+// result. A nil result (the transport-error path) contributes zero; non-text
+// content blocks are ignored.
+func sumTextBytes(result *mcplib.CallToolResult) int64 {
+	if result == nil {
+		return 0
+	}
+	var n int64
+	for _, c := range result.Content {
+		if tc, ok := c.(mcplib.TextContent); ok {
+			n += int64(len(tc.Text))
+		}
+	}
+	return n
 }
