@@ -21,21 +21,24 @@ import (
 // errorHints maps a tool to the one-line recovery step appended ONLY when that
 // tool returns an error/empty result. Values name tools, never argument values,
 // and stay a single lean line so the failure path costs the agent almost nothing.
+// Keys and the tool names embedded in each value are built from the ToolName
+// constants (toolref.go), so a tool rename is a compile error rather than a hint
+// that silently points at a tool that no longer exists.
 var errorHints = map[string]string{
-	"magus_run_target":   "next: list valid targets with magus_describe (kind=targets)",
-	"magus_run_affected": "next: list valid targets with magus_describe (kind=targets)",
-	"magus_where":        "next: list projects with magus_describe (kind=projects)",
-	"magus_output":       "next: output refs come from magus_run_target or magus_tail_log",
-	"magus_explain":      "next: locate a node with magus_query, then explain it",
-	"magus_path":         "next: locate the endpoints with magus_query",
-	"magus_refs":         "next: locate a symbol with magus_query",
+	ToolRunTarget.String():   "next: list valid targets with " + ToolDescribe.String() + " (kind=targets)",
+	ToolRunAffected.String(): "next: list valid targets with " + ToolDescribe.String() + " (kind=targets)",
+	ToolWhere.String():       "next: list projects with " + ToolDescribe.String() + " (kind=projects)",
+	ToolOutput.String():      "next: output refs come from " + ToolRunTarget.String() + " or " + ToolTailLog.String(),
+	ToolExplain.String():     "next: locate a node with " + ToolQuery.String() + ", then explain it",
+	ToolPath.String():        "next: locate the endpoints with " + ToolQuery.String(),
+	ToolRefs.String():        "next: locate a symbol with " + ToolQuery.String(),
 }
 
 // staticChainHints maps a tool to a chain hint appended on a SUCCESS that always
 // leads somewhere fixed. Only tools whose whole purpose is to feed a follow-up
 // tool belong here - never general read tools, which get no footer.
 var staticChainHints = map[string]string{
-	"magus_affected_plan": "next: run the affected set with magus_run_affected",
+	ToolAffectedPlan.String(): "next: run the affected set with " + ToolRunAffected.String(),
 }
 
 // refChainTools mint an output reference the agent chains into magus_output. On
@@ -43,8 +46,8 @@ var staticChainHints = map[string]string{
 // fetch hint names that exact ref so the agent can pull the captured output
 // without re-reading the run's event wall.
 var refChainTools = map[string]bool{
-	"magus_run_target":   true,
-	"magus_run_affected": true,
+	ToolRunTarget.String():   true,
+	ToolRunAffected.String(): true,
 }
 
 // decorateResult appends at most one cross-link line to a tool result, chosen by
@@ -67,7 +70,7 @@ func decorateResult(result *mcplib.CallToolResult, toolName string) {
 	}
 	if refChainTools[toolName] {
 		if ref := firstRef(result); ref != "" {
-			appendHint(result, "next: fetch the captured output with magus_output (ref="+ref+")")
+			appendHint(result, "next: fetch the captured output with "+ToolOutput.String()+" (ref="+ref+")")
 		}
 	}
 }

@@ -1,5 +1,7 @@
 package mcp
 
+import "github.com/egladman/magus/internal/interactive/clihint"
+
 // ParamDescriptor describes a single parameter on an MCP tool.
 type ParamDescriptor struct {
 	Name        string `json:"name"                  yaml:"name"`
@@ -21,21 +23,21 @@ type ToolDescriptor struct {
 // Order matches the registration order in tools.go.
 var Registry = []ToolDescriptor{
 	{
-		Name:        "magus_describe",
+		Name:        string(ToolDescribe),
 		Description: "Describe a magus concept and list every entity of that kind in the workspace: spells (language/runtime adapters), targets (targets), projects, workspaces, or mcp_tools.",
 		Params: []ParamDescriptor{
 			{Name: "kind", Type: "string", Required: true, Description: "One of: spells, targets, projects, workspaces, mcp_tools."},
 		},
 	},
 	{
-		Name:        "magus_where",
+		Name:        string(ToolWhere),
 		Description: "Resolve a fuzzy project name to its absolute directory path. Useful for navigating to a project or passing a path to another tool.",
 		Params: []ParamDescriptor{
 			{Name: "filter", Type: "string", Description: "One or more space-separated tokens to AND-filter project names (case-insensitive leaf match). Omit to list all."},
 		},
 	},
 	{
-		Name:        "magus_affected_explain",
+		Name:        string(ToolAffectedExplain),
 		Description: "Explain why a project is in the VCS-diff affected set: shows the changed files and dependency chains that caused it to be selected.",
 		Params: []ParamDescriptor{
 			{Name: "project", Type: "string", Required: true, Description: "Project path (e.g. \"api\" or \"web/studio\")."},
@@ -43,7 +45,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_insight",
+		Name:        string(ToolInsight),
 		Description: "Behavioral code analysis from VCS history: find where a codebase's attention and risk concentrate before diving in. Lenses (the `lens` param): hotspots (per-project churn × complexity, with authors/recency/blast-radius), files (per-file churn × complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity).",
 		Params: []ParamDescriptor{
 			{Name: "lens", Type: "string", Description: "One of: hotspots (default), files, affinity, ownership, trend."},
@@ -52,7 +54,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_run_target",
+		Name:        string(ToolRunTarget),
 		Description: "Run a build target for one or more projects. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Without projects, the cwd project (or all) is selected.",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run, e.g. \"build\", \"test\", \"lint\", \"format\", \"ci\", or an op-direct spell-qualified form like \"go::go-test\"."},
@@ -61,8 +63,8 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_run_affected",
-		Description: "Run a build target on only the projects affected by VCS changes. Equivalent to `magus affected <target>`.",
+		Name:        string(ToolRunAffected),
+		Description: "Run a build target on only the projects affected by VCS changes. Equivalent to `" + clihint.Affected.With("<target>") + "`.",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run on affected projects (e.g. \"test\", \"lint\", \"ci\")."},
 			{Name: "base", Type: "string", Description: "Override VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
@@ -70,33 +72,33 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_doctor",
+		Name:        string(ToolDoctor),
 		Description: "Validate the workspace: config schema, cache writability, project discovery, language coverage, dependency cycles, tool availability, and VCS reachability.",
 	},
 	{
-		Name:        "magus_status",
+		Name:        string(ToolStatus),
 		Description: "Report the workspace's configured telemetry, cache settings, and live proc-server pool state (when a parent magus is running).",
 	},
 	{
-		Name:        "magus_affected_plan",
+		Name:        string(ToolAffectedPlan),
 		Description: "Emit a provider-neutral JSON shard plan for the VCS-affected project set. Use for CI fan-out: map the matrix entries to your CI system's parallel job format.",
 		Params: []ParamDescriptor{
 			{Name: "max_shards", Type: "number", Description: "Maximum CI shards (default: from config; -1 means unlimited)."},
 		},
 	},
 	{
-		Name:        "magus_config_get",
+		Name:        string(ToolConfigGet),
 		Description: "Return the resolved workspace configuration as JSON. Read-only — use the magus CLI to edit config.",
 	},
 	{
-		Name:        "magus_tail_log",
+		Name:        string(ToolTailLog),
 		Description: "Return the captured build log of the most recent cache entry for a project. Useful after a failed magus_run_target to inspect tool output.",
 		Params: []ParamDescriptor{
 			{Name: "project", Type: "string", Required: true, Description: "Project path."},
 		},
 	},
 	{
-		Name:        "magus_scratchpad",
+		Name:        string(ToolScratchpad),
 		Description: "A private, per-workspace scratch file for the agent to jot intermediate work into and read back later, instead of dumping it all into the conversation. Use it to park a plan, a running checklist, partial findings, or notes across several tool calls, then read them back on demand. It is NOT shown to the user unless they open the file themselves. One file per workspace; write and append overwrite/extend the same file.",
 		Params: []ParamDescriptor{
 			{Name: "op", Type: "string", Description: "One of: read (default; returns current contents, empty if never written), write (overwrite with content), append (add content on a new line), clear (empty the scratchpad)."},
@@ -104,7 +106,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_query",
+		Name:        string(ToolQuery),
 		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind:symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (ref1a2b3c), use magus_output.",
 		Params: []ParamDescriptor{
 			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field filters like kind:spell, project:pkg/foo, relation:uses, id:build, and negation -kind:op."},
@@ -114,21 +116,21 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_output",
+		Name:        string(ToolOutput),
 		Description: "Return one target execution's exact captured output by its reference id (ref1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
 		Params: []ParamDescriptor{
 			{Name: "ref", Type: "string", Required: true, Description: "A target-output reference id (ref1a2b3c) or a unique prefix of one, as printed on each target's result line."},
 		},
 	},
 	{
-		Name:        "magus_explain",
+		Name:        string(ToolExplain),
 		Description: "Show one knowledge-graph node's context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it. The argument is a node ID (target:pkg/foo:build) or a name that resolves to one.",
 		Params: []ParamDescriptor{
 			{Name: "node", Type: "string", Required: true, Description: "A node ID or a name that resolves to one."},
 		},
 	},
 	{
-		Name:        "magus_refs",
+		Name:        string(ToolRefs),
 		Description: "List where an ingested code symbol is defined and every file that references it, as file:line rows drawn from a SCIP index. The occurrence-shaped answer for a symbol's fan-in (magus_query renders that poorly). Symbols come from a declared knowledge.symbols index. For a large fan-in, pass limit and echo the returned next_cursor.",
 		Params: []ParamDescriptor{
 			{Name: "symbol", Type: "string", Required: true, Description: "A symbol node ID (symbol:...) or a name that resolves to one."},
@@ -137,7 +139,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_path",
+		Name:        string(ToolPath),
 		Description: "Show the shortest path between two knowledge-graph nodes: the chain of edges connecting them, with each hop's relation. Answers how two entities relate.",
 		Params: []ParamDescriptor{
 			{Name: "from", Type: "string", Required: true, Description: "Start node ID or a name that resolves to one."},
@@ -145,7 +147,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name:        "magus_stats",
+		Name:        string(ToolStats),
 		Description: "Report the knowledge graph's shape - where the workspace concentrates and neglects. Returns god nodes (the most connected spells, targets, modules, where structural risk concentrates), orphans (docs that document nothing, spells no target uses), and doc coverage. Answers \"where is risk concentrated\" without shelling out.",
 		Params: []ParamDescriptor{
 			{Name: "kind", Type: "string", Description: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
