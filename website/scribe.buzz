@@ -1551,10 +1551,13 @@ fun writeManifest(site: Site) > void {
     final body = "\{\n"
         + "  \"name\": \"magus\",\n"
         + "  \"short_name\": \"magus\",\n"
+        + "  \"id\": \"" + basePath + "\",\n"
+        + "  \"lang\": \"en\",\n"
         + "  \"description\": \"" + escapeAttr(SITE_DESC) + "\",\n"
         + "  \"start_url\": \"" + basePath + "\",\n"
         + "  \"scope\": \"" + basePath + "\",\n"
         + "  \"display\": \"standalone\",\n"
+        + "  \"categories\": [\"developer\", \"utilities\"],\n"
         + "  \"background_color\": \"#ffffff\",\n"
         + "  \"theme_color\": \"#3178c6\",\n"
         + "  \"icons\": [\n"
@@ -1936,9 +1939,12 @@ fun renderSiteNav(root: str, active: str) > str {
     links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
     links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
     links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
-    links.append({"href": root + "graph/", "label": "Graph", "current": active == "graph"});
-    // /dashboard/ is deliberately NOT in the public nav: it is magus's control surface,
-    // reachable by direct URL or as an installed PWA app shortcut, not a public site page.
+    links.append({"href": root + "dashboard/", "label": "Dashboard", "current": active == "dashboard"});
+    // The Dashboard is the single public entry point to magus's browser apps: its
+    // connect screen carries the launchers (plus a demo), so Graph and Logs are reached
+    // from there - and via `magus graph open` - rather than getting their own top-nav
+    // items. Playground stays a distinct link above because it is a standalone in-browser
+    // Buzz runner (no daemon) that the tour deep-links into, not a daemon app.
     return template.render(tmpl, {"root": root, "links": links});
 }
 
@@ -1952,11 +1958,13 @@ fun renderSiteFooter(root: str, site: Site) > str {
     // Two clusters spread across the footer's width: this site's own surfaces on
     // the left, the project/external links on the right. Dots separate items within
     // a cluster; the clusters divide the row without adding a second line on desktop.
+    // The middle cluster's app entry is the Dashboard (the single entry point to the
+    // browser apps, matching the header) - Graph and Logs are reached from there.
     // Backtick raw string holds the Mustache verbatim (a double-quoted "{{x}}" would
     // collide with Buzz's own {expr} interpolation).
     final tmpl = `  <footer class="site-footer container">
     <small class="footer-group"><a href="{{root}}search/">Search</a> &middot; <a href="{{root}}public/">Files</a></small>
-    <small class="footer-group"><a href="{{root}}graph/">Graph</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
+    <small class="footer-group"><a href="{{root}}dashboard/">Dashboard</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
