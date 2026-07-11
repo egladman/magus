@@ -415,29 +415,29 @@ func (disabledProvider) RecordRemoteOp(_ context.Context, _ RemoteOp)           
 func (disabledProvider) StartSpan(ctx context.Context, _ string, _ ...Attr) (context.Context, func(error)) {
 	return ctx, func(error) {}
 }
-func (disabledProvider) RecordTargetRun(_ context.Context, _ float64, _ ...Attr)             {}
-func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64)             {}
-func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)                        {}
-func (disabledProvider) RecordPoolWaiting(_ context.Context, _ int64)                        {}
-func (disabledProvider) RecordMCPCall(_ context.Context, _ MCPCall)                          {}
-func (disabledProvider) RecordSandboxApply(_ context.Context, _ float64, _, _ string)        {}
-func (disabledProvider) RecordSandboxRules(_ context.Context, _, _, _, _, _ int64, _ string) {}
-func (disabledProvider) RecordSandboxCheck(_ context.Context, _, _, _ string)                {}
-func (disabledProvider) RecordSandboxEnvDropped(_ context.Context, _ string, _ int64)        {}
-func (disabledProvider) RecordBuzzExec(_ context.Context, _ float64, _, _ string)            {}
-func (disabledProvider) RecordBuzzCompile(_ context.Context, _ float64, _, _ string)         {}
-func (disabledProvider) RecordBuzzHostCall(_ context.Context, _ BuzzHostCall)                {}
-func (disabledProvider) RecordBuzzSessionReuse(_ context.Context, _ string)                  {}
-func (disabledProvider) RecordBuzzSessionIdle(_ context.Context, _ int64)                    {}
-func (disabledProvider) RecordBuzzSessionEviction(_ context.Context, _ string)               {}
-func (disabledProvider) RecordBuzzSessionWarm(_ context.Context, _ float64, _ string)        {}
-func (disabledProvider) RecordBuzzImport(_ context.Context, _ float64, _, _ string)          {}
-func (disabledProvider) RecordBuzzSpellResolve(_ context.Context, _ float64, _, _ string)    {}
-func (disabledProvider) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string)  {}
-func (disabledProvider) RecordBuzzJITRun(_ context.Context)                                  {}
-func (disabledProvider) RecordBuzzVMFault(_ context.Context, _ string)                       {}
-func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)                          { return nil, nil }
-func (disabledProvider) Shutdown(_ context.Context) error                                    { return nil }
+func (disabledProvider) RecordTargetRun(_ context.Context, _ float64, _ ...Attr)            {}
+func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64)            {}
+func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)                       {}
+func (disabledProvider) RecordPoolWaiting(_ context.Context, _ int64)                       {}
+func (disabledProvider) RecordMCPCall(_ context.Context, _ MCPCall)                         {}
+func (disabledProvider) RecordSandboxApply(_ context.Context, _ float64, _, _ string)       {}
+func (disabledProvider) RecordSandboxRules(_ context.Context, _ SandboxRules)               {}
+func (disabledProvider) RecordSandboxCheck(_ context.Context, _, _, _ string)               {}
+func (disabledProvider) RecordSandboxEnvDropped(_ context.Context, _ string, _ int64)       {}
+func (disabledProvider) RecordBuzzExec(_ context.Context, _ float64, _, _ string)           {}
+func (disabledProvider) RecordBuzzCompile(_ context.Context, _ float64, _, _ string)        {}
+func (disabledProvider) RecordBuzzHostCall(_ context.Context, _ BuzzHostCall)               {}
+func (disabledProvider) RecordBuzzSessionReuse(_ context.Context, _ string)                 {}
+func (disabledProvider) RecordBuzzSessionIdle(_ context.Context, _ int64)                   {}
+func (disabledProvider) RecordBuzzSessionEviction(_ context.Context, _ string)              {}
+func (disabledProvider) RecordBuzzSessionWarm(_ context.Context, _ float64, _ string)       {}
+func (disabledProvider) RecordBuzzImport(_ context.Context, _ float64, _, _ string)         {}
+func (disabledProvider) RecordBuzzSpellResolve(_ context.Context, _ float64, _, _ string)   {}
+func (disabledProvider) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string) {}
+func (disabledProvider) RecordBuzzJITRun(_ context.Context)                                 {}
+func (disabledProvider) RecordBuzzVMFault(_ context.Context, _ string)                      {}
+func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)                         { return nil, nil }
+func (disabledProvider) Shutdown(_ context.Context) error                                   { return nil }
 
 func toKV(attrs []Attr) []attribute.KeyValue {
 	out := make([]attribute.KeyValue, len(attrs))

@@ -148,6 +148,33 @@ func TestRunRegistryPrunesAfterRetention(t *testing.T) {
 	require.Empty(t, reg.Snapshot())
 }
 
+// resultState maps known journal statuses onto explicit run states; an unrecognized status
+// (a future journal status) maps to the zero/unspecified state, never silently to PASSED.
+func TestResultState(t *testing.T) {
+	require.Equal(t, types.TargetRunPassed, resultState(journal.StatusPass))
+	require.Equal(t, types.TargetRunCached, resultState(journal.StatusCached))
+	require.Equal(t, types.TargetRunFailed, resultState(journal.StatusFail))
+	require.Equal(t, types.TargetRunState(""), resultState("some-future-status"))
+}
+
+// An unfinished run that never emits KindFinished is evicted once its last event ages past
+// the maxRunAge ceiling, so a crashed dispatch does not linger forever.
+func TestRunRegistryPrunesStaleUnfinishedRun(t *testing.T) {
+	reg := NewRunRegistry()
+	now := time.UnixMilli(100_000)
+	reg.nowFn = func() time.Time { return now }
+
+	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
+	emit(reg, "inv1", journal.Event{Ts: 2_000, Kind: journal.KindExec, Project: "p", Target: "t"})
+
+	// Still in-flight and recent: visible.
+	require.Len(t, reg.Snapshot(), 1)
+
+	// No KindFinished ever arrives; once silent past maxRunAge it is evicted anyway.
+	now = now.Add(maxRunAge + time.Second)
+	require.Empty(t, reg.Snapshot())
+}
+
 // Events with no invocation id cannot be attributed and are dropped.
 func TestRunRegistryIgnoresEventsWithoutInv(t *testing.T) {
 	reg := NewRunRegistry()

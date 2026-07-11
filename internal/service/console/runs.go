@@ -16,6 +16,12 @@ import (
 // row disappears rather than blinking out the instant a run ends.
 const defaultRunRetention = 10 * time.Second
 
+// maxRunAge is the hard age ceiling for an unfinished run. A run that never emits a
+// KindFinished event (a crashed dispatch, or one whose finished event was dropped) would
+// otherwise linger forever, since retention only evicts finished runs. Once such a run has
+// been silent longer than this bound it is evicted regardless.
+const maxRunAge = 5 * time.Minute
+
 // RunRegistry is the daemon's live-run tap: a slog.Handler folded into every adopted run's
 // capture logger. It decodes the journal events a run emits (started/scope/exec/result/
 // finished) and maintains, per invocation, the per-target execution state a dashboard
@@ -34,13 +40,14 @@ type RunRegistry struct {
 }
 
 type runState struct {
-	inv        string
-	trigger    string
-	startedAt  time.Time
-	finished   bool
-	finishedAt time.Time
-	order      []string                          // target keys, first-seen order (stable render)
-	targets    map[string]*types.StatusTargetRun // keyed by targetKey(project, target)
+	inv         string
+	trigger     string
+	startedAt   time.Time
+	finished    bool
+	finishedAt  time.Time
+	lastEventAt time.Time                         // wall-clock time of the most recent folded event
+	order       []string                          // target keys, first-seen order (stable render)
+	targets     map[string]*types.StatusTargetRun // keyed by targetKey(project, target)
 }
 
 // NewRunRegistry returns an empty registry using the default retention and wall clock.
@@ -119,6 +126,7 @@ func (r *RunRegistry) fold(e journal.Event) {
 		rs.finishedAt = r.nowFn()
 	}
 
+	rs.lastEventAt = r.nowFn()
 	r.pruneLocked(r.nowFn())
 }
 
@@ -159,11 +167,15 @@ func (r *RunRegistry) Snapshot() []types.StatusRun {
 	return out
 }
 
-// pruneLocked drops runs that finished more than the retention window before now. Caller
-// holds r.mu.
+// pruneLocked drops runs that finished more than the retention window before now, plus any
+// unfinished run whose last event is older than maxRunAge (a run that never emitted a
+// KindFinished must not linger forever). Caller holds r.mu.
 func (r *RunRegistry) pruneLocked(now time.Time) {
 	for inv, rs := range r.runs {
-		if rs.finished && now.Sub(rs.finishedAt) > r.retain {
+		switch {
+		case rs.finished && now.Sub(rs.finishedAt) > r.retain:
+			delete(r.runs, inv)
+		case !rs.finished && now.Sub(rs.lastEventAt) > maxRunAge:
 			delete(r.runs, inv)
 		}
 	}
@@ -172,15 +184,19 @@ func (r *RunRegistry) pruneLocked(now time.Time) {
 // targetKey joins a project and target into a map key that cannot collide across projects.
 func targetKey(project, target string) string { return project + "\x00" + target }
 
-// resultState maps a journal result status onto a target run state.
+// resultState maps a journal result status onto a target run state. An unrecognized status
+// (e.g. a future journal status this build does not know) maps to the zero/unspecified state
+// rather than being silently shown as PASSED.
 func resultState(status string) types.TargetRunState {
 	switch status {
+	case journal.StatusPass:
+		return types.TargetRunPassed
 	case journal.StatusCached:
 		return types.TargetRunCached
 	case journal.StatusFail:
 		return types.TargetRunFailed
 	default:
-		return types.TargetRunPassed
+		return ""
 	}
 }
 

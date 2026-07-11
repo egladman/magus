@@ -71,10 +71,10 @@ type Provider interface {
 	RecordMCPCall(ctx context.Context, c MCPCall)
 
 	// Filesystem sandbox families: magus.sandbox.*.
-	RecordSandboxApply(ctx context.Context, secs float64, outcome, scope string)                      // magus.sandbox.apply.duration
-	RecordSandboxRules(ctx context.Context, read, write, exec, envExact, envGlob int64, scope string) // magus.sandbox.rules + magus.sandbox.env.rules
-	RecordSandboxCheck(ctx context.Context, access, decision, project string)                         // magus.sandbox.checks
-	RecordSandboxEnvDropped(ctx context.Context, project string, n int64)                             // magus.sandbox.env.dropped
+	RecordSandboxApply(ctx context.Context, secs float64, outcome, scope string) // magus.sandbox.apply.duration
+	RecordSandboxRules(ctx context.Context, r SandboxRules)                      // magus.sandbox.rules + magus.sandbox.env.rules
+	RecordSandboxCheck(ctx context.Context, access, decision, project string)    // magus.sandbox.checks
+	RecordSandboxEnvDropped(ctx context.Context, project string, n int64)        // magus.sandbox.env.dropped
 
 	// Buzz language families: magus.buzz.*.
 	RecordBuzzExec(ctx context.Context, secs float64, mode, outcome string)          // magus.buzz.exec.duration
@@ -117,6 +117,19 @@ type MCPCall struct {
 	InputBytes  int64
 	OutputBytes int64
 	Duration    float64
+}
+
+// SandboxRules describes the allow-rules one sandbox was built from, for the
+// magus.sandbox.rules and magus.sandbox.env.rules families. Read/Write/Exec count filesystem
+// access rules by permission; EnvExact/EnvGlob count environment allow-rules by match kind;
+// Scope is the sandbox scope attribute (e.g. "workspace" or "target").
+type SandboxRules struct {
+	Read     int64
+	Write    int64
+	Exec     int64
+	EnvExact int64
+	EnvGlob  int64
+	Scope    string
 }
 
 // BuzzHostCall describes one native-boundary call from Buzz into a host callable, for the

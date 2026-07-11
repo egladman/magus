@@ -187,6 +187,17 @@ func TestLooksLikeRef(t *testing.T) {
 	}
 }
 
+// TestIsMintedRef pins the exact-length ref shape used to scan free text: only ref + exactly
+// refHexLen hex is accepted, so prefixes and coincidentally-hex words are rejected.
+func TestIsMintedRef(t *testing.T) {
+	for _, s := range []string{"ref1a2b3c4d", "refdeadbeef"} {
+		assert.True(t, IsMintedRef(s), "%q should be a minted ref", s)
+	}
+	for _, s := range []string{"reface", "refed", "ref1a2b3c", "refa", "ref", "refactor", "ref1a2b3c4d5", ""} {
+		assert.False(t, IsMintedRef(s), "%q must NOT be a minted ref", s)
+	}
+}
+
 // TestRunPersistsOutputRef drives the real Run path and confirms captured output is
 // persisted as records - and reconstructed by ref - for a passing miss and a failure.
 func TestRunPersistsOutputRef(t *testing.T) {

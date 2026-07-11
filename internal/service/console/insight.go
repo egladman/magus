@@ -39,7 +39,7 @@ func (s *Service) Insight(ctx context.Context) (types.InsightView, error) {
 	if err != nil {
 		return types.InsightView{}, err
 	}
-	report, err := s.Volatility(ctx)
+	report, err := s.volatility(ctx)
 	if err != nil {
 		return types.InsightView{}, err
 	}
@@ -95,13 +95,13 @@ func (s *Service) computeInsight(ctx context.Context) (types.InsightView, error)
 	return types.InsightView{Hotspots: hot, Affinity: aff, Ownership: own, Trend: tr}, nil
 }
 
-// Volatility reports per-(project, target) volatility read from the shared runtime-history file
+// volatility reports per-(project, target) volatility read from the shared runtime-history file
 // (config.HistoryPath). It is a pure file read plus the Wilson-score compute via the shared
 // volatility.BuildReport: no shell-out, no workspace graph, so it works even when the service
 // holds no Magus. A missing or unset history file yields an empty report carrying just the
-// configured threshold. It is an internal method now - Insight folds it into InsightView rather
-// than a standalone HTTP route - and is kept exported so the MCP surface can read it directly.
-func (s *Service) Volatility(ctx context.Context) (types.VolatilityReport, error) {
+// configured threshold. Insight folds it into InsightView rather than exposing a standalone
+// route; the MCP/CLI path reads magus.Magus.Volatility, not this.
+func (s *Service) volatility(ctx context.Context) (types.VolatilityReport, error) {
 	return volatility.BuildReport(ctx, s.config.HistoryPath, s.volatilityConfig())
 }
 

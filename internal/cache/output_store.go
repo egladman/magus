@@ -370,3 +370,12 @@ var refPattern = regexp.MustCompile("^" + RefPrefix + "[0-9a-f]+$")
 func LooksLikeRef(s string) bool {
 	return refPattern.MatchString(s)
 }
+
+// IsMintedRef reports whether s is a fully-minted reference id: the "ref" prefix followed
+// by exactly refHexLen hex digits. Unlike LooksLikeRef, which accepts any-length hex prefix
+// so `magus query output` can take a git-style short ref, this rejects prefixes. Use it when
+// scanning free text for a chainable ref, so short English words whose tail is coincidentally
+// hex ("reface", "refed") are not mistaken for a ref.
+func IsMintedRef(s string) bool {
+	return len(s) == len(RefPrefix)+refHexLen && refPattern.MatchString(s)
+}

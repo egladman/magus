@@ -33,8 +33,8 @@ func (r *applyRecorder) RecordSandboxApply(_ context.Context, secs float64, outc
 	r.applies = append(r.applies, applyCall{secs, outcome, scope})
 }
 
-func (r *applyRecorder) RecordSandboxRules(_ context.Context, read, write, exec, envExact, envGlob int64, scope string) {
-	r.rules = append(r.rules, rulesCall{read, write, exec, envExact, envGlob, scope})
+func (r *applyRecorder) RecordSandboxRules(_ context.Context, sr observability.SandboxRules) {
+	r.rules = append(r.rules, rulesCall{sr.Read, sr.Write, sr.Exec, sr.EnvExact, sr.EnvGlob, sr.Scope})
 }
 
 func TestRecordApplyDurationAndRules(t *testing.T) {

@@ -271,7 +271,7 @@ func writeVolatilitySection(b *md.Builder, v *types.VolatilityReport) {
 		rows = append(rows, []string{
 			fmt.Sprintf("%.3f", t.Score), checkbox(t.Volatile),
 			strconv.Itoa(t.Pass), strconv.Itoa(t.Fail), strconv.Itoa(t.VolatileCount),
-			strconv.Itoa(t.Samples), md.Code(t.Project+":"+t.Target),
+			strconv.Itoa(t.Samples), md.Code(t.Project + ":" + t.Target),
 		})
 	}
 	b.Table([]string{"Score", "Volatile", "Pass", "Fail", "Volatile runs", "Samples", "Target"},

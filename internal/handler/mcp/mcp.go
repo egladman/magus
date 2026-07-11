@@ -243,7 +243,7 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 		audit.record(ev)
 		if tel != nil {
 			// INPUT = the serialized tool arguments (same bytes the audit record
-			// carries); OUTPUT = the total length of the result's text blocks.
+			// carries); OUTPUT = the total byte length of the result's text blocks.
 			// Attribute by tool + outcome only to keep cardinality bounded.
 			tel.RecordMCPCall(ctx, observability.MCPCall{
 				Tool:        toolName,
@@ -257,7 +257,7 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 	}
 }
 
-// sumTextBytes totals the character length of every text block in a tool
+// sumTextBytes totals the byte length (len) of every text block in a tool
 // result. A nil result (the transport-error path) contributes zero; non-text
 // content blocks are ignored.
 func sumTextBytes(result *mcplib.CallToolResult) int64 {

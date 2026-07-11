@@ -54,7 +54,7 @@ func TestServiceVolatility(t *testing.T) {
 	}
 	svc := NewService(nil, volatilityConfigFixture(writeHistory(t, hist)), types.StatusBase{}, "1.0.0")
 
-	report, err := svc.Volatility(context.Background())
+	report, err := svc.volatility(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 0.01, report.Threshold)
 	require.Len(t, report.Targets, 2)
@@ -76,7 +76,7 @@ func TestServiceVolatility(t *testing.T) {
 
 func TestServiceVolatilityNoHistoryPath(t *testing.T) {
 	svc := NewService(nil, config.Config{Volatility: config.Volatility{Threshold: 0.2}}, types.StatusBase{}, "1.0.0")
-	report, err := svc.Volatility(context.Background())
+	report, err := svc.volatility(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 0.2, report.Threshold)
 	assert.Empty(t, report.Targets, "no history path yields an empty target list, not an error")

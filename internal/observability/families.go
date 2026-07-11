@@ -107,19 +107,19 @@ func (p *otelProvider) RecordSandboxApply(ctx context.Context, secs float64, out
 	))
 }
 
-func (p *otelProvider) RecordSandboxRules(ctx context.Context, read, write, exec, envExact, envGlob int64, scope string) {
+func (p *otelProvider) RecordSandboxRules(ctx context.Context, r SandboxRules) {
 	add := func(access string, n int64) {
 		if n == 0 {
 			return
 		}
 		p.sandbox.rules.Add(ctx, n, metric.WithAttributes(
 			attribute.String("access", access),
-			attribute.String("scope", scope),
+			attribute.String("scope", r.Scope),
 		))
 	}
-	add("read", read)
-	add("write", write)
-	add("exec", exec)
+	add("read", r.Read)
+	add("write", r.Write)
+	add("exec", r.Exec)
 
 	addEnv := func(kind string, n int64) {
 		if n == 0 {
@@ -127,8 +127,8 @@ func (p *otelProvider) RecordSandboxRules(ctx context.Context, read, write, exec
 		}
 		p.sandbox.envRules.Add(ctx, n, metric.WithAttributes(attribute.String("kind", kind)))
 	}
-	addEnv("exact", envExact)
-	addEnv("glob", envGlob)
+	addEnv("exact", r.EnvExact)
+	addEnv("glob", r.EnvGlob)
 }
 
 func (p *otelProvider) RecordSandboxCheck(ctx context.Context, access, decision, project string) {
@@ -177,7 +177,7 @@ func newBuzzInstruments(m metric.Meter) (buzzInstruments, error) {
 		importDuration:      r.f64h("magus.buzz.import.duration", "Wall-clock duration of resolving a Buzz import, in seconds.", "s"),
 		spellResolve:        r.f64h("magus.buzz.spell.resolve.duration", "Wall-clock duration of resolving a spell, in seconds.", "s"),
 		spellBuiltinsWarm:   r.f64h("magus.buzz.spell.builtins.warm", "Wall-clock duration of warming a spell's builtins, in seconds.", "s"),
-		spellBuiltinsCount:  r.i64c("magus.buzz.spell.builtins.warm", "Number of spell builtin warms.", "{spell}"),
+		spellBuiltinsCount:  r.i64c("magus.buzz.spell.builtins.count", "Number of spell builtin warms.", "{spell}"),
 		jitRuns:             r.i64c("magus.buzz.jit.runs", "Number of JIT-compiled entry executions.", "{entry}"),
 		vmFaults:            r.i64c("magus.buzz.vm.faults", "Number of Buzz VM faults.", "{fault}"),
 	}

@@ -89,9 +89,9 @@ type CacheStatus struct {
 
 // StatusOutput is the public shape of the live concurrency pool reported by `magus status`.
 type StatusOutput struct {
-	ParentPID     int               `json:"parent_pid" yaml:"parent_pid"`
-	DaemonVersion string            `json:"daemon_version,omitempty" yaml:"daemon_version,omitempty"`
-	Mode          string            `json:"mode,omitempty" yaml:"mode,omitempty"` // "daemon", "proc", or ""
+	ParentPID      int                   `json:"parent_pid" yaml:"parent_pid"`
+	DaemonVersion  string                `json:"daemon_version,omitempty" yaml:"daemon_version,omitempty"`
+	Mode           string                `json:"mode,omitempty" yaml:"mode,omitempty"` // "daemon", "proc", or ""
 	Capacity       int                   `json:"capacity" yaml:"capacity"`
 	Running        int                   `json:"running" yaml:"running"`
 	Queued         int                   `json:"queued" yaml:"queued"`

@@ -78,6 +78,10 @@ func score(s forecast.Stats, cfg Config) float64 {
 	if total < cfg.MinSamples {
 		return 0
 	}
+	if total == 0 {
+		// With MinSamples==0 the guard above lets an empty history through; avoid a 0/0 NaN.
+		return 0
+	}
 	p := float64(s.VolatileCount) / float64(total)
 	n := float64(total)
 	const z = 1.96
@@ -248,6 +252,7 @@ func (rt *Runtime) stats(projectPath, target string) forecast.Stats {
 	return targets[target]
 }
 
+// Stats returns the recorded Stats for (projectPath, target), or the zero Stats when unknown.
 func (rt *Runtime) Stats(projectPath, target string) forecast.Stats {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()

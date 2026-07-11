@@ -118,7 +118,7 @@ func (r *recorder) RecordMCPCall(_ context.Context, _ MCPCall) {}
 
 func (r *recorder) RecordSandboxApply(_ context.Context, _ float64, _, _ string) {}
 
-func (r *recorder) RecordSandboxRules(_ context.Context, _, _, _, _, _ int64, _ string) {}
+func (r *recorder) RecordSandboxRules(_ context.Context, _ SandboxRules) {}
 
 func (r *recorder) RecordSandboxCheck(_ context.Context, _, _, _ string) {}
 

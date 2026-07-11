@@ -156,6 +156,12 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 			exec++
 		}
 	}
-	prov.RecordSandboxRules(ctx, read, write, exec,
-		int64(len(policy.Env.Allow)), int64(len(policy.Env.Globs)), scope)
+	prov.RecordSandboxRules(ctx, observability.SandboxRules{
+		Read:     read,
+		Write:    write,
+		Exec:     exec,
+		EnvExact: int64(len(policy.Env.Allow)),
+		EnvGlob:  int64(len(policy.Env.Globs)),
+		Scope:    scope,
+	})
 }
