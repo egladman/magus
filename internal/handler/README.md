@@ -21,7 +21,7 @@ trivially correlated:
 When you add a new wire contract `proto/magus/foo/v1`, its mapping goes in a new
 `internal/handler/foo` package - same name, no exceptions for the wire packages.
 
-Each browser-bridge handler is an `http.Handler` receiver type holding a NARROW
+Each console handler is an `http.Handler` receiver type holding a NARROW
 consumer interface (e.g. `graphSource`, `statusSource`) that is satisfied by the
 pure-logic `internal/service/console` service. The service returns DOMAIN values; the
 handler owns the wire encoding.

@@ -141,6 +141,9 @@ export class DashboardTransport {
       queued: view.pool.queued,
       cacheHits: view.cache.hits,
       cacheMisses: view.cache.misses,
+      // The status pool tallies are a DIFFERENT counter baseline than the metrics
+      // Backfill's OTel counter; tag it so cacheRate skips the crossover diff.
+      cacheSrc: "status",
     });
     this.store.set({ status: view, samples: this.samples });
   }

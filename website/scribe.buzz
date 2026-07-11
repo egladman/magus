@@ -1494,7 +1494,7 @@ final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.
 //     CORS-enabled address (e.g. a raw GitHub link): a third-party #src= now
 //     fails at the browser CSP layer rather than being fetched. Both loaders
 //     already handle a fetch failure gracefully (a status message, not a
-//     crash) - see docs/browser-bridge.md's "Verify it yourself" section.
+//     crash) - see docs/console.md's "Verify it yourself" section.
 //   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, or
 //     <iframe> anywhere on the site.
 //   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
@@ -3360,7 +3360,7 @@ fun pruneStaleOutputs(site: Site) > void {
 // writeSiteManifest emits gen/site-manifest.sha256: one "<sha256>  <path>\n"
 // line (standard sha256sum(1) format, so `sha256sum -c` or a spot-check
 // `curl -s <asset-url> | sha256sum` verifies it directly - see
-// docs/browser-bridge.md's "Verify it yourself" section) per file actually
+// docs/console.md's "Verify it yourself" section) per file actually
 // shipped under gen/, repo-relative, sorted. Reuses fileSha256 - the same
 // per-file digest writeServiceWorker already computes for its cache-version
 // stamp, just surfaced for every asset instead of folded into one internal

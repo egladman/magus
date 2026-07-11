@@ -171,19 +171,31 @@ export async function fetchSSE(
       const { value, done } = await reader.read();
       if (done) { onError(new Error("stream ended")); return; }
       buf += value;
-      let boundary: number;
-      while ((boundary = buf.indexOf("\n\n")) >= 0) {
+      // A frame ends at the first blank line, spelled either "\n\n" (magus's
+      // framing) or "\r\n\r\n" (CRLF framing). Split on whichever boundary comes
+      // first so both are honored regardless of the producer's line endings.
+      while (true) {
+        const lf = buf.indexOf("\n\n");
+        const crlf = buf.indexOf("\r\n\r\n");
+        let boundary: number, sep: number;
+        if (crlf >= 0 && (lf < 0 || crlf < lf)) { boundary = crlf; sep = 4; }
+        else if (lf >= 0) { boundary = lf; sep = 2; }
+        else break;
         const chunk = buf.slice(0, boundary);
-        buf = buf.slice(boundary + 2);
+        buf = buf.slice(boundary + sep);
         if (!chunk.trim()) continue;
-        let eventType = "message", data = "";
-        for (const line of chunk.split("\n")) {
+        let eventType = "message";
+        const dataLines: string[] = [];
+        for (const line of chunk.split(/\r?\n/)) {
           // Tolerate both "event: status" (SSE convention, space after colon) and
           // "event:status" (no space): the SSE field parse only requires the colon.
           if (line.startsWith("event:")) eventType = line.slice(6).replace(/^ /, "").trim();
-          else if (line.startsWith("data:")) data = line.slice(5).replace(/^ /, "").trim();
+          // Per the SSE spec an event may carry multiple "data:" lines; collect
+          // them all and join with "\n" (a single frame yields the same string as
+          // before). Strip one leading space per line, no more.
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
         }
-        onEvent(eventType, data);
+        onEvent(eventType, dataLines.join("\n"));
       }
     }
   } catch (e) {

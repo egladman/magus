@@ -152,7 +152,17 @@ export function ganttTile(): Tile {
   function render(): void {
     const now = Date.now();
     const t0 = now - WINDOW_MS;
-    const nTargets = runs.reduce((n, r) => n + r.targets.length, 0);
+    // Window the runs: drop any target whose span is entirely before the visible
+    // window (a terminal bar that finished more than WINDOW_MS ago), and any run
+    // left with no visible targets. Otherwise stale terminal bars clamp to
+    // MIN_BAR_W stubs and pile up against the left gutter forever.
+    const visibleRuns = runs
+      .map((r) => ({ ...r, targets: r.targets.filter((t) => {
+        const span = barSpan(t, now);
+        return !span || span.e >= t0;
+      }) }))
+      .filter((r) => r.targets.length > 0);
+    const nTargets = visibleRuns.reduce((n, r) => n + r.targets.length, 0);
     empty.hidden = nTargets > 0;
     if (nTargets === 0) {
       wrap.replaceChildren();
@@ -160,7 +170,7 @@ export function ganttTile(): Tile {
       return;
     }
 
-    const totalH = AXIS_H + runs.reduce((n, r) => n + RUN_H + r.targets.length * ROW_H, 0) + 4;
+    const totalH = AXIS_H + visibleRuns.reduce((n, r) => n + RUN_H + r.targets.length * ROW_H, 0) + 4;
     const root = svg("svg");
     root.setAttribute("viewBox", "0 0 " + VIEW_W + " " + totalH);
     root.setAttribute("class", "gantt-svg");
@@ -172,7 +182,7 @@ export function ganttTile(): Tile {
 
     let y = AXIS_H;
     let running = 0;
-    for (const run of runs) {
+    for (const run of visibleRuns) {
       const head = svg("text");
       head.setAttribute("x", "2");
       head.setAttribute("y", String(y + 12));
@@ -198,7 +208,7 @@ export function ganttTile(): Tile {
     }
 
     wrap.replaceChildren(root);
-    card.setNote(runs.length + (runs.length === 1 ? " run" : " runs") + ", " + running + " running");
+    card.setNote(visibleRuns.length + (visibleRuns.length === 1 ? " run" : " runs") + ", " + running + " running");
   }
 
   // A light 1s ticker advances the running bars and rolls the window forward even when

@@ -333,6 +333,16 @@ export function mapSnapshot(snap: Snapshot): MetricsView {
 // One unified Sample shape fed from two sources: the metrics Backfill (history)
 // and a live synthesis per status frame. Counters are cumulative; the cache-rate
 // chart diffs adjacent samples for a per-interval rate.
+//
+// The cache tallies do NOT share a baseline across those two sources: the metrics
+// Backfill carries the global monotonic OTel counter (magus.cache.hits), while the
+// live status synthesis carries the sum of the currently-warm workspaces' cache
+// counters. `cacheSrc` records which one so the cache-rate chart can refuse to diff
+// across the crossover (a mismatched-baseline diff shows a spurious gap or spike);
+// occupancy (running/capacity/queued) comes from the same StatusReport in both, so
+// it needs no such tag.
+
+export type CacheSrc = "metrics" | "status";
 
 export interface SampleView {
   at: number;        // ms
@@ -341,6 +351,7 @@ export interface SampleView {
   queued: number;
   cacheHits: number;
   cacheMisses: number;
+  cacheSrc: CacheSrc; // baseline source of cacheHits/cacheMisses
 }
 
 export function mapSample(s: ProtoSample): SampleView {
@@ -351,6 +362,7 @@ export function mapSample(s: ProtoSample): SampleView {
     queued: s.queued,
     cacheHits: Number(s.cacheHits),
     cacheMisses: Number(s.cacheMisses),
+    cacheSrc: "metrics",
   };
 }
 

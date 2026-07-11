@@ -1,23 +1,24 @@
 ---
-title: Browser bridge
+title: Console
 description: Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.
-tags: [bridge, graph, privacy]
+tags: [console, graph, privacy]
+aliases: [browser-bridge]
 ---
 
-# Browser bridge
+# Console
 
-The browser bridge is three frozen, read-only GET routes that the magus daemon
+The console is three frozen, read-only GET routes that the magus daemon
 exposes over loopback so the hosted [Graph Explorer](https://eli.gladman.cc/magus/graph/)
 can display your current workspace.
 
-**Nothing in the browser can make the daemon do anything.** The bridge has no
+**Nothing in the browser can make the daemon do anything.** The console has no
 write surface, no POST routes, and no way to trigger a build, run a target, or
 change configuration. This is a design decision, not just a security posture
 (see section 0.3 of the PWA plan).
 
-## What the bridge serves
+## What the console serves
 
-Every byte the bridge can emit, enumerated:
+Every byte the console can emit, enumerated:
 
 | Route                              | Content                                                             |
 | ---------------------------------- | ------------------------------------------------------------------- |
@@ -28,7 +29,7 @@ Every byte the bridge can emit, enumerated:
 | `GET /api/v1/status`               | Daemon pool state (same as `magus status -o json`)                  |
 | `GET /api/v1/events`               | SSE stream: `event: graph` when the workspace graph changes         |
 
-No other routes exist. The bridge mounts at `/api/v1/` on the same port as the
+No other routes exist. The console mounts at `/api/v1/` on the same port as the
 MCP server (`127.0.0.1:7391` by default).
 
 **Error bodies.** When a route fails (5xx), the response body contains
@@ -48,9 +49,9 @@ serialization). This is a known limitation; memoization per variant is deferred.
 
 ## How it is secured
 
-**Loopback only.** The bridge refuses to mount on any non-loopback bind
+**Loopback only.** The console refuses to mount on any non-loopback bind
 address. If you set `mcp.address` to a non-loopback IP (for k8s or LAN use),
-the bridge logs a warning and does not register its routes.
+the console logs a warning and does not register its routes.
 
 **Bearer token.** Every request must carry `Authorization: Bearer <token>`.
 The token is the same one the MCP server uses. Retrieve it with:
@@ -61,7 +62,7 @@ magus config mcp token print
 
 The token is stored on disk (`~/.config/magus/mcp-token`) and never logged.
 
-**DNS-rebind guard.** The bridge shares the MCP server's host-header check.
+**DNS-rebind guard.** The console shares the MCP server's host-header check.
 A request whose `Host` header does not resolve to the loopback range is
 rejected with 403 before the bearer token is examined.
 
@@ -76,7 +77,7 @@ cross-origin request before any data is read.
 
 **Chrome Private Network Access.** When Chrome sends the
 `Access-Control-Request-Private-Network: true` preflight header (Private
-Network Access spec), the bridge replies with
+Network Access spec), the console replies with
 `Access-Control-Allow-Private-Network: true`. Without this, Chrome 94+ blocks
 requests from an HTTPS page to a loopback address. Expect a one-time
 permission prompt in Chrome when you first connect the explorer.
@@ -84,14 +85,14 @@ permission prompt in Chrome when you first connect the explorer.
 ## Safari limitation
 
 Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed
-content). The bridge will not work in Safari's live mode. Use
+content). The console will not work in Safari's live mode. Use
 `magus graph open --serve` instead, which runs an ephemeral loopback server
 with a matching same-origin response and opens the graph via a `#src=` fragment
 that is served directly.
 
 ## Kill switch
 
-Disable the bridge in `magus.yaml`:
+Disable the console in `magus.yaml`:
 
 ```yaml
 bridge:
@@ -100,12 +101,12 @@ bridge:
 
 Or via environment variable: `MAGUS_BRIDGE_ENABLED=false`.
 
-The bridge only exists when the daemon binary is compiled with `-tags mcp`.
-A binary built without that tag has no bridge and no `/api/v1/` routes.
+The console only exists when the daemon binary is compiled with `-tags mcp`.
+A binary built without that tag has no console and no `/api/v1/` routes.
 
 ## Privacy statement
 
-The bridge serves your workspace graph over loopback. It does not:
+The console serves your workspace graph over loopback. It does not:
 
 - Send data to any external service
 - Log request payloads
@@ -120,7 +121,7 @@ log in the address bar).
 
 ## `magus doctor` check
 
-`magus doctor` reports bridge reachability when the daemon is running:
+`magus doctor` reports console reachability when the daemon is running:
 
 ```
 [pass] console: reachable at http://127.0.0.1:7391/api/v1/graph
@@ -128,7 +129,7 @@ log in the address bar).
 ```
 
 When the daemon is not running, the check is skipped (not a failure).
-When `bridge.enabled: false` is set, the check reports that the bridge is
+When `bridge.enabled: false` is set, the check reports that the console is
 disabled.
 
 ## Live mode pairing
@@ -327,4 +328,4 @@ If your threat model excludes our hosting altogether: clone the repo, run
 network. Every page here is origin-agnostic and works identically. (magus
 ships no general-purpose static file server for hosting this site; the only
 servers it binds are the ephemeral loopback `--serve` graph server and the
-read-only loopback daemon bridge documented above.)
+read-only loopback daemon console documented above.)

@@ -25,7 +25,7 @@ import { select } from "d3-selection";
 // be copy-pasted into all three tool pages; they now live in one audited module.
 // (The ConnectRPC transport this module also exports is tree-shaken out here - the
 // graph explorer only uses these four primitives.)
-import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE } from "./lib/daemon";
+import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, authHeaders, isRemembered, setRemembered } from "./lib/daemon";
 
 // The node kinds the graph can emit. Each gets a stable legend color via a CSS
 // custom property (--gk-<kind>) defined for both themes in graph.css, so the
@@ -2528,7 +2528,7 @@ function liveApplyGraphUpdate(data) {
 async function liveRefetchGraph() {
   if (!liveHost || !liveToken) return;
   const url = "http://" + liveHost + "/api/v1/graph" + liveGraphQuery;
-  const headers = { Authorization: "Bearer " + liveToken };
+  const headers = authHeaders(liveToken);
   if (liveETag) headers["If-None-Match"] = liveETag;
   let resp;
   try {
@@ -2551,7 +2551,7 @@ function liveConnect() {
   clearTimeout(liveReconnectTimer); // a fresh connect attempt supersedes any pending reconnect
   liveReconnectTimer = null;
   const url = "http://" + liveHost + "/api/v1/events";
-  const headers = { Authorization: "Bearer " + liveToken };
+  const headers = authHeaders(liveToken);
 
   fetchSSE(url, headers, (eventType) => {
     if (eventType === "graph") {
@@ -2630,7 +2630,7 @@ async function fetchLiveStatus() {
   if (!liveHost || !liveToken) return;
   try {
     const resp = await fetch("http://" + liveHost + "/api/v1/status", {
-      headers: { Authorization: "Bearer " + liveToken }
+      headers: authHeaders(liveToken)
     });
     if (!resp.ok) return;
     const status = await resp.json();
@@ -3088,15 +3088,9 @@ function bootWireEvents() {
   // Phase 9: wire the live-mode "Remember this workspace" checkbox.
   const rememberCb = el("live-remember-cb");
   if (rememberCb) {
-    rememberCb.checked = localStorage.getItem("magus-live-remember") === "1";
+    rememberCb.checked = isRemembered();
     rememberCb.addEventListener("change", () => {
-      if (rememberCb.checked) {
-        localStorage.setItem("magus-live-remember", "1");
-        if (liveToken) localStorage.setItem("magus-live-token", liveToken);
-      } else {
-        localStorage.removeItem("magus-live-remember");
-        localStorage.removeItem("magus-live-token");
-      }
+      setRemembered(rememberCb.checked);
     });
   }
   // Show the remember row when in live mode.
@@ -3139,7 +3133,7 @@ async function bootLive() {
   try {
     const skeletonUrl = "http://" + liveHost + "/api/v1/graph?level=projects";
     const skeletonResp = await fetch(skeletonUrl, {
-      headers: { Authorization: "Bearer " + liveToken }
+      headers: authHeaders(liveToken)
     });
     if (!skeletonResp.ok) throw new Error("HTTP " + skeletonResp.status);
     liveETag = skeletonResp.headers.get("ETag") || null;
@@ -3165,7 +3159,7 @@ async function bootLive() {
     if (nodeCount < 20000) {
       const fullQuery = liveFlavor === "targets" ? "?flavor=targets" : "";
       const fullUrl = "http://" + liveHost + "/api/v1/graph" + fullQuery;
-      const fullResp = await fetch(fullUrl, { headers: { Authorization: "Bearer " + liveToken } });
+      const fullResp = await fetch(fullUrl, { headers: authHeaders(liveToken) });
       if (fullResp.ok) {
         liveETag = fullResp.headers.get("ETag") || null;
         liveGraphQuery = fullQuery;
