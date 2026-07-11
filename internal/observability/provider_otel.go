@@ -151,13 +151,21 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("observability: pool.wait.duration histogram: %w", err)
 	}
-	poolInflight, err := meter.Int64UpDownCounter(
-		"magus.pool.slots.inflight",
+	poolInUse, err := meter.Int64UpDownCounter(
+		"magus.pool.slots.in_use",
 		metric.WithDescription("Number of concurrency slots currently in use."),
 		metric.WithUnit("{slot}"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("observability: pool.slots.inflight counter: %w", err)
+		return nil, fmt.Errorf("observability: pool.slots.in_use counter: %w", err)
+	}
+	poolWaiting, err := meter.Int64UpDownCounter(
+		"magus.pool.slots.waiting",
+		metric.WithDescription("Number of callers currently waiting to acquire a concurrency slot."),
+		metric.WithUnit("{slot}"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("observability: pool.slots.waiting counter: %w", err)
 	}
 
 	// Remote cache backend (S3, GitHub Actions, ...). These mirror the local
@@ -205,6 +213,30 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("observability: cache.remote.io.size histogram: %w", err)
 	}
+	// A successful put reports outcome "stored" (see remote.go); it is neither a hit nor a
+	// miss, so it needs its own tally. Without this counter a put's outcome vanishes from the
+	// OTLP export even though its duration and bytes were recorded.
+	remoteStores, err := meter.Int64Counter(
+		"magus.cache.remote.stores",
+		metric.WithDescription("Number of remote cache puts that stored an entry."),
+		metric.WithUnit("{call}"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("observability: cache.remote.stores counter: %w", err)
+	}
+
+	mcp, err := newMCPInstruments(meter)
+	if err != nil {
+		return nil, err
+	}
+	sandbox, err := newSandboxInstruments(meter)
+	if err != nil {
+		return nil, err
+	}
+	buzz, err := newBuzzInstruments(meter)
+	if err != nil {
+		return nil, err
+	}
 
 	return &otelProvider{
 		mp:              mp,
@@ -222,12 +254,17 @@ func New(ctx context.Context, cfg Config) (Provider, error) {
 		targetRuns:      targetRuns,
 		targetDur:       targetDur,
 		poolWait:        poolWait,
-		poolInflight:    poolInflight,
+		poolInUse:       poolInUse,
+		poolWaiting:     poolWaiting,
 		remoteHits:      remoteHits,
 		remoteMisses:    remoteMisses,
 		remoteErrs:      remoteErrs,
 		remoteDur:       remoteDur,
 		remoteBytes:     remoteBytes,
+		remoteStores:    remoteStores,
+		mcp:             mcp,
+		sandbox:         sandbox,
+		buzz:            buzz,
 	}, nil
 }
 
@@ -249,12 +286,18 @@ type otelProvider struct {
 	targetRuns      metric.Int64Counter
 	targetDur       metric.Float64Histogram
 	poolWait        metric.Float64Histogram
-	poolInflight    metric.Int64UpDownCounter
+	poolInUse       metric.Int64UpDownCounter
+	poolWaiting     metric.Int64UpDownCounter
 	remoteHits      metric.Int64Counter
 	remoteMisses    metric.Int64Counter
 	remoteErrs      metric.Int64Counter
 	remoteDur       metric.Float64Histogram
 	remoteBytes     metric.Int64Histogram
+	remoteStores    metric.Int64Counter
+
+	mcp     mcpInstruments
+	sandbox sandboxInstruments
+	buzz    buzzInstruments
 }
 
 func (*otelProvider) Enabled() bool { return true }
@@ -310,6 +353,8 @@ func (p *otelProvider) RecordRemoteOp(ctx context.Context, op RemoteOp) {
 		p.remoteHits.Add(ctx, 1, kv)
 	case "miss":
 		p.remoteMisses.Add(ctx, 1, kv)
+	case "stored":
+		p.remoteStores.Add(ctx, 1, kv)
 	case "error":
 		p.remoteErrs.Add(ctx, 1, kv)
 	}
@@ -327,11 +372,15 @@ func (p *otelProvider) RecordTargetRun(ctx context.Context, secs float64, attrs 
 
 func (p *otelProvider) RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64) {
 	p.poolWait.Record(ctx, waitSecs)
-	p.poolInflight.Add(ctx, n)
+	p.poolInUse.Add(ctx, n)
 }
 
 func (p *otelProvider) RecordPoolRelease(ctx context.Context, n int64) {
-	p.poolInflight.Add(ctx, -n)
+	p.poolInUse.Add(ctx, -n)
+}
+
+func (p *otelProvider) RecordPoolWaiting(ctx context.Context, delta int64) {
+	p.poolWaiting.Add(ctx, delta)
 }
 
 func (p *otelProvider) Shutdown(ctx context.Context) error {
@@ -366,11 +415,29 @@ func (disabledProvider) RecordRemoteOp(_ context.Context, _ RemoteOp)           
 func (disabledProvider) StartSpan(ctx context.Context, _ string, _ ...Attr) (context.Context, func(error)) {
 	return ctx, func(error) {}
 }
-func (disabledProvider) RecordTargetRun(_ context.Context, _ float64, _ ...Attr) {}
-func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64) {}
-func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)            {}
-func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)              { return nil, nil }
-func (disabledProvider) Shutdown(_ context.Context) error                        { return nil }
+func (disabledProvider) RecordTargetRun(_ context.Context, _ float64, _ ...Attr)             {}
+func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64)             {}
+func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)                        {}
+func (disabledProvider) RecordPoolWaiting(_ context.Context, _ int64)                        {}
+func (disabledProvider) RecordMCPCall(_ context.Context, _ MCPCall)                          {}
+func (disabledProvider) RecordSandboxApply(_ context.Context, _ float64, _, _ string)        {}
+func (disabledProvider) RecordSandboxRules(_ context.Context, _, _, _, _, _ int64, _ string) {}
+func (disabledProvider) RecordSandboxCheck(_ context.Context, _, _, _ string)                {}
+func (disabledProvider) RecordSandboxEnvDropped(_ context.Context, _ string, _ int64)        {}
+func (disabledProvider) RecordBuzzExec(_ context.Context, _ float64, _, _ string)            {}
+func (disabledProvider) RecordBuzzCompile(_ context.Context, _ float64, _, _ string)         {}
+func (disabledProvider) RecordBuzzHostCall(_ context.Context, _ BuzzHostCall)                {}
+func (disabledProvider) RecordBuzzSessionReuse(_ context.Context, _ string)                  {}
+func (disabledProvider) RecordBuzzSessionIdle(_ context.Context, _ int64)                    {}
+func (disabledProvider) RecordBuzzSessionEviction(_ context.Context, _ string)               {}
+func (disabledProvider) RecordBuzzSessionWarm(_ context.Context, _ float64, _ string)        {}
+func (disabledProvider) RecordBuzzImport(_ context.Context, _ float64, _, _ string)          {}
+func (disabledProvider) RecordBuzzSpellResolve(_ context.Context, _ float64, _, _ string)    {}
+func (disabledProvider) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string)  {}
+func (disabledProvider) RecordBuzzJITRun(_ context.Context)                                  {}
+func (disabledProvider) RecordBuzzVMFault(_ context.Context, _ string)                       {}
+func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)                          { return nil, nil }
+func (disabledProvider) Shutdown(_ context.Context) error                                    { return nil }
 
 func toKV(attrs []Attr) []attribute.KeyValue {
 	out := make([]attribute.KeyValue, len(attrs))

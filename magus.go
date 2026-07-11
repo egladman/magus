@@ -409,6 +409,9 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		func(n int) {
 			m.tel.RecordPoolRelease(ctx, int64(n))
 		},
+		func(delta int) {
+			m.tel.RecordPoolWaiting(ctx, int64(delta))
+		},
 	)
 	return m, nil
 }

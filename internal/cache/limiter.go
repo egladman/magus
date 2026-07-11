@@ -19,13 +19,20 @@ type Limiter struct {
 
 	onAcquire atomic.Pointer[func(waitNs int64, n int)]
 	onRelease atomic.Pointer[func(n int)]
+	onWait    atomic.Pointer[func(delta int)]
 }
 
 // SetHooks installs optional callbacks fired on every Acquire/Release. Must not block.
 // Stored atomically so a SetHooks racing with concurrent Acquire/Release is safe.
-func (l *Limiter) SetHooks(onAcquire func(waitNs int64, n int), onRelease func(n int)) {
+//
+// onWait mirrors the internal waiting counter exactly: it fires with +n the instant a caller
+// begins waiting for n slots (before the blocking Acquire) and with -n once that Acquire
+// returns, whether it acquired or the context was cancelled. Net inflight of onWait tracks
+// [Limiter.Snapshot]'s Waiting.
+func (l *Limiter) SetHooks(onAcquire func(waitNs int64, n int), onRelease func(n int), onWait func(delta int)) {
 	l.onAcquire.Store(&onAcquire)
 	l.onRelease.Store(&onRelease)
+	l.onWait.Store(&onWait)
 }
 
 // NewLimiter returns a Limiter with capacity n. n <= 0 means unlimited
@@ -62,7 +69,15 @@ func (l *Limiter) AcquireN(ctx context.Context, n int) error {
 		return fmt.Errorf("limiter: acquire %d exceeds capacity %d", n, l.cap)
 	}
 	l.waiting.Add(int64(n))
-	defer l.waiting.Add(-int64(n))
+	if fn := l.onWait.Load(); fn != nil && *fn != nil {
+		(*fn)(n)
+	}
+	defer func() {
+		l.waiting.Add(-int64(n))
+		if fn := l.onWait.Load(); fn != nil && *fn != nil {
+			(*fn)(-n)
+		}
+	}()
 	start := time.Now()
 	if err := l.sem.Acquire(ctx, int64(n)); err != nil {
 		return err

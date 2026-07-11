@@ -63,8 +63,32 @@ type Provider interface {
 	RecordRemoteOp(ctx context.Context, op RemoteOp)                                          // magus.cache.remote.* metrics
 	StartSpan(ctx context.Context, name string, attrs ...Attr) (context.Context, func(error)) // end fn marks failure on non-nil error
 	RecordTargetRun(ctx context.Context, secs float64, attrs ...Attr)                         // magus.target.runs + magus.target.duration
-	RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64)                         // magus.pool.wait.duration + inflight+n
-	RecordPoolRelease(ctx context.Context, n int64)                                           // inflight-n
+	RecordPoolAcquire(ctx context.Context, waitSecs float64, n int64)                         // magus.pool.wait.duration + slots.in_use+n
+	RecordPoolRelease(ctx context.Context, n int64)                                           // slots.in_use-n
+	RecordPoolWaiting(ctx context.Context, delta int64)                                       // magus.pool.slots.waiting += delta
+
+	// MCP tool call family: magus.mcp.tool.*.
+	RecordMCPCall(ctx context.Context, c MCPCall)
+
+	// Filesystem sandbox families: magus.sandbox.*.
+	RecordSandboxApply(ctx context.Context, secs float64, outcome, scope string)                      // magus.sandbox.apply.duration
+	RecordSandboxRules(ctx context.Context, read, write, exec, envExact, envGlob int64, scope string) // magus.sandbox.rules + magus.sandbox.env.rules
+	RecordSandboxCheck(ctx context.Context, access, decision, project string)                         // magus.sandbox.checks
+	RecordSandboxEnvDropped(ctx context.Context, project string, n int64)                             // magus.sandbox.env.dropped
+
+	// Buzz language families: magus.buzz.*.
+	RecordBuzzExec(ctx context.Context, secs float64, mode, outcome string)          // magus.buzz.exec.duration
+	RecordBuzzCompile(ctx context.Context, secs float64, phase, mode string)         // magus.buzz.compile.duration
+	RecordBuzzHostCall(ctx context.Context, c BuzzHostCall)                          // magus.buzz.host.call.{duration,count}
+	RecordBuzzSessionReuse(ctx context.Context, outcome string)                      // magus.buzz.session.pool.reuse
+	RecordBuzzSessionIdle(ctx context.Context, delta int64)                          // magus.buzz.session.pool.idle
+	RecordBuzzSessionEviction(ctx context.Context, source string)                    // magus.buzz.session.pool.evictions
+	RecordBuzzSessionWarm(ctx context.Context, secs float64, source string)          // magus.buzz.session.warm.duration
+	RecordBuzzImport(ctx context.Context, secs float64, kind, outcome string)        // magus.buzz.import.duration
+	RecordBuzzSpellResolve(ctx context.Context, secs float64, spell, builtin string) // magus.buzz.spell.resolve.duration
+	RecordBuzzSpellBuiltinsWarm(ctx context.Context, secs float64, spell string)     // magus.buzz.spell.builtins.warm
+	RecordBuzzJITRun(ctx context.Context)                                            // magus.buzz.jit.runs
+	RecordBuzzVMFault(ctx context.Context, kind string)                              // magus.buzz.vm.faults
 	// Snapshot returns the current metrics as standard OTLP protobuf, or (nil, nil) when this
 	// provider is not collecting locally. OTLP is the export format for real monitoring
 	// backends; it is never put on the dashboard's wire.
@@ -82,6 +106,26 @@ type RemoteOp struct {
 	Outcome  string
 	Duration float64 // wall-clock seconds
 	Bytes    int64
+}
+
+// MCPCall describes one completed MCP tool call for the magus.mcp.tool.* family. Outcome is
+// "success" or "error". InputBytes/OutputBytes are the request/response payload sizes; Duration
+// is wall-clock seconds.
+type MCPCall struct {
+	Tool        string
+	Outcome     string
+	InputBytes  int64
+	OutputBytes int64
+	Duration    float64
+}
+
+// BuzzHostCall describes one native-boundary call from Buzz into a host callable, for the
+// magus.buzz.host.call.* family. Callable names the host function; Outcome is "success" or
+// "error"; Duration is wall-clock seconds.
+type BuzzHostCall struct {
+	Callable string
+	Outcome  string
+	Duration float64
 }
 
 // GraphObserver wraps p as a types.Observer; returns types.NoopObserver{} when p is nil or disabled.

@@ -235,13 +235,20 @@ func (*StreamMetricsResponse_Snapshot) isStreamMetricsResponse_Of() {}
 // Snapshot is the derived-metrics view at one instant: each OTel instrument family
 // aggregated for the dashboard.
 type Snapshot struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CapturedAt    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=captured_at,json=capturedAt,proto3" json:"captured_at,omitempty"`
-	Target        *Latency               `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`                           // magus.target.duration + magus.target.runs
-	CacheOp       *Latency               `protobuf:"bytes,3,opt,name=cache_op,json=cacheOp,proto3" json:"cache_op,omitempty"`          // magus.cache.duration + magus.cache.{hits,misses,errors}
-	PoolWait      *Latency               `protobuf:"bytes,4,opt,name=pool_wait,json=poolWait,proto3" json:"pool_wait,omitempty"`       // magus.pool.wait.duration
-	GraphQuery    *Latency               `protobuf:"bytes,5,opt,name=graph_query,json=graphQuery,proto3" json:"graph_query,omitempty"` // magus.graph.query.duration + magus.graph.queries
-	Remote        *Remote                `protobuf:"bytes,6,opt,name=remote,proto3" json:"remote,omitempty"`                           // magus.cache.remote.*
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	CapturedAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=captured_at,json=capturedAt,proto3" json:"captured_at,omitempty"`
+	Target     *Latency               `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // magus.target.duration + magus.target.runs
+	// cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
+	// Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
+	// this family measures a Cache.Run, not a resolved op.
+	Cache         *Latency       `protobuf:"bytes,3,opt,name=cache,proto3" json:"cache,omitempty"`
+	PoolWait      *Latency       `protobuf:"bytes,4,opt,name=pool_wait,json=poolWait,proto3" json:"pool_wait,omitempty"`          // magus.pool.wait.duration
+	GraphQuery    *Latency       `protobuf:"bytes,5,opt,name=graph_query,json=graphQuery,proto3" json:"graph_query,omitempty"`    // magus.graph.query.duration + magus.graph.queries
+	Remote        *Remote        `protobuf:"bytes,6,opt,name=remote,proto3" json:"remote,omitempty"`                              // magus.cache.remote.*
+	TargetStats   []*TargetStat  `protobuf:"bytes,7,rep,name=target_stats,json=targetStats,proto3" json:"target_stats,omitempty"` // per-target rollup of magus.target.{duration,runs}
+	McpTools      []*MCPToolStat `protobuf:"bytes,8,rep,name=mcp_tools,json=mcpTools,proto3" json:"mcp_tools,omitempty"`          // per-tool rollup of magus.mcp.tool.*
+	Buzz          *Buzz          `protobuf:"bytes,9,opt,name=buzz,proto3" json:"buzz,omitempty"`                                  // magus.buzz.* families
+	Sandbox       *Sandbox       `protobuf:"bytes,10,opt,name=sandbox,proto3" json:"sandbox,omitempty"`                           // magus.sandbox.* filesystem families
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -290,9 +297,9 @@ func (x *Snapshot) GetTarget() *Latency {
 	return nil
 }
 
-func (x *Snapshot) GetCacheOp() *Latency {
+func (x *Snapshot) GetCache() *Latency {
 	if x != nil {
-		return x.CacheOp
+		return x.Cache
 	}
 	return nil
 }
@@ -314,6 +321,34 @@ func (x *Snapshot) GetGraphQuery() *Latency {
 func (x *Snapshot) GetRemote() *Remote {
 	if x != nil {
 		return x.Remote
+	}
+	return nil
+}
+
+func (x *Snapshot) GetTargetStats() []*TargetStat {
+	if x != nil {
+		return x.TargetStats
+	}
+	return nil
+}
+
+func (x *Snapshot) GetMcpTools() []*MCPToolStat {
+	if x != nil {
+		return x.McpTools
+	}
+	return nil
+}
+
+func (x *Snapshot) GetBuzz() *Buzz {
+	if x != nil {
+		return x.Buzz
+	}
+	return nil
+}
+
+func (x *Snapshot) GetSandbox() *Sandbox {
+	if x != nil {
+		return x.Sandbox
 	}
 	return nil
 }
@@ -499,6 +534,575 @@ func (x *Remote) GetBytesTotal() int64 {
 	return 0
 }
 
+// TargetStat is one per-target rollup: how often a (project, target, spell) ran, its latency
+// percentiles, cache hit-rate, and success/error split. Grouped from the magus.target.duration
+// histogram's per-(project,spell,target,outcome,cache.hit) data points.
+type TargetStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`                                   // magus.project attribute
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`                                     // magus.target attribute
+	Spell         string                 `protobuf:"bytes,3,opt,name=spell,proto3" json:"spell,omitempty"`                                       // magus.spell attribute ("" when the project declares none)
+	Count         int64                  `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`                                      // total executions (including cache replays)
+	P50           float64                `protobuf:"fixed64,5,opt,name=p50,proto3" json:"p50,omitempty"`                                         // seconds
+	P95           float64                `protobuf:"fixed64,6,opt,name=p95,proto3" json:"p95,omitempty"`                                         // seconds
+	P99           float64                `protobuf:"fixed64,7,opt,name=p99,proto3" json:"p99,omitempty"`                                         // seconds
+	CacheHitRate  float64                `protobuf:"fixed64,8,opt,name=cache_hit_rate,json=cacheHitRate,proto3" json:"cache_hit_rate,omitempty"` // [0,1]; fraction of runs served from cache
+	Success       int64                  `protobuf:"varint,9,opt,name=success,proto3" json:"success,omitempty"`                                  // runs with outcome=success
+	Errors        int64                  `protobuf:"varint,10,opt,name=errors,proto3" json:"errors,omitempty"`                                   // runs with outcome=error
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TargetStat) Reset() {
+	*x = TargetStat{}
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TargetStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TargetStat) ProtoMessage() {}
+
+func (x *TargetStat) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TargetStat.ProtoReflect.Descriptor instead.
+func (*TargetStat) Descriptor() ([]byte, []int) {
+	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TargetStat) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *TargetStat) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *TargetStat) GetSpell() string {
+	if x != nil {
+		return x.Spell
+	}
+	return ""
+}
+
+func (x *TargetStat) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *TargetStat) GetP50() float64 {
+	if x != nil {
+		return x.P50
+	}
+	return 0
+}
+
+func (x *TargetStat) GetP95() float64 {
+	if x != nil {
+		return x.P95
+	}
+	return 0
+}
+
+func (x *TargetStat) GetP99() float64 {
+	if x != nil {
+		return x.P99
+	}
+	return 0
+}
+
+func (x *TargetStat) GetCacheHitRate() float64 {
+	if x != nil {
+		return x.CacheHitRate
+	}
+	return 0
+}
+
+func (x *TargetStat) GetSuccess() int64 {
+	if x != nil {
+		return x.Success
+	}
+	return 0
+}
+
+func (x *TargetStat) GetErrors() int64 {
+	if x != nil {
+		return x.Errors
+	}
+	return 0
+}
+
+// MCPToolStat is one per-tool rollup of the magus.mcp.tool.* families: call/error tallies,
+// input/output payload sizes, and call duration percentiles.
+type MCPToolStat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tool          string                 `protobuf:"bytes,1,opt,name=tool,proto3" json:"tool,omitempty"`
+	Calls         int64                  `protobuf:"varint,2,opt,name=calls,proto3" json:"calls,omitempty"`
+	Errors        int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
+	InputP50      float64                `protobuf:"fixed64,4,opt,name=input_p50,json=inputP50,proto3" json:"input_p50,omitempty"`           // bytes
+	InputP95      float64                `protobuf:"fixed64,5,opt,name=input_p95,json=inputP95,proto3" json:"input_p95,omitempty"`           // bytes
+	InputTotal    int64                  `protobuf:"varint,6,opt,name=input_total,json=inputTotal,proto3" json:"input_total,omitempty"`      // total input bytes observed
+	OutputP50     float64                `protobuf:"fixed64,7,opt,name=output_p50,json=outputP50,proto3" json:"output_p50,omitempty"`        // bytes
+	OutputP95     float64                `protobuf:"fixed64,8,opt,name=output_p95,json=outputP95,proto3" json:"output_p95,omitempty"`        // bytes
+	OutputTotal   int64                  `protobuf:"varint,9,opt,name=output_total,json=outputTotal,proto3" json:"output_total,omitempty"`   // total output bytes observed
+	DurationP50   float64                `protobuf:"fixed64,10,opt,name=duration_p50,json=durationP50,proto3" json:"duration_p50,omitempty"` // seconds
+	DurationP95   float64                `protobuf:"fixed64,11,opt,name=duration_p95,json=durationP95,proto3" json:"duration_p95,omitempty"` // seconds
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MCPToolStat) Reset() {
+	*x = MCPToolStat{}
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MCPToolStat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MCPToolStat) ProtoMessage() {}
+
+func (x *MCPToolStat) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MCPToolStat.ProtoReflect.Descriptor instead.
+func (*MCPToolStat) Descriptor() ([]byte, []int) {
+	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MCPToolStat) GetTool() string {
+	if x != nil {
+		return x.Tool
+	}
+	return ""
+}
+
+func (x *MCPToolStat) GetCalls() int64 {
+	if x != nil {
+		return x.Calls
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetErrors() int64 {
+	if x != nil {
+		return x.Errors
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetInputP50() float64 {
+	if x != nil {
+		return x.InputP50
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetInputP95() float64 {
+	if x != nil {
+		return x.InputP95
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetInputTotal() int64 {
+	if x != nil {
+		return x.InputTotal
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetOutputP50() float64 {
+	if x != nil {
+		return x.OutputP50
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetOutputP95() float64 {
+	if x != nil {
+		return x.OutputP95
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetOutputTotal() int64 {
+	if x != nil {
+		return x.OutputTotal
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetDurationP50() float64 {
+	if x != nil {
+		return x.DurationP50
+	}
+	return 0
+}
+
+func (x *MCPToolStat) GetDurationP95() float64 {
+	if x != nil {
+		return x.DurationP95
+	}
+	return 0
+}
+
+// Buzz rolls up the magus.buzz.* families: script exec/compile latency, the native-boundary
+// host-call family, session-pool health, import and spell resolution, and VM-level counters.
+type Buzz struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	ExecCount            int64                  `protobuf:"varint,1,opt,name=exec_count,json=execCount,proto3" json:"exec_count,omitempty"`
+	ExecP50              float64                `protobuf:"fixed64,2,opt,name=exec_p50,json=execP50,proto3" json:"exec_p50,omitempty"` // seconds
+	ExecP95              float64                `protobuf:"fixed64,3,opt,name=exec_p95,json=execP95,proto3" json:"exec_p95,omitempty"` // seconds
+	CompileCount         int64                  `protobuf:"varint,4,opt,name=compile_count,json=compileCount,proto3" json:"compile_count,omitempty"`
+	CompileP50           float64                `protobuf:"fixed64,5,opt,name=compile_p50,json=compileP50,proto3" json:"compile_p50,omitempty"` // seconds
+	CompileP95           float64                `protobuf:"fixed64,6,opt,name=compile_p95,json=compileP95,proto3" json:"compile_p95,omitempty"` // seconds
+	HostCallCount        int64                  `protobuf:"varint,7,opt,name=host_call_count,json=hostCallCount,proto3" json:"host_call_count,omitempty"`
+	HostCallP50          float64                `protobuf:"fixed64,8,opt,name=host_call_p50,json=hostCallP50,proto3" json:"host_call_p50,omitempty"`                // seconds
+	HostCallP95          float64                `protobuf:"fixed64,9,opt,name=host_call_p95,json=hostCallP95,proto3" json:"host_call_p95,omitempty"`                // seconds
+	SessionPoolReuse     int64                  `protobuf:"varint,10,opt,name=session_pool_reuse,json=sessionPoolReuse,proto3" json:"session_pool_reuse,omitempty"` // acquires served from an idle session
+	SessionPoolIdle      int64                  `protobuf:"varint,11,opt,name=session_pool_idle,json=sessionPoolIdle,proto3" json:"session_pool_idle,omitempty"`    // current idle sessions (gauge)
+	SessionPoolEvictions int64                  `protobuf:"varint,12,opt,name=session_pool_evictions,json=sessionPoolEvictions,proto3" json:"session_pool_evictions,omitempty"`
+	SessionWarmP50       float64                `protobuf:"fixed64,13,opt,name=session_warm_p50,json=sessionWarmP50,proto3" json:"session_warm_p50,omitempty"` // seconds
+	SessionWarmP95       float64                `protobuf:"fixed64,14,opt,name=session_warm_p95,json=sessionWarmP95,proto3" json:"session_warm_p95,omitempty"` // seconds
+	ImportCount          int64                  `protobuf:"varint,15,opt,name=import_count,json=importCount,proto3" json:"import_count,omitempty"`
+	ImportP50            float64                `protobuf:"fixed64,16,opt,name=import_p50,json=importP50,proto3" json:"import_p50,omitempty"` // seconds
+	ImportP95            float64                `protobuf:"fixed64,17,opt,name=import_p95,json=importP95,proto3" json:"import_p95,omitempty"` // seconds
+	SpellResolveCount    int64                  `protobuf:"varint,18,opt,name=spell_resolve_count,json=spellResolveCount,proto3" json:"spell_resolve_count,omitempty"`
+	SpellResolveP50      float64                `protobuf:"fixed64,19,opt,name=spell_resolve_p50,json=spellResolveP50,proto3" json:"spell_resolve_p50,omitempty"` // seconds
+	SpellResolveP95      float64                `protobuf:"fixed64,20,opt,name=spell_resolve_p95,json=spellResolveP95,proto3" json:"spell_resolve_p95,omitempty"` // seconds
+	JitRuns              int64                  `protobuf:"varint,21,opt,name=jit_runs,json=jitRuns,proto3" json:"jit_runs,omitempty"`
+	VmFaults             int64                  `protobuf:"varint,22,opt,name=vm_faults,json=vmFaults,proto3" json:"vm_faults,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *Buzz) Reset() {
+	*x = Buzz{}
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Buzz) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Buzz) ProtoMessage() {}
+
+func (x *Buzz) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Buzz.ProtoReflect.Descriptor instead.
+func (*Buzz) Descriptor() ([]byte, []int) {
+	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *Buzz) GetExecCount() int64 {
+	if x != nil {
+		return x.ExecCount
+	}
+	return 0
+}
+
+func (x *Buzz) GetExecP50() float64 {
+	if x != nil {
+		return x.ExecP50
+	}
+	return 0
+}
+
+func (x *Buzz) GetExecP95() float64 {
+	if x != nil {
+		return x.ExecP95
+	}
+	return 0
+}
+
+func (x *Buzz) GetCompileCount() int64 {
+	if x != nil {
+		return x.CompileCount
+	}
+	return 0
+}
+
+func (x *Buzz) GetCompileP50() float64 {
+	if x != nil {
+		return x.CompileP50
+	}
+	return 0
+}
+
+func (x *Buzz) GetCompileP95() float64 {
+	if x != nil {
+		return x.CompileP95
+	}
+	return 0
+}
+
+func (x *Buzz) GetHostCallCount() int64 {
+	if x != nil {
+		return x.HostCallCount
+	}
+	return 0
+}
+
+func (x *Buzz) GetHostCallP50() float64 {
+	if x != nil {
+		return x.HostCallP50
+	}
+	return 0
+}
+
+func (x *Buzz) GetHostCallP95() float64 {
+	if x != nil {
+		return x.HostCallP95
+	}
+	return 0
+}
+
+func (x *Buzz) GetSessionPoolReuse() int64 {
+	if x != nil {
+		return x.SessionPoolReuse
+	}
+	return 0
+}
+
+func (x *Buzz) GetSessionPoolIdle() int64 {
+	if x != nil {
+		return x.SessionPoolIdle
+	}
+	return 0
+}
+
+func (x *Buzz) GetSessionPoolEvictions() int64 {
+	if x != nil {
+		return x.SessionPoolEvictions
+	}
+	return 0
+}
+
+func (x *Buzz) GetSessionWarmP50() float64 {
+	if x != nil {
+		return x.SessionWarmP50
+	}
+	return 0
+}
+
+func (x *Buzz) GetSessionWarmP95() float64 {
+	if x != nil {
+		return x.SessionWarmP95
+	}
+	return 0
+}
+
+func (x *Buzz) GetImportCount() int64 {
+	if x != nil {
+		return x.ImportCount
+	}
+	return 0
+}
+
+func (x *Buzz) GetImportP50() float64 {
+	if x != nil {
+		return x.ImportP50
+	}
+	return 0
+}
+
+func (x *Buzz) GetImportP95() float64 {
+	if x != nil {
+		return x.ImportP95
+	}
+	return 0
+}
+
+func (x *Buzz) GetSpellResolveCount() int64 {
+	if x != nil {
+		return x.SpellResolveCount
+	}
+	return 0
+}
+
+func (x *Buzz) GetSpellResolveP50() float64 {
+	if x != nil {
+		return x.SpellResolveP50
+	}
+	return 0
+}
+
+func (x *Buzz) GetSpellResolveP95() float64 {
+	if x != nil {
+		return x.SpellResolveP95
+	}
+	return 0
+}
+
+func (x *Buzz) GetJitRuns() int64 {
+	if x != nil {
+		return x.JitRuns
+	}
+	return 0
+}
+
+func (x *Buzz) GetVmFaults() int64 {
+	if x != nil {
+		return x.VmFaults
+	}
+	return 0
+}
+
+// Sandbox rolls up the magus.sandbox.* filesystem families: apply latency, the rule counts a
+// sandbox was built from, allow/deny check tallies, and dropped environment variables.
+type Sandbox struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ApplyP50      float64                `protobuf:"fixed64,1,opt,name=apply_p50,json=applyP50,proto3" json:"apply_p50,omitempty"` // seconds
+	ApplyP95      float64                `protobuf:"fixed64,2,opt,name=apply_p95,json=applyP95,proto3" json:"apply_p95,omitempty"` // seconds
+	RulesRead     int64                  `protobuf:"varint,3,opt,name=rules_read,json=rulesRead,proto3" json:"rules_read,omitempty"`
+	RulesWrite    int64                  `protobuf:"varint,4,opt,name=rules_write,json=rulesWrite,proto3" json:"rules_write,omitempty"`
+	RulesExec     int64                  `protobuf:"varint,5,opt,name=rules_exec,json=rulesExec,proto3" json:"rules_exec,omitempty"`
+	EnvRules      int64                  `protobuf:"varint,6,opt,name=env_rules,json=envRules,proto3" json:"env_rules,omitempty"` // exact + glob env rules
+	ChecksAllow   int64                  `protobuf:"varint,7,opt,name=checks_allow,json=checksAllow,proto3" json:"checks_allow,omitempty"`
+	ChecksDeny    int64                  `protobuf:"varint,8,opt,name=checks_deny,json=checksDeny,proto3" json:"checks_deny,omitempty"`
+	EnvDropped    int64                  `protobuf:"varint,9,opt,name=env_dropped,json=envDropped,proto3" json:"env_dropped,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Sandbox) Reset() {
+	*x = Sandbox{}
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Sandbox) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Sandbox) ProtoMessage() {}
+
+func (x *Sandbox) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Sandbox.ProtoReflect.Descriptor instead.
+func (*Sandbox) Descriptor() ([]byte, []int) {
+	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Sandbox) GetApplyP50() float64 {
+	if x != nil {
+		return x.ApplyP50
+	}
+	return 0
+}
+
+func (x *Sandbox) GetApplyP95() float64 {
+	if x != nil {
+		return x.ApplyP95
+	}
+	return 0
+}
+
+func (x *Sandbox) GetRulesRead() int64 {
+	if x != nil {
+		return x.RulesRead
+	}
+	return 0
+}
+
+func (x *Sandbox) GetRulesWrite() int64 {
+	if x != nil {
+		return x.RulesWrite
+	}
+	return 0
+}
+
+func (x *Sandbox) GetRulesExec() int64 {
+	if x != nil {
+		return x.RulesExec
+	}
+	return 0
+}
+
+func (x *Sandbox) GetEnvRules() int64 {
+	if x != nil {
+		return x.EnvRules
+	}
+	return 0
+}
+
+func (x *Sandbox) GetChecksAllow() int64 {
+	if x != nil {
+		return x.ChecksAllow
+	}
+	return 0
+}
+
+func (x *Sandbox) GetChecksDeny() int64 {
+	if x != nil {
+		return x.ChecksDeny
+	}
+	return 0
+}
+
+func (x *Sandbox) GetEnvDropped() int64 {
+	if x != nil {
+		return x.EnvDropped
+	}
+	return 0
+}
+
 // Backfill is the ring-buffer history the daemon sends once, right after a dashboard
 // connects, so the utilization grid and cache-rate trend start populated instead of empty.
 type Backfill struct {
@@ -510,7 +1114,7 @@ type Backfill struct {
 
 func (x *Backfill) Reset() {
 	*x = Backfill{}
-	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[7]
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -522,7 +1126,7 @@ func (x *Backfill) String() string {
 func (*Backfill) ProtoMessage() {}
 
 func (x *Backfill) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[7]
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -535,7 +1139,7 @@ func (x *Backfill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Backfill.ProtoReflect.Descriptor instead.
 func (*Backfill) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{7}
+	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Backfill) GetSamples() []*Sample {
@@ -563,7 +1167,7 @@ type Sample struct {
 
 func (x *Sample) Reset() {
 	*x = Sample{}
-	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[8]
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +1179,7 @@ func (x *Sample) String() string {
 func (*Sample) ProtoMessage() {}
 
 func (x *Sample) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[8]
+	mi := &file_magus_metrics_v1_metrics_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,7 +1192,7 @@ func (x *Sample) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Sample.ProtoReflect.Descriptor instead.
 func (*Sample) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{8}
+	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Sample) GetAt() *timestamppb.Timestamp {
@@ -652,16 +1256,21 @@ const file_magus_metrics_v1_metrics_proto_rawDesc = "" +
 	"\x15StreamMetricsResponse\x128\n" +
 	"\bbackfill\x18\x01 \x01(\v2\x1a.magus.metrics.v1.BackfillH\x00R\bbackfill\x128\n" +
 	"\bsnapshot\x18\x02 \x01(\v2\x1a.magus.metrics.v1.SnapshotH\x00R\bsnapshotB\x04\n" +
-	"\x02of\"\xd6\x02\n" +
+	"\x02of\"\xaf\x04\n" +
 	"\bSnapshot\x12;\n" +
 	"\vcaptured_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"capturedAt\x121\n" +
-	"\x06target\x18\x02 \x01(\v2\x19.magus.metrics.v1.LatencyR\x06target\x124\n" +
-	"\bcache_op\x18\x03 \x01(\v2\x19.magus.metrics.v1.LatencyR\acacheOp\x126\n" +
+	"\x06target\x18\x02 \x01(\v2\x19.magus.metrics.v1.LatencyR\x06target\x12/\n" +
+	"\x05cache\x18\x03 \x01(\v2\x19.magus.metrics.v1.LatencyR\x05cache\x126\n" +
 	"\tpool_wait\x18\x04 \x01(\v2\x19.magus.metrics.v1.LatencyR\bpoolWait\x12:\n" +
 	"\vgraph_query\x18\x05 \x01(\v2\x19.magus.metrics.v1.LatencyR\n" +
 	"graphQuery\x120\n" +
-	"\x06remote\x18\x06 \x01(\v2\x18.magus.metrics.v1.RemoteR\x06remote\"y\n" +
+	"\x06remote\x18\x06 \x01(\v2\x18.magus.metrics.v1.RemoteR\x06remote\x12?\n" +
+	"\ftarget_stats\x18\a \x03(\v2\x1c.magus.metrics.v1.TargetStatR\vtargetStats\x12:\n" +
+	"\tmcp_tools\x18\b \x03(\v2\x1d.magus.metrics.v1.MCPToolStatR\bmcpTools\x12*\n" +
+	"\x04buzz\x18\t \x01(\v2\x16.magus.metrics.v1.BuzzR\x04buzz\x123\n" +
+	"\asandbox\x18\n" +
+	" \x01(\v2\x19.magus.metrics.v1.SandboxR\asandbox\"y\n" +
 	"\aLatency\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x03R\x05count\x12\x10\n" +
 	"\x03p50\x18\x02 \x01(\x01R\x03p50\x12\x10\n" +
@@ -677,7 +1286,80 @@ const file_magus_metrics_v1_metrics_proto_rawDesc = "" +
 	"\fduration_p95\x18\x05 \x01(\x01R\vdurationP95\x12\x19\n" +
 	"\bio_count\x18\x06 \x01(\x03R\aioCount\x12\x1f\n" +
 	"\vbytes_total\x18\a \x01(\x03R\n" +
-	"bytesTotal\">\n" +
+	"bytesTotal\"\xf8\x01\n" +
+	"\n" +
+	"TargetStat\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\x12\x14\n" +
+	"\x05spell\x18\x03 \x01(\tR\x05spell\x12\x14\n" +
+	"\x05count\x18\x04 \x01(\x03R\x05count\x12\x10\n" +
+	"\x03p50\x18\x05 \x01(\x01R\x03p50\x12\x10\n" +
+	"\x03p95\x18\x06 \x01(\x01R\x03p95\x12\x10\n" +
+	"\x03p99\x18\a \x01(\x01R\x03p99\x12$\n" +
+	"\x0ecache_hit_rate\x18\b \x01(\x01R\fcacheHitRate\x12\x18\n" +
+	"\asuccess\x18\t \x01(\x03R\asuccess\x12\x16\n" +
+	"\x06errors\x18\n" +
+	" \x01(\x03R\x06errors\"\xd1\x02\n" +
+	"\vMCPToolStat\x12\x12\n" +
+	"\x04tool\x18\x01 \x01(\tR\x04tool\x12\x14\n" +
+	"\x05calls\x18\x02 \x01(\x03R\x05calls\x12\x16\n" +
+	"\x06errors\x18\x03 \x01(\x03R\x06errors\x12\x1b\n" +
+	"\tinput_p50\x18\x04 \x01(\x01R\binputP50\x12\x1b\n" +
+	"\tinput_p95\x18\x05 \x01(\x01R\binputP95\x12\x1f\n" +
+	"\vinput_total\x18\x06 \x01(\x03R\n" +
+	"inputTotal\x12\x1d\n" +
+	"\n" +
+	"output_p50\x18\a \x01(\x01R\toutputP50\x12\x1d\n" +
+	"\n" +
+	"output_p95\x18\b \x01(\x01R\toutputP95\x12!\n" +
+	"\foutput_total\x18\t \x01(\x03R\voutputTotal\x12!\n" +
+	"\fduration_p50\x18\n" +
+	" \x01(\x01R\vdurationP50\x12!\n" +
+	"\fduration_p95\x18\v \x01(\x01R\vdurationP95\"\xb7\x06\n" +
+	"\x04Buzz\x12\x1d\n" +
+	"\n" +
+	"exec_count\x18\x01 \x01(\x03R\texecCount\x12\x19\n" +
+	"\bexec_p50\x18\x02 \x01(\x01R\aexecP50\x12\x19\n" +
+	"\bexec_p95\x18\x03 \x01(\x01R\aexecP95\x12#\n" +
+	"\rcompile_count\x18\x04 \x01(\x03R\fcompileCount\x12\x1f\n" +
+	"\vcompile_p50\x18\x05 \x01(\x01R\n" +
+	"compileP50\x12\x1f\n" +
+	"\vcompile_p95\x18\x06 \x01(\x01R\n" +
+	"compileP95\x12&\n" +
+	"\x0fhost_call_count\x18\a \x01(\x03R\rhostCallCount\x12\"\n" +
+	"\rhost_call_p50\x18\b \x01(\x01R\vhostCallP50\x12\"\n" +
+	"\rhost_call_p95\x18\t \x01(\x01R\vhostCallP95\x12,\n" +
+	"\x12session_pool_reuse\x18\n" +
+	" \x01(\x03R\x10sessionPoolReuse\x12*\n" +
+	"\x11session_pool_idle\x18\v \x01(\x03R\x0fsessionPoolIdle\x124\n" +
+	"\x16session_pool_evictions\x18\f \x01(\x03R\x14sessionPoolEvictions\x12(\n" +
+	"\x10session_warm_p50\x18\r \x01(\x01R\x0esessionWarmP50\x12(\n" +
+	"\x10session_warm_p95\x18\x0e \x01(\x01R\x0esessionWarmP95\x12!\n" +
+	"\fimport_count\x18\x0f \x01(\x03R\vimportCount\x12\x1d\n" +
+	"\n" +
+	"import_p50\x18\x10 \x01(\x01R\timportP50\x12\x1d\n" +
+	"\n" +
+	"import_p95\x18\x11 \x01(\x01R\timportP95\x12.\n" +
+	"\x13spell_resolve_count\x18\x12 \x01(\x03R\x11spellResolveCount\x12*\n" +
+	"\x11spell_resolve_p50\x18\x13 \x01(\x01R\x0fspellResolveP50\x12*\n" +
+	"\x11spell_resolve_p95\x18\x14 \x01(\x01R\x0fspellResolveP95\x12\x19\n" +
+	"\bjit_runs\x18\x15 \x01(\x03R\ajitRuns\x12\x1b\n" +
+	"\tvm_faults\x18\x16 \x01(\x03R\bvmFaults\"\xa4\x02\n" +
+	"\aSandbox\x12\x1b\n" +
+	"\tapply_p50\x18\x01 \x01(\x01R\bapplyP50\x12\x1b\n" +
+	"\tapply_p95\x18\x02 \x01(\x01R\bapplyP95\x12\x1d\n" +
+	"\n" +
+	"rules_read\x18\x03 \x01(\x03R\trulesRead\x12\x1f\n" +
+	"\vrules_write\x18\x04 \x01(\x03R\n" +
+	"rulesWrite\x12\x1d\n" +
+	"\n" +
+	"rules_exec\x18\x05 \x01(\x03R\trulesExec\x12\x1b\n" +
+	"\tenv_rules\x18\x06 \x01(\x03R\benvRules\x12!\n" +
+	"\fchecks_allow\x18\a \x01(\x03R\vchecksAllow\x12\x1f\n" +
+	"\vchecks_deny\x18\b \x01(\x03R\n" +
+	"checksDeny\x12\x1f\n" +
+	"\venv_dropped\x18\t \x01(\x03R\n" +
+	"envDropped\">\n" +
 	"\bBackfill\x122\n" +
 	"\asamples\x18\x01 \x03(\v2\x18.magus.metrics.v1.SampleR\asamples\"\xe4\x01\n" +
 	"\x06Sample\x12*\n" +
@@ -708,7 +1390,7 @@ func file_magus_metrics_v1_metrics_proto_rawDescGZIP() []byte {
 	return file_magus_metrics_v1_metrics_proto_rawDescData
 }
 
-var file_magus_metrics_v1_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_magus_metrics_v1_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_magus_metrics_v1_metrics_proto_goTypes = []any{
 	(*GetMetricsRequest)(nil),     // 0: magus.metrics.v1.GetMetricsRequest
 	(*GetMetricsResponse)(nil),    // 1: magus.metrics.v1.GetMetricsResponse
@@ -717,31 +1399,39 @@ var file_magus_metrics_v1_metrics_proto_goTypes = []any{
 	(*Snapshot)(nil),              // 4: magus.metrics.v1.Snapshot
 	(*Latency)(nil),               // 5: magus.metrics.v1.Latency
 	(*Remote)(nil),                // 6: magus.metrics.v1.Remote
-	(*Backfill)(nil),              // 7: magus.metrics.v1.Backfill
-	(*Sample)(nil),                // 8: magus.metrics.v1.Sample
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(*TargetStat)(nil),            // 7: magus.metrics.v1.TargetStat
+	(*MCPToolStat)(nil),           // 8: magus.metrics.v1.MCPToolStat
+	(*Buzz)(nil),                  // 9: magus.metrics.v1.Buzz
+	(*Sandbox)(nil),               // 10: magus.metrics.v1.Sandbox
+	(*Backfill)(nil),              // 11: magus.metrics.v1.Backfill
+	(*Sample)(nil),                // 12: magus.metrics.v1.Sample
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_magus_metrics_v1_metrics_proto_depIdxs = []int32{
 	4,  // 0: magus.metrics.v1.GetMetricsResponse.snapshot:type_name -> magus.metrics.v1.Snapshot
-	7,  // 1: magus.metrics.v1.StreamMetricsResponse.backfill:type_name -> magus.metrics.v1.Backfill
+	11, // 1: magus.metrics.v1.StreamMetricsResponse.backfill:type_name -> magus.metrics.v1.Backfill
 	4,  // 2: magus.metrics.v1.StreamMetricsResponse.snapshot:type_name -> magus.metrics.v1.Snapshot
-	9,  // 3: magus.metrics.v1.Snapshot.captured_at:type_name -> google.protobuf.Timestamp
+	13, // 3: magus.metrics.v1.Snapshot.captured_at:type_name -> google.protobuf.Timestamp
 	5,  // 4: magus.metrics.v1.Snapshot.target:type_name -> magus.metrics.v1.Latency
-	5,  // 5: magus.metrics.v1.Snapshot.cache_op:type_name -> magus.metrics.v1.Latency
+	5,  // 5: magus.metrics.v1.Snapshot.cache:type_name -> magus.metrics.v1.Latency
 	5,  // 6: magus.metrics.v1.Snapshot.pool_wait:type_name -> magus.metrics.v1.Latency
 	5,  // 7: magus.metrics.v1.Snapshot.graph_query:type_name -> magus.metrics.v1.Latency
 	6,  // 8: magus.metrics.v1.Snapshot.remote:type_name -> magus.metrics.v1.Remote
-	8,  // 9: magus.metrics.v1.Backfill.samples:type_name -> magus.metrics.v1.Sample
-	9,  // 10: magus.metrics.v1.Sample.at:type_name -> google.protobuf.Timestamp
-	0,  // 11: magus.metrics.v1.MetricsService.GetMetrics:input_type -> magus.metrics.v1.GetMetricsRequest
-	2,  // 12: magus.metrics.v1.MetricsService.StreamMetrics:input_type -> magus.metrics.v1.StreamMetricsRequest
-	1,  // 13: magus.metrics.v1.MetricsService.GetMetrics:output_type -> magus.metrics.v1.GetMetricsResponse
-	3,  // 14: magus.metrics.v1.MetricsService.StreamMetrics:output_type -> magus.metrics.v1.StreamMetricsResponse
-	13, // [13:15] is the sub-list for method output_type
-	11, // [11:13] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	7,  // 9: magus.metrics.v1.Snapshot.target_stats:type_name -> magus.metrics.v1.TargetStat
+	8,  // 10: magus.metrics.v1.Snapshot.mcp_tools:type_name -> magus.metrics.v1.MCPToolStat
+	9,  // 11: magus.metrics.v1.Snapshot.buzz:type_name -> magus.metrics.v1.Buzz
+	10, // 12: magus.metrics.v1.Snapshot.sandbox:type_name -> magus.metrics.v1.Sandbox
+	12, // 13: magus.metrics.v1.Backfill.samples:type_name -> magus.metrics.v1.Sample
+	13, // 14: magus.metrics.v1.Sample.at:type_name -> google.protobuf.Timestamp
+	0,  // 15: magus.metrics.v1.MetricsService.GetMetrics:input_type -> magus.metrics.v1.GetMetricsRequest
+	2,  // 16: magus.metrics.v1.MetricsService.StreamMetrics:input_type -> magus.metrics.v1.StreamMetricsRequest
+	1,  // 17: magus.metrics.v1.MetricsService.GetMetrics:output_type -> magus.metrics.v1.GetMetricsResponse
+	3,  // 18: magus.metrics.v1.MetricsService.StreamMetrics:output_type -> magus.metrics.v1.StreamMetricsResponse
+	17, // [17:19] is the sub-list for method output_type
+	15, // [15:17] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_magus_metrics_v1_metrics_proto_init() }
@@ -759,7 +1449,7 @@ func file_magus_metrics_v1_metrics_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_metrics_v1_metrics_proto_rawDesc), len(file_magus_metrics_v1_metrics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

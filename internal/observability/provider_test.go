@@ -112,6 +112,42 @@ func (r *recorder) RecordPoolAcquire(_ context.Context, _ float64, _ int64) {}
 
 func (r *recorder) RecordPoolRelease(_ context.Context, _ int64) {}
 
+func (r *recorder) RecordPoolWaiting(_ context.Context, _ int64) {}
+
+func (r *recorder) RecordMCPCall(_ context.Context, _ MCPCall) {}
+
+func (r *recorder) RecordSandboxApply(_ context.Context, _ float64, _, _ string) {}
+
+func (r *recorder) RecordSandboxRules(_ context.Context, _, _, _, _, _ int64, _ string) {}
+
+func (r *recorder) RecordSandboxCheck(_ context.Context, _, _, _ string) {}
+
+func (r *recorder) RecordSandboxEnvDropped(_ context.Context, _ string, _ int64) {}
+
+func (r *recorder) RecordBuzzExec(_ context.Context, _ float64, _, _ string) {}
+
+func (r *recorder) RecordBuzzCompile(_ context.Context, _ float64, _, _ string) {}
+
+func (r *recorder) RecordBuzzHostCall(_ context.Context, _ BuzzHostCall) {}
+
+func (r *recorder) RecordBuzzSessionReuse(_ context.Context, _ string) {}
+
+func (r *recorder) RecordBuzzSessionIdle(_ context.Context, _ int64) {}
+
+func (r *recorder) RecordBuzzSessionEviction(_ context.Context, _ string) {}
+
+func (r *recorder) RecordBuzzSessionWarm(_ context.Context, _ float64, _ string) {}
+
+func (r *recorder) RecordBuzzImport(_ context.Context, _ float64, _, _ string) {}
+
+func (r *recorder) RecordBuzzSpellResolve(_ context.Context, _ float64, _, _ string) {}
+
+func (r *recorder) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string) {}
+
+func (r *recorder) RecordBuzzJITRun(_ context.Context) {}
+
+func (r *recorder) RecordBuzzVMFault(_ context.Context, _ string) {}
+
 func (r *recorder) Snapshot(_ context.Context) ([]byte, error) { return nil, nil }
 
 func (r *recorder) Shutdown(_ context.Context) error { r.stops++; return nil }

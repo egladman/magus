@@ -42,10 +42,17 @@ message StreamMetricsResponse {
 message Snapshot {
   google.protobuf.Timestamp captured_at = 1;
   Latency target = 2;       // magus.target.duration + magus.target.runs
-  Latency cache_op = 3;     // magus.cache.duration + magus.cache.{hits,misses,errors}
+  // cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
+  // Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
+  // this family measures a Cache.Run, not a resolved op.
+  Latency cache = 3;
   Latency pool_wait = 4;    // magus.pool.wait.duration
   Latency graph_query = 5;  // magus.graph.query.duration + magus.graph.queries
   Remote remote = 6;        // magus.cache.remote.*
+  repeated TargetStat target_stats = 7;  // per-target rollup of magus.target.{duration,runs}
+  repeated MCPToolStat mcp_tools = 8;     // per-tool rollup of magus.mcp.tool.*
+  Buzz buzz = 9;            // magus.buzz.* families
+  Sandbox sandbox = 10;     // magus.sandbox.* filesystem families
 }
 
 // Latency is an operation-family rollup: how many happened and how long they took. The
@@ -70,6 +77,79 @@ message Remote {
   double duration_p95 = 5;  // seconds
   int64 io_count = 6;       // number of get/put operations observed
   int64 bytes_total = 7;    // total bytes transferred (sum of the io.size histogram)
+}
+
+// TargetStat is one per-target rollup: how often a (project, target, spell) ran, its latency
+// percentiles, cache hit-rate, and success/error split. Grouped from the magus.target.duration
+// histogram's per-(project,spell,target,outcome,cache.hit) data points.
+message TargetStat {
+  string project = 1;        // magus.project attribute
+  string target = 2;         // magus.target attribute
+  string spell = 3;          // magus.spell attribute ("" when the project declares none)
+  int64 count = 4;           // total executions (including cache replays)
+  double p50 = 5;            // seconds
+  double p95 = 6;            // seconds
+  double p99 = 7;            // seconds
+  double cache_hit_rate = 8; // [0,1]; fraction of runs served from cache
+  int64 success = 9;         // runs with outcome=success
+  int64 errors = 10;         // runs with outcome=error
+}
+
+// MCPToolStat is one per-tool rollup of the magus.mcp.tool.* families: call/error tallies,
+// input/output payload sizes, and call duration percentiles.
+message MCPToolStat {
+  string tool = 1;
+  int64 calls = 2;
+  int64 errors = 3;
+  double input_p50 = 4;    // bytes
+  double input_p95 = 5;    // bytes
+  int64 input_total = 6;   // total input bytes observed
+  double output_p50 = 7;   // bytes
+  double output_p95 = 8;   // bytes
+  int64 output_total = 9;  // total output bytes observed
+  double duration_p50 = 10; // seconds
+  double duration_p95 = 11; // seconds
+}
+
+// Buzz rolls up the magus.buzz.* families: script exec/compile latency, the native-boundary
+// host-call family, session-pool health, import and spell resolution, and VM-level counters.
+message Buzz {
+  int64 exec_count = 1;
+  double exec_p50 = 2;              // seconds
+  double exec_p95 = 3;              // seconds
+  int64 compile_count = 4;
+  double compile_p50 = 5;           // seconds
+  double compile_p95 = 6;           // seconds
+  int64 host_call_count = 7;
+  double host_call_p50 = 8;         // seconds
+  double host_call_p95 = 9;         // seconds
+  int64 session_pool_reuse = 10;    // acquires served from an idle session
+  int64 session_pool_idle = 11;     // current idle sessions (gauge)
+  int64 session_pool_evictions = 12;
+  double session_warm_p50 = 13;     // seconds
+  double session_warm_p95 = 14;     // seconds
+  int64 import_count = 15;
+  double import_p50 = 16;           // seconds
+  double import_p95 = 17;           // seconds
+  int64 spell_resolve_count = 18;
+  double spell_resolve_p50 = 19;    // seconds
+  double spell_resolve_p95 = 20;    // seconds
+  int64 jit_runs = 21;
+  int64 vm_faults = 22;
+}
+
+// Sandbox rolls up the magus.sandbox.* filesystem families: apply latency, the rule counts a
+// sandbox was built from, allow/deny check tallies, and dropped environment variables.
+message Sandbox {
+  double apply_p50 = 1;   // seconds
+  double apply_p95 = 2;   // seconds
+  int64 rules_read = 3;
+  int64 rules_write = 4;
+  int64 rules_exec = 5;
+  int64 env_rules = 6;    // exact + glob env rules
+  int64 checks_allow = 7;
+  int64 checks_deny = 8;
+  int64 env_dropped = 9;
 }
 
 // Backfill is the ring-buffer history the daemon sends once, right after a dashboard

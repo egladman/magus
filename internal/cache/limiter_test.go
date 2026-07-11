@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -196,6 +197,7 @@ func TestLimiterHooks(t *testing.T) {
 			relN = append(relN, n)
 			mu.Unlock()
 		},
+		nil,
 	)
 
 	_ = l.Acquire(context.Background())
@@ -211,7 +213,7 @@ func TestLimiterHooks(t *testing.T) {
 	// Contended case: second Acquire on a full pool should observe wait > 0.
 	l2 := NewLimiter(1)
 	var waitedNs int64
-	l2.SetHooks(func(ns int64, _ int) { waitedNs = ns }, nil)
+	l2.SetHooks(func(ns int64, _ int) { waitedNs = ns }, nil, nil)
 	_ = l2.Acquire(context.Background()) // fill pool
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -229,6 +231,37 @@ func TestLimiterHooks(t *testing.T) {
 	l2.Release() // unblock the now-blocked goroutine
 	wg.Wait()
 	assert.NotZero(t, waitedNs, "contended acquire reported wait == 0ns")
+}
+
+// TestLimiterWaitingHook verifies the onWait hook mirrors the internal waiting counter
+// exactly: it fires +n the instant a caller begins waiting and -n once its Acquire returns,
+// so the net inflight of onWait tracks Snapshot().Waiting at every step.
+func TestLimiterWaitingHook(t *testing.T) {
+	t.Parallel()
+	l := NewLimiter(1)
+	var net atomic.Int64
+	l.SetHooks(nil, nil, func(delta int) { net.Add(int64(delta)) })
+
+	// Uncontended: onWait still fires +1 (before Acquire) and -1 (on return), netting 0.
+	require.NoError(t, l.Acquire(context.Background()))
+	assert.Equal(t, int64(0), net.Load(), "uncontended acquire should net zero waiting")
+
+	// Contended: a second acquire on the now-full pool must register as waiting.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = l.Acquire(context.Background())
+	}()
+	for l.Snapshot().Waiting == 0 {
+		runtime.Gosched()
+	}
+	// While the goroutine is provably blocked, onWait's net must equal the live waiting count.
+	assert.Equal(t, int64(l.Snapshot().Waiting), net.Load(), "onWait net must mirror Waiting")
+
+	l.Release() // unblock the waiter
+	wg.Wait()
+	assert.Equal(t, int64(0), net.Load(), "waiting should return to zero after acquire")
 }
 
 // TestLimiterYieldRestoresSlotOnCancel verifies that Yield always returns with

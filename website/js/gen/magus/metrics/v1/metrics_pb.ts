@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/metrics/v1/metrics.proto.
  */
 export const file_magus_metrics_v1_metrics: GenFile = /*@__PURE__*/
-  fileDesc("Ch5tYWd1cy9tZXRyaWNzL3YxL21ldHJpY3MucHJvdG8SEG1hZ3VzLm1ldHJpY3MudjEiEwoRR2V0TWV0cmljc1JlcXVlc3QiQgoSR2V0TWV0cmljc1Jlc3BvbnNlEiwKCHNuYXBzaG90GAEgASgLMhoubWFndXMubWV0cmljcy52MS5TbmFwc2hvdCIWChRTdHJlYW1NZXRyaWNzUmVxdWVzdCJ9ChVTdHJlYW1NZXRyaWNzUmVzcG9uc2USLgoIYmFja2ZpbGwYASABKAsyGi5tYWd1cy5tZXRyaWNzLnYxLkJhY2tmaWxsSAASLgoIc25hcHNob3QYAiABKAsyGi5tYWd1cy5tZXRyaWNzLnYxLlNuYXBzaG90SABCBAoCb2YimwIKCFNuYXBzaG90Ei8KC2NhcHR1cmVkX2F0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIpCgZ0YXJnZXQYAiABKAsyGS5tYWd1cy5tZXRyaWNzLnYxLkxhdGVuY3kSKwoIY2FjaGVfb3AYAyABKAsyGS5tYWd1cy5tZXRyaWNzLnYxLkxhdGVuY3kSLAoJcG9vbF93YWl0GAQgASgLMhkubWFndXMubWV0cmljcy52MS5MYXRlbmN5Ei4KC2dyYXBoX3F1ZXJ5GAUgASgLMhkubWFndXMubWV0cmljcy52MS5MYXRlbmN5EigKBnJlbW90ZRgGIAEoCzIYLm1hZ3VzLm1ldHJpY3MudjEuUmVtb3RlIlkKB0xhdGVuY3kSDQoFY291bnQYASABKAMSCwoDcDUwGAIgASgBEgsKA3A5NRgDIAEoARILCgNwOTkYBCABKAESCwoDbWF4GAUgASgBEgsKA3N1bRgGIAEoASKJAQoGUmVtb3RlEgwKBGhpdHMYASABKAMSDgoGbWlzc2VzGAIgASgDEg4KBmVycm9ycxgDIAEoAxIUCgxkdXJhdGlvbl9wNTAYBCABKAESFAoMZHVyYXRpb25fcDk1GAUgASgBEhAKCGlvX2NvdW50GAYgASgDEhMKC2J5dGVzX3RvdGFsGAcgASgDIjUKCEJhY2tmaWxsEikKB3NhbXBsZXMYASADKAsyGC5tYWd1cy5tZXRyaWNzLnYxLlNhbXBsZSKiAQoGU2FtcGxlEiYKAmF0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZpbl91c2UYAiABKAUSEAoIY2FwYWNpdHkYAyABKAUSDwoHd2FpdGluZxgEIAEoBRISCgpjYWNoZV9oaXRzGAUgASgDEhQKDGNhY2hlX21pc3NlcxgGIAEoAxITCgt0YXJnZXRfcnVucxgHIAEoAzLNAQoOTWV0cmljc1NlcnZpY2USVwoKR2V0TWV0cmljcxIjLm1hZ3VzLm1ldHJpY3MudjEuR2V0TWV0cmljc1JlcXVlc3QaJC5tYWd1cy5tZXRyaWNzLnYxLkdldE1ldHJpY3NSZXNwb25zZRJiCg1TdHJlYW1NZXRyaWNzEiYubWFndXMubWV0cmljcy52MS5TdHJlYW1NZXRyaWNzUmVxdWVzdBonLm1hZ3VzLm1ldHJpY3MudjEuU3RyZWFtTWV0cmljc1Jlc3BvbnNlMAFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("Ch5tYWd1cy9tZXRyaWNzL3YxL21ldHJpY3MucHJvdG8SEG1hZ3VzLm1ldHJpY3MudjEiEwoRR2V0TWV0cmljc1JlcXVlc3QiQgoSR2V0TWV0cmljc1Jlc3BvbnNlEiwKCHNuYXBzaG90GAEgASgLMhoubWFndXMubWV0cmljcy52MS5TbmFwc2hvdCIWChRTdHJlYW1NZXRyaWNzUmVxdWVzdCJ9ChVTdHJlYW1NZXRyaWNzUmVzcG9uc2USLgoIYmFja2ZpbGwYASABKAsyGi5tYWd1cy5tZXRyaWNzLnYxLkJhY2tmaWxsSAASLgoIc25hcHNob3QYAiABKAsyGi5tYWd1cy5tZXRyaWNzLnYxLlNuYXBzaG90SABCBAoCb2Yi0AMKCFNuYXBzaG90Ei8KC2NhcHR1cmVkX2F0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIpCgZ0YXJnZXQYAiABKAsyGS5tYWd1cy5tZXRyaWNzLnYxLkxhdGVuY3kSKAoFY2FjaGUYAyABKAsyGS5tYWd1cy5tZXRyaWNzLnYxLkxhdGVuY3kSLAoJcG9vbF93YWl0GAQgASgLMhkubWFndXMubWV0cmljcy52MS5MYXRlbmN5Ei4KC2dyYXBoX3F1ZXJ5GAUgASgLMhkubWFndXMubWV0cmljcy52MS5MYXRlbmN5EigKBnJlbW90ZRgGIAEoCzIYLm1hZ3VzLm1ldHJpY3MudjEuUmVtb3RlEjIKDHRhcmdldF9zdGF0cxgHIAMoCzIcLm1hZ3VzLm1ldHJpY3MudjEuVGFyZ2V0U3RhdBIwCgltY3BfdG9vbHMYCCADKAsyHS5tYWd1cy5tZXRyaWNzLnYxLk1DUFRvb2xTdGF0EiQKBGJ1enoYCSABKAsyFi5tYWd1cy5tZXRyaWNzLnYxLkJ1enoSKgoHc2FuZGJveBgKIAEoCzIZLm1hZ3VzLm1ldHJpY3MudjEuU2FuZGJveCJZCgdMYXRlbmN5Eg0KBWNvdW50GAEgASgDEgsKA3A1MBgCIAEoARILCgNwOTUYAyABKAESCwoDcDk5GAQgASgBEgsKA21heBgFIAEoARILCgNzdW0YBiABKAEiiQEKBlJlbW90ZRIMCgRoaXRzGAEgASgDEg4KBm1pc3NlcxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSFAoMZHVyYXRpb25fcDUwGAQgASgBEhQKDGR1cmF0aW9uX3A5NRgFIAEoARIQCghpb19jb3VudBgGIAEoAxITCgtieXRlc190b3RhbBgHIAEoAyKrAQoKVGFyZ2V0U3RhdBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRINCgVzcGVsbBgDIAEoCRINCgVjb3VudBgEIAEoAxILCgNwNTAYBSABKAESCwoDcDk1GAYgASgBEgsKA3A5ORgHIAEoARIWCg5jYWNoZV9oaXRfcmF0ZRgIIAEoARIPCgdzdWNjZXNzGAkgASgDEg4KBmVycm9ycxgKIAEoAyLfAQoLTUNQVG9vbFN0YXQSDAoEdG9vbBgBIAEoCRINCgVjYWxscxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSEQoJaW5wdXRfcDUwGAQgASgBEhEKCWlucHV0X3A5NRgFIAEoARITCgtpbnB1dF90b3RhbBgGIAEoAxISCgpvdXRwdXRfcDUwGAcgASgBEhIKCm91dHB1dF9wOTUYCCABKAESFAoMb3V0cHV0X3RvdGFsGAkgASgDEhQKDGR1cmF0aW9uX3A1MBgKIAEoARIUCgxkdXJhdGlvbl9wOTUYCyABKAEihwQKBEJ1enoSEgoKZXhlY19jb3VudBgBIAEoAxIQCghleGVjX3A1MBgCIAEoARIQCghleGVjX3A5NRgDIAEoARIVCg1jb21waWxlX2NvdW50GAQgASgDEhMKC2NvbXBpbGVfcDUwGAUgASgBEhMKC2NvbXBpbGVfcDk1GAYgASgBEhcKD2hvc3RfY2FsbF9jb3VudBgHIAEoAxIVCg1ob3N0X2NhbGxfcDUwGAggASgBEhUKDWhvc3RfY2FsbF9wOTUYCSABKAESGgoSc2Vzc2lvbl9wb29sX3JldXNlGAogASgDEhkKEXNlc3Npb25fcG9vbF9pZGxlGAsgASgDEh4KFnNlc3Npb25fcG9vbF9ldmljdGlvbnMYDCABKAMSGAoQc2Vzc2lvbl93YXJtX3A1MBgNIAEoARIYChBzZXNzaW9uX3dhcm1fcDk1GA4gASgBEhQKDGltcG9ydF9jb3VudBgPIAEoAxISCgppbXBvcnRfcDUwGBAgASgBEhIKCmltcG9ydF9wOTUYESABKAESGwoTc3BlbGxfcmVzb2x2ZV9jb3VudBgSIAEoAxIZChFzcGVsbF9yZXNvbHZlX3A1MBgTIAEoARIZChFzcGVsbF9yZXNvbHZlX3A5NRgUIAEoARIQCghqaXRfcnVucxgVIAEoAxIRCgl2bV9mYXVsdHMYFiABKAMivwEKB1NhbmRib3gSEQoJYXBwbHlfcDUwGAEgASgBEhEKCWFwcGx5X3A5NRgCIAEoARISCgpydWxlc19yZWFkGAMgASgDEhMKC3J1bGVzX3dyaXRlGAQgASgDEhIKCnJ1bGVzX2V4ZWMYBSABKAMSEQoJZW52X3J1bGVzGAYgASgDEhQKDGNoZWNrc19hbGxvdxgHIAEoAxITCgtjaGVja3NfZGVueRgIIAEoAxITCgtlbnZfZHJvcHBlZBgJIAEoAyI1CghCYWNrZmlsbBIpCgdzYW1wbGVzGAEgAygLMhgubWFndXMubWV0cmljcy52MS5TYW1wbGUiogEKBlNhbXBsZRImCgJhdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGaW5fdXNlGAIgASgFEhAKCGNhcGFjaXR5GAMgASgFEg8KB3dhaXRpbmcYBCABKAUSEgoKY2FjaGVfaGl0cxgFIAEoAxIUCgxjYWNoZV9taXNzZXMYBiABKAMSEwoLdGFyZ2V0X3J1bnMYByABKAMyzQEKDk1ldHJpY3NTZXJ2aWNlElcKCkdldE1ldHJpY3MSIy5tYWd1cy5tZXRyaWNzLnYxLkdldE1ldHJpY3NSZXF1ZXN0GiQubWFndXMubWV0cmljcy52MS5HZXRNZXRyaWNzUmVzcG9uc2USYgoNU3RyZWFtTWV0cmljcxImLm1hZ3VzLm1ldHJpY3MudjEuU3RyZWFtTWV0cmljc1JlcXVlc3QaJy5tYWd1cy5tZXRyaWNzLnYxLlN0cmVhbU1ldHJpY3NSZXNwb25zZTABYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message magus.metrics.v1.GetMetricsRequest
@@ -118,11 +118,13 @@ export type Snapshot = Message<"magus.metrics.v1.Snapshot"> & {
   target?: Latency;
 
   /**
-   * magus.cache.duration + magus.cache.{hits,misses,errors}
+   * cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
+   * Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
+   * this family measures a Cache.Run, not a resolved op.
    *
-   * @generated from field: magus.metrics.v1.Latency cache_op = 3;
+   * @generated from field: magus.metrics.v1.Latency cache = 3;
    */
-  cacheOp?: Latency;
+  cache?: Latency;
 
   /**
    * magus.pool.wait.duration
@@ -144,6 +146,34 @@ export type Snapshot = Message<"magus.metrics.v1.Snapshot"> & {
    * @generated from field: magus.metrics.v1.Remote remote = 6;
    */
   remote?: Remote;
+
+  /**
+   * per-target rollup of magus.target.{duration,runs}
+   *
+   * @generated from field: repeated magus.metrics.v1.TargetStat target_stats = 7;
+   */
+  targetStats: TargetStat[];
+
+  /**
+   * per-tool rollup of magus.mcp.tool.*
+   *
+   * @generated from field: repeated magus.metrics.v1.MCPToolStat mcp_tools = 8;
+   */
+  mcpTools: MCPToolStat[];
+
+  /**
+   * magus.buzz.* families
+   *
+   * @generated from field: magus.metrics.v1.Buzz buzz = 9;
+   */
+  buzz?: Buzz;
+
+  /**
+   * magus.sandbox.* filesystem families
+   *
+   * @generated from field: magus.metrics.v1.Sandbox sandbox = 10;
+   */
+  sandbox?: Sandbox;
 };
 
 /**
@@ -270,6 +300,397 @@ export const RemoteSchema: GenMessage<Remote> = /*@__PURE__*/
   messageDesc(file_magus_metrics_v1_metrics, 6);
 
 /**
+ * TargetStat is one per-target rollup: how often a (project, target, spell) ran, its latency
+ * percentiles, cache hit-rate, and success/error split. Grouped from the magus.target.duration
+ * histogram's per-(project,spell,target,outcome,cache.hit) data points.
+ *
+ * @generated from message magus.metrics.v1.TargetStat
+ */
+export type TargetStat = Message<"magus.metrics.v1.TargetStat"> & {
+  /**
+   * magus.project attribute
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+
+  /**
+   * magus.target attribute
+   *
+   * @generated from field: string target = 2;
+   */
+  target: string;
+
+  /**
+   * magus.spell attribute ("" when the project declares none)
+   *
+   * @generated from field: string spell = 3;
+   */
+  spell: string;
+
+  /**
+   * total executions (including cache replays)
+   *
+   * @generated from field: int64 count = 4;
+   */
+  count: bigint;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double p50 = 5;
+   */
+  p50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double p95 = 6;
+   */
+  p95: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double p99 = 7;
+   */
+  p99: number;
+
+  /**
+   * [0,1]; fraction of runs served from cache
+   *
+   * @generated from field: double cache_hit_rate = 8;
+   */
+  cacheHitRate: number;
+
+  /**
+   * runs with outcome=success
+   *
+   * @generated from field: int64 success = 9;
+   */
+  success: bigint;
+
+  /**
+   * runs with outcome=error
+   *
+   * @generated from field: int64 errors = 10;
+   */
+  errors: bigint;
+};
+
+/**
+ * Describes the message magus.metrics.v1.TargetStat.
+ * Use `create(TargetStatSchema)` to create a new message.
+ */
+export const TargetStatSchema: GenMessage<TargetStat> = /*@__PURE__*/
+  messageDesc(file_magus_metrics_v1_metrics, 7);
+
+/**
+ * MCPToolStat is one per-tool rollup of the magus.mcp.tool.* families: call/error tallies,
+ * input/output payload sizes, and call duration percentiles.
+ *
+ * @generated from message magus.metrics.v1.MCPToolStat
+ */
+export type MCPToolStat = Message<"magus.metrics.v1.MCPToolStat"> & {
+  /**
+   * @generated from field: string tool = 1;
+   */
+  tool: string;
+
+  /**
+   * @generated from field: int64 calls = 2;
+   */
+  calls: bigint;
+
+  /**
+   * @generated from field: int64 errors = 3;
+   */
+  errors: bigint;
+
+  /**
+   * bytes
+   *
+   * @generated from field: double input_p50 = 4;
+   */
+  inputP50: number;
+
+  /**
+   * bytes
+   *
+   * @generated from field: double input_p95 = 5;
+   */
+  inputP95: number;
+
+  /**
+   * total input bytes observed
+   *
+   * @generated from field: int64 input_total = 6;
+   */
+  inputTotal: bigint;
+
+  /**
+   * bytes
+   *
+   * @generated from field: double output_p50 = 7;
+   */
+  outputP50: number;
+
+  /**
+   * bytes
+   *
+   * @generated from field: double output_p95 = 8;
+   */
+  outputP95: number;
+
+  /**
+   * total output bytes observed
+   *
+   * @generated from field: int64 output_total = 9;
+   */
+  outputTotal: bigint;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double duration_p50 = 10;
+   */
+  durationP50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double duration_p95 = 11;
+   */
+  durationP95: number;
+};
+
+/**
+ * Describes the message magus.metrics.v1.MCPToolStat.
+ * Use `create(MCPToolStatSchema)` to create a new message.
+ */
+export const MCPToolStatSchema: GenMessage<MCPToolStat> = /*@__PURE__*/
+  messageDesc(file_magus_metrics_v1_metrics, 8);
+
+/**
+ * Buzz rolls up the magus.buzz.* families: script exec/compile latency, the native-boundary
+ * host-call family, session-pool health, import and spell resolution, and VM-level counters.
+ *
+ * @generated from message magus.metrics.v1.Buzz
+ */
+export type Buzz = Message<"magus.metrics.v1.Buzz"> & {
+  /**
+   * @generated from field: int64 exec_count = 1;
+   */
+  execCount: bigint;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double exec_p50 = 2;
+   */
+  execP50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double exec_p95 = 3;
+   */
+  execP95: number;
+
+  /**
+   * @generated from field: int64 compile_count = 4;
+   */
+  compileCount: bigint;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double compile_p50 = 5;
+   */
+  compileP50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double compile_p95 = 6;
+   */
+  compileP95: number;
+
+  /**
+   * @generated from field: int64 host_call_count = 7;
+   */
+  hostCallCount: bigint;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double host_call_p50 = 8;
+   */
+  hostCallP50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double host_call_p95 = 9;
+   */
+  hostCallP95: number;
+
+  /**
+   * acquires served from an idle session
+   *
+   * @generated from field: int64 session_pool_reuse = 10;
+   */
+  sessionPoolReuse: bigint;
+
+  /**
+   * current idle sessions (gauge)
+   *
+   * @generated from field: int64 session_pool_idle = 11;
+   */
+  sessionPoolIdle: bigint;
+
+  /**
+   * @generated from field: int64 session_pool_evictions = 12;
+   */
+  sessionPoolEvictions: bigint;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double session_warm_p50 = 13;
+   */
+  sessionWarmP50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double session_warm_p95 = 14;
+   */
+  sessionWarmP95: number;
+
+  /**
+   * @generated from field: int64 import_count = 15;
+   */
+  importCount: bigint;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double import_p50 = 16;
+   */
+  importP50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double import_p95 = 17;
+   */
+  importP95: number;
+
+  /**
+   * @generated from field: int64 spell_resolve_count = 18;
+   */
+  spellResolveCount: bigint;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double spell_resolve_p50 = 19;
+   */
+  spellResolveP50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double spell_resolve_p95 = 20;
+   */
+  spellResolveP95: number;
+
+  /**
+   * @generated from field: int64 jit_runs = 21;
+   */
+  jitRuns: bigint;
+
+  /**
+   * @generated from field: int64 vm_faults = 22;
+   */
+  vmFaults: bigint;
+};
+
+/**
+ * Describes the message magus.metrics.v1.Buzz.
+ * Use `create(BuzzSchema)` to create a new message.
+ */
+export const BuzzSchema: GenMessage<Buzz> = /*@__PURE__*/
+  messageDesc(file_magus_metrics_v1_metrics, 9);
+
+/**
+ * Sandbox rolls up the magus.sandbox.* filesystem families: apply latency, the rule counts a
+ * sandbox was built from, allow/deny check tallies, and dropped environment variables.
+ *
+ * @generated from message magus.metrics.v1.Sandbox
+ */
+export type Sandbox = Message<"magus.metrics.v1.Sandbox"> & {
+  /**
+   * seconds
+   *
+   * @generated from field: double apply_p50 = 1;
+   */
+  applyP50: number;
+
+  /**
+   * seconds
+   *
+   * @generated from field: double apply_p95 = 2;
+   */
+  applyP95: number;
+
+  /**
+   * @generated from field: int64 rules_read = 3;
+   */
+  rulesRead: bigint;
+
+  /**
+   * @generated from field: int64 rules_write = 4;
+   */
+  rulesWrite: bigint;
+
+  /**
+   * @generated from field: int64 rules_exec = 5;
+   */
+  rulesExec: bigint;
+
+  /**
+   * exact + glob env rules
+   *
+   * @generated from field: int64 env_rules = 6;
+   */
+  envRules: bigint;
+
+  /**
+   * @generated from field: int64 checks_allow = 7;
+   */
+  checksAllow: bigint;
+
+  /**
+   * @generated from field: int64 checks_deny = 8;
+   */
+  checksDeny: bigint;
+
+  /**
+   * @generated from field: int64 env_dropped = 9;
+   */
+  envDropped: bigint;
+};
+
+/**
+ * Describes the message magus.metrics.v1.Sandbox.
+ * Use `create(SandboxSchema)` to create a new message.
+ */
+export const SandboxSchema: GenMessage<Sandbox> = /*@__PURE__*/
+  messageDesc(file_magus_metrics_v1_metrics, 10);
+
+/**
  * Backfill is the ring-buffer history the daemon sends once, right after a dashboard
  * connects, so the utilization grid and cache-rate trend start populated instead of empty.
  *
@@ -289,7 +710,7 @@ export type Backfill = Message<"magus.metrics.v1.Backfill"> & {
  * Use `create(BackfillSchema)` to create a new message.
  */
 export const BackfillSchema: GenMessage<Backfill> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1_metrics, 7);
+  messageDesc(file_magus_metrics_v1_metrics, 11);
 
 /**
  * Sample is one point in the rolling utilization/activity history. The daemon appends one
@@ -352,7 +773,7 @@ export type Sample = Message<"magus.metrics.v1.Sample"> & {
  * Use `create(SampleSchema)` to create a new message.
  */
 export const SampleSchema: GenMessage<Sample> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1_metrics, 8);
+  messageDesc(file_magus_metrics_v1_metrics, 12);
 
 /**
  * MetricsService serves the derived dashboard metrics. Served over ConnectRPC, so one
