@@ -326,6 +326,9 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
   padding: clamp(1.5rem, 5vw, 3rem); color: var(--pico-muted-color);
   max-width: 44rem; margin: 0 auto; text-align: center;
   display: flex; flex-direction: column; align-items: center;
+  /* Fill the (tall) scroll area and center the prompt within it, rather than letting it
+     sit at the top of the emptiness. */
+  justify-content: center; min-height: 100%; box-sizing: border-box;
 }
 .log-empty[hidden] { display: none; }
 .log-empty-icon { width: 3rem; height: 3rem; color: var(--pico-muted-border-color); margin-bottom: 0.9rem; }

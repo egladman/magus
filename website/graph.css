@@ -240,7 +240,9 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
 .graph-app:has(.graph-empty-state:not([hidden])) #graph-canvas,
 .graph-app:has(.graph-empty-state:not([hidden])) #graph-legend,
 .graph-app:has(.graph-empty-state:not([hidden])) #legend-toggle { display: none; }
-.graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state { position: static; }
+/* Give the cold-state prompt a tall-enough area and keep it vertically centered (it is
+   already flex-centered), so it sits in the middle of the emptiness rather than at the top. */
+.graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state { position: static; min-height: min(60svh, 520px); }
 
 /* Kind dots: shape here, color from a .k-<kind> class (data-driven, no inline
    style). The same classes color the legend swatches and the explain-card head. */
