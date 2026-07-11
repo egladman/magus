@@ -204,7 +204,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
 <ul>
 <li>Every rounded box is a <strong>target</strong> you can <code>magus run</code>. <strong>Blue</strong> is a top-level target (nothing else depends on it — a typical entry point); <strong>gray</strong> ones are pulled in as dependencies.</li>
-<li>Arrows show <strong>run order</strong>: a target's dependencies run before it, so the graph flows left → right (e.g. <code>preflight</code> runs first, <code>ci</code> last).</li>
+<li>Arrows show <strong>run order</strong>: a target's dependencies run before it, so the graph flows left -&gt; right (e.g. <code>preflight</code> runs first, <code>ci</code> last).</li>
 <li>A dotted arrow marks a <strong>cross-project dependency</strong> (the other project's target runs first).</li>
 <li>Each project's <strong>Toolchain</strong> graph (top-down) shows which <strong>spell</strong> each target drives.</li>
 </ul>

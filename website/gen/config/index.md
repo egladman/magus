@@ -40,16 +40,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `daemon.socket` | `MAGUS_DAEMON_SOCKET` | `--daemon-socket` | string |
 | `daemon.workspaces` | `MAGUS_DAEMON_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |
 
-## flake
-
-| Config key | Environment variable | Flag | Type |
-|------------|----------------------|------|------|
-| `flake.annotate_gha` | `MAGUS_FLAKE_ANNOTATE_GHA` | `--flake-annotate-gha` | bool |
-| `flake.bootstrap_samples` | `MAGUS_FLAKE_BOOTSTRAP_SAMPLES` | `--flake-bootstrap-samples` | int |
-| `flake.enabled` | `MAGUS_FLAKE_ENABLED` | `--flake-enabled` | bool |
-| `flake.min_samples` | `MAGUS_FLAKE_MIN_SAMPLES` | `--flake-min-samples` | int |
-| `flake.threshold` | `MAGUS_FLAKE_THRESHOLD` | `--flake-threshold` | float |
-
 ## general
 
 | Config key | Environment variable | Flag | Type |
@@ -130,4 +120,14 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `vcs.base_ref` | `MAGUS_VCS_BASE_REF` | `--vcs-base-ref` | string |
 | `vcs.enabled` | `MAGUS_VCS_ENABLED` | _(env only)_ | bool _(env only)_ |
 | `vcs.name` | `MAGUS_VCS_NAME` | `--vcs-name` | string |
+
+## volatility
+
+| Config key | Environment variable | Flag | Type |
+|------------|----------------------|------|------|
+| `volatility.annotate_gha` | `MAGUS_VOLATILITY_ANNOTATE_GHA` | `--volatility-annotate-gha` | bool |
+| `volatility.bootstrap_samples` | `MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES` | `--volatility-bootstrap-samples` | int |
+| `volatility.enabled` | `MAGUS_VOLATILITY_ENABLED` | `--volatility-enabled` | bool |
+| `volatility.min_samples` | `MAGUS_VOLATILITY_MIN_SAMPLES` | `--volatility-min-samples` | int |
+| `volatility.threshold` | `MAGUS_VOLATILITY_THRESHOLD` | `--volatility-threshold` | float |
 

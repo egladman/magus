@@ -63,6 +63,7 @@ codes/services/MGS5001/
 codes/services/MGS5002/
 codes/services/MGS5003/
 config/
+console/
 conventions/
 daemon/
 debugging/
@@ -158,5 +159,6 @@ telemetry/
 testing/
 tips/
 tour/
+volatility/
 wards/
 workspace/

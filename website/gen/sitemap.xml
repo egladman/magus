@@ -4,7 +4,6 @@
   <url><loc>https://eli.gladman.cc/magus/blog/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/blog/2026/07/01/hello-blog/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/breaking-changes/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/browser-bridge/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/archive/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/charm/</loc></url>
@@ -64,6 +63,7 @@
   <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5002/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5003/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/config/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/console/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/conventions/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/daemon/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/debugging/</loc></url>
@@ -81,7 +81,6 @@
   <url><loc>https://eli.gladman.cc/magus/editor/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/engines/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/faq/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/flaky-builds/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/getting-started/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/glossary/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/</loc></url>
@@ -128,6 +127,7 @@
   <url><loc>https://eli.gladman.cc/magus/telemetry/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/testing/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/tips/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/volatility/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/wards/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/workspace/</loc></url>
 </urlset>

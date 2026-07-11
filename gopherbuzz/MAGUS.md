@@ -67,7 +67,7 @@ graph LR
 ```
 
 - Every rounded box is a **target** you can `magus run`. **Blue** is a top-level target (nothing else depends on it — a typical entry point); **gray** ones are pulled in as dependencies.
-- Arrows show **run order**: a target's dependencies run before it, so the graph flows left → right (e.g. `preflight` runs first, `ci` last).
+- Arrows show **run order**: a target's dependencies run before it, so the graph flows left -> right (e.g. `preflight` runs first, `ci` last).
 - A dotted arrow marks a **cross-project dependency** (the other project's target runs first).
 - Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.
 

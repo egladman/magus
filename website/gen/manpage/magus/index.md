@@ -67,7 +67,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Run a target for VCS-diff affected projects. See [**magus-affected**(1)](magus-affected.md).
 
 **insight**
-: Behavioral code analysis from VCS history. See [**magus-insight**(1)](magus-insight.md).
+: Behavioral code analysis from VCS and run-outcome history. See [**magus-insight**(1)](magus-insight.md).
 
 **graph**
 : The workspace's graphs as objects: deps, export, stats. See [**magus-graph**(1)](magus-graph.md).
@@ -123,7 +123,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Maximum number of concurrently running per-project build steps (default: min(NumCPU,8)). Equivalent magus.yaml key: **concurrency**.
 
 **MAGUS_HISTORY_PATH**
-: Path to the runtime-history JSON shared by flake detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: **history_path**.
+: Path to the runtime-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: **history_path**.
 
 **MAGUS_DRY_RUN**
 : When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: **dry_run**.
@@ -201,7 +201,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : When 1 or true, assume an interactive terminal even if detection says otherwise (default: false). Equivalent magus.yaml key: **assume_interactive**.
 
 **MAGUS_MCP_ENABLED**
-: When 0 or false, refuse to start the MCP server even when the binary was built with -tags mcp (default: true). Equivalent magus.yaml key: **mcp.enabled**.
+: When 0 or false, refuse to start the MCP server (default: true). Equivalent magus.yaml key: **mcp.enabled**.
 
 **MAGUS_MCP_ADDRESS**
 : host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: **mcp.address**.
@@ -209,20 +209,20 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_HINTS_ENABLED**
 : When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: **hints.enabled**.
 
-**MAGUS_FLAKE_ENABLED**
-: Master switch for flakiness detection and auto-retry; false disables all retry logic (default: true). Equivalent magus.yaml key: **flake.enabled**.
+**MAGUS_VOLATILITY_ENABLED**
+: Master switch for volatility detection and auto-retry; false disables all retry logic (default: true). Equivalent magus.yaml key: **volatility.enabled**.
 
-**MAGUS_FLAKE_BOOTSTRAP_SAMPLES**
-: Number of outcomes below which all failures are retried once (bootstrap phase) (default: 20). Equivalent magus.yaml key: **flake.bootstrap_samples**.
+**MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES**
+: Number of outcomes below which all failures are retried once (bootstrap phase) (default: 20). Equivalent magus.yaml key: **volatility.bootstrap_samples**.
 
-**MAGUS_FLAKE_MIN_SAMPLES**
-: Minimum outcomes required before Wilson-score flake rate gates retry decisions (default: 20). Equivalent magus.yaml key: **flake.min_samples**.
+**MAGUS_VOLATILITY_MIN_SAMPLES**
+: Minimum outcomes required before Wilson-score volatility rate gates retry decisions (default: 20). Equivalent magus.yaml key: **volatility.min_samples**.
 
-**MAGUS_FLAKE_THRESHOLD**
-: Wilson lower-bound flake rate above which a project+target is considered flaky (default: 0.05). Equivalent magus.yaml key: **flake.threshold**.
+**MAGUS_VOLATILITY_THRESHOLD**
+: Wilson lower-bound volatility rate above which a project+target is considered volatile (default: 0.05). Equivalent magus.yaml key: **volatility.threshold**.
 
-**MAGUS_FLAKE_ANNOTATE_GHA**
-: When true, emit ::warning annotations and flake summary to $GITHUB_STEP_SUMMARY (default: true). Equivalent magus.yaml key: **flake.annotate_gha**.
+**MAGUS_VOLATILITY_ANNOTATE_GHA**
+: When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY (default: true). Equivalent magus.yaml key: **volatility.annotate_gha**.
 
 **MAGUS_REPORT_FILTER**
 : Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query). Equivalent magus.yaml key: **report.filter**.

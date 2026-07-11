@@ -130,13 +130,14 @@ per resolved spell per project.
 
 ### Concurrency pool
 
-| Metric                      | Instrument      | Unit     | Attributes | Meaning                                         |
-| --------------------------- | --------------- | -------- | ---------- | ----------------------------------------------- |
-| `magus.pool.wait.duration`  | histogram       | `s`      | —          | Time a target waited for a slot                 |
-| `magus.pool.slots.inflight` | up-down counter | `{slot}` | —          | Concurrency slots currently in use (gauge-like) |
+| Metric                      | Instrument      | Unit     | Attributes | Meaning                                          |
+| --------------------------- | --------------- | -------- | ---------- | ------------------------------------------------ |
+| `magus.pool.wait.duration`  | histogram       | `s`      | —          | Time a target waited for a slot                  |
+| `magus.pool.slots.running`  | up-down counter | `{slot}` | —          | Concurrency slots currently running (gauge-like) |
+| `magus.pool.slots.queued`   | up-down counter | `{slot}` | —          | Callers currently queued for a slot (gauge-like) |
 
-`magus.pool.slots.inflight` is an up-down counter: it rises as targets acquire
-slots and falls as they release, so its value reads as the live in-use depth.
+`magus.pool.slots.running` is an up-down counter: it rises as targets acquire
+slots and falls as they release, so its value reads as the live running depth.
 
 ## Traces (spans)
 

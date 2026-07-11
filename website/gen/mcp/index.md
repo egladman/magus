@@ -41,6 +41,7 @@ http://127.0.0.1:7391/mcp
 | `magus_affected_plan`    | Emit a CI shard plan for the affected set                            |
 | `magus_config_get`       | Read the resolved workspace config (read-only)                       |
 | `magus_tail_log`         | Retrieve the captured build log for a project                        |
+| `magus_scratchpad`       | Private per-workspace scratch file for the agent's intermediate notes |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 
@@ -70,23 +71,53 @@ Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
 > **Warning:** Reaching the MCP endpoint is equivalent to having shell access to your build workspace. Any authenticated caller can execute arbitrary build targets, which in turn invoke arbitrary toolchain commands defined in your magusfiles.
 
-The endpoint requires a **bearer token**. The daemon generates one on first start and stores it `0600` at `$XDG_CONFIG_HOME/magus/mcp_token`; the secret never reaches the daemon log, so retrieve it with `magus config mcp token print`. Every `/mcp` request must carry `Authorization: Bearer <token>`; requests without it get `401 Unauthorized`. Manage the token with:
+The endpoint requires a **bearer token**, and accepts two kinds:
+
+- **The cli token** - a single, retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token` (`~/.local/state/magus/mcp_token`). magus's own commands reuse it (for example `graph open --live`). The secret never reaches the daemon log, so retrieve it with `magus config mcp token print`.
+- **Connector tokens** - named, hashed-at-rest, expiring secrets you mint per external client (a Claude connector, an IDE). Only their SHA-256 is stored, so a connector token is shown once at creation and can never be re-displayed; rotate by minting a new one.
+
+Every `/mcp` request must carry `Authorization: Bearer <token>` with either kind; requests without a valid token get `401 Unauthorized`. Manage them with:
 
 ```text
-magus config mcp token print      # show the current token
-magus config mcp token generate   # mint a new one (--force to rotate)
-magus config mcp token revoke     # delete it (daemon mints a fresh one on next start)
+magus config mcp token print                     # show the cli token
+magus config mcp token generate                  # mint a new cli token (--force to rotate)
+magus config mcp token revoke                     # delete it (daemon mints a fresh one on next start)
+
+magus config mcp connector create --name claude   # mint a connector token (prints the secret once)
+magus config mcp connector create --expires 30d    # override the default 90-day expiry (or "never")
+magus config mcp connector list                    # names, fingerprints, and expiry
+magus config mcp connector revoke <name|fingerprint>
 ```
 
-Configure your client with the header, e.g.:
+The token must be presented in the `Authorization` header; the `/mcp` endpoint
+does not accept a token in the URL query string (RFC 6750 keeps secrets out of
+logs and history). How you connect depends on the client:
 
-```json
-{
-  "type": "streamable-http",
-  "url": "http://127.0.0.1:7391/mcp",
-  "headers": { "Authorization": "Bearer <token>" }
-}
-```
+- **Claude Code** connects to the loopback endpoint directly with a header:
+
+  ```text
+  claude mcp add --transport http magus http://127.0.0.1:7391/mcp \
+    --header "Authorization: Bearer <token>"
+  ```
+
+- **Claude Desktop / other IDE plugins** that take a Streamable-HTTP URL plus
+  headers use the same shape:
+
+  ```json
+  {
+    "type": "streamable-http",
+    "url": "http://127.0.0.1:7391/mcp",
+    "headers": { "Authorization": "Bearer <token>" }
+  }
+  ```
+
+  Clients whose connector UI only speaks OAuth (no static-header option) reach a
+  loopback server through the `mcp-remote` stdio bridge:
+  `npx -y mcp-remote http://127.0.0.1:7391/mcp --header "Authorization: Bearer <token>"`.
+
+- **The Claude API "MCP connector"** cannot reach this server: it requires a
+  public `https://` URL and rejects `http://` and loopback addresses. Front the
+  daemon with a TLS tunnel first if you need that path.
 
 Treat the token as **defense in depth**, and still keep the port closed. The server binds to `127.0.0.1` by default and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.
 

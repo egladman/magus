@@ -71,7 +71,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="mcp-driving-magus-from-agents">MCP: driving magus from agents</h1>
 <p>When the daemon is running, it also exposes an <strong>MCP (Model Context Protocol) server</strong> over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.</p>
@@ -137,6 +137,10 @@
 <td><code>magus_tail_log</code></td>
 <td>Retrieve the captured build log for a project</td>
 </tr>
+<tr>
+<td><code>magus_scratchpad</code></td>
+<td>Private per-workspace scratch file for the agent's intermediate notes</td>
+</tr>
 </tbody>
 </table></figure>
 <p>Config mutation is not exposed over MCP. Use the CLI for <code>magus config set</code> and related commands.</p>
@@ -157,18 +161,50 @@ mcp:
 <blockquote>
 <p><strong>Warning:</strong> Reaching the MCP endpoint is equivalent to having shell access to your build workspace. Any authenticated caller can execute arbitrary build targets, which in turn invoke arbitrary toolchain commands defined in your magusfiles.</p>
 </blockquote>
-<p>The endpoint requires a <strong>bearer token</strong>. The daemon generates one on first start and stores it <code>0600</code> at <code>$XDG_CONFIG_HOME/magus/mcp_token</code>; the secret never reaches the daemon log, so retrieve it with <code>magus config mcp token print</code>. Every <code>/mcp</code> request must carry <code>Authorization: Bearer &lt;token&gt;</code>; requests without it get <code>401 Unauthorized</code>. Manage the token with:</p>
-<pre><code class="language-text">magus config mcp token print      # show the current token
-magus config mcp token generate   # mint a new one (--force to rotate)
-magus config mcp token revoke     # delete it (daemon mints a fresh one on next start)
+<p>The endpoint requires a <strong>bearer token</strong>, and accepts two kinds:</p>
+<ul>
+<li><strong>The cli token</strong> - a single, retrievable secret the daemon generates on first start and stores <code>0600</code> at <code>$XDG_STATE_HOME/magus/mcp_token</code> (<code>~/.local/state/magus/mcp_token</code>). magus's own commands reuse it (for example <code>graph open --live</code>). The secret never reaches the daemon log, so retrieve it with <code>magus config mcp token print</code>.</li>
+<li><strong>Connector tokens</strong> - named, hashed-at-rest, expiring secrets you mint per external client (a Claude connector, an IDE). Only their SHA-256 is stored, so a connector token is shown once at creation and can never be re-displayed; rotate by minting a new one.</li>
+</ul>
+<p>Every <code>/mcp</code> request must carry <code>Authorization: Bearer &lt;token&gt;</code> with either kind; requests without a valid token get <code>401 Unauthorized</code>. Manage them with:</p>
+<pre><code class="language-text">magus config mcp token print                     # show the cli token
+magus config mcp token generate                  # mint a new cli token (--force to rotate)
+magus config mcp token revoke                     # delete it (daemon mints a fresh one on next start)
+
+magus config mcp connector create --name claude   # mint a connector token (prints the secret once)
+magus config mcp connector create --expires 30d    # override the default 90-day expiry (or &quot;never&quot;)
+magus config mcp connector list                    # names, fingerprints, and expiry
+magus config mcp connector revoke &lt;name|fingerprint&gt;
 </code></pre>
-<p>Configure your client with the header, e.g.:</p>
+<p>The token must be presented in the <code>Authorization</code> header; the <code>/mcp</code> endpoint
+does not accept a token in the URL query string (RFC 6750 keeps secrets out of
+logs and history). How you connect depends on the client:</p>
+<ul>
+<li>
+<p><strong>Claude Code</strong> connects to the loopback endpoint directly with a header:</p>
+<pre><code class="language-text">claude mcp add --transport http magus http://127.0.0.1:7391/mcp \
+  --header &quot;Authorization: Bearer &lt;token&gt;&quot;
+</code></pre>
+</li>
+<li>
+<p><strong>Claude Desktop / other IDE plugins</strong> that take a Streamable-HTTP URL plus
+headers use the same shape:</p>
 <pre><code class="language-json">{
   &quot;type&quot;: &quot;streamable-http&quot;,
   &quot;url&quot;: &quot;http://127.0.0.1:7391/mcp&quot;,
   &quot;headers&quot;: { &quot;Authorization&quot;: &quot;Bearer &lt;token&gt;&quot; }
 }
 </code></pre>
+<p>Clients whose connector UI only speaks OAuth (no static-header option) reach a
+loopback server through the <code>mcp-remote</code> stdio bridge:
+<code>npx -y mcp-remote http://127.0.0.1:7391/mcp --header &quot;Authorization: Bearer &lt;token&gt;&quot;</code>.</p>
+</li>
+<li>
+<p><strong>The Claude API &quot;MCP connector&quot;</strong> cannot reach this server: it requires a
+public <code>https://</code> URL and rejects <code>http://</code> and loopback addresses. Front the
+daemon with a TLS tunnel first if you need that path.</p>
+</li>
+</ul>
 <p>Treat the token as <strong>defense in depth</strong>, and still keep the port closed. The server binds to <code>127.0.0.1</code> by default and validates the <code>Host</code> and <code>Origin</code> headers on every <code>/mcp</code> request, returning <code>403 Forbidden</code> for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.</p>
 <p><strong>Do not expose it over:</strong></p>
 <ul>
@@ -198,7 +234,7 @@ magus config mcp token revoke     # delete it (daemon mints a fresh one on next 
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22mcp%22">mcp</a><a class="tag" href="../search/?q=tag%3A%22model-context-protocol%22">model-context-protocol</a><a class="tag" href="../search/?q=tag%3A%22ai%22">ai</a><a class="tag" href="../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../search/?q=tag%3A%22claude%22">claude</a><a class="tag" href="../search/?q=tag%3A%22cursor%22">cursor</a><a class="tag" href="../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../search/?q=tag%3A%22ide%22">ide</a></div>
-    <small>Last updated <time datetime="2026-07-05T02:24:52Z">July 5, 2026, 2:24 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733" data-tooltip="66e4aa40fa8388abc0f2f7024ef843424e893733" title="66e4aa40fa8388abc0f2f7024ef843424e893733">66e4aa40</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514d</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb476</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a45196</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b9</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -&gt; opaque; charm becomes a pure-buzz inlinable module</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/mcp.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/mcp.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-10T22:04:19Z">July 10, 2026, 10:04 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/081541c7aec505f6895372d1ed1a69b0514bb4bf" data-tooltip="081541c7aec505f6895372d1ed1a69b0514bb4bf" title="081541c7aec505f6895372d1ed1a69b0514bb4bf">081541c7</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/4b0f4d20ebca853c9b393a850fe8426e71c4f0dc"><code>4b0f4d20</code></a> <small><time datetime="2026-07-10T21:44:24Z">Jul 10, 2026</time></small> - add a two-tier MCP daemon auth model: relocate the retrievable cli token to the XDG state dir and add named, hashed-at-rest, expiring connector tokens in the mgs_ format (base62 body + crc32 checksum, SHA-256 at rest, shown once) for external clients; generalize httpx.BearerGuard to a Verifier accepting either tier via auth.VerifyBearer, with SingleTokenVerifier for the ephemeral live/blob servers; add magus config mcp connector create/list/revoke and a doctor mcp-tokens check with pre-expiry warnings; serialize the connector store with a self-healing cross-process lock; cover internal/daemon (0 -&gt; 83%) and several mcp tools with workspace fixtures</li><li><a href="https://github.com/egladman/magus/commit/bc38b543e2d85c96304b12ccae1a32cd30be1a98"><code>bc38b543</code></a> <small><time datetime="2026-07-10T20:35:50Z">Jul 10, 2026</time></small> - add a magus_scratchpad MCP tool giving an agent a private per-workspace scratch file (read/write/append/clear at cacheDir/scratch/scratchpad.md) for intermediate notes instead of the conversation; file logic is a pure helper for testability</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514d</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb476</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a45196</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b9</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -&gt; opaque; charm becomes a pure-buzz inlinable module</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/mcp.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/mcp.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>

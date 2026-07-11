@@ -236,7 +236,7 @@
         <dt><code>#src=&lt;url&gt;</code></dt>
         <dd>A URL-encoded address the page fetches the JSON from - a loopback server (<code>magus graph open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
         <dt><code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;</code></dt>
-        <dd>Connect to a running daemon for a live workspace view. The host must be literally <code>127.0.0.1</code> or <code>[::1]</code> (not <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph open --live</code> to build this link. Not available in Safari (see browser bridge docs).</dd>
+        <dd>Connect to a running daemon for a live workspace view. The host must be literally <code>127.0.0.1</code> or <code>[::1]</code> (not <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph open --live</code> to build this link. Not available in Safari (see console docs).</dd>
         <dt><code>#node=&lt;id&gt;</code></dt>
         <dd>Select and center a node on load, e.g. <code>#node=spell:go</code>.</dd>
         <dt><code>#q=&lt;query&gt;</code></dt>
@@ -257,7 +257,7 @@
       <p style="color:var(--pico-muted-color);">The graph explorer needs JavaScript to lay out and render the graph. You can still <a href="./graph.json">download the raw graph JSON</a>, or read the <a href="../documentation/">documentation</a>.</p>
     </noscript>
 
-    <p class="verify-note">Everything on this page runs locally in your browser and nothing is uploaded. <a href="../browser-bridge/#privacy-statement">See exactly what does and does not leave your machine</a>.</p>
+    <p class="verify-note">Everything on this page runs locally in your browser and nothing is uploaded. <a href="../console/#privacy-statement">See exactly what does and does not leave your machine</a>.</p>
   </main>
 
     <footer class="site-footer container">

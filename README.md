@@ -102,7 +102,7 @@ repository    internal/cache, knowledge   data access (cache.OutputStore, the kn
 composition   internal/daemon       assembles the daemon HTTP server from all of the above
 ```
 
-A `handler` subpackage is named for and owns the wire concerns of the proto package `magus.<name>.v1` (`handler/viewer`<->`viewer.v1`, `handler/status`<->`status.v1`, `handler/graph`<->`graph.v1`); see [`internal/handler/README.md`](internal/handler/README.md). Route handlers hold a narrow interface satisfied by the service; `internal/service/console` holds the web-UI logic and imports no `net/http`.
+A `handler` subpackage is named for and owns the wire concerns of the proto package `magus.<name>.v1` (`handler/viewer`<->`viewer.v1`, `handler/status`<->`status.v1`, `handler/graph`<->`graph.v1`); see [`internal/handler/README.md`](https://github.com/egladman/magus/blob/main/internal/handler/README.md). Route handlers hold a narrow interface satisfied by the service; `internal/service/console` holds the web-UI logic and imports no `net/http`.
 
 The MCP tools operate on a `*magus.Magus`, so `handler/mcp` imports the root `magus` package - which means the daemon (it imports `handler/mcp`) cannot live in `magus` without a cycle. Instead the root `Magus` holds an injected `Daemon` interface field, populated only in daemon mode by the CLI (`m.SetDaemon(daemon.New(opts))`), so the workspace owns the server without importing its assembler. The CLI's ephemeral `graph open --serve` and `run --live` servers reuse the same `httpx` transport, which is why it is a foundational package rather than part of `daemon`.
 

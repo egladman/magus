@@ -45,7 +45,7 @@ alter execution order. You decide what to do.
 - **Tier B** fires when the observed execution ordering of the two projects
   _changed_ relative to a prior run. A flip means the file's final state
   differed from last time even though neither project changed, the classic
-  flaky-CI symptom.
+  volatility symptom.
 
 ## Resolution
 

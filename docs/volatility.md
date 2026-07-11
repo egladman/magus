@@ -2,6 +2,7 @@
 title: Volatility
 description: How magus tells a volatile failure from a real regression using per-target history and a Wilson-score volatility rate, when it auto-retries, and the tools for chasing down a genuine intermittent break.
 tags: [volatile, volatility, retry, regression, bisect, race, ci, debugging]
+aliases: [flaky-builds]
 ---
 
 # Volatility

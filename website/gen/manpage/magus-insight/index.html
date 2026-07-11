@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>magus insight — magus</title>
-  <meta name="description" content="Show where a codebase&#39;s attention and risk concentrate: hotspots, temporal coupling, ownership, and trend, read from VCS history.">
+  <meta name="description" content="Show where a codebase&#39;s attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/manpage/magus-insight/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="magus insight — magus">
-  <meta property="og:description" content="Show where a codebase&#39;s attention and risk concentrate: hotspots, temporal coupling, ownership, and trend, read from VCS history.">
+  <meta property="og:description" content="Show where a codebase&#39;s attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/manpage/magus-insight/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -74,44 +74,50 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="magus-insight">magus-insight</h1>
-<p>Behavioral code analysis from VCS history</p>
+<p>Behavioral code analysis from VCS and run-outcome history</p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> insight &lt;lens&gt; [flags]</p>
 <h2 id="description">Description</h2>
-<p>Read version-control history to show where a codebase's attention and
-risk concentrate. By default every lens is contextual to the working directory — run
-from inside a subtree and it reflects only that subtree's history; pass --workspace to
-analyze the whole workspace instead (the fan-in postflight uses this). The active VCS
-adapter must report per-commit files (git can).</p>
-<p>Lenses (the first argument):</p>
-<p>hotspots   Edit frequency × complexity — the prime refactoring targets. The
+<p>Read history to show where a codebase's attention and risk concentrate.
+Four lenses read version-control history; a fifth, volatility, reads run-outcome
+history instead. The VCS lenses are contextual to the working directory by default -
+run from inside a subtree and each reflects only that subtree's history; pass
+--workspace to analyze the whole workspace (the fan-in postflight uses this). The
+active VCS adapter must report per-commit files (git can).</p>
+<p>VCS-history lenses (the first argument):</p>
+<p>hotspots   Edit frequency x complexity - the prime refactoring targets. The
 project view is the dependency graph heat-coloured by churn (with
 authors, recency, blast radius, and CI duration); --files ranks
-individual files by churn × complexity.
+individual files by churn x complexity.
 affinity   Projects that change together (temporal coupling). A hidden pair
-co-changes without either declaring a dependency on the other — a
+co-changes without either declaring a dependency on the other - a
 candidate architectural smell.
 ownership  Author concentration: the primary author and their share, distinct
 author count (bus factor), and abandonment (projects gone quiet).
 trend      The recent half of the window versus the earlier half: a positive
-delta is a rising hotspot, a negative one is cooling.
-report     Every lens plus graph stats as one whole-workspace Markdown document
+delta is a rising hotspot, a negative one is cooling.</p>
+<p>Run-outcome lens:</p>
+<p>volatility Each (project, target) pair's recent pass/fail/volatile record scored
+by its Wilson lower bound; a pair at or above the configured threshold
+is flagged volatile - a flakiness signal, the prime stabilization
+targets. It reads the shared runtime-history file, not git, so it takes
+no --commits/--since window and is always workspace-wide.</p>
+<p>report     Every lens plus graph stats as one whole-workspace Markdown document
 (the magusfile's postflight target writes this to the GitHub Actions
 step summary).</p>
-<p>The lenses read VCS: --commits caps the scan; --since bounds it by date
-(90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
+<p>The VCS lenses read the commit log: --commits caps the scan; --since bounds it by
+date (90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
 affinity also render -o mermaid (the hotspots file view renders a
-churn-vs-complexity quadrant). The structural companion — god nodes, orphans,
-and doc coverage from the knowledge graph — is magus graph stats; the report
-embeds it.</p>
+churn-vs-complexity quadrant). The structural companion - god nodes, orphans, and
+doc coverage from the knowledge graph - is magus graph stats; the report embeds it.</p>
 <h2 id="options">Options</h2>
 <dl>
 <dt><strong>--commits</strong> <em>int</em> (default: 500)</dt>
-<dd>Cap on how many recent commits to scan</dd>
+<dd>Cap on how many recent commits to scan (VCS lenses only)</dd>
 <dt><strong>--files</strong></dt>
 <dd>hotspots: rank individual files instead of projects</dd>
 <dt><strong>--since</strong> <em>string</em></dt>
-<dd>Only commits within this window (e.g. 90d, 12w, 6mo, 1y)</dd>
+<dd>Only commits within this window, e.g. 90d, 12w, 6mo, 1y (VCS lenses only)</dd>
 <dt><strong>--workspace</strong></dt>
 <dd>Analyze the whole workspace instead of the current project/subtree</dd>
 </dl>
@@ -130,6 +136,9 @@ embeds it.</p>
 </code></pre>
 <p><em>Rising vs cooling activity</em></p>
 <pre><code class="language-sh">magus insight trend --since 90d
+</code></pre>
+<p><em>Flaky (volatile) targets</em></p>
+<pre><code class="language-sh">magus insight volatility
 </code></pre>
 <p><em>Whole-workspace report (all lenses)</em></p>
 <pre><code class="language-sh">magus insight report --workspace
@@ -154,8 +163,8 @@ embeds it.</p>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+insight%22">magus insight</a><a class="tag" href="../../search/?q=tag%3A%22analysis%22">analysis</a><a class="tag" href="../../search/?q=tag%3A%22hotspots%22">hotspots</a><a class="tag" href="../../search/?q=tag%3A%22ownership%22">ownership</a><a class="tag" href="../../search/?q=tag%3A%22coupling%22">coupling</a><a class="tag" href="../../search/?q=tag%3A%22vcs%22">vcs</a></div>
-    <small>Last updated <time datetime="2026-07-07T23:47:57Z">July 7, 2026, 11:47 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b79201db380e5cd1ae586860878dce3571cddaac" data-tooltip="b79201db380e5cd1ae586860878dce3571cddaac" title="b79201db380e5cd1ae586860878dce3571cddaac">b79201db</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/4f1e825671cfbba6b9c75240603a60abbb747f8c"><code>4f1e8256</code></a> <small><time datetime="2026-07-07T23:00:48Z">Jul 7, 2026</time></small> - add an insight structure lens over the knowledge graph: god nodes, orphans, and doc coverage with --kind scoping; fold it into insight report and group the help into history (git) vs structure axes; the git-history lenses are unchanged</li><li><a href="https://github.com/egladman/magus/commit/f9192ce1394ca9d7564ee721c008cc322d6ab00d"><code>f9192ce1</code></a> <small><time datetime="2026-07-02T22:09:12Z">Jul 2, 2026</time></small> - manpage: generator emits frontmatter; registry gains Description + Tags; document powershell</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514d</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c0</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/5cf487cd315c639cda74697a0766e1311f21fd51"><code>5cf487cd</code></a> <small><time datetime="2026-06-20T03:59:44Z">Jun 20, 2026</time></small> - add magus insight; behavioral code analysis from vcs history</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-insight.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-insight.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+insight%22">magus insight</a><a class="tag" href="../../search/?q=tag%3A%22analysis%22">analysis</a><a class="tag" href="../../search/?q=tag%3A%22hotspots%22">hotspots</a><a class="tag" href="../../search/?q=tag%3A%22ownership%22">ownership</a><a class="tag" href="../../search/?q=tag%3A%22coupling%22">coupling</a><a class="tag" href="../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../search/?q=tag%3A%22volatility%22">volatility</a><a class="tag" href="../../search/?q=tag%3A%22flaky%22">flaky</a></div>
+    <small>Last updated <time datetime="2026-07-11T04:42:23Z">July 11, 2026, 4:42 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/0d0014ea12c4dd61be80bf4df6333d92dfd3274f" data-tooltip="0d0014ea12c4dd61be80bf4df6333d92dfd3274f" title="0d0014ea12c4dd61be80bf4df6333d92dfd3274f">0d0014ea</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (6)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b79201db380e5cd1ae586860878dce3571cddaac"><code>b79201db</code></a> <small><time datetime="2026-07-07T23:47:57Z">Jul 7, 2026</time></small> - consolidate the knowledge-graph surface under a new magus graph verb: graph deps (standalone project DAG; run/affected --graph remain), graph export (was describe knowledge; adds -o graphml), graph stats (was insight structure; insight report still embeds it as graph_stats); hard-break the old spellings with pointers to the new home; rename KnowledgeStructure to KnowledgeStats; add a typed markdown builder (internal/render/md) and rewrite the MAGUS.md and insight-report renderers on it; ignore .claude/ in prettier; regenerate MAGUS.md, manpages, api.lock, and the website, sweeping in stale buf-spell docs and site drift from earlier commits</li><li><a href="https://github.com/egladman/magus/commit/4f1e825671cfbba6b9c75240603a60abbb747f8c"><code>4f1e8256</code></a> <small><time datetime="2026-07-07T23:00:48Z">Jul 7, 2026</time></small> - add an insight structure lens over the knowledge graph: god nodes, orphans, and doc coverage with --kind scoping; fold it into insight report and group the help into history (git) vs structure axes; the git-history lenses are unchanged</li><li><a href="https://github.com/egladman/magus/commit/f9192ce1394ca9d7564ee721c008cc322d6ab00d"><code>f9192ce1</code></a> <small><time datetime="2026-07-02T22:09:12Z">Jul 2, 2026</time></small> - manpage: generator emits frontmatter; registry gains Description + Tags; document powershell</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514d</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/4f6f02c042b8a6355b133e8ab93b80915f72a8c1"><code>4f6f02c0</code></a> <small><time datetime="2026-07-01T00:30:08Z">Jul 1, 2026</time></small> - regenerate module docs and manpages</li><li><a href="https://github.com/egladman/magus/commit/5cf487cd315c639cda74697a0766e1311f21fd51"><code>5cf487cd</code></a> <small><time datetime="2026-06-20T03:59:44Z">Jun 20, 2026</time></small> - add magus insight; behavioral code analysis from vcs history</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-insight.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-insight.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>

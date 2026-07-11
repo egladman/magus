@@ -1,12 +1,12 @@
 ---
 title: magus insight
-description: "Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend, read from VCS history."
-tags: [cli, magus insight, analysis, hotspots, ownership, coupling, vcs]
+description: "Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history."
+tags: [cli, magus insight, analysis, hotspots, ownership, coupling, vcs, volatility, flaky]
 ---
 
 # magus-insight
 
-Behavioral code analysis from VCS history
+Behavioral code analysis from VCS and run-outcome history
 
 ## Synopsis
 
@@ -14,46 +14,55 @@ Behavioral code analysis from VCS history
 
 ## Description
 
-Read version-control history to show where a codebase's attention and
-risk concentrate. By default every lens is contextual to the working directory — run
-from inside a subtree and it reflects only that subtree's history; pass --workspace to
-analyze the whole workspace instead (the fan-in postflight uses this). The active VCS
-adapter must report per-commit files (git can).
+Read history to show where a codebase's attention and risk concentrate.
+Four lenses read version-control history; a fifth, volatility, reads run-outcome
+history instead. The VCS lenses are contextual to the working directory by default -
+run from inside a subtree and each reflects only that subtree's history; pass
+--workspace to analyze the whole workspace (the fan-in postflight uses this). The
+active VCS adapter must report per-commit files (git can).
 
-Lenses (the first argument):
+VCS-history lenses (the first argument):
 
-hotspots   Edit frequency × complexity — the prime refactoring targets. The
+hotspots   Edit frequency x complexity - the prime refactoring targets. The
              project view is the dependency graph heat-coloured by churn (with
              authors, recency, blast radius, and CI duration); --files ranks
-             individual files by churn × complexity.
+             individual files by churn x complexity.
   affinity   Projects that change together (temporal coupling). A hidden pair
-             co-changes without either declaring a dependency on the other — a
+             co-changes without either declaring a dependency on the other - a
              candidate architectural smell.
   ownership  Author concentration: the primary author and their share, distinct
              author count (bus factor), and abandonment (projects gone quiet).
   trend      The recent half of the window versus the earlier half: a positive
              delta is a rising hotspot, a negative one is cooling.
-  report     Every lens plus graph stats as one whole-workspace Markdown document
+
+Run-outcome lens:
+
+volatility Each (project, target) pair's recent pass/fail/volatile record scored
+             by its Wilson lower bound; a pair at or above the configured threshold
+             is flagged volatile - a flakiness signal, the prime stabilization
+             targets. It reads the shared runtime-history file, not git, so it takes
+             no --commits/--since window and is always workspace-wide.
+
+report     Every lens plus graph stats as one whole-workspace Markdown document
              (the magusfile's postflight target writes this to the GitHub Actions
              step summary).
 
-The lenses read VCS: --commits caps the scan; --since bounds it by date
-(90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
+The VCS lenses read the commit log: --commits caps the scan; --since bounds it by
+date (90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
 affinity also render -o mermaid (the hotspots file view renders a
-churn-vs-complexity quadrant). The structural companion — god nodes, orphans,
-and doc coverage from the knowledge graph — is magus graph stats; the report
-embeds it.
+churn-vs-complexity quadrant). The structural companion - god nodes, orphans, and
+doc coverage from the knowledge graph - is magus graph stats; the report embeds it.
 
 ## Options
 
 **--commits** *int* (default: 500)
-: Cap on how many recent commits to scan
+: Cap on how many recent commits to scan (VCS lenses only)
 
 **--files**
 : hotspots: rank individual files instead of projects
 
 **--since** *string*
-: Only commits within this window (e.g. 90d, 12w, 6mo, 1y)
+: Only commits within this window, e.g. 90d, 12w, 6mo, 1y (VCS lenses only)
 
 **--workspace**
 : Analyze the whole workspace instead of the current project/subtree
@@ -88,6 +97,12 @@ magus insight ownership
 
 ```sh
 magus insight trend --since 90d
+```
+
+*Flaky (volatile) targets*
+
+```sh
+magus insight volatility
 ```
 
 *Whole-workspace report (all lenses)*

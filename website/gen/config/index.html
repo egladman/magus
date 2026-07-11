@@ -66,7 +66,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#bridge" title="bridge">bridge</a></li><li><a href="#cache" title="cache">cache</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#daemon" title="daemon">daemon</a></li><li><a href="#flake" title="flake">flake</a></li><li><a href="#general" title="general">general</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#hints" title="hints">hints</a></li><li><a href="#knowledge" title="knowledge">knowledge</a></li><li><a href="#log" title="log">log</a></li><li><a href="#mcp" title="mcp">mcp</a></li><li><a href="#report" title="report">report</a></li><li><a href="#sandbox" title="sandbox">sandbox</a></li><li><a href="#telemetry" title="telemetry">telemetry</a></li><li><a href="#vcs" title="vcs">vcs</a></li></ul>
+        <ul><li><a href="#bridge" title="bridge">bridge</a></li><li><a href="#cache" title="cache">cache</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#daemon" title="daemon">daemon</a></li><li><a href="#general" title="general">general</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#hints" title="hints">hints</a></li><li><a href="#knowledge" title="knowledge">knowledge</a></li><li><a href="#log" title="log">log</a></li><li><a href="#mcp" title="mcp">mcp</a></li><li><a href="#report" title="report">report</a></li><li><a href="#sandbox" title="sandbox">sandbox</a></li><li><a href="#telemetry" title="telemetry">telemetry</a></li><li><a href="#vcs" title="vcs">vcs</a></li><li><a href="#volatility" title="volatility">volatility</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -196,49 +196,6 @@
 <td><code>MAGUS_DAEMON_WORKSPACES</code></td>
 <td><em>(env only)</em></td>
 <td>list <em>(comma-separated, env only)</em></td>
-</tr>
-</tbody>
-</table></figure>
-<h2 id="flake">flake</h2>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>Config key</th>
-<th>Environment variable</th>
-<th>Flag</th>
-<th>Type</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>flake.annotate_gha</code></td>
-<td><code>MAGUS_FLAKE_ANNOTATE_GHA</code></td>
-<td><code>--flake-annotate-gha</code></td>
-<td>bool</td>
-</tr>
-<tr>
-<td><code>flake.bootstrap_samples</code></td>
-<td><code>MAGUS_FLAKE_BOOTSTRAP_SAMPLES</code></td>
-<td><code>--flake-bootstrap-samples</code></td>
-<td>int</td>
-</tr>
-<tr>
-<td><code>flake.enabled</code></td>
-<td><code>MAGUS_FLAKE_ENABLED</code></td>
-<td><code>--flake-enabled</code></td>
-<td>bool</td>
-</tr>
-<tr>
-<td><code>flake.min_samples</code></td>
-<td><code>MAGUS_FLAKE_MIN_SAMPLES</code></td>
-<td><code>--flake-min-samples</code></td>
-<td>int</td>
-</tr>
-<tr>
-<td><code>flake.threshold</code></td>
-<td><code>MAGUS_FLAKE_THRESHOLD</code></td>
-<td><code>--flake-threshold</code></td>
-<td>float</td>
 </tr>
 </tbody>
 </table></figure>
@@ -558,12 +515,55 @@
 </tr>
 </tbody>
 </table></figure>
+<h2 id="volatility">volatility</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>volatility.annotate_gha</code></td>
+<td><code>MAGUS_VOLATILITY_ANNOTATE_GHA</code></td>
+<td><code>--volatility-annotate-gha</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>volatility.bootstrap_samples</code></td>
+<td><code>MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES</code></td>
+<td><code>--volatility-bootstrap-samples</code></td>
+<td>int</td>
+</tr>
+<tr>
+<td><code>volatility.enabled</code></td>
+<td><code>MAGUS_VOLATILITY_ENABLED</code></td>
+<td><code>--volatility-enabled</code></td>
+<td>bool</td>
+</tr>
+<tr>
+<td><code>volatility.min_samples</code></td>
+<td><code>MAGUS_VOLATILITY_MIN_SAMPLES</code></td>
+<td><code>--volatility-min-samples</code></td>
+<td>int</td>
+</tr>
+<tr>
+<td><code>volatility.threshold</code></td>
+<td><code>MAGUS_VOLATILITY_THRESHOLD</code></td>
+<td><code>--volatility-threshold</code></td>
+<td>float</td>
+</tr>
+</tbody>
+</table></figure>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../charms/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Charms</span></a>
-      <a class="page-nav-next" href="../conventions/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Documentation conventions</span></a>
+      <a class="page-nav-next" href="../console/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Console</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -577,7 +577,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../search/?q=tag%3A%22config%22">config</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22configuration%22">configuration</a><a class="tag" href="../search/?q=tag%3A%22environment+variables%22">environment variables</a><a class="tag" href="../search/?q=tag%3A%22flags%22">flags</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a></div>
-    <small>Last updated <time datetime="2026-07-09T04:04:05Z">July 9, 2026, 4:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018" data-tooltip="b95401fb48b20305330b7e6f9838dccef89be018" title="b95401fb48b20305330b7e6f9838dccef89be018">b95401fb</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/17da04414fea2f059ffd41b43c09929c4a6685e0"><code>17da0441</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - Merge branch &#39;main&#39; into pwa-graph-explorer</li><li><a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3"><code>c7924b64</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - regenerate MAGUS.md, manpages, config docs, and site manifests for the knowledge-graph surface; refresh the coverage badge</li><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/config.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/config.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-11T04:22:33Z">July 11, 2026, 4:22 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/7858e3f8802b2c5e0e5289b4292a54f1c5b097bd" data-tooltip="7858e3f8802b2c5e0e5289b4292a54f1c5b097bd" title="7858e3f8802b2c5e0e5289b4292a54f1c5b097bd">7858e3f8</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018"><code>b95401fb</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li><li><a href="https://github.com/egladman/magus/commit/17da04414fea2f059ffd41b43c09929c4a6685e0"><code>17da0441</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - Merge branch &#39;main&#39; into pwa-graph-explorer</li><li><a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3"><code>c7924b64</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - regenerate MAGUS.md, manpages, config docs, and site manifests for the knowledge-graph surface; refresh the coverage badge</li><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/config.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/config.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>

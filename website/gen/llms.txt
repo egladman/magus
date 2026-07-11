@@ -6,7 +6,6 @@
 
 - [Affected](https://eli.gladman.cc/magus/affected/index.md): How magus runs a target only for the projects a VCS diff touched, taking the transitive closure over the dependency graph, and the forensic modes that explain, graph, shard, and bisect that set.
 - [Breaking changes](https://eli.gladman.cc/magus/breaking-changes/index.md): How magus makes backward-incompatible changes visible in review before they reach users - buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI's public surface.
-- [Browser bridge](https://eli.gladman.cc/magus/browser-bridge/index.md): Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.
 - [magus stdlib](https://eli.gladman.cc/magus/buzz/modules/index.md): Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.
 - [archive module](https://eli.gladman.cc/magus/buzz/modules/archive/index.md): Archive creation and extraction with automatic format detection.
 - [charm module](https://eli.gladman.cc/magus/buzz/modules/charm/index.md): Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).
@@ -66,6 +65,7 @@
 - [MGS5002: service op detaches](https://eli.gladman.cc/magus/codes/services/MGS5002/index.md): Fires when a service op's process command detaches (docker run -d), which forks the process away from magus and breaks foreground supervision, stdout capture, readiness probing, and graceful stop.
 - [MGS5003: command op never exits](https://eli.gladman.cc/magus/codes/services/MGS5003/index.md): Fires when a command op runs a watcher (tsc --watch, vitest --watch), which never terminates, so a run-to-completion op would hang the run. The mirror image of MGS5002.
 - [magus.yaml configuration](https://eli.gladman.cc/magus/config/index.md): Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.
+- [Console](https://eli.gladman.cc/magus/console/index.md): Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.
 - [Documentation conventions](https://eli.gladman.cc/magus/conventions/index.md): How to read the magus docs - placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages.
 - [Daemon and concurrency](https://eli.gladman.cc/magus/daemon/index.md): The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.
 - [Debugging magusfiles](https://eli.gladman.cc/magus/debugging/index.md): Drop into an interactive Buzz REPL with magusfile bindings preloaded, or set magus.pry() breakpoints mid-target to inspect frames, locals, and state.
@@ -78,7 +78,6 @@
 - [Editor setup](https://eli.gladman.cc/magus/editor/index.md): Wire your editor to the magus language server (magus buzz lsp) for completion, hover, and signature help in magusfiles and spells.
 - [Engines](https://eli.gladman.cc/magus/engines/index.md): Understand the small engine.Engine seam that lets magus run magusfiles on the embedded Buzz VM and how a new scripting language would plug in.
 - [FAQ](https://eli.gladman.cc/magus/faq/index.md): Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.
-- [Flaky builds](https://eli.gladman.cc/magus/flaky-builds/index.md): How magus tells a flaky failure from a real regression using per-target history and a Wilson-score flake rate, when it auto-retries, and the tools for chasing down a genuine intermittent break.
 - [Getting started](https://eli.gladman.cc/magus/getting-started/index.md): A linear, CLI-first walkthrough from installing magus to running your first spell-composed target and a ci pipeline.
 - [Glossary](https://eli.gladman.cc/magus/glossary/index.md): The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, and engine - each defined in one line with a pointer to the page that covers it in full.
 - [Insight](https://eli.gladman.cc/magus/insight/index.md): How magus reads VCS history to show where a codebase's attention and risk concentrate - hotspots, temporal coupling, ownership, and trend - as a behavioral complement to static structure.
@@ -90,7 +89,7 @@
 - [magus doctor](https://eli.gladman.cc/magus/manpage/magus-doctor/index.md): Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.
 - [magus graph](https://eli.gladman.cc/magus/manpage/magus-graph/index.md): Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).
 - [magus init](https://eli.gladman.cc/magus/manpage/magus-init/index.md): Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.
-- [magus insight](https://eli.gladman.cc/magus/manpage/magus-insight/index.md): Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend, read from VCS history.
+- [magus insight](https://eli.gladman.cc/magus/manpage/magus-insight/index.md): Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.
 - [magus ls](https://eli.gladman.cc/magus/manpage/magus-ls/index.md): List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.
 - [magus run](https://eli.gladman.cc/magus/manpage/magus-run/index.md): Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.
 - [magus self](https://eli.gladman.cc/magus/manpage/magus-self/index.md): Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.
@@ -124,5 +123,6 @@
 - [Telemetry](https://eli.gladman.cc/magus/telemetry/index.md): Export magus metrics and traces to any OTLP collector you run, with head-based sampling, resource attributes, and full instrument reference.
 - [Testing](https://eli.gladman.cc/magus/testing/index.md): How to test Buzz code in magus with the test primitive and the assert and suite libraries, and why not to test magusfiles.
 - [Tips and tricks](https://eli.gladman.cc/magus/tips/index.md): Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, and recursive invocation.
+- [Volatility](https://eli.gladman.cc/magus/volatility/index.md): How magus tells a volatile failure from a real regression using per-target history and a Wilson-score volatility rate, when it auto-retries, and the tools for chasing down a genuine intermittent break.
 - [Wards](https://eli.gladman.cc/magus/wards/index.md): Wards are coded guardrails that inspect a resolved op before it runs and reject an argv that contradicts the op's declared kind, so a misconfigured service or command op fails fast with a fix.
 - [Workspace and projects](https://eli.gladman.cc/magus/workspace/index.md): A workspace is the discovered root; a project is a directory whose magusfile registers it, and depends_on wires the two into an ordered, cache-aware graph.

@@ -66,7 +66,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#live-pool-snapshot-in-a-multiplexer-sidebar" title="Live pool snapshot in a multiplexer sidebar">Live pool snapshot in a multiplexer sidebar</a></li><li><a href="#step-through-a-target-to-diagnose-a-flaky-build" title="Step through a target to diagnose a flaky build">Step through a target to diagnose a flaky build</a></li><li><a href="#re-run-only-affected-projects-on-each-save" title="Re-run only affected projects on each save">Re-run only affected projects on each save</a></li><li><a href="#one-shot-daemon-health-probe" title="One-shot daemon health probe">One-shot daemon health probe</a></li><li><a href="#interactive-debugging-entry-points" title="Interactive debugging entry points">Interactive debugging entry points</a></li><li><a href="#recursive-invocation" title="Recursive invocation">Recursive invocation</a></li></ul>
+        <ul><li><a href="#live-pool-snapshot-in-a-multiplexer-sidebar" title="Live pool snapshot in a multiplexer sidebar">Live pool snapshot in a multiplexer sidebar</a></li><li><a href="#step-through-a-target-to-diagnose-a-volatile-build" title="Step through a target to diagnose a volatile build">Step through a target to diagnose a volatile build</a></li><li><a href="#re-run-only-affected-projects-on-each-save" title="Re-run only affected projects on each save">Re-run only affected projects on each save</a></li><li><a href="#one-shot-daemon-health-probe" title="One-shot daemon health probe">One-shot daemon health probe</a></li><li><a href="#interactive-debugging-entry-points" title="Interactive debugging entry points">Interactive debugging entry points</a></li><li><a href="#recursive-invocation" title="Recursive invocation">Recursive invocation</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -83,7 +83,7 @@
 <pre><code class="language-text">daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
 </code></pre>
 <p>When no daemon is running the line reads <code>daemon: off</code>, with no error and no hang. Drop <code>--compact</code> for the full grid view when you have a wider pane to spare.</p>
-<h2 id="step-through-a-target-to-diagnose-a-flaky-build">Step through a target to diagnose a flaky build</h2>
+<h2 id="step-through-a-target-to-diagnose-a-volatile-build">Step through a target to diagnose a volatile build</h2>
 <p><code>magus run --step</code> pauses before every subprocess and lets you inspect state, skip commands, or open a REPL mid-run. Concurrency is forced to 1, so commands execute one at a time:</p>
 <pre><code class="language-sh">magus run build --step
 magus affected build --step
@@ -124,7 +124,7 @@ magus status -o json   # machine-readable output
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../testing/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Testing</span></a>
-      <a class="page-nav-next" href="../wards/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Wards</span></a>
+      <a class="page-nav-next" href="../volatility/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Volatility</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -138,7 +138,7 @@ magus status -o json   # machine-readable output
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22tips%22">tips</a><a class="tag" href="../search/?q=tag%3A%22status%22">status</a><a class="tag" href="../search/?q=tag%3A%22step%22">step</a><a class="tag" href="../search/?q=tag%3A%22watch%22">watch</a><a class="tag" href="../search/?q=tag%3A%22repl%22">repl</a><a class="tag" href="../search/?q=tag%3A%22recursion%22">recursion</a><a class="tag" href="../search/?q=tag%3A%22magus.cmd%22">magus.cmd</a><a class="tag" href="../search/?q=tag%3A%22magus+status%22">magus status</a></div>
-    <small>Last updated <time datetime="2026-07-08T00:52:01Z">July 8, 2026, 12:52 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a8035bd7681363aedf5847d5d2fb5a6e67e2f11c" data-tooltip="a8035bd7681363aedf5847d5d2fb5a6e67e2f11c" title="a8035bd7681363aedf5847d5d2fb5a6e67e2f11c">a8035bd7</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b3</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/tips.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/tips.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-11T04:22:33Z">July 11, 2026, 4:22 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/7858e3f8802b2c5e0e5289b4292a54f1c5b097bd" data-tooltip="7858e3f8802b2c5e0e5289b4292a54f1c5b097bd" title="7858e3f8802b2c5e0e5289b4292a54f1c5b097bd">7858e3f8</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a8035bd7681363aedf5847d5d2fb5a6e67e2f11c"><code>a8035bd7</code></a> <small><time datetime="2026-07-08T00:52:01Z">Jul 8, 2026</time></small> - fix golangci-lint findings across cmd/magus, std, internal/knowledge, internal/serviceident, internal/spell, project, and run.go; fix markdownlint (MD025 frontmatter-title collision, adjacent-blockquote merging, fenced-code language, code-span spacing, bare $ prompts) and regenerate downstream docs, website, and coverage badge</li><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b3</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/tips.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/tips.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
