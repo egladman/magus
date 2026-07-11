@@ -242,6 +242,18 @@
 .ref-drawer.open { transform: translateX(0); }
 /* Pinned it is docked furniture, not a floating overlay - drop the shadow so it reads as flat. */
 .ref-drawer.pinned { box-shadow: none; }
+
+/* The reference sections were authored for the full page, so inside the narrow drawer their
+   definition lists (grid: max-content 1fr) and long inline code (#live=127.0.0.1...) overran the
+   edge. Contain them: never scroll the drawer sideways; stack the dl rows; wrap code and long tokens;
+   let any real table scroll inside its own box. */
+.ref-drawer { overflow-x: hidden; }
+#ref-drawer .disclosure-body { overflow-wrap: break-word; }
+#ref-drawer dl { grid-template-columns: 1fr; gap: 0.1rem 0; }
+#ref-drawer dt { white-space: normal; }
+#ref-drawer dd { margin-bottom: 0.5rem; }
+#ref-drawer pre, #ref-drawer code { white-space: pre-wrap; overflow-wrap: anywhere; }
+#ref-drawer table { display: block; overflow-x: auto; }
 /* Pinned: the panel docks and the page reflows to make room (no backdrop - the content stays
    visible and usable beside the panel). Pico sets body{width:100%}, so shrink the body's width by
    the panel width; the fixed panel (viewport-relative) fills the strip on the right where the body

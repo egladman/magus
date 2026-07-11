@@ -32,6 +32,8 @@ import { versionsTile } from "./tiles/versions";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
 import "../nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
+import "../search.js"; // the docs search - relocated into the reference drawer (below) by ref-drawer
+import "../ref-drawer.js"; // the shared reference drawer; imported AFTER search so it can pull the search bar in
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);

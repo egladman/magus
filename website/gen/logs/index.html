@@ -171,6 +171,24 @@
     </section>
 
     <details class="url-help ref-section">
+      <summary>Filter syntax</summary>
+      <div class="disclosure-body">
+        <p>The filter box narrows the log to matching lines. Terms combine with AND and match case-insensitively; the whole filter is shareable as a <code>#q=</code> link fragment.</p>
+        <dl>
+          <dt><code>compile</code></dt>
+          <dd>Free text: match any command or output line containing it.</dd>
+          <dt><code>step:&lt;text&gt;</code></dt>
+          <dd>Match a step (command/output) line containing the text - the same as free text, written explicitly.</dd>
+          <dt><code>target:&lt;text&gt;</code></dt>
+          <dd>Keep lines under a target whose label contains the text, e.g. <code>target:build</code>.</dd>
+          <dt><code>status:pass|fail|cached|running</code></dt>
+          <dd>Keep only steps with that result.</dd>
+        </dl>
+        <p>Combine them: <code>status:fail target:build compile</code> shows failing build steps that mention "compile".</p>
+      </div>
+    </details>
+
+    <details class="url-help ref-section">
       <summary>Loading a log by URL</summary>
       <div class="disclosure-body">
         <p><code>magus query output &lt;ref&gt; --open</code> builds these links for you. Everything rides the fragment (after <code>#</code>), which the browser never sends to a server, so nothing about the run - not even its ref - ever leaves your machine.</p>
