@@ -228,20 +228,40 @@
   opacity: 0; visibility: hidden; transition: opacity 0.2s ease;
 }
 .ref-backdrop.open { opacity: 1; visibility: visible; }
+:root { --ref-w: min(400px, 90vw); }
 .ref-drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: min(440px, 92vw);
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: var(--ref-w);
   background: var(--pico-card-background-color); border-left: 1px solid var(--pico-muted-border-color);
   box-shadow: -8px 0 28px rgba(0, 0, 0, 0.16);
   transform: translateX(100%); transition: transform 0.24s ease;
   overflow-y: auto; overscroll-behavior: contain; padding: 0.9rem 1.05rem 2rem;
 }
 .ref-drawer.open { transform: translateX(0); }
+/* Pinned: the panel docks and the page reflows to make room (no backdrop - the content stays
+   visible and usable beside the panel). Pico sets body{width:100%}, so shrink the body's width by
+   the panel width; the fixed panel (viewport-relative) fills the strip on the right where the body
+   no longer extends. */
+body.ref-pinned { width: calc(100% - var(--ref-w)); }
+body { transition: width 0.24s ease; }
+/* On narrow viewports there is no room to reflow, so a pinned panel just overlays (no shrink). */
+@media (max-width: 720px) { body.ref-pinned { width: 100%; } }
+/* Apply the persisted pinned state on load without animating the slide/reflow every navigation. */
+html.ref-instant body, html.ref-instant .ref-drawer, html.ref-instant .ref-backdrop { transition: none !important; }
 .ref-drawer-head {
   display: flex; align-items: center; justify-content: space-between;
   position: sticky; top: 0; margin-bottom: 0.6rem; padding-bottom: 0.4rem;
   background: var(--pico-card-background-color);
 }
+.ref-drawer-head-l { display: flex; align-items: center; gap: 0.5rem; }
 .ref-drawer-title { margin: 0; font-size: 0.95rem; }
+/* Pin/tack toggle: quiet by default, tinted primary when the panel is pinned. */
+.ref-pin {
+  width: auto; margin: 0; padding: 0.15rem 0.3rem; background: none; border: 0;
+  color: var(--pico-muted-color); cursor: pointer; display: inline-flex; line-height: 1;
+}
+.ref-pin:hover { color: var(--pico-color); }
+.ref-pin[aria-pressed="true"] { color: var(--pico-primary); }
+.ref-pin svg { display: block; }
 .ref-drawer-close {
   width: auto; margin: 0; padding: 0.1rem 0.5rem; font-size: 1.2rem; line-height: 1;
   background: none; border: 0; color: var(--pico-muted-color); cursor: pointer;
