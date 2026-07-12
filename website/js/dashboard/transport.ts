@@ -21,6 +21,7 @@ import { MetricsService } from "../gen/magus/metrics/v1/metrics_pb";
 import {
   authHeaders, createDaemonTransport, fetchSSE, getLiveToken, type SSEHeaders,
 } from "../lib/daemon";
+import { getPollMs } from "../lib/settings";
 import type { Store } from "../lib/store";
 import {
   mapStatus, mapSnapshot, mapSample, mapInsight,
@@ -29,10 +30,9 @@ import {
 
 const GRID_MAX = 7 * 52; // ~a GitHub year of columns; the rolling sample window
 const RECONNECT_MS = 3000;
-// Insight is an on-demand JSON read (GET /api/v1/insight), server-side cached ~10s.
-// Not on the status SSE: it is polled on a modest cadence, refetched on open and on a
-// manual refresh. The interval sits just above the server cache TTL so most polls hit it.
-const INSIGHT_POLL_MS = 20000;
+// Insight is an on-demand JSON read (GET /api/v1/insight), server-side cached ~10s. Not on the
+// status SSE: it is polled on a cadence, refetched on open and on a manual refresh. The interval is
+// the operator's configured refresh rate (getPollMs, default 20s - just above the server cache TTL).
 
 export interface TransportCallbacks {
   onStatusOpen(host: string): void;
@@ -196,7 +196,7 @@ export class DashboardTransport {
     this.stopInsight();
     this.insightHost = host;
     void this.fetchInsight();
-    this.insightTimer = setInterval(() => void this.fetchInsight(), INSIGHT_POLL_MS);
+    this.insightTimer = setInterval(() => void this.fetchInsight(), getPollMs());
   }
 
   private stopInsight(): void {

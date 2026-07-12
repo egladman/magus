@@ -22,21 +22,21 @@
   <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
-  <!-- console.css: the shared console-app shell (app bar, launcher, status bar), loaded by
+  <!-- console.css: the shared console-app chrome (app bar, launcher, status bar), loaded by
        all three daemon apps before their own page sheet. -->
   <link rel="stylesheet" href="../console.css">
   <script src="../theme.js"></script>
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body class="dash-native">
-  <!-- Shared console shell (app bar + waffle launcher + reference drawer), injected by
-       renderDashboard() from renderConsoleShell("dashboard", ...) in scribe.buzz - the exact
+  <!-- Shared console chrome (app bar + waffle launcher + reference drawer), injected by
+       renderDashboard() from renderConsoleChrome("dashboard", ...) in scribe.buzz - the exact
        same chrome the log viewer and graph explorer wear, so the three read as one native app.
        The daemon health/connection/mode and the demo/offline flags live in the bottom status bar
        (see .console-statusbar below), not the top bar. -->
     <header class="site-header console-bar">
     <nav class="container-fluid">
-      <ul><li><a href="../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">Dashboard</h1></li><li><span id="console-demo" class="status-tag console-demo-tag" hidden aria-live="polite">Demo data</span></li></ul>
+      <ul><li><a href="../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">Dashboard</h1></li></ul>
       <div class="nav-right">
         <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
         <span class="nav-divider" aria-hidden="true"></span>
@@ -52,19 +52,6 @@
       </div>
     </nav>
   </header>
-  <details class="ref-section" open>
-    <summary>Documentation</summary>
-    <div class="disclosure-body">
-      <ul class="ref-doclinks">
-        <li><a href="../console/">Console</a><span class="ref-doclink-desc">Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.</span></li>
-        <li><a href="../knowledge/">Knowledge graph</a><span class="ref-doclink-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></li>
-        <li><a href="../output-refs/">Target output references</a><span class="ref-doclink-desc">Every target that runs gets a short reference id (ref1a2b3c) for its captured output. Retrieve any target&#39;s exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.</span></li>
-        <li><a href="../mcp/">MCP</a><span class="ref-doclink-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></li>
-        <li><a href="../glossary/">Glossary</a><span class="ref-doclink-desc">The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, and engine - each defined in one line with a pointer to the page that covers it in full.</span></li>
-        <li><a href="../conventions/">Documentation conventions</a><span class="ref-doclink-desc">How to read the magus docs - placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages.</span></li>
-      </ul>
-    </div>
-  </details>
   <div class="ref-backdrop" id="ref-backdrop"></div>
   <aside class="ref-drawer" id="ref-drawer" data-relocate-search="true" aria-hidden="true" aria-label="Reference">
     <div class="ref-drawer-head">
@@ -75,16 +62,6 @@
       <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
     </div>
   </aside>
-  <footer class="console-statusbar" aria-label="Status">
-    <div class="statusbar-cluster" id="console-statusbar-left">
-      <span id="console-conn" class="status-item conn" aria-live="polite">not connected</span>
-    </div>
-    <div class="statusbar-cluster statusbar-right">
-      <span id="console-count" class="status-item status-observing" hidden aria-live="polite"></span>
-      <span id="console-observing" class="status-item status-observing" hidden></span>
-      <span id="offline-badge" class="status-item status-tag status-offline" hidden aria-live="polite">offline</span>
-    </div>
-  </footer>
 
 
   <main class="dash-main">
@@ -145,16 +122,28 @@
         <p class="hub-connect-lead">Start the daemon, then open the live link it prints:</p>
         <pre class="dash-connect-cmd"><code>magus server start</code></pre>
         <p class="dash-connect-demo">Just looking around? <button type="button" id="dash-demo-btn" class="dash-demo-btn">See a demo with sample data</button></p>
-        <!-- Privacy note: the dashboard only ever talks to a loopback daemon in the browser; nothing
-             is sent anywhere. Stated here because it is not disclosed anywhere else in the UI. -->
-        <p class="hub-connect-note">The dashboard talks to your daemon over loopback (127.0.0.1) in your browser - no data ever leaves your machine.</p>
       </div>
     </div>
   </main>
 
-  <!-- The bottom status bar (connection dot + observing-since + offline) is part of the shared
-       console shell (renderConsoleShell), so it is identical across the dashboard, log viewer and
-       graph explorer; main.ts drives #console-conn / #console-observing here. -->
+  <!-- Status bar: a slim, fixed strip pinned to the bottom of the viewport, like a native
+       app / IDE status bar. It carries the daemon liveness that used to crowd the top app bar:
+       the browser<->daemon connection (with its liveness dot), the daemon's health rollup, and
+       a quiet mode note on the left; the demo-data and offline flags on the right when active.
+       main.ts keeps the SAME element ids (dash-conn / dash-health / dash-mode / offline-badge,
+       plus dash-demo) - they were only relocated and restyled. The aria-live regions announce
+       connection and offline changes to assistive tech. -->
+  <footer class="console-statusbar" aria-label="Daemon status">
+    <div class="statusbar-cluster">
+      <span id="dash-conn" class="status-item conn" aria-live="polite">not connected</span>
+      <span id="dash-health" class="status-item" hidden></span>
+      <span id="dash-mode" class="status-item status-mode" hidden></span>
+    </div>
+    <div class="statusbar-cluster statusbar-right">
+      <span id="dash-demo" class="status-item status-demo" hidden aria-live="polite">demo data</span>
+      <span id="offline-badge" class="status-item status-offline" hidden aria-live="polite">offline</span>
+    </div>
+  </footer>
 
   <noscript>
     <div class="dash-noscript">

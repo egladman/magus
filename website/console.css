@@ -81,7 +81,29 @@ body:has(.console-bar) {
    show it at every width (JS-gated, like site.css - a dead button with no toggle is worse
    than the inline links the no-js path falls back to below). */
 .js .console-bar .nav-toggle { display: inline-flex; }
-.console-bar .nav-right { gap: 0.55rem; }
+.console-bar .nav-right { gap: 0.55rem; position: relative; } /* position: anchor the settings panel */
+
+/* Settings panel: the gear button's dropdown of BROWSER-side preferences (refresh rate, daemon host
+   override), persisted in localStorage by console-settings.js. Same dropdown treatment as the app
+   launcher - a Pico-tinted card anchored under the nav buttons. */
+.settings-panel {
+  position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 40;
+  min-width: 15rem; padding: 0.85rem 0.9rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+.settings-title { margin: 0 0 0.15rem; font-size: 0.9rem; }
+.settings-note { margin: 0 0 0.7rem; font-size: 0.72rem; color: var(--pico-muted-color); }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  margin: 0 0 0.55rem; font-size: 0.8rem;
+}
+.settings-row:last-child { margin-bottom: 0; }
+.settings-row select, .settings-row input {
+  width: auto; margin: 0; padding: 0.2rem 0.45rem; height: auto; font-size: 0.8rem;
+}
+.settings-row input { max-width: 9.5rem; }
 
 /* site.css only collapses .nav-links into the dropdown drawer under 1024px; the dashboard
    app bar is a drawer at EVERY width (the sibling tool pages live behind the menu, never

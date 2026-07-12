@@ -34,6 +34,8 @@ import { insightSection } from "./tiles/insight";
 import "../nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
 import "../search.js"; // the docs search - relocated into the reference drawer (below) by ref-drawer
 import "../ref-drawer.js"; // the shared reference drawer; imported AFTER search so it can pull the search bar in
+import "../console-settings.js"; // the gear settings panel (refresh rate + daemon host override)
+import { getDefaultHost } from "../lib/settings";
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
@@ -343,6 +345,16 @@ function boot(): void {
     setText("dash-connect-title", "Reconnecting...");
     setText("dash-connect-sub", "Resuming your last daemon at " + savedHost + ".");
     connectLive(savedHost); // the normalized host, matching the #live= and resume-form paths
+    return;
+  }
+  // No remembered daemon, but the operator set a default host in Settings (the loopback override):
+  // connect to it.
+  const configured = getDefaultHost();
+  const configuredHost = configured ? validateLiveHost(configured) : null;
+  if (configuredHost) {
+    setText("dash-connect-title", "Reconnecting...");
+    setText("dash-connect-sub", "Connecting to your configured daemon at " + configuredHost + ".");
+    connectLive(configuredHost);
     return;
   }
   setConn({ state: "none" });

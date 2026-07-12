@@ -13,6 +13,7 @@ import "./toc.js";
 import "./search.js";
 // ref-drawer runs AFTER search so it can pull the search bar (.page-tools) into the drawer.
 import "./ref-drawer.js";
+import "./console-settings.js"; // the gear settings panel on the console apps (no-op on docs pages)
 import "./anchors.js";
 import "./code-copy.js";
 import "./syntax-highlight.js";
