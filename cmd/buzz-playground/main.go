@@ -141,7 +141,10 @@ func main() {
 		loading.Call("remove")
 	}
 	u.in.Set("disabled", false)
-	u.in.Call("focus")
+	// preventScroll: the console input sits near the bottom of a viewport-tall panel,
+	// so a plain focus() at boot yanks the page down to it - the reader should land at
+	// the top (title + editor), not scrolled past them.
+	u.in.Call("focus", map[string]any{"preventScroll": true})
 	showIntroOnce(doc)
 
 	<-make(chan struct{}) // keep the exported callbacks alive

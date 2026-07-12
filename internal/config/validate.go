@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -41,7 +41,7 @@ func newValidator() *validator.Validate {
 		if !strings.HasPrefix(s, "unix://") {
 			return false
 		}
-		_, err := proc.ParseEndpoint(s)
+		_, err := endpoint.ParseEndpoint(s)
 		return err == nil
 	})
 

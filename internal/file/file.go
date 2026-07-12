@@ -31,7 +31,7 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 		_ = os.Remove(tmpName)
 		return err
 	}
-	if err := os.Chmod(tmpName, perm); err != nil {
+	if err := Chmod(tmpName, perm); err != nil {
 		_ = os.Remove(tmpName)
 		return err
 	}

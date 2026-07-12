@@ -76,12 +76,12 @@ func (s *Console) SetSource(ctx context.Context, src string) (ok bool, status st
 		if s.parsed.Spell {
 			unit = "op" // a spell buffer's runnable units are its ops, not targets
 		}
-		return true, "[pass] " + strconv.Itoa(n) + " " + unit + plural(n)
+		return true, "pass " + strconv.Itoa(n) + " " + unit + plural(n)
 	}
 	if d := s.parsed.Diag; d != nil && d.Line > 0 {
-		return false, "[fail] line " + strconv.Itoa(d.Line) + ":" + strconv.Itoa(d.Col)
+		return false, "fail line " + strconv.Itoa(d.Line) + ":" + strconv.Itoa(d.Col)
 	}
-	return false, "[fail] parse error"
+	return false, "fail parse error"
 }
 
 // Exec runs one input line and returns the rows to render (including the echoed

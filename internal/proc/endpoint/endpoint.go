@@ -1,4 +1,9 @@
-package proc
+// Package endpoint is the parsed-transport-address value type, split out of internal/proc
+// as a leaf with no OS or daemon dependencies (only context/fmt/net/strings). Keeping it
+// separate lets pure consumers - notably internal/config's endpoint validator - depend on
+// endpoint parsing without importing the daemon package, whose signal handling
+// (syscall.SIGHUP) does not compile for the Buzz playground's js/wasm build.
+package endpoint
 
 import (
 	"context"

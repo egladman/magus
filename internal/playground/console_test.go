@@ -83,7 +83,7 @@ func TestConsole_status(t *testing.T) {
 
 	ok, status = s.SetSource(context.Background(), "export fun x(_a: [str]) > void { let ; }")
 	require.False(t, ok, "expected parse error badge")
-	assert.True(t, strings.HasPrefix(status, "[fail]"), "expected parse error badge, got %q", status)
+	assert.True(t, strings.HasPrefix(status, "fail"), "expected parse error badge, got %q", status)
 }
 
 func TestConsole_ls(t *testing.T) {

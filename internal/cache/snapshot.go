@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache/reflink"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/file"
 )
 
 // snapshot records the project's declared outputs into the cache and writes the manifest.
@@ -186,7 +187,7 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 			return nil, fmt.Errorf("replay %s: %w", rec.Path, err)
 		}
 		if rec.Mode != 0 {
-			_ = os.Chmod(dst, os.FileMode(rec.Mode&0o777)) // best-effort
+			_ = file.Chmod(dst, os.FileMode(rec.Mode&0o777)) // best-effort (no-op on wasm)
 		}
 		paths = append(paths, dst)
 	}

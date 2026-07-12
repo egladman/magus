@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/types"
 )
 
@@ -25,7 +26,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 		return 0, fmt.Errorf("proc: forward: MAGUS_DAEMON_SOCKET not set")
 	}
 
-	ep, err := ParseEndpoint(raw)
+	ep, err := endpoint.ParseEndpoint(raw)
 	if err != nil {
 		return 0, fmt.Errorf("proc: forward: invalid MAGUS_DAEMON_SOCKET: %w", err)
 	}
@@ -67,7 +68,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 // QueryStatus dials the proc server at addr and returns a live pool snapshot.
 // addr accepts a unix:// URL or a bare path.
 func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
-	ep, err := ParseEndpoint(addr)
+	ep, err := endpoint.ParseEndpoint(addr)
 	if err != nil {
 		return nil, fmt.Errorf("proc: query: invalid address: %w", err)
 	}
@@ -113,7 +114,7 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 // Shutdown dials the proc server at addr and requests a graceful shutdown.
 // addr accepts a unix:// URL or a bare path.
 func Shutdown(ctx context.Context, addr string) error {
-	ep, err := ParseEndpoint(addr)
+	ep, err := endpoint.ParseEndpoint(addr)
 	if err != nil {
 		return fmt.Errorf("proc: shutdown: invalid address: %w", err)
 	}
@@ -149,7 +150,7 @@ func Shutdown(ctx context.Context, addr string) error {
 // keep it warm past this invocation, returning once it is ready. addr accepts a
 // unix:// URL or a bare path.
 func AcquireService(ctx context.Context, addr, key string, svc types.Service) error {
-	ep, err := ParseEndpoint(addr)
+	ep, err := endpoint.ParseEndpoint(addr)
 	if err != nil {
 		return fmt.Errorf("proc: service.acquire: invalid address: %w", err)
 	}
@@ -191,7 +192,7 @@ func AcquireService(ctx context.Context, addr, key string, svc types.Service) er
 // shared service for key; the daemon keeps it warm and reaps it later. addr accepts
 // a unix:// URL or a bare path.
 func ReleaseService(ctx context.Context, addr, key string) error {
-	ep, err := ParseEndpoint(addr)
+	ep, err := endpoint.ParseEndpoint(addr)
 	if err != nil {
 		return fmt.Errorf("proc: service.release: invalid address: %w", err)
 	}
@@ -234,7 +235,7 @@ func ReleaseService(ctx context.Context, addr, key string) error {
 // daemon running) and returns how many were stopped. addr accepts a unix:// URL or a
 // bare path.
 func StopAllServices(ctx context.Context, addr string) (int, error) {
-	ep, err := ParseEndpoint(addr)
+	ep, err := endpoint.ParseEndpoint(addr)
 	if err != nil {
 		return 0, fmt.Errorf("proc: service.stopall: invalid address: %w", err)
 	}

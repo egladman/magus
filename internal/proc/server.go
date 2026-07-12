@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/types"
 )
 
@@ -69,7 +70,7 @@ type Options struct {
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
 type Server struct {
-	ep       Endpoint
+	ep       endpoint.Endpoint
 	listener net.Listener
 	svc      *service
 	cancel   context.CancelFunc
@@ -104,10 +105,10 @@ func New(opts Options) (*Server, error) {
 		return nil, ErrAlreadyAdopted
 	}
 
-	var ep Endpoint
+	var ep endpoint.Endpoint
 	if opts.Address != "" {
 		var err error
-		ep, err = ParseEndpoint(opts.Address)
+		ep, err = endpoint.ParseEndpoint(opts.Address)
 		if err != nil {
 			return nil, fmt.Errorf("proc: invalid address: %w", err)
 		}
@@ -117,7 +118,7 @@ func New(opts Options) (*Server, error) {
 			return nil, fmt.Errorf("proc: random bytes: %w", err)
 		}
 		sockName := fmt.Sprintf("magus-%d-%s.sock", os.Getpid(), hex.EncodeToString(rnd))
-		ep = Endpoint{Scheme: "unix", Addr: filepath.Join(sockDir(), sockName)}
+		ep = endpoint.Endpoint{Scheme: "unix", Addr: filepath.Join(sockDir(), sockName)}
 	}
 
 	lim := opts.Limiter
