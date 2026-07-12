@@ -156,9 +156,10 @@ function mountTiles(): void {
   const ordered: Tile[] = [
     attention, activity,
     pool, cacheStats,
+    remote,
     gantt,
     cacheRate, utilization,
-    targets, remote, workspaces, services, config,
+    targets, workspaces, services, config,
     latency, buzz, sandbox, mcp,
   ];
   for (const t of ordered) host.append(t.el);
@@ -188,7 +189,7 @@ function beginDemo(): void {
   // Synthesize an observing-since ~92 minutes back so the demo shows the same since-caption a live
   // daemon would (the real value comes from the JSON status endpoint on connect).
   store.set({ observingSince: Date.now() - 92 * 60 * 1000 });
-  store.set({ config: { defaultCharms: ["rw", "cd", "gha"], concurrency: 8, sandbox: true } });
+  store.set({ config: { defaultCharms: ["rw"], concurrency: 8, sandbox: true } });
   demo = startDemo(store);
   // Chain the sibling apps' demos off the same `#demo` fragment so the showcase flows
   // across all three surfaces as one unified demo. Both the graph explorer and the log

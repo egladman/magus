@@ -72,6 +72,9 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   const t0 = Date.now();
 
   // ---- evolving pool + cache counters -------------------------------------
+  // running/queued random-walk ONLY to make the utilization HISTORY chart breathe; the attention
+  // hero's live RUNNING/QUEUED counts are derived from the actual runs in buildStatus (a local const
+  // shadows these) so the hero always matches the Live activity list exactly.
   let running = 4;
   let queued = 0;
   let hits = 4213;
@@ -254,6 +257,10 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           startTime: t.startMs != null ? timestampFromMs(t.startMs) : undefined,
           invocation: run.inv,
         })));
+    // Derive the pool counts from the SAME runs the Live activity shows, so the hero's RUNNING count
+    // equals the number of running targets listed (and QUEUED likewise), never a stale static number.
+    const running = runningTargets.length;
+    const queued = runs.flatMap((run) => run.targets).filter((t) => t.state === "queued").length;
     const total = hits + misses;
     return {
       health: { label: "healthy", cls: "ok" },
