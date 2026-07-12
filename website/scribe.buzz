@@ -1299,6 +1299,8 @@ fun render404(site: Site) > void {
   <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
   <link rel="stylesheet" href="{{basePath}}theme.css">
   <link rel="stylesheet" href="{{basePath}}site.css">
+  <!-- console.css sizes the settings gear (rightmost nav control) and styles its dropdown. -->
+  <link rel="stylesheet" href="{{basePath}}console.css">
   <script src="{{basePath}}theme.js"></script>
 </head>
 <body>
@@ -1321,7 +1323,7 @@ fun render404(site: Site) > void {
 `;
     final doc = template.render(tmpl, {
         "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
-        "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath, site),
+        "nav": renderSiteNav(basePath, "", false), "footer": renderSiteFooter(basePath, site),
     });
     fs.writeFile(site.outDir + "/404.html", doc);
 }
@@ -1360,6 +1362,8 @@ fun writeOffline(site: Site) > void {
   <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
   <link rel="stylesheet" href="{{basePath}}theme.css">
   <link rel="stylesheet" href="{{basePath}}site.css">
+  <!-- console.css sizes the settings gear (rightmost nav control) and styles its dropdown. -->
+  <link rel="stylesheet" href="{{basePath}}console.css">
   <script src="{{basePath}}theme.js"></script>
 </head>
 <body>
@@ -1381,7 +1385,7 @@ fun writeOffline(site: Site) > void {
 `;
     final doc = template.render(tmpl, {
         "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
-        "nav": renderSiteNav(basePath, ""), "footer": renderSiteFooter(basePath, site),
+        "nav": renderSiteNav(basePath, "", false), "footer": renderSiteFooter(basePath, site),
     });
     fs.makeDirectory(site.outDir + "/offline");
     fs.writeFile(site.outDir + "/offline/index.html", doc);
@@ -1941,12 +1945,48 @@ fun capitalizeFirst(s: str) > str {
 
 // navLink renders one top-nav item, marking it aria-current when it is the page
 // the visitor is currently on (key == active).
-// renderSiteNav renders the shared top bar (brand + section links + theme toggle). One
+
+// renderSettingsPanel renders the gear button and its dropdown - the rightmost control
+// in every top bar. The theme (auto/light/dark) select lives here on EVERY page: it
+// replaced the standalone toggle button so the bar carries two trailing controls
+// (reference + gear), not three. showConsole adds the daemon-app operator prefs (refresh
+// rate, daemon host) that only the console apps read and persist; the docs, playground,
+// 404, and offline pages get the theme row alone. console-settings.js opens/closes the
+// panel (and persists poll/host); theme.js seeds and drives the #theme-cycle button
+// (click cycles auto/light/dark), since it owns the pre-paint theme set(). Both scripts
+// no-op when their controls are absent.
+fun renderSettingsPanel(showConsole: bool) > str {
+    var rows = "";
+    if (showConsole) {
+        rows = `          <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
+          <label class="settings-row"><span>Daemon host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
+`;
+    }
+    // "Saved locally" rather than "in this browser": these apps install as a PWA, so the
+    // browser framing reads wrong. The reload behavior is no longer stated here - changing a
+    // console pref now raises a "reload to apply" toast (console-settings.js), so the note
+    // stays short and the same on every surface.
+    final note = "Saved locally.";
+    final tmpl = `        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
+          <h2 class="settings-title">Settings</h2>
+          <p class="settings-note">{{note}}</p>
+{{{rows}}}          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+        </div>`;
+    return template.render(tmpl, {"note": note, "rows": rows});
+}
+
+// renderSiteNav renders the shared top bar (brand + section links + settings gear). One
 // definition for every page - docs pages via renderPage(), the 404, and the playground
 // (build-time injected via renderPlayground) - so adding a nav item lands everywhere
 // at once. root is the relative prefix back to gen/'s root; active is the current
-// section's key (or "" for none).
-fun renderSiteNav(root: str, active: str) > str {
+// section's key (or "" for none). withRef controls the Reference (drawer trigger)
+// button: it is shown only where the page actually ships a #ref-drawer + ref-drawer.js
+// and loads console.css (which sizes the icon button) - the docs pages and the
+// playground (whose drawer holds its "not everything runs here" module note). The 404
+// and offline pages have no reference content, so they pass false to omit the trigger
+// and its divider rather than render an oversized, dead button.
+fun renderSiteNav(root: str, active: str, withRef: bool) > str {
     // On mobile the five section links collapse behind a menu button. That button is a
     // plain Pico .outline <button> (like the theme toggle) - NOT a <details>, whose Pico
     // accordion styling we kept having to fight - so it inherits the button look for free
@@ -1961,15 +2001,15 @@ fun renderSiteNav(root: str, active: str) > str {
     <nav class="container">
       <ul><li><a href="{{root}}index.html" class="contrast"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
       <div class="nav-right">
-        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+{{#withRef}}        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
         <span class="nav-divider" aria-hidden="true"></span>
-        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+{{/withRef}}        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
           <li class="nav-menu-label" aria-hidden="true">Menu</li>
 {{#links}}        <li><a href="{{href}}"{{#current}} aria-current="page"{{/current}}>{{label}}</a></li>
 {{/links}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
-        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+{{{settings}}}
       </div>
     </nav>
   </header>
@@ -1987,7 +2027,7 @@ fun renderSiteNav(root: str, active: str) > str {
     // from there - and via `magus graph open` - rather than getting their own top-nav
     // items. Playground stays a distinct link above because it is a standalone in-browser
     // Buzz runner (no daemon) that the tour deep-links into, not a daemon app.
-    return template.render(tmpl, {"root": root, "links": links});
+    return template.render(tmpl, {"root": root, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
 }
 
 // renderReferenceDrawer returns the docs-site reference panel: the same slide-out drawer the console
@@ -2071,7 +2111,8 @@ fun renderSiteFooter(root: str, site: Site) > str {
 }
 
 // renderConsoleShell renders the shared "console app" top bar: the hat home link, the
-// Google-waffle app launcher (icon tiles for the sibling surfaces), and the theme toggle.
+// Google-waffle app launcher (icon tiles for the sibling surfaces), and the settings gear
+// (renderSettingsPanel(true): the theme select plus the console-only refresh/host prefs).
 // It is the app-facing counterpart to renderSiteNav - the daemon apps (/dashboard/,
 // /logs/, /graph/) wear this instead of the docs nav, so they read as one native app
 // switcher. `app` is the current surface's key ("dashboard" | "logs" | "graph"); the
@@ -2090,17 +2131,10 @@ fun renderConsoleShell(app: str, root: str, refExtra: str) > str {
         <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="console-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links app-grid" id="console-nav-links">
           <li class="nav-menu-label" aria-hidden="true">Console</li>
-{{#cells}}          <li class="app-cell"><a href="{{href}}" id="{{id}}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></a></li>
+{{#cells}}          <li class="app-cell">{{#current}}<span class="app-cell-current" aria-current="page"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></span>{{/current}}{{^current}}<a href="{{href}}" id="{{id}}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></a>{{/current}}</li>
 {{/cells}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
-        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
-          <h2 class="settings-title">Settings</h2>
-          <p class="settings-note">Saved in this browser. Applied on reload.</p>
-          <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
-          <label class="settings-row"><span>Daemon host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
-        </div>
-        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
+{{{settings}}}
       </div>
     </nav>
   </header>
@@ -2134,24 +2168,27 @@ fun renderConsoleShell(app: str, root: str, refExtra: str) > str {
     // trigger's book (the in-app reference drawer) so the two are not confused.
     final iconDocs = `<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>`;
 
-    // Each cell carries a stable id (menu-<app>) so a page's script can repoint the link at
-    // runtime - the dashboard's main.ts rewrites menu-logs/menu-graph to the live daemon (or the
-    // demo) so the launcher hops keep the connection. The current app is omitted (you are on it),
-    // so on the dashboard the launcher shows menu-logs + menu-graph + menu-docs.
+    // Every app is ALWAYS listed, in a fixed order, so the launcher tiles never shift position
+    // between surfaces. The current app stays in place but renders as a non-interactive, muted
+    // "you are here" marker (current == true -> a <span>, not a link) instead of being dropped -
+    // the menu always reads as fully populated and nothing jumps. Each link carries a stable id
+    // (menu-<app>) so a page's script can repoint it at runtime; the dashboard's main.ts rewrites
+    // menu-logs/menu-graph to the live daemon (or the demo). The current cell is a span with no
+    // id/href, so those scripts (guarded by getElementById null checks) simply skip it.
     final cells = mut [<{str: any}>];
-    if (app != "dashboard") { cells.append({"href": root + "console/dashboard/", "icon": iconDashboard, "label": "Dashboard", "id": "menu-dashboard"}); }
-    if (app != "logs") { cells.append({"href": root + "console/logs/", "icon": iconLogs, "label": "Log viewer", "id": "menu-logs"}); }
-    if (app != "graph") { cells.append({"href": root + "console/graph/", "icon": iconGraph, "label": "Graph explorer", "id": "menu-graph"}); }
+    cells.append({"href": root + "console/dashboard/", "icon": iconDashboard, "label": "Dashboard", "id": "menu-dashboard", "current": app == "dashboard"});
+    cells.append({"href": root + "console/logs/", "icon": iconLogs, "label": "Log viewer", "id": "menu-logs", "current": app == "logs"});
+    cells.append({"href": root + "console/graph/", "icon": iconGraph, "label": "Graph explorer", "id": "menu-graph", "current": app == "graph"});
     // Playground is NOT a console app - it is part of the documentation site (standalone WASM, no
     // daemon), so the console launcher lists only the daemon apps plus a link out to the docs.
-    cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation", "id": "menu-docs"});
+    cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation", "id": "menu-docs", "current": false});
     // The app's own name sits in the bar next to the hat (native title-bar pattern), so the
     // page body no longer repeats it as an <h1> + lede.
     var title = "Console";
     if (app == "logs") { title = "Log Viewer"; }
     if (app == "graph") { title = "Graph Explorer"; }
     if (app == "dashboard") { title = "Dashboard"; }
-    return template.render(tmpl, {"root": root, "cells": cells, "title": title, "refExtra": refExtra});
+    return template.render(tmpl, {"root": root, "cells": cells, "title": title, "refExtra": refExtra, "settings": renderSettingsPanel(true)});
 }
 
 // renderAnnouncementBar renders a dismissible top strip announcing the newest shipped
@@ -2175,16 +2212,20 @@ fun renderAnnouncementBar(site: Site) > str {
 // renderPlayground writes gen/playground/index.html from the hand-authored source, injecting
 // the shared nav + footer at its <!-- site-nav --> / <!-- site-footer --> placeholders.
 // The playground is a standalone page (custom head, wasm, its own scripts) so it does
-// not go through renderPage(); templating only the chrome keeps its top bar and footer in
-// lockstep with every other page. It sits at gen/'s root, so its nav prefix is "".
+// not go through renderPage(); templating only the top nav keeps it in lockstep with every
+// other page (its bottom chrome is the console status bar, authored in playground.html, not
+// the docs footer). It sits at gen/'s root, so its nav prefix is "".
 fun renderPlayground(site: Site) > void {
     final f = io.File.open("playground.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
     // The page ships at /playground/ (a directory index like every other page), so
     // its injected nav climbs one level to reach the site root.
-    html = html.replace("<!-- site-nav -->", renderSiteNav("../", "playground"));
-    html = html.replace("<!-- site-footer -->", renderSiteFooter("../", site));
+    html = html.replace("<!-- site-nav -->", renderSiteNav("../", "playground", true));
+    // No site-footer injection: the playground wears the console apps' bottom status bar
+    // (authored directly in playground.html) instead of the docs footer, so the parse
+    // result reads in the console design language. renderSiteFooter still serves the docs
+    // pages (renderPage) and the reference drawer.
     // The default (non-home) CSP meta - site.csp, not site.cspHome - since the
     // playground has no reason to load an external image and holds the reader's
     // own source, so it gets the tighter img-src, not the badge hosts. Also:
@@ -2537,7 +2578,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
         "root": root,
         "gh": GH,
         "announcement": renderAnnouncementBar(site),
-        "nav": renderSiteNav(root, active),
+        "nav": renderSiteNav(root, active, true),
         "breadcrumb": site.renderBreadcrumb(srcRel, title, root),
         "secondaryRow": secondaryRow,
         "contentBlock": contentBlock,

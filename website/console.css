@@ -83,14 +83,11 @@ body:has(.console-bar) {
    than the inline links the no-js path falls back to below). */
 .js .console-bar .nav-toggle { display: inline-flex; }
 .console-bar .nav-right { gap: 0.55rem; position: relative; } /* position: anchor the settings panel */
-/* In the docs nav #theme-toggle carries a margin-left to breathe from the section links; in the
-   console bar it is just another icon button, so drop that margin and let the nav-right gap alone
-   space it - otherwise gear->theme is wider than menu->gear. */
-.console-bar #theme-toggle { margin-left: 0; }
 
-/* Settings panel: the gear button's dropdown of BROWSER-side preferences (refresh rate, daemon host
-   override), persisted in localStorage by console-settings.js. Same dropdown treatment as the app
-   launcher - a Pico-tinted card anchored under the nav buttons. */
+/* Settings panel: the gear button's dropdown of BROWSER-side preferences - the theme select on every
+   page (persisted by theme.js), plus the console apps' refresh rate + daemon host override (persisted
+   by console-settings.js). Same dropdown treatment as the app launcher - a Pico-tinted card anchored
+   under the nav buttons. */
 .settings-panel {
   position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 40;
   min-width: 15rem; padding: 0.85rem 0.9rem;
@@ -109,6 +106,34 @@ body:has(.console-bar) {
   width: auto; margin: 0; padding: 0.2rem 0.45rem; height: auto; font-size: 0.8rem;
 }
 .settings-row input { max-width: 9.5rem; }
+/* The theme control is a click-to-cycle button (auto -> light -> dark), showing the
+   current mode as an icon + label. Sized to match the row's selects/inputs; theme.js
+   fills the icon and label. */
+.theme-cycle {
+  width: auto; margin: 0; padding: 0.2rem 0.55rem; height: auto; font-size: 0.8rem;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.theme-cycle-icon { display: inline-flex; }
+.theme-cycle-icon svg { display: block; width: 0.95em; height: 0.95em; }
+
+/* --- Console apps only: button contrast (body.console-app; the docs site + playground are
+   left with their lighter treatment). The acute accessibility problem was that a disabled
+   button was just a faint, low-opacity ghost of the enabled one, so an unavailable control
+   still read as clickable. Make disabled buttons flatly inert instead - muted fill, muted
+   text and border, full opacity - so enabled (Pico primary blue) vs disabled (gray) is
+   obvious. `body.console-app` out-specifies the apps' own `.file-bar/.stage-tools
+   button:disabled` opacity rules (which load after console.css), so this wins without
+   !important. --- */
+body.console-app button:disabled,
+body.console-app button[disabled],
+body.console-app button[aria-disabled="true"] {
+  opacity: 1;
+  background: var(--pico-card-sectioning-background-color);
+  border-color: var(--pico-muted-border-color);
+  color: var(--pico-muted-color);
+  box-shadow: none;
+  cursor: not-allowed;
+}
 
 /* site.css only collapses .nav-links into the dropdown drawer under 1024px; the dashboard
    app bar is a drawer at EVERY width (the sibling tool pages live behind the menu, never
@@ -189,6 +214,24 @@ body:has(.console-bar) {
 }
 .js .console-bar .app-grid .app-cell svg { color: var(--pico-primary); }
 .js .console-bar .app-grid .app-cell span { font-size: 0.76rem; line-height: 1.15; }
+/* The current app keeps its launcher tile (so nothing shifts) but as a muted, non-interactive
+   "you are here" marker - same layout as the links, no hover, default cursor, gray icon. Reads as
+   disabled/current, mirroring the dashboard connect waffle's current card. */
+.js .console-bar .app-grid .app-cell-current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 0.4rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-sectioning-background-color);
+  text-align: center;
+  color: var(--pico-muted-color);
+  cursor: default;
+}
+.js .console-bar .app-grid .app-cell-current svg { color: var(--pico-muted-color); }
+.js .console-bar .app-grid .app-cell-current span { font-size: 0.76rem; line-height: 1.15; }
 
 /* Bottom status bar: a slim, fixed strip pinned to the bottom of the viewport, the way a
    native app / IDE surface carries its liveness (VS Code-style). It holds the daemon status
@@ -209,6 +252,58 @@ body:has(.console-bar) {
 }
 .statusbar-cluster { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 .statusbar-right { margin-left: auto; } /* push the demo / offline flags to the far end */
+
+/* --- Native full-height layout (console-fill: the graph explorer + log viewer, whose single
+   card should own the whole screen). The body is a viewport-tall flex column - top bar, then the
+   card region, with the fixed status bar reserved below - so the card fills exactly the space
+   between the two chrome rails and the PAGE never scrolls; only the card's own contents (the log
+   list, the graph stage) scroll. This replaces the apps' `height: calc(100svh - 12.5rem)` magic
+   numbers, which under- or over-shot the chrome and left a gap or a page scrollbar. The dashboard
+   opts out (it is console-app but not console-fill) because its connect screen is meant to scroll. */
+body.console-fill {
+  /* The flex column is exactly the viewport minus the fixed status bar, so the card region
+     ends at the status bar's top edge - no overlap, no reserved-padding guesswork. */
+  height: calc(100svh - var(--console-statusbar-h));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+body.console-fill > header { flex: 0 0 auto; } /* the app bar keeps its natural height */
+body.console-fill > main {
+  flex: 1 1 auto;
+  min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
+  overflow: hidden;
+  padding-block: 0.6rem;    /* tight vertical gutter so the card reads as full-bleed */
+  display: flex;
+  flex-direction: column;   /* the single app card stretches as a flex child (below) */
+}
+/* The app card stretches to fill the main region as a flex child - more robust than a
+   percentage height against a flex parent, and it drops the apps' fixed heights + tall
+   min-heights + Pico's section margin so short viewports still fit without a page scroll. */
+body.console-fill > main > .graph-app,
+body.console-fill > main > .panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  position: relative; /* positioning context for the graph's absolute cold-state prompt */
+}
+/* Graph cold state: the prompt normally collapses the card (and its stage) to a natural
+   ~520px height, which in the full-height layout would leave a void (and a background seam)
+   below it. Instead let the stage fill the card and the prompt fill + center within it,
+   matching the log viewer's centered empty state. The prompt's base style is already
+   position:absolute; inset:0; flex-centered - it just needs a full-height positioned
+   ancestor, which the stage now provides. */
+body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-stage {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+}
 
 /* Status items: normal-case status tokens (never all-caps - too loud, eats the bar). The
    connection line is plain text carrying its own leading liveness dot; the discrete rollups
@@ -299,8 +394,8 @@ body:has(.console-bar) {
    (query/filter syntax, views, display options, how-to). Native docs-app pattern; shared across
    the console apps. A page marks its reference blocks .ref-section, adds a .ref-trigger, and the
    #ref-drawer + #ref-backdrop; ref-drawer.js relocates the sections in and wires open/close. */
-/* The trigger is a square icon button, matching the menu + theme toggles exactly (padding 0.4rem);
-   its muted color comes from the shared .nav-toggle/#theme-toggle rule in site.css. */
+/* The trigger is a square icon button, matching the menu button + settings gear exactly (padding
+   0.4rem); its muted color comes from the shared .nav-toggle/.ref-trigger rule in site.css. */
 .ref-trigger, #settings-btn {
   width: auto; margin: 0; padding: 0.4rem;
   display: inline-flex; align-items: center; justify-content: center;

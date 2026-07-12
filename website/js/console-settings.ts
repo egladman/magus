@@ -4,6 +4,7 @@
 // (the gear, a click outside, Escape). No-ops where there is no gear, like every other main.js
 // module. These are BROWSER-side prefs the operator controls; the dashboard reads them on load.
 import { getPollMs, setPollMs, getDefaultHost, setDefaultHost } from "./lib/settings.js";
+import { showRefreshToast } from "./lib/refresh-toast.js";
 
 (function () {
   const btn = document.getElementById("settings-btn");
@@ -13,12 +14,23 @@ import { getPollMs, setPollMs, getDefaultHost, setDefaultHost } from "./lib/sett
   const poll = document.getElementById("settings-poll") as HTMLSelectElement | null;
   const host = document.getElementById("settings-host") as HTMLInputElement | null;
 
+  // The dashboard reads poll/host at load, so a change takes effect on the next reload.
+  // Capture what booted so we only nag when the CURRENT state differs (reverting an edit
+  // back to the applied value shouldn't leave a stale prompt).
+  const appliedPoll = getPollMs();
+  const appliedHost = getDefaultHost();
+  const maybePromptReload = (): void => {
+    if (getPollMs() !== appliedPoll || getDefaultHost() !== appliedHost) {
+      showRefreshToast("Console settings changed. Reload to apply.");
+    }
+  };
+
   // Seed the controls from the stored prefs.
   if (poll) poll.value = String(getPollMs());
   if (host) host.value = getDefaultHost();
 
-  if (poll) poll.addEventListener("change", () => setPollMs(Number(poll.value)));
-  if (host) host.addEventListener("change", () => setDefaultHost(host.value));
+  if (poll) poll.addEventListener("change", () => { setPollMs(Number(poll.value)); maybePromptReload(); });
+  if (host) host.addEventListener("change", () => { setDefaultHost(host.value); maybePromptReload(); });
 
   let open = false;
   const render = (): void => {

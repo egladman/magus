@@ -22,9 +22,16 @@
   <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
+  <!-- console.css carries the shared reference drawer (trigger sizing, slide-out panel,
+       relocated .ref-section styling) that the "Not everything runs here" note lives in;
+       the docs pages load it for the same drawer. -->
+  <link rel="stylesheet" href="../console.css">
   <script src="../theme.js"></script>
   <style>
     :root { --pad: clamp(0.75rem, 2vw, 1.25rem); }
+    /* Reserve room for the fixed bottom status bar so content scrolled below the panel
+       (the "Not everything runs here" note) never hides behind it. */
+    body { padding-bottom: var(--console-statusbar-h); }
     /* Cap the editor to the same width as the /search/ page (--content-wide, from
        site.css) and center it, so the two app-like tool pages share one footprint
        rather than the playground running edge-to-edge. */
@@ -38,8 +45,10 @@
     .panel {
       display: flex; flex-direction: column; position: relative;
       /* Fill the viewport below the nav + title (so the editor uses the full
-         height, not an arbitrary cap); the panes scroll in below. */
-      height: calc(100svh - 9rem);
+         height, not an arbitrary cap); the panes scroll in below. The bottom
+         status bar is fixed, so subtract its height too or the console input
+         hides behind it. */
+      height: calc(100svh - 9rem - var(--console-statusbar-h));
       min-height: 480px;
       border: 1px solid var(--pico-muted-border-color);
       /* Match the rest of the site's corner radius (Pico's), not a rounder custom one. */
@@ -68,7 +77,9 @@
       font-size: 0.8rem;
     }
     .file-bar .name { font-family: var(--pico-font-family-monospace); color: var(--pico-muted-color); }
-    .file-bar .badge { margin-left: auto; font-size: 0.72rem; }
+    /* The parse-status moved to the bottom status bar, so the action buttons take the
+       auto-margin that pushes them to the right edge of the file bar. */
+    .file-bar #download-btn { margin-left: auto; }
     .badge.ok { color: var(--pico-ins-color); }
     .badge.err { color: var(--pico-del-color); }
     /* Compact action buttons (Download, Share) at the right of the bar. The
@@ -244,11 +255,6 @@
     .modules-note li { padding: 0.3rem 0; list-style: none; color: var(--pico-muted-color); }
     .modules-note li + li { border-top: 1px solid var(--pico-muted-border-color); }
     .modules-note code { font-size: 0.85em; }
-
-    /* The provenance block that used to carry the divider between the content and
-       the footer is gone (its text was redundant), so give the injected site footer
-       its own top rule - scoped to this page - so the footer doesn't read as barren. */
-    .site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
   </style>
 </head>
 <body>
@@ -257,13 +263,11 @@
   <main class="container-fluid">
     <h1 class="pg-title">Playground</h1>
     <p class="lede">A scratchpad for magusfiles. New to magus? <a href="../tour/">Take the tour</a> for guided, runnable examples.</p>
-    <p class="pg-note">The <a href="https://buzz-lang.dev/">Buzz</a> interpreter runs as WebAssembly in your browser; nothing leaves this tab. Build tools don't run here, so <code>run</code> shows a target's plan, not the real build. <a href="../download/">Install magus</a> to run for real.</p>
+    <p class="pg-note">The <a href="https://buzz-lang.dev/">Buzz</a> interpreter runs as WebAssembly here, so nothing leaves this tab and <code>run</code> shows a target's plan, not a real build. <a href="../download/">Install magus</a> to run for real.</p>
 
     <section class="panel">
       <header class="file-bar">
         <span id="file-name" class="name">magusfile.buzz</span>
-        <span id="parse-status" class="badge"></span>
-        <span id="offline-badge" class="offline-badge" hidden aria-live="polite">offline - everything on this page is local</span>
         <button id="download-btn" class="outline" type="button" title="Save this magusfile to your machine"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span class="btn-label">Download</span></button>
         <button id="share-btn" class="outline" type="button" title="Copy a link that reopens this code"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="btn-label">Share</span></button>
         <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the editor to fill the screen"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg><span class="btn-label">Fullscreen</span></button>
@@ -298,6 +302,11 @@
         <style>
           .panel .file-bar, .panel .editor, .panel .term-bar, .panel .term, #loading { display: none !important; }
           .panel { height: auto !important; min-height: 0 !important; }
+          /* The status bar's contents are JS-driven (parse-status from the WASM, offline
+             from offline-badge.js), so with JS off there is nothing to show - hide it and
+             drop its reserved padding. */
+          .console-statusbar { display: none !important; }
+          body { padding-bottom: 0 !important; }
         </style>
         <div style="padding:1.5rem;color:var(--pico-muted-color);">
           <p><strong>The playground needs JavaScript.</strong></p>
@@ -306,19 +315,46 @@
       </noscript>
     </section>
 
-    <!-- Collapsed by default: the host modules the browser build leaves out. The
-         list is filled from the interpreter itself (globalThis.buzz.excludedModules
-         via editor.js), so it can't drift from what actually compiled in. -->
-    <details class="modules-note">
+    <!-- The host modules the browser build leaves out. Marked .ref-section so
+         ref-drawer.js (bundled in main.js) relocates it into the Reference panel
+         behind the book button in the nav; with JS off it stays here inline (the
+         `.js .ref-section` hide rule only applies when scripting is on). The list is
+         filled from the interpreter itself (globalThis.buzz.excludedModules via
+         editor.js), so it can't drift from what actually compiled in. -->
+    <details class="modules-note ref-section">
       <summary>Not everything runs here <span class="excluded-count"></span></summary>
       <p>Anything that just crunches data works in your browser. A handful of modules need a process, a real filesystem, or the network, so they only come alive with <a href="../download/">magus installed</a>:</p>
       <ul id="excluded-modules"></ul>
     </details>
-
-    <p class="verify-note">Everything on this page runs locally in your browser and nothing is uploaded. <a href="../console/#privacy-statement">See exactly what does and does not leave your machine</a>.</p>
   </main>
 
-  <!-- site-footer -->
+  <!-- Status bar: the playground wears the console apps' bottom status rail (styled by
+       console.css's .console-statusbar) instead of the docs footer, so the parse result and
+       offline flag read in the same native design language as the daemon apps. The WASM writes
+       #parse-status ([pass]/[fail] + target/op count); offline-badge.ts toggles #offline-badge. -->
+  <footer class="console-statusbar" aria-label="Status">
+    <div class="statusbar-cluster">
+      <span id="parse-status" class="badge" aria-live="polite"></span>
+    </div>
+    <div class="statusbar-cluster statusbar-right">
+      <span id="offline-badge" class="status-item status-tag status-offline" hidden aria-live="polite">offline - everything on this page is local</span>
+    </div>
+  </footer>
+
+  <!-- Reference drawer: the slide-out panel the nav's book button (.ref-trigger, injected
+       by renderSiteNav) opens. Same shell the docs pages and console apps use (styled by
+       console.css, driven by ref-drawer.js in main.js); ref-drawer.js relocates the page's
+       .ref-section blocks - here, the "Not everything runs here" module note - into it. -->
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
 
   <!-- TinyGo runtime glue. Defines globalThis.Go. Committed alongside buzz.wasm. -->
   <script src="wasm_exec.js"></script>
@@ -430,6 +466,44 @@
       }
       // Fallback in case the overlay was already gone or never observed.
       setTimeout(function () { if (!document.getElementById("loading")) restore(); }, 1500);
+    })();
+  </script>
+  <!-- Keep the reader at the top on load. The WASM focuses the console input once it
+       boots (cmd/buzz-playground), and on a viewport-tall page a plain focus() scrolls
+       past the title + editor down to that input. cmd/buzz-playground now focuses with
+       {preventScroll:true}, but the committed WASM predates that and can't be rebuilt in
+       CI (no TinyGo), so this is the page-side safety net: snap back to the top once the
+       boot overlay (#loading) is removed. A no-op once the WASM ships preventScroll. -->
+  <script>
+    (function () {
+      function toTop() { window.scrollTo(0, 0); }
+      var loading = document.getElementById("loading");
+      if (loading && loading.parentNode && window.MutationObserver) {
+        var obs = new MutationObserver(function () {
+          if (!document.getElementById("loading")) { obs.disconnect(); toTop(); }
+        });
+        obs.observe(loading.parentNode, { childList: true });
+      } else {
+        window.addEventListener("load", toTop);
+      }
+    })();
+  </script>
+  <!-- The status bar shows the parse result plain (no brackets), matching the console
+       apps' status language. cmd/buzz-playground already emits bracket-free "pass"/"fail",
+       but the committed WASM predates that and can't be rebuilt in CI (no TinyGo), so
+       normalize "[pass]"/"[fail]" here until it ships. Idempotent: a bracket-free value
+       does not re-trigger the strip, so there is no observer loop. -->
+  <script>
+    (function () {
+      var el = document.getElementById("parse-status");
+      if (!el || !window.MutationObserver) return;
+      function strip() {
+        var t = el.textContent;
+        var s = t.replace(/^\[(pass|fail)\]\s*/, "$1 ");
+        if (s !== t) el.textContent = s;
+      }
+      new MutationObserver(strip).observe(el, { childList: true, characterData: true, subtree: true });
+      strip();
     })();
   </script>
   <!-- Fullscreen toggle: expand the editor panel to fill the screen for an

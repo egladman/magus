@@ -10,6 +10,8 @@
 // a first install): rather than let the swap happen silently, we show a small toast
 // offering a refresh so the reader gets the new assets when they choose to.
 
+import { showRefreshToast } from "./lib/refresh-toast.js";
+
 (function () {
   if (typeof navigator === "undefined") return;
   if (!("serviceWorker" in navigator)) return;
@@ -32,29 +34,10 @@
     return "the docs";
   }
 
-  function showUpdateToast(): void {
-    if (document.querySelector(".sw-toast")) return;
-    const toast = document.createElement("div");
-    toast.className = "sw-toast";
-    toast.setAttribute("role", "status");
-
-    const msg = document.createElement("span");
-    msg.textContent = "A newer version of " + pageSubject() + " is available.";
-    toast.appendChild(msg);
-
-    const refresh = document.createElement("button");
-    refresh.type = "button";
-    refresh.textContent = "Refresh";
-    refresh.addEventListener("click", () => { location.reload(); });
-    toast.appendChild(refresh);
-
-    document.body.appendChild(toast);
-  }
-
   // A new service worker taking control (the current one skipWaiting()s) fires this.
   // Only treat it as an update worth surfacing if we were already controlled.
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (hadController) showUpdateToast();
+    if (hadController) showRefreshToast("A newer version of " + pageSubject() + " is available.");
   });
 
   window.addEventListener("load", () => {

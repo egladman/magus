@@ -96,18 +96,9 @@ html {
 .site-header nav {
   --pico-nav-element-spacing-vertical: 0.4rem;
 }
-/* Compact the theme-toggle button so it sits neatly in the nav bar (also used on
-   the standalone playground page, which carries its own copy of this rule). */
-#theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  padding: 0.4rem; /* square icon button, matching the TOC toggle */
-  /* Breathing room from the last section link (Playground); butted against it the
-     visual weight reads as cramped. Adds to the nav-right flex gap. */
-  margin-left: 0.6rem;
-}
+/* The settings gear (the rightmost nav control, holding the theme select) is sized as a
+   square icon button by .ref-trigger/#settings-btn in console.css, which every page now
+   loads; the .nav-right flex gap gives it breathing room from the section links. */
 /* Section links share ONE "background-fill" language for both hover and the current
    page - no underlines on either - so the two states read as the same thing at
    different strengths (neutral tint on hover, persistent primary tint for the page
@@ -163,9 +154,9 @@ html {
   justify-content: center;
   width: auto;
   margin: 0; /* its type="button" attribute otherwise picks up Pico's form-button
-                bottom margin, which #theme-toggle (no type attribute) doesn't -
-                that mismatch was pushing this button up within the centered row */
-  padding: 0.4rem; /* square, matching the TOC + theme toggles */
+                bottom margin, which was pushing this button up within the centered
+                row; the settings gear zeroes the same margin in console.css */
+  padding: 0.4rem; /* square, matching the TOC + settings gear */
 }
 /* Icon swap: hamburger by default, X once the dropdown is open. The .nav-open class
    lives on .nav-right (the button's parent), so it drives both glyphs from one hook. */
@@ -173,20 +164,18 @@ html {
 .nav-right.nav-open .nav-toggle .icon-menu { display: none; }
 .nav-right.nav-open .nav-toggle .icon-close { display: inline; }
 
-/* Utility chrome (the menu + theme toggles) reads as quiet, secondary controls
+/* Utility chrome (the menu button + reference trigger) reads as quiet, secondary controls
    rather than primary-blue outlines, so the eye is free to land on content and on
    the warm "run/try" CTAs. Resting state is muted gray; hover/focus firm up to the
-   full text color so they never feel disabled. */
+   full text color so they never feel disabled. The settings gear (#settings-btn) gets
+   the same treatment from console.css, which every page loads. */
 .nav-toggle,
-#theme-toggle,
 .ref-trigger {
   border-color: var(--pico-muted-border-color);
   color: var(--pico-muted-color);
 }
 .nav-toggle:hover,
 .nav-toggle:focus-visible,
-#theme-toggle:hover,
-#theme-toggle:focus-visible,
 .ref-trigger:hover,
 .ref-trigger:focus-visible {
   border-color: var(--pico-color);
@@ -1886,11 +1875,11 @@ a code {
 /* --- No-JS graceful degradation (foundation from WS D: theme.js flips
        <html class="no-js"> to "js" before paint). Anything the JS bundle
        injects (TOC toggle, search box, code-copy, anchors, back-to-top,
-       Run buttons) simply doesn't appear when JS is off. The theme-toggle
-       button is static in the template but a dead control without JS, so
-       hide it explicitly; the OS still drives dark mode via
-       prefers-color-scheme. */
-.no-js #theme-toggle {
+       Run buttons) simply doesn't appear when JS is off. The settings gear is
+       static in the template but a dead control without JS (console-settings.js
+       opens its panel, and the theme select inside needs theme.js), so hide it
+       explicitly; the OS still drives dark mode via prefers-color-scheme. */
+.no-js #settings-btn {
   display: none;
 }
 /* The /search/ page input is static HTML (unlike the JS-injected header search),
@@ -1901,7 +1890,7 @@ a code {
 }
 /* The announcement bar's close button is static; without JS it can't dismiss
    anything. Hide the dead control (the bar itself stays readable). Mirrors the
-   theme-toggle treatment above. */
+   settings-gear treatment above. */
 .no-js .announcement-close {
   display: none;
 }

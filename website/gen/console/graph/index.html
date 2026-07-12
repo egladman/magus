@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'"><!-- injected at build time by renderGraph() in scribe.buzz; see
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LpZl4VVF4vVfBEDCgBV6fTc5zg1FHYDUqxNnFGhQPJ0=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'"><!-- injected at build time by renderGraph() in scribe.buzz; see
        playground.html's identical placeholder comment for why it lives here. -->
   <title>Graph Explorer — magus</title>
   <meta name="description" content="Explore the magus knowledge graph in your browser: projects, targets, spells, ops, modules and their relations, force-directed and searchable. Open it seeded with your own workspace via `magus graph explore` — your data never leaves your machine.">
@@ -23,7 +23,7 @@
   <script src="../../theme.js"></script>
   <link rel="stylesheet" href="graph.css">
 </head>
-<body>
+<body class="console-app console-fill">
     <header class="site-header console-bar">
     <nav class="container-fluid">
       <ul><li><a href="../../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">Graph Explorer</h1></li><li><span id="console-demo" class="status-tag console-demo-tag" hidden aria-live="polite">Demo data</span></li></ul>
@@ -35,17 +35,18 @@
           <li class="nav-menu-label" aria-hidden="true">Console</li>
           <li class="app-cell"><a href="../../console/dashboard/" id="menu-dashboard"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="13" x2="9" y2="18"/></svg><span>Dashboard</span></a></li>
           <li class="app-cell"><a href="../../console/logs/" id="menu-logs"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg><span>Log viewer</span></a></li>
+          <li class="app-cell"><span class="app-cell-current" aria-current="page"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><line x1="8" y1="8" x2="11" y2="16"/><line x1="16" y1="7.5" x2="13" y2="16"/><line x1="8" y1="7" x2="16" y2="6.5"/></svg><span>Graph explorer</span></span></li>
           <li class="app-cell"><a href="../../documentation/" id="menu-docs"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Documentation</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
         <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
           <h2 class="settings-title">Settings</h2>
-          <p class="settings-note">Saved in this browser. Applied on reload.</p>
+          <p class="settings-note">Saved locally.</p>
           <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
           <label class="settings-row"><span>Daemon host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
+          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
         </div>
-        <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
       </div>
     </nav>
   </header>
