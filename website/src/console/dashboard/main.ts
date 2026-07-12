@@ -32,11 +32,21 @@ import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
-import "../../site/nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
-import "../../site/search.js"; // the docs search - relocated into the reference drawer (below) by ref-drawer
-import "../../site/ref-drawer.js"; // the shared reference drawer; imported AFTER search so it can pull the search bar in
-import "../../site/console-settings.js"; // the gear settings panel (refresh rate + daemon host override)
+// This app does NOT load the docs main.js bundle, so it wires the shared console chrome
+// itself: the nav dropdown, the docs search (relocated into the drawer), the reference drawer
+// (from src/ui/), and the settings gear (from src/ui/). Each is an exported init function
+// (post-ESM-refactor), so they are CALLED here, not run on import. Order matters: ref-drawer
+// runs after search so it can pull the search bar (.page-tools) into the drawer.
+import { initNav } from "../../site/nav.js";
+import { initSearch } from "../../site/search.js";
+import { initRefDrawer } from "../../ui/ref-drawer.js";
+import { initConsoleSettings } from "../../ui/console-settings.js";
 import { getDefaultHost } from "../../lib/settings";
+
+initNav();
+initSearch();
+initRefDrawer();
+initConsoleSettings();
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
