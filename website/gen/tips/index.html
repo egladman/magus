@@ -160,55 +160,55 @@ term has its own anchor, so you can deep-link a single definition (for example
 <h2 id="core-model">Core model</h2>
 <h3 id="workspace">Workspace</h3>
 <p>The magus root directory that owns a set of projects and shared config; the unit
-magus operates over. See <a href="../workspace/">workspace.md</a>.</p>
+magus operates over. See <a href="../workspace/">workspace</a>.</p>
 <h3 id="project">Project</h3>
 <p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
-caching, scheduling, and dependency tracking. See <a href="../workspace/">workspace.md</a>.</p>
+caching, scheduling, and dependency tracking. See <a href="../workspace/">workspace</a>.</p>
 <h3 id="magusfile">Magusfile</h3>
 <p>The <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and
-binds its spells. See <a href="../targets/">targets.md</a>.</p>
+binds its spells. See <a href="../targets/">targets</a>.</p>
 <h3 id="target">Target</h3>
 <p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
 may compose a spell's tool-native operations and depend on other targets. See
-<a href="../targets/">targets.md</a>.</p>
+<a href="../targets/">targets</a>.</p>
 <h3 id="operation">Operation</h3>
 <p>A single tool-native command a target composes; the middle of the work hierarchy
-(Spell to Operation to Target). See <a href="../operations/">operations.md</a>.</p>
+(Spell to Operation to Target). See <a href="../operations/">operations</a>.</p>
 <h3 id="spell">Spell</h3>
 <p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
-toolchain's real commands. See <a href="../spells/">spells.md</a>.</p>
+toolchain's real commands. See <a href="../spells/">spells</a>.</p>
 <h3 id="charm">Charm</h3>
 <p>An execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target
 runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in
-place, and <code>ci</code> always strips it. See <a href="../charms/">charms.md</a>.</p>
+place, and <code>ci</code> always strips it. See <a href="../charms/">charms</a>.</p>
 <h3 id="ward">Ward</h3>
 <p>A coded diagnostic that inspects a resolved op and nudges or blocks an
-anti-pattern before it runs. See <a href="../wards/">wards.md</a>.</p>
+anti-pattern before it runs. See <a href="../wards/">wards</a>.</p>
 <h3 id="module">Module</h3>
 <p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
 exec, vcs, and more. See <a href="../buzz/modules/">the module reference</a>.</p>
 <h3 id="buzz">Buzz</h3>
 <p>The language magusfiles are written in (the <code>.buzz</code> engine). See
-<a href="../engines/">engines.md</a>.</p>
+<a href="../engines/">engines</a>.</p>
 <h3 id="engine">Engine</h3>
 <p>The interpreter a magusfile runs on; magus embeds the Buzz engine. See
-<a href="../engines/">engines.md</a>.</p>
+<a href="../engines/">engines</a>.</p>
 <h2 id="execution-and-caching">Execution and caching</h2>
 <h3 id="cache">Cache</h3>
 <p>The content-addressed store magus consults before running a target, so unchanged
-work is skipped. See <a href="../cache/">cache.md</a>.</p>
+work is skipped. See <a href="../cache/">cache</a>.</p>
 <h3 id="affected">Affected</h3>
 <p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
-only over them. See <a href="../affected/">affected.md</a>.</p>
+only over them. See <a href="../affected/">affected</a>.</p>
 <h3 id="sandbox">Sandbox</h3>
 <p>The restricted filesystem and environment a target runs in, so builds stay
-reproducible and side-effect-free. See <a href="../sandbox/">sandbox.md</a>.</p>
+reproducible and side-effect-free. See <a href="../sandbox/">sandbox</a>.</p>
 <h3 id="service">Service</h3>
 <p>A long-running or shared process magus manages across runs, distinct from a
-one-shot target. See <a href="../services/">services.md</a>.</p>
+one-shot target. See <a href="../services/">services</a>.</p>
 <h3 id="daemon">Daemon</h3>
 <p>The background magus host that owns shared state such as services and the warm
-knowledge graph. See <a href="../daemon/">daemon.md</a>.</p>
+knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
 <p>The composite pipeline (lint, build, test, coverage); run with
 <code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
@@ -217,94 +217,94 @@ knowledge graph. See <a href="../daemon/">daemon.md</a>.</p>
 captured output; it appears on each target's line, and
 <code>magus query output ref1a2b3c</code> prints those exact bytes. In OpenTelemetry terms
 it corresponds to a <strong>span</strong> (one target execution) within its <strong>trace</strong> (the
-whole <code>magus</code> invocation). See <a href="../output-refs/">output-refs.md</a>.</p>
+whole <code>magus</code> invocation). See <a href="../output-refs/">output-refs</a>.</p>
 <h3 id="trace">Trace</h3>
 <p>OpenTelemetry's name for one whole <code>magus</code> invocation; every target it runs is a
-span beneath it. See <a href="../telemetry/">telemetry.md</a>.</p>
+span beneath it. See <a href="../telemetry/">telemetry</a>.</p>
 <h3 id="span">Span</h3>
 <p>OpenTelemetry's name for one unit of work under a trace - a target execution,
 whose sub-operations are child spans. An output reference points at a span's
-captured output. See <a href="../telemetry/">telemetry.md</a>.</p>
+captured output. See <a href="../telemetry/">telemetry</a>.</p>
 <h3 id="pool">Pool</h3>
 <p>The concurrency pool: the shared set of slots that caps how many targets run in
 parallel on one machine. Its capacity defaults to <code>MAGUS_CONCURRENCY</code>, then 4 on
 GitHub-hosted runners, then <code>min(NumCPU, 8)</code>; <code>magus status</code> and the
-<a href="../daemon/">dashboard</a> report it live. See <a href="../daemon/">daemon.md</a>.</p>
+<a href="../daemon/">dashboard</a> report it live. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="slot">Slot</h3>
 <p>One unit of the pool's capacity. A target acquires the slots it needs to run
 (most take one) and releases them when it finishes; the pool tracks capacity
 (total slots), running (acquired), and queued (blocked). See
-<a href="../daemon/">daemon.md</a>.</p>
+<a href="../daemon/">daemon</a>.</p>
 <h3 id="concurrency">Concurrency</h3>
 <p>How many targets run at once. It is bounded by the pool's capacity and set with
 <code>--concurrency</code>, <code>MAGUS_CONCURRENCY</code>, or the <code>concurrency</code> config key. See
-<a href="../daemon/">daemon.md</a>.</p>
+<a href="../daemon/">daemon</a>.</p>
 <h3 id="queued">Queued</h3>
 <p>A target that wants a slot while the pool is full; it blocks first-in-first-out
 until a slot frees. The dashboard colors a sample with queued &gt; 0 accordingly.
-See <a href="../daemon/">daemon.md</a>.</p>
+See <a href="../daemon/">daemon</a>.</p>
 <h3 id="pool-mode">Pool mode</h3>
 <p>Which pool a run uses: <strong>daemon</strong> (one shared pool the background daemon owns
 across every workspace and client) or <strong>proc</strong> (a per-process pool for a single
-one-off invocation). See <a href="../daemon/">daemon.md</a>.</p>
+one-off invocation). See <a href="../daemon/">daemon</a>.</p>
 <h3 id="one-off">One-off</h3>
 <p>A single <code>magus</code> invocation that runs a target and exits, using a per-process
 pool; the opposite of the long-lived daemon or a service. See
-<a href="../daemon/">daemon.md</a>.</p>
+<a href="../daemon/">daemon</a>.</p>
 <h3 id="remote-cache">Remote cache</h3>
 <p>A CI-only backend that shares content-addressed artifacts across runners: a cold
 machine replays a build another runner already did instead of rebuilding. Every
 remote artifact must be signed by a trusted key. See
-<a href="../remote-cache/">remote-cache.md</a>.</p>
+<a href="../remote-cache/">remote-cache</a>.</p>
 <h3 id="snapshot">Snapshot</h3>
 <p>A point-in-time view of live state - the pool's occupancy or a tick of exported
-metrics - as opposed to accumulated history. See <a href="../daemon/">daemon.md</a>.</p>
+metrics - as opposed to accumulated history. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="backfill">Backfill</h3>
 <p>The recent history the daemon replays to a dashboard on connect, so its charts
 start populated instead of empty. It is served from a bounded ring buffer of the
-last few hundred samples. See <a href="../daemon/">daemon.md</a>.</p>
+last few hundred samples. See <a href="../daemon/">daemon</a>.</p>
 <h2 id="telemetry-and-health">Telemetry and health</h2>
 <h3 id="latency">Latency</h3>
 <p>How long an operation takes. magus records latency as OpenTelemetry histograms
 per family - target execution, cache op, pool wait, and graph query - and reports
-each as a count, sum, and percentiles. See <a href="../telemetry/">telemetry.md</a>.</p>
+each as a count, sum, and percentiles. See <a href="../telemetry/">telemetry</a>.</p>
 <h3 id="percentile">Percentile</h3>
 <p>A latency value at a given rank, interpolated from a histogram's buckets: <strong>p50</strong>
 is the median, <strong>p95</strong> and <strong>p99</strong> are the tail that most latency budgets care
-about. See <a href="../telemetry/">telemetry.md</a>.</p>
+about. See <a href="../telemetry/">telemetry</a>.</p>
 <h3 id="health">Health</h3>
 <p>The at-a-glance daemon state derived from the pool: <strong>healthy</strong> when the pool is
 reporting, <strong>degraded</strong> when it reports an error, <strong>down</strong> when there is no pool.
-The dashboard color-codes each state. See <a href="../daemon/">daemon.md</a>.</p>
+The dashboard color-codes each state. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="volatility">Volatility</h3>
 <p>A target that fails once and passes on rerun is <strong>volatile</strong>, as opposed to a
 regression that started failing and stays failing. magus keeps per-target
 pass/fail history and a Wilson-score volatility rate to tell them apart and
-auto-retry the noise. See <a href="../volatility/">volatility.md</a>.</p>
+auto-retry the noise. See <a href="../volatility/">volatility</a>.</p>
 <h2 id="insight-and-knowledge">Insight and knowledge</h2>
 <h3 id="knowledge-graph">Knowledge graph</h3>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
-<a href="../knowledge/">knowledge.md</a>.</p>
+<a href="../knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
-ownership, trend). See <a href="../insight/">insight.md</a>.</p>
+ownership, trend). See <a href="../insight/">insight</a>.</p>
 <h3 id="hotspot">Hotspot</h3>
 <p>An insight lens: edit frequency times complexity, the prime refactoring targets.
 The project view heat-colours the dependency graph by churn; <code>--files</code> ranks
-individual files. See <a href="../insight/">insight.md</a>.</p>
+individual files. See <a href="../insight/">insight</a>.</p>
 <h3 id="affinity">Affinity</h3>
 <p>An insight lens: projects that change together (temporal coupling). A pair that
 co-changes without either declaring a dependency on the other is a candidate
-architectural smell. See <a href="../insight/">insight.md</a>.</p>
+architectural smell. See <a href="../insight/">insight</a>.</p>
 <h3 id="ownership">Ownership</h3>
 <p>An insight lens: author concentration - the primary author and their share, the
 distinct-author count (the bus factor), and abandonment. See
-<a href="../insight/">insight.md</a>.</p>
+<a href="../insight/">insight</a>.</p>
 <h3 id="trend">Trend</h3>
 <p>An insight lens: the recent half of the window against the earlier half. A
 positive delta is a rising hotspot; a negative one is cooling. See
-<a href="../insight/">insight.md</a>.</p>
+<a href="../insight/">insight</a>.</p>
 <h3 id="diagnostic-code">Diagnostic code</h3>
 <p>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be
 referenced and looked up; some are guardrails (see <a href="../wards/">wards</a>), others hard

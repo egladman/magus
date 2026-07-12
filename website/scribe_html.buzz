@@ -345,11 +345,37 @@ export fun tagAdmonition(html: str) > str {
     return buf + rest;
 }
 
+// stripMdFromLinkText drops a trailing ".md" from LINK TEXT (the value between > and </a>).
+// rewriteLinks rewrites a file link's href to its clean URL, but the visible text of a
+// path-named link (e.g. [workspace.md](workspace.md), common in the glossary) still shows the
+// ".md" - a stale user-facing reference to a source file. Only text ending in ".md" immediately
+// before </a> is touched, so it targets bare path-named links and leaves other link text alone.
+export fun stripMdFromLinkText(html: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(".md</a>");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx) + "</a>";
+        rest = rest.sub(idx + 7); // past ".md</a>"
+        idx = rest.indexOf(".md</a>");
+    }
+    return buf + rest;
+}
+
 // renderContentHTML is the one post-processing pipeline every page runs: rewrite
-// links, then the ordered content transforms. Routing every render through it keeps
-// a transform from being applied on one path and forgotten on another.
+// links (href AND the path-named link text), then the ordered content transforms. Routing
+// every render through it keeps a transform from being applied on one path and forgotten on another.
 export fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
-    return wrapTables(tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(rewriteLinks(rawHtml, oldDir, newDir))))))));
+    return wrapTables(tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(stripMdFromLinkText(rewriteLinks(rawHtml, oldDir, newDir)))))))));
+}
+
+test "stripMdFromLinkText drops a trailing .md from link text only" {
+    assert.equal(stripMdFromLinkText("<a href=\"workspace/\">workspace.md</a>"),
+        "<a href=\"workspace/\">workspace</a>", "path-named link text cleaned");
+    assert.equal(stripMdFromLinkText("<a href=\"x/\">Targets</a>"),
+        "<a href=\"x/\">Targets</a>", "non-.md link text untouched");
+    assert.equal(stripMdFromLinkText("edit README.md by hand"),
+        "edit README.md by hand", "prose .md that is not link text is untouched");
 }
 
 test "tagMermaid wraps a mermaid fence and passes other html through" {
