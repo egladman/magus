@@ -29,6 +29,10 @@ type Service struct {
 	statusBase   types.StatusBase
 	version      string
 	daemonSocket string
+	// startedAt marks when this service (and thus the daemon it fronts) began observing, stamped
+	// onto every status report as ObservingSince so the dashboard can say the counters are cumulative
+	// from here, not all-time. Captured at construction; the daemon holds one Service for its lifetime.
+	startedAt time.Time
 
 	// runsFn returns the daemon's live runs, folded onto the status report. Nil when
 	// this service is not backed by a daemon run registry (a plain CLI status query), leaving
@@ -117,7 +121,7 @@ func WithServices(fn func() []types.StatusService) Option {
 // and the running magus version. m may be nil only when every graph/status path is
 // overridden by a With* seam (tests).
 func NewService(m *magus.Magus, cfg config.Config, base types.StatusBase, version string, opts ...Option) *Service {
-	s := &Service{magus: m, config: cfg, statusBase: base, version: version, insightTTL: defaultInsightTTL}
+	s := &Service{magus: m, config: cfg, statusBase: base, version: version, insightTTL: defaultInsightTTL, startedAt: time.Now().UTC()}
 	for _, o := range opts {
 		o(s)
 	}
@@ -154,9 +158,10 @@ func (s *Service) statusReport(ctx context.Context) types.StatusReport {
 		return s.statusReportFn(ctx)
 	}
 	out := types.StatusReport{
-		Telemetry: s.statusBase.Telemetry,
-		Cache:     s.statusBase.Cache,
-		Build:     s.statusBase.Build,
+		Telemetry:      s.statusBase.Telemetry,
+		Cache:          s.statusBase.Cache,
+		Build:          s.statusBase.Build,
+		ObservingSince: s.startedAt,
 	}
 	addr, err := s.resolveStatusAddr(ctx)
 	if err != nil {

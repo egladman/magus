@@ -470,8 +470,13 @@ export interface DashboardState {
   // because the daemon's status SSE carries pool/health frames, not a raw-output
   // journal - a real live tail would need a journal SSE consumer (see activity.ts).
   logLines: string[];
+  // observingSince is when the daemon began collecting the telemetry/cache counters (epoch ms),
+  // read once from the JSON status endpoint (it is static per session and not on the proto event
+  // stream). null until known. Surfaced so the board can be transparent that the numbers are
+  // cumulative since then and are NOT persisted across daemon restarts. The demo synthesizes one.
+  observingSince: number | null;
 }
 
 export function initialState(): DashboardState {
-  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [], insight: null, logLines: [] };
+  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [], insight: null, logLines: [], observingSince: null };
 }

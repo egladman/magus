@@ -92,6 +92,18 @@ function renderChrome(s: DashboardState): void {
     const mode = el("dash-mode");
     if (s.status.pool.mode) { mode.textContent = s.status.pool.mode; mode.hidden = false; } else { mode.hidden = true; }
   }
+
+  // Observing-since: a brief note of when the daemon began collecting these counters, so it is
+  // clear the numbers are cumulative from then and are NOT persisted across daemon restarts.
+  const obs = el("dash-observing");
+  if (s.observingSince) {
+    const t = new Date(s.observingSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    obs.textContent = "observing since " + t;
+    obs.title = "The telemetry and cache counters are cumulative since the daemon started observing (" + t + "). They are not persisted across daemon restarts.";
+    obs.hidden = false;
+  } else {
+    obs.hidden = true;
+  }
 }
 
 // ---- tiles -----------------------------------------------------------------
@@ -166,6 +178,9 @@ function beginDemo(): void {
   transport.stop();      // make sure no resume loop is racing the demo feed
   demo?.stop();
   setConn({ state: "demo" });
+  // Synthesize an observing-since ~92 minutes back so the demo shows the same since-caption a live
+  // daemon would (the real value comes from the JSON status endpoint on connect).
+  store.set({ observingSince: Date.now() - 92 * 60 * 1000 });
   demo = startDemo(store);
   // Chain the sibling apps' demos off the same `#demo` fragment so the showcase flows
   // across all three surfaces as one unified demo. Both the graph explorer and the log

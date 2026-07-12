@@ -223,8 +223,10 @@ body:has(.console-bar) {
 .status-demo { color: var(--c-info); }
 .status-offline { color: var(--c-warn); }
 
-/* Mobile: drop the least-important item (the mode note) before the bar can crowd. */
-@media (max-width: 480px) { .status-mode { display: none; } }
+/* Observing-since: a quiet, borderless note (not a chip) of when the daemon began collecting. */
+.status-observing { color: var(--pico-muted-color); }
+/* Mobile: drop the least-important items (mode + observing-since) before the bar can crowd. */
+@media (max-width: 480px) { .status-mode, .status-observing { display: none; } }
 
 /* Help glyph: the small circular "?" beside a query/filter prompt. One shared shape so every
    console app's help affordance is an identical circle (the graph query prompt, the log filter).

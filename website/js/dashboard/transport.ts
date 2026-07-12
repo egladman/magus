@@ -73,6 +73,7 @@ export class DashboardTransport {
     this.connectStatus(host);
     this.startMetrics(host);
     this.startInsight(host);
+    void this.fetchObservingSince(host);
   }
 
   disconnect(): void {
@@ -224,6 +225,21 @@ export class DashboardTransport {
       this.store.set({ insight: mapInsight(raw) });
     } catch {
       // Network blip or abort: leave the prior insight in place; the poll retries.
+    }
+  }
+
+  // One-shot fetch of the daemon's observing-since (when it began collecting the counters), read
+  // from the JSON status endpoint because it is static per session and NOT on the proto event
+  // stream. Best-effort: a failure just means no since-caption; it never blocks the live view.
+  private async fetchObservingSince(host: string): Promise<void> {
+    try {
+      const res = await fetch("http://" + host + "/api/v1/status", { headers: authHeaders() });
+      if (!res.ok) return;
+      const raw = (await res.json()) as { observing_since?: string };
+      const ms = raw.observing_since ? Date.parse(raw.observing_since) : NaN;
+      if (!Number.isNaN(ms)) this.store.set({ observingSince: ms });
+    } catch {
+      // Network blip or abort: leave observingSince null; nothing on the board depends on it.
     }
   }
 

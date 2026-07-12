@@ -31,6 +31,11 @@ type StatusReport struct {
 	// kept warm across invocations. Empty when none are held or when reported by a
 	// process that is not the daemon.
 	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`
+	// ObservingSince is when this daemon began observing (its start). The telemetry and
+	// cache counters above are cumulative from this instant and are NOT persisted across
+	// restarts, so a dashboard can be transparent that the numbers are "since <this>", not
+	// all-time. Zero (omitted) when reported by a non-daemon `magus status`.
+	ObservingSince time.Time `json:"observing_since,omitempty" yaml:"observing_since,omitempty"`
 }
 
 // StatusService is one long-running shared service the daemon is hosting, surfaced on
