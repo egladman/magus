@@ -2041,7 +2041,7 @@ fun renderSiteFooter(root: str, site: Site) > str {
 // prefix back to gen/'s root, matching renderSiteNav. A backtick raw string holds the
 // Mustache verbatim; {{{icon}}} injects each tile's inner SVG unescaped.
 fun renderConsoleChrome(app: str, root: str) > str {
-    final tmpl = `  <header class="site-header dash-bar">
+    final tmpl = `  <header class="site-header console-bar">
     <nav class="container-fluid">
       <ul><li><a href="{{root}}index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">{{title}}</h1></li></ul>
       <div class="nav-right">
@@ -2050,7 +2050,7 @@ fun renderConsoleChrome(app: str, root: str) > str {
         <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="console-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links app-grid" id="console-nav-links">
           <li class="nav-menu-label" aria-hidden="true">Console</li>
-{{#cells}}          <li class="app-cell"><a href="{{href}}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></a></li>
+{{#cells}}          <li class="app-cell"><a href="{{href}}" id="{{id}}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></a></li>
 {{/cells}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
@@ -2077,13 +2077,17 @@ fun renderConsoleChrome(app: str, root: str) > str {
     // trigger's book (the in-app reference drawer) so the two are not confused.
     final iconDocs = `<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>`;
 
+    // Each cell carries a stable id (menu-<app>) so a page's script can repoint the link at
+    // runtime - the dashboard's main.ts rewrites menu-logs/menu-graph to the live daemon (or the
+    // demo) so the launcher hops keep the connection. The current app is omitted (you are on it),
+    // so on the dashboard the launcher shows menu-logs + menu-graph + menu-docs.
     final cells = mut [<{str: any}>];
-    if (app != "dashboard") { cells.append({"href": root + "dashboard/", "icon": iconDashboard, "label": "Dashboard"}); }
-    if (app != "logs") { cells.append({"href": root + "logs/", "icon": iconLogs, "label": "Log viewer"}); }
-    if (app != "graph") { cells.append({"href": root + "graph/", "icon": iconGraph, "label": "Graph explorer"}); }
+    if (app != "dashboard") { cells.append({"href": root + "dashboard/", "icon": iconDashboard, "label": "Dashboard", "id": "menu-dashboard"}); }
+    if (app != "logs") { cells.append({"href": root + "logs/", "icon": iconLogs, "label": "Log viewer", "id": "menu-logs"}); }
+    if (app != "graph") { cells.append({"href": root + "graph/", "icon": iconGraph, "label": "Graph explorer", "id": "menu-graph"}); }
     // Playground is NOT a console app - it is part of the documentation site (standalone WASM, no
     // daemon), so the console launcher lists only the daemon apps plus a link out to the docs.
-    cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation"});
+    cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation", "id": "menu-docs"});
     // The app's own name sits in the bar next to the hat (native title-bar pattern), so the
     // page body no longer repeats it as an <h1> + lede.
     var title = "Console";
@@ -2173,17 +2177,22 @@ fun renderLogs(site: Site) > void {
 }
 
 // renderDashboard writes gen/dashboard/index.html from the hand-authored dashboard.html -
-// magus's control surface. Unlike the other tool pages it is CHROMELESS: it authors its own
-// slim app bar (magus mark + theme toggle) rather than the shared site nav/footer, so it reads
-// like a native app, and it is deliberately absent from the public nav/footer (reachable by
-// direct URL or as an installed PWA shortcut). renderDashboard therefore injects only the
-// default CSP (no inline scripts; the default connect-src already allows loopback for the
-// daemon-bridge status stream). Its stylesheet (gen/dashboard/dashboard.css) and module
-// (gen/dashboard/dashboard.js) are built in site_render and preserved by pruneStaleOutputs.
+// magus's control surface. Like the log viewer and graph explorer it wears the shared console
+// chrome (renderConsoleChrome: app bar + waffle launcher + reference drawer) rather than the
+// docs site nav/footer, so the three read as one native app; it is deliberately absent from the
+// public nav/footer (reachable by direct URL or as an installed PWA shortcut). renderDashboard
+// injects that chrome and the default CSP (no inline scripts; the default connect-src already
+// allows loopback for the daemon-bridge status stream). Its stylesheet (gen/dashboard/dashboard.css)
+// and module (gen/dashboard/dashboard.js) are built in site_render and preserved by pruneStaleOutputs.
 fun renderDashboard(site: Site) > void {
     final f = io.File.open("dashboard.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
+    // The dashboard wears the SAME shared console chrome as the log viewer and graph explorer
+    // (app bar + waffle launcher + reference drawer), injected at its <!-- console-chrome -->
+    // placeholder - one source of truth for all three surfaces. Its own bottom status bar and
+    // the connect/panels body stay in dashboard.html.
+    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("dashboard", "../"));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/dashboard");
     fs.writeFile(site.outDir + "/dashboard/index.html", html);

@@ -4,13 +4,12 @@
    /logs/, /graph/) after site.css and before each page's own sheet, so the three read as
    one native app rather than three separate pages. It is deliberately NOT loaded on the
    documentation pages - that is the console-vs-docs distinction. Extracted from
-   dashboard.css, where this chrome originally lived; the class names still carry the
-   historical `dash-` prefix and are renamed to neutral `console-` names in a follow-up. */
+   dashboard.css, where this chrome originally lived. */
 
 :root {
-  --dash-gap: 0.6rem;
-  --dash-pad: clamp(0.6rem, 1.6vw, 1rem);
-  --dash-statusbar-h: 1.75rem;
+  --console-gap: 0.6rem;
+  --console-pad: clamp(0.6rem, 1.6vw, 1rem);
+  --console-statusbar-h: 1.75rem;
   /* Chart/accent palette. hit / error / info / ok alias Pico's semantic tokens so they
      theme-track for free (the charts read the RESOLVED value via getComputedStyle, so a
      var() alias is fine); only the amber miss/warn slots, which Pico has no token for, keep
@@ -31,37 +30,37 @@
 /* App bar: reuse the site header's geometry (.site-header / .nav-right / .nav-toggle /
    #theme-toggle from site.css) and only INVERT the palette - a sectioning-tinted bar that
    reads as a distinct control surface while staying theme-aware. */
-.dash-bar.site-header {
+.console-bar.site-header {
   background: var(--pico-card-sectioning-background-color);
   /* Inverted (inset) shadow: the bar reads as recessed and the page content sits on top of it
      - the subtle "dashboard vs. doc site" distinction, without a new design language. */
   box-shadow: inset 0 3px 7px -5px rgba(0, 0, 0, 0.45);
 }
-.dash-bar nav { align-items: center; }
-.dash-bar .brand-mark { display: block; }
+.console-bar nav { align-items: center; }
+.console-bar .brand-mark { display: block; }
 /* App title in the bar, next to the hat (native title-bar pattern): the current app's name.
    Resets Pico's large <h1> to a compact inline label so it reads as a title, not a page heading.
    The page body no longer repeats the name as an <h1> + lede.
    Vertical alignment: Pico gives each nav <li> vertical padding, which made the title's line box sit
    off-center from the hat. Zero that padding and flex-center each li (the <ul> already centers them)
    so the hat glyph and the title text share one center. */
-.dash-bar nav > ul { align-items: center; }
-.dash-bar nav > ul > li { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
-.dash-bar .console-app-title {
+.console-bar nav > ul { align-items: center; }
+.console-bar nav > ul > li { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
+.console-bar .console-app-title {
   margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.15;
   color: var(--pico-color); white-space: nowrap;
 }
 /* The menu button is mobile-only in site.css; on the dashboard it is the primary nav, so
    show it at every width (JS-gated, like site.css - a dead button with no toggle is worse
    than the inline links the no-js path falls back to below). */
-.js .dash-bar .nav-toggle { display: inline-flex; }
-.dash-bar .nav-right { gap: 0.55rem; }
+.js .console-bar .nav-toggle { display: inline-flex; }
+.console-bar .nav-right { gap: 0.55rem; }
 
 /* site.css only collapses .nav-links into the dropdown drawer under 1024px; the dashboard
    app bar is a drawer at EVERY width (the sibling tool pages live behind the menu, never
    inline), so re-apply that collapse here with no media query. Mirrors the mobile block in
-   site.css (lines ~201-248) scoped to .dash-bar - keep the two in sync. */
-.js .dash-bar .nav-links {
+   site.css (lines ~201-248) scoped to .console-bar - keep the two in sync. */
+.js .console-bar .nav-links {
   display: none;
   position: absolute;
   top: calc(100% + 0.5rem);
@@ -74,9 +73,9 @@
   border-radius: var(--pico-border-radius);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
 }
-.js .dash-bar .nav-right.nav-open .nav-links { display: block; }
-.js .dash-bar .nav-links li { display: block; margin: 0; } /* stack one per row */
-.js .dash-bar .nav-links .nav-menu-label {
+.js .console-bar .nav-right.nav-open .nav-links { display: block; }
+.js .console-bar .nav-links li { display: block; margin: 0; } /* stack one per row */
+.js .console-bar .nav-links .nav-menu-label {
   display: block;
   margin: 0.15rem;
   padding: 0.25rem 0.6rem;
@@ -86,12 +85,12 @@
   letter-spacing: 0.04em;
   color: var(--pico-muted-color);
 }
-.js .dash-bar .nav-links a {
+.js .console-bar .nav-links a {
   display: block;
   padding: 0.45rem 0.6rem; /* bigger tap rows; overrides the desktop pill padding */
   margin: 0;
 }
-.js .dash-bar .nav-links .nav-menu-hint {
+.js .console-bar .nav-links .nav-menu-hint {
   display: block;
   margin: 0.25rem 0.15rem 0.1rem;
   padding: 0.35rem 0.6rem 0.1rem;
@@ -100,24 +99,24 @@
   color: var(--pico-muted-color);
 }
 /* No-js fallback: no toggle, so keep the links inline (wrapping) rather than hidden. */
-.no-js .dash-bar .nav-links { flex-wrap: wrap; justify-content: flex-end; }
+.no-js .console-bar .nav-links { flex-wrap: wrap; justify-content: flex-end; }
 
 /* App launcher: the dashboard's menu dropdown is a Google-waffle-style grid of app tiles,
    not a list of text links, so it reads as a native app switcher. Same show/hide plumbing
    as the drawer above (nav.js toggles .nav-open; the base rules hide .nav-links and reveal
    on open) - only the inner layout changes to a grid, so these rules carry .app-grid to
    out-specify the drawer's list styling. Boxy Pico-tinted tiles: icon over label. */
-.js .dash-bar .nav-links.app-grid {
+.js .console-bar .nav-links.app-grid {
   min-width: 16.5rem;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.3rem;
   padding: 0.5rem;
 }
-.js .dash-bar .nav-right.nav-open .nav-links.app-grid { display: grid; }
-.js .dash-bar .app-grid .nav-menu-label,
-.js .dash-bar .app-grid .nav-menu-hint { grid-column: 1 / -1; }
-.js .dash-bar .app-grid .app-cell { display: block; margin: 0; }
-.js .dash-bar .app-grid .app-cell a {
+.js .console-bar .nav-right.nav-open .nav-links.app-grid { display: grid; }
+.js .console-bar .app-grid .nav-menu-label,
+.js .console-bar .app-grid .nav-menu-hint { grid-column: 1 / -1; }
+.js .console-bar .app-grid .app-cell { display: block; margin: 0; }
+.js .console-bar .app-grid .app-cell a {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -129,26 +128,26 @@
   text-decoration: none;
   color: var(--pico-color);
 }
-.js .dash-bar .app-grid .app-cell a:hover,
-.js .dash-bar .app-grid .app-cell a:focus-visible {
+.js .console-bar .app-grid .app-cell a:hover,
+.js .console-bar .app-grid .app-cell a:focus-visible {
   background: var(--pico-card-sectioning-background-color);
   border-color: var(--pico-muted-border-color);
 }
-.js .dash-bar .app-grid .app-cell svg { color: var(--pico-primary); }
-.js .dash-bar .app-grid .app-cell span { font-size: 0.76rem; line-height: 1.15; }
+.js .console-bar .app-grid .app-cell svg { color: var(--pico-primary); }
+.js .console-bar .app-grid .app-cell span { font-size: 0.76rem; line-height: 1.15; }
 
 /* Bottom status bar: a slim, fixed strip pinned to the bottom of the viewport, the way a
    native app / IDE surface carries its liveness (VS Code-style). It holds the daemon status
    that used to crowd the top app bar - the browser<->daemon connection with its liveness dot,
    the daemon's health rollup, and a quiet mode note on the left; the demo-data and offline
    flags on the right when they apply. Sectioning-tinted with a subtle top border so it reads
-   as a distinct rail; main reserves --dash-statusbar-h of bottom padding (above) so it never
+   as a distinct rail; main reserves --console-statusbar-h of bottom padding (above) so it never
    covers the last tile. */
-.dash-statusbar {
+.console-statusbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
   display: flex; align-items: center; gap: 0.9rem;
-  min-height: var(--dash-statusbar-h);
-  padding: 0.15rem var(--dash-pad);
+  min-height: var(--console-statusbar-h);
+  padding: 0.15rem var(--console-pad);
   background: var(--pico-card-sectioning-background-color);
   border-top: 1px solid var(--pico-muted-border-color);
   font-size: 0.7rem; color: var(--pico-muted-color);

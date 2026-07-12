@@ -6,9 +6,9 @@
 
 /* Full-bleed: drop the doc container, let the app own the whole viewport. */
 body.dash-native { margin: 0; }
-/* Reserve --dash-statusbar-h of bottom padding so the fixed status bar (below) never
+/* Reserve --console-statusbar-h of bottom padding so the fixed status bar (below) never
    overlaps the last tile at any scroll position. */
-.dash-native main.dash-main { max-width: none; margin: 0; padding: var(--dash-pad); padding-bottom: calc(var(--dash-pad) + var(--dash-statusbar-h)); }
+.dash-native main.dash-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
 
 /* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact
    tile opts into a single column with .tile-half so it pairs with a neighbor instead of
@@ -21,7 +21,7 @@ body.dash-native { margin: 0; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-flow: row dense;
   align-items: start;
-  gap: var(--dash-gap);
+  gap: var(--console-gap);
 }
 .dash-panels > * { grid-column: 1 / -1; }
 .dash-panels > .tile-half { grid-column: span 1; }
@@ -32,7 +32,7 @@ body.dash-native { margin: 0; }
 
 /* Stat strip: dense KPI tiles, auto-fitting the full width. */
 .stat-strip {
-  display: grid; gap: var(--dash-gap);
+  display: grid; gap: var(--console-gap);
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
 }
 .stat {
@@ -125,7 +125,7 @@ body.dash-native { margin: 0; }
 .chart-legend { display: flex; gap: 1rem; font-size: 0.7rem; margin-top: 0.3rem; }
 
 /* Latency: a responsive grid of small per-family charts, each with an exact readout. */
-.chart-grid { display: grid; gap: var(--dash-gap); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.chart-grid { display: grid; gap: var(--console-gap); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .chart { margin: 0; }
 .chart figcaption { font-size: 0.72rem; font-weight: 600; color: var(--pico-muted-color); margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .chart-readout { font-family: var(--pico-font-family-monospace); font-size: 0.72rem; color: var(--pico-color); margin-top: 0.25rem; overflow-wrap: anywhere; }
@@ -175,7 +175,7 @@ body.dash-native { margin: 0; }
 .gantt-legend .lg-cached { color: var(--c-info); } .gantt-legend .lg-cached::before { background: var(--c-info); opacity: 0.35; }
 
 /* Two-up columns. */
-.dash-cols { display: grid; gap: var(--dash-gap); grid-template-columns: 1fr 1fr; }
+.dash-cols { display: grid; gap: var(--console-gap); grid-template-columns: 1fr 1fr; }
 
 /* Dense rows. */
 .row-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
