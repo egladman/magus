@@ -101,26 +101,4 @@ magus/
 └── website/              docs-site generator (Buzz-based static site)
 ```
 
-### The web and daemon stack
-
-magus serves three browser surfaces - the dashboard, the graph explorer, and the log viewer - plus the MCP endpoint for agents. They share one layering, arrows pointing down:
-
-```text
-transport     internal/httpx        one loopback *http.Server + composable middleware
-                                     (CORS, RequireLoopbackPeer, GuardRebind, BearerGuard, Gzip)
-                                     + the generic one-shot BlobServer
-auth          internal/auth         the daemon's bearer-token store (guards /mcp AND /api)
-handler       internal/handler/*    domain<->proto WIRE mapping + HTTP route handlers as
-                                     receiver-method http.Handler types; mirrors the proto packages
-service       internal/service/*    PURE application logic - no net/http, no proto
-repository    internal/cache, knowledge   data access (cache.OutputStore, the knowledge graph)
-composition   internal/daemon       assembles the daemon HTTP server from all of the above
-```
-
-A `handler` subpackage is named for and owns the wire concerns of the proto package `magus.<name>.v1` (`handler/viewer`<->`viewer.v1`, `handler/status`<->`status.v1`, `handler/graph`<->`graph.v1`); see [`internal/handler/README.md`](https://github.com/egladman/magus/blob/main/internal/handler/README.md). Route handlers hold a narrow interface satisfied by the service; `internal/service/console` holds the web-UI logic and imports no `net/http`.
-
-The MCP tools operate on a `*magus.Magus`, so `handler/mcp` imports the root `magus` package - which means the daemon (it imports `handler/mcp`) cannot live in `magus` without a cycle. Instead the root `Magus` holds an injected `Daemon` interface field, populated only in daemon mode by the CLI (`m.SetDaemon(daemon.New(opts))`), so the workspace owns the server without importing its assembler. The CLI's ephemeral `graph open --serve` and `run --live` servers reuse the same `httpx` transport, which is why it is a foundational package rather than part of `daemon`.
-
-Two house rules: no `_test`-suffixed test packages (a test file uses the same package as the code it tests), and MCP is always compiled in (no build tags).
-
 [^docs-source]: Source: [website/](https://github.com/egladman/magus/tree/main/website).

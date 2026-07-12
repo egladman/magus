@@ -332,17 +332,35 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
 .query-help dt, .url-help dt { margin: 0; white-space: nowrap; }
 .query-help dd, .url-help dd { margin: 0; color: var(--pico-muted-color); }
 .query-help code, .url-help code { font-size: 0.85em; }
+/* The search-syntax examples are natural-language calls to action, not code chips: plain clickable
+   text (primary color, underline on hover), no box or monospace. The syntax lives in each definition. */
 .q-example {
-  width: auto; margin: 0; padding: 0.12rem 0.45rem;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
+  width: auto; margin: 0; padding: 0; font: inherit; text-align: left;
+  background: none; border: 0; color: var(--pico-primary); cursor: pointer;
 }
-.q-example:hover, .q-example:focus-visible { border-color: var(--pico-primary); }
-.q-example code { color: inherit; }
-/* Live layout-force sliders (the "alive" wobble is tunable). */
-.force-controls { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; margin-top: 0.2rem; }
-.force-controls label { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--pico-muted-color); margin: 0; }
-.force-controls input[type="range"] { width: 8rem; margin: 0; }
+.q-example:hover, .q-example:focus-visible { text-decoration: underline; }
+
+/* The "?" help circle on the query prompt (matches the log viewer's filter help): a quiet outlined
+   marker whose title spells out the query syntax, since what to type is not obvious. */
+.search-help {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.2rem; height: 1.2rem; border-radius: 50%; cursor: help;
+  border: 1px solid var(--pico-muted-border-color); background: none;
+  color: var(--pico-muted-color); font-size: 0.72rem; font-weight: 700;
+}
+.search-help:hover, .search-help:focus-visible { color: var(--pico-color); border-color: var(--pico-color); }
+/* Layout mode: a compact toggle button with its explanation beneath it. Stacked, because these
+   controls now live in the narrow reference drawer where a button + long hint on one row wrapped
+   into a malformed jumble. */
+.layout-mode-row { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.2rem; }
+.layout-toggle { width: auto; align-self: flex-start; margin: 0; padding: 0.25rem 0.7rem; font-size: 0.8rem; }
+.layout-hint { font-size: 0.75rem; color: var(--pico-muted-color); line-height: 1.45; }
+
+/* Live layout-force sliders (the "alive" wobble is tunable). Stacked one per row so each label and
+   its slider fit the narrow drawer instead of wrapping mid-control. */
+.force-controls { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.2rem; }
+.force-controls label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; color: var(--pico-muted-color); margin: 0; }
+.force-controls input[type="range"] { width: 8rem; flex: 0 0 auto; margin: 0; }
 
 /* Color groups: paint query matches a chosen color on top of the kind palette.
    The swatch color is genuinely dynamic (a user pick), so it rides an inline style

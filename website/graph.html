@@ -69,28 +69,28 @@
     <details class="query-help ref-section">
       <summary>Search syntax</summary>
       <div class="disclosure-body">
-      <p>The filter box speaks the same grammar as <code>magus query</code>. Terms are combined with AND and matched case-insensitively.</p>
+      <p>The filter box speaks the same grammar as <code>magus query</code>. Terms combine with AND and match case-insensitively. Click an example to run it.</p>
       <dl>
-        <dt><button type="button" class="q-example" data-q="render"><code>render</code></button></dt>
-        <dd>Free text: match a node's id, label, or doc.</dd>
-        <dt><button type="button" class="q-example" data-q="kind:spell"><code>kind:spell</code></button></dt>
-        <dd>Only nodes of one kind: <code>project</code>, <code>target</code>, <code>spell</code>, <code>op</code>, <code>charm</code>, <code>module</code>, <code>method</code>, <code>import</code>, <code>function</code>, <code>file</code>, <code>doc</code>, <code>rationale</code>, <code>diagnostic</code>, <code>symbol</code>. (Or click a legend color.)</dd>
-        <dt><button type="button" class="q-example" data-q="kind:target"><code>kind:target</code></button></dt>
-        <dd>All targets in the graph. In a target graph (<code>magus describe graph -o json</code>), anchor targets - those nothing depends on within their project - are shown with a ring outline.</dd>
-        <dt><button type="button" class="q-example" data-q="project:website"><code>project:website</code></button></dt>
-        <dd>A project node and its targets.</dd>
-        <dt><button type="button" class="q-example" data-q="relation:uses"><code>relation:uses</code></button></dt>
-        <dd>Nodes touching a <code>uses</code> edge (any of <code>depends_on</code>, <code>contains</code>, <code>uses</code>, <code>calls</code>, <code>imports</code>, <code>references</code>, <code>documents</code>, <code>rationale_for</code>).</dd>
-        <dt><button type="button" class="q-example" data-q="id:build"><code>id:build</code></button></dt>
-        <dd>Substring match on the node id (e.g. <code>target:.:build</code>).</dd>
-        <dt><button type="button" class="q-example" data-q="-kind:function"><code>-kind:function</code></button></dt>
-        <dd>A leading <code>-</code> negates a term - exclude these.</dd>
-        <dt><button type="button" class="q-example" data-q="&quot;spell op&quot;"><code>"spell op"</code></button></dt>
-        <dd>Quote a value that contains spaces to keep it one term.</dd>
-        <dt><button type="button" class="q-example" data-q="kind:target -id:generate"><code>kind:target -id:generate</code></button></dt>
-        <dd>Combine terms; all must match. This lists targets whose id doesn't contain <code>generate</code>.</dd>
-        <dt><button type="button" class="q-example" data-q="kind:symbol"><code>kind:symbol</code></button></dt>
-        <dd>SCIP code-symbol nodes (from <code>magus refs</code>), when present in the loaded graph.</dd>
+        <dt><button type="button" class="q-example" data-q="render">Match text anywhere</button></dt>
+        <dd>Free text like <code>render</code> matches a node's id, label, or doc.</dd>
+        <dt><button type="button" class="q-example" data-q="kind:spell">Keep one kind of node</button></dt>
+        <dd><code>kind:spell</code> - one of project, target, spell, op, charm, module, method, import, function, file, doc, rationale, diagnostic, symbol. (Or click a legend color.)</dd>
+        <dt><button type="button" class="q-example" data-q="kind:target">Show every target</button></dt>
+        <dd><code>kind:target</code> lists all targets. In a target graph (<code>magus describe graph -o json</code>), anchor targets - those nothing depends on within their project - get a ring outline.</dd>
+        <dt><button type="button" class="q-example" data-q="project:website">Show a project and its targets</button></dt>
+        <dd><code>project:website</code> - a project node with its targets.</dd>
+        <dt><button type="button" class="q-example" data-q="relation:uses">Match a relationship</button></dt>
+        <dd><code>relation:uses</code> - nodes touching a uses edge (depends_on, contains, uses, calls, imports, references, documents, rationale_for).</dd>
+        <dt><button type="button" class="q-example" data-q="id:build">Match by node id</button></dt>
+        <dd><code>id:build</code> substring-matches the node id (e.g. <code>target:.:build</code>).</dd>
+        <dt><button type="button" class="q-example" data-q="-kind:function">Exclude a term</button></dt>
+        <dd>A leading <code>-</code> negates: <code>-kind:function</code> hides functions.</dd>
+        <dt><button type="button" class="q-example" data-q="&quot;spell op&quot;">Match an exact phrase</button></dt>
+        <dd>Quote a value with spaces to keep it one term: <code>"spell op"</code>.</dd>
+        <dt><button type="button" class="q-example" data-q="kind:target -id:generate">Combine terms</button></dt>
+        <dd>All terms must match: <code>kind:target -id:generate</code> lists targets whose id lacks "generate".</dd>
+        <dt><button type="button" class="q-example" data-q="kind:symbol">Show code symbols</button></dt>
+        <dd><code>kind:symbol</code> - SCIP code-symbol nodes (from <code>magus refs</code>), when present.</dd>
       </dl>
       <p>A query dims non-matching nodes and hides edges except those between two matches, so the matching subgraph stands out. The same string works as <code>magus query "&lt;terms&gt;"</code> on the command line, or as a <code>#q=</code> deep link on this page.</p>
       <p><b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>
@@ -136,6 +136,7 @@
         <div class="sidebar-search term-prompt search-prompt">
           <span class="ps1" aria-hidden="true">magus query <span class="chevron">&#10095;</span></span>
           <input id="node-search" type="text" placeholder="kind:spell project:web" aria-label="Query the graph" spellcheck="false" autocomplete="off" disabled>
+          <span class="search-help" tabindex="0" role="button" aria-label="Query syntax" title="Filter the graph by typing terms. Free text matches names; kind:spell / project:web / relation:uses / id:build filter by field; a leading - excludes. Terms combine with AND. Full list under Reference > Search syntax.">?</span>
           <button id="search-copy-btn" type="button" class="search-copy" title="Copy this query as a shell command" aria-label="Copy magus query command">&#10697;</button>
         </div>
         <!-- Phase 5: projection unfold button - shown when default projection is active. -->

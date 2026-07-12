@@ -69,12 +69,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#optional-browser-ui" title="Optional browser UI">Optional browser UI</a></li><li><a href="#development" title="Development">Development</a><ul><li><a href="#project-layout" title="Project layout">Project layout</a></li><li><a href="#the-web-and-daemon-stack" title="The web and daemon stack">The web and daemon stack</a></li></ul></li></ul>
+        <ul><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#optional-browser-ui" title="Optional browser UI">Optional browser UI</a></li><li><a href="#development" title="Development">Development</a><ul><li><a href="#project-layout" title="Project layout">Project layout</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">5 min read</small>
+    <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="magus">magus</h1>
 <p align="center">
@@ -155,21 +155,6 @@ go build -o magus ./cmd/magus
 ├── docs/                 documentation source (rendered by `magus run generate website`)
 └── website/              docs-site generator (Buzz-based static site)
 </code></pre>
-<h3 id="the-web-and-daemon-stack">The web and daemon stack</h3>
-<p>magus serves three browser surfaces - the dashboard, the graph explorer, and the log viewer - plus the MCP endpoint for agents. They share one layering, arrows pointing down:</p>
-<pre><code class="language-text">transport     internal/httpx        one loopback *http.Server + composable middleware
-                                     (CORS, RequireLoopbackPeer, GuardRebind, BearerGuard, Gzip)
-                                     + the generic one-shot BlobServer
-auth          internal/auth         the daemon's bearer-token store (guards /mcp AND /api)
-handler       internal/handler/*    domain&lt;-&gt;proto WIRE mapping + HTTP route handlers as
-                                     receiver-method http.Handler types; mirrors the proto packages
-service       internal/service/*    PURE application logic - no net/http, no proto
-repository    internal/cache, knowledge   data access (cache.OutputStore, the knowledge graph)
-composition   internal/daemon       assembles the daemon HTTP server from all of the above
-</code></pre>
-<p>A <code>handler</code> subpackage is named for and owns the wire concerns of the proto package <code>magus.&lt;name&gt;.v1</code> (<code>handler/viewer</code>&lt;-&gt;<code>viewer.v1</code>, <code>handler/status</code>&lt;-&gt;<code>status.v1</code>, <code>handler/graph</code>&lt;-&gt;<code>graph.v1</code>); see <a href="https://github.com/egladman/magus/blob/main/internal/handler/README.md" rel="noopener noreferrer" target="_blank" data-external><code>internal/handler/README.md</code></a>. Route handlers hold a narrow interface satisfied by the service; <code>internal/service/console</code> holds the web-UI logic and imports no <code>net/http</code>.</p>
-<p>The MCP tools operate on a <code>*magus.Magus</code>, so <code>handler/mcp</code> imports the root <code>magus</code> package - which means the daemon (it imports <code>handler/mcp</code>) cannot live in <code>magus</code> without a cycle. Instead the root <code>Magus</code> holds an injected <code>Daemon</code> interface field, populated only in daemon mode by the CLI (<code>m.SetDaemon(daemon.New(opts))</code>), so the workspace owns the server without importing its assembler. The CLI's ephemeral <code>graph open --serve</code> and <code>run --live</code> servers reuse the same <code>httpx</code> transport, which is why it is a foundational package rather than part of <code>daemon</code>.</p>
-<p>Two house rules: no <code>_test</code>-suffixed test packages (a test file uses the same package as the code it tests), and MCP is always compiled in (no build tags).</p>
 <div class="footnotes" role="doc-endnotes">
 <hr>
 <ol>
