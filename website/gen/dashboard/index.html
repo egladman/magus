@@ -122,6 +122,9 @@
         <p class="hub-connect-lead">Start the daemon, then open the live link it prints:</p>
         <pre class="dash-connect-cmd"><code>magus server start</code></pre>
         <p class="dash-connect-demo">Just looking around? <button type="button" id="dash-demo-btn" class="dash-demo-btn">See a demo with sample data</button></p>
+        <!-- Privacy note: the dashboard only ever talks to a loopback daemon in the browser; nothing
+             is sent anywhere. Stated here because it is not disclosed anywhere else in the UI. -->
+        <p class="hub-connect-note">The dashboard talks to your daemon over loopback (127.0.0.1) in your browser - no data ever leaves your machine.</p>
       </div>
     </div>
   </main>

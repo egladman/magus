@@ -239,6 +239,11 @@ a.hub-card:hover, a.hub-card:focus-visible {
 /* "See a demo" affordance: a quiet inline link-button that enters the daemon-free
    showcase (#demo). */
 .dash-connect-demo { margin: 0 auto; font-size: 0.85rem; color: var(--pico-muted-color); }
+/* Privacy note under the connect panel: the local-only reassurance, quieter than the lead. */
+.hub-connect-note {
+  margin: 1rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--pico-muted-border-color);
+  font-size: 0.78rem; color: var(--pico-muted-color);
+}
 .dash-demo-btn {
   margin: 0; padding: 0; width: auto; border: 0; background: none;
   color: var(--pico-primary); font-size: inherit; text-decoration: underline; cursor: pointer;

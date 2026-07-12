@@ -44,6 +44,14 @@ export function activityTile(): Tile {
   preview.setAttribute("aria-label", "Streaming output preview");
   card.body.append(caption, list, empty, preview);
 
+  // Auto-follow the tail UNTIL the operator scrolls up to read - then freeze in place and let them
+  // take control (like the log viewer's livePaused). Scrolling back to the bottom re-arms the follow.
+  // The threshold absorbs sub-pixel rounding so "resting at the bottom" reliably counts as pinned.
+  let pinned = true;
+  preview.addEventListener("scroll", () => {
+    pinned = preview.scrollHeight - preview.scrollTop - preview.clientHeight < 8;
+  });
+
   function render(targets: RunningTargetView[], liveHost: string | null, logLines: string[]): void {
     count.textContent = String(targets.length);
     open.setAttribute("href", liveHost ? "../logs/#live=" + encodeURIComponent(liveHost) : "../logs/");
@@ -63,15 +71,20 @@ export function activityTile(): Tile {
       list.append(row);
     }
 
-    // Streaming preview: only when a raw-output buffer is present (the demo feed). Keep the
-    // last PREVIEW_LINES and pin the scroll to the newest line so it reads as a live tail.
+    // Streaming preview: only when a raw-output buffer is present (the demo feed). Keep the last
+    // PREVIEW_LINES and follow the newest line so it reads as a live tail - BUT only while pinned.
+    // When the operator has scrolled up we leave the preview frozen (content and position both) so
+    // they can read without being yanked back down; scrolling to the bottom re-arms the follow.
     if (logLines.length > 0) {
       preview.hidden = false;
-      preview.textContent = logLines.slice(-PREVIEW_LINES).join("\n");
-      preview.scrollTop = preview.scrollHeight;
+      if (pinned) {
+        preview.textContent = logLines.slice(-PREVIEW_LINES).join("\n");
+        preview.scrollTop = preview.scrollHeight;
+      }
     } else {
       preview.hidden = true;
       preview.textContent = "";
+      pinned = true; // reset so the next stream starts following again
     }
   }
 
