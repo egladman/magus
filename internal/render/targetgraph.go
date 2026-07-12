@@ -322,7 +322,7 @@ func writeDispatchDefaults(b *md.Builder, path, label string, eval map[string]ty
 //
 // ANTI-DRIFT: the classDef names below ("anchor", "target") and externalClass
 // ("external") and spellClass ("spell") are mirrored verbatim in
-// website/src/console/graph/graph-explorer.js (toMermaid / targets flavor). A rename here must
+// website/src/console/graph/mermaid.ts (toMermaid / targets flavor). A rename here must
 // be matched there. internal/render/mermaid_drift_test.go asserts this in CI.
 var targetRoleClasses = []renderClass{
 	{Name: "anchor", Style: "fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px"},

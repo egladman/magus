@@ -96,7 +96,7 @@ func knowledgeShape(kind string) renderShape {
 // back to a neutral gray.
 //
 // ANTI-DRIFT: these fill/text values and the "kind_" classDef prefix (line 74)
-// are mirrored verbatim in website/src/console/graph/graph-explorer.js (toMermaid / knowledge
+// are mirrored verbatim in website/src/console/graph/mermaid.ts (toMermaid / knowledge
 // flavor). A rename or color change here must be matched there.
 // internal/render/mermaid_drift_test.go asserts the classDef names in CI.
 var knowledgeKindPalette = map[string]struct{ fill, text string }{

@@ -1,5 +1,5 @@
 // vendor/mermaid.ts - single-line entry point for esbuild to bundle mermaid
-// into gen/assets/mermaid.js. Mirrors the pattern of src/console/graph/graph-explorer.js
+// into gen/assets/mermaid.js. Mirrors the pattern of src/console/graph/main.ts
 // -> gen/console/graph/explorer.js: one committed artifact per npm-dep bundle. Lives in
 // src/vendor/ (third-party bundle entries) to keep it distinct from src/site/mermaid.ts,
 // the init/theming module that consumes the built bundle. This file is not raw library

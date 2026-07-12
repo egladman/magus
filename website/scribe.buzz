@@ -1539,7 +1539,7 @@ final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.
 //     keeps every other page - notably graph/playground - at same-origin-only.
 //   - connect-src: 'self' plus the loopback wildcards - the browser-enforced
 //     form of the loopback-only rule (plan 0.3), kept in sync with the
-//     literal 127.0.0.1/[::1] host check graph-explorer.js's live mode makes
+//     literal 127.0.0.1/[::1] host check the graph explorer's live mode makes
 //     client-side. This is intentionally NOT loosened for graph.html's/
 //     playground.html's `#src=<url>` loader, which can point at an arbitrary
 //     CORS-enabled address (e.g. a raw GitHub link): a third-party #src= now
