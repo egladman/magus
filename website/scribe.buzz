@@ -3371,8 +3371,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // docs corpus can load only this and drop console.css. Gen-root, precached like the others.
     os.execute(["sh", "-c", "esbuild ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
     os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
-    // graph.css: the /graph/ Graph Explorer page's own stylesheet (its rules are
-    // page-scoped, so it loads only on /graph/, not every page like site.css).
+    // graph.css / logs.css / dashboard.css: each console app's page-scoped stylesheet (rules
+    // load only on that one page, not site-wide). Built HERE only - the pnpm build-<app> scripts
+    // used to re-minify these three into the same paths (a second, identical build), which is now
+    // dropped; pnpm bundles just the JS modules. `serve` re-renders CSS via this path, no pnpm run.
     fs.makeDirectory(site.outDir + "/console/graph");
     os.execute(["sh", "-c", "esbuild graph.css --minify --outfile=" + site.outDir + "/console/graph/graph.css"]);
     // logs.css: the /logs/ Log Viewer's page-scoped stylesheet (no imports; single-file
