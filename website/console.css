@@ -27,6 +27,17 @@
 :root[data-theme="dark"] { --c-miss: #fbbf24; --c-warn: #fbbf24; }
 :root[data-theme="light"] { --c-miss: #d97706; --c-warn: #d97706; }
 
+/* Console-only typeface: the daemon apps use the platform system-ui stack so they read as a
+   native app, visibly distinct from the documentation site (which keeps Pico's default stack).
+   console.css is ALSO loaded on the docs pages now (for the shared reference drawer), so this
+   can NOT be a bare `body` rule - it is scoped to pages that carry the console app bar (only the
+   three daemon apps have .console-bar; docs pages use the site nav). Setting --pico-font-family
+   too so Pico components that read the token track the same stack. */
+body:has(.console-bar) {
+  --pico-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--pico-font-family);
+}
+
 /* App bar: reuse the site header's geometry (.site-header / .nav-right / .nav-toggle /
    #theme-toggle from site.css) and only INVERT the palette - a sectioning-tinted bar that
    reads as a distinct control surface while staying theme-aware. */
@@ -135,6 +146,13 @@
 }
 .js .console-bar .app-grid .app-cell svg { color: var(--pico-primary); }
 .js .console-bar .app-grid .app-cell span { font-size: 0.76rem; line-height: 1.15; }
+/* A full-width rule in the waffle separating the daemon apps (dashboard/logs/graph - they talk
+   to a local daemon over loopback) from the Documentation link-out (which does not), so the
+   "these are live app surfaces / that is the docs site" distinction is visible in the launcher. */
+.js .console-bar .app-grid .app-divider {
+  grid-column: 1 / -1; height: 1px; margin: 0.15rem 0.15rem 0.1rem;
+  background: var(--pico-muted-border-color);
+}
 
 /* Bottom status bar: a slim, fixed strip pinned to the bottom of the viewport, the way a
    native app / IDE surface carries its liveness (VS Code-style). It holds the daemon status
@@ -156,11 +174,20 @@
 .statusbar-cluster { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 .statusbar-right { margin-left: auto; } /* push the demo / offline flags to the far end */
 
-/* Status items: plain muted text - the bar itself is the container, so no pill border on the
-   left group. Health colors via data-health; the mode note stays quiet (inherits the bar's
-   muted color) since it is almost always "daemon". */
+/* Status items: uppercase status tokens. The connection line is plain text (the leading dot
+   carries its state); the discrete rollups (health, mode, demo, offline) wear the shared .pill.
+   Health colors via data-health; the mode note stays quiet (inherits the bar's muted color). */
 .status-item {
   text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; line-height: 1;
+}
+/* .pill - the shared chip primitive: a small rounded, outlined token. Used for the console
+   status rollups (HEALTHY / DAEMON / demo / offline) and reusable anywhere a discrete state
+   needs to read as a chip rather than plain text. Border tracks currentColor so a colored
+   token (health ok/warn/fail, the info-blue demo, the warm offline) outlines in its own hue. */
+.pill {
+  display: inline-flex; align-items: center; gap: 0.3em;
+  padding: 0.05rem 0.5rem; border-radius: 999px; border: 1px solid currentColor;
+  line-height: 1.5;
 }
 .status-item[data-health="ok"]   { color: var(--c-ok); }
 .status-item[data-health="warn"] { color: var(--c-warn); }
@@ -180,12 +207,9 @@
 .status-item.conn[data-state="disconnected"] { color: var(--c-err); }
 .status-item.conn[data-state="disconnected"]::before { background: var(--c-err); }
 
-/* Demo-data and offline flags: the two conditional right-side indicators. Faintly outlined
-   (unlike the borderless left items) so "not live data" and "no network" register at a glance
-   without shouting. Hidden by default; main.ts toggles them. */
-.status-demo, .status-offline {
-  padding: 0.05rem 0.45rem; border-radius: var(--pico-border-radius); border: 1px solid currentColor;
-}
+/* Demo-data and offline flags: the two conditional right-side indicators (both .pill). "not
+   live data" and "no network" register at a glance without shouting. Hidden by default; the
+   app toggles them. */
 .status-demo { color: var(--c-info); }
 .status-offline { color: var(--c-warn); }
 
