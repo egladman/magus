@@ -12,8 +12,10 @@
 import { initNav } from "./nav.js";
 import { initTocToggle, initScrollSpy } from "./toc.js";
 import { initSearch } from "./search.js";
-import { initRefDrawer } from "./ref-drawer.js";
-import { initConsoleSettings } from "./console-settings.js";
+// ref-drawer + console-settings live in src/ui/ (shared nav panels, styled by
+// styles/ui-panels.css) - loaded on the docs pages AND the console apps, not docs-only.
+import { initRefDrawer } from "../ui/ref-drawer.js";
+import { initConsoleSettings } from "../ui/console-settings.js";
 import { initAnchors } from "./anchors.js";
 import { initCodeCopy } from "./code-copy.js";
 import { initSyntaxHighlight } from "./syntax-highlight.js";

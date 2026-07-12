@@ -3,8 +3,8 @@
 // this fills the controls from localStorage (lib/settings), persists edits, and wires open/close
 // (the gear, a click outside, Escape). No-ops where there is no gear, like every other main.js
 // module. These are BROWSER-side prefs the operator controls; the dashboard reads them on load.
-import { getPollMs, setPollMs, getDefaultHost, setDefaultHost } from "./lib/settings.js";
-import { showRefreshToast } from "./lib/refresh-toast.js";
+import { getPollMs, setPollMs, getDefaultHost, setDefaultHost } from "../lib/settings.js";
+import { showRefreshToast } from "../lib/refresh-toast.js";
 
 export function initConsoleSettings(): void {
   const btn = document.getElementById("settings-btn");

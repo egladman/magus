@@ -9,8 +9,8 @@
 
 import {
   parseHash, validateLiveHost, consumeLiveToken, wantsDemo,
-} from "../lib/daemon";
-import { createStore } from "../lib/store";
+} from "../../lib/daemon";
+import { createStore } from "../../lib/store";
 import { initialState, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
 import { startDemo, type DemoHandle } from "./demo";
@@ -32,11 +32,11 @@ import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
-import "../nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
-import "../search.js"; // the docs search - relocated into the reference drawer (below) by ref-drawer
-import "../ref-drawer.js"; // the shared reference drawer; imported AFTER search so it can pull the search bar in
-import "../console-settings.js"; // the gear settings panel (refresh rate + daemon host override)
-import { getDefaultHost } from "../lib/settings";
+import "../../site/nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
+import "../../site/search.js"; // the docs search - relocated into the reference drawer (below) by ref-drawer
+import "../../site/ref-drawer.js"; // the shared reference drawer; imported AFTER search so it can pull the search bar in
+import "../../site/console-settings.js"; // the gear settings panel (refresh rate + daemon host override)
+import { getDefaultHost } from "../../lib/settings";
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);

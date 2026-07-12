@@ -16,13 +16,13 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { createClient, type Client } from "@connectrpc/connect";
-import { StatusSchema, type Status } from "../gen/magus/status/v1/status_pb";
-import { MetricsService } from "../gen/magus/metrics/v1/metrics_pb";
+import { StatusSchema, type Status } from "../../gen/magus/status/v1/status_pb";
+import { MetricsService } from "../../gen/magus/metrics/v1/metrics_pb";
 import {
   authHeaders, createDaemonTransport, fetchSSE, getLiveToken, type SSEHeaders,
-} from "../lib/daemon";
-import { getPollMs } from "../lib/settings";
-import type { Store } from "../lib/store";
+} from "../../lib/daemon";
+import { getPollMs } from "../../lib/settings";
+import type { Store } from "../../lib/store";
 import {
   mapStatus, mapSnapshot, mapSample, mapInsight,
   type DashboardState, type SampleView, type InsightWire,

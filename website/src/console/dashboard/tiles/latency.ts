@@ -6,7 +6,7 @@
 import type { DashboardState, LatKey, LatView } from "../state";
 import { LAT_KEYS, LAT_META, fmtCount, fmtDur } from "../state";
 import { TimeChart, onThemeChange } from "../charts/uplot";
-import { glossaryLink } from "../../lib/glossary";
+import { glossaryLink } from "../../../lib/glossary";
 import { Card, h, type Tile } from "./card";
 import type uPlot from "uplot";
 

@@ -3,7 +3,7 @@
 # gen/playground/buzz.wasm; the node_modules that produce it are not.
 node_modules/
 
-# Bundled test output: `pnpm run test` esbuild-bundles js/lib/*.test.ts here and
+# Bundled test output: `pnpm run test` esbuild-bundles src/lib/*.test.ts here and
 # runs it under node --test (which skips node_modules, so the bundle can't live
 # there). A build artifact, not committed.
 .testcache/

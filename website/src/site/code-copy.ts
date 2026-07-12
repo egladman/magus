@@ -5,7 +5,7 @@
 // positioned .code-block and drops a small button in the top-right corner;
 // copyFeedback (lib/clipboard.js) wires the copy + check-confirmation. No-ops
 // where the Clipboard API is unavailable.
-import { copyFeedback } from "./lib/clipboard.js";
+import { copyFeedback } from "../lib/clipboard.js";
 
 export function initCodeCopy(): void {
   if (!navigator.clipboard) return;

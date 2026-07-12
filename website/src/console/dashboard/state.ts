@@ -7,11 +7,11 @@
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   Health, TargetRun_State, type Status, type Pool, type Run, type TargetRun,
-} from "../gen/magus/status/v1/status_pb";
+} from "../../gen/magus/status/v1/status_pb";
 import type {
   Snapshot, Latency, Remote, TargetStat, MCPToolStat, Buzz, Sandbox, Sample as ProtoSample,
-} from "../gen/magus/metrics/v1/metrics_pb";
-import type { ConnState } from "../lib/daemon";
+} from "../../gen/magus/metrics/v1/metrics_pb";
+import type { ConnState } from "../../lib/daemon";
 
 // ---- formatters ------------------------------------------------------------
 

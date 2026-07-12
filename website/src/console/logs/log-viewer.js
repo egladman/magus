@@ -9,12 +9,12 @@
 // target, so it is a no-op if the scaffold is absent (e.g. main.js loading on another page).
 
 import { fromBinary, toBinary, create } from "@bufbuild/protobuf";
-import { JournalSchema, EventSchema, Kind, Status, Stream } from "./gen/magus/viewer/v1/viewer_pb";
+import { JournalSchema, EventSchema, Kind, Status, Stream } from "../../gen/magus/viewer/v1/viewer_pb";
 // The loopback lock, the shared bearer token, and the fetch-based SSE reader are the
 // SAME security-critical helpers all three tool pages use; they live in one audited
 // module now instead of being copy-pasted here. Live-mode host is /events on the
 // ephemeral per-run server (not the daemon's /api/v1/events), but the helpers are identical.
-import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, parseHash, wantsDemo } from "./lib/daemon";
+import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, parseHash, wantsDemo } from "../../lib/daemon";
 
 const el = (id) => document.getElementById(id);
 

@@ -1,6 +1,6 @@
 // Auto-generated at build time (gen/sw.js). Template lives at website/sw.js.tmpl;
-// the render substitutes magus-f68adcbd893d and /magus/ before copying into gen/.
-const VERSION = "magus-f68adcbd893d";
+// the render substitutes magus-fb0add00932d and /magus/ before copying into gen/.
+const VERSION = "magus-fb0add00932d";
 const BASE = "/magus/";
 
 const PRECACHE = [

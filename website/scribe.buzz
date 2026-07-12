@@ -1507,7 +1507,7 @@ final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.
 // computeCSP builds one page's Content-Security-Policy meta content (see the
 // doc comment on Site.csp/Site.cspHome for which pages get which img-src).
 // Deny-by-default (default-src 'self' - not 'none': manifest-src and the
-// same-origin-only <link rel=prefetch> hover-warm in js/prefetch.js both fall
+// same-origin-only <link rel=prefetch> hover-warm in src/site/prefetch.ts both fall
 // back to default-src per the CSP3 fetch-directive spec, and the service
 // worker registration (`navigator.serviceWorker.register('sw.js')`, main.js)
 // falls back through worker-src -> child-src -> default-src since neither is
@@ -3011,7 +3011,7 @@ fun tourSrc(file: str) > str {
 }
 
 // playgroundLink deep-links src into the playground editor. The raw source is url-safe
-// base64 (unpadded, matching js/run-example.js and the wasm's applyHashSource decoder)
+// base64 (unpadded, matching src/site/run-example.ts and the wasm's applyHashSource decoder)
 // in the #source= fragment, so the code stays client-side (never hits the server/CDN).
 fun playgroundLink(root: str, src: str) > str {
     var enc = encoding.base64urlEncode(src);
@@ -3353,43 +3353,43 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     os.execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets/. " + site.outDir + "/assets/ || true"]);
 
     // Bundle + minify the client-side assets with esbuild (pinned in mise.toml).
-    // The nine flat scripts became a js/ ES-module tree (feature modules + lib/);
+    // The nine flat scripts became a src/ ES-module tree (feature modules + lib/);
     // esbuild writes two outputs: theme.js (head, critical, minified — no bundle
     // needed, it has no imports) and main.js (the deferred bundle of every feature
     // module). mermaid is a lazy dynamic import() pointing to the same-origin
     // gen/assets/mermaid.js bundle (built by build-mermaid); esbuild leaves dynamic
     // imports as external runtime imports. CSS is minified per-file (not
     // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
-    os.execute(["sh", "-c", "esbuild site.css --minify --outfile=" + site.outDir + "/site.css"]);
+    os.execute(["sh", "-c", "esbuild src/styles/site.css --minify --outfile=" + site.outDir + "/site.css"]);
     // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
     // layout) loaded by /dashboard/, /logs/, /graph/ (and the playground, for the status bar)
     // but NOT the docs corpus. Site-wide-ish, so minified to gen root and enumerated in the
     // precache/allowlist next to site.css.
-    os.execute(["sh", "-c", "esbuild console.css --minify --outfile=" + site.outDir + "/console.css"]);
+    os.execute(["sh", "-c", "esbuild src/styles/console.css --minify --outfile=" + site.outDir + "/console.css"]);
     // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
     // drawer) that BOTH the docs pages and the console apps use. Split out of console.css so the
     // docs corpus can load only this and drop console.css. Gen-root, precached like the others.
-    os.execute(["sh", "-c", "esbuild ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
-    os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
+    os.execute(["sh", "-c", "esbuild src/styles/ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
+    os.execute(["sh", "-c", "esbuild src/styles/theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
     // graph.css / logs.css / dashboard.css: each console app's page-scoped stylesheet (rules
     // load only on that one page, not site-wide). Built HERE only - the pnpm build-<app> scripts
     // used to re-minify these three into the same paths (a second, identical build), which is now
     // dropped; pnpm bundles just the JS modules. `serve` re-renders CSS via this path, no pnpm run.
     fs.makeDirectory(site.outDir + "/console/graph");
-    os.execute(["sh", "-c", "esbuild graph.css --minify --outfile=" + site.outDir + "/console/graph/graph.css"]);
+    os.execute(["sh", "-c", "esbuild src/console/graph/graph.css --minify --outfile=" + site.outDir + "/console/graph/graph.css"]);
     // logs.css: the /logs/ Log Viewer's page-scoped stylesheet (no imports; single-file
-    // minify). Its module js/log-viewer.js now imports the @bufbuild/protobuf client, so it
+    // minify). Its module src/console/logs/log-viewer.js now imports the @bufbuild/protobuf client, so it
     // is bundled by `pnpm run build-log-viewer` (generateJsBundles) like the graph explorer,
     // not here.
     fs.makeDirectory(site.outDir + "/console/logs");
-    os.execute(["sh", "-c", "esbuild logs.css --minify --outfile=" + site.outDir + "/console/logs/logs.css"]);
+    os.execute(["sh", "-c", "esbuild src/console/logs/logs.css --minify --outfile=" + site.outDir + "/console/logs/logs.css"]);
     // dashboard.css: the /dashboard/ control surface's page-scoped stylesheet (no imports;
-    // single-file minify). Its module js/dashboard.js imports the @bufbuild/protobuf status
+    // single-file minify). Its module src/console/dashboard/main.ts imports the @bufbuild/protobuf status
     // client, so it is bundled by `pnpm run build-dashboard` (generateJsBundles), not here.
     fs.makeDirectory(site.outDir + "/console/dashboard");
-    os.execute(["sh", "-c", "esbuild dashboard.css --minify --outfile=" + site.outDir + "/console/dashboard/dashboard.css"]);
-    os.execute(["sh", "-c", "esbuild js/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
-    os.execute(["sh", "-c", "esbuild js/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
+    os.execute(["sh", "-c", "esbuild src/console/dashboard/dashboard.css --minify --outfile=" + site.outDir + "/console/dashboard/dashboard.css"]);
+    os.execute(["sh", "-c", "esbuild src/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
+    os.execute(["sh", "-c", "esbuild src/site/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
     // Emit the WebAssembly playground page at gen/playground/index.html (injecting the
     // shared nav/footer into the hand-authored playground.html). buzz.wasm,

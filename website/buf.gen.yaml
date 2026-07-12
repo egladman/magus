@@ -1,7 +1,7 @@
 version: v2
 # The website generates its OWN JS/TS client for the magus.viewer.v1 (and status/settings/
 # query) contracts, from the shared .proto in ../proto (`buf generate ../proto` from this
-# dir, run by the `generate` target before the esbuild bundles). Output lands in js/gen/
+# dir, run by the `generate` target before the esbuild bundles). Output lands in src/gen/
 # (committed, drift-gated), INSIDE this project, so esbuild resolves the @bufbuild/protobuf
 # runtime from this project's node_modules when it bundles the client into the log viewer /
 # console. The proto project owns the Go codegen; each consumer owns the codegen it needs.
@@ -10,6 +10,6 @@ plugins:
   # no local protoc-gen-es install needed. include_imports emits buf/validate/* so the
   # generated relative imports resolve locally; google well-known types map to the runtime.
   - remote: buf.build/bufbuild/es:v2.9.0
-    out: js/gen
+    out: src/gen
     opt: target=ts
     include_imports: true

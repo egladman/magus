@@ -6,7 +6,7 @@
 // (lib/clipboard.js), copies the section's full URL, briefly swapping the link icon
 // for a check to confirm. The icon stays hidden until its heading is hovered (see
 // .heading-anchor in site.css); the href still works without the Clipboard API.
-import { copyFeedback } from "./lib/clipboard.js";
+import { copyFeedback } from "../lib/clipboard.js";
 
 export function initAnchors(): void {
   const LINK =

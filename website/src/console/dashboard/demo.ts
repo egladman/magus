@@ -13,7 +13,7 @@
 // "See a demo" button.
 
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
-import type { Store } from "../lib/store";
+import type { Store } from "../../lib/store";
 import type {
   DashboardState, StatusView, MetricsView, SampleView, InsightView,
   RunView, TargetRunView, TargetState,

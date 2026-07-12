@@ -1,7 +1,7 @@
 // versions.ts - the footer strip: magus + daemon versions. Deep-links the Daemon term.
 
 import type { DashboardState } from "../state";
-import { glossaryLink } from "../../lib/glossary";
+import { glossaryLink } from "../../../lib/glossary";
 import { h, type Tile } from "./card";
 
 export function versionsTile(): Tile {

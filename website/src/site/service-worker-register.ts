@@ -10,7 +10,7 @@
 // a first install): rather than let the swap happen silently, we show a small toast
 // offering a refresh so the reader gets the new assets when they choose to.
 
-import { showRefreshToast } from "./lib/refresh-toast.js";
+import { showRefreshToast } from "../lib/refresh-toast.js";
 
 export function initServiceWorker(): void {
   if (typeof navigator === "undefined") return;

@@ -7,7 +7,7 @@
 // instances, observers) so the page can be re-composed cleanly.
 
 import type { DashboardState } from "../state";
-import { glossaryLink } from "../../lib/glossary";
+import { glossaryLink } from "../../../lib/glossary";
 
 export interface Tile {
   readonly el: HTMLElement;

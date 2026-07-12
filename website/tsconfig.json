@@ -1,5 +1,5 @@
 {
-  "//": "Type-check gate for the hand-written TS client bundles (js/*.ts). esbuild does the actual compilation (strips types, no checking); this config drives `pnpm run typecheck` (tsgo --noEmit) so the source is verified type-correct against the generated protobuf-es and ConnectRPC types. allowJs lets the side-effect import of nav.js resolve without being checked.",
+  "//": "Type-check gate for the hand-written TS client bundles (src/**/*.ts). esbuild does the actual compilation (strips types, no checking); this config drives `pnpm run typecheck` (tsgo --noEmit) so the source is verified type-correct against the generated protobuf-es and ConnectRPC types. allowJs lets the side-effect import of nav.js resolve without being checked.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -14,7 +14,7 @@
     "forceConsistentCasingInFileNames": true,
     "types": []
   },
-  "include": ["js/**/*.ts"],
+  "include": ["src/**/*.ts"],
   "//exclude": "The *.test.ts loopback-lock test imports node:test / node:assert (validated by `pnpm run test` via node --test, not by tsc). It is excluded here so the type-check gate needs no @types/node; the tested function itself lives in daemon.ts and IS checked.",
-  "exclude": ["node_modules", "js/**/*.test.ts"]
+  "exclude": ["node_modules", "src/**/*.test.ts"]
 }

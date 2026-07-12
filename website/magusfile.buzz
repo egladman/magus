@@ -15,20 +15,20 @@ import "scribe";
 
 magus.project({
     // Affected/drift tracks this sources glob, not the import graph, so scribe.buzz
-    // (and every other input) must be named to be watched. Both js/**/*.js AND js/**/*.ts
+    // (and every other input) must be named to be watched. Both src/**/*.js AND src/**/*.ts
     // are named: the client bundles are increasingly TypeScript (esbuild strips the types),
     // and a .ts edit must mark this project affected just like a .js one. package.json +
     // pnpm-lock.yaml are named so a bundled-dep version bump (mermaid, hljs, d3,
     // codemirror) invalidates the cacheable build-* targets and marks this project
-    // affected - the esbuild inputs live in those manifests, not in the js/ entries.
+    // affected - the esbuild inputs live in those manifests, not in the src/ entries.
     // (pnpm is the package manager - NOT npm; there is no package-lock.json.)
-    "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "js/**/*.ts", "*.css", "playground.html", "graph.html", "logs.html",
+    "sources": ["magusfile.buzz", "*.buzz", "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "graph.html", "logs.html",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "buf.gen.yaml",
                 // The viewer/console bundles a JS client generated FROM these .proto sources
-                // (website/buf.gen.yaml -> js/gen/), so a schema change reruns codegen + rebuild.
+                // (website/buf.gen.yaml -> src/gen/), so a schema change reruns codegen + rebuild.
                 "../proto/magus/**/*.proto", "../proto/buf.yaml", "../proto/buf.lock",
                 "../README.md", "../CONTRIBUTING.md", "../docs/**", "../blog/**", "../assets/**"],
-    "outputs": ["gen/**", "MAGUS.md", "js/gen/**"],
+    "outputs": ["gen/**", "MAGUS.md", "src/gen/**"],
     "targets": {
         // generate renders + gates on drift, so it must run every time (skipCache) and
         // alone (exclusive), so a peer mutating gen/ can't trip its git-status check.
@@ -38,7 +38,7 @@ magus.project({
         // wasm binary; skipCache so a hit never replays a stale one. Run by hand.
         "build-playground": {"skipCache": true},
         // build-mermaid / build-hljs / build-editor / build-graph-explorer bundle a
-        // js/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
+        // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // committed gen/ artifact. esbuild + pinned npm deps are deterministic, so these
         // stay cacheable (no skipCache): a cache hit replays identical bytes, and a
         // version bump invalidates it via package.json/pnpm-lock.yaml in sources.
@@ -85,9 +85,9 @@ export fun changelog_generate(args: [str]) > void {
 // a cold CI checkout installs. Running here - inside generate - is what lets both the
 // gen/** drift gate and the merge driver regenerate the bundles.
 // generateProtoClient generates the magus.viewer.v1 (etc.) JS client from the shared .proto
-// definitions in ../proto, using THIS project's buf.gen.yaml, into js/gen/ (committed). The
+// definitions in ../proto, using THIS project's buf.gen.yaml, into src/gen/ (committed). The
 // website owns its own JS codegen - the proto project owns the Go codegen - so each consumer
-// generates the client it needs from the one source of truth. Bundling from js/gen/ (inside
+// generates the client it needs from the one source of truth. Bundling from src/gen/ (inside
 // this project) lets @bufbuild/protobuf resolve from this project's node_modules. Deterministic
 // (pinned remote es plugin), so the committed output is drift-gated by generate.
 fun generateProtoClient() > void {
@@ -107,7 +107,7 @@ fun generateJsBundles() > void {
 // committed. The `rw` charm (`generate:rw`) keeps the result instead of gating.
 export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
-    final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "js/gen"]) == false;
+    final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"]) == false;
     magus.needs(magus.target.literal("md-generate"));
     magus.needs(magus.target.literal("changelog-generate"));
     // Regenerate the JS proto client from ../proto BEFORE the bundles that import it.
@@ -174,7 +174,7 @@ export fun build_playground(args: [str]) > void {
     magus.info("rebuilt website/gen/playground/buzz.wasm + wasm_exec.js - commit the result");
 }
 
-// build-mermaid bundles the vendored mermaid library (js/vendor/mermaid.js -> mermaid@11)
+// build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11)
 // into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports
 // it same-origin so diagrams and page styling work offline without any CDN. Run after
 // bumping the mermaid version in package.json; commit the regenerated artifact.
@@ -187,7 +187,7 @@ export fun build_mermaid(args: [str]) > void {
     magus.info("rebuilt gen/assets/mermaid.js - commit the result");
 }
 
-// build-hljs bundles the vendored highlight.js library (js/vendor/hljs.js -> highlight.js@11)
+// build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11)
 // into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so
 // syntax highlighting works offline without any CDN. Run after bumping the version in
 // package.json; commit the regenerated artifact.

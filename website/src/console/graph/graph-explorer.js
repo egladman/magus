@@ -25,7 +25,7 @@ import { select } from "d3-selection";
 // be copy-pasted into all three tool pages; they now live in one audited module.
 // (The ConnectRPC transport this module also exports is tree-shaken out here - the
 // graph explorer only uses these four primitives.)
-import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, authHeaders, isRemembered, setRemembered, wantsDemo } from "./lib/daemon";
+import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, authHeaders, isRemembered, setRemembered, wantsDemo } from "../../lib/daemon";
 
 // The node kinds the graph can emit. Each gets a stable legend color via a CSS
 // custom property (--gk-<kind>) defined for both themes in graph.css, so the

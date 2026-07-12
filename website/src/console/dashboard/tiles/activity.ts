@@ -14,7 +14,7 @@
 
 import type { DashboardState, RunningTargetView } from "../state";
 import { fmtArgs, relTime } from "../state";
-import { glossaryLink } from "../../lib/glossary";
+import { glossaryLink } from "../../../lib/glossary";
 import { Card, h, type Tile } from "./card";
 
 const PREVIEW_LINES = 120; // most recent captured lines kept in the streaming preview

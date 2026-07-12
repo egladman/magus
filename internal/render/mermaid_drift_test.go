@@ -2,16 +2,16 @@ package render
 
 // TestMermaidClassDefDrift is the anti-drift contract for Phase 7 (Copy as
 // Mermaid). It enforces a two-way lock between the Go Mermaid emitters and the
-// JS implementation in website/js/graph-explorer.js:
+// JS implementation in website/src/console/graph/graph-explorer.js:
 //
 //  1. It runs the Go emitters and asserts the expected classDef names appear in
 //     their output.
-//  2. It reads website/js/graph-explorer.js from disk and asserts the SAME
+//  2. It reads website/src/console/graph/graph-explorer.js from disk and asserts the SAME
 //     names appear verbatim in the JS source.
 //
 // If you rename a classDef in either place without updating the other, exactly
 // one of the two subtests fails CI. See the KEYWORDS mirror note in
-// website/js/editor.js for the house pattern this follows.
+// website/src/playground/editor.js for the house pattern this follows.
 //
 // Where each class name is emitted in Go:
 //
@@ -136,12 +136,12 @@ func TestMermaidClassDefDrift(t *testing.T) {
 		}
 	})
 
-	// -- side B: verify website/js/graph-explorer.js contains the same names ----
+	// -- side B: verify website/src/console/graph/graph-explorer.js contains the same names ----
 
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "runtime.Caller failed")
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
-	jsPath := filepath.Join(repoRoot, "website", "js", "graph-explorer.js")
+	jsPath := filepath.Join(repoRoot, "website", "src", "console", "graph", "graph-explorer.js")
 
 	data, err := os.ReadFile(jsPath)
 	require.NoError(t, err, "could not read %s", jsPath)
@@ -151,7 +151,7 @@ func TestMermaidClassDefDrift(t *testing.T) {
 		// Use a space suffix so "classDef anchor" does not match "classDef anchor2".
 		for _, name := range targetsClassDefNames {
 			require.True(t, strings.Contains(content, "classDef "+name+" "),
-				"JS file missing targets classDef %q - update website/js/graph-explorer.js "+
+				"JS file missing targets classDef %q - update website/src/console/graph/graph-explorer.js "+
 					"(toMermaid targets branch) to match the rename in targetgraph.go",
 				name)
 		}
@@ -164,7 +164,7 @@ func TestMermaidClassDefDrift(t *testing.T) {
 		// Use the colon suffix to ensure exact word boundaries.
 		for _, name := range knowledgeClassDefNames {
 			require.True(t, strings.Contains(content, name+":"),
-				"JS file missing knowledge classDef %q - update website/js/graph-explorer.js "+
+				"JS file missing knowledge classDef %q - update website/src/console/graph/graph-explorer.js "+
 					"(kindClassPalette in toMermaid knowledge branch) to match knowledgegraph.go",
 				name)
 		}
