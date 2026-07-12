@@ -336,9 +336,9 @@ a.hub-card:hover, a.hub-card:focus-visible {
   color: inherit; text-decoration: none;
   border-bottom: 1px dotted var(--pico-muted-border-color);
 }
+/* No external-link arrow: the term opens INLINE in the reference panel (ref-drawer.ts), not a new
+   tab, so the dotted underline alone marks it as looked-up-able; it firms to the info blue on hover. */
 .gloss-link:hover { color: var(--c-info); border-bottom-color: var(--c-info); }
-.gloss-link::after { content: " \2197"; font-size: 0.8em; color: var(--pico-muted-color); }
-.gloss-link:hover::after { color: var(--c-info); }
 
 /* Dense data tables (per-target, MCP tools). Header cells are sort buttons; the
    active column shows an ascending/descending caret. The table scrolls inside its
