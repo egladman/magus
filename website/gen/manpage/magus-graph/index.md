@@ -97,7 +97,7 @@ deps     The project dependency DAG. A trailing list of project paths roots
 **--targets**
 : Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project
 
-**--url** *string* (default: https://eli.gladman.cc/magus/graph/)
+**--url** *string* (default: https://eli.gladman.cc/magus/console/graph/)
 : Base URL of the Graph Explorer page (override for a self-hosted mirror)
 
 ## Subcommands

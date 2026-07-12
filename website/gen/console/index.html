@@ -52,7 +52,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../dashboard/">Dashboard</a></li>
+        <li><a href="../console/dashboard/">Dashboard</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
@@ -79,7 +79,7 @@
     <article>
 <h1 id="console">Console</h1>
 <p>The console is three frozen, read-only GET routes that the magus daemon
-exposes over loopback so the hosted <a href="https://eli.gladman.cc/magus/graph/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a>
+exposes over loopback so the hosted <a href="https://eli.gladman.cc/magus/console/graph/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a>
 can display your current workspace.</p>
 <p><strong>Nothing in the browser can make the daemon do anything.</strong> The console has no
 write surface, no POST routes, and no way to trigger a build, run a target, or
@@ -300,7 +300,7 @@ that's the HTTP standard, not our promise.</p>
 <ol>
 <li>Open DevTools (<code>F12</code>) -&gt; <strong>Network</strong> tab. Tick <strong>Preserve log</strong>.</li>
 <li>Load your graph: run <code>magus graph open</code> in your workspace, or drag a
-<code>graph.json</code> onto the <a href="https://eli.gladman.cc/magus/graph/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a>.</li>
+<code>graph.json</code> onto the <a href="https://eli.gladman.cc/magus/console/graph/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a>.</li>
 <li>Read the request list. Every row is a <code>GET</code> for a static file from this
 site's own origin (or, in live mode, your own loopback address). Click any
 row - the <strong>Payload</strong> tab is absent (no request carries a body). Compare
@@ -401,7 +401,7 @@ read-only loopback daemon console documented above.)</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22console%22">console</a><a class="tag" href="../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../search/?q=tag%3A%22privacy%22">privacy</a></div>
-    <small>Last updated <time datetime="2026-07-11T13:01:20Z">July 11, 2026, 1:01 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/4a0f98689e04bc2eb4db2f22ad6fca2fc1cb53b0" data-tooltip="4a0f98689e04bc2eb4db2f22ad6fca2fc1cb53b0" title="4a0f98689e04bc2eb4db2f22ad6fca2fc1cb53b0">4a0f9868</a>)</small>
+    <small>Last updated <time datetime="2026-07-12T03:12:57Z">July 12, 2026, 3:12 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/b8969f2cfd3f1bea119b8984baa6bd794c6a917d" data-tooltip="b8969f2cfd3f1bea119b8984baa6bd794c6a917d" title="b8969f2cfd3f1bea119b8984baa6bd794c6a917d">b8969f2c</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/4a0f98689e04bc2eb4db2f22ad6fca2fc1cb53b0"><code>4a0f9868</code></a> <small><time datetime="2026-07-11T13:01:20Z">Jul 11, 2026</time></small> - finish the deferred dashboard work and fix the stale-CSS footgun: consolidate graph-explorer.js onto lib/daemon.ts (authHeaders + setRemembered, no more hand-rolled Bearer/token); make the SSE reader CRLF and multi-line-data robust; window the live Gantt so stale terminal bars drop instead of piling at the edge; gap the cache-rate chart across the metrics-versus-status sample boundary instead of diffing mismatched counters; rename the browser-bridge docs page to console with an alias stub for old links; and wire the page CSS build into pnpm build so dashboard, logs, and graph CSS can no longer go stale relative to the JS</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/console.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/console.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -653,7 +653,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

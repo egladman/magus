@@ -52,7 +52,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../dashboard/">Dashboard</a></li>
+        <li><a href="../console/dashboard/">Dashboard</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
@@ -102,11 +102,11 @@ magus graph export -o json  # the whole graph as node-link JSON
 magus graph diff base.json  # what this branch changed vs an exported baseline
 magus graph open            # explore it visually in your browser (data stays local)
 </code></pre>
-<p>Prefer a picture? <code>magus graph open</code> launches the interactive <a href="../graph/">Graph
+<p>Prefer a picture? <code>magus graph open</code> launches the interactive <a href="../console/graph/">Graph
 Explorer</a> seeded with your own workspace - a force-directed, searchable
 view of the same graph. Your data never leaves your machine: it rides in the URL
 fragment (or a local loopback server with <code>--serve</code>), never reaching the site. This
-site's own graph is the <a href="../graph/">live demo</a>.</p>
+site's own graph is the <a href="../console/graph/">live demo</a>.</p>
 <p>The committed <code>MAGUS.md</code> routing table is the entry point: it lists every node
 kind with its count, the query that lists it, and the highest-degree anchor
 nodes, so an agent knows what exists before running anything.</p>
@@ -160,7 +160,7 @@ to a node budget (<code>--budget</code>, default 50), so a match on a high-degre
 cannot pull in the whole graph.</p>
 <h2 id="graph-explorer">Graph Explorer</h2>
 <p><code>magus graph open</code> opens the graph in an interactive, force-directed
-<a href="../graph/">Graph Explorer</a> in your browser - <strong>privately</strong>. Your graph never
+<a href="../console/graph/">Graph Explorer</a> in your browser - <strong>privately</strong>. Your graph never
 leaves your machine: by default it rides in the link's URL <code>#fragment</code> (which
 browsers never send to a server), and <code>--serve</code> instead hands it to the page from
 an ephemeral <code>127.0.0.1</code> loopback server that serves once and stops. The hosted
@@ -189,7 +189,7 @@ depth), click a legend color to isolate a kind, and use the <strong>hubs</strong
 lenses (the visual twin of <code>magus graph stats</code>). The page is fully client-side and
 data-agnostic - it also loads any <code>graph.json</code> from <code>magus graph export -o json</code>
 via the Open-file button or drag-and-drop. This site's own graph is the
-<a href="../graph/">live demo</a>.</p>
+<a href="../console/graph/">live demo</a>.</p>
 <h2 id="schema">Schema</h2>
 <p>A node is a magus-domain entity with a stable, human-readable ID
 (<code>&lt;kind&gt;:&lt;qualified-name&gt;</code>, e.g. <code>target:pkg/foo:build</code>). The ID is stable across
@@ -389,7 +389,7 @@ installed skill has fallen behind the binary after an upgrade.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../search/?q=tag%3A%22schema%22">schema</a><a class="tag" href="../search/?q=tag%3A%22node-link%22">node-link</a><a class="tag" href="../search/?q=tag%3A%22graphml%22">graphml</a><a class="tag" href="../search/?q=tag%3A%22mcp%22">mcp</a></div>
-    <small>Last updated <time datetime="2026-07-10T16:46:36Z">July 10, 2026, 4:46 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/9f9750b0a1d4b5287cfa2f2a4deb2943801cabd1" data-tooltip="9f9750b0a1d4b5287cfa2f2a4deb2943801cabd1" title="9f9750b0a1d4b5287cfa2f2a4deb2943801cabd1">9f9750b0</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/70f9d574b94f5fb563d6d6f920f9360804d90b77"><code>70f9d574</code></a> <small><time datetime="2026-07-09T15:57:10Z">Jul 9, 2026</time></small> - improve ui/ux on graph page; add builtin claude skill</li><li><a href="https://github.com/egladman/magus/commit/9187ea11938bd5a6d8fc55f58d62bcb183d9a5ef"><code>9187ea11</code></a> <small><time datetime="2026-07-09T06:41:44Z">Jul 9, 2026</time></small> - fix double-fragment URLs in per-project and query deep links; add graph open to manpage registry with --targets; document --targets in docs/knowledge.md; regenerate manpages and MAGUS.md</li><li><a href="https://github.com/egladman/magus/commit/8f420216a6d76726d4aa6f612df503e5a6383833"><code>8f420216</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - restore root generated outputs to canonical versions; website work must not own root-project outputs</li><li><a href="https://github.com/egladman/magus/commit/4fc336f7cbd0a6c958402315503bb4287e884d19"><code>4fc336f7</code></a> <small><time datetime="2026-07-09T00:39:08Z">Jul 9, 2026</time></small> - add a target-graph flavor adapter to the explorer (detectFlavor, targetGraphToNodeLink, anchors, dashed cycles); add the symbol kind color and legend</li><li><a href="https://github.com/egladman/magus/commit/08597bdb468e3fcbedb5143bf189631962c67d72"><code>08597bdb</code></a> <small><time datetime="2026-07-08T22:53:04Z">Jul 8, 2026</time></small> - rectify wildcard review: SeedsSymbols now recognizes a wildcard kind:/id: that could reach symbols (kind:sym*, id:sym*) so a symbol-matching query actually loads the symbol shards instead of silently returning empty (high); wildcardCouldMatchPrefix gates the id case; document globMatch&#39;s leftmost-no-backtrack correctness, the wildcard-terms-skip-doc rationale, and that the conformance corpus&#39;s JS side is not yet wired; realign the grammar doc table</li><li><a href="https://github.com/egladman/magus/commit/d0d1db85651e263ad5bc7df3c6befe3fa49e8aef"><code>d0d1db85</code></a> <small><time datetime="2026-07-08T22:45:50Z">Jul 8, 2026</time></small> - document the * wildcard in the query grammar and the agent skill; bump agent-skill-version to 4</li><li><a href="https://github.com/egladman/magus/commit/10f35f9d00e18d4cccb605d9e75927a5bd895573"><code>10f35f9d</code></a> <small><time datetime="2026-07-08T22:25:07Z">Jul 8, 2026</time></small> - document SCIP code-symbol ingestion: declaring an index, the @symbols shards, lazy loading, refs, and the xref routing file</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-12T03:12:57Z">July 12, 2026, 3:12 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/b8969f2cfd3f1bea119b8984baa6bd794c6a917d" data-tooltip="b8969f2cfd3f1bea119b8984baa6bd794c6a917d" title="b8969f2cfd3f1bea119b8984baa6bd794c6a917d">b8969f2c</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/9f9750b0a1d4b5287cfa2f2a4deb2943801cabd1"><code>9f9750b0</code></a> <small><time datetime="2026-07-10T16:46:36Z">Jul 10, 2026</time></small> - sync output-ref docs to `magus query output &lt;ref&gt;` and `-o json`; document the magus_output tool; regenerate site and catalog</li><li><a href="https://github.com/egladman/magus/commit/70f9d574b94f5fb563d6d6f920f9360804d90b77"><code>70f9d574</code></a> <small><time datetime="2026-07-09T15:57:10Z">Jul 9, 2026</time></small> - improve ui/ux on graph page; add builtin claude skill</li><li><a href="https://github.com/egladman/magus/commit/9187ea11938bd5a6d8fc55f58d62bcb183d9a5ef"><code>9187ea11</code></a> <small><time datetime="2026-07-09T06:41:44Z">Jul 9, 2026</time></small> - fix double-fragment URLs in per-project and query deep links; add graph open to manpage registry with --targets; document --targets in docs/knowledge.md; regenerate manpages and MAGUS.md</li><li><a href="https://github.com/egladman/magus/commit/8f420216a6d76726d4aa6f612df503e5a6383833"><code>8f420216</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - restore root generated outputs to canonical versions; website work must not own root-project outputs</li><li><a href="https://github.com/egladman/magus/commit/4fc336f7cbd0a6c958402315503bb4287e884d19"><code>4fc336f7</code></a> <small><time datetime="2026-07-09T00:39:08Z">Jul 9, 2026</time></small> - add a target-graph flavor adapter to the explorer (detectFlavor, targetGraphToNodeLink, anchors, dashed cycles); add the symbol kind color and legend</li><li><a href="https://github.com/egladman/magus/commit/08597bdb468e3fcbedb5143bf189631962c67d72"><code>08597bdb</code></a> <small><time datetime="2026-07-08T22:53:04Z">Jul 8, 2026</time></small> - rectify wildcard review: SeedsSymbols now recognizes a wildcard kind:/id: that could reach symbols (kind:sym*, id:sym*) so a symbol-matching query actually loads the symbol shards instead of silently returning empty (high); wildcardCouldMatchPrefix gates the id case; document globMatch&#39;s leftmost-no-backtrack correctness, the wildcard-terms-skip-doc rationale, and that the conformance corpus&#39;s JS side is not yet wired; realign the grammar doc table</li><li><a href="https://github.com/egladman/magus/commit/d0d1db85651e263ad5bc7df3c6befe3fa49e8aef"><code>d0d1db85</code></a> <small><time datetime="2026-07-08T22:45:50Z">Jul 8, 2026</time></small> - document the * wildcard in the query grammar and the agent skill; bump agent-skill-version to 4</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -641,7 +641,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>
