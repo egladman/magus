@@ -8,7 +8,7 @@ aliases: [browser-bridge]
 # Console
 
 The console is three frozen, read-only GET routes that the magus daemon
-exposes over loopback so the hosted [Graph Explorer](https://eli.gladman.cc/magus/graph/)
+exposes over loopback so the hosted [Graph Explorer](https://eli.gladman.cc/magus/console/graph/)
 can display your current workspace.
 
 **Nothing in the browser can make the daemon do anything.** The console has no
@@ -232,7 +232,7 @@ that's the HTTP standard, not our promise.
 
 1. Open DevTools (`F12`) -> **Network** tab. Tick **Preserve log**.
 2. Load your graph: run `magus graph open` in your workspace, or drag a
-   `graph.json` onto the [Graph Explorer](https://eli.gladman.cc/magus/graph/).
+   `graph.json` onto the [Graph Explorer](https://eli.gladman.cc/magus/console/graph/).
 3. Read the request list. Every row is a `GET` for a static file from this
    site's own origin (or, in live mode, your own loopback address). Click any
    row - the **Payload** tab is absent (no request carries a body). Compare

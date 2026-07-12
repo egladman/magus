@@ -34,7 +34,7 @@ import (
 // output <ref> --open` points a browser at, with the captured output delivered
 // PRIVATELY in a URL fragment (never uploaded). Override with --url for a self-hosted
 // mirror.
-const defaultLogViewerURL = "https://eli.gladman.cc/magus/logs/"
+const defaultLogViewerURL = "https://eli.gladman.cc/magus/console/logs/"
 
 func queryCmd(ctx context.Context, root string, args []string) error {
 	var (

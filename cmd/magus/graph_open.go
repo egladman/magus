@@ -26,7 +26,7 @@ import (
 // browser at this page with the workspace's graph delivered PRIVATELY: either in a
 // URL fragment (default) or fetched from an ephemeral loopback server (--serve).
 // Either way the graph stays on the machine - the site only serves static assets.
-const defaultExploreURL = "https://eli.gladman.cc/magus/graph/"
+const defaultExploreURL = "https://eli.gladman.cc/magus/console/graph/"
 
 // fragmentWarnBytes is a conservative ceiling on the encoded fragment. The whole
 // URL rides on the command line to the browser and into the address bar; Chrome

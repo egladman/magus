@@ -1369,9 +1369,9 @@ fun writeOffline(site: Site) > void {
       <p>This page requires a network connection and is not available offline.</p>
       <p>These work fully offline (they are cached on your device):</p>
       <ul>
-        <li><a href="{{basePath}}graph/">Graph explorer</a> - explore and query your dependency graph</li>
+        <li><a href="{{basePath}}console/graph/">Graph explorer</a> - explore and query your dependency graph</li>
         <li><a href="{{basePath}}playground/">Playground</a> - run Buzz code in the browser</li>
-        <li><a href="{{basePath}}logs/">Log viewer</a> - read a target's captured output</li>
+        <li><a href="{{basePath}}console/logs/">Log viewer</a> - read a target's captured output</li>
       </ul>
     </article>
   </main>
@@ -1608,14 +1608,14 @@ fun writeManifest(site: Site) > void {
         + "    \{ \"src\": \"" + basePath + "assets/icon-512-maskable.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"maskable\" \}\n"
         + "  ],\n"
         + "  \"shortcuts\": [\n"
-        + "    \{ \"name\": \"Graph\", \"url\": \"" + basePath + "graph/\" \},\n"
-        + "    \{ \"name\": \"Dashboard\", \"url\": \"" + basePath + "dashboard/\" \},\n"
+        + "    \{ \"name\": \"Graph\", \"url\": \"" + basePath + "console/graph/\" \},\n"
+        + "    \{ \"name\": \"Dashboard\", \"url\": \"" + basePath + "console/dashboard/\" \},\n"
         + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
         + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
         + "  ],\n"
         + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \},\n"
         + "  \"file_handlers\": [\n"
-        + "    \{ \"action\": \"" + basePath + "graph/\", \"accept\": \{ \"application/json\": [\".json\"] \} \}\n"
+        + "    \{ \"action\": \"" + basePath + "console/graph/\", \"accept\": \{ \"application/json\": [\".json\"] \} \}\n"
         + "  ]\n"
         + "\}\n";
     fs.writeFile(site.outDir + "/manifest.webmanifest", body);
@@ -1648,7 +1648,7 @@ fun writeServiceWorker(site: Site) > void {
     // the old "magus-<HEAD short hash>" form, which changed on every commit, could
     // never contain its own commit's hash, and so perpetually drifted the gen gate.
     final precached = ["search-index.json", "playground/wasm_exec.js",
-        "playground/buzz.wasm", "graph/explorer.js", "graph/graph.css",
+        "playground/buzz.wasm", "console/graph/explorer.js", "console/graph/graph.css",
         "logs/log-viewer.js", "logs/logs.css", "dashboard/dashboard.js", "dashboard/dashboard.css",
         "main.js", "theme.js", "site.css", "console.css", "theme.css",
         "assets/pico.min.css", "offline/index.html"];
@@ -1981,7 +1981,7 @@ fun renderSiteNav(root: str, active: str) > str {
     links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
     links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
     links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
-    links.append({"href": root + "dashboard/", "label": "Dashboard", "current": active == "dashboard"});
+    links.append({"href": root + "console/dashboard/", "label": "Dashboard", "current": active == "dashboard"});
     // The Dashboard is the single public entry point to magus's browser apps: its
     // connect screen carries the launchers (plus a demo), so Graph and Logs are reached
     // from there - and via `magus graph open` - rather than getting their own top-nav
@@ -2063,7 +2063,7 @@ fun renderSiteFooter(root: str, site: Site) > str {
     // collide with Buzz's own {expr} interpolation).
     final tmpl = `  <footer class="site-footer container">
     <small class="footer-group"><a href="{{root}}search/">Search</a> &middot; <a href="{{root}}public/">Files</a></small>
-    <small class="footer-group"><a href="{{root}}dashboard/">Dashboard</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
+    <small class="footer-group"><a href="{{root}}console/dashboard/">Dashboard</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
@@ -2139,9 +2139,9 @@ fun renderConsoleShell(app: str, root: str, refExtra: str) > str {
     // demo) so the launcher hops keep the connection. The current app is omitted (you are on it),
     // so on the dashboard the launcher shows menu-logs + menu-graph + menu-docs.
     final cells = mut [<{str: any}>];
-    if (app != "dashboard") { cells.append({"href": root + "dashboard/", "icon": iconDashboard, "label": "Dashboard", "id": "menu-dashboard"}); }
-    if (app != "logs") { cells.append({"href": root + "logs/", "icon": iconLogs, "label": "Log viewer", "id": "menu-logs"}); }
-    if (app != "graph") { cells.append({"href": root + "graph/", "icon": iconGraph, "label": "Graph explorer", "id": "menu-graph"}); }
+    if (app != "dashboard") { cells.append({"href": root + "console/dashboard/", "icon": iconDashboard, "label": "Dashboard", "id": "menu-dashboard"}); }
+    if (app != "logs") { cells.append({"href": root + "console/logs/", "icon": iconLogs, "label": "Log viewer", "id": "menu-logs"}); }
+    if (app != "graph") { cells.append({"href": root + "console/graph/", "icon": iconGraph, "label": "Graph explorer", "id": "menu-graph"}); }
     // Playground is NOT a console app - it is part of the documentation site (standalone WASM, no
     // daemon), so the console launcher lists only the daemon apps plus a link out to the docs.
     cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation", "id": "menu-docs"});
@@ -2207,14 +2207,14 @@ fun renderGraph(site: Site) > void {
     final f = io.File.open("graph.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("graph", "../", site.consoleRefLinks("graph", "../")));
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("graph", "../../", site.consoleRefLinks("graph", "../../")));
     // The default (non-home) CSP meta - site.csp, not site.cspHome. The graph
     // page holds the reader's own dependency graph, so it gets the tighter
     // img-src (no external hosts), same as playground; see renderPlayground's
     // comment above.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/graph");
-    fs.writeFile(site.outDir + "/graph/index.html", html);
+    fs.makeDirectory(site.outDir + "/console/graph");
+    fs.writeFile(site.outDir + "/console/graph/index.html", html);
 }
 
 // renderLogs writes gen/logs/index.html from the hand-authored logs.html - the log
@@ -2227,10 +2227,10 @@ fun renderLogs(site: Site) > void {
     final f = io.File.open("logs.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("logs", "../", site.consoleRefLinks("logs", "../")));
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("logs", "../../", site.consoleRefLinks("logs", "../../")));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/logs");
-    fs.writeFile(site.outDir + "/logs/index.html", html);
+    fs.makeDirectory(site.outDir + "/console/logs");
+    fs.writeFile(site.outDir + "/console/logs/index.html", html);
 }
 
 // renderDashboard writes gen/dashboard/index.html from the hand-authored dashboard.html -
@@ -2249,10 +2249,10 @@ fun renderDashboard(site: Site) > void {
     // (app bar + waffle launcher + reference drawer), injected at its <!-- console-shell -->
     // placeholder - one source of truth for all three surfaces. Its own bottom status bar and
     // the connect/panels body stay in dashboard.html.
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("dashboard", "../", site.consoleRefLinks("dashboard", "../")));
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("dashboard", "../../", site.consoleRefLinks("dashboard", "../../")));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/dashboard");
-    fs.writeFile(site.outDir + "/dashboard/index.html", html);
+    fs.makeDirectory(site.outDir + "/console/dashboard");
+    fs.writeFile(site.outDir + "/console/dashboard/index.html", html);
 }
 
 // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
@@ -3311,19 +3311,19 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
     // graph.css: the /graph/ Graph Explorer page's own stylesheet (its rules are
     // page-scoped, so it loads only on /graph/, not every page like site.css).
-    fs.makeDirectory(site.outDir + "/graph");
-    os.execute(["sh", "-c", "esbuild graph.css --minify --outfile=" + site.outDir + "/graph/graph.css"]);
+    fs.makeDirectory(site.outDir + "/console/graph");
+    os.execute(["sh", "-c", "esbuild graph.css --minify --outfile=" + site.outDir + "/console/graph/graph.css"]);
     // logs.css: the /logs/ Log Viewer's page-scoped stylesheet (no imports; single-file
     // minify). Its module js/log-viewer.js now imports the @bufbuild/protobuf client, so it
     // is bundled by `pnpm run build-log-viewer` (generateJsBundles) like the graph explorer,
     // not here.
-    fs.makeDirectory(site.outDir + "/logs");
-    os.execute(["sh", "-c", "esbuild logs.css --minify --outfile=" + site.outDir + "/logs/logs.css"]);
+    fs.makeDirectory(site.outDir + "/console/logs");
+    os.execute(["sh", "-c", "esbuild logs.css --minify --outfile=" + site.outDir + "/console/logs/logs.css"]);
     // dashboard.css: the /dashboard/ control surface's page-scoped stylesheet (no imports;
     // single-file minify). Its module js/dashboard.js imports the @bufbuild/protobuf status
     // client, so it is bundled by `pnpm run build-dashboard` (generateJsBundles), not here.
-    fs.makeDirectory(site.outDir + "/dashboard");
-    os.execute(["sh", "-c", "esbuild dashboard.css --minify --outfile=" + site.outDir + "/dashboard/dashboard.css"]);
+    fs.makeDirectory(site.outDir + "/console/dashboard");
+    os.execute(["sh", "-c", "esbuild dashboard.css --minify --outfile=" + site.outDir + "/console/dashboard/dashboard.css"]);
     os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + site.outDir + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild js/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
@@ -3538,10 +3538,10 @@ fun pruneStaleOutputs(site: Site) > void {
         "search/index.html": true,
         "playground/index.html": true, "playground/buzz.wasm": true,
         "playground/wasm_exec.js": true, "playground/editor.js": true,
-        "graph/index.html": true, "graph/explorer.js": true, "graph/graph.json": true,
-        "graph/graph.css": true,
-        "logs/index.html": true, "logs/log-viewer.js": true, "logs/logs.css": true,
-        "dashboard/index.html": true, "dashboard/dashboard.js": true, "dashboard/dashboard.css": true,
+        "console/graph/index.html": true, "console/graph/explorer.js": true, "console/graph/graph.json": true,
+        "console/graph/graph.css": true,
+        "console/logs/index.html": true, "console/logs/log-viewer.js": true, "console/logs/logs.css": true,
+        "console/dashboard/index.html": true, "console/dashboard/dashboard.js": true, "console/dashboard/dashboard.css": true,
     };
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);

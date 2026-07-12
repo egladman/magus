@@ -75,7 +75,7 @@ func (o Options) httpAddr() netip.AddrPort {
 
 // defaultExploreURL mirrors cmd/magus/graph_open.go:defaultExploreURL.
 // Duplicated here to avoid importing cmd/magus; keep in sync.
-const defaultExploreURL = "https://eli.gladman.cc/magus/graph/"
+const defaultExploreURL = "https://eli.gladman.cc/magus/console/graph/"
 
 // SiteOrigin returns the scheme://host origin of the hosted Graph Explorer.
 // Used by internal/daemon to set the bridge's CORS allowed origin.

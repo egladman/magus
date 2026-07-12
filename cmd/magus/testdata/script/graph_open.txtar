@@ -3,7 +3,7 @@
 # to the server). --print emits the URL instead of launching a browser, so it is
 # testable headlessly.
 exec magus graph open --print
-stdout 'https://eli\.gladman\.cc/magus/graph/#data='
+stdout 'https://eli\.gladman\.cc/magus/console/graph/#data='
 # the fragment is gzip+base64url (starts with the gzip magic H4sI in base64url)
 stdout '#data=H4sI'
 

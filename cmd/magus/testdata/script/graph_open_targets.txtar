@@ -1,7 +1,7 @@
 # --targets opens the target dependency graph (instead of the knowledge graph)
 # in the Graph Explorer via the #data= fragment. --print emits the URL headlessly.
 exec magus graph open --targets --print
-stdout 'https://eli\.gladman\.cc/magus/graph/#data='
+stdout 'https://eli\.gladman\.cc/magus/console/graph/#data='
 # the fragment is gzip+base64url (starts with the gzip magic H4sI in base64url)
 stdout '#data=H4sI'
 

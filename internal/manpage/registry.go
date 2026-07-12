@@ -389,7 +389,7 @@ Subcommands (the first argument):
 			fs.Bool("serve", false, "Hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
 			fs.Bool("print", false, "Print the explorer URL to stdout instead of opening a browser")
 			fs.Bool("refresh", false, "Force a full graph rebuild before opening (knowledge graph only)")
-			fs.String("url", "https://eli.gladman.cc/magus/graph/", "Base URL of the Graph Explorer page (override for a self-hosted mirror)")
+			fs.String("url", "https://eli.gladman.cc/magus/console/graph/", "Base URL of the Graph Explorer page (override for a self-hosted mirror)")
 		}},
 	},
 	Examples: []Example{

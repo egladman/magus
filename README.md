@@ -35,11 +35,11 @@ magus ships as a single self-contained binary. See the [Download guide](docs/dow
 
 magus is fully featured from the terminal - everything here is optional. Alongside the CLI, it can drive three read-only browser surfaces:
 
-> **See it first:** [open the live demo](https://eli.gladman.cc/magus/dashboard/#demo) - no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all three apps in demo mode. Everything below runs against your own daemon instead.
+> **See it first:** [open the live demo](https://eli.gladman.cc/magus/console/dashboard/#demo) - no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all three apps in demo mode. Everything below runs against your own daemon instead.
 
-- **[Dashboard](https://eli.gladman.cc/magus/dashboard/)** - live daemon health, the concurrency pool, running targets, and cache activity.
-- **[Graph explorer](https://eli.gladman.cc/magus/graph/)** - navigate targets, spells, and their dependency graph (`magus graph open`).
-- **[Log viewer](https://eli.gladman.cc/magus/logs/)** - read or stream any past run's captured output (`magus query output <ref> --open`).
+- **[Dashboard](https://eli.gladman.cc/magus/console/dashboard/)** - live daemon health, the concurrency pool, running targets, and cache activity.
+- **[Graph explorer](https://eli.gladman.cc/magus/console/graph/)** - navigate targets, spells, and their dependency graph (`magus graph open`).
+- **[Log viewer](https://eli.gladman.cc/magus/console/logs/)** - read or stream any past run's captured output (`magus query output <ref> --open`).
 
 These are complementary add-ons, not a runtime you depend on. Two things set them apart architecturally:
 
