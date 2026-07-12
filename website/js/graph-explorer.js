@@ -2813,6 +2813,11 @@ async function boot() {
   // updates automatically or is a point-in-time snapshot.
   updateSnapshotBadge(loaded.source);
 
+  // Shared demo indicator in the app bar: unhide it when the loaded graph is the synthesized
+  // demo, so the graph explorer calls out demo data the same way the dashboard and log viewer do.
+  const demoPill = el("console-demo");
+  if (demoPill) demoPill.hidden = loaded.source !== "demo";
+
   // Status line: targets flavor shows a summary; knowledge/demo shows the
   // existing brief confirmation or nothing (demo remains statusless).
   if (flavor === "targets") {

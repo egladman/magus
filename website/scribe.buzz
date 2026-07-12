@@ -2043,15 +2043,14 @@ fun renderSiteFooter(root: str, site: Site) > str {
 fun renderConsoleChrome(app: str, root: str) > str {
     final tmpl = `  <header class="site-header console-bar">
     <nav class="container-fluid">
-      <ul><li><a href="{{root}}index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">{{title}}</h1></li></ul>
+      <ul><li><a href="{{root}}index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">{{title}}</h1></li><li><span id="console-demo" class="status-tag console-demo-tag" hidden aria-live="polite">Demo data</span></li></ul>
       <div class="nav-right">
         <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
         <span class="nav-divider" aria-hidden="true"></span>
         <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="console-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links app-grid" id="console-nav-links">
           <li class="nav-menu-label" aria-hidden="true">Console</li>
-{{#cells}}{{#divider}}          <li class="app-divider" aria-hidden="true"></li>
-{{/divider}}          <li class="app-cell"><a href="{{href}}" id="{{id}}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></a></li>
+{{#cells}}          <li class="app-cell"><a href="{{href}}" id="{{id}}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></a></li>
 {{/cells}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="theme-toggle" class="outline" aria-label="Cycle theme (auto / light / dark)" title="Cycle theme (auto / light / dark)">◐</button>
@@ -2083,14 +2082,12 @@ fun renderConsoleChrome(app: str, root: str) > str {
     // demo) so the launcher hops keep the connection. The current app is omitted (you are on it),
     // so on the dashboard the launcher shows menu-logs + menu-graph + menu-docs.
     final cells = mut [<{str: any}>];
-    if (app != "dashboard") { cells.append({"href": root + "dashboard/", "icon": iconDashboard, "label": "Dashboard", "id": "menu-dashboard", "divider": false}); }
-    if (app != "logs") { cells.append({"href": root + "logs/", "icon": iconLogs, "label": "Log viewer", "id": "menu-logs", "divider": false}); }
-    if (app != "graph") { cells.append({"href": root + "graph/", "icon": iconGraph, "label": "Graph explorer", "id": "menu-graph", "divider": false}); }
+    if (app != "dashboard") { cells.append({"href": root + "dashboard/", "icon": iconDashboard, "label": "Dashboard", "id": "menu-dashboard"}); }
+    if (app != "logs") { cells.append({"href": root + "logs/", "icon": iconLogs, "label": "Log viewer", "id": "menu-logs"}); }
+    if (app != "graph") { cells.append({"href": root + "graph/", "icon": iconGraph, "label": "Graph explorer", "id": "menu-graph"}); }
     // Playground is NOT a console app - it is part of the documentation site (standalone WASM, no
     // daemon), so the console launcher lists only the daemon apps plus a link out to the docs.
-    // "divider": true draws a rule before this cell, separating the daemon apps (they talk to a
-    // local daemon over loopback) from the documentation link-out (which does not).
-    cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation", "id": "menu-docs", "divider": true});
+    cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation", "id": "menu-docs"});
     // The app's own name sits in the bar next to the hat (native title-bar pattern), so the
     // page body no longer repeats it as an <h1> + lede.
     var title = "Console";

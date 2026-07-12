@@ -101,19 +101,18 @@
   <!-- Status bar: a slim, fixed strip pinned to the bottom of the viewport, like a native
        app / IDE status bar. It carries the daemon liveness that used to crowd the top app bar:
        the browser<->daemon connection (with its liveness dot), the daemon's health rollup, and
-       a quiet mode note on the left; the demo-data and offline flags on the right when active.
-       main.ts keeps the SAME element ids (dash-conn / dash-health / dash-mode / offline-badge,
-       plus dash-demo) - they were only relocated and restyled. The aria-live regions announce
-       connection and offline changes to assistive tech. -->
+       a quiet mode note on the left; the offline flag on the right when active. The demo-data
+       indicator is the shared #console-demo pill in the app bar (every console app shares it),
+       not a bottom-bar chip. main.ts keeps the element ids (dash-conn / dash-health / dash-mode /
+       offline-badge). The aria-live regions announce connection and offline changes to assistive tech. -->
   <footer class="console-statusbar" aria-label="Daemon status">
     <div class="statusbar-cluster">
       <span id="dash-conn" class="status-item conn" aria-live="polite">not connected</span>
-      <span id="dash-health" class="status-item pill" hidden></span>
-      <span id="dash-mode" class="status-item pill status-mode" hidden></span>
+      <span id="dash-health" class="status-item status-tag" hidden></span>
+      <span id="dash-mode" class="status-item status-tag status-mode" hidden></span>
     </div>
     <div class="statusbar-cluster statusbar-right">
-      <span id="dash-demo" class="status-item pill status-demo" hidden aria-live="polite">demo data</span>
-      <span id="offline-badge" class="status-item pill status-offline" hidden aria-live="polite">offline</span>
+      <span id="offline-badge" class="status-item status-tag status-offline" hidden aria-live="polite">offline</span>
     </div>
   </footer>
 

@@ -157,12 +157,8 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 }
 /* The "?" help chip is a passive indicator, NOT a role=button (that made Pico paint it a
    solid blue oval); a plain bordered circle whose title tooltip carries the grammar. */
-.log-filter-help {
-  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  width: 1.2rem; height: 1.2rem; border-radius: 50%; cursor: help; background: none;
-  border: 1px solid var(--pico-muted-border-color);
-  color: var(--pico-muted-color); font-size: 0.68rem; font-weight: 700; user-select: none;
-}
+/* The "?" help glyph beside the filter is the shared .help-glyph (console.css) so it is an
+   identical circle across the console apps. */
 .log-filter-help:hover, .log-filter-help:focus-visible { color: var(--pico-color); border-color: var(--pico-primary); }
 
 /* The parsed-filter chip row sits under the toolbar, inset to the panel padding, with a

@@ -36,7 +36,7 @@
        (see .console-statusbar below), not the top bar. -->
     <header class="site-header console-bar">
     <nav class="container-fluid">
-      <ul><li><a href="../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">Dashboard</h1></li></ul>
+      <ul><li><a href="../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">Dashboard</h1></li><li><span id="console-demo" class="status-tag console-demo-tag" hidden aria-live="polite">Demo data</span></li></ul>
       <div class="nav-right">
         <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
         <span class="nav-divider" aria-hidden="true"></span>
@@ -45,7 +45,6 @@
           <li class="nav-menu-label" aria-hidden="true">Console</li>
           <li class="app-cell"><a href="../logs/" id="menu-logs"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg><span>Log viewer</span></a></li>
           <li class="app-cell"><a href="../graph/" id="menu-graph"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><line x1="8" y1="8" x2="11" y2="16"/><line x1="16" y1="7.5" x2="13" y2="16"/><line x1="8" y1="7" x2="16" y2="6.5"/></svg><span>Graph explorer</span></a></li>
-          <li class="app-divider" aria-hidden="true"></li>
           <li class="app-cell"><a href="../documentation/" id="menu-docs"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Documentation</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -130,19 +129,18 @@
   <!-- Status bar: a slim, fixed strip pinned to the bottom of the viewport, like a native
        app / IDE status bar. It carries the daemon liveness that used to crowd the top app bar:
        the browser<->daemon connection (with its liveness dot), the daemon's health rollup, and
-       a quiet mode note on the left; the demo-data and offline flags on the right when active.
-       main.ts keeps the SAME element ids (dash-conn / dash-health / dash-mode / offline-badge,
-       plus dash-demo) - they were only relocated and restyled. The aria-live regions announce
-       connection and offline changes to assistive tech. -->
+       a quiet mode note on the left; the offline flag on the right when active. The demo-data
+       indicator is the shared #console-demo pill in the app bar (every console app shares it),
+       not a bottom-bar chip. main.ts keeps the element ids (dash-conn / dash-health / dash-mode /
+       offline-badge). The aria-live regions announce connection and offline changes to assistive tech. -->
   <footer class="console-statusbar" aria-label="Daemon status">
     <div class="statusbar-cluster">
       <span id="dash-conn" class="status-item conn" aria-live="polite">not connected</span>
-      <span id="dash-health" class="status-item pill" hidden></span>
-      <span id="dash-mode" class="status-item pill status-mode" hidden></span>
+      <span id="dash-health" class="status-item status-tag" hidden></span>
+      <span id="dash-mode" class="status-item status-tag status-mode" hidden></span>
     </div>
     <div class="statusbar-cluster statusbar-right">
-      <span id="dash-demo" class="status-item pill status-demo" hidden aria-live="polite">demo data</span>
-      <span id="offline-badge" class="status-item pill status-offline" hidden aria-live="polite">offline</span>
+      <span id="offline-badge" class="status-item status-tag status-offline" hidden aria-live="polite">offline</span>
     </div>
   </footer>
 

@@ -78,8 +78,9 @@ function renderChrome(s: DashboardState): void {
   c.dataset.state = s.conn.state;
   c.hidden = demoing;
 
-  // Demo-data flag: the daemon-free showcase, called out on the right of the bar.
-  el("dash-demo").hidden = !demoing;
+  // Demo-data flag: the daemon-free showcase, called out by the shared #console-demo pill in the
+  // app bar (the one demo affordance every console app shares), not a dashboard-only corner chip.
+  el("console-demo").hidden = !demoing;
 
   if (s.status) {
     el("dash-connect").hidden = true;

@@ -342,13 +342,8 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
 
 /* The "?" help circle on the query prompt (matches the log viewer's filter help): a quiet outlined
    marker whose title spells out the query syntax, since what to type is not obvious. */
-.search-help {
-  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  width: 1.2rem; height: 1.2rem; border-radius: 50%; cursor: help;
-  border: 1px solid var(--pico-muted-border-color); background: none;
-  color: var(--pico-muted-color); font-size: 0.72rem; font-weight: 700;
-}
-.search-help:hover, .search-help:focus-visible { color: var(--pico-color); border-color: var(--pico-color); }
+/* The "?" help glyph beside the query prompt is the shared .help-glyph (console.css) so it is
+   an identical circle across the console apps. */
 /* Layout mode: a compact toggle button with its explanation beneath it. Stacked, because these
    controls now live in the narrow reference drawer where a button + long hint on one row wrapped
    into a malformed jumble. */
@@ -522,7 +517,10 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
   border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
   cursor: pointer; color: var(--pico-muted-color);
 }
-.suggestion-chip:hover { border-color: var(--pico-primary); color: var(--pico-color); }
+/* Plain muted text at rest, firming to the primary blue on hover (the Claude-Desktop idiom Eli
+   prefers). NOT color:var(--pico-color) - on a bare <button> Pico resolves that to white, so the
+   label vanished on hover; the primary is a real color. See pico-bare-button-hover-white. */
+.suggestion-chip:hover { border-color: var(--pico-primary); color: var(--pico-primary); }
 
 /* Phase 5: color preset buttons. */
 .preset-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; }
@@ -547,8 +545,6 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
   border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
 }
 .views-table .view-btn:hover { border-color: var(--pico-primary); }
-
-.site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
 
 
 /* Phase 9: live mode badge and status strip */
