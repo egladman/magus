@@ -241,16 +241,242 @@ daemon with a TLS tunnel first if you need that path.</p>
     <small>Last updated <time datetime="2026-07-11T13:21:06Z">July 11, 2026, 1:21 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5e5973153a496c16dd5173a06d6b4546bf8a9e70" data-tooltip="5e5973153a496c16dd5173a06d6b4546bf8a9e70" title="5e5973153a496c16dd5173a06d6b4546bf8a9e70">5e597315</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/081541c7aec505f6895372d1ed1a69b0514bb4bf"><code>081541c7</code></a> <small><time datetime="2026-07-10T22:04:19Z">Jul 10, 2026</time></small> - harden the MCP server exposure to best-practice: make /mcp header-only (reject a bearer token in the ?token= query param per RFC 6750; the query carrier now opts in only for the browser-EventSource bridge/live/blob routes that cannot set a header); enable Streamable-HTTP SSE heartbeats so a long-lived GET stream survives idle timeouts/gateways; warn when the daemon binds a non-loopback address that the token is sent in cleartext without TLS; document how each client (Claude Code header, Desktop via mcp-remote, and why the API MCP connector cannot reach a loopback http server) connects</li><li><a href="https://github.com/egladman/magus/commit/4b0f4d20ebca853c9b393a850fe8426e71c4f0dc"><code>4b0f4d20</code></a> <small><time datetime="2026-07-10T21:44:24Z">Jul 10, 2026</time></small> - add a two-tier MCP daemon auth model: relocate the retrievable cli token to the XDG state dir and add named, hashed-at-rest, expiring connector tokens in the mgs_ format (base62 body + crc32 checksum, SHA-256 at rest, shown once) for external clients; generalize httpx.BearerGuard to a Verifier accepting either tier via auth.VerifyBearer, with SingleTokenVerifier for the ephemeral live/blob servers; add magus config mcp connector create/list/revoke and a doctor mcp-tokens check with pre-expiry warnings; serialize the connector store with a self-healing cross-process lock; cover internal/daemon (0 -&gt; 83%) and several mcp tools with workspace fixtures</li><li><a href="https://github.com/egladman/magus/commit/bc38b543e2d85c96304b12ccae1a32cd30be1a98"><code>bc38b543</code></a> <small><time datetime="2026-07-10T20:35:50Z">Jul 10, 2026</time></small> - add a magus_scratchpad MCP tool giving an agent a private per-workspace scratch file (read/write/append/clear at cacheDir/scratch/scratchpad.md) for intermediate notes instead of the conversation; file logic is a pure helper for testability</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514d</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb476</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a45196</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/mcp.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/mcp.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
-    <summary>Look it up</summary>
-    <div class="disclosure-body">
-      <p>Open a reference right here, without leaving the page.</p>
-      <ul class="ref-links">
-        <li><a href="../glossary/">Glossary</a> - the vocabulary: target, spell, charm, op, ward, service.</li>
-        <li><a href="../conventions/">Conventions</a> - naming and layout rules for a magusfile.</li>
-        <li><a href="../config/">Configuration</a> - every magus.yaml field.</li>
-        <li><a href="../testing/">Testing</a> - how to test spells and Buzz.</li>
-      </ul>
-    </div>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed"><h1 id="glossary">Glossary</h1>
+<p>The vocabulary that runs through the rest of the docs. Each entry is a short
+definition; follow the link for the page that covers the term in depth. Every
+term has its own anchor, so you can deep-link a single definition (for example
+<code>glossary/#output-reference</code>).</p>
+<h2 id="core-model">Core model</h2>
+<h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../workspace/">workspace.md</a>.</p>
+<h3 id="project">Project</h3>
+<p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
+caching, scheduling, and dependency tracking. See <a href="../workspace/">workspace.md</a>.</p>
+<h3 id="magusfile">Magusfile</h3>
+<p>The <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and
+binds its spells. See <a href="../targets/">targets.md</a>.</p>
+<h3 id="target">Target</h3>
+<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
+may compose a spell's tool-native operations and depend on other targets. See
+<a href="../targets/">targets.md</a>.</p>
+<h3 id="operation">Operation</h3>
+<p>A single tool-native command a target composes; the middle of the work hierarchy
+(Spell to Operation to Target). See <a href="../operations/">operations.md</a>.</p>
+<h3 id="spell">Spell</h3>
+<p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
+toolchain's real commands. See <a href="../spells/">spells.md</a>.</p>
+<h3 id="charm">Charm</h3>
+<p>An execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target
+runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in
+place, and <code>ci</code> always strips it. See <a href="../charms/">charms.md</a>.</p>
+<h3 id="ward">Ward</h3>
+<p>A coded diagnostic that inspects a resolved op and nudges or blocks an
+anti-pattern before it runs. See <a href="../wards/">wards.md</a>.</p>
+<h3 id="module">Module</h3>
+<p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
+exec, vcs, and more. See <a href="../buzz/modules/">the module reference</a>.</p>
+<h3 id="buzz">Buzz</h3>
+<p>The language magusfiles are written in (the <code>.buzz</code> engine). See
+<a href="../engines/">engines.md</a>.</p>
+<h3 id="engine">Engine</h3>
+<p>The interpreter a magusfile runs on; magus embeds the Buzz engine. See
+<a href="../engines/">engines.md</a>.</p>
+<h2 id="execution-and-caching">Execution and caching</h2>
+<h3 id="cache">Cache</h3>
+<p>The content-addressed store magus consults before running a target, so unchanged
+work is skipped. See <a href="../cache/">cache.md</a>.</p>
+<h3 id="affected">Affected</h3>
+<p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
+only over them. See <a href="../affected/">affected.md</a>.</p>
+<h3 id="sandbox">Sandbox</h3>
+<p>The restricted filesystem and environment a target runs in, so builds stay
+reproducible and side-effect-free. See <a href="../sandbox/">sandbox.md</a>.</p>
+<h3 id="service">Service</h3>
+<p>A long-running or shared process magus manages across runs, distinct from a
+one-shot target. See <a href="../services/">services.md</a>.</p>
+<h3 id="daemon">Daemon</h3>
+<p>The background magus host that owns shared state such as services and the warm
+knowledge graph. See <a href="../daemon/">daemon.md</a>.</p>
+<h3 id="ci">CI</h3>
+<p>The composite pipeline (lint, build, test, coverage); run with
+<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<h3 id="output-reference">Output reference</h3>
+<p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
+captured output; it appears on each target's line, and
+<code>magus query output ref1a2b3c</code> prints those exact bytes. In OpenTelemetry terms
+it corresponds to a <strong>span</strong> (one target execution) within its <strong>trace</strong> (the
+whole <code>magus</code> invocation). See <a href="../output-refs/">output-refs.md</a>.</p>
+<h3 id="trace">Trace</h3>
+<p>OpenTelemetry's name for one whole <code>magus</code> invocation; every target it runs is a
+span beneath it. See <a href="../telemetry/">telemetry.md</a>.</p>
+<h3 id="span">Span</h3>
+<p>OpenTelemetry's name for one unit of work under a trace - a target execution,
+whose sub-operations are child spans. An output reference points at a span's
+captured output. See <a href="../telemetry/">telemetry.md</a>.</p>
+<h3 id="pool">Pool</h3>
+<p>The concurrency pool: the shared set of slots that caps how many targets run in
+parallel on one machine. Its capacity defaults to <code>MAGUS_CONCURRENCY</code>, then 4 on
+GitHub-hosted runners, then <code>min(NumCPU, 8)</code>; <code>magus status</code> and the
+<a href="../daemon/">dashboard</a> report it live. See <a href="../daemon/">daemon.md</a>.</p>
+<h3 id="slot">Slot</h3>
+<p>One unit of the pool's capacity. A target acquires the slots it needs to run
+(most take one) and releases them when it finishes; the pool tracks capacity
+(total slots), running (acquired), and queued (blocked). See
+<a href="../daemon/">daemon.md</a>.</p>
+<h3 id="concurrency">Concurrency</h3>
+<p>How many targets run at once. It is bounded by the pool's capacity and set with
+<code>--concurrency</code>, <code>MAGUS_CONCURRENCY</code>, or the <code>concurrency</code> config key. See
+<a href="../daemon/">daemon.md</a>.</p>
+<h3 id="queued">Queued</h3>
+<p>A target that wants a slot while the pool is full; it blocks first-in-first-out
+until a slot frees. The dashboard colors a sample with queued &gt; 0 accordingly.
+See <a href="../daemon/">daemon.md</a>.</p>
+<h3 id="pool-mode">Pool mode</h3>
+<p>Which pool a run uses: <strong>daemon</strong> (one shared pool the background daemon owns
+across every workspace and client) or <strong>proc</strong> (a per-process pool for a single
+one-off invocation). See <a href="../daemon/">daemon.md</a>.</p>
+<h3 id="one-off">One-off</h3>
+<p>A single <code>magus</code> invocation that runs a target and exits, using a per-process
+pool; the opposite of the long-lived daemon or a service. See
+<a href="../daemon/">daemon.md</a>.</p>
+<h3 id="remote-cache">Remote cache</h3>
+<p>A CI-only backend that shares content-addressed artifacts across runners: a cold
+machine replays a build another runner already did instead of rebuilding. Every
+remote artifact must be signed by a trusted key. See
+<a href="../remote-cache/">remote-cache.md</a>.</p>
+<h3 id="snapshot">Snapshot</h3>
+<p>A point-in-time view of live state - the pool's occupancy or a tick of exported
+metrics - as opposed to accumulated history. See <a href="../daemon/">daemon.md</a>.</p>
+<h3 id="backfill">Backfill</h3>
+<p>The recent history the daemon replays to a dashboard on connect, so its charts
+start populated instead of empty. It is served from a bounded ring buffer of the
+last few hundred samples. See <a href="../daemon/">daemon.md</a>.</p>
+<h2 id="telemetry-and-health">Telemetry and health</h2>
+<h3 id="latency">Latency</h3>
+<p>How long an operation takes. magus records latency as OpenTelemetry histograms
+per family - target execution, cache op, pool wait, and graph query - and reports
+each as a count, sum, and percentiles. See <a href="../telemetry/">telemetry.md</a>.</p>
+<h3 id="percentile">Percentile</h3>
+<p>A latency value at a given rank, interpolated from a histogram's buckets: <strong>p50</strong>
+is the median, <strong>p95</strong> and <strong>p99</strong> are the tail that most latency budgets care
+about. See <a href="../telemetry/">telemetry.md</a>.</p>
+<h3 id="health">Health</h3>
+<p>The at-a-glance daemon state derived from the pool: <strong>healthy</strong> when the pool is
+reporting, <strong>degraded</strong> when it reports an error, <strong>down</strong> when there is no pool.
+The dashboard color-codes each state. See <a href="../daemon/">daemon.md</a>.</p>
+<h3 id="volatility">Volatility</h3>
+<p>A target that fails once and passes on rerun is <strong>volatile</strong>, as opposed to a
+regression that started failing and stays failing. magus keeps per-target
+pass/fail history and a Wilson-score volatility rate to tell them apart and
+auto-retry the noise. See <a href="../volatility/">volatility.md</a>.</p>
+<h2 id="insight-and-knowledge">Insight and knowledge</h2>
+<h3 id="knowledge-graph">Knowledge graph</h3>
+<p>The queryable graph of a workspace's spells, targets, docs, and code
+relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
+<a href="../knowledge/">knowledge.md</a>.</p>
+<h3 id="insight">Insight</h3>
+<p>The reports magus derives over the graph and history (hotspots, affinity,
+ownership, trend). See <a href="../insight/">insight.md</a>.</p>
+<h3 id="hotspot">Hotspot</h3>
+<p>An insight lens: edit frequency times complexity, the prime refactoring targets.
+The project view heat-colours the dependency graph by churn; <code>--files</code> ranks
+individual files. See <a href="../insight/">insight.md</a>.</p>
+<h3 id="affinity">Affinity</h3>
+<p>An insight lens: projects that change together (temporal coupling). A pair that
+co-changes without either declaring a dependency on the other is a candidate
+architectural smell. See <a href="../insight/">insight.md</a>.</p>
+<h3 id="ownership">Ownership</h3>
+<p>An insight lens: author concentration - the primary author and their share, the
+distinct-author count (the bus factor), and abandonment. See
+<a href="../insight/">insight.md</a>.</p>
+<h3 id="trend">Trend</h3>
+<p>An insight lens: the recent half of the window against the earlier half. A
+positive delta is a rising hotspot; a negative one is cooling. See
+<a href="../insight/">insight.md</a>.</p>
+<h3 id="diagnostic-code">Diagnostic code</h3>
+<p>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be
+referenced and looked up; some are guardrails (see <a href="../wards/">wards</a>), others hard
+errors.</p>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../conventions/">Documentation conventions</a> - how to read the placeholders,
+shell commands, and admonitions used across these pages.</li>
+<li><a href="../targets/">Targets</a> - the fuller Target-struct glossary (Path, Name, Files)
+for magusfile authors.
+</content></li>
+</ul>
+</invoke>
+</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed"><h1 id="documentation-conventions">Documentation conventions</h1>
+<p>A few conventions run through every page on this site. This page is the key.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Angle brackets mark a value you replace with your own - never type the brackets:</p>
+<pre><code class="language-sh">magus run &lt;target&gt;
+magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
+</code></pre>
+<p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="shell-commands">Shell commands</h2>
+<p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
+<code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>
+<pre><code class="language-sh">magus version
+# magus 0.4.2
+</code></pre>
+<p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="runnable-examples">Runnable examples</h2>
+<p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
+the snippet in the in-browser <a href="../playground/">playground</a> via WebAssembly - no
+install needed. Blocks without the button are illustrative only. (With JavaScript
+off, every block is plain, copyable text.)</p>
+<h2 id="admonitions">Admonitions</h2>
+<p>Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent
+per type:</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note</p>
+<p>Context worth knowing, but not a warning.</p>
+</div>
+<!-- -->
+<div class="admonition admonition-warning"><p class="admonition-title">Warning</p>
+<p>Something that can bite you if ignored.</p>
+</div>
+<p>The types are <code>NOTE</code>, <code>TIP</code>, <code>IMPORTANT</code>, <code>WARNING</code>, and <code>CAUTION</code>.</p>
+<h2 id="footnotes">Footnotes</h2>
+<p>An aside that would break the flow inline is written as a footnote: a bracketed
+superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
+links back. The generated module reference uses them to flag methods that also exist
+in Buzz's own standard library without cluttering each signature.</p>
+<h2 id="code-block-titles">Code-block titles</h2>
+<p>A fenced block can carry a filename or label in a small caption bar above it, so you
+know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
+<h2 id="diffs">Diffs</h2>
+<p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
+removed lines (leading <code>-</code>) as a red one.</p>
+<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
+-    magus.needs(magus.target.literal(&quot;lint&quot;));
++    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+ }
+</code></pre>
+<h2 id="auto-generated-pages">Auto-generated pages</h2>
+<p>Pages built from source - the <a href="../buzz/modules/">module reference</a>, the
+<a href="../spells/">spell reference</a>, the <a href="../manpage/magus/">man pages</a>, and the
+<a href="../config/">configuration reference</a> - carry an <strong>auto-generated</strong> chip. Edit the
+generator, not the page; a hand edit is overwritten on the next build.</p>
+<h2 id="reading-time">Reading time</h2>
+<p>Longer pages show an estimated reading time near the top. It is a word count of the
+source, not a tracker - nothing is measured about you.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>Authored as <code>text[^label]</code> in the prose, with a matching <code>[^label]: note</code>
+line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+</div>
   </details>
   <div class="ref-backdrop" id="ref-backdrop"></div>
   <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">

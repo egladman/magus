@@ -1955,18 +1955,43 @@ fun renderSiteNav(root: str, active: str) > str {
 // docs keep their prominent top search bar in place. Its one .ref-section links the key reference
 // pages; ref-drawer.js relocates it into the drawer and the inline-browse feature opens each one in
 // the panel (no navigating away). root is the relative prefix back to gen/'s root.
-fun renderReferenceDrawer(root: str) > str {
+// Cached, root-templated reference content. Each doc is rendered to HTML ONCE, then its root-relative
+// links ("../X", from a depth-1 page) get a %%ROOT%% marker so renderReferenceDrawer can substitute
+// the embedding page's own root prefix per page - the same content works from any depth.
+var _refGlossary = "";
+var _refConventions = "";
+var _refLoaded = false;
+
+// refDocHtml renders one docs/*.md to content HTML and templatizes its root-relative links.
+fun refDocHtml(rel: str, site: Site) > str {
+    final f = io.File.open(site.root + "/" + site.docs + "/" + rel, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+    var html = renderContentHTML(markdown.toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
+    while (html.indexOf("=\"../") != null) { html = html.replace("=\"../", "=\"%%ROOT%%"); }
+    return html;
+}
+
+fun loadReferenceContent(site: Site) > void {
+    if (_refLoaded) { return; }
+    _refLoaded = true;
+    _refGlossary = refDocHtml("glossary.md", site);
+    _refConventions = refDocHtml("conventions.md", site);
+}
+
+fun renderReferenceDrawer(root: str, site: Site) > str {
+    loadReferenceContent(site);
+    var glossary = _refGlossary;
+    while (glossary.indexOf("%%ROOT%%") != null) { glossary = glossary.replace("%%ROOT%%", root); }
+    var conventions = _refConventions;
+    while (conventions.indexOf("%%ROOT%%") != null) { conventions = conventions.replace("%%ROOT%%", root); }
     final tmpl = `  <details class="ref-section" open>
-    <summary>Look it up</summary>
-    <div class="disclosure-body">
-      <p>Open a reference right here, without leaving the page.</p>
-      <ul class="ref-links">
-        <li><a href="{{root}}glossary/">Glossary</a> - the vocabulary: target, spell, charm, op, ward, service.</li>
-        <li><a href="{{root}}conventions/">Conventions</a> - naming and layout rules for a magusfile.</li>
-        <li><a href="{{root}}config/">Configuration</a> - every magus.yaml field.</li>
-        <li><a href="{{root}}testing/">Testing</a> - how to test spells and Buzz.</li>
-      </ul>
-    </div>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed">{{{glossary}}}</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed">{{{conventions}}}</div>
   </details>
   <div class="ref-backdrop" id="ref-backdrop"></div>
   <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
@@ -1979,7 +2004,7 @@ fun renderReferenceDrawer(root: str) > str {
     </div>
   </aside>
 `;
-    return template.render(tmpl, {"root": root});
+    return template.render(tmpl, {"root": root, "glossary": glossary, "conventions": conventions});
 }
 
 // renderSiteFooter renders the shared one-line attribution footer. It leads with two
@@ -2453,7 +2478,7 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
         "pager": pager,
         "related": site.renderRelated(srcRel, root),
         "provenance": provenance,
-        "refdrawer": renderReferenceDrawer(root),
+        "refdrawer": renderReferenceDrawer(root, site),
         "footer": renderSiteFooter(root, site),
     });
 }

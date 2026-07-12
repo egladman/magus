@@ -41,9 +41,14 @@
 .dash-bar .brand-mark { display: block; }
 /* App title in the bar, next to the hat (native title-bar pattern): the current app's name.
    Resets Pico's large <h1> to a compact inline label so it reads as a title, not a page heading.
-   The page body no longer repeats the name as an <h1> + lede. */
+   The page body no longer repeats the name as an <h1> + lede.
+   Vertical alignment: Pico gives each nav <li> vertical padding, which made the title's line box sit
+   off-center from the hat. Zero that padding and flex-center each li (the <ul> already centers them)
+   so the hat glyph and the title text share one center. */
+.dash-bar nav > ul { align-items: center; }
+.dash-bar nav > ul > li { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
 .dash-bar .console-app-title {
-  margin: 0; font-size: 1rem; font-weight: 600; line-height: 1;
+  margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.15;
   color: var(--pico-color); white-space: nowrap;
 }
 /* The menu button is mobile-only in site.css; on the dashboard it is the primary nav, so
@@ -293,8 +298,15 @@
 /* In the drawer the content already sits inside the panel card, so the section body is FLUSH - no
    nested box. A white-bordered white box on the white drawer just wasted the narrow panel's width. */
 #ref-drawer .disclosure-body { padding: 0; border: 0; background: none; }
-#ref-drawer .ref-links { margin: 0.3rem 0 0; padding-left: 1.1rem; }
-#ref-drawer .ref-links li { margin: 0.3rem 0; }
+/* Embedded reference content (glossary, conventions rendered inline): styled compact so it reads
+   like the rest of the reference material, not a full doc page. The section summary already names
+   it, so the doc's own leading <h1> is hidden. */
+#ref-drawer .ref-embed { font-size: 0.85rem; }
+#ref-drawer .ref-embed > h1:first-child { display: none; }
+#ref-drawer .ref-embed > :first-of-type { margin-top: 0; }
+#ref-drawer .ref-embed :is(h2, h3, h4) { font-size: 0.92rem; margin: 0.9rem 0 0.2rem; }
+#ref-drawer .ref-embed p, #ref-drawer .ref-embed dl, #ref-drawer .ref-embed ul { margin: 0 0 0.5rem; }
+#ref-drawer .ref-embed .heading-anchor { display: none; }
 /* Pinned: the panel docks and the page reflows to make room (no backdrop - the content stays
    visible and usable beside the panel). Pico sets body{width:100%}, so shrink the body's width by
    the panel width; the fixed panel (viewport-relative) fills the strip on the right where the body
