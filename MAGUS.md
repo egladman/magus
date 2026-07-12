@@ -18,7 +18,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1692 nodes** and **2966 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1693 nodes** and **2968 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -40,7 +40,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 26 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS4001`, `MGS5003` |
 | doc | 104 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
 | file | 196 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 980 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
+| function | 981 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
 | import | 91 | [`magus query kind:import`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
 | rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
 
