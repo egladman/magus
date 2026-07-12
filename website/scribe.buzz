@@ -1315,8 +1315,8 @@ fun render404(site: Site) > void {
   <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
   <link rel="stylesheet" href="{{basePath}}theme.css">
   <link rel="stylesheet" href="{{basePath}}site.css">
-  <!-- console.css sizes the settings gear (rightmost nav control) and styles its dropdown. -->
-  <link rel="stylesheet" href="{{basePath}}console.css">
+  <!-- ui-panels.css: the shared settings-gear dropdown + reference drawer (split out of console.css). -->
+  <link rel="stylesheet" href="{{basePath}}ui-panels.css">
   <script src="{{basePath}}theme.js"></script>
 </head>
 <body>
@@ -1369,8 +1369,8 @@ fun writeOffline(site: Site) > void {
   <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
   <link rel="stylesheet" href="{{basePath}}theme.css">
   <link rel="stylesheet" href="{{basePath}}site.css">
-  <!-- console.css sizes the settings gear (rightmost nav control) and styles its dropdown. -->
-  <link rel="stylesheet" href="{{basePath}}console.css">
+  <!-- ui-panels.css: the shared settings-gear dropdown + reference drawer (split out of console.css). -->
+  <link rel="stylesheet" href="{{basePath}}ui-panels.css">
   <script src="{{basePath}}theme.js"></script>
 </head>
 <body>
@@ -2563,8 +2563,9 @@ fun renderPage(title: str, description: str, content: str, srcRel: str, pager: s
   <link rel="stylesheet" href="{{root}}assets/pico.min.css">
   <link rel="stylesheet" href="{{root}}theme.css">
   <link rel="stylesheet" href="{{root}}site.css">
-  <!-- console.css also carries the shared reference drawer, which the docs pages now use. -->
-  <link rel="stylesheet" href="{{root}}console.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="{{root}}ui-panels.css">
   <script src="{{root}}theme.js"></script>
 </head>
 <body{{#bodyClass}} class="{{bodyClass}}"{{/bodyClass}}>
@@ -3360,10 +3361,15 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // imports as external runtime imports. CSS is minified per-file (not
     // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
     os.execute(["sh", "-c", "esbuild site.css --minify --outfile=" + site.outDir + "/site.css"]);
-    // console.css: the shared console-app shell (app bar, launcher, status bar) loaded by
-    // /dashboard/, /logs/, /graph/ but not the docs pages. Site-wide like site.css, so it
-    // is minified to gen root and enumerated in the precache/allowlist next to site.css.
+    // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
+    // layout) loaded by /dashboard/, /logs/, /graph/ (and the playground, for the status bar)
+    // but NOT the docs corpus. Site-wide-ish, so minified to gen root and enumerated in the
+    // precache/allowlist next to site.css.
     os.execute(["sh", "-c", "esbuild console.css --minify --outfile=" + site.outDir + "/console.css"]);
+    // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
+    // drawer) that BOTH the docs pages and the console apps use. Split out of console.css so the
+    // docs corpus can load only this and drop console.css. Gen-root, precached like the others.
+    os.execute(["sh", "-c", "esbuild ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
     os.execute(["sh", "-c", "esbuild theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
     // graph.css: the /graph/ Graph Explorer page's own stylesheet (its rules are
     // page-scoped, so it loads only on /graph/, not every page like site.css).
@@ -3590,7 +3596,7 @@ fun pruneStaleOutputs(site: Site) > void {
         "index.html": true, "index.md": true, "404.html": true,
         "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
         "sw.js": true, "search-index.json": true, "site-manifest.sha256": true,
-        "site.css": true, "console.css": true, "theme.css": true, "theme.js": true, "main.js": true,
+        "site.css": true, "console.css": true, "ui-panels.css": true, "theme.css": true, "theme.js": true, "main.js": true,
         "search/index.html": true,
         "playground/index.html": true, "playground/buzz.wasm": true,
         "playground/wasm_exec.js": true, "playground/editor.js": true,

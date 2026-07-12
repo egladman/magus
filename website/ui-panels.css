@@ -1,0 +1,203 @@
+/* ui-panels.css - the shared nav-triggered UI panels used by BOTH the documentation site and
+   the console apps: the settings gear dropdown (theme cycle + the console-only refresh/host
+   prefs) and the reference slide-out drawer (trigger, sections, inline doc browsing). Extracted
+   from console.css so the docs corpus + 404 + offline can drop console.css entirely - they need
+   these panels but none of the console-app chrome (app bar, launcher, status bar, full-height
+   layout, empty states). Bundled/minified to gen root like site.css and console.css and loaded
+   by every page; console.css now holds ONLY console-app-only rules. --ref-w and --accent-warm
+   come from within this file and theme.css respectively, so this file is self-contained. */
+
+/* Settings panel: the gear button's dropdown of BROWSER-side preferences - the theme select on every
+   page (persisted by theme.js), plus the console apps' refresh rate + daemon host override (persisted
+   by console-settings.js). Same dropdown treatment as the app launcher - a Pico-tinted card anchored
+   under the nav buttons. */
+.settings-panel {
+  position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 40;
+  min-width: 15rem; padding: 0.85rem 0.9rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+.settings-title { margin: 0 0 0.15rem; font-size: 0.9rem; }
+.settings-note { margin: 0 0 0.7rem; font-size: 0.72rem; color: var(--pico-muted-color); }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  margin: 0 0 0.55rem; font-size: 0.8rem;
+}
+.settings-row:last-child { margin-bottom: 0; }
+.settings-row select, .settings-row input {
+  width: auto; margin: 0; padding: 0.2rem 0.45rem; height: auto; font-size: 0.8rem;
+}
+.settings-row input { max-width: 9.5rem; }
+/* The theme control is a click-to-cycle button (auto -> light -> dark), showing the
+   current mode as an icon + label. Sized to match the row's selects/inputs; theme.js
+   fills the icon and label. */
+.theme-cycle {
+  width: auto; margin: 0; padding: 0.2rem 0.55rem; height: auto; font-size: 0.8rem;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.theme-cycle-icon { display: inline-flex; }
+.theme-cycle-icon svg { display: block; width: 0.95em; height: 0.95em; }
+
+/* Reference drawer: a right-side slide-out panel holding a console app's reference material
+   (query/filter syntax, views, display options, how-to). Native docs-app pattern; shared across
+   the console apps. A page marks its reference blocks .ref-section, adds a .ref-trigger, and the
+   #ref-drawer + #ref-backdrop; ref-drawer.js relocates the sections in and wires open/close. */
+/* The trigger is a square icon button, matching the menu button + settings gear exactly (padding
+   0.4rem); its muted color comes from the shared .nav-toggle/.ref-trigger rule in site.css. */
+.ref-trigger, #settings-btn {
+  width: auto; margin: 0; padding: 0.4rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* The gear matches the reference / menu / theme icon buttons exactly: a small square outline button,
+   muted until hover - not Pico's default full-size button (which class="outline" alone would give). */
+#settings-btn { border-color: var(--pico-muted-border-color); color: var(--pico-muted-color); }
+#settings-btn:hover, #settings-btn:focus-visible { border-color: var(--pico-color); color: var(--pico-color); }
+#settings-btn svg { display: block; }
+.ref-trigger svg { display: block; }
+/* A thin vertical rule that sets the Reference button apart from the fixed menu/theme cluster. */
+.nav-divider { flex: 0 0 auto; width: 1px; height: 1.1rem; margin: 0 0.15rem; background: var(--pico-muted-border-color); }
+/* The docs search bar, once relocated into the drawer, sits flush at the top. */
+#ref-drawer .page-tools { margin: 0 0 0.85rem; }
+.ref-backdrop {
+  position: fixed; inset: 0; z-index: 49; background: rgba(0, 0, 0, 0.28);
+  opacity: 0; visibility: hidden; transition: opacity 0.2s ease;
+}
+.ref-backdrop.open { opacity: 1; visibility: visible; }
+:root { --ref-w: min(400px, 90vw); }
+.ref-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: var(--ref-w);
+  background: var(--pico-card-background-color); border-left: 1px solid var(--pico-muted-border-color);
+  box-shadow: -6px 0 18px rgba(0, 0, 0, 0.1);
+  transform: translateX(100%); transition: transform 0.24s ease;
+  overflow-y: auto; overscroll-behavior: contain; padding: 0.9rem 1.05rem 2rem;
+}
+.ref-drawer.open { transform: translateX(0); }
+/* Pinned it is docked furniture, not a floating overlay - drop the shadow so it reads as flat. */
+.ref-drawer.pinned { box-shadow: none; }
+
+/* The reference sections were authored for the full page, so inside the narrow drawer their
+   definition lists (grid: max-content 1fr) and long inline code (#live=127.0.0.1...) overran the
+   edge. Contain them: never scroll the drawer sideways; stack the dl rows; wrap code and long tokens;
+   let any real table scroll inside its own box. */
+.ref-drawer { overflow-x: hidden; }
+#ref-drawer .disclosure-body { overflow-wrap: break-word; }
+#ref-drawer dl { grid-template-columns: 1fr; gap: 0.1rem 0; }
+#ref-drawer dt { white-space: normal; }
+#ref-drawer dd { margin-bottom: 0.5rem; }
+#ref-drawer pre, #ref-drawer code { white-space: pre-wrap; overflow-wrap: anywhere; }
+#ref-drawer table { display: block; overflow-x: auto; }
+
+/* Inline docs browsing: a fetched page's article renders in .ref-docview with a back bar; while a
+   doc is open the search + reference sections hide. Lets you look up docs without leaving the app. */
+.ref-docview { display: none; }
+/* Out-specify the `.js #ref-drawer .ref-section { display:block }` reveal rule (same specificity
+   otherwise) so browsing genuinely hides the reference sections + search. */
+.js #ref-drawer.browsing .page-tools,
+.js #ref-drawer.browsing .ref-section { display: none; }
+#ref-drawer.browsing .ref-docview { display: block; }
+.ref-docview-bar {
+  position: sticky; top: 0; z-index: 1; background: var(--pico-card-background-color);
+  /* Same fix as .ref-drawer-head: all the space around the back bar is opaque padding (top and
+     bottom), never a transparent margin, so scrolling content never leaks through it. It overlays the
+     drawer head (z-index) in browse mode, so its top padding covers the head's spot too. */
+  margin: 0; padding: 0.9rem 0 0.7rem;
+}
+/* Bare button: reset Pico's white --pico-color (see .ref-pin) so hover firms up, never vanishes. */
+.ref-doc-back {
+  width: auto; margin: 0; padding: 0.2rem 0.5rem; font-size: 0.82rem;
+  background: none; border: 0; box-shadow: none; cursor: pointer;
+  --pico-color: var(--pico-contrast); color: var(--pico-muted-color);
+}
+.ref-doc-back:hover { color: var(--pico-contrast); }
+/* The browsed doc sits flush in the drawer like the reference sections (no nested box). */
+.ref-doc { font-size: 0.9rem; }
+.ref-doc h1 { font-size: 1.25rem; }
+.ref-doc :is(h2, h3, h4) { font-size: 1.02rem; margin-top: 1.1rem; }
+.ref-doc img { max-width: 100%; height: auto; }
+
+/* Reference-section styling for EVERY drawer (console apps + docs): an uppercase summary over a tinted,
+   outlined body panel. Scoped to #ref-drawer so it matches consistently wherever the drawer is (the
+   graph page also has its own inline copies in graph.css). */
+#ref-drawer .ref-section { margin: 0 0 0.9rem; font-size: 0.82rem; }
+#ref-drawer .ref-section > summary {
+  width: fit-content; cursor: pointer;
+  color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+#ref-drawer .ref-section[open] > summary { margin-bottom: 0.35rem; }
+/* In the drawer the content already sits inside the panel card, so the section body is FLUSH - no
+   nested box. A white-bordered white box on the white drawer just wasted the narrow panel's width. */
+#ref-drawer .disclosure-body { padding: 0; border: 0; background: none; }
+/* Embedded reference content (glossary, conventions rendered inline): styled compact so it reads
+   like the rest of the reference material, not a full doc page. The section summary already names
+   it, so the doc's own leading <h1> is hidden. */
+#ref-drawer .ref-embed { font-size: 0.85rem; }
+#ref-drawer .ref-embed > h1:first-child { display: none; }
+#ref-drawer .ref-embed > :first-of-type { margin-top: 0; }
+#ref-drawer .ref-embed :is(h2, h3, h4) { font-size: 0.92rem; margin: 0.9rem 0 0.2rem; }
+#ref-drawer .ref-embed p, #ref-drawer .ref-embed dl, #ref-drawer .ref-embed ul { margin: 0 0 0.5rem; }
+#ref-drawer .ref-embed .heading-anchor { display: none; }
+/* Pinned: the panel docks and the page reflows to make room (no backdrop - the content stays
+   visible and usable beside the panel). Pico sets body{width:100%}, so shrink the body's width by
+   the panel width; the fixed panel (viewport-relative) fills the strip on the right where the body
+   no longer extends. */
+body.ref-pinned { width: calc(100% - var(--ref-w)); }
+body { transition: width 0.24s ease; }
+/* On narrow viewports there is no room to reflow, so a pinned panel just overlays (no shrink). */
+@media (max-width: 720px) { body.ref-pinned { width: 100%; } }
+/* Apply the persisted pinned state on load without animating the slide/reflow every navigation. */
+html.ref-instant body, html.ref-instant .ref-drawer, html.ref-instant .ref-backdrop { transition: none !important; }
+/* The drawer's top padding is moved onto the sticky head (below) so the head's OPAQUE background
+   spans that space - otherwise a transparent sliver above the head lets scrolling content peek. */
+.ref-drawer { padding-top: 0; }
+.ref-drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0;
+  /* All spacing around the head is PADDING (inside the opaque background box), never a transparent
+     margin, so scrolling content is fully covered above and below the sticky head. */
+  margin: 0; padding: 0.9rem 0 0.8rem;
+  background: var(--pico-card-background-color);
+}
+.ref-drawer-head-l { display: flex; align-items: center; gap: 0.5rem; }
+.ref-drawer-title { margin: 0; font-size: 0.95rem; }
+/* Pin/tack toggle: quiet gray by default, our warm ORANGE (--accent-warm, the shared "action"
+   color) when pinned so the pinned state is unmistakable. Background/border/shadow are pinned to
+   none across every interaction state so a click never flashes Pico's white active-button fill. */
+.ref-pin,
+.ref-pin:hover,
+.ref-pin:active,
+.ref-pin:focus,
+.ref-pin:focus-visible {
+  width: auto; margin: 0; padding: 0.15rem 0.3rem; background: none; border: 0; box-shadow: none;
+  cursor: pointer; display: inline-flex; line-height: 1;
+}
+/* Pico sets --pico-color:#fff on a bare <button> (its filled-button text color), so hovering with
+   color:var(--pico-color) turns the glyph WHITE and it vanishes in light mode. Reset that variable
+   to the real text color (--pico-contrast) and use it for hover, so the icon firms up, never fades. */
+.ref-pin { --pico-color: var(--pico-contrast); color: var(--pico-muted-color); }
+.ref-pin:hover { color: var(--pico-contrast); }
+.ref-pin[aria-pressed="true"],
+.ref-pin[aria-pressed="true"]:hover,
+.ref-pin[aria-pressed="true"]:active { color: var(--accent-warm); }
+.ref-pin svg { display: block; }
+.ref-drawer-close {
+  width: auto; margin: 0; padding: 0.1rem 0.5rem; font-size: 1.2rem; line-height: 1;
+  background: none; border: 0; box-shadow: none; cursor: pointer;
+  /* Same fix as .ref-pin: reset Pico's bare-<button> white --pico-color so the glyph never fades. */
+  --pico-color: var(--pico-contrast); color: var(--pico-muted-color);
+}
+.ref-drawer-close:hover, .ref-drawer-close:focus-visible { color: var(--pico-contrast); background: none; }
+/* Documentation link list in a console app's reference drawer: each dedicated doc as a titled link
+   over its own one-line description (pulled from the page frontmatter). Plain title that firms to the
+   primary blue on hover (the Claude-Desktop idiom). */
+.ref-doclinks { list-style: none; margin: 0; padding: 0; }
+.ref-doclinks li { margin: 0 0 0.7rem; }
+.ref-doclinks a { font-weight: 600; text-decoration: none; }
+.ref-doclinks a:hover, .ref-doclinks a:focus-visible { color: var(--pico-primary); }
+.ref-doclink-desc { display: block; font-size: 0.8rem; color: var(--pico-muted-color); margin-top: 0.1rem; }
+
+/* Reference sections are inline for no-JS; with JS, ref-drawer.js relocates them into the drawer,
+   so hide them until they land there (no flash at the top of the page), then show them in-drawer. */
+.js .ref-section { display: none; }
+.js #ref-drawer .ref-section { display: block; }
