@@ -3388,7 +3388,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // client, so it is bundled by `pnpm run build-dashboard` (generateJsBundles), not here.
     fs.makeDirectory(site.outDir + "/console/dashboard");
     os.execute(["sh", "-c", "esbuild dashboard.css --minify --outfile=" + site.outDir + "/console/dashboard/dashboard.css"]);
-    os.execute(["sh", "-c", "esbuild js/theme.js --minify --outfile=" + site.outDir + "/theme.js"]);
+    os.execute(["sh", "-c", "esbuild js/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild js/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
     // Emit the WebAssembly playground page at gen/playground/index.html (injecting the

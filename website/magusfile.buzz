@@ -15,11 +15,13 @@ import "scribe";
 
 magus.project({
     // Affected/drift tracks this sources glob, not the import graph, so scribe.buzz
-    // (and every other input) must be named to be watched. package.json +
+    // (and every other input) must be named to be watched. Both js/**/*.js AND js/**/*.ts
+    // are named: the client bundles are increasingly TypeScript (esbuild strips the types),
+    // and a .ts edit must mark this project affected just like a .js one. package.json +
     // package-lock.json are named so a bundled-dep version bump (mermaid, hljs, d3,
     // codemirror) invalidates the cacheable build-* targets and marks this project
     // affected - the esbuild inputs live in those manifests, not in the js/ entries.
-    "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "*.css", "playground.html", "graph.html", "logs.html",
+    "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "js/**/*.ts", "*.css", "playground.html", "graph.html", "logs.html",
                 "tour/*.buzz", "package.json", "package-lock.json", "buf.gen.yaml",
                 // The viewer/console bundles a JS client generated FROM these .proto sources
                 // (website/buf.gen.yaml -> js/gen/), so a schema change reruns codegen + rebuild.
