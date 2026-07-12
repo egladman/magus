@@ -18,11 +18,12 @@ magus.project({
     // (and every other input) must be named to be watched. Both js/**/*.js AND js/**/*.ts
     // are named: the client bundles are increasingly TypeScript (esbuild strips the types),
     // and a .ts edit must mark this project affected just like a .js one. package.json +
-    // package-lock.json are named so a bundled-dep version bump (mermaid, hljs, d3,
+    // pnpm-lock.yaml are named so a bundled-dep version bump (mermaid, hljs, d3,
     // codemirror) invalidates the cacheable build-* targets and marks this project
     // affected - the esbuild inputs live in those manifests, not in the js/ entries.
+    // (pnpm is the package manager - NOT npm; there is no package-lock.json.)
     "sources": ["magusfile.buzz", "*.buzz", "js/**/*.js", "js/**/*.ts", "*.css", "playground.html", "graph.html", "logs.html",
-                "tour/*.buzz", "package.json", "package-lock.json", "buf.gen.yaml",
+                "tour/*.buzz", "package.json", "pnpm-lock.yaml", "buf.gen.yaml",
                 // The viewer/console bundles a JS client generated FROM these .proto sources
                 // (website/buf.gen.yaml -> js/gen/), so a schema change reruns codegen + rebuild.
                 "../proto/magus/**/*.proto", "../proto/buf.yaml", "../proto/buf.lock",
@@ -40,7 +41,7 @@ magus.project({
         // js/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // committed gen/ artifact. esbuild + pinned npm deps are deterministic, so these
         // stay cacheable (no skipCache): a cache hit replays identical bytes, and a
-        // version bump invalidates it via package.json/package-lock.json in sources.
+        // version bump invalidates it via package.json/pnpm-lock.yaml in sources.
         // Run by hand when a version is bumped; commit the new artifact.
     },
 });
