@@ -36,6 +36,20 @@ type StatusReport struct {
 	// restarts, so a dashboard can be transparent that the numbers are "since <this>", not
 	// all-time. Zero (omitted) when reported by a non-daemon `magus status`.
 	ObservingSince time.Time `json:"observing_since,omitempty" yaml:"observing_since,omitempty"`
+	// Config surfaces the daemon's RESOLVED configuration (read-only) so a dashboard can show what
+	// the daemon is set to do - the default charms it applies, the concurrency cap - without a
+	// round-trip to the terminal. Additive JSON, not on the proto event wire.
+	Config StatusConfig `json:"config,omitempty" yaml:"config,omitempty"`
+}
+
+// StatusConfig is the read-only slice of the daemon's resolved config surfaced on the status wire.
+type StatusConfig struct {
+	// DefaultCharms are the execution charms applied to every run (e.g. rw, cd, gha).
+	DefaultCharms []string `json:"default_charms,omitempty" yaml:"default_charms,omitempty"`
+	// Concurrency is the resolved cap on concurrent builds (0 = the min(NumCPU, 8) default).
+	Concurrency int `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
+	// Sandbox reports whether subprocess/spell sandboxing is enabled.
+	Sandbox bool `json:"sandbox" yaml:"sandbox"`
 }
 
 // StatusService is one long-running shared service the daemon is hosting, surfaced on

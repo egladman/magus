@@ -235,9 +235,19 @@ export class DashboardTransport {
     try {
       const res = await fetch("http://" + host + "/api/v1/status", { headers: authHeaders() });
       if (!res.ok) return;
-      const raw = (await res.json()) as { observing_since?: string };
+      const raw = (await res.json()) as {
+        observing_since?: string;
+        config?: { default_charms?: string[]; concurrency?: number; sandbox?: boolean };
+      };
       const ms = raw.observing_since ? Date.parse(raw.observing_since) : NaN;
       if (!Number.isNaN(ms)) this.store.set({ observingSince: ms });
+      if (raw.config) {
+        this.store.set({ config: {
+          defaultCharms: raw.config.default_charms || [],
+          concurrency: raw.config.concurrency || 0,
+          sandbox: !!raw.config.sandbox,
+        } });
+      }
     } catch {
       // Network blip or abort: leave observingSince null; nothing on the board depends on it.
     }

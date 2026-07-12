@@ -29,7 +29,7 @@ import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
 import { workspacesTile } from "./tiles/workspaces";
 import { servicesTile } from "./tiles/services";
-import { versionsTile } from "./tiles/versions";
+import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
 import "../nav.js"; // reuse the site's exact nav dropdown behavior (hamburger <-> X, dismiss)
@@ -128,7 +128,7 @@ function mountTiles(): void {
   //  3. pool + cache (half)  - the two instantaneous-state summaries, side by side.
   //  4. execution timeline   - the live gantt of runs.
   //  5. cache rate / util    - the two live history charts.
-  //  6. per-target / remote / workspaces / versions - the denser but still legible readouts.
+  //  6. per-target / remote / workspaces / services / config - the denser but still legible readouts.
   //  7. latency / buzz / sandbox / mcp - the heavy metric families, DEFAULT-COLLAPSED so
   //     they sit out of the way until asked (see each tile's Card defaultCollapsed).
   //  8. insight section      - the VCS/run-outcome lenses (on-demand poll).
@@ -146,7 +146,7 @@ function mountTiles(): void {
   const remote = remoteTile();
   const workspaces = workspacesTile();
   const services = servicesTile();
-  const versions = versionsTile();
+  const config = configTile();
   const latency = latencyTile();
   const buzz = buzzTile();
   const sandbox = sandboxTile();
@@ -158,7 +158,7 @@ function mountTiles(): void {
     pool, cacheStats,
     gantt,
     cacheRate, utilization,
-    targets, remote, workspaces, services, versions,
+    targets, remote, workspaces, services, config,
     latency, buzz, sandbox, mcp,
   ];
   for (const t of ordered) host.append(t.el);
@@ -188,6 +188,7 @@ function beginDemo(): void {
   // Synthesize an observing-since ~92 minutes back so the demo shows the same since-caption a live
   // daemon would (the real value comes from the JSON status endpoint on connect).
   store.set({ observingSince: Date.now() - 92 * 60 * 1000 });
+  store.set({ config: { defaultCharms: ["rw", "cd", "gha"], concurrency: 8, sandbox: true } });
   demo = startDemo(store);
   // Chain the sibling apps' demos off the same `#demo` fragment so the showcase flows
   // across all three surfaces as one unified demo. Both the graph explorer and the log

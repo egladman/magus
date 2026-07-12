@@ -162,6 +162,11 @@ func (s *Service) statusReport(ctx context.Context) types.StatusReport {
 		Cache:          s.statusBase.Cache,
 		Build:          s.statusBase.Build,
 		ObservingSince: s.startedAt,
+		Config: types.StatusConfig{
+			DefaultCharms: s.config.DefaultCharms,
+			Concurrency:   s.config.Concurrency,
+			Sandbox:       s.config.Sandbox.Enabled,
+		},
 	}
 	addr, err := s.resolveStatusAddr(ctx)
 	if err != nil {

@@ -76,8 +76,10 @@ export class Card {
     const h = document.createElement("h2");
     h.className = "tile-h";
     if (opts.term) {
-      h.append(document.createTextNode(title + " "));
-      h.append(glossaryLink(opts.term, { label: opts.label ?? opts.term, slug: opts.slug }));
+      // The TITLE itself is the reference link: clicking it opens the term inline in the reference
+      // panel (ref-drawer.js intercepts .gloss-link). No separate labeled link beside it - that just
+      // repeated the title ("Workspaces Workspace", "Sandbox File system sandbox").
+      h.append(glossaryLink(opts.term, { label: title, slug: opts.slug }));
     } else {
       h.textContent = title;
     }

@@ -201,6 +201,23 @@ a.row:hover { border-color: var(--c-info); background: var(--pico-card-backgroun
 a.row .row-cmd::after { content: " \2197"; color: var(--c-info); font-size: 0.85em; }
 .row-ws-cache { display: flex; gap: 0.5rem; font-size: 0.68rem; }
 .row-ws-cache .h { color: var(--c-hit); } .row-ws-cache .m { color: var(--c-miss); } .row-ws-cache .e { color: var(--c-err); }
+/* Configuration card: key/value rows; default charms are square tag pills colored by effect. */
+.config-body { display: flex; flex-direction: column; gap: 0.5rem; }
+.config-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.config-k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color); }
+.config-v { font-size: 0.85rem; color: var(--pico-color); font-family: var(--pico-font-family-monospace); }
+.config-charms { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
+.charm-pill {
+  font-family: var(--pico-font-family-monospace); font-size: 0.72rem;
+  padding: 0.05rem 0.4rem; border: 1px solid currentColor; border-radius: var(--pico-border-radius);
+}
+/* Colored by charm EFFECT: rw mutates (loud/red), cd delivers (info/blue), gha shapes output
+   (benign/green), custom is neutral. */
+.charm-pill[data-effect="loud"]    { color: var(--c-err); }
+.charm-pill[data-effect="deliver"] { color: var(--c-info); }
+.charm-pill[data-effect="benign"]  { color: var(--c-ok); }
+.charm-pill[data-effect="neutral"] { color: var(--pico-muted-color); }
+
 /* Shared-service run state, colored by state (normal case, not all-caps). */
 .svc-meta { display: inline-flex; align-items: baseline; gap: 0.35rem; }
 .svc-state { font-weight: 600; }

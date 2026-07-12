@@ -90,6 +90,7 @@ export interface CacheView { hits: number; misses: number; errors: number; hitRa
 export interface RunningTargetView { args: string[]; step: string; startTime?: Timestamp; invocation: string; }
 export interface WorkspaceView { root: string; hits?: number; misses?: number; errors?: number; lastAccessTime?: Timestamp; }
 export interface ServiceView { id: string; label: string; command: string; ports: string[]; state: string; dependents: number; startedAt?: Timestamp; }
+export interface ConfigView { defaultCharms: string[]; concurrency: number; sandbox: boolean; }
 
 // A target's lifecycle state, as plain view-model strings that double as the gantt
 // tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
@@ -479,6 +480,9 @@ export interface DashboardState {
   // because the daemon's status SSE carries pool/health frames, not a raw-output
   // journal - a real live tail would need a journal SSE consumer (see activity.ts).
   logLines: string[];
+  // config is the daemon's resolved read-only configuration (default charms, concurrency cap,
+  // sandbox), read once from the JSON status endpoint alongside observingSince. null until known.
+  config: ConfigView | null;
   // observingSince is when the daemon began collecting the telemetry/cache counters (epoch ms),
   // read once from the JSON status endpoint (it is static per session and not on the proto event
   // stream). null until known. Surfaced so the board can be transparent that the numbers are
@@ -487,5 +491,5 @@ export interface DashboardState {
 }
 
 export function initialState(): DashboardState {
-  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [], insight: null, logLines: [], observingSince: null };
+  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [], insight: null, logLines: [], observingSince: null, config: null };
 }
