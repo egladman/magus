@@ -31,7 +31,7 @@ type Load struct {
 	MetricsCollect bool // build an always-on local metrics collector (daemon dashboard feed)
 	// Provider injects an already-constructed observability provider so several Magus
 	// instances share one set of OTel instruments and one metrics collector. When set it
-	// takes precedence over MetricsCollect (Open skips observability.New and adopts it).
+	// takes precedence over MetricsCollect (Open skips otlp.New and adopts it).
 	Provider observability.Provider
 }
 

@@ -58,6 +58,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/console"
@@ -620,10 +621,10 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	// init failure fall back to a disabled provider so the daemon still starts.
 	telCfg := observability.ConfigFromTelemetry(cfg.Telemetry, version, "")
 	telCfg.LocalCollect = true
-	sharedTel, terr := observability.New(ctx, telCfg)
+	sharedTel, terr := otlp.New(ctx, telCfg)
 	if terr != nil {
 		slog.Warn("daemon: telemetry init failed; dashboard metrics disabled", slog.String("error", terr.Error()))
-		sharedTel, _ = observability.New(ctx, observability.Config{})
+		sharedTel, _ = otlp.New(ctx, observability.Config{})
 	}
 	daemonProvider = sharedTel
 

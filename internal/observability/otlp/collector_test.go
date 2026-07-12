@@ -1,4 +1,4 @@
-package observability
+package otlp
 
 import (
 	"context"
@@ -9,20 +9,22 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	colmetricpb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+
+	"github.com/egladman/magus/internal/observability"
 )
 
 // TestLocalCollectSnapshot exercises the real provider path: a LocalCollect provider (telemetry
 // export OFF) records through the normal Provider methods, and Snapshot returns standard OTLP
 // protobuf carrying those values - the wire the /dashboard reads. No external export, no network.
 func TestLocalCollectSnapshot(t *testing.T) {
-	p, err := New(context.Background(), Config{LocalCollect: true, ServiceName: "magus-test"})
+	p, err := New(context.Background(), observability.Config{LocalCollect: true, ServiceName: "magus-test"})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Shutdown(context.Background()) })
 
 	ctx := context.Background()
-	p.RecordCacheHit(ctx, Attr{Key: "outcome", Value: "hit"})
-	p.RecordCacheHit(ctx, Attr{Key: "outcome", Value: "hit"})
-	p.RecordCacheMiss(ctx, Attr{Key: "outcome", Value: "miss"})
+	p.RecordCacheHit(ctx, observability.Attr{Key: "outcome", Value: "hit"})
+	p.RecordCacheHit(ctx, observability.Attr{Key: "outcome", Value: "hit"})
+	p.RecordCacheMiss(ctx, observability.Attr{Key: "outcome", Value: "miss"})
 	// Spans are export-only; in local-collect mode StartSpan must be a safe no-op.
 	_, end := p.StartSpan(ctx, "noop")
 	end(nil)
@@ -40,7 +42,7 @@ func TestLocalCollectSnapshot(t *testing.T) {
 // TestDisabledSnapshotNil confirms a fully-disabled provider (no export, no local collect)
 // returns no snapshot and stays a no-op, so the CLI hot path is untouched.
 func TestDisabledSnapshotNil(t *testing.T) {
-	p, err := New(context.Background(), Config{})
+	p, err := New(context.Background(), observability.Config{})
 	require.NoError(t, err)
 	raw, err := p.Snapshot(context.Background())
 	require.NoError(t, err)

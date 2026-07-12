@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/otlp"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
@@ -371,10 +372,10 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	} else {
 		telCfg := observability.ConfigFromTelemetry(m.cfg.Telemetry, "", m.ws.Root)
 		telCfg.LocalCollect = m.metricsCollect // daemon: record metrics even when export is off
-		built, err := observability.New(ctx, telCfg)
+		built, err := otlp.New(ctx, telCfg)
 		if err != nil {
 			slog.Warn("magus: telemetry init failed; falling back to no-op", "err", err)
-			built, _ = observability.New(ctx, observability.Config{})
+			built, _ = otlp.New(ctx, observability.Config{})
 		}
 		tel = built
 	}

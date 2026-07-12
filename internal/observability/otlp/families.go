@@ -1,4 +1,4 @@
-package observability
+package otlp
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/egladman/magus/internal/observability"
 )
 
 // reg is a small registration helper that threads the first instrument-creation error through
@@ -66,7 +68,7 @@ func newMCPInstruments(m metric.Meter) (mcpInstruments, error) {
 	return mi, r.err
 }
 
-func (p *otelProvider) RecordMCPCall(ctx context.Context, c MCPCall) {
+func (p *otelProvider) RecordMCPCall(ctx context.Context, c observability.MCPCall) {
 	tool := metric.WithAttributes(attribute.String("tool", c.Tool))
 	toolOutcome := metric.WithAttributes(
 		attribute.String("tool", c.Tool),
@@ -107,7 +109,7 @@ func (p *otelProvider) RecordSandboxApply(ctx context.Context, secs float64, out
 	))
 }
 
-func (p *otelProvider) RecordSandboxRules(ctx context.Context, r SandboxRules) {
+func (p *otelProvider) RecordSandboxRules(ctx context.Context, r observability.SandboxRules) {
 	add := func(access string, n int64) {
 		if n == 0 {
 			return
@@ -198,7 +200,7 @@ func (p *otelProvider) RecordBuzzCompile(ctx context.Context, secs float64, phas
 	))
 }
 
-func (p *otelProvider) RecordBuzzHostCall(ctx context.Context, c BuzzHostCall) {
+func (p *otelProvider) RecordBuzzHostCall(ctx context.Context, c observability.BuzzHostCall) {
 	p.buzz.hostCallDuration.Record(ctx, c.Duration, metric.WithAttributes(attribute.String("callable", c.Callable)))
 	p.buzz.hostCallCount.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("callable", c.Callable),

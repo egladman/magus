@@ -12,22 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNew_DisabledIsNoOp verifies that constructing a Provider with
-// Enabled=false never opens a connection or panics. This is the path
-// almost all magus invocations take, since telemetry is OFF by default.
-func TestNew_DisabledIsNoOp(t *testing.T) {
-	t.Parallel()
-	p, err := New(context.Background(), Config{Enabled: false})
-	require.NoError(t, err)
-	require.NotNil(t, p, "New(disabled) returned nil Provider")
-	assert.False(t, p.Enabled(), "disabled Provider reports Enabled() == true")
-	p.RecordCacheHit(context.Background())
-	p.RecordCacheMiss(context.Background())
-	p.RecordCacheError(context.Background())
-	p.RecordCacheDuration(context.Background(), 1.5)
-	assert.NoError(t, p.Shutdown(context.Background()))
-}
-
 // TestCacheRunOptions_NilProviderReturnsNil ensures callers can pass a
 // nil Provider through without crashing — a common pattern when telemetry
 // init failed earlier in the boot path.
@@ -46,13 +30,6 @@ func TestConfigFromTelemetry_AppliesFallbacks(t *testing.T) {
 	assert.Equal(t, "magus", got.ServiceName)
 	assert.Equal(t, 1.0, got.SampleRatio)
 	assert.Equal(t, "v1.2.3", got.ServiceVersion)
-}
-
-// TestNew_EnabledRequiresEndpoint exercises the validation path.
-func TestNew_EnabledRequiresEndpoint(t *testing.T) {
-	t.Parallel()
-	_, err := New(context.Background(), Config{Enabled: true})
-	assert.Error(t, err, "New(enabled, no endpoint) should error")
 }
 
 // recorder implements observability.Provider and captures every call so
@@ -248,46 +225,6 @@ func TestMetricRecordNoProjectAttr(t *testing.T) {
 			assert.NotEqual(t, "project", attr.Key, "miss metric attrs must not contain per-project cardinality")
 		}
 	}
-}
-
-// TestCacheRunOptions_DisabledProviderIsInert verifies the
-// nil-vs-disabled boundary documented on CacheRunOptions: a Provider
-// reporting Enabled()==false still returns the options (callers can
-// wire them unconditionally), but the underlying record calls are
-// no-ops via disabledProvider — the cache.Run pipeline exercises
-// every disabled-provider record method through a hit path.
-func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
-	p, err := New(context.Background(), Config{Enabled: false})
-	require.NoError(t, err)
-	assert.False(t, p.Enabled(), "disabled provider reports Enabled() == true")
-
-	root, c := newCache(t)
-	srcDir := filepath.Join(root, "p")
-	require.NoError(t, os.MkdirAll(srcDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package p"), 0o644))
-	outPath := filepath.Join(srcDir, "out.txt")
-	spec := cache.Step{
-		ProjectPath:   "p",
-		Sources:       []string{"p/*.go"},
-		Outputs:       []string{"p/out.txt"},
-		WorkspaceRoot: root,
-	}
-	opts := CacheRunOptions(context.Background(), p)
-
-	// Drive a miss then a hit so OnMiss + OnHit + OnError-adjacent
-	// paths fire on the disabled provider. No assertion on counters
-	// (it is inert) — the test is that nothing panics and Run
-	// completes.
-	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
-		return os.WriteFile(outPath, []byte("ok"), 0o644)
-	}, opts...)
-	require.NoError(t, err, "Run(miss)")
-	_, err = c.Run(context.Background(), spec, func(_ context.Context) error {
-		t.Error("fn must not run on a hit")
-		return nil
-	}, opts...)
-	require.NoError(t, err, "Run(hit)")
-	assert.NoError(t, p.Shutdown(context.Background()), "disabled.Shutdown")
 }
 
 // recordingTargetProvider extends recorder to capture

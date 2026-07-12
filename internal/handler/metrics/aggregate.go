@@ -1,6 +1,6 @@
 // Package metrics is the daemon's derived-dashboard presentation layer for magus's OTel
 // metrics. It rolls raw in-process metricdata (histogram buckets and counters, read via
-// observability.Collector) into the magus.metrics.v1 wire types the /dashboard consumes,
+// otlp.Collector) into the magus.metrics.v1 wire types the /dashboard consumes,
 // maintains a rolling sample ring for backfill, and implements the Connect MetricsService.
 // It is the only place the generated metrics proto meets the OTel SDK; observability itself
 // stays proto-free.
@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// OTel instrument names magus registers (see internal/observability/provider_otel.go). Kept
+// OTel instrument names magus registers (see internal/observability/otlp/provider.go). Kept
 // as constants so the aggregation and the instrument registration read from one vocabulary.
 const (
 	instTargetDuration = "magus.target.duration"

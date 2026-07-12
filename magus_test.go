@@ -21,6 +21,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/types"
 )
 
@@ -723,7 +724,7 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	ctx := context.Background()
 
 	// One provider, LocalCollect on (as the daemon builds it), shared by both workspaces.
-	tel, err := observability.New(ctx, observability.Config{LocalCollect: true})
+	tel, err := otlp.New(ctx, observability.Config{LocalCollect: true})
 	require.NoError(t, err)
 
 	mkWS := func() string {

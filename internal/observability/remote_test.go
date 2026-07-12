@@ -111,15 +111,20 @@ func TestInstrumentRemoteBackend_Put(t *testing.T) {
 	assert.Equal(t, []string{"magus.cache.remote.put"}, rec.spans)
 }
 
+// disabledRec is a recorder that reports Enabled()==false, standing in for the
+// concrete disabled provider (which now lives in the otlp subpackage and cannot
+// be imported here without an import cycle).
+type disabledRec struct{ recorder }
+
+func (*disabledRec) Enabled() bool { return false }
+
 // TestInstrumentRemoteBackend_DisabledPassthrough verifies that a disabled
 // provider yields the original backend unwrapped — no byte counting overhead on
 // the default (telemetry-off) path.
 func TestInstrumentRemoteBackend_DisabledPassthrough(t *testing.T) {
 	t.Parallel()
-	disabled, err := New(context.Background(), Config{Enabled: false})
-	require.NoError(t, err)
 	fb := &fakeBackend{}
-	assert.Equal(t, cache.RemoteBackend(fb), InstrumentRemoteBackend(fb, disabled), "disabled provider should return the backend unwrapped")
+	assert.Equal(t, cache.RemoteBackend(fb), InstrumentRemoteBackend(fb, &disabledRec{}), "disabled provider should return the backend unwrapped")
 }
 
 // TestInstrumentRemoteBackend_PrunePreserved verifies the optional RemotePruner

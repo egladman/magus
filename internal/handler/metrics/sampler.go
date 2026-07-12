@@ -11,7 +11,7 @@ import (
 )
 
 // collector is the narrow read side the aggregation and sampler need from
-// observability.Collector: one in-process metricdata collection, no export hop.
+// otlp.Collector: one in-process metricdata collection, no export hop.
 type collector interface {
 	Collect(context.Context) (metricdata.ResourceMetrics, error)
 }

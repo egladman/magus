@@ -1,4 +1,4 @@
-package observability
+package otlp
 
 import (
 	"bytes"

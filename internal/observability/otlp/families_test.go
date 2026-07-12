@@ -1,4 +1,4 @@
-package observability
+package otlp
 
 import (
 	"context"
@@ -7,14 +7,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
+	"github.com/egladman/magus/internal/observability"
 )
 
 // collectLocal builds a LocalCollect provider and returns a Collector over its in-process
 // ManualReader, so a test can record through the real Provider methods and read the raw
 // metricdata back without any network hop.
-func collectLocal(t *testing.T) (Provider, *Collector) {
+func collectLocal(t *testing.T) (observability.Provider, *Collector) {
 	t.Helper()
-	p, err := New(context.Background(), Config{LocalCollect: true, ServiceName: "magus-test"})
+	p, err := New(context.Background(), observability.Config{LocalCollect: true, ServiceName: "magus-test"})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Shutdown(context.Background()) })
 	coll, ok := CollectorFrom(p)
@@ -78,7 +80,7 @@ func TestRemoteStoredOutcome(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
 
-	p.RecordRemoteOp(ctx, RemoteOp{Method: "put", Outcome: "stored", Duration: 0.02, Bytes: 512})
+	p.RecordRemoteOp(ctx, observability.RemoteOp{Method: "put", Outcome: "stored", Duration: 0.02, Bytes: 512})
 
 	rm, err := coll.Collect(ctx)
 	require.NoError(t, err)
@@ -94,10 +96,10 @@ func TestBuzzFamiliesCollect(t *testing.T) {
 	p, coll := collectLocal(t)
 	ctx := context.Background()
 
-	p.RecordMCPCall(ctx, MCPCall{Tool: "graph", Outcome: "success", InputBytes: 100, OutputBytes: 200, Duration: 0.03})
-	p.RecordSandboxRules(ctx, SandboxRules{Read: 3, Write: 2, Exec: 1, EnvExact: 4, EnvGlob: 5, Scope: "target"})
+	p.RecordMCPCall(ctx, observability.MCPCall{Tool: "graph", Outcome: "success", InputBytes: 100, OutputBytes: 200, Duration: 0.03})
+	p.RecordSandboxRules(ctx, observability.SandboxRules{Read: 3, Write: 2, Exec: 1, EnvExact: 4, EnvGlob: 5, Scope: "target"})
 	p.RecordSandboxCheck(ctx, "read", "allow", "//app")
-	p.RecordBuzzHostCall(ctx, BuzzHostCall{Callable: "os.exec", Outcome: "success", Duration: 0.01})
+	p.RecordBuzzHostCall(ctx, observability.BuzzHostCall{Callable: "os.exec", Outcome: "success", Duration: 0.01})
 	p.RecordBuzzSpellBuiltinsWarm(ctx, 0.05, "build")
 	p.RecordBuzzJITRun(ctx)
 

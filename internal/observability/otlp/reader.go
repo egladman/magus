@@ -1,10 +1,12 @@
-package observability
+package otlp
 
 import (
 	"context"
 
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
+	"github.com/egladman/magus/internal/observability"
 )
 
 // Collector is a narrow, proto-free accessor over an in-process metrics ManualReader.
@@ -30,7 +32,7 @@ func (c *Collector) Collect(ctx context.Context) (metricdata.ResourceMetrics, er
 // p is not an otelProvider that collects locally (the disabled CLI no-op, or an
 // export-only provider built without a manual reader). Callers gate the dashboard mount on
 // the bool.
-func CollectorFrom(p Provider) (*Collector, bool) {
+func CollectorFrom(p observability.Provider) (*Collector, bool) {
 	op, ok := p.(*otelProvider)
 	if !ok || op.manual == nil {
 		return nil, false

@@ -1,4 +1,9 @@
-package observability
+// Package otlp holds the concrete OpenTelemetry/OTLP provider that backs the
+// observability.Provider interface. It is a subpackage so the heavy OTLP SDK
+// dependency graph - which pulls in net/http and grpc - stays out of the light
+// parent package and out of the Buzz playground's wasm build (TinyGo's js/wasm
+// cannot compile net/http).
+package otlp
 
 import (
 	"context"
@@ -20,11 +25,13 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/egladman/magus/internal/observability"
 )
 
 // New returns a Provider backed by the configured OTLP collector.
 // When cfg.Enabled is false it returns a no-op disabledProvider without opening any connection.
-func New(ctx context.Context, cfg Config) (Provider, error) {
+func New(ctx context.Context, cfg observability.Config) (observability.Provider, error) {
 	// Disabled with no local collection requested: a true no-op (the common CLI path).
 	if !cfg.Enabled && !cfg.LocalCollect {
 		return disabledProvider{}, nil
@@ -302,29 +309,29 @@ type otelProvider struct {
 
 func (*otelProvider) Enabled() bool { return true }
 
-func (p *otelProvider) RecordCacheHit(ctx context.Context, attrs ...Attr) {
+func (p *otelProvider) RecordCacheHit(ctx context.Context, attrs ...observability.Attr) {
 	p.hits.Add(ctx, 1, metric.WithAttributes(toKV(attrs)...))
 }
 
-func (p *otelProvider) RecordCacheMiss(ctx context.Context, attrs ...Attr) {
+func (p *otelProvider) RecordCacheMiss(ctx context.Context, attrs ...observability.Attr) {
 	p.misses.Add(ctx, 1, metric.WithAttributes(toKV(attrs)...))
 }
 
-func (p *otelProvider) RecordCacheError(ctx context.Context, attrs ...Attr) {
+func (p *otelProvider) RecordCacheError(ctx context.Context, attrs ...observability.Attr) {
 	p.errs.Add(ctx, 1, metric.WithAttributes(toKV(attrs)...))
 }
 
-func (p *otelProvider) RecordCacheDuration(ctx context.Context, secs float64, attrs ...Attr) {
+func (p *otelProvider) RecordCacheDuration(ctx context.Context, secs float64, attrs ...observability.Attr) {
 	p.dur.Record(ctx, secs, metric.WithAttributes(toKV(attrs)...))
 }
 
-func (p *otelProvider) RecordGraphQuery(ctx context.Context, secs float64, attrs ...Attr) {
+func (p *otelProvider) RecordGraphQuery(ctx context.Context, secs float64, attrs ...observability.Attr) {
 	kv := metric.WithAttributes(toKV(attrs)...)
 	p.graphQueryDur.Record(ctx, secs, kv)
 	p.graphQueryCount.Add(ctx, 1, kv)
 }
 
-func (p *otelProvider) StartSpan(ctx context.Context, name string, attrs ...Attr) (context.Context, func(error)) {
+func (p *otelProvider) StartSpan(ctx context.Context, name string, attrs ...observability.Attr) (context.Context, func(error)) {
 	if p.tracer == nil { // local-collect-only mode records metrics but not spans
 		return ctx, func(error) {}
 	}
@@ -343,7 +350,7 @@ func (p *otelProvider) StartSpan(ctx context.Context, name string, attrs ...Attr
 	}
 }
 
-func (p *otelProvider) RecordRemoteOp(ctx context.Context, op RemoteOp) {
+func (p *otelProvider) RecordRemoteOp(ctx context.Context, op observability.RemoteOp) {
 	kv := metric.WithAttributes(
 		attribute.String("method", op.Method),
 		attribute.String("outcome", op.Outcome),
@@ -364,7 +371,7 @@ func (p *otelProvider) RecordRemoteOp(ctx context.Context, op RemoteOp) {
 	}
 }
 
-func (p *otelProvider) RecordTargetRun(ctx context.Context, secs float64, attrs ...Attr) {
+func (p *otelProvider) RecordTargetRun(ctx context.Context, secs float64, attrs ...observability.Attr) {
 	kv := metric.WithAttributes(toKV(attrs)...)
 	p.targetRuns.Add(ctx, 1, kv)
 	p.targetDur.Record(ctx, secs, kv)
@@ -406,40 +413,41 @@ func (p *otelProvider) Shutdown(ctx context.Context) error {
 type disabledProvider struct{}
 
 func (disabledProvider) Enabled() bool                                               { return false }
-func (disabledProvider) RecordCacheHit(_ context.Context, _ ...Attr)                 {}
-func (disabledProvider) RecordCacheMiss(_ context.Context, _ ...Attr)                {}
-func (disabledProvider) RecordCacheError(_ context.Context, _ ...Attr)               {}
-func (disabledProvider) RecordCacheDuration(_ context.Context, _ float64, _ ...Attr) {}
-func (disabledProvider) RecordGraphQuery(_ context.Context, _ float64, _ ...Attr)    {}
-func (disabledProvider) RecordRemoteOp(_ context.Context, _ RemoteOp)                {}
-func (disabledProvider) StartSpan(ctx context.Context, _ string, _ ...Attr) (context.Context, func(error)) {
+func (disabledProvider) RecordCacheHit(_ context.Context, _ ...observability.Attr)   {}
+func (disabledProvider) RecordCacheMiss(_ context.Context, _ ...observability.Attr)  {}
+func (disabledProvider) RecordCacheError(_ context.Context, _ ...observability.Attr) {}
+func (disabledProvider) RecordCacheDuration(_ context.Context, _ float64, _ ...observability.Attr) {
+}
+func (disabledProvider) RecordGraphQuery(_ context.Context, _ float64, _ ...observability.Attr) {}
+func (disabledProvider) RecordRemoteOp(_ context.Context, _ observability.RemoteOp)             {}
+func (disabledProvider) StartSpan(ctx context.Context, _ string, _ ...observability.Attr) (context.Context, func(error)) {
 	return ctx, func(error) {}
 }
-func (disabledProvider) RecordTargetRun(_ context.Context, _ float64, _ ...Attr)            {}
-func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64)            {}
-func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)                       {}
-func (disabledProvider) RecordPoolWaiting(_ context.Context, _ int64)                       {}
-func (disabledProvider) RecordMCPCall(_ context.Context, _ MCPCall)                         {}
-func (disabledProvider) RecordSandboxApply(_ context.Context, _ float64, _, _ string)       {}
-func (disabledProvider) RecordSandboxRules(_ context.Context, _ SandboxRules)               {}
-func (disabledProvider) RecordSandboxCheck(_ context.Context, _, _, _ string)               {}
-func (disabledProvider) RecordSandboxEnvDropped(_ context.Context, _ string, _ int64)       {}
-func (disabledProvider) RecordBuzzExec(_ context.Context, _ float64, _, _ string)           {}
-func (disabledProvider) RecordBuzzCompile(_ context.Context, _ float64, _, _ string)        {}
-func (disabledProvider) RecordBuzzHostCall(_ context.Context, _ BuzzHostCall)               {}
-func (disabledProvider) RecordBuzzSessionReuse(_ context.Context, _ string)                 {}
-func (disabledProvider) RecordBuzzSessionIdle(_ context.Context, _ int64)                   {}
-func (disabledProvider) RecordBuzzSessionEviction(_ context.Context, _ string)              {}
-func (disabledProvider) RecordBuzzSessionWarm(_ context.Context, _ float64, _ string)       {}
-func (disabledProvider) RecordBuzzImport(_ context.Context, _ float64, _, _ string)         {}
-func (disabledProvider) RecordBuzzSpellResolve(_ context.Context, _ float64, _, _ string)   {}
-func (disabledProvider) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string) {}
-func (disabledProvider) RecordBuzzJITRun(_ context.Context)                                 {}
-func (disabledProvider) RecordBuzzVMFault(_ context.Context, _ string)                      {}
-func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)                         { return nil, nil }
-func (disabledProvider) Shutdown(_ context.Context) error                                   { return nil }
+func (disabledProvider) RecordTargetRun(_ context.Context, _ float64, _ ...observability.Attr) {}
+func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64)               {}
+func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)                          {}
+func (disabledProvider) RecordPoolWaiting(_ context.Context, _ int64)                          {}
+func (disabledProvider) RecordMCPCall(_ context.Context, _ observability.MCPCall)              {}
+func (disabledProvider) RecordSandboxApply(_ context.Context, _ float64, _, _ string)          {}
+func (disabledProvider) RecordSandboxRules(_ context.Context, _ observability.SandboxRules)    {}
+func (disabledProvider) RecordSandboxCheck(_ context.Context, _, _, _ string)                  {}
+func (disabledProvider) RecordSandboxEnvDropped(_ context.Context, _ string, _ int64)          {}
+func (disabledProvider) RecordBuzzExec(_ context.Context, _ float64, _, _ string)              {}
+func (disabledProvider) RecordBuzzCompile(_ context.Context, _ float64, _, _ string)           {}
+func (disabledProvider) RecordBuzzHostCall(_ context.Context, _ observability.BuzzHostCall)    {}
+func (disabledProvider) RecordBuzzSessionReuse(_ context.Context, _ string)                    {}
+func (disabledProvider) RecordBuzzSessionIdle(_ context.Context, _ int64)                      {}
+func (disabledProvider) RecordBuzzSessionEviction(_ context.Context, _ string)                 {}
+func (disabledProvider) RecordBuzzSessionWarm(_ context.Context, _ float64, _ string)          {}
+func (disabledProvider) RecordBuzzImport(_ context.Context, _ float64, _, _ string)            {}
+func (disabledProvider) RecordBuzzSpellResolve(_ context.Context, _ float64, _, _ string)      {}
+func (disabledProvider) RecordBuzzSpellBuiltinsWarm(_ context.Context, _ float64, _ string)    {}
+func (disabledProvider) RecordBuzzJITRun(_ context.Context)                                    {}
+func (disabledProvider) RecordBuzzVMFault(_ context.Context, _ string)                         {}
+func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)                            { return nil, nil }
+func (disabledProvider) Shutdown(_ context.Context) error                                      { return nil }
 
-func toKV(attrs []Attr) []attribute.KeyValue {
+func toKV(attrs []observability.Attr) []attribute.KeyValue {
 	out := make([]attribute.KeyValue, len(attrs))
 	for i, a := range attrs {
 		out[i] = attribute.String(a.Key, a.Value)
@@ -447,7 +455,7 @@ func toKV(attrs []Attr) []attribute.KeyValue {
 	return out
 }
 
-func newTracerProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdktrace.TracerProvider, func(context.Context) error, error) {
+func newTracerProvider(ctx context.Context, cfg observability.Config, res *resource.Resource) (*sdktrace.TracerProvider, func(context.Context) error, error) {
 	var (
 		exp sdktrace.SpanExporter
 		err error
@@ -483,7 +491,7 @@ func newTracerProvider(ctx context.Context, cfg Config, res *resource.Resource) 
 	return tp, tp.Shutdown, nil
 }
 
-func newMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context) error, *captureTransport, *sdkmetric.ManualReader, error) {
+func newMeterProvider(ctx context.Context, cfg observability.Config, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context) error, *captureTransport, *sdkmetric.ManualReader, error) {
 	// The capturing reader is always present: it yields on-demand OTLP snapshots for the
 	// dashboard without a network hop (see collector.go). ForceFlush drives it.
 	capReader, capT, err := newCaptureReader(ctx)

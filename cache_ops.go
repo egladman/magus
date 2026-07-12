@@ -7,7 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/types"
 )
 
@@ -101,11 +101,11 @@ func (m *Magus) MetricsSnapshot(ctx context.Context) ([]byte, error) {
 // collection was not enabled at Open (the CLI default). Unlike [Magus.MetricsSnapshot] (OTLP
 // bytes for external export), this reads raw metricdata - histogram buckets and counters -
 // with no exporter hop and without exposing the generated dashboard proto here.
-func (m *Magus) MetricsCollector() (*observability.Collector, bool) {
+func (m *Magus) MetricsCollector() (*otlp.Collector, bool) {
 	if m.tel == nil {
 		return nil, false
 	}
-	return observability.CollectorFrom(m.tel)
+	return otlp.CollectorFrom(m.tel)
 }
 
 // CacheDir returns the resolved workspace cache directory - the same location the
