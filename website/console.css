@@ -66,15 +66,16 @@ body:has(.console-bar) {
    same everywhere (each app's script unhides #console-demo when it enters #demo). A quiet info
    .status-tag with a leading dot - square + normal case like every other chip, not a rounded pill. */
 .console-demo-tag {
-  border-color: var(--c-info); color: var(--c-info); font-size: 0.68rem;
+  border-color: var(--c-info); color: var(--c-info); font-size: 0.68rem; white-space: nowrap;
 }
 .console-demo-tag::before {
   content: ""; width: 0.4em; height: 0.4em; border-radius: 50%; background: currentColor;
 }
 /* On a narrow bar the title already crowds the launcher; keep the chip but drop its label to just
-   the dot so it never pushes the controls off-screen. */
+   the dot so it never wraps or pushes the controls off-screen. The doubled class out-specifies the
+   later .status-tag font-size so this actually wins at this width. */
 @media (max-width: 520px) {
-  .console-demo-tag { font-size: 0; padding: 0.3rem; gap: 0; }
+  .status-tag.console-demo-tag { font-size: 0; padding: 0.3rem; gap: 0; }
   .console-demo-tag::before { width: 0.5rem; height: 0.5rem; }
 }
 /* The menu button is mobile-only in site.css; on the dashboard it is the primary nav, so
@@ -296,10 +297,15 @@ body:has(.console-bar) {
    #ref-drawer + #ref-backdrop; ref-drawer.js relocates the sections in and wires open/close. */
 /* The trigger is a square icon button, matching the menu + theme toggles exactly (padding 0.4rem);
    its muted color comes from the shared .nav-toggle/#theme-toggle rule in site.css. */
-.ref-trigger {
+.ref-trigger, #settings-btn {
   width: auto; margin: 0; padding: 0.4rem;
   display: inline-flex; align-items: center; justify-content: center;
 }
+/* The gear matches the reference / menu / theme icon buttons exactly: a small square outline button,
+   muted until hover - not Pico's default full-size button (which class="outline" alone would give). */
+#settings-btn { border-color: var(--pico-muted-border-color); color: var(--pico-muted-color); }
+#settings-btn:hover, #settings-btn:focus-visible { border-color: var(--pico-color); color: var(--pico-color); }
+#settings-btn svg { display: block; }
 .ref-trigger svg { display: block; }
 /* A thin vertical rule that sets the Reference button apart from the fixed menu/theme cluster. */
 .nav-divider { flex: 0 0 auto; width: 1px; height: 1.1rem; margin: 0 0.15rem; background: var(--pico-muted-border-color); }

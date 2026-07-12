@@ -89,6 +89,7 @@ export interface PoolView { capacity: number; running: number; queued: number; m
 export interface CacheView { hits: number; misses: number; errors: number; hitRate: number | null; sizeBytes: number | bigint; }
 export interface RunningTargetView { args: string[]; step: string; startTime?: Timestamp; invocation: string; }
 export interface WorkspaceView { root: string; hits?: number; misses?: number; errors?: number; lastAccessTime?: Timestamp; }
+export interface ServiceView { id: string; label: string; command: string; ports: string[]; state: string; dependents: number; startedAt?: Timestamp; }
 
 // A target's lifecycle state, as plain view-model strings that double as the gantt
 // tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
@@ -126,6 +127,9 @@ export interface StatusView {
   runningTargets: RunningTargetView[];
   runs: RunView[];
   workspaces: WorkspaceView[];
+  // Shared services the daemon is hosting right now (deduped across the whole daemon, kept warm
+  // between runs). Empty when none are held.
+  services: ServiceView[];
   magusVersion: string;
   daemonVersion: string;
 }
@@ -191,6 +195,11 @@ export function mapStatus(st: Status): StatusView {
       misses: w.cache ? Number(w.cache.misses) : undefined,
       errors: w.cache ? Number(w.cache.errors) : undefined,
       lastAccessTime: w.lastAccessTime,
+    })),
+    services: (st.services || []).map((sv) => ({
+      id: sv.id || "", label: sv.label || "", command: sv.command || "",
+      ports: sv.port || [], state: sv.state || "", dependents: sv.dependents || 0,
+      startedAt: sv.startedAt,
     })),
     magusVersion: st.magusVersion || "",
     daemonVersion: (pool && pool.daemonVersion) || "",

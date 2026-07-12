@@ -28,6 +28,7 @@ import { sandboxTile } from "./tiles/sandbox";
 import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
 import { workspacesTile } from "./tiles/workspaces";
+import { servicesTile } from "./tiles/services";
 import { versionsTile } from "./tiles/versions";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
@@ -144,6 +145,7 @@ function mountTiles(): void {
   const targets = targetsTile();
   const remote = remoteTile();
   const workspaces = workspacesTile();
+  const services = servicesTile();
   const versions = versionsTile();
   const latency = latencyTile();
   const buzz = buzzTile();
@@ -156,7 +158,7 @@ function mountTiles(): void {
     pool, cacheStats,
     gantt,
     cacheRate, utilization,
-    targets, remote, workspaces, versions,
+    targets, remote, workspaces, services, versions,
     latency, buzz, sandbox, mcp,
   ];
   for (const t of ordered) host.append(t.el);

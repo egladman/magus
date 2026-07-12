@@ -26,7 +26,11 @@ body.dash-native { margin: 0; }
 .dash-panels > * { grid-column: 1 / -1; }
 .dash-panels > .tile-half { grid-column: span 1; }
 @media (max-width: 760px) {
-  .dash-panels { grid-template-columns: 1fr; }
+  /* minmax(0, 1fr), NOT 1fr: a plain 1fr column is min-content-sized, so a tile with wide
+     unshrinkable content (a chart/gantt/table) blows the single column past the viewport and the
+     whole board scrolls sideways. minmax(0,...) lets the column shrink to the viewport; each such
+     tile then scrolls/wraps inside its own box. */
+  .dash-panels { grid-template-columns: minmax(0, 1fr); }
   .dash-panels > .tile-half { grid-column: 1 / -1; }
 }
 
@@ -197,6 +201,13 @@ a.row:hover { border-color: var(--c-info); background: var(--pico-card-backgroun
 a.row .row-cmd::after { content: " \2197"; color: var(--c-info); font-size: 0.85em; }
 .row-ws-cache { display: flex; gap: 0.5rem; font-size: 0.68rem; }
 .row-ws-cache .h { color: var(--c-hit); } .row-ws-cache .m { color: var(--c-miss); } .row-ws-cache .e { color: var(--c-err); }
+/* Shared-service run state, colored by state (normal case, not all-caps). */
+.svc-meta { display: inline-flex; align-items: baseline; gap: 0.35rem; }
+.svc-state { font-weight: 600; }
+.svc-state[data-state="running"] { color: var(--c-ok); }
+.svc-state[data-state="starting"] { color: var(--c-warn); }
+.svc-state[data-state="failed"] { color: var(--c-err); }
+.svc-state[data-state="idle"] { color: var(--pico-muted-color); }
 .row-empty { font-size: 0.8rem; color: var(--pico-muted-color); margin: 0.2rem 0 0; }
 
 .dash-versions { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pico-muted-color); padding: 0.2rem 0.1rem; }

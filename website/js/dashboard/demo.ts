@@ -265,6 +265,10 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         { root: "~/Repos/magus", hits: Math.round(hits * 0.82), misses: Math.round(misses * 0.8), errors, lastAccessTime: timestampFromMs(now - 1200) },
         { root: "~/Repos/tack2", hits: Math.round(hits * 0.18), misses: Math.round(misses * 0.2), errors: 0, lastAccessTime: timestampFromMs(now - 38_000) },
       ],
+      services: [
+        { id: "svc9f21", label: "postgres:16", command: "docker run postgres:16", ports: ["5432"], state: "running", dependents: 3, startedAt: timestampFromMs(now - 214_000) },
+        { id: "svc4c08", label: "redis:7", command: "docker run redis:7-alpine", ports: ["6379"], state: "idle", dependents: 0, startedAt: timestampFromMs(now - 88_000) },
+      ],
       magusVersion: "1.4.2",
       daemonVersion: "1.4.2",
     };
