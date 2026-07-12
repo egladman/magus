@@ -8,24 +8,24 @@
 // when the bar reveals again. No-ops when the bar is absent (no release shipped); when
 // localStorage is unavailable the bar simply always reveals.
 
-(function () {
-  var bar = document.getElementById("announcement-bar");
+export function initAnnouncement(): void {
+  const bar = document.getElementById("announcement-bar");
   if (!bar) return;
 
-  var version = bar.getAttribute("data-version") || "";
-  var KEY = "announcement-dismissed";
+  const version = bar.getAttribute("data-version") || "";
+  const KEY = "announcement-dismissed";
 
-  var dismissed = false;
+  let dismissed = false;
   try { dismissed = localStorage.getItem(KEY) === version; } catch (e) {}
   // Reveal only when this version is undismissed. Hidden-by-default + opt-in reveal is
   // the inverse of the old "show then hide", so nothing paints that will be taken away.
   if (!dismissed) bar.classList.add("is-shown");
 
-  var close = bar.querySelector(".announcement-close");
+  const close = bar.querySelector(".announcement-close");
   if (close) {
     close.addEventListener("click", function () {
       bar.classList.remove("is-shown");
       try { localStorage.setItem(KEY, version); } catch (e) {}
     });
   }
-})();
+}

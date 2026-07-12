@@ -16,18 +16,19 @@
 // The bundle is NOT precached by the SW (3 MB; cache-first same-origin on first use).
 // The import path resolves relative to gen/main.js (where this module is bundled),
 // so ./assets/mermaid.js is correct regardless of the page's URL depth.
-if (document.querySelector("code.language-mermaid")) {
+export function initMermaid(): void {
+  if (!document.querySelector("code.language-mermaid")) return;
   import("./assets/mermaid.js").then((m) => {
     const root = document.documentElement;
 
     // Capture each diagram's source once. Mermaid replaces the .mermaid node's
     // contents with an <svg> on render, so re-renders restore the source from here.
-    const blocks = [];
+    const blocks: { el: HTMLDivElement; src: string | null }[] = [];
     document.querySelectorAll("pre > code.language-mermaid").forEach((code) => {
       const div = document.createElement("div");
       div.className = "mermaid";
       div.textContent = code.textContent;
-      code.parentElement.replaceWith(div);
+      code.parentElement?.replaceWith(div);
       blocks.push({ el: div, src: code.textContent });
     });
 
@@ -40,7 +41,7 @@ if (document.querySelector("code.language-mermaid")) {
       // One computed-style read per render; pico() pulls each Pico custom
       // property off it, falling back when the variable is unset.
       const cs = getComputedStyle(root);
-      const pico = (name, fallback) => cs.getPropertyValue(name).trim() || fallback;
+      const pico = (name: string, fallback: string): string => cs.getPropertyValue(name).trim() || fallback;
 
       const bg = pico("--pico-background-color", dark ? "#13171f" : "#ffffff");
       // Pico's code-block tint: a surface that reads as distinct from the page
@@ -108,7 +109,7 @@ if (document.querySelector("code.language-mermaid")) {
       attributeFilter: ["data-theme"],
     });
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
-  }).catch(function (err) {
+  }).catch((err) => {
     // Load or render failed (e.g. not yet cached offline, or a bad diagram):
     // leave the <pre> source visible rather than letting the import reject
     // unhandled - the diagram reads as its (legible) source text. Warn (do not

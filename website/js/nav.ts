@@ -2,7 +2,7 @@
 // as an ordinary .outline button, so it needs none of the overrides a <details> would);
 // this toggles the dropdown open/closed. No-ops on desktop (the button is display:none)
 // and, since it only shows under .js, no-JS visitors keep the links inline instead.
-(function () {
+export function initNav(): void {
   const btn = document.querySelector(".nav-toggle");
   const right = document.querySelector(".nav-right");
   if (!btn || !right) return;
@@ -30,4 +30,4 @@
   right.addEventListener("click", function (e: Event) {
     if ((e.target as Element).closest(".nav-links a")) setOpen(false);
   });
-})();
+}

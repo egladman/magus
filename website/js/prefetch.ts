@@ -6,7 +6,7 @@
 // actually navigates; the perceived latency drops without paying the cost of
 // SPA-style navigation. Enhancement only: no JS, no prefetch.
 
-(function () {
+export function initPrefetch(): void {
   if (typeof window === "undefined") return;
   const origin = window.location.origin;
   const seen = new Set<string>();
@@ -44,4 +44,4 @@
 
   document.addEventListener("mouseover", onHover, { passive: true });
   document.addEventListener("touchstart", onHover, { passive: true });
-})();
+}

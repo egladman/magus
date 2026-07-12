@@ -3,26 +3,26 @@
 // choice persists across pages. With no stored preference the sidebar starts
 // open on the wide (two-column) layout and collapsed on narrow screens. No-ops
 // where there is no .with-toc grid.
-(function () {
-  var grid = document.querySelector(".with-toc");
+export function initTocToggle(): void {
+  const grid = document.querySelector(".with-toc");
   if (!grid) return;
 
-  var KEY = "toc-collapsed";
-  var stored = null;
+  const KEY = "toc-collapsed";
+  let stored: string | null = null;
   try { stored = localStorage.getItem(KEY); } catch (e) {}
-  var collapsed = stored === null ? window.innerWidth < 1024 : stored === "1";
+  let collapsed = stored === null ? window.innerWidth < 1024 : stored === "1";
 
   // A document-outline glyph (a page with heading lines), deliberately NOT a plain
   // three-line "list": the navbar's hamburger menu button is three lines, so a page
   // shape keeps this "table of contents" control from being mistaken for site nav.
-  var TOC_ICON =
+  const TOC_ICON =
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>' +
     '<polyline points="14 2 14 8 20 8"></polyline>' +
     '<line x1="8" y1="13" x2="14" y2="13"></line>' +
     '<line x1="8" y1="17" x2="16" y2="17"></line></svg>';
 
-  var btn = document.createElement("button");
+  const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "toc-toggle outline";
   btn.innerHTML = TOC_ICON; // one stable icon; state is shown by the active style, not an icon swap
@@ -31,8 +31,9 @@
   // so search.js can drop its field in beside it. Resolve the toolbar within the
   // enclosing <main> - the same scope search.js searches - so whichever script
   // runs first wins and the other reuses it, rather than each making its own.
-  var main = grid.closest("main") || grid.parentNode;
-  var tools = main.querySelector(".page-tools");
+  const main = grid.closest("main") || grid.parentNode;
+  if (!main) return;
+  let tools = main.querySelector(".page-tools");
   if (!tools) {
     tools = document.createElement("div");
     tools.className = "page-tools";
@@ -49,21 +50,23 @@
   // Two modes, chosen by viewport. Desktop: the toggle collapses the sidebar and
   // the article reflows to full width (persisted). Mobile: the toggle drops a
   // top-sheet tray down over a dimming backdrop.
-  var mq = window.matchMedia("(max-width: 1023px)");
-  var tocAside = grid.querySelector(".toc");
-  var backdrop = null;
+  const mq = window.matchMedia("(max-width: 1023px)");
+  const tocAside = grid.querySelector(".toc");
+  let backdrop: HTMLDivElement | null = null;
 
-  function setLabel(open) {
-    var label = open ? "Hide table of contents" : "Show table of contents";
+  function setLabel(open: boolean): void {
+    const label = open ? "Hide table of contents" : "Show table of contents";
     btn.setAttribute("aria-label", label);
     btn.setAttribute("title", label);
     btn.setAttribute("aria-expanded", open ? "true" : "false");
   }
-  function applyDesktop() {
+  // A const arrow (not a hoisted function declaration) so the null-guard above
+  // narrows grid to non-null inside it.
+  const applyDesktop = (): void => {
     grid.classList.toggle("toc-collapsed", collapsed);
     setLabel(!collapsed);
-  }
-  function openSheet() {
+  };
+  function openSheet(): void {
     if (!tocAside) return;
     tocAside.classList.add("toc-sheet-open");
     if (!backdrop) {
@@ -74,7 +77,7 @@
     }
     setLabel(true);
   }
-  function closeSheet() {
+  function closeSheet(): void {
     if (tocAside) tocAside.classList.remove("toc-sheet-open");
     if (backdrop) { backdrop.remove(); backdrop = null; }
     setLabel(false);
@@ -82,7 +85,7 @@
   // Reconcile state for the current breakpoint: on mobile the TOC is a closed
   // bottom sheet (never desktop-collapsed, which would display:none it); on
   // desktop the sheet is closed and the persisted collapse state applies.
-  function syncMode() {
+  const syncMode = (): void => {
     closeSheet();
     if (mq.matches) {
       grid.classList.remove("toc-collapsed");
@@ -90,7 +93,7 @@
     } else {
       applyDesktop();
     }
-  }
+  };
   syncMode();
 
   btn.addEventListener("click", function () {
@@ -105,45 +108,49 @@
   });
 
   // Close the sheet on Escape and when a TOC link is tapped (the page navigates).
-  document.addEventListener("keydown", function (e) {
+  document.addEventListener("keydown", function (e: KeyboardEvent) {
     if (e.key === "Escape") closeSheet();
   });
   if (tocAside) {
-    tocAside.addEventListener("click", function (e) {
-      if (mq.matches && e.target.closest("a")) closeSheet();
+    tocAside.addEventListener("click", function (e: Event) {
+      const t = e.target;
+      if (mq.matches && t instanceof Element && t.closest("a")) closeSheet();
     });
   }
   // Reset cleanly when crossing the breakpoint.
   mq.addEventListener("change", syncMode);
-})();
+}
 
 // Table-of-contents scroll-spy. Highlights the TOC link for the section
 // currently in view by setting aria-current="page" on it (Pico styles that with
 // an underline + primary color, matching the top-nav "you are here" indicator).
 // No-ops on pages that have no .toc sidebar.
-(function () {
-  var toc = document.querySelector(".toc nav");
+export function initScrollSpy(): void {
+  const toc = document.querySelector(".toc nav");
   if (!toc) return;
 
   // Map each heading id -> its TOC link, and collect the headings to observe.
-  var links = {};
-  toc.querySelectorAll('a[href^="#"]').forEach(function (a) {
+  const links: Record<string, Element> = {};
+  toc.querySelectorAll('a[href^="#"]').forEach((a) => {
     // A malformed fragment (e.g. a lone "%") makes decodeURIComponent throw;
     // fall back to the raw slug so one bad link can't abort scroll-spy setup.
-    var raw = a.getAttribute("href").slice(1), id;
+    const href = a.getAttribute("href");
+    if (!href) return;
+    const raw = href.slice(1);
+    let id: string;
     try { id = decodeURIComponent(raw); } catch (e) { id = raw; }
     if (id) links[id] = a;
   });
 
-  var headings = [];
-  Object.keys(links).forEach(function (id) {
-    var el = document.getElementById(id);
+  const headings: HTMLElement[] = [];
+  Object.keys(links).forEach((id) => {
+    const el = document.getElementById(id);
     if (el) headings.push(el);
   });
   if (!headings.length) return;
 
-  var current = null;
-  function setCurrent(id) {
+  let current: string | null = null;
+  function setCurrent(id: string): void {
     if (id === current) return;
     if (current && links[current]) links[current].removeAttribute("aria-current");
     current = id;
@@ -153,10 +160,10 @@
   // Track which headings are above the top of the viewport (offset to clear the
   // sticky header). The lowest such heading is the section being read; if none
   // are above yet, highlight the first.
-  var visible = new Set();
-  var observer = new IntersectionObserver(
-    function (entries) {
-      entries.forEach(function (e) {
+  const visible = new Set<string>();
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
         if (e.isIntersecting) visible.add(e.target.id);
         else visible.delete(e.target.id);
       });
@@ -165,27 +172,27 @@
     // rootMargin takes only px/% (no rem): -72px ~= the 4.5rem sticky header.
     { rootMargin: "-72px 0px -70% 0px", threshold: 0 }
   );
-  headings.forEach(function (h) { observer.observe(h); });
+  headings.forEach((h) => { observer.observe(h); });
 
-  function pick() {
+  function pick(): void {
     if (visible.size) {
       // Choose the topmost heading still intersecting the active band.
-      var best = null, bestTop = Infinity;
-      headings.forEach(function (h) {
+      let best: string | null = null, bestTop = Infinity;
+      headings.forEach((h) => {
         if (!visible.has(h.id)) return;
-        var top = h.getBoundingClientRect().top;
+        const top = h.getBoundingClientRect().top;
         if (top < bestTop) { bestTop = top; best = h.id; }
       });
       if (best) setCurrent(best);
       return;
     }
     // Nothing in the band: pick the last heading scrolled past, else the first.
-    var passed = null;
-    headings.forEach(function (h) {
+    let passed: string | null = null;
+    headings.forEach((h) => {
       if (h.getBoundingClientRect().top < 80) passed = h.id;
     });
     setCurrent(passed || headings[0].id);
   }
 
   pick();
-})();
+}

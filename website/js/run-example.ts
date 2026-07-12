@@ -7,36 +7,64 @@
 // reuse the cached module. Also adds an "Open in Playground ↗" link (opens in a
 // new tab) that deep-links the snippet into /playground/#source=<base64url>.
 
-(function () {
-  var blocks = document.querySelectorAll("pre[data-runnable]");
+// The playground WASM exposes window.buzz.* inside its Go main(), and wasm_exec.js
+// defines window.Go; declare just the surface this module touches.
+interface BuzzOp {
+  target?: string;
+  name: string;
+  detail?: string;
+  kind: string;
+}
+interface BuzzResult {
+  ok: boolean;
+  output?: string;
+  trace?: BuzzOp[];
+}
+interface BuzzRuntime {
+  evalBuzz(src: string): BuzzResult;
+  evalBuzzWithRecorder(src: string): BuzzResult;
+}
+interface GoInstance {
+  run(instance: WebAssembly.Instance): void;
+  importObject: WebAssembly.Imports;
+}
+declare global {
+  interface Window {
+    buzz?: BuzzRuntime;
+    Go: { new (): GoInstance };
+  }
+}
+
+export function initRunExample(): void {
+  const blocks = document.querySelectorAll("pre[data-runnable]");
   if (!blocks.length) return;
 
   // Resolve the playground/ folder relative to this bundle so links work under
   // the /magus/ subpath and local preview alike.
-  var ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
+  const ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
 
   // Lazy WASM loader. Returns a Promise that resolves once window.buzz is ready.
-  var wasmPromise = null;
-  function ensureBuzz() {
-    if (window.buzz && window.buzz.evalBuzz) return Promise.resolve();
+  let wasmPromise: Promise<void> | null = null;
+  function ensureBuzz(): Promise<void> {
+    if (window.buzz && typeof window.buzz.evalBuzz === "function") return Promise.resolve();
     if (wasmPromise) return wasmPromise;
-    wasmPromise = new Promise(function (resolve, reject) {
+    wasmPromise = new Promise<void>(function (resolve, reject) {
       // wasm_exec.js is a classic script that defines globalThis.Go; append it,
       // wait for load, then instantiate buzz.wasm exactly like playground.html.
-      var s = document.createElement("script");
+      const s = document.createElement("script");
       s.src = ROOT + "playground/wasm_exec.js";
       s.onload = function () {
         try {
-          var go = new window.Go();
-          var loader = fetch(ROOT + "playground/buzz.wasm");
-          var startWith = function (mod) {
+          const go = new window.Go();
+          const loader = fetch(ROOT + "playground/buzz.wasm");
+          const startWith = function (mod: WebAssembly.WebAssemblyInstantiatedSource): void {
             go.run(mod.instance);
             // The playground exposes window.buzz.evalBuzz inside main(); poll
             // briefly for it to appear before resolving (Go's main is async under
             // asyncify).
-            var deadline = Date.now() + 5000;
+            const deadline = Date.now() + 5000;
             (function wait() {
-              if (window.buzz && window.buzz.evalBuzz) return resolve();
+              if (window.buzz && typeof window.buzz.evalBuzz === "function") return resolve();
               if (Date.now() > deadline) return reject(new Error("buzz.evalBuzz not ready"));
               setTimeout(wait, 30);
             })();
@@ -56,11 +84,11 @@
     return wasmPromise;
   }
 
-  var PLAY =
+  const PLAY =
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
 
-  function base64url(text) {
+  function base64url(text: string): string {
     // UTF-8 -> latin1 (unescape(encodeURIComponent)) -> btoa -> URL-safe alphabet.
     return btoa(unescape(encodeURIComponent(text)))
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -70,26 +98,26 @@
   // playground console's dry-run output: any printed output first, then one line
   // per recorded op ("[target] name detail  kind · recorded"), then a summary. On
   // failure it shows the diagnostic; with no ops it says nothing would run.
-  function formatTrace(r) {
+  function formatTrace(r: BuzzResult | null): string {
     if (!r) return "(no result)";
     if (!r.ok) return (r.output ? r.output + "\n" : "") + "dry-run failed";
-    var lines = [];
+    const lines: string[] = [];
     if (r.output) lines.push(r.output);
-    var trace = r.trace || [];
-    for (var i = 0; i < trace.length; i++) {
-      var op = trace[i];
-      var tag = op.target ? "[" + op.target + "] " : "";
-      var detail = op.detail ? " " + op.detail : "";
+    const trace = r.trace || [];
+    for (let i = 0; i < trace.length; i++) {
+      const op = trace[i];
+      const tag = op.target ? "[" + op.target + "] " : "";
+      const detail = op.detail ? " " + op.detail : "";
       lines.push(tag + op.name + detail + "  " + op.kind + " · recorded");
     }
-    var n = trace.length;
+    const n = trace.length;
     lines.push("[pass] dry-run: " + n + " step" + (n === 1 ? "" : "s") +
       " recorded, nothing executed");
     return lines.join("\n");
   }
 
-  blocks.forEach(function (pre) {
-    var code = pre.querySelector("code");
+  blocks.forEach((pre) => {
+    const code = pre.querySelector("code");
     if (!code) return;
 
     // Couple the controls to the code block itself: reuse the .code-block wrapper
@@ -97,21 +125,23 @@
     // BOTTOM of that wrapper so Run + Open-in-Playground read as part of the block
     // rather than a row floating above it. The output panel attaches directly below
     // the same block, so the whole thing is one visually-connected unit.
-    var block = pre.parentElement && pre.parentElement.classList.contains("code-block")
-      ? pre.parentElement
-      : (function () {
-          var w = document.createElement("div");
-          w.className = "code-block";
-          pre.parentNode.insertBefore(w, pre);
-          w.appendChild(pre);
-          return w;
-        })();
+    const parent = pre.parentElement;
+    let block: HTMLElement;
+    if (parent && parent.classList.contains("code-block")) {
+      block = parent;
+    } else {
+      const w = document.createElement("div");
+      w.className = "code-block";
+      pre.parentNode?.insertBefore(w, pre);
+      w.appendChild(pre);
+      block = w;
+    }
     block.classList.add("runnable");
 
-    var bar = document.createElement("div");
+    const bar = document.createElement("div");
     bar.className = "runnable-bar";
 
-    var runBtn = document.createElement("button");
+    const runBtn = document.createElement("button");
     runBtn.type = "button";
     runBtn.className = "run-example";
     runBtn.innerHTML = PLAY + '<span>Run</span>';
@@ -120,15 +150,15 @@
     runBtn.setAttribute("data-tooltip", "Run this snippet");
     bar.appendChild(runBtn);
 
-    var openLink = document.createElement("a");
+    const openLink = document.createElement("a");
     openLink.className = "open-in-playground";
-    openLink.href = ROOT + "playground/#source=" + base64url(code.textContent);
+    openLink.href = ROOT + "playground/#source=" + base64url(code.textContent ?? "");
     openLink.target = "_blank";
     openLink.rel = "noopener";
     openLink.setAttribute("title", "Open this snippet in the playground (new tab)");
     openLink.setAttribute("data-tooltip", "Open in playground");
     openLink.append("Open in Playground ");
-    var openArrow = document.createElement("span");
+    const openArrow = document.createElement("span");
     openArrow.className = "oip-arrow";
     openArrow.setAttribute("aria-hidden", "true");
     openArrow.textContent = "↗";
@@ -138,43 +168,45 @@
     block.appendChild(bar);
 
     // Output panel inserted after the whole block on first run.
-    var out = null;
-    function panel() {
+    let out: HTMLPreElement | null = null;
+    function panel(): HTMLPreElement {
       if (out) return out;
       out = document.createElement("pre");
       out.className = "runnable-output";
-      block.parentNode.insertBefore(out, block.nextSibling);
+      block.parentNode?.insertBefore(out, block.nextSibling);
       return out;
     }
 
-    runBtn.addEventListener("click", function () {
+    runBtn.addEventListener("click", () => {
       runBtn.disabled = true;
-      var oldLabel = runBtn.querySelector("span").textContent;
-      runBtn.querySelector("span").textContent = "Running…";
+      const span = runBtn.querySelector("span");
+      const oldLabel = span?.textContent ?? "";
+      if (span) span.textContent = "Running…";
       // Spell examples opt into the dry-run recorder (data-recorder): their
       // targets fork tools, so evalBuzz can't run them, but evalBuzzWithRecorder
       // reports the tool invocations they WOULD trigger as a trace. Module
       // examples stay on the plain evalBuzz path (print output).
-      var recorder = pre.hasAttribute("data-recorder");
-      ensureBuzz().then(function () {
-        var pnl = panel();
+      const recorder = pre.hasAttribute("data-recorder");
+      ensureBuzz().then(() => {
+        const pnl = panel();
+        const src = code.textContent ?? "";
         if (recorder) {
-          var r = window.buzz.evalBuzzWithRecorder(code.textContent);
+          const r = window.buzz!.evalBuzzWithRecorder(src);
           pnl.textContent = formatTrace(r);
           pnl.classList.toggle("failed", !(r && r.ok));
         } else {
-          var r = window.buzz.evalBuzz(code.textContent);
+          const r = window.buzz!.evalBuzz(src);
           pnl.textContent = (r && r.output) ? r.output : "(no output)";
           pnl.classList.toggle("failed", !(r && r.ok));
         }
-      }).catch(function (e) {
-        var pnl = panel();
+      }).catch((e) => {
+        const pnl = panel();
         pnl.textContent = "Failed to load the Buzz runtime: " + e.message;
         pnl.classList.add("failed");
-      }).then(function () {
+      }).then(() => {
         runBtn.disabled = false;
-        runBtn.querySelector("span").textContent = oldLabel;
+        if (span) span.textContent = oldLabel;
       });
     });
   });
-})();
+}

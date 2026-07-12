@@ -10,25 +10,25 @@
 // rather than mis-highlighted.
 //
 // The import path resolves relative to gen/main.js (where this module is bundled).
-(function () {
-  var blocks = document.querySelectorAll('pre > code[class*="language-"]');
+export function initSyntaxHighlight(): void {
+  const blocks = document.querySelectorAll('pre > code[class*="language-"]');
   if (!blocks.length) return;
 
   // Skip mermaid fences: mermaid-init.js turns those into diagrams.
-  var work = [];
-  blocks.forEach(function (el) {
+  const work: Element[] = [];
+  blocks.forEach((el) => {
     if (!el.classList.contains("language-mermaid")) work.push(el);
   });
   if (!work.length) return;
 
   import("./assets/hljs.js")
-    .then(function (m) {
-      var hljs = m.default;
+    .then((m) => {
+      const hljs = m.default;
 
       // Minimal Buzz grammar: keywords, types, strings (plain and $"..."
       // interpolated), line/block comments, and numbers. Enough for the
       // magusfile snippets to read in color without a full language spec.
-      hljs.registerLanguage("buzz", function (hl) {
+      hljs.registerLanguage("buzz", function (hl: any) {
         return {
           name: "Buzz",
           keywords: {
@@ -57,17 +57,17 @@
 
       hljs.configure({ ignoreUnescapedHTML: true });
 
-      work.forEach(function (el) {
-        var cls = (el.className.match(/language-([\w-]+)/) || [])[1];
+      work.forEach((el) => {
+        const cls = (el.className.match(/language-([\w-]+)/) || [])[1];
         // Only highlight languages we actually have a grammar for; otherwise
         // leave the block as plain (but still styled) text.
         if (cls && hljs.getLanguage(cls)) hljs.highlightElement(el);
       });
     })
-    .catch(function (err) {
+    .catch((err) => {
       // Load or highlight failed (e.g. not yet cached offline): code blocks stay
       // as legible plain text. Warn (do not swallow): an empty catch here once hid
       // a broken vendor bundle for a day.
       console.warn("syntax highlight skipped:", err);
     });
-})();
+}

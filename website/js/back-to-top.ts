@@ -3,7 +3,7 @@
 // with the mobile TOC bottom-sheet (both sit in the bottom-right / bottom safe
 // area) but is a pure enhancement: with JS off, the button is never inserted.
 
-(function () {
+export function initBackToTop(): void {
   if (typeof window === "undefined") return;
 
   // One button, kept out of the DOM until it's needed.
@@ -35,4 +35,4 @@
     if (!ticking) { requestAnimationFrame(apply); ticking = true; }
   }, { passive: true });
   apply();
-})();
+}

@@ -9,7 +9,7 @@
 // be true at once (an offline snapshot is the normal case for `magus graph open`
 // without --serve), so they are separate elements, never merged into one.
 
-(function () {
+export function initOfflineBadge(): void {
   if (typeof window === "undefined") return;
   const badge = document.getElementById("offline-badge");
   if (!badge) return;
@@ -23,4 +23,4 @@
   window.addEventListener("online", apply);
   window.addEventListener("offline", apply);
   apply();
-})();
+}

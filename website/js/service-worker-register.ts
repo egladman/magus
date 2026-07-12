@@ -12,7 +12,7 @@
 
 import { showRefreshToast } from "./lib/refresh-toast.js";
 
-(function () {
+export function initServiceWorker(): void {
   if (typeof navigator === "undefined") return;
   if (!("serviceWorker" in navigator)) return;
   if (location.protocol !== "https:" && location.hostname !== "localhost") return;
@@ -45,4 +45,4 @@ import { showRefreshToast } from "./lib/refresh-toast.js";
       // Registration failures are non-fatal - the plain static site works fine.
     });
   });
-})();
+}

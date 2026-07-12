@@ -7,7 +7,7 @@
 // date would change every day and trip the render's drift gate. No-ops where there
 // is no provenance strip.
 
-(function () {
+export function initRelativeTime(): void {
   const times = document.querySelectorAll(".page-provenance time[datetime]");
   if (!times.length) return;
 
@@ -40,4 +40,4 @@
     if (!t.getAttribute("title")) t.setAttribute("title", t.textContent ?? "");
     t.textContent = relative(d.getTime(), now);
   });
-})();
+}

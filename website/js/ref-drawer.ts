@@ -4,7 +4,7 @@
 // the sections into the drawer (so the same blocks serve as inline no-JS content AND as the drawer
 // body - no duplicate markup) and wires open/close: the trigger, the close button, a backdrop
 // click, and Escape. No-ops where there is no drawer, like every other main.js module.
-(function () {
+export function initRefDrawer(): void {
   const drawer = document.getElementById("ref-drawer");
   const backdrop = document.getElementById("ref-backdrop");
   if (!drawer || !backdrop) return;
@@ -178,4 +178,4 @@
   document.documentElement.classList.add("ref-instant");
   render();
   requestAnimationFrame(() => document.documentElement.classList.remove("ref-instant"));
-})();
+}

@@ -1,29 +1,50 @@
-// main.ts - the deferred bundle entry. It imports every non-critical feature
-// module for its side effects (each guards on the presence of its own DOM targets,
-// so importing them all is safe and cheap). esbuild bundles this to gen/main.js;
-// the heavy CDN libraries the syntax-highlight and mermaid modules pull in stay
-// lazy dynamic import()s, which esbuild leaves as external runtime imports.
+// main.ts - the deferred bundle entry and composition root. Each non-critical
+// feature module exports a named init function; this file imports them all and
+// calls each one explicitly, in a fixed order (below). Every init guards on the
+// presence of its own DOM targets, so running them all on every page is safe and
+// cheap. esbuild bundles this to gen/main.js; the heavy CDN libraries the
+// syntax-highlight and mermaid modules pull in stay lazy dynamic import()s, which
+// esbuild leaves as external runtime imports.
 //
 // Modules are imported with .js specifiers even though the sources are .ts: that is
 // the standard TypeScript convention (the extension names the emitted file), and
-// esbuild resolves each to its .ts source. Modules not yet converted are still .js
-// and resolve directly; the mix is fine (allowJs + esbuild bundle both).
-import "./nav.js";
-import "./toc.js";
-import "./search.js";
+// esbuild resolves each to its .ts source.
+import { initNav } from "./nav.js";
+import { initTocToggle, initScrollSpy } from "./toc.js";
+import { initSearch } from "./search.js";
+import { initRefDrawer } from "./ref-drawer.js";
+import { initConsoleSettings } from "./console-settings.js";
+import { initAnchors } from "./anchors.js";
+import { initCodeCopy } from "./code-copy.js";
+import { initSyntaxHighlight } from "./syntax-highlight.js";
+import { initMermaid } from "./mermaid.js";
+import { initHomeHeading } from "./home-heading.js";
+import { initBackToTop } from "./back-to-top.js";
+import { initPrefetch } from "./prefetch.js";
+import { initRunExample } from "./run-example.js";
+import { initKeyboardHelp } from "./keyboard-help.js";
+import { initAnnouncement } from "./announcement.js";
+import { initRelativeTime } from "./relative-time.js";
+import { initOfflineBadge } from "./offline-badge.js";
+import { initServiceWorker } from "./service-worker-register.js";
+
+initNav();
+initTocToggle();
+initScrollSpy();
+initSearch();
 // ref-drawer runs AFTER search so it can pull the search bar (.page-tools) into the drawer.
-import "./ref-drawer.js";
-import "./console-settings.js"; // the gear settings panel on the console apps (no-op on docs pages)
-import "./anchors.js";
-import "./code-copy.js";
-import "./syntax-highlight.js";
-import "./mermaid.js";
-import "./home-heading.js";
-import "./back-to-top.js";
-import "./prefetch.js";
-import "./run-example.js";
-import "./keyboard-help.js";
-import "./announcement.js";
-import "./relative-time.js";
-import "./offline-badge.js";
-import "./service-worker-register.js";
+initRefDrawer();
+initConsoleSettings(); // the gear settings panel on the console apps (no-op on docs pages)
+initAnchors();
+initCodeCopy();
+initSyntaxHighlight();
+initMermaid();
+initHomeHeading();
+initBackToTop();
+initPrefetch();
+initRunExample();
+initKeyboardHelp();
+initAnnouncement();
+initRelativeTime();
+initOfflineBadge();
+initServiceWorker();

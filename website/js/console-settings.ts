@@ -6,7 +6,7 @@
 import { getPollMs, setPollMs, getDefaultHost, setDefaultHost } from "./lib/settings.js";
 import { showRefreshToast } from "./lib/refresh-toast.js";
 
-(function () {
+export function initConsoleSettings(): void {
   const btn = document.getElementById("settings-btn");
   const panel = document.getElementById("settings-panel");
   if (!btn || !panel) return;
@@ -52,4 +52,4 @@ import { showRefreshToast } from "./lib/refresh-toast.js";
   });
 
   render();
-})();
+}
