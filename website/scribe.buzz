@@ -1646,16 +1646,31 @@ fun writeServiceWorker(site: Site) > void {
     final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
     var body = tmplFile.readAll();
     tmplFile.close();
-    // The cache version is a digest of the precached assets' own digests (same list
-    // as PRECACHE in the template), so it changes exactly when a cached asset changes
-    // and is otherwise byte-identical across re-renders. This deliberately replaces
-    // the old "magus-<HEAD short hash>" form, which changed on every commit, could
-    // never contain its own commit's hash, and so perpetually drifted the gen gate.
-    final precached = ["search-index.json", "playground/wasm_exec.js",
-        "playground/buzz.wasm", "console/graph/explorer.js", "console/graph/graph.css",
-        "logs/log-viewer.js", "logs/logs.css", "dashboard/dashboard.js", "dashboard/dashboard.css",
-        "main.js", "theme.js", "site.css", "console.css", "theme.css",
-        "assets/pico.min.css", "offline/index.html"];
+    // The cache version is a digest of the precached assets' own digests, so it changes
+    // exactly when a cached asset changes and is otherwise byte-identical across
+    // re-renders. This deliberately replaces the old "magus-<HEAD short hash>" form, which
+    // changed on every commit, could never contain its own commit's hash, and so
+    // perpetually drifted the gen gate.
+    //
+    // The list is parsed from the template's OWN PRECACHE array (the single source of
+    // truth) rather than duplicated here - a second hand-maintained copy silently drifted
+    // once (the /console/ move left this list pointing at logs/ and dashboard/ instead of
+    // console/logs/ and console/dashboard/, so the test -f guard below skipped them and
+    // editing those apps never bumped the version -> stale service worker). Only the
+    // PRECACHE block is scanned, so the fetch handler's own BASE + "offline/" is ignored.
+    final pcRest = body.sub(body.indexOf("const PRECACHE = ["));
+    final pcBlock = pcRest.sub(0, pcRest.indexOf("];"));
+    var precached = mut [<str>];
+    foreach (line in pcBlock.split("\n")) {
+        final q = line.indexOf("BASE + \"");
+        if (q != null) {
+            final tail = line.sub(q + 8); // past `BASE + "`
+            var rel = tail.sub(0, tail.indexOf("\""));
+            // A directory URL (e.g. offline/) caches its index.html; hash that real file.
+            if (rel.endsWith("/")) { rel = rel + "index.html"; }
+            precached.append(rel);
+        }
+    }
     var manifest = "";
     foreach (rel in precached) {
         final p = site.outDir + "/" + rel;
