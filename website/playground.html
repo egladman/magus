@@ -469,11 +469,11 @@
     })();
   </script>
   <!-- Keep the reader at the top on load. The WASM focuses the console input once it
-       boots (cmd/buzz-playground), and on a viewport-tall page a plain focus() scrolls
-       past the title + editor down to that input. cmd/buzz-playground now focuses with
-       {preventScroll:true}, but the committed WASM predates that and can't be rebuilt in
-       CI (no TinyGo), so this is the page-side safety net: snap back to the top once the
-       boot overlay (#loading) is removed. A no-op once the WASM ships preventScroll. -->
+       boots (cmd/buzz-playground, with {preventScroll:true}); this is a cross-browser
+       fallback for the few engines that ignore preventScroll - on a viewport-tall page a
+       plain focus() would scroll past the title + editor down to that input, so snap back
+       to the top once the boot overlay (#loading) is removed. A no-op where preventScroll
+       is honored. -->
   <script>
     (function () {
       function toTop() { window.scrollTo(0, 0); }
@@ -486,24 +486,6 @@
       } else {
         window.addEventListener("load", toTop);
       }
-    })();
-  </script>
-  <!-- The status bar shows the parse result plain (no brackets), matching the console
-       apps' status language. cmd/buzz-playground already emits bracket-free "pass"/"fail",
-       but the committed WASM predates that and can't be rebuilt in CI (no TinyGo), so
-       normalize "[pass]"/"[fail]" here until it ships. Idempotent: a bracket-free value
-       does not re-trigger the strip, so there is no observer loop. -->
-  <script>
-    (function () {
-      var el = document.getElementById("parse-status");
-      if (!el || !window.MutationObserver) return;
-      function strip() {
-        var t = el.textContent;
-        var s = t.replace(/^\[(pass|fail)\]\s*/, "$1 ");
-        if (s !== t) el.textContent = s;
-      }
-      new MutationObserver(strip).observe(el, { childList: true, characterData: true, subtree: true });
-      strip();
     })();
   </script>
   <!-- Fullscreen toggle: expand the editor panel to fill the screen for an
