@@ -28,7 +28,7 @@
 <body>
     <header class="site-header console-bar">
     <nav class="container-fluid">
-      <ul><li><a href="../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">Log Viewer</h1></li><li><span id="console-demo" class="status-tag console-demo-tag" hidden aria-live="polite">Demo data</span></li></ul>
+      <ul><li><a href="../index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">Log Viewer</h1></li></ul>
       <div class="nav-right">
         <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
         <span class="nav-divider" aria-hidden="true"></span>
@@ -66,7 +66,7 @@
         <div class="log-toolbar">
           <div class="log-filter">
             <input id="log-filter" type="text" placeholder="Filter: status:fail  target:mm  <text>" aria-label="Filter the log" spellcheck="false" autocomplete="off" enterkeyhint="search">
-            <span class="help-glyph" tabindex="0" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">?</span>
+            <span class="log-filter-help" tabindex="0" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">?</span>
           </div>
           <!-- Grouped, wrapping toolbar: clusters by use case (Live / View / Time / Clipboard /
                Open) so it reads as chunks and wraps cluster-by-cluster instead of one long row. -->

@@ -398,6 +398,15 @@ html.ref-instant body, html.ref-instant .ref-drawer, html.ref-instant .ref-backd
   --pico-color: var(--pico-contrast); color: var(--pico-muted-color);
 }
 .ref-drawer-close:hover, .ref-drawer-close:focus-visible { color: var(--pico-contrast); background: none; }
+/* Documentation link list in a console app's reference drawer: each dedicated doc as a titled link
+   over its own one-line description (pulled from the page frontmatter). Plain title that firms to the
+   primary blue on hover (the Claude-Desktop idiom). */
+.ref-doclinks { list-style: none; margin: 0; padding: 0; }
+.ref-doclinks li { margin: 0 0 0.7rem; }
+.ref-doclinks a { font-weight: 600; text-decoration: none; }
+.ref-doclinks a:hover, .ref-doclinks a:focus-visible { color: var(--pico-primary); }
+.ref-doclink-desc { display: block; font-size: 0.8rem; color: var(--pico-muted-color); margin-top: 0.1rem; }
+
 /* Reference sections are inline for no-JS; with JS, ref-drawer.js relocates them into the drawer,
    so hide them until they land there (no flash at the top of the page), then show them in-drawer. */
 .js .ref-section { display: none; }

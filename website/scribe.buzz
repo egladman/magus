@@ -484,6 +484,46 @@ object Site {
 `, {"root": root, "picks": picks});
     }
 
+    // consoleRefLinks builds the "Documentation" reference-drawer section for a console app
+    // (dashboard/logs/graph): a short list of the dedicated docs most relevant to that surface,
+    // resolved LIVE from the docs corpus so each link's title and description come from the page's
+    // own frontmatter and never drift. The per-app set is seeded (not tag-ranked) because the docs'
+    // frontmatter tags are too sparse in the console/apps domain to order these reliably - but the
+    // links themselves are looked up from the corpus, not hand-written URLs, so a renamed or
+    // re-described page updates here for free. Returns "" when none of the seeds are in the corpus.
+    // ref-drawer.js relocates this .ref-section into the shared drawer like the apps' own sections.
+    fun consoleRefLinks(app: str, root: str) > str {
+        var seed: [str] = mut [];
+        if (app == "graph") {
+            seed = ["knowledge.md", "console.md", "output-refs.md", "glossary.md", "conventions.md"];
+        } else if (app == "logs") {
+            seed = ["output-refs.md", "console.md", "knowledge.md", "glossary.md", "conventions.md"];
+        } else {
+            // The dashboard is the hub, so it links every console-app doc plus the shared references.
+            seed = ["console.md", "knowledge.md", "output-refs.md", "mcp.md", "glossary.md", "conventions.md"];
+        }
+        var links: [{str: any}] = mut [<{str: any}>];
+        foreach (name in seed) {
+            final srcRel = this.docs + "/" + name;
+            foreach (p in this.docPages) {
+                if (p.srcRel == srcRel) {
+                    links.append(mut {"url": p.url, "title": p.title, "desc": p.desc, "hasDesc": p.desc != ""});
+                    break;
+                }
+            }
+        }
+        if (links.len() == 0) { return ""; }
+        return template.render(`  <details class="ref-section" open>
+    <summary>Documentation</summary>
+    <div class="disclosure-body">
+      <ul class="ref-doclinks">
+{{#links}}        <li><a href="{{root}}{{url}}">{{title}}</a>{{#hasDesc}}<span class="ref-doclink-desc">{{desc}}</span>{{/hasDesc}}</li>
+{{/links}}      </ul>
+    </div>
+  </details>
+`, {"root": root, "links": links});
+    }
+
     // loadMeta populates the commit-metadata fields once, shelling out to git. Pinned
     // to the default branch so deployed links stay stable across feature-branch renders.
     fun loadMeta() > void {
@@ -2040,7 +2080,7 @@ fun renderSiteFooter(root: str, site: Site) > str {
 // console.css; nav.js (bundled into every app) drives the dropdown. root is the relative
 // prefix back to gen/'s root, matching renderSiteNav. A backtick raw string holds the
 // Mustache verbatim; {{{icon}}} injects each tile's inner SVG unescaped.
-fun renderConsoleChrome(app: str, root: str) > str {
+fun renderConsoleChrome(app: str, root: str, refExtra: str) > str {
     final tmpl = `  <header class="site-header console-bar">
     <nav class="container-fluid">
       <ul><li><a href="{{root}}index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">{{title}}</h1></li><li><span id="console-demo" class="status-tag console-demo-tag" hidden aria-live="polite">Demo data</span></li></ul>
@@ -2057,7 +2097,7 @@ fun renderConsoleChrome(app: str, root: str) > str {
       </div>
     </nav>
   </header>
-  <div class="ref-backdrop" id="ref-backdrop"></div>
+{{{refExtra}}}  <div class="ref-backdrop" id="ref-backdrop"></div>
   <aside class="ref-drawer" id="ref-drawer" data-relocate-search="true" aria-hidden="true" aria-label="Reference">
     <div class="ref-drawer-head">
       <div class="ref-drawer-head-l">
@@ -2094,7 +2134,7 @@ fun renderConsoleChrome(app: str, root: str) > str {
     if (app == "logs") { title = "Log Viewer"; }
     if (app == "graph") { title = "Graph Explorer"; }
     if (app == "dashboard") { title = "Dashboard"; }
-    return template.render(tmpl, {"root": root, "cells": cells, "title": title});
+    return template.render(tmpl, {"root": root, "cells": cells, "title": title, "refExtra": refExtra});
 }
 
 // renderAnnouncementBar renders a dismissible top strip announcing the newest shipped
@@ -2150,7 +2190,7 @@ fun renderGraph(site: Site) > void {
     final f = io.File.open("graph.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("graph", "../"));
+    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("graph", "../", site.consoleRefLinks("graph", "../")));
     // The default (non-home) CSP meta - site.csp, not site.cspHome. The graph
     // page holds the reader's own dependency graph, so it gets the tighter
     // img-src (no external hosts), same as playground; see renderPlayground's
@@ -2170,7 +2210,7 @@ fun renderLogs(site: Site) > void {
     final f = io.File.open("logs.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("logs", "../"));
+    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("logs", "../", site.consoleRefLinks("logs", "../")));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/logs");
     fs.writeFile(site.outDir + "/logs/index.html", html);
@@ -2192,7 +2232,7 @@ fun renderDashboard(site: Site) > void {
     // (app bar + waffle launcher + reference drawer), injected at its <!-- console-chrome -->
     // placeholder - one source of truth for all three surfaces. Its own bottom status bar and
     // the connect/panels body stay in dashboard.html.
-    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("dashboard", "../"));
+    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("dashboard", "../", site.consoleRefLinks("dashboard", "../")));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/dashboard");
     fs.writeFile(site.outDir + "/dashboard/index.html", html);
@@ -3278,6 +3318,12 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // gets wiped on every generate (see the comment above fs.makeDirectory(site.outDir)),
     // so there is no external source copy to merge in; pruneStaleOutputs() also knows
     // to leave these three paths alone (see its alwaysKeep set).
+    // Gather every docs page's relatedness metadata BEFORE any page renders, so both the console
+    // apps' "Documentation" reference sections (consoleRefLinks) and each docs page's "Related"
+    // cards (renderRelated) can resolve titles/URLs against the full corpus. collectDocPages only
+    // reads frontmatter, so it is free of the render state below.
+    site.collectDocPages("");
+
     renderPlayground(site);
     renderGraph(site);
     renderLogs(site);
@@ -3289,11 +3335,6 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // file would trip the asset check). Changelog-parsing no longer runs at site-build
     // time; it runs only at release-cut time (cmd/magus-utils cut).
     loadReleases(site);
-
-    // Pre-pass: gather every docs page's relatedness metadata before rendering, so
-    // each page's "Related" cards can rank against the full corpus (the render walk
-    // below is single-pass and can't see pages it hasn't reached yet).
-    site.collectDocPages("");
 
     renderRoot(site);
     walk("", site);
