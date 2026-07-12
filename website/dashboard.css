@@ -90,6 +90,10 @@ body.dash-native { margin: 0; }
    bullet; it brightens and tints its box on hover. */
 .tile-collapse {
   width: 1.35rem; height: 1.35rem; margin: 0; padding: 0; border: 0; background: none;
+  /* Pico sets --pico-color to the filled-button text (white) on a bare <button>, so the hover
+     rule below (color:var(--pico-color)) turned the chevron white and invisible. Reset the variable
+     to the real text color so hover firms up instead of vanishing. See pico-bare-button-hover-white. */
+  --pico-color: var(--pico-contrast);
   color: var(--pico-muted-color); cursor: pointer; line-height: 1; flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: var(--pico-border-radius); transition: color 0.12s ease, background 0.12s ease;
@@ -380,9 +384,12 @@ a.hub-card:hover, a.hub-card:focus-visible {
 .insight-refresh {
   margin: 0 0 0 auto; padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
   border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--pico-card-sectioning-background-color); color: var(--pico-color); cursor: pointer;
+  /* Reads blue like the other actions, not white: on a bare <button> Pico resolves --pico-color to
+     white, so the old color:var(--pico-color) rendered white-on-light (invisible). Use the info blue
+     directly and firm the border on hover. See pico-bare-button-hover-white. */
+  background: var(--pico-card-sectioning-background-color); color: var(--c-info); cursor: pointer;
 }
-.insight-refresh:hover { color: var(--c-info); border-color: var(--c-info); }
+.insight-refresh:hover { color: var(--c-info); border-color: var(--c-info); background: color-mix(in srgb, var(--c-info) 8%, var(--pico-card-sectioning-background-color)); }
 
 /* uPlot base styles (vendored from uplot/dist/uPlot.min.css, MIT). Inlined here
    rather than imported in the TS entry: the dashboard's CSS is minified as a

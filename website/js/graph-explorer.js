@@ -2607,14 +2607,30 @@ function clearDisconnectBanner() {
 
 function updateLiveBadge() {
   const badge = el("live-badge");
-  if (!badge) return;
-  if (liveHost) {
-    const ws = liveWorkspaceName || liveHost;
-    badge.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
-    badge.hidden = false;
-    badge.className = liveConnected ? "live-badge live-badge-connected" : "live-badge live-badge-disconnected";
-  } else {
-    badge.hidden = true;
+  if (badge) {
+    if (liveHost) {
+      const ws = liveWorkspaceName || liveHost;
+      badge.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
+      badge.hidden = false;
+      badge.className = liveConnected ? "live-badge live-badge-connected" : "live-badge live-badge-disconnected";
+    } else {
+      badge.hidden = true;
+    }
+  }
+  // Mirror the live state onto the shared console status bar's connection dot, so the graph explorer
+  // reads the same as the dashboard and log viewer. A snapshot/demo graph has no live daemon link, so
+  // the dot stays at its default "not connected".
+  const conn = document.getElementById("console-conn");
+  if (conn) {
+    if (liveHost) {
+      conn.textContent = liveConnected ? "connected" : "connecting...";
+      conn.dataset.state = liveConnected ? "connected" : "connecting";
+      delete conn.dataset.health;
+    } else {
+      conn.textContent = "not connected";
+      conn.dataset.state = "none";
+      delete conn.dataset.health;
+    }
   }
 }
 

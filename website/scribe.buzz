@@ -2070,7 +2070,7 @@ fun renderSiteFooter(root: str, site: Site) > str {
     return template.render(tmpl, {"root": root, "gh": GH, "branch": site.metaBranch});
 }
 
-// renderConsoleChrome renders the shared "console app" top bar: the hat home link, the
+// renderConsoleShell renders the shared "console app" top bar: the hat home link, the
 // Google-waffle app launcher (icon tiles for the sibling surfaces), and the theme toggle.
 // It is the app-facing counterpart to renderSiteNav - the daemon apps (/dashboard/,
 // /logs/, /graph/) wear this instead of the docs nav, so they read as one native app
@@ -2080,7 +2080,7 @@ fun renderSiteFooter(root: str, site: Site) > str {
 // console.css; nav.js (bundled into every app) drives the dropdown. root is the relative
 // prefix back to gen/'s root, matching renderSiteNav. A backtick raw string holds the
 // Mustache verbatim; {{{icon}}} injects each tile's inner SVG unescaped.
-fun renderConsoleChrome(app: str, root: str, refExtra: str) > str {
+fun renderConsoleShell(app: str, root: str, refExtra: str) > str {
     final tmpl = `  <header class="site-header console-bar">
     <nav class="container-fluid">
       <ul><li><a href="{{root}}index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">{{title}}</h1></li><li><span id="console-demo" class="status-tag console-demo-tag" hidden aria-live="polite">Demo data</span></li></ul>
@@ -2107,6 +2107,15 @@ fun renderConsoleChrome(app: str, root: str, refExtra: str) > str {
       <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
     </div>
   </aside>
+  <footer class="console-statusbar" aria-label="Status">
+    <div class="statusbar-cluster" id="console-statusbar-left">
+      <span id="console-conn" class="status-item conn" aria-live="polite">not connected</span>
+    </div>
+    <div class="statusbar-cluster statusbar-right">
+      <span id="console-observing" class="status-item status-observing" hidden></span>
+      <span id="offline-badge" class="status-item status-tag status-offline" hidden aria-live="polite">offline</span>
+    </div>
+  </footer>
 `;
     // Inner SVG paths per app tile (the <svg> wrapper is in the template). Backtick raw
     // strings so the double-quoted attributes need no escaping.
@@ -2190,7 +2199,7 @@ fun renderGraph(site: Site) > void {
     final f = io.File.open("graph.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("graph", "../", site.consoleRefLinks("graph", "../")));
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("graph", "../", site.consoleRefLinks("graph", "../")));
     // The default (non-home) CSP meta - site.csp, not site.cspHome. The graph
     // page holds the reader's own dependency graph, so it gets the tighter
     // img-src (no external hosts), same as playground; see renderPlayground's
@@ -2210,7 +2219,7 @@ fun renderLogs(site: Site) > void {
     final f = io.File.open("logs.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("logs", "../", site.consoleRefLinks("logs", "../")));
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("logs", "../", site.consoleRefLinks("logs", "../")));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/logs");
     fs.writeFile(site.outDir + "/logs/index.html", html);
@@ -2218,21 +2227,21 @@ fun renderLogs(site: Site) > void {
 
 // renderDashboard writes gen/dashboard/index.html from the hand-authored dashboard.html -
 // magus's control surface. Like the log viewer and graph explorer it wears the shared console
-// chrome (renderConsoleChrome: app bar + waffle launcher + reference drawer) rather than the
+// shell (renderConsoleShell: app bar + waffle launcher + reference drawer) rather than the
 // docs site nav/footer, so the three read as one native app; it is deliberately absent from the
 // public nav/footer (reachable by direct URL or as an installed PWA shortcut). renderDashboard
-// injects that chrome and the default CSP (no inline scripts; the default connect-src already
+// injects that shell and the default CSP (no inline scripts; the default connect-src already
 // allows loopback for the daemon-bridge status stream). Its stylesheet (gen/dashboard/dashboard.css)
 // and module (gen/dashboard/dashboard.js) are built in site_render and preserved by pruneStaleOutputs.
 fun renderDashboard(site: Site) > void {
     final f = io.File.open("dashboard.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    // The dashboard wears the SAME shared console chrome as the log viewer and graph explorer
-    // (app bar + waffle launcher + reference drawer), injected at its <!-- console-chrome -->
+    // The dashboard wears the SAME shared console shell as the log viewer and graph explorer
+    // (app bar + waffle launcher + reference drawer), injected at its <!-- console-shell -->
     // placeholder - one source of truth for all three surfaces. Its own bottom status bar and
     // the connect/panels body stay in dashboard.html.
-    html = html.replace("<!-- console-chrome -->", renderConsoleChrome("dashboard", "../", site.consoleRefLinks("dashboard", "../")));
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("dashboard", "../", site.consoleRefLinks("dashboard", "../")));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/dashboard");
     fs.writeFile(site.outDir + "/dashboard/index.html", html);
@@ -3287,7 +3296,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // imports as external runtime imports. CSS is minified per-file (not
     // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
     os.execute(["sh", "-c", "esbuild site.css --minify --outfile=" + site.outDir + "/site.css"]);
-    // console.css: the shared console-app chrome (app bar, launcher, status bar) loaded by
+    // console.css: the shared console-app shell (app bar, launcher, status bar) loaded by
     // /dashboard/, /logs/, /graph/ but not the docs pages. Site-wide like site.css, so it
     // is minified to gen root and enumerated in the precache/allowlist next to site.css.
     os.execute(["sh", "-c", "esbuild console.css --minify --outfile=" + site.outDir + "/console.css"]);

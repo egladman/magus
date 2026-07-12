@@ -20,13 +20,13 @@
   <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
-  <!-- console.css: the shared console-app chrome (app bar + launcher), loaded by all three daemon apps. -->
+  <!-- console.css: the shared console-app shell (app bar + launcher), loaded by all three daemon apps. -->
   <link rel="stylesheet" href="../console.css">
   <script src="../theme.js"></script>
   <link rel="stylesheet" href="logs.css">
 </head>
 <body>
-  <!-- console-chrome --><!-- injected at build time by renderLogs() in scribe.buzz; the log viewer wears the shared console app bar (renderConsoleChrome), not the docs nav -->
+  <!-- console-shell --><!-- injected at build time by renderLogs() in scribe.buzz; the log viewer wears the shared console app bar (renderConsoleShell), not the docs nav -->
 
   <main class="container-fluid">
     <section class="panel log-app">
@@ -132,14 +132,9 @@
           <p><strong>The log viewer needs JavaScript.</strong> It decodes the output from the link fragment in your browser. Enable JavaScript, or <a href="../download/">install magus</a> and run <code>magus query output &lt;ref&gt;</code> to print the output in your terminal.</p>
         </div>
       </noscript>
-
-      <!-- Bottom status bar (dashboard-style): the run's live/done state and event count live
-           here at the foot of the panel, out of the top toolbar. -->
-      <footer class="log-statusbar" aria-label="Log status">
-        <span id="log-status" class="badge"></span>
-        <span id="log-count" class="badge count" hidden></span>
-        <span id="offline-badge" class="offline-badge" hidden aria-live="polite">offline - everything on this page is local</span>
-      </footer>
+      <!-- The run's live/done state now drives the shared console status bar's connection dot
+           (log-viewer.js -> #console-conn), and the offline flag lives there too, so the log viewer
+           reads the same as the dashboard and graph explorer instead of its own in-panel footer. -->
     </section>
 
     <details class="url-help ref-section">

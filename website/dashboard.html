@@ -22,19 +22,19 @@
   <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
-  <!-- console.css: the shared console-app chrome (app bar, launcher, status bar), loaded by
+  <!-- console.css: the shared console-app shell (app bar, launcher, status bar), loaded by
        all three daemon apps before their own page sheet. -->
   <link rel="stylesheet" href="../console.css">
   <script src="../theme.js"></script>
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body class="dash-native">
-  <!-- Shared console chrome (app bar + waffle launcher + reference drawer), injected by
-       renderDashboard() from renderConsoleChrome("dashboard", ...) in scribe.buzz - the exact
+  <!-- Shared console shell (app bar + waffle launcher + reference drawer), injected by
+       renderDashboard() from renderConsoleShell("dashboard", ...) in scribe.buzz - the exact
        same chrome the log viewer and graph explorer wear, so the three read as one native app.
        The daemon health/connection/mode and the demo/offline flags live in the bottom status bar
        (see .console-statusbar below), not the top bar. -->
-  <!-- console-chrome -->
+  <!-- console-shell -->
 
   <main class="dash-main">
     <!-- Live panels (hidden until the first status frame arrives). Every tile inside is
@@ -101,26 +101,9 @@
     </div>
   </main>
 
-  <!-- Status bar: a slim, fixed strip pinned to the bottom of the viewport, like a native
-       app / IDE status bar. It carries the daemon liveness that used to crowd the top app bar:
-       the browser<->daemon connection (with its liveness dot), the daemon's health rollup, and
-       a quiet mode note on the left; the offline flag on the right when active. The demo-data
-       indicator is the shared #console-demo pill in the app bar (every console app shares it),
-       not a bottom-bar chip. main.ts keeps the element ids (dash-conn / dash-health / dash-mode /
-       offline-badge). The aria-live regions announce connection and offline changes to assistive tech. -->
-  <footer class="console-statusbar" aria-label="Daemon status">
-    <div class="statusbar-cluster">
-      <span id="dash-conn" class="status-item conn" aria-live="polite">not connected</span>
-      <span id="dash-health" class="status-item status-tag" hidden></span>
-      <span id="dash-mode" class="status-item status-tag status-mode" hidden></span>
-      <!-- Observing-since: when the daemon began collecting the counters. Transparency that the
-           numbers are cumulative from here and not persisted across restarts (main.ts fills it). -->
-      <span id="dash-observing" class="status-item status-observing" hidden></span>
-    </div>
-    <div class="statusbar-cluster statusbar-right">
-      <span id="offline-badge" class="status-item status-tag status-offline" hidden aria-live="polite">offline</span>
-    </div>
-  </footer>
+  <!-- The bottom status bar (connection dot + observing-since + offline) is part of the shared
+       console shell (renderConsoleShell), so it is identical across the dashboard, log viewer and
+       graph explorer; main.ts drives #console-conn / #console-observing here. -->
 
   <noscript>
     <div class="dash-noscript">

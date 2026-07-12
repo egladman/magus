@@ -18,19 +18,19 @@
   <link rel="stylesheet" href="../assets/pico.min.css">
   <link rel="stylesheet" href="../theme.css">
   <link rel="stylesheet" href="../site.css">
-  <!-- console.css: the shared console-app chrome (app bar + launcher), loaded by all three daemon apps. -->
+  <!-- console.css: the shared console-app shell (app bar + launcher), loaded by all three daemon apps. -->
   <link rel="stylesheet" href="../console.css">
   <script src="../theme.js"></script>
   <link rel="stylesheet" href="graph.css">
 </head>
 <body>
-  <!-- console-chrome --><!-- injected at build time by renderGraph() in scribe.buzz; the graph explorer wears the shared console app bar (renderConsoleChrome), not the docs nav -->
+  <!-- console-shell --><!-- injected at build time by renderGraph() in scribe.buzz; the graph explorer wears the shared console app bar (renderConsoleShell), not the docs nav -->
 
   <main class="container-fluid">
 
     <!-- The reference blocks below (Ask, Query syntax and views, Display, Loading a graph by URL)
          are each marked .ref-section; ref-drawer.js moves them into the shared #ref-drawer (emitted
-         by the console chrome, opened from the nav-bar Reference button) at load, along with the
+         by the console shell, opened from the nav-bar Reference button) at load, along with the
          docs search bar. They stay inline (visible) for no-JS. -->
     <!-- Views panel - question-first navigation (max 7 modes). Moved into the reference drawer at load. -->
     <details class="views-panel ref-section" id="ask-panel">
@@ -155,7 +155,6 @@
         <div class="stage-tools">
           <span id="live-badge" class="live-badge" hidden aria-live="polite"></span>
           <span id="snapshot-badge" class="live-badge snapshot-badge" hidden aria-live="polite"></span>
-          <span id="offline-badge" class="offline-badge" hidden aria-live="polite">offline - everything on this page is local</span>
           <button id="fit-btn" class="outline" type="button" title="Zoom to fit the whole graph (or the current matches)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span class="btn-label">Fit</span></button>
           <button id="open-file-btn" class="outline" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span class="btn-label">Open file</span></button>
           <button id="copy-mermaid-btn" class="outline" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first.">&#10697;<span class="btn-label">Copy as Mermaid</span></button>

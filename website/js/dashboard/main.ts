@@ -67,16 +67,25 @@ function setConn(conn: ConnView): void {
 function renderChrome(s: DashboardState): void {
   const demoing = s.conn.state === "demo";
 
-  // Connection item: the real browser<->daemon link. In demo mode there is no connection,
-  // so the pill steps aside for the demo-data flag on the right of the status bar.
-  const c = el("dash-conn");
-  const map: Record<string, string> = {
-    connecting: "connecting...", connected: "connected",
-    disconnected: s.conn.detail || "reconnecting", none: "not connected",
-  };
-  c.textContent = map[s.conn.state] || s.conn.state;
-  c.dataset.state = s.conn.state;
-  c.hidden = demoing;
+  // Connection dot: ONE indicator - a colored dot that reads "connected" (green) when live, and
+  // "not connected" otherwise. When connected, the dot takes the daemon's HEALTH color (green ok /
+  // amber degraded / red down) so a single element carries both "is it live" and "is it well" - no
+  // separate health/mode chips. In demo the board is streaming synthesized data, so the dot reads
+  // "connected" (the app-bar "Demo data" chip is what marks it as synthetic).
+  const c = el("console-conn");
+  if (demoing) {
+    c.textContent = "connected";
+    c.dataset.state = "connected";
+    c.dataset.health = s.status ? s.status.health.cls : "ok";
+  } else {
+    const map: Record<string, string> = {
+      connecting: "connecting...", connected: "connected",
+      disconnected: s.conn.detail || "reconnecting", none: "not connected",
+    };
+    c.textContent = map[s.conn.state] || s.conn.state;
+    c.dataset.state = s.conn.state;
+    if (s.conn.state === "connected" && s.status) { c.dataset.health = s.status.health.cls; } else { delete c.dataset.health; }
+  }
 
   // Demo-data flag: the daemon-free showcase, called out by the shared #console-demo pill in the
   // app bar (the one demo affordance every console app shares), not a dashboard-only corner chip.
@@ -85,17 +94,11 @@ function renderChrome(s: DashboardState): void {
   if (s.status) {
     el("dash-connect").hidden = true;
     el("dash-panels").hidden = false;
-    const badge = el("dash-health");
-    badge.hidden = false;
-    badge.textContent = s.status.health.label;
-    badge.dataset.health = s.status.health.cls;
-    const mode = el("dash-mode");
-    if (s.status.pool.mode) { mode.textContent = s.status.pool.mode; mode.hidden = false; } else { mode.hidden = true; }
   }
 
   // Observing-since: a brief note of when the daemon began collecting these counters, so it is
   // clear the numbers are cumulative from then and are NOT persisted across daemon restarts.
-  const obs = el("dash-observing");
+  const obs = el("console-observing");
   if (s.observingSince) {
     const t = new Date(s.observingSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     obs.textContent = "observing since " + t;

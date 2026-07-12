@@ -29,7 +29,6 @@ function setBtnLabel(btn, text) {
 
 const refEl = el("log-ref");
 const refLabelEl = el("log-ref-label");
-const statusEl = el("log-status");
 const scrollEl = el("log-scroll");
 
 // setRefIdentity fills the file-bar identity strip. A real ref gets a "Reference ID:" label
@@ -837,17 +836,24 @@ function scheduleLiveRender() {
 }
 
 function setLiveStatus(state) {
-  const pill = statusEl;
-  if (!pill) return;
+  // Drive the shared console status bar's connection dot (the same element the dashboard uses), so
+  // the log viewer reads the same as its sibling apps. A live stream is "connected" (green) with the
+  // event count; a finished stream is "done" (still green - it completed cleanly); connecting/
+  // disconnected map to those states. A statically loaded log never calls this, so the dot stays at
+  // its default "not connected", which is accurate (no live daemon link).
+  const conn = document.getElementById("console-conn");
+  if (!conn) return;
   const n = liveEvents.length;
-  const labels = { connecting: "connecting...", streaming: "live", done: "done", disconnected: "disconnected" };
-  // State and event count are SEPARATE pills (no hyphen delimiter) - the state reads like the
-  // dashboard's status pill, the count sits beside it as its own label.
-  pill.textContent = labels[state] || state;
-  pill.classList.toggle("err", state === "disconnected");
-  pill.classList.toggle("live", state === "streaming" || state === "connecting");
-  const countEl = el("log-count");
-  if (countEl) { countEl.textContent = n ? n + " events" : ""; countEl.hidden = !n; }
+  const suffix = n ? " - " + n + " events" : "";
+  if (state === "streaming") {
+    conn.textContent = "connected" + suffix; conn.dataset.state = "connected"; delete conn.dataset.health;
+  } else if (state === "connecting") {
+    conn.textContent = "connecting..."; conn.dataset.state = "connecting"; delete conn.dataset.health;
+  } else if (state === "done") {
+    conn.textContent = "done" + suffix; conn.dataset.state = "connected"; delete conn.dataset.health;
+  } else if (state === "disconnected") {
+    conn.textContent = "disconnected"; conn.dataset.state = "disconnected"; delete conn.dataset.health;
+  }
 }
 
 function base64ToBytes(b64) {

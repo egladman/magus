@@ -1,10 +1,10 @@
-/* console.css - the shared "console app" chrome: the slim top app bar and its waffle app
+/* console.css - the shared "console app" shell: the slim top app bar and its waffle app
    launcher, and the fixed bottom status bar, plus the small accent palette and layout
    custom properties they consume. Loaded by every daemon-facing app surface (/dashboard/,
    /logs/, /graph/) after site.css and before each page's own sheet, so the three read as
    one native app rather than three separate pages. It is deliberately NOT loaded on the
    documentation pages - that is the console-vs-docs distinction. Extracted from
-   dashboard.css, where this chrome originally lived. */
+   dashboard.css, where this shell originally lived. */
 
 :root {
   --console-gap: 0.6rem;
@@ -216,10 +216,15 @@ body:has(.console-bar) {
 .status-item.conn[data-state="reconnecting"]::before { background: var(--c-warn); }
 .status-item.conn[data-state="disconnected"] { color: var(--c-err); }
 .status-item.conn[data-state="disconnected"]::before { background: var(--c-err); }
+/* When connected, the dot takes the daemon's HEALTH color so the one indicator carries both "live"
+   and "well": ok stays green (the connected default above), degraded goes amber, down goes red. */
+.status-item.conn[data-state="connected"][data-health="warn"] { color: var(--c-warn); }
+.status-item.conn[data-state="connected"][data-health="warn"]::before { background: var(--c-warn); }
+.status-item.conn[data-state="connected"][data-health="fail"] { color: var(--c-err); }
+.status-item.conn[data-state="connected"][data-health="fail"]::before { background: var(--c-err); }
 
-/* Demo-data and offline flags: the two conditional right-side indicators (both .pill). "not
-   live data" and "no network" register at a glance without shouting. Hidden by default; the
-   app toggles them. */
+/* Demo-data and offline flags: the two conditional right-side indicators. "not live data" and
+   "no network" register at a glance without shouting. Hidden by default; the app toggles them. */
 .status-demo { color: var(--c-info); }
 .status-offline { color: var(--c-warn); }
 
@@ -332,7 +337,7 @@ body:has(.console-bar) {
 .ref-doc :is(h2, h3, h4) { font-size: 1.02rem; margin-top: 1.1rem; }
 .ref-doc img { max-width: 100%; height: auto; }
 
-/* Reference-section chrome for EVERY drawer (console apps + docs): an uppercase summary over a tinted,
+/* Reference-section styling for EVERY drawer (console apps + docs): an uppercase summary over a tinted,
    outlined body panel. Scoped to #ref-drawer so it matches consistently wherever the drawer is (the
    graph page also has its own inline copies in graph.css). */
 #ref-drawer .ref-section { margin: 0 0 0.9rem; font-size: 0.82rem; }

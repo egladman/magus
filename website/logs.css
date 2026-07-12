@@ -59,28 +59,8 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
    ref itself, so the id reads as the emphasized part. Hidden when there is no ref. */
 .file-bar-id .id-label { color: var(--pico-muted-color); font-weight: 400; }
 .file-bar-id .id-label[hidden] { display: none; }
-/* Bottom status bar: a slim footer at the foot of the panel (the dashboard's status-bar
-   idiom) holding the run's live/done state and event count as outlined pills. */
-.log-statusbar {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.22rem 0.6rem; min-height: 1.7rem;
-  border-top: 1px solid var(--pico-muted-border-color);
-  background: var(--pico-card-sectioning-background-color);
-}
-.log-statusbar .badge {
-  font-size: 0.7rem; color: var(--pico-muted-color);
-  padding: 0.06rem 0.5rem; border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius); white-space: nowrap;
-}
-.log-statusbar .badge.err { color: var(--pico-del-color); border-color: var(--pico-del-color); }
-.log-statusbar .badge.ok { color: var(--pico-ins-color); border-color: var(--pico-ins-color); }
-/* Live-stream pill: a green dot + label while a run streams in. */
-.log-statusbar .badge.live { color: var(--pico-ins-color); border-color: var(--pico-ins-color); font-weight: 600; }
-.log-statusbar .badge.live::before {
-  content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.35em;
-  border-radius: 50%; background: var(--pico-ins-color); vertical-align: middle;
-}
-.offline-badge { font-size: 0.72rem; color: var(--pico-muted-color); }
+/* The run's live/done state now drives the shared console status bar (console.css); the log viewer
+   no longer has its own in-panel footer. */
 
 .log-actions {
   margin-left: auto; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;
