@@ -322,7 +322,10 @@ body:has(.console-bar) {
 #ref-drawer.browsing .ref-docview { display: block; }
 .ref-docview-bar {
   position: sticky; top: 0; z-index: 1; background: var(--pico-card-background-color);
-  margin-bottom: 0.5rem; padding-bottom: 0.4rem;
+  /* Same fix as .ref-drawer-head: all the space around the back bar is opaque padding (top and
+     bottom), never a transparent margin, so scrolling content never leaks through it. It overlays the
+     drawer head (z-index) in browse mode, so its top padding covers the head's spot too. */
+  margin: 0; padding: 0.9rem 0 0.7rem;
 }
 /* Bare button: reset Pico's white --pico-color (see .ref-pin) so hover firms up, never vanishes. */
 .ref-doc-back {
@@ -369,9 +372,15 @@ body { transition: width 0.24s ease; }
 @media (max-width: 720px) { body.ref-pinned { width: 100%; } }
 /* Apply the persisted pinned state on load without animating the slide/reflow every navigation. */
 html.ref-instant body, html.ref-instant .ref-drawer, html.ref-instant .ref-backdrop { transition: none !important; }
+/* The drawer's top padding is moved onto the sticky head (below) so the head's OPAQUE background
+   spans that space - otherwise a transparent sliver above the head lets scrolling content peek. */
+.ref-drawer { padding-top: 0; }
 .ref-drawer-head {
   display: flex; align-items: center; justify-content: space-between;
-  position: sticky; top: 0; margin-bottom: 0.6rem; padding-bottom: 0.4rem;
+  position: sticky; top: 0;
+  /* All spacing around the head is PADDING (inside the opaque background box), never a transparent
+     margin, so scrolling content is fully covered above and below the sticky head. */
+  margin: 0; padding: 0.9rem 0 0.8rem;
   background: var(--pico-card-background-color);
 }
 .ref-drawer-head-l { display: flex; align-items: center; gap: 0.5rem; }

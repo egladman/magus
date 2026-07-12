@@ -843,16 +843,22 @@ function setLiveStatus(state) {
   // its default "not connected", which is accurate (no live daemon link).
   const conn = document.getElementById("console-conn");
   if (!conn) return;
-  const n = liveEvents.length;
-  const suffix = n ? " - " + n + " events" : "";
   if (state === "streaming") {
-    conn.textContent = "connected" + suffix; conn.dataset.state = "connected"; delete conn.dataset.health;
+    conn.textContent = "connected"; conn.dataset.state = "connected"; delete conn.dataset.health;
   } else if (state === "connecting") {
     conn.textContent = "connecting..."; conn.dataset.state = "connecting"; delete conn.dataset.health;
   } else if (state === "done") {
-    conn.textContent = "done" + suffix; conn.dataset.state = "connected"; delete conn.dataset.health;
+    conn.textContent = "done"; conn.dataset.state = "connected"; delete conn.dataset.health;
   } else if (state === "disconnected") {
     conn.textContent = "disconnected"; conn.dataset.state = "disconnected"; delete conn.dataset.health;
+  }
+  // The event count sits on the FAR RIGHT of the bar (its own item, like observing-since), not
+  // appended to the connection state.
+  const count = document.getElementById("console-count");
+  if (count) {
+    const n = liveEvents.length;
+    count.textContent = n ? n + " events" : "";
+    count.hidden = !n;
   }
 }
 
