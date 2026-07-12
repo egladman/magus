@@ -83,6 +83,10 @@ body:has(.console-bar) {
    than the inline links the no-js path falls back to below). */
 .js .console-bar .nav-toggle { display: inline-flex; }
 .console-bar .nav-right { gap: 0.55rem; position: relative; } /* position: anchor the settings panel */
+/* In the docs nav #theme-toggle carries a margin-left to breathe from the section links; in the
+   console bar it is just another icon button, so drop that margin and let the nav-right gap alone
+   space it - otherwise gear->theme is wider than menu->gear. */
+.console-bar #theme-toggle { margin-left: 0; }
 
 /* Settings panel: the gear button's dropdown of BROWSER-side preferences (refresh rate, daemon host
    override), persisted in localStorage by console-settings.js. Same dropdown treatment as the app
