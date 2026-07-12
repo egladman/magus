@@ -52,9 +52,11 @@ export function activityTile(): Tile {
     pinned = preview.scrollHeight - preview.scrollTop - preview.clientHeight < 8;
   });
 
-  function render(targets: RunningTargetView[], liveHost: string | null, logLines: string[]): void {
+  function render(targets: RunningTargetView[], liveHost: string | null, logLines: string[], demo: boolean): void {
     count.textContent = String(targets.length);
-    open.setAttribute("href", liveHost ? "../logs/#live=" + encodeURIComponent(liveHost) : "../logs/");
+    // Live: deep-link to the host's stream. Demo: stay inside the unified demo (../logs/#demo)
+    // instead of dropping into the empty log viewer (demo has no live host). Otherwise plain.
+    open.setAttribute("href", liveHost ? "../logs/#live=" + encodeURIComponent(liveHost) : demo ? "../logs/#demo" : "../logs/");
 
     empty.hidden = targets.length > 0;
     list.replaceChildren();
@@ -90,7 +92,7 @@ export function activityTile(): Tile {
 
   return {
     el: card.el,
-    update(s: DashboardState) { if (s.status) render(s.status.runningTargets, s.liveHost, s.logLines); },
+    update(s: DashboardState) { if (s.status) render(s.status.runningTargets, s.liveHost, s.logLines, s.conn.state === "demo"); },
     destroy() {},
   };
 }
