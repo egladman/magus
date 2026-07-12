@@ -2028,12 +2028,14 @@ fun renderSiteNav(root: str, active: str, withRef: bool) > str {
     links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
     links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
     links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
-    links.append({"href": root + "console/dashboard/", "label": "Dashboard", "current": active == "dashboard"});
-    // The Dashboard is the single public entry point to magus's browser apps: its
-    // connect screen carries the launchers (plus a demo), so Graph and Logs are reached
-    // from there - and via `magus graph open` - rather than getting their own top-nav
-    // items. Playground stays a distinct link above because it is a standalone in-browser
-    // Buzz runner (no daemon) that the tour deep-links into, not a daemon app.
+    links.append({"href": root + "console/dashboard/", "label": "Console", "current": active == "dashboard"});
+    // The console (its dashboard) is the single public entry point to magus's browser apps:
+    // the dashboard's connect screen carries the launchers (plus a demo), so Graph and Logs
+    // are reached from there - and via `magus graph open` - rather than getting their own
+    // top-nav items. The nav item lands on console/dashboard/ directly; /console/ itself is
+    // the console API docs page (docs/console.md), left in place. Playground stays a distinct
+    // link above because it is a standalone in-browser Buzz runner (no daemon) that the tour
+    // deep-links into, not a daemon app.
     return template.render(tmpl, {"root": root, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
 }
 
