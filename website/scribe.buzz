@@ -743,6 +743,15 @@ fun climb(n: int) > str {
     return s;
 }
 
+// climbFromDir returns the "../" prefix that climbs from a gen-relative directory back to
+// gen's root - one "../" per path segment. So "playground" -> "../" and "console/dashboard"
+// -> "../../". The standalone/app pages derive their nav prefix from their output location
+// with this instead of a hand-maintained literal, which silently went wrong in the
+// /console/ move (the prefix and the write path drifted apart).
+fun climbFromDir(dir: str) > str {
+    return climb(dir.split("/").len());
+}
+
 // rewriteLinks applies rewriteHref to every href="..." in a rendered content
 // fragment. It runs on the markdown-rendered body only (before the page template
 // wraps it), so the nav/breadcrumb/pager hrefs — built separately with clean URLs —
@@ -2236,7 +2245,9 @@ fun renderPlayground(site: Site) > void {
     f.close();
     // The page ships at /playground/ (a directory index like every other page), so
     // its injected nav climbs one level to reach the site root.
-    html = html.replace("<!-- site-nav -->", renderSiteNav("../", "playground", true));
+    final outDir = "playground";
+    final root = climbFromDir(outDir);
+    html = html.replace("<!-- site-nav -->", renderSiteNav(root, "playground", true));
     // No site-footer injection: the playground wears the console apps' bottom status bar
     // (authored directly in playground.html) instead of the docs footer, so the parse
     // result reads in the console design language. renderSiteFooter still serves the docs
@@ -2248,8 +2259,8 @@ fun renderPlayground(site: Site) > void {
     // CSP_INLINE_SCRIPT_SOURCES reads to compute it in the first place, so this
     // file is both the hash's source and its sink.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/playground");
-    fs.writeFile(site.outDir + "/playground/index.html", html);
+    fs.makeDirectory(site.outDir + "/" + outDir);
+    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
 }
 
 // renderGraph writes gen/graph/index.html from the hand-authored graph.html, injecting
@@ -2263,14 +2274,16 @@ fun renderGraph(site: Site) > void {
     final f = io.File.open("graph.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("graph", "../../", site.consoleRefLinks("graph", "../../")));
+    final outDir = "console/graph";
+    final root = climbFromDir(outDir);
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("graph", root, site.consoleRefLinks("graph", root)));
     // The default (non-home) CSP meta - site.csp, not site.cspHome. The graph
     // page holds the reader's own dependency graph, so it gets the tighter
     // img-src (no external hosts), same as playground; see renderPlayground's
     // comment above.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/console/graph");
-    fs.writeFile(site.outDir + "/console/graph/index.html", html);
+    fs.makeDirectory(site.outDir + "/" + outDir);
+    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
 }
 
 // renderLogs writes gen/logs/index.html from the hand-authored logs.html - the log
@@ -2283,10 +2296,12 @@ fun renderLogs(site: Site) > void {
     final f = io.File.open("logs.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("logs", "../../", site.consoleRefLinks("logs", "../../")));
+    final outDir = "console/logs";
+    final root = climbFromDir(outDir);
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("logs", root, site.consoleRefLinks("logs", root)));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/console/logs");
-    fs.writeFile(site.outDir + "/console/logs/index.html", html);
+    fs.makeDirectory(site.outDir + "/" + outDir);
+    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
 }
 
 // renderDashboard writes gen/dashboard/index.html from the hand-authored dashboard.html -
@@ -2305,10 +2320,12 @@ fun renderDashboard(site: Site) > void {
     // (app bar + waffle launcher + reference drawer), injected at its <!-- console-shell -->
     // placeholder - one source of truth for all three surfaces. Its own bottom status bar and
     // the connect/panels body stay in dashboard.html.
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("dashboard", "../../", site.consoleRefLinks("dashboard", "../../")));
+    final outDir = "console/dashboard";
+    final root = climbFromDir(outDir);
+    html = html.replace("<!-- console-shell -->", renderConsoleShell("dashboard", root, site.consoleRefLinks("dashboard", root)));
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/console/dashboard");
-    fs.writeFile(site.outDir + "/console/dashboard/index.html", html);
+    fs.makeDirectory(site.outDir + "/" + outDir);
+    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
 }
 
 // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
