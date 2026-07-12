@@ -752,6 +752,24 @@ fun climbFromDir(dir: str) > str {
     return climb(dir.split("/").len());
 }
 
+// sitePathPrefix returns the root-absolute URL path prefix for this deployment - the path
+// component of SITE_URL, e.g. "https://eli.gladman.cc/magus/" -> "/magus/" - or "/" when
+// SITE_URL is unset (an empty string splits to length 1, so the branch is skipped). Only the
+// pages that can be served at an unpredictable depth (the 404 and the SW offline fallback)
+// and the PWA manifest/service worker use this absolute scheme; every other page uses the
+// depth-relative rootPrefix. One definition so the derivation isn't copy-pasted four ways.
+fun sitePathPrefix() > str {
+    var basePath = "/";
+    final parts = SITE_URL.split("://");
+    if (parts.len() > 1) {
+        final rest = parts[1];
+        final firstSlash = rest.indexOf("/");
+        if (firstSlash != null) { basePath = rest.sub(firstSlash); }
+    }
+    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    return basePath;
+}
+
 // rewriteLinks applies rewriteHref to every href="..." in a rendered content
 // fragment. It runs on the markdown-rendered body only (before the page template
 // wraps it), so the nav/breadcrumb/pager hrefs — built separately with clean URLs —
@@ -1277,18 +1295,7 @@ fun renderPublic(site: Site) > void {
 // -> "/magus/"); when SITE_URL is empty, fall back to "/" so the page still
 // renders locally with absolute paths from the server root.
 fun render404(site: Site) > void {
-    // Extract the path component of SITE_URL: after "://<host>", everything
-    // from the first "/" onwards. e.g. https://eli.gladman.cc/magus/ -> /magus/
-    var basePath = "/";
-    if (SITE_URL != "") {
-        final noScheme = SITE_URL.split("://");
-        if (noScheme.len() > 1) {
-            final rest = noScheme[1];
-            final firstSlash = rest.indexOf("/");
-            if (firstSlash != null) { basePath = rest.sub(firstSlash); }
-        }
-    }
-    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final basePath = sitePathPrefix();
     final title = "Page not found - magus";
     final desc = "You have warped off the map. That page is not here; head back to the documentation, install page, or playground.";
     // Its own template (rather than renderPage()) because every asset/link here must be
@@ -1344,16 +1351,7 @@ fun render404(site: Site) > void {
 // Graph and playground are called out explicitly because they are precached and fully
 // functional offline - they are the honest answer to "what CAN I do right now?".
 fun writeOffline(site: Site) > void {
-    var basePath = "/";
-    if (SITE_URL != "") {
-        final noScheme = SITE_URL.split("://");
-        if (noScheme.len() > 1) {
-            final rest = noScheme[1];
-            final firstSlash = rest.indexOf("/");
-            if (firstSlash != null) { basePath = rest.sub(firstSlash); }
-        }
-    }
-    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final basePath = sitePathPrefix();
     final title = "You are offline - magus";
     final desc = "No network connection. The graph explorer and playground are fully functional offline.";
     final tmpl = `<!DOCTYPE html>
@@ -1587,15 +1585,7 @@ fun cspForRedirectStub(script: str) > str {
 // scope is well-defined; without it we'd default to "/" and mis-scope.
 fun writeManifest(site: Site) > void {
     if (SITE_URL == "") { return; }
-    // basePath extraction mirrors render404's derivation.
-    var basePath = "/";
-    final noScheme = SITE_URL.split("://");
-    if (noScheme.len() > 1) {
-        final rest = noScheme[1];
-        final firstSlash = rest.indexOf("/");
-        if (firstSlash != null) { basePath = rest.sub(firstSlash); }
-    }
-    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final basePath = sitePathPrefix();
     // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
     // (see gopherbuzz/testdata/54_raw_string.buzz).
     // Icons: favicon-32 and apple-touch-icon are the legacy set; icon-192/512 target
@@ -1644,14 +1634,7 @@ fun writeManifest(site: Site) > void {
 // __BASE__ (SITE_URL's path prefix).
 fun writeServiceWorker(site: Site) > void {
     if (SITE_URL == "") { return; }
-    var basePath = "/";
-    final noScheme = SITE_URL.split("://");
-    if (noScheme.len() > 1) {
-        final rest = noScheme[1];
-        final firstSlash = rest.indexOf("/");
-        if (firstSlash != null) { basePath = rest.sub(firstSlash); }
-    }
-    if (basePath.endsWith("/") == false) { basePath = basePath + "/"; }
+    final basePath = sitePathPrefix();
     final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
     var body = tmplFile.readAll();
     tmplFile.close();
