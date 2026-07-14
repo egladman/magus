@@ -265,20 +265,18 @@ func validPrefix(prefix string) bool {
 }
 
 // validRef matches the GetPayload wire pattern: a valid prefix followed by exactly refHexLen
-// hex chars. The stricter length (vs the proto's [0-9a-f]+) is the filesystem guard.
+// hex chars. The hash is a FIXED-length suffix, so the split is len-refHexLen - a greedy
+// letter-scan would misfire because hex digits a-f are also lowercase letters. The stricter
+// length (vs the proto's [0-9a-f]+) is the filesystem guard.
 func validRef(ref string) bool {
-	i := 0
-	for i < len(ref) && ref[i] >= 'a' && ref[i] <= 'z' {
-		i++
-	}
-	if !validPrefix(ref[:i]) {
+	if len(ref) < 2+refHexLen || len(ref) > 8+refHexLen {
 		return false
 	}
-	hexPart := ref[i:]
-	if len(hexPart) != refHexLen {
+	split := len(ref) - refHexLen
+	if !validPrefix(ref[:split]) {
 		return false
 	}
-	for _, c := range hexPart {
+	for _, c := range ref[split:] {
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false
 		}
