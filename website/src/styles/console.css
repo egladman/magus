@@ -265,6 +265,7 @@ body.console-fill > main {
   min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
   overflow: hidden;
   padding-block: 0.6rem;    /* tight vertical gutter so the card reads as full-bleed */
+  padding-inline: 0.6rem;   /* slim the side gutter (Pico's .container-fluid is ~1rem) to match the block gutter */
   display: flex;
   flex-direction: column;   /* the single app card stretches as a flex child (below) */
   /* Full-bleed: the tool pages (logs/graph) cap main.container-fluid to --content-wide and
