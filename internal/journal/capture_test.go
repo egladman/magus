@@ -19,7 +19,7 @@ func TestFileHandlerAppendsJSONL(t *testing.T) {
 	ctx := WithLogger(context.Background(), NewLogger(fh))
 
 	Emit(ctx, Event{Kind: KindOutput, Stream: StreamStdout, Project: "web", Target: "build", Text: "line one"})
-	Emit(ctx, Event{Kind: KindResult, Status: StatusPass, Ref: "refabc", DurMs: 5})
+	Emit(ctx, Event{Kind: KindResult, Status: StatusPass, Ref: "outabc", DurMs: 5})
 	fh.Flush()
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")

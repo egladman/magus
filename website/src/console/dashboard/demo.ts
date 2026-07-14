@@ -88,7 +88,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   // a fresh queued is appended; a run caps at a few targets, then a new run starts.
   let catIdx = 0;
   const nextCat = () => CATALOG[catIdx++ % CATALOG.length];
-  const ref = (n: number): string => "ref" + (0x1a2b3c + n * 0x111).toString(16).slice(0, 6);
+  const ref = (n: number): string => "out" + (0x1a2b3c + n * 0x111).toString(16).slice(0, 6);
   const invId = (n: number): string => (0xa1b2c3d4e5f6 + n * 0x1357).toString(16).slice(0, 12);
 
   let refN = 0;

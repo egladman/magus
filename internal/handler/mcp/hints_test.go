@@ -75,10 +75,10 @@ func TestDecorateResultChainHints(t *testing.T) {
 	})
 
 	t.Run("run result carrying a ref chains into magus_output naming the ref", func(t *testing.T) {
-		r := mcplib.NewToolResultText(`{"ok":true,"ref":"ref1a2b3c4d"}`)
+		r := mcplib.NewToolResultText(`{"ok":true,"ref":"out1a2b3c4d"}`)
 		decorateResult(r, "magus_run_target")
 		require.Len(t, r.Content, 2)
-		assert.Contains(t, resultText(r), "magus_output (ref=ref1a2b3c4d)")
+		assert.Contains(t, resultText(r), "magus_output (ref=out1a2b3c4d)")
 	})
 
 	t.Run("run result with no ref gets no chain hint", func(t *testing.T) {
@@ -92,13 +92,13 @@ func TestFirstRef(t *testing.T) {
 	t.Parallel()
 
 	// A fully-minted ref (ref + 8 hex) is isolated from the JSON payload.
-	assert.Equal(t, "ref1a2b3c4d", firstRef(mcplib.NewToolResultText(`{"ref":"ref1a2b3c4d"}`)))
+	assert.Equal(t, "out1a2b3c4d", firstRef(mcplib.NewToolResultText(`{"ref":"out1a2b3c4d"}`)))
 	assert.Empty(t, firstRef(mcplib.NewToolResultText(`{"ok":true}`)))
 	// "refactor" has a non-hex tail, so it is a free-text word, not a ref.
 	assert.Empty(t, firstRef(mcplib.NewToolResultText(`{"note":"refactor later"}`)))
 	// Short English words whose tail is coincidentally all-hex must not be mistaken for a
 	// ref: only the exact minted length is accepted, not any hex prefix.
-	assert.Empty(t, firstRef(mcplib.NewToolResultText(`please reface the refed panel`)))
+	assert.Empty(t, firstRef(mcplib.NewToolResultText(`please outace the refed panel`)))
 	assert.Empty(t, firstRef(nil))
 }
 

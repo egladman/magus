@@ -125,7 +125,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolQuery),
-		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind:symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (ref1a2b3c), use magus_output.",
+		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind:symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (out1a2b3c), use magus_output.",
 		Params: []ParamDescriptor{
 			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field filters like kind:spell, project:pkg/foo, relation:uses, id:build, and negation -kind:op."},
 			{Name: "budget", Type: "number", Description: "Max nodes in the returned neighborhood (default 50)."},
@@ -135,9 +135,9 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolOutput),
-		Description: "Return one target execution's exact captured output by its reference id (ref1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
+		Description: "Return one target execution's exact captured output by its reference id (out1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
 		Params: []ParamDescriptor{
-			{Name: "ref", Type: "string", Required: true, Description: "A target-output reference id (ref1a2b3c) or a unique prefix of one, as printed on each target's result line."},
+			{Name: "ref", Type: "string", Required: true, Description: "A target-output reference id (out1a2b3c) or a unique prefix of one, as printed on each target's result line."},
 		},
 	},
 	{

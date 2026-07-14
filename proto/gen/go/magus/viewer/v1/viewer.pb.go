@@ -1140,7 +1140,7 @@ const file_magus_viewer_v1_viewer_proto_rawDesc = "" +
 	"invocation\x12.\n" +
 	"\x06events\x18\x02 \x03(\v2\x16.magus.viewer.v1.EventR\x06events\"{\n" +
 	"\bSelector\x12)\n" +
-	"\x03ref\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^ref[0-9a-f]+$H\x00R\x03ref\x127\n" +
+	"\x03ref\x18\x01 \x01(\tB\x15\xbaH\x12r\x102\x0e^out[0-9a-f]+$H\x00R\x03ref\x127\n" +
 	"\n" +
 	"invocation\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^inv[0-9a-z]+$H\x00R\n" +
 	"invocationB\v\n" +

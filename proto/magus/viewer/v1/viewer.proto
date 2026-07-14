@@ -131,7 +131,7 @@ service ViewerService {
 message Selector {
   oneof of {
     option (buf.validate.oneof).required = true;
-    string ref = 1 [(buf.validate.field).string.pattern = "^ref[0-9a-f]+$"];
+    string ref = 1 [(buf.validate.field).string.pattern = "^out[0-9a-f]+$"];
     string invocation = 2 [(buf.validate.field).string.pattern = "^inv[0-9a-z]+$"];
   }
 }

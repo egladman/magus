@@ -19,7 +19,7 @@ import (
 func TestRunResultCarriesRefAndFiresChainHint(t *testing.T) {
 	t.Parallel()
 
-	const ref = "ref1a2b3c4d"
+	const ref = "out1a2b3c4d"
 
 	// Emit a target.result event with a ref, exactly as report.RunOptions does.
 	var buf bytes.Buffer

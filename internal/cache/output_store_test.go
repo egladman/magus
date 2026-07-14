@@ -158,7 +158,7 @@ func TestOutputStorePrefixAndAmbiguity(t *testing.T) {
 	require.True(t, errors.As(err, &amb), "a shared prefix should return *AmbiguousRefError, got %v", err)
 	assert.Len(t, amb.Candidates, 2)
 
-	_, _, err = s.ByRef("refffffffff")
+	_, _, err = s.ByRef("outffffffff")
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
 
@@ -187,12 +187,12 @@ func TestInvocationByID(t *testing.T) {
 
 // TestAmbiguousRefErrorMessage covers AmbiguousRefError.Error's rendering.
 func TestAmbiguousRefErrorMessage(t *testing.T) {
-	e := &AmbiguousRefError{Prefix: "refde", Candidates: []string{"refdead", "refdeed"}}
+	e := &AmbiguousRefError{Prefix: "refde", Candidates: []string{"outdead", "outdeed"}}
 	msg := e.Error()
 	assert.Contains(t, msg, "refde")
 	assert.Contains(t, msg, "ambiguous")
-	assert.Contains(t, msg, "refdead")
-	assert.Contains(t, msg, "refdeed")
+	assert.Contains(t, msg, "outdead")
+	assert.Contains(t, msg, "outdeed")
 }
 
 // TestRunOutputNoTrailingNewline drives a real Run whose output lacks a final newline, covering
@@ -218,10 +218,10 @@ func TestRunOutputNoTrailingNewline(t *testing.T) {
 
 // TestLooksLikeRef pins the query router's discriminator.
 func TestLooksLikeRef(t *testing.T) {
-	for _, s := range []string{"ref1a2b3c", "refdeadbeef", "refa", "ref0"} {
+	for _, s := range []string{"out1a2b3c", "outdeadbeef", "outa", "out0"} {
 		assert.True(t, LooksLikeRef(s), "%q should be recognized as a ref", s)
 	}
-	for _, s := range []string{"refactor", "reference", "ref", "ref ", "kind:spell", "REF1A2B", "1a2b3c", ""} {
+	for _, s := range []string{"output", "outer", "out", "out ", "kind:spell", "OUT1A2B", "1a2b3c", ""} {
 		assert.False(t, LooksLikeRef(s), "%q must NOT be treated as a ref", s)
 	}
 }
@@ -229,10 +229,10 @@ func TestLooksLikeRef(t *testing.T) {
 // TestIsMintedRef pins the exact-length ref shape used to scan free text: only ref + exactly
 // refHexLen hex is accepted, so prefixes and coincidentally-hex words are rejected.
 func TestIsMintedRef(t *testing.T) {
-	for _, s := range []string{"ref1a2b3c4d", "refdeadbeef"} {
+	for _, s := range []string{"out1a2b3c4d", "outdeadbeef"} {
 		assert.True(t, IsMintedRef(s), "%q should be a minted ref", s)
 	}
-	for _, s := range []string{"reface", "refed", "ref1a2b3c", "refa", "ref", "refactor", "ref1a2b3c4d5", ""} {
+	for _, s := range []string{"outace", "outed", "out1a2b3c", "outa", "out", "output", "out1a2b3c4d5", ""} {
 		assert.False(t, IsMintedRef(s), "%q must NOT be a minted ref", s)
 	}
 }

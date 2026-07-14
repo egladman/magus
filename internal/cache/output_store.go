@@ -19,11 +19,13 @@ import (
 	"github.com/egladman/magus/internal/journal"
 )
 
-// RefPrefix begins every target-output reference id ("ref1a2b3c"). No delimiter - "ref" reads
-// as "reference" the way MGSxxxx codes read as diagnostics. LooksLikeRef validates the shape of
-// the argument to `magus query output <ref>`; it is not a router (retrieval is an explicit
-// subcommand), so a shape-collision with a search term is impossible.
-const RefPrefix = "ref"
+// RefPrefix begins every target-output reference id ("out1a2b3c"). It is the provenance tag in
+// the shared ref namespace - "out" for a target OUTPUT, alongside "mcp" for an MCP call payload
+// (internal/trail) - so a ref names where it came from at a glance. No delimiter, matching the
+// other prefixes. LooksLikeRef validates the shape of the argument to `magus query output <ref>`;
+// it is not a router (retrieval is an explicit subcommand), so a shape-collision with a search
+// term is impossible.
+const RefPrefix = "out"
 
 // RunsDir is the cache subdir holding one union event log per invocation
 // (<cacheDir>/runs/<inv>.jsonl). Shared by the writer (magus.BeginInvocation) and the reader
@@ -451,7 +453,7 @@ func LooksLikeRef(s string) bool {
 // by exactly refHexLen hex digits. Unlike LooksLikeRef, which accepts any-length hex prefix
 // so `magus query output` can take a git-style short ref, this rejects prefixes. Use it when
 // scanning free text for a chainable ref, so short English words whose tail is coincidentally
-// hex ("reface", "refed") are not mistaken for a ref.
+// hex ("outace", "refed") are not mistaken for a ref.
 func IsMintedRef(s string) bool {
 	return len(s) == len(RefPrefix)+refHexLen && refPattern.MatchString(s)
 }

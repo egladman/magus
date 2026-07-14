@@ -45,17 +45,17 @@ func TestOutputToolInvokeHappy(t *testing.T) {
 	reader := fakeOutputReader{
 		data: []byte("hello stdout"),
 		desc: cache.OutputDescriptor{
-			Ref:        "ref1a2b3c",
+			Ref:        "out1a2b3c",
 			Project:    "pkg/a",
 			Target:     "build",
 			Failed:     true,
 			DurationMs: 42,
 		},
 	}
-	resp, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "ref1a2b3c"}})
+	resp, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	require.NoError(t, err)
 	assert.Equal(t, outputRefResult{
-		Ref:        "ref1a2b3c",
+		Ref:        "out1a2b3c",
 		Project:    "pkg/a",
 		Target:     "build",
 		Failed:     true,
@@ -67,8 +67,8 @@ func TestOutputToolInvokeHappy(t *testing.T) {
 // TestOutputToolInvokeAmbiguous pins that an *cache.AmbiguousRefError from the reader
 // is wrapped as an "mcp: ..." error that still lists the candidates.
 func TestOutputToolInvokeAmbiguous(t *testing.T) {
-	reader := fakeOutputReader{err: &cache.AmbiguousRefError{Prefix: "ref1a", Candidates: []string{"ref1a2b3c", "ref1a9f0e"}}}
-	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "ref1a2b3c"}})
+	reader := fakeOutputReader{err: &cache.AmbiguousRefError{Prefix: "ref1a", Candidates: []string{"out1a2b3c", "out1a9f0e"}}}
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	assert.ErrorContains(t, err, "mcp: ")
 	assert.ErrorContains(t, err, "is ambiguous")
 	var amb *cache.AmbiguousRefError
@@ -79,11 +79,11 @@ func TestOutputToolInvokeAmbiguous(t *testing.T) {
 // message; a generic error passes through unwrapped.
 func TestOutputToolInvokeNotExist(t *testing.T) {
 	reader := fakeOutputReader{err: fs.ErrNotExist}
-	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "ref1a2b3c"}})
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	assert.ErrorContains(t, err, "no stored output")
 
 	generic := errors.New("disk on fire")
-	_, err = (&outputTool{reader: fakeOutputReader{err: generic}}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "ref1a2b3c"}})
+	_, err = (&outputTool{reader: fakeOutputReader{err: generic}}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	assert.ErrorIs(t, err, generic)
 }
 

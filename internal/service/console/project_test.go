@@ -17,7 +17,7 @@ import (
 // presentation layer, so it is asserted here against a hand-built descriptor + raw bytes.
 func TestStitchDisplayEvents(t *testing.T) {
 	d := cache.OutputDescriptor{
-		Ref: "ref1a2b3c", Project: "svc/api", Target: "test", Inv: "inv123",
+		Ref: "out1a2b3c", Project: "svc/api", Target: "test", Inv: "inv123",
 		Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200,
 	}
 	events := StitchDisplayEvents([]byte("lint: undefined symbol foo\n"), d)
@@ -33,7 +33,7 @@ func TestStitchDisplayEvents(t *testing.T) {
 
 	assert.Equal(t, journal.Event{
 		Kind: journal.KindResult, Project: "svc/api", Target: "test",
-		Status: journal.StatusFail, Ref: "ref1a2b3c", Inv: "inv123", DurMs: 1200,
+		Status: journal.StatusFail, Ref: "out1a2b3c", Inv: "inv123", DurMs: 1200,
 		Ts: 1_700_000_000_000, Text: "boom",
 	}, events[1])
 }

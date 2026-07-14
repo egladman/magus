@@ -283,8 +283,8 @@ func TestRuntimeTimingMergesOntoTarget(t *testing.T) {
 func TestAssembleRuntimeOutputRefAttrs(t *testing.T) {
 	known := map[string]bool{"target:pkg/a:build": true}
 	refs := []types.KnowledgeOutputRef{
-		{Project: "pkg/a", Target: "build", Ref: "ref1a2b3c", OK: true},
-		{Project: "pkg/a", Target: "test", Ref: "refdeadbe", OK: false}, // unknown target -> dropped
+		{Project: "pkg/a", Target: "build", Ref: "out1a2b3c", OK: true},
+		{Project: "pkg/a", Target: "test", Ref: "outdeadbe", OK: false}, // unknown target -> dropped
 		{Project: "pkg/a", Target: "gen", Ref: ""},                      // no ref -> no node, no empty attr
 	}
 	s := assembleRuntime(nil, nil, refs, known)
@@ -293,7 +293,7 @@ func TestAssembleRuntimeOutputRefAttrs(t *testing.T) {
 	n := s.Nodes[0]
 	assert.Equal(t, "target:pkg/a:build", n.ID)
 	assert.Equal(t, types.KindTarget, n.Kind, "typed so the merge is order-independent")
-	assert.Equal(t, "ref1a2b3c", n.Attrs[AttrLastOutputRef])
+	assert.Equal(t, "out1a2b3c", n.Attrs[AttrLastOutputRef])
 	assert.Equal(t, "true", n.Attrs[AttrLastRunOK])
 }
 
@@ -303,12 +303,12 @@ func TestAssembleRuntimeOutputRefAttrs(t *testing.T) {
 func TestRuntimeOutputRefMergesOntoTarget(t *testing.T) {
 	in := sampleInputs()
 	in.Timings = []types.KnowledgeTiming{{Project: "pkg/a", Target: "build", P75Ms: 500, Samples: 5, HitRate: 0.5, HitRateSamples: 8}}
-	in.OutputRefs = []types.KnowledgeOutputRef{{Project: "pkg/a", Target: "build", Ref: "reff00dfa", OK: false}}
+	in.OutputRefs = []types.KnowledgeOutputRef{{Project: "pkg/a", Target: "build", Ref: "outf00dfa", OK: false}}
 	out := mergeAll(AssembleShards(in)).Output()
 
 	build, ok := nodeByID(out, "target:pkg/a:build")
 	require.True(t, ok)
-	assert.Equal(t, "reff00dfa", build.Attrs[AttrLastOutputRef])
+	assert.Equal(t, "outf00dfa", build.Attrs[AttrLastOutputRef])
 	assert.Equal(t, "false", build.Attrs[AttrLastRunOK])
 	assert.Equal(t, "500", build.Attrs[AttrDurationP75Ms], "timing attrs coexist with ref attrs")
 	assert.Equal(t, "buzz", build.Attrs[AttrEngine], "static engine attr survives the ref merge")

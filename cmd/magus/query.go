@@ -25,7 +25,7 @@ import (
 // the neighborhood; explain shows one node's context; path connects two nodes.
 //
 // query also doubles as the retrieval verb for target-output reference ids through
-// an EXPLICIT `output` subcommand: `magus query output ref1a2b3c` prints that
+// an EXPLICIT `output` subcommand: `magus query output out1a2b3c` prints that
 // execution's captured output instead of searching the graph. It is a subcommand,
 // not a shape-routed positional, so a free-text search term can never collide with a
 // ref id (`magus query refactor` always searches the graph).
@@ -65,10 +65,10 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus query kind:spell go")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "`%s <ref>` retrieves one target execution's captured output by its\n", clihint.QueryOutput.Leaf())
-			fmt.Fprintln(os.Stderr, "reference id (ref1a2b3c), shown when the target ran:")
-			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", clihint.QueryOutput.With("ref1a2b3c"))
-			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("ref1a2b3c", "-o json"))
-			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("ref1a2b3c", "--open"))
+			fmt.Fprintln(os.Stderr, "reference id (out1a2b3c), shown when the target ran:")
+			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", clihint.QueryOutput.With("out1a2b3c"))
+			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("out1a2b3c", "-o json"))
+			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("out1a2b3c", "--open"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
 			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
@@ -85,12 +85,12 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	// shape-routed positional, so a search term can never collide with a ref id.
 	if len(pos) >= 1 && pos[0] == clihint.QueryOutput.Leaf() {
 		if len(pos) != 2 {
-			fmt.Fprintf(os.Stderr, "%s: expected exactly one ref (e.g. %s)\n", clihint.QueryOutput, clihint.QueryOutput.With("ref1a2b3c"))
+			fmt.Fprintf(os.Stderr, "%s: expected exactly one ref (e.g. %s)\n", clihint.QueryOutput, clihint.QueryOutput.With("out1a2b3c"))
 			return errSilent{exitCode: 2}
 		}
 		ref := pos[1]
 		if !cache.LooksLikeRef(ref) {
-			msg := fmt.Sprintf("%q is not a target-output reference (expected ref<hex>, e.g. ref1a2b3c)", ref)
+			msg := fmt.Sprintf("%q is not a target-output reference (expected out<hex>, e.g. out1a2b3c)", ref)
 			fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg).Error())
 			return errSilent{exitCode: 2}
 		}

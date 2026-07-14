@@ -87,7 +87,7 @@ function synthDemoJournal(): Journal {
     if (p.status === Status.PASS && p.project === "." && p.target === "vmlinux") {
       events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 8), project: p.project, target: p.target, stream: Stream.STDOUT, text: "Kernel: arch/x86/boot/bzImage is ready  (#1)" }));
     }
-    const ref = "refd" + (n++).toString(16).padStart(6, "0");
+    const ref = "outd" + (n++).toString(16).padStart(6, "0");
     events.push(create(EventSchema, { kind: Kind.RESULT, time: demoTs(end), project: p.project, target: p.target, status: p.status, ref, duration: demoDur(p.dur) }));
   }
   events.push(create(EventSchema, { kind: Kind.FINISHED, time: demoTs(base + maxEnd), level: "error" }));

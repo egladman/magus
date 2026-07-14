@@ -22,7 +22,7 @@ func TestEventToProtoMapsEnums(t *testing.T) {
 	r := journal.Event{
 		Ts: 1700, Project: "web", Target: "test",
 		Kind: journal.KindResult, Stream: journal.StreamStderr, Level: "error",
-		Status: journal.StatusFail, Ref: "ref1a2b3c", DurMs: 42, Text: "boom",
+		Status: journal.StatusFail, Ref: "out1a2b3c", DurMs: 42, Text: "boom",
 	}
 	p := eventToProto(r)
 	assert.Equal(t, int64(1700), p.GetTime().AsTime().UnixMilli(), "ts -> google.protobuf.Timestamp")
@@ -31,7 +31,7 @@ func TestEventToProtoMapsEnums(t *testing.T) {
 	assert.Equal(t, viewerv1.Kind_KIND_RESULT, p.GetKind())
 	assert.Equal(t, viewerv1.Stream_STREAM_STDERR, p.GetStream())
 	assert.Equal(t, viewerv1.Status_STATUS_FAIL, p.GetStatus())
-	assert.Equal(t, "ref1a2b3c", p.GetRef())
+	assert.Equal(t, "out1a2b3c", p.GetRef())
 	assert.Equal(t, 42*time.Millisecond, p.GetDuration().AsDuration(), "dur_ms -> google.protobuf.Duration")
 	assert.Equal(t, "boom", p.GetText())
 
@@ -68,7 +68,7 @@ func TestEventToProtoCarriesStartedCommand(t *testing.T) {
 func TestEncodeJournalFragmentRoundTrip(t *testing.T) {
 	events := []journal.Event{
 		{Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: "building..."},
-		{Kind: journal.KindResult, Project: "web", Target: "build", Status: journal.StatusPass, Ref: "refabc", DurMs: 10},
+		{Kind: journal.KindResult, Project: "web", Target: "build", Status: journal.StatusPass, Ref: "outabc", DurMs: 10},
 	}
 	inv := journal.Invocation{ID: "inv7", MagusVersion: "v1.2.3", Command: journal.Command{Verb: "affected", Args: []string{"ci"}, Trigger: journal.TriggerCI}}
 	frag, err := EncodeJournalFragment(inv, events)
@@ -89,7 +89,7 @@ func TestEncodeJournalFragmentRoundTrip(t *testing.T) {
 	require.Len(t, got.GetEvents(), 2)
 	assert.Equal(t, "building...", got.GetEvents()[0].GetText())
 	assert.Equal(t, viewerv1.Status_STATUS_PASS, got.GetEvents()[1].GetStatus())
-	assert.Equal(t, "refabc", got.GetEvents()[1].GetRef())
+	assert.Equal(t, "outabc", got.GetEvents()[1].GetRef())
 }
 
 // TestEnumMappingsExhaustive walks every domain enum value through its proto mapper so a new

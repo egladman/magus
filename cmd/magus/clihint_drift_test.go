@@ -75,10 +75,10 @@ func TestClihintQueryOutputForm(t *testing.T) {
 	if clihint.QueryOutput.Leaf() != "output" {
 		t.Errorf("QueryOutput leaf = %q, want %q", clihint.QueryOutput.Leaf(), "output")
 	}
-	if got, want := clihint.QueryOutput.With("ref1a2b3c"), "magus query output ref1a2b3c"; got != want {
+	if got, want := clihint.QueryOutput.With("out1a2b3c"), "magus query output out1a2b3c"; got != want {
 		t.Errorf("QueryOutput.With(ref) = %q, want %q", got, want)
 	}
-	if got, want := clihint.QueryOutput.With("ref1a2b3c", "--open"), "magus query output ref1a2b3c --open"; got != want {
+	if got, want := clihint.QueryOutput.With("out1a2b3c", "--open"), "magus query output out1a2b3c --open"; got != want {
 		t.Errorf("QueryOutput.With(ref, --open) = %q, want %q", got, want)
 	}
 }

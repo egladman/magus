@@ -148,7 +148,7 @@ function finishLoad(ref: string, statusMsg: string): void {
 // looksLikeRef mirrors the CLI's cache.LooksLikeRef: the "copy as command" buttons
 // only make sense when the page was seeded by a real ref (not a pasted file name).
 function looksLikeRef(s: string): boolean {
-  return typeof s === "string" && /^ref[0-9a-f]+$/.test(s);
+  return typeof s === "string" && /^out[0-9a-f]+$/.test(s);
 }
 
 function summarize(text: string): string {

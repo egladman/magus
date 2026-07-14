@@ -86,10 +86,10 @@ func appendHint(result *mcplib.CallToolResult, s string) {
 
 // firstRef returns the first output-reference token in the result's text blocks,
 // or "" if none. It splits on any non lower-alphanumeric rune so a ref embedded in
-// a JSON payload (e.g. "ref":"ref1a2b3c") is isolated, then accepts a token only when
+// a JSON payload (e.g. "ref":"out1a2b3c") is isolated, then accepts a token only when
 // it is a fully-minted ref (cache.IsMintedRef). It deliberately does NOT use the looser
 // LooksLikeRef prefix check the `magus query` router uses: over free-text tool output
-// that would misfire on short words whose tail is coincidentally hex ("reface", "refed").
+// that would misfire on short words whose tail is coincidentally hex ("outace", "refed").
 func firstRef(result *mcplib.CallToolResult) string {
 	if result == nil {
 		return ""

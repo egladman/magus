@@ -77,10 +77,10 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			"cache.miss",
 			slog.String("project", "api"),
 			slog.Int64("duration", int64(80*time.Millisecond)),
-			slog.String("ref", "ref1a2b3c4d"),
+			slog.String("ref", "out1a2b3c4d"),
 		)))
 		out := buf.String()
-		assert.Contains(t, out, "\nref1a2b3c4d\n", "the ref must sit alone on its own bare line for clean copy")
+		assert.Contains(t, out, "\nout1a2b3c4d\n", "the ref must sit alone on its own bare line for clean copy")
 		assert.NotContains(t, out, "full output:", "a passing run gets no failure hint")
 	})
 
@@ -93,12 +93,12 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			slog.String("project", "api"),
 			slog.Int64("duration", int64(5*time.Millisecond)),
 			slog.String("error", "build failed"),
-			slog.String("ref", "refdeadbeef"),
+			slog.String("ref", "outdeadbeef"),
 		)))
 		out := buf.String()
-		assert.Contains(t, out, "\nrefdeadbeef\n", "the ref must be on its own bare line")
-		assert.Contains(t, out, "full output: magus query output refdeadbeef")
-		assert.Contains(t, out, "open in browser: magus query output refdeadbeef --open")
+		assert.Contains(t, out, "\noutdeadbeef\n", "the ref must be on its own bare line")
+		assert.Contains(t, out, "full output: magus query output outdeadbeef")
+		assert.Contains(t, out, "open in browser: magus query output outdeadbeef --open")
 	})
 
 	t.Run("cache.summary", func(t *testing.T) {

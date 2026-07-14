@@ -268,7 +268,7 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 // openBrowser launches a browser for a URL and does not wait - the browser owns the
 // tab from there. It honors the freedesktop/de-facto BROWSER convention first, so a
 // user can force a specific browser on any platform (e.g.
-// `BROWSER=firefox magus query ref1a2b3c --open`); only when BROWSER is unset or every
+// `BROWSER=firefox magus query out1a2b3c --open`); only when BROWSER is unset or every
 // entry fails does it fall back to the OS default handler (macOS `open`, Windows
 // FileProtocolHandler, else `xdg-open`, which itself already respects BROWSER and the
 // desktop's default-web-browser setting on Linux).

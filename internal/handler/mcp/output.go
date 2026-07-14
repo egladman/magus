@@ -14,7 +14,7 @@ import (
 
 // magus_output and magus_tail_log are the captured-output retrieval tools: they return a
 // target execution's stdout/stderr, not a knowledge-graph answer. magus_output addresses ONE
-// past execution by its reference id (ref1a2b3c); magus_tail_log returns the LATEST log for a
+// past execution by its reference id (out1a2b3c); magus_tail_log returns the LATEST log for a
 // project (no ref needed). Both read straight from the cache dir.
 
 // outputReader is the slice of the workspace magus_output needs: resolve a
@@ -50,7 +50,7 @@ func (t *outputTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 		return types.InvokeResponse{}, errors.New("mcp: ref is required")
 	}
 	if !cache.LooksLikeRef(ref) {
-		return types.InvokeResponse{}, fmt.Errorf("mcp: %q is not a target-output reference (expected ref<hex>, e.g. ref1a2b3c)", ref)
+		return types.InvokeResponse{}, fmt.Errorf("mcp: %q is not a target-output reference (expected out<hex>, e.g. out1a2b3c)", ref)
 	}
 	data, desc, err := t.reader.OutputByRef(ref)
 	if err != nil {

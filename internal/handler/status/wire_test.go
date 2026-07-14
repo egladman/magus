@@ -109,9 +109,9 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 			Trigger:   "run",
 			StartedAt: started,
 			Targets: []types.StatusTargetRun{
-				{Project: "svc/api", Target: "build", State: types.TargetRunPassed, StartedAt: execAt, EndedAt: doneAt, OutputRef: "refcafef00d", DurationMs: 3_000},
+				{Project: "svc/api", Target: "build", State: types.TargetRunPassed, StartedAt: execAt, EndedAt: doneAt, OutputRef: "outcafef00d", DurationMs: 3_000},
 				{Project: "svc/api", Target: "test", State: types.TargetRunRunning, StartedAt: execAt},
-				{Project: "svc/web", Target: "lint", State: types.TargetRunCached, StartedAt: doneAt, EndedAt: doneAt, OutputRef: "refbeef"},
+				{Project: "svc/web", Target: "lint", State: types.TargetRunCached, StartedAt: doneAt, EndedAt: doneAt, OutputRef: "outbeef"},
 			},
 		}},
 	}
@@ -125,7 +125,7 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 
 	require.Len(t, run.GetTargets(), 3)
 	assert.Equal(t, statusv1.TargetRun_PASSED, run.GetTargets()[0].GetState())
-	assert.Equal(t, "refcafef00d", run.GetTargets()[0].GetOutputRef())
+	assert.Equal(t, "outcafef00d", run.GetTargets()[0].GetOutputRef())
 	assert.Equal(t, int64(3_000), run.GetTargets()[0].GetDurationMs())
 	assert.Equal(t, int64(5_000), run.GetTargets()[0].GetEndedAt().AsTime().UnixMilli())
 	assert.Equal(t, statusv1.TargetRun_RUNNING, run.GetTargets()[1].GetState())
