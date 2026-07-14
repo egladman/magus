@@ -2,7 +2,6 @@ package render
 
 import (
 	"bytes"
-	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -12,6 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestWriteTargetGraphMarkdown pins the routing-index shape: a per-project target
+// list (name + one-line doc), the pointer to the commands that expand an entry,
+// and the deliberate absence of the old per-target dispatch plan and Mermaid graphs.
 func TestWriteTargetGraphMarkdown(t *testing.T) {
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
 		Path:   ".",
@@ -22,29 +24,67 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, "", nil))
 	got := b.String()
 	for _, want := range []string{
 		"# Targets",
 		"## Quick start",
-		"## Project: (workspace root)",        // bare "." is never used as a heading
-		"### `build`",                         // per-target heading
-		"Build the binary.",                   // doc line
-		"**Defaults**",                        // base invocation block label
-		"magus run build",                     // one canonical form; the root project needs no path
-		"**Charms**",                          // charm variants live in their own block
-		"magus run build:rw",                  // charm example command
-		"mutate in place instead of checking", // the rw charm's gloss
-		"**Depends on:**",                     // dependency list header
-		"- [`fmt`](#fmt)",                     // each dep links to its own section
-		"### `fmt`",
-		"[Glossary](https://eli.gladman.cc/magus/glossary/)", // terms link out to the hosted docs, not an embedded section
-		"**Run order**", // each project's graph renders inline in its section
-		"```mermaid",
-		"fmt --> build", // run order: the dependency points at the target that needs it
+		"## Project: (workspace root)", // bare "." is never used as a heading
+		"| Target | What it does |",    // the compact per-project list is a table
+		"| `build` | Build the binary. |",
+		"| `fmt` |",
+		"[Glossary](https://eli.gladman.cc/magus/glossary/)", // terms link out to the hosted docs
+		"magus describe target <name>",                       // pointer: a target's evaluated plan is one command away
+		"magus describe mcp-tools",                           // pointer: the agent tool list
+		// Staleness contract (always present, near the header) and the front-loaded
+		// "route by question" block with its exact routing commands.
+		"If the counts here look stale, trust the live tools (`magus query`) over this file.",
+		"## Route by question",
+		"| `magus query \"<terms>\"` |",
+		"| `magus describe file <path>` |",
+		"| `magus affected ci` |",
+		"| `magus query output <ref>` |",
 	} {
 		assert.Contains(t, got, want, "markdown output missing %q", want)
 	}
+	// Route by question is front-loaded: it precedes Quick start and every project
+	// table, so an agent hits the exact command before any bulk.
+	assert.Less(t, strings.Index(got, "## Route by question"), strings.Index(got, "## Quick start"),
+		"route-by-question should precede Quick start")
+	assert.Less(t, strings.Index(got, "## Route by question"), strings.Index(got, "| Target | What it does |"),
+		"route-by-question should precede the project tables")
+	// No default_charms passed here, so the header carries no default-charms line.
+	assert.NotContains(t, got, "Default charms:", "default-charms line must be omitted when none are set")
+	// The dispatch plan and the embedded graphs are gone - that bulk is what made
+	// the file useless as in-context routing.
+	for _, bad := range []string{"```mermaid", "**Run order**", "**Toolchain**", "**Defaults**", "**Charms**", "**Executes**", "Shared defaults", "#data="} {
+		assert.NotContains(t, got, bad, "routing index should not carry %q", bad)
+	}
+}
+
+// TestWriteTargetGraphMarkdownDefaultCharms pins the header's default-charms line:
+// it renders (near the header, above the route table) only when the workspace sets
+// default charms, and is omitted entirely - no empty section - when none are set.
+func TestWriteTargetGraphMarkdownDefaultCharms(t *testing.T) {
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
+		Path: ".", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}},
+	}}}
+
+	// With default charms set: the line renders and sits near the header, before the
+	// route table.
+	var withCharms bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&withCharms, out, nil, "", []string{"rw"}))
+	got := withCharms.String()
+	assert.Contains(t, got, "Default charms: rw (local runs write; CI strips them with `--no-default-charms`).",
+		"default-charms line should render when the workspace sets them")
+	assert.Less(t, strings.Index(got, "Default charms:"), strings.Index(got, "## Route by question"),
+		"default-charms line should sit near the header, above the route table")
+
+	// With no default charms: the line is omitted entirely, no empty section.
+	var noCharms bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&noCharms, out, nil, "", nil))
+	assert.NotContains(t, noCharms.String(), "Default charms:",
+		"default-charms line must be omitted when none are set")
 }
 
 // TestWriteTargetGraphMarkdownHeadingAndOrder pins the two layout refinements: a
@@ -62,16 +102,12 @@ func TestWriteTargetGraphMarkdownHeadingAndOrder(t *testing.T) {
 		},
 	}}}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, "", nil))
 	got := b.String()
 	assert.Contains(t, got, "## Project: magus", "heading should use the repo-relative path")
-	// The root project's invocation needs no path (it is the workspace root), so it
-	// renders as the bare command rather than a noisy trailing-dot form.
-	assert.Contains(t, got, "magus run build", "root invocation is the bare command")
-	assert.NotContains(t, got, "magus run build .", "root project must not render a trailing-dot path")
-	i, j := strings.Index(got, "### `build`"), strings.Index(got, "### `worker`")
-	require.GreaterOrEqual(t, i, 0, "primary target should precede the worker:\n%s", got)
-	require.GreaterOrEqual(t, j, 0, "primary target should precede the worker:\n%s", got)
+	i, j := strings.Index(got, "| `build` |"), strings.Index(got, "| `worker` |")
+	require.GreaterOrEqual(t, i, 0, "build row should be present:\n%s", got)
+	require.GreaterOrEqual(t, j, 0, "worker row should be present:\n%s", got)
 	assert.Less(t, i, j, "primary target should precede the worker")
 }
 
@@ -85,7 +121,7 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 
 	// Without routing, the section is absent.
 	var plain bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, nil, nil, ""))
+	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, nil, "", nil))
 	assert.NotContains(t, plain.String(), "## Query first")
 
 	routing := &types.KnowledgeRouting{
@@ -94,7 +130,7 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 3, KeyTargets: []string{"ci"}}},
 	}
 	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, routing, ""))
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, routing, "", nil))
 	got := b.String()
 	for _, want := range []string{
 		"## Query first",
@@ -108,178 +144,14 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 	}
 }
 
-// TestWriteTargetGraphMarkdownNestedInvocation pins the invocation form for a
-// nested project: one canonical command that names the project path, so it is
-// unambiguous when copy-pasted from the repo root (not the cwd-sensitive bare form).
-func TestWriteTargetGraphMarkdownNestedInvocation(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   "pkg/foo",
-		Engine: "buzz",
-		Nodes:  []types.TargetGraphNode{{Name: "build"}},
-	}}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
-	got := b.String()
-	assert.Contains(t, got, "magus run build pkg/foo", "nested invocation names its project path")
-}
-
-// TestWriteTargetGraphMarkdownInlineGraphs pins the graph layout: there is no
-// separate workspace-overview graph, each project section carries its own inline
-// graph, and a project-level depends_on (an affected/scheduling concern) is NOT
-// drawn — only target-level cross-project edges are. (Cross-target edges
-// are covered by TestWriteTargetGraphMarkdownCrossTargetDependencies.)
-func TestWriteTargetGraphMarkdownInlineGraphs(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
-		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build", Dependencies: []string{"fmt"}}, {Name: "fmt"}}},
-		{Path: "web", Engine: "buzz", DependsOn: []string{"api"}, Nodes: []types.TargetGraphNode{{Name: "build"}}},
-	}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
-	got := b.String()
-	assert.NotContains(t, got, "## Workspace overview", "the workspace-overview graph should be gone")
-	assert.Equal(t, 2, strings.Count(got, "**Run order**"), "want one inline graph per project (2)")
-	// Per-project graphs stay flat — no multi-project `p0_`-style prefixes.
-	assert.NotContains(t, got, "subgraph p0", "per-project graphs should render flat, without multi-project prefixes")
-	assert.NotContains(t, got, "p0_build", "per-project graphs should render flat, without multi-project prefixes")
-	// A project-level depends_on (web -> api, no target-level external) is no longer
-	// drawn: there is no coarse project box or project→project arrow anywhere.
-	for _, bad := range []string{"xproj_self", "xdep_", `-.->|"depends on"|`} {
-		assert.NotContains(t, got, bad, "project-level depends_on should not render a coarse cross-project edge")
-	}
-}
-
-// TestWriteTargetGraphMarkdownDispatch confirms the evaluated dispatch plan
-// (defaults block, rendered command, non-default policy) renders when eval is
-// supplied, and is omitted otherwise.
-func TestWriteTargetGraphMarkdownDispatch(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   ".",
-		Engine: "buzz",
-		Nodes:  []types.TargetGraphNode{{Name: "build", Doc: "Build."}, {Name: "gen", Doc: "Generate."}},
-	}}}
-	eval := map[string]types.EvaluatedTargetEntry{
-		".\x00build": {
-			Project: ".", Target: "build",
-			Sources: []string{"**/*.go", "go.mod"},
-			Outputs: []string{"bin/app"},
-			Spells: []types.EvaluatedSpellEntry{
-				{Name: "go", Command: []string{"go", "build"}},
-				{Name: "md", EffectiveClaims: []string{"**/*.md"}},
-			},
-		},
-		".\x00gen": {
-			Project: ".", Target: "gen",
-			Policy: &types.Target{SkipCache: true, Exclusive: true},
-		},
-	}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, eval, nil, ""))
-	got := b.String()
-	for _, want := range []string{
-		"<summary><b>Shared defaults</b>", // collapsed shared block
-		"sources  **/*.go, go.mod",
-		"outputs  bin/app",
-		"md (claims: **/*.md)",
-		"**Executes**",           // per-target rendered command, in a code block
-		"go build",               // the command itself (no inline backticks)
-		"uncached (always runs)", // non-default behavior on gen
-		"exclusive (runs alone, no concurrent targets)",
-	} {
-		assert.Contains(t, got, want, "markdown output missing %q", want)
-	}
-}
-
-// TestProjectDefaultsDeterministic guards the shared-defaults block against the
-// regression where it was rendered from whatever target Go's randomized map
-// iteration happened to yield first — which made the block (and so MAGUS.md) flap
-// between runs once a project's targets weren't perfectly uniform. With several
-// targets in a project, projectDefaults must return the same one every call; the
-// old map-ranging version fails this within a handful of iterations.
-func TestProjectDefaultsDeterministic(t *testing.T) {
-	eval := map[string]types.EvaluatedTargetEntry{
-		".\x00build": {Project: ".", Target: "build", Sources: []string{"**/*.go"}},
-		".\x00gen":   {Project: ".", Target: "gen"},
-		".\x00test":  {Project: ".", Target: "test"},
-		".\x00lint":  {Project: ".", Target: "lint"},
-	}
-	first, ok := projectDefaults(".", eval)
-	require.True(t, ok, "expected a default entry for the project")
-	for i := 0; i < 100; i++ {
-		got, _ := projectDefaults(".", eval)
-		require.Equal(t, first.Target, got.Target, "projectDefaults is nondeterministic")
-	}
-}
-
-// TestWriteTargetGraphMarkdownLegend pins the shared legend: a key that names the
-// role colors and the external-project shape, plus the notes for the spell box and
-// the dotted cross-project arrow.
-func TestWriteTargetGraphMarkdownLegend(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   ".",
-		Engine: "buzz",
-		Nodes:  []types.TargetGraphNode{{Name: "build"}},
-	}}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
-	got := b.String()
-	for _, want := range []string{
-		"## Reading the graphs",
-		`subgraph legend["Legend"]`,
-		`lg_anchor("Top-level target")`,
-		`lg_target("Target")`,
-		`lg_ext[["Other project"]]`,
-		`lg_spell{{"Spell"}}`,
-		"**Toolchain** graph",
-		"**cross-project dependency**",
-	} {
-		assert.Contains(t, got, want, "legend missing %q", want)
-	}
-}
-
-// TestWriteTargetGraphMarkdownCrossTargetDependencies pins target-level cross-project dependencies:
-// a target with a CrossDependency draws a dotted run-order edge from an external
-// [[project:target]] node (it runs first), and the coarse project→project arrow is
-// suppressed for any project already covered at target granularity.
-func TestWriteTargetGraphMarkdownCrossTargetDependencies(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:      "web",
-		Engine:    "buzz",
-		DependsOn: []string{"api"}, // also declared project-level (e.g. for affected)
-		Nodes: []types.TargetGraphNode{
-			{Name: "build", CrossDependencies: []types.CrossTargetRef{{Project: "api", Target: "compile"}}},
-		},
-	}}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
-	got := b.String()
-	for _, want := range []string{
-		`xt_api_compile[["api:compile"]]`, // external target node
-		`xt_api_compile -.-> build`,       // granular dotted edge: external runs first, into the target
-	} {
-		assert.Contains(t, got, want, "granular cross-target dep missing %q", want)
-	}
-	// api is covered at target granularity, so the coarse project arrow is gone.
-	for _, bad := range []string{"xdep_api", `subgraph xproj_self`, `-.->|"depends on"|`} {
-		assert.NotContains(t, got, bad, "coarse project arrow should be suppressed when covered granularly")
-	}
-}
-
-// TestWriteTargetGraphMarkdownDirection pins that per-project graphs read
-// left-to-right.
-func TestWriteTargetGraphMarkdownDirection(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   "app",
-		Engine: "buzz",
-		Nodes:  []types.TargetGraphNode{{Name: "ci", Dependencies: []string{"build"}}, {Name: "build"}},
-	}}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
-	got := b.String()
-	assert.Contains(t, got, "graph LR", "per-project graph should read left-to-right (graph LR)")
-	// Layout spacing rides in the Mermaid frontmatter config (no ELK on GitHub).
-	for _, want := range []string{"config:", "nodeSpacing:", "rankSpacing:"} {
-		assert.Contains(t, got, want, "per-project graph should carry layout spacing config; missing %q", want)
-	}
+// TestFirstDocLine pins the target-list cell helper: it keeps only the first
+// line, trims it, and escapes a pipe so the doc cannot break the Markdown table.
+func TestFirstDocLine(t *testing.T) {
+	assert.Equal(t, "Build the binary.", firstDocLine("Build the binary."))
+	assert.Equal(t, "Build the binary.", firstDocLine("Build the binary.\nmore detail"))
+	assert.Equal(t, "", firstDocLine(""))
+	assert.Equal(t, `a \| b`, firstDocLine("a | b"))
+	assert.Equal(t, "trimmed", firstDocLine("  trimmed  "))
 }
 
 func TestWriteTargetGraphMermaidSingleProject(t *testing.T) {
@@ -327,40 +199,6 @@ func TestWriteTargetGraphMermaidNoSpellBoxes(t *testing.T) {
 	for _, bad := range []string{`subgraph lint`, "lint_s0", "go: golangci-lint"} {
 		assert.NotContains(t, got, bad, "dependency graph should not box spells")
 	}
-}
-
-// TestWriteTargetGraphMarkdownToolchain pins the separate Toolchain graph: a
-// top-down chart drawing each spell-driving target to the spell it drives, with the
-// ops on the edge; consolidated so one spell node serves all its targets.
-func TestWriteTargetGraphMarkdownToolchain(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   ".",
-		Engine: "buzz",
-		Nodes: []types.TargetGraphNode{
-			{Name: "lint", Spells: []types.TargetSpellUse{
-				{Spell: "go", Ops: []string{"golangci-lint", "go-vet"}},
-				{Spell: "md", Ops: []string{"markdownlint"}},
-			}},
-			{Name: "test", Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-test"}}}},
-		},
-	}}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
-	got := b.String()
-	for _, want := range []string{
-		"**Toolchain**",
-		"graph TB", // top-down, unlike the LR run-order graph
-		`sp_go{{"go"}}`,
-		`sp_md{{"md"}}`,
-		`t_lint("lint")`,
-		`t_lint -->|"golangci-lint, go-vet"| sp_go`,
-		`t_lint -->|"markdownlint"| sp_md`,
-		`t_test -->|"go-test"| sp_go`, // the go spell node is shared, not duplicated
-	} {
-		assert.Contains(t, got, want, "toolchain graph missing %q", want)
-	}
-	// One shared go spell node, declared once.
-	assert.Equal(t, 1, strings.Count(got, `sp_go{{"go"}}`), "go spell node should be declared once")
 }
 
 // TestWriteTargetGraphMermaidStages pins the pipeline-stage grouping: targets that
@@ -455,98 +293,6 @@ func TestWriteTargetGraphDOTCrossProject(t *testing.T) {
 	}
 }
 
-// TestWriteTargetGraphMarkdownPerProjectDeepLinks pins the per-project deep links:
-// when explorerURL is set, each project section carries a link to the Graph
-// Explorer pre-seeded with just that project's graph fragment.
-func TestWriteTargetGraphMarkdownPerProjectDeepLinks(t *testing.T) {
-	const explorerURL = "https://example.com/graph/"
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
-		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
-		{Path: "web", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "serve"}}},
-	}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, explorerURL))
-	got := b.String()
-	// Each project section carries a deep link with #data=.
-	assert.Contains(t, got, "Explore this project's graph interactively", "per-project deep link text missing")
-	assert.Contains(t, got, "https://example.com/graph/#data=H4sI", "per-project deep link fragment missing")
-	// Two projects -> two such links (one per project).
-	assert.Equal(t, 2, strings.Count(got, "Explore this project's graph interactively"),
-		"expected one deep link per project")
-}
-
-// TestWriteTargetGraphMarkdownDeepLinkSkippedWhenFragmentTooLarge pins the
-// fragmentCap SKIP path: when a project's encoded fragment exceeds fragmentCap,
-// the "Explore this project's graph interactively" link is omitted but the
-// Mermaid run-order graph is still emitted. This guards the invariant that we
-// never emit a per-project deep link too large for constrained browsers (older
-// Firefox caps at ~64 KB).
-func TestWriteTargetGraphMarkdownDeepLinkSkippedWhenFragmentTooLarge(t *testing.T) {
-	const explorerURL = "https://example.com/graph/"
-
-	// Build a project whose encoded JSON exceeds fragmentCap (64 KB encoded after
-	// gzip+base64). We use a fixed raw JSON payload that we know exceeds the cap,
-	// injected as a single node's doc string. This avoids relying on compression
-	// ratios of generated data, which are hard to predict.
-	//
-	// We need the base64url(gzip(json)) output to exceed 64 KB. A simple way is
-	// to include enough bytes that gzip cannot compress below 64 KB. We use a long
-	// doc with mixed content: repeated patterns broken up by unique indices, making
-	// each 128-byte chunk distinct enough to resist heavy compression.
-	const nodeCount = 2200
-	nodes := make([]types.TargetGraphNode, nodeCount)
-	for i := range nodes {
-		// Each doc mixes a fixed preamble with a unique index in multiple positions
-		// so gzip can't reduce the overall size below fragmentCap across all nodes.
-		nodes[i] = types.TargetGraphNode{
-			Name:   fmt.Sprintf("t%06d", i),
-			Doc:    fmt.Sprintf("step=%06d hash=%016x path=bin/build/%06d/output_%06d.bin deps=all", i, uint64(i)*6364136223846793005+1442695040888963407, i, i),
-			Charms: []string{"rw"},
-		}
-		if i > 0 {
-			nodes[i].Dependencies = []string{fmt.Sprintf("t%06d", i-1)}
-		}
-	}
-
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
-		Path:   "big",
-		Engine: "buzz",
-		Nodes:  nodes,
-	}}}
-
-	// Confirm the fragment actually exceeds the cap (so this test is meaningful).
-	frag, err := EncodeFragment(out)
-	require.NoError(t, err)
-	require.Greater(t, len(frag), fragmentCap,
-		"test setup error: encoded fragment (%d bytes) does not exceed fragmentCap (%d); inflate the payload", len(frag), fragmentCap)
-
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, explorerURL))
-	got := b.String()
-
-	// The deep link must be absent because the fragment exceeds the cap.
-	assert.NotContains(t, got, "Explore this project's graph interactively",
-		"deep link should be absent when the encoded fragment exceeds fragmentCap")
-	assert.NotContains(t, got, "#data=", "no #data= link when fragment exceeds cap")
-
-	// The Mermaid run-order graph is still emitted (the skip is link-only).
-	assert.Contains(t, got, "**Run order**", "Mermaid run-order graph should still be emitted when the deep link is skipped")
-	assert.Contains(t, got, "```mermaid", "Mermaid block should still be emitted when the deep link is skipped")
-}
-
-// TestWriteTargetGraphMarkdownNoDeepLinksWithoutURL pins that deep links are
-// absent when explorerURL is empty.
-func TestWriteTargetGraphMarkdownNoDeepLinksWithoutURL(t *testing.T) {
-	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
-		{Path: "api", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
-	}}
-	var b bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, nil, ""))
-	got := b.String()
-	assert.NotContains(t, got, "Explore this project's graph interactively", "deep link should be absent without explorerURL")
-	assert.NotContains(t, got, "#data=", "no data fragment without explorerURL")
-}
-
 // TestWriteTargetGraphMarkdownQueryLinks pins that routing query cells are
 // plain inline code when explorerURL is empty, and markdown links when it is set.
 func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
@@ -561,7 +307,7 @@ func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
 
 	// Without explorerURL: query cells are plain inline code, no href.
 	var plain bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, nil, routing, ""))
+	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, routing, "", nil))
 	plainStr := plain.String()
 	assert.Contains(t, plainStr, "`magus query kind:spell`", "query cell should be inline code without explorerURL")
 	assert.NotContains(t, plainStr, "#q=", "no #q= link without explorerURL")
@@ -572,7 +318,7 @@ func TestWriteTargetGraphMarkdownQueryLinks(t *testing.T) {
 	// leaves '+' as a literal plus character, which would corrupt multi-word queries.
 	const explorerURL = "https://example.com/graph/"
 	var withLink bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&withLink, out, nil, routing, explorerURL))
+	require.NoError(t, WriteTargetGraphMarkdown(&withLink, out, routing, explorerURL, nil))
 	linkedStr := withLink.String()
 	// url.PathEscape encodes spaces as %20 and slashes as %2F but leaves colons
 	// unescaped (colons are valid in a URI path component). decodeURIComponent in
@@ -619,15 +365,14 @@ func TestQueryCellEncodingRoundTrip(t *testing.T) {
 }
 
 // TestWriteTargetGraphMarkdownRenderDeterministic confirms that two calls to
-// WriteTargetGraphMarkdown with the same input produce byte-identical output.
-// This covers both the gzip fragment determinism (encodeDataFragment) and the
-// overall render pipeline.
+// WriteTargetGraphMarkdown with the same input produce byte-identical output -
+// the property that lets MAGUS.md back a drift gate.
 func TestWriteTargetGraphMarkdownRenderDeterministic(t *testing.T) {
 	const explorerURL = "https://example.com/graph/"
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{
 		{Path: "pkg/foo", Engine: "buzz", Nodes: []types.TargetGraphNode{
-			{Name: "build", Dependencies: []string{"fmt"}},
-			{Name: "fmt"},
+			{Name: "build", Doc: "Build it.", Dependencies: []string{"fmt"}},
+			{Name: "fmt", Doc: "Format it."},
 		}},
 	}}
 	routing := &types.KnowledgeRouting{
@@ -636,7 +381,7 @@ func TestWriteTargetGraphMarkdownRenderDeterministic(t *testing.T) {
 		Projects: []types.KnowledgeRoutingProject{{Path: "pkg/foo", TargetCount: 2}},
 	}
 	var first, second bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&first, out, nil, routing, explorerURL))
-	require.NoError(t, WriteTargetGraphMarkdown(&second, out, nil, routing, explorerURL))
+	require.NoError(t, WriteTargetGraphMarkdown(&first, out, routing, explorerURL, []string{"rw"}))
+	require.NoError(t, WriteTargetGraphMarkdown(&second, out, routing, explorerURL, []string{"rw"}))
 	assert.Equal(t, first.String(), second.String(), "WriteTargetGraphMarkdown output is not deterministic")
 }

@@ -16,9 +16,12 @@ package render
 // Where each class name is emitted in Go:
 //
 //	"anchor", "target"   - targetGraphIR -> WriteTargetGraphMermaid
-//	"external"           - addCrossTargetDependencies -> writeProjectGraph (markdown)
-//	"spell"              - writeToolchainGraph (markdown) + spellClass var
 //	"kind_*"             - knowledgeGraphIR -> WriteKnowledgeMermaid
+//
+// "external" and "spell" still appear in the JS targets flavor (the interactive
+// web graph draws cross-project edges and spell nodes), but no Go emitter writes
+// them any more - MAGUS.md dropped its embedded per-project graphs - so they are
+// no longer part of the two-way Go<->JS lock below.
 
 import (
 	"bytes"
@@ -33,13 +36,14 @@ import (
 )
 
 // targetsClassDefNames are the exact classDef name strings the Go targets-flavor
-// emitters write. They are listed here explicitly so that renaming one in
-// targetgraph.go without updating this list causes a test failure.
+// emitter writes. They are listed here explicitly so that renaming one in
+// targetgraph.go without updating this list causes a test failure. Only the two
+// role classes are Go-emitted now (MAGUS.md no longer embeds per-project graphs);
+// the JS file still carries "external"/"spell" for its interactive targets graph,
+// but with no Go counterpart there is nothing to drift-lock them against.
 var targetsClassDefNames = []string{
-	"anchor",   // targetRoleClasses[0].Name (targetgraph.go)
-	"target",   // targetRoleClasses[1].Name (targetgraph.go)
-	"external", // externalClass.Name        (targetgraph.go)
-	"spell",    // spellClass.Name           (targetgraph.go)
+	"anchor", // targetRoleClasses[0].Name (targetgraph.go)
+	"target", // targetRoleClasses[1].Name (targetgraph.go)
 }
 
 // knowledgeClassDefNames are kind_<kind> names from knowledgeKindPalette in
@@ -78,31 +82,6 @@ func TestMermaidClassDefDrift(t *testing.T) {
 		for _, name := range []string{"anchor", "target"} {
 			require.True(t, strings.Contains(got, "classDef "+name+" "),
 				"WriteTargetGraphMermaid output missing classDef %q - "+
-					"update targetsClassDefNames in this test to match targetgraph.go", name)
-		}
-	})
-
-	t.Run("go_targets_markdown_external_spell", func(t *testing.T) {
-		// WriteTargetGraphMarkdown emits "external" (addCrossTargetDependencies) and
-		// "spell" (writeToolchainGraph) inside its per-project mermaid blocks.
-		out := types.TargetGraphOutput{
-			Projects: []types.TargetGraphProject{{
-				Path: ".",
-				Nodes: []types.TargetGraphNode{{
-					Name:   "build",
-					Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"build"}}},
-					CrossDependencies: []types.CrossTargetRef{
-						{Project: "pkg/b", Target: "gen"},
-					},
-				}},
-			}},
-		}
-		var buf bytes.Buffer
-		require.NoError(t, WriteTargetGraphMarkdown(&buf, out, nil, nil, ""))
-		got := buf.String()
-		for _, name := range []string{"external", "spell"} {
-			require.True(t, strings.Contains(got, "classDef "+name+" "),
-				"WriteTargetGraphMarkdown output missing classDef %q - "+
 					"update targetsClassDefNames in this test to match targetgraph.go", name)
 		}
 	})
