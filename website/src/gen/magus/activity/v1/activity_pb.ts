@@ -26,7 +26,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/activity/v1/activity.proto.
  */
 export const file_magus_activity_v1_activity: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy9hY3Rpdml0eS92MS9hY3Rpdml0eS5wcm90bxIRbWFndXMuYWN0aXZpdHkudjEi0wIKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoEa2luZBgCIAEoDjIXLm1hZ3VzLmFjdGl2aXR5LnYxLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEisKB291dGNvbWUYBSABKA4yGi5tYWd1cy5hY3Rpdml0eS52MS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMigQEKDUFjdGl2aXR5UXVlcnkSJgoFa2luZHMYASADKA4yFy5tYWd1cy5hY3Rpdml0eS52MS5LaW5kEg4KBmFjdG9ycxgCIAMoCRIPCgdhY3Rpb25zGAMgAygJEicKBHRpbWUYBCABKAsyGS5tYWd1cy5xdWVyeS52MS5UaW1lUmFuZ2UiegoTTGlzdEFjdGl2aXR5UmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgCIAEoCRIwCgZmaWx0ZXIYAyABKAsyIC5tYWd1cy5hY3Rpdml0eS52MS5BY3Rpdml0eVF1ZXJ5ImEKFExpc3RBY3Rpdml0eVJlc3BvbnNlEjAKBmV2ZW50cxgBIAMoCzIgLm1hZ3VzLmFjdGl2aXR5LnYxLkFjdGl2aXR5RXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIj4KEUdldFBheWxvYWRSZXF1ZXN0EikKA3JlZhgBIAEoCUIcukgZchcyFV5bYS16XXsyLDh9WzAtOWEtZl0rJCIxChJHZXRQYXlsb2FkUmVzcG9uc2USDAoEYm9keRgBIAEoDBINCgVieXRlcxgCIAEoAyp/CgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIWChJLSU5EX01DUF9UT09MX0NBTEwQARIYChRLSU5EX1RPS0VOX0xJRkVDWUNMRRACEhYKEktJTkRfQ09ORklHX0NIQU5HRRADEhcKE0tJTkRfU0FOREJPWF9ERU5JQUwQBCpFCgdPdXRjb21lEhcKE09VVENPTUVfVU5TUEVDSUZJRUQQABIOCgpPVVRDT01FX09LEAESEQoNT1VUQ09NRV9FUlJPUhACMs0BCg9BY3Rpdml0eVNlcnZpY2USXwoMTGlzdEFjdGl2aXR5EiYubWFndXMuYWN0aXZpdHkudjEuTGlzdEFjdGl2aXR5UmVxdWVzdBonLm1hZ3VzLmFjdGl2aXR5LnYxLkxpc3RBY3Rpdml0eVJlc3BvbnNlElkKCkdldFBheWxvYWQSJC5tYWd1cy5hY3Rpdml0eS52MS5HZXRQYXlsb2FkUmVxdWVzdBolLm1hZ3VzLmFjdGl2aXR5LnYxLkdldFBheWxvYWRSZXNwb25zZWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1_query]);
+  fileDesc("CiBtYWd1cy9hY3Rpdml0eS92MS9hY3Rpdml0eS5wcm90bxIRbWFndXMuYWN0aXZpdHkudjEi0wIKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoEa2luZBgCIAEoDjIXLm1hZ3VzLmFjdGl2aXR5LnYxLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEisKB291dGNvbWUYBSABKA4yGi5tYWd1cy5hY3Rpdml0eS52MS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMigQEKDUFjdGl2aXR5UXVlcnkSJgoFa2luZHMYASADKA4yFy5tYWd1cy5hY3Rpdml0eS52MS5LaW5kEg4KBmFjdG9ycxgCIAMoCRIPCgdhY3Rpb25zGAMgAygJEicKBHRpbWUYBCABKAsyGS5tYWd1cy5xdWVyeS52MS5UaW1lUmFuZ2UiegoTTGlzdEFjdGl2aXR5UmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgCIAEoCRIwCgZmaWx0ZXIYAyABKAsyIC5tYWd1cy5hY3Rpdml0eS52MS5BY3Rpdml0eVF1ZXJ5ImEKFExpc3RBY3Rpdml0eVJlc3BvbnNlEjAKBmV2ZW50cxgBIAMoCzIgLm1hZ3VzLmFjdGl2aXR5LnYxLkFjdGl2aXR5RXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIj4KEUdldFBheWxvYWRSZXF1ZXN0EikKA3JlZhgBIAEoCUIcukgZchcyFV5bYS16XXsyLDh9WzAtOWEtZl0rJCIxChJHZXRQYXlsb2FkUmVzcG9uc2USDAoEYm9keRgBIAEoDBINCgVieXRlcxgCIAEoAyqNAQoES2luZBIUChBLSU5EX1VOU1BFQ0lGSUVEEAASFgoSS0lORF9NQ1BfVE9PTF9DQUxMEAESDAoIS0lORF9KT0IQAhIWChJLSU5EX0NPTkZJR19DSEFOR0UQAxIYChRLSU5EX1RPS0VOX0xJRkVDWUNMRRAEEhcKE0tJTkRfU0FOREJPWF9ERU5JQUwQBSpFCgdPdXRjb21lEhcKE09VVENPTUVfVU5TUEVDSUZJRUQQABIOCgpPVVRDT01FX09LEAESEQoNT1VUQ09NRV9FUlJPUhACMs0BCg9BY3Rpdml0eVNlcnZpY2USXwoMTGlzdEFjdGl2aXR5EiYubWFndXMuYWN0aXZpdHkudjEuTGlzdEFjdGl2aXR5UmVxdWVzdBonLm1hZ3VzLmFjdGl2aXR5LnYxLkxpc3RBY3Rpdml0eVJlc3BvbnNlElkKCkdldFBheWxvYWQSJC5tYWd1cy5hY3Rpdml0eS52MS5HZXRQYXlsb2FkUmVxdWVzdBolLm1hZ3VzLmFjdGl2aXR5LnYxLkdldFBheWxvYWRSZXNwb25zZWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1_query]);
 
 /**
  * ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
@@ -270,32 +270,43 @@ export enum Kind {
   UNSPECIFIED = 0,
 
   /**
-   * an agent invoked an MCP tool over the daemon
+   * an agent invoked an MCP tool over the daemon (emitted)
    *
    * @generated from enum value: KIND_MCP_TOOL_CALL = 1;
    */
   MCP_TOOL_CALL = 1,
 
   /**
-   * a connector token was minted or revoked
+   * The remaining sources share this envelope; each is emitted once its producer records into
+   * the trail, with no schema change. A reader/dashboard selects the kinds it wants (see
+   * ActivityQuery.kinds), so one stream serves the agent view, a jobs view, and a full log.
    *
-   * @generated from enum value: KIND_TOKEN_LIFECYCLE = 2;
+   * reserved: a daemon background job (SCIP reindex, graph build, VCS refresh)
+   *
+   * @generated from enum value: KIND_JOB = 2;
    */
-  TOKEN_LIFECYCLE = 2,
+  JOB = 2,
 
   /**
-   * reserved: a `magus config set` mutation (not yet emitted)
+   * reserved: magus.yaml changed on reload, or a `magus config set` mutation
    *
    * @generated from enum value: KIND_CONFIG_CHANGE = 3;
    */
   CONFIG_CHANGE = 3,
 
   /**
-   * reserved: a target attempted a disallowed filesystem write (not yet emitted)
+   * reserved: a connector token was minted or revoked
    *
-   * @generated from enum value: KIND_SANDBOX_DENIAL = 4;
+   * @generated from enum value: KIND_TOKEN_LIFECYCLE = 4;
    */
-  SANDBOX_DENIAL = 4,
+  TOKEN_LIFECYCLE = 4,
+
+  /**
+   * reserved: a target attempted a disallowed filesystem write
+   *
+   * @generated from enum value: KIND_SANDBOX_DENIAL = 5;
+   */
+  SANDBOX_DENIAL = 5,
 }
 
 /**

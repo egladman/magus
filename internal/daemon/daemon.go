@@ -20,12 +20,14 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/file/watch"
+	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
 	"github.com/egladman/magus/types"
 )
@@ -222,6 +224,19 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			} else {
 				log.Info("[BRIDGE] metrics service off (workspace not collecting metrics)")
 			}
+
+			// Activity-trail Connect service for the /dashboard + log viewer: recent agent
+			// and governance activity, read-only over the workspace trail. Mounted with the
+			// same cross-origin guards as metrics (the dashboard is a hosted-site browser
+			// client) and unconditionally - the trail is readable even when metrics are off.
+			activityPath, activityHandler := activityv1connect.NewActivityServiceHandler(activityhandler.NewService(opts.Magus.CacheDir()))
+			activityAllowed := allowed
+			if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
+				activityAllowed = allowed.Allow(u.Host)
+			}
+			httpServer.Handle(activityPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, activityHandler))))
+			log.Info("[BRIDGE] activity service mounted", slog.String("path", activityPath))
+
 			log.Info("[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}
 	}

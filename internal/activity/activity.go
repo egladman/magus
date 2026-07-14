@@ -35,10 +35,15 @@ const (
 const refHexLen = 16
 
 // Kind values name an action's source; they map to the magus.activity.v1 Kind enum at the
-// wire. Kept as readable strings on disk, like the journal's status strings.
+// wire. Kept as readable strings on disk, like the journal's status strings. Only
+// KindMCPToolCall is emitted today; the rest name the sources the envelope is built to hold
+// (a producer records into the trail and the reader maps its string to the wire enum).
 const (
 	KindMCPToolCall    = "mcp_tool_call"
-	KindTokenLifecycle = "token_lifecycle"
+	KindJob            = "job"             // a daemon background job (SCIP reindex, graph build, VCS refresh)
+	KindConfigChange   = "config_change"   // magus.yaml changed on reload, or a config-set mutation
+	KindTokenLifecycle = "token_lifecycle" // a connector token minted or revoked
+	KindSandboxDenial  = "sandbox_denial"  // a target attempted a disallowed filesystem write
 )
 
 // Outcome values; map to the wire Outcome enum.
