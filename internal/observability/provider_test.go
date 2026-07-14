@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -310,4 +312,61 @@ func TestTargetRunOptions(t *testing.T) {
 	}, multiOpts...)
 	require.NoError(t, err, "Run(multi-spell)")
 	assert.Equal(t, 2, len(rec.targetRuns)-before, "multi-spell should emit 2 rows")
+}
+
+// graphRecorder captures RecordGraphQuery calls so the otel graph observer's
+// attribute mapping can be asserted. It embeds Provider so only the two methods
+// the observer touches need bodies.
+type graphRecorder struct {
+	Provider
+	enabled bool
+	calls   []graphCall
+}
+
+type graphCall struct {
+	secs  float64
+	attrs []Attr
+}
+
+func (g *graphRecorder) Enabled() bool { return g.enabled }
+func (g *graphRecorder) RecordGraphQuery(_ context.Context, secs float64, attrs ...Attr) {
+	g.calls = append(g.calls, graphCall{secs, attrs})
+}
+
+func TestGraphObserver_NilOrDisabledIsNoop(t *testing.T) {
+	t.Parallel()
+	assert.IsType(t, types.NoopObserver{}, GraphObserver(context.Background(), nil))
+	assert.IsType(t, types.NoopObserver{}, GraphObserver(context.Background(), &graphRecorder{enabled: false}))
+	// An enabled provider yields the real otel-backed observer.
+	assert.IsType(t, &otelGraphObserver{}, GraphObserver(context.Background(), &graphRecorder{enabled: true}))
+}
+
+func TestOtelGraphObserver_OnBuildOnQueryOnError(t *testing.T) {
+	t.Parallel()
+	rec := &graphRecorder{enabled: true}
+	obs := GraphObserver(context.Background(), rec)
+
+	obs.OnBuild(types.BuildStats{Duration: 2 * time.Second})
+	obs.OnQuery(types.QueryEvent{Op: "path", Strategy: "bfs", Duration: 500 * time.Millisecond})
+	obs.OnQuery(types.QueryEvent{Op: "stats", Duration: time.Second}) // no strategy: attr omitted
+	obs.OnError(assert.AnError)                                       // no-op, must not panic or record
+
+	require.Len(t, rec.calls, 3)
+
+	assert.InDelta(t, 2.0, rec.calls[0].secs, 1e-9)
+	assert.Equal(t, []Attr{{Key: "op", Value: "build"}}, rec.calls[0].attrs)
+
+	assert.InDelta(t, 0.5, rec.calls[1].secs, 1e-9)
+	assert.Equal(t, []Attr{{Key: "op", Value: "path"}, {Key: "strategy", Value: "bfs"}}, rec.calls[1].attrs)
+
+	assert.Equal(t, []Attr{{Key: "op", Value: "stats"}}, rec.calls[2].attrs) // strategy dropped when empty
+}
+
+func TestWithProviderAndFromContext(t *testing.T) {
+	t.Parallel()
+	assert.Nil(t, FromContext(context.Background())) // nothing stored
+
+	rec := &graphRecorder{enabled: true}
+	ctx := WithProvider(context.Background(), rec)
+	assert.Same(t, rec, FromContext(ctx))
 }
