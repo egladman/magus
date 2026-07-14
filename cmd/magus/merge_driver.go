@@ -157,13 +157,13 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	}
 
 	if conflicted, err := sourcesConflicted(ctx, wsRoot, p); err == nil && conflicted {
-		return fmt.Errorf("merge-driver: %s has conflicted source files; resolve source conflicts first, then re-merge", p.Path)
+		return fmt.Errorf("merge-driver: %s has conflicted source files; resolve source conflicts first, then re-merge", types.ProjectLabel(p.Path, p.Dir))
 	}
 
 	regenTarget := pickRegenTarget(p)
 	targets := []types.Target{{Path: p.Path, Name: regenTarget}}
 	if err := m.Run(ctx, targets, magus.WithWrite()); err != nil {
-		return fmt.Errorf("merge-driver: %s %s: %w", p.Path, regenTarget, err)
+		return fmt.Errorf("merge-driver: %s %s: %w", types.ProjectLabel(p.Path, p.Dir), regenTarget, err)
 	}
 
 	resultPath := args[1] // copy to result if it differs from absPath (git temp-file protocol)

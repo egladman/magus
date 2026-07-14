@@ -147,6 +147,16 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
+	// Fault tolerance by design: a target only some projects serve should skip - not
+	// error - the projects that lack it when the scope is the workspace or several
+	// projects, but a single project that does not serve it (or a name no project serves
+	// at all) is an error. This is the run counterpart to affected's tolerance.
+	if len(targets) > 0 {
+		targets, err = filterServedTargets(m, targets, targetName)
+		if err != nil {
+			return err
+		}
+	}
 	var scopeLabel string
 	if len(targets) == 1 {
 		scopeLabel = targets[0].Path
@@ -287,6 +297,83 @@ func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []
 	}
 	targets, err := ws.ExpandPath(t)
 	return targets, "", err
+}
+
+// filterServedTargets keeps only the (project, target) pairs whose project actually
+// defines the target, so a fan-out never runs - or misreports "[pass]" for - a project
+// that lacks it. It errors when nothing serves the target: a single project in scope
+// names that project (you asked for it explicitly), otherwise it reads as an unknown
+// target across the selection. When some projects serve it and others don't, the ones
+// that don't are dropped with a warning - the tolerant multi-project behavior.
+func filterServedTargets(m *magus.Magus, targets []types.Target, targetName string) ([]types.Target, error) {
+	return applyTargetFilter(targets, targetName, buildDefinesTarget(m), func(path string) string { return projectLabelFor(m, path) })
+}
+
+// applyTargetFilter is the pure policy behind filterServedTargets: partition targets by
+// whether their project defines the target, error when none do (single project named vs
+// unknown-across-selection), otherwise drop the undefined ones with a warning. Split out
+// so the fault-tolerance matrix is testable without a live workspace.
+func applyTargetFilter(targets []types.Target, targetName string, defines func(path, target string) bool, label func(path string) string) ([]types.Target, error) {
+	var served, skipped []types.Target
+	for _, t := range targets {
+		if defines(t.Path, t.Name) {
+			served = append(served, t)
+		} else {
+			skipped = append(skipped, t)
+		}
+	}
+	if len(served) == 0 {
+		if len(targets) == 1 {
+			return nil, fmt.Errorf("run: target %q is not defined in project %s", targetName, label(targets[0].Path))
+		}
+		return nil, fmt.Errorf("run: target %q is not defined in any of the %d selected projects", targetName, len(targets))
+	}
+	if len(skipped) > 0 {
+		names := make([]string, 0, len(skipped))
+		for _, t := range skipped {
+			names = append(names, label(t.Path))
+		}
+		slog.Warn("run: target not defined in some selected projects; skipping them",
+			slog.String("target", targetName), slog.String("skipped", strings.Join(names, ", ")))
+	}
+	return served, nil
+}
+
+// buildDefinesTarget returns a predicate reporting whether a project defines a target,
+// covering BOTH sources of runnable targets: magusfile-declared targets (the target
+// graph's nodes) and spell ops (each bound spell's Targets). Neither set alone is
+// complete - the magusfile spell exposes no ops, and spell ops are not graph nodes.
+func buildDefinesTarget(m *magus.Magus) func(path, target string) bool {
+	byProject := map[string]map[string]bool{}
+	add := func(path, name string) {
+		set := byProject[path]
+		if set == nil {
+			set = map[string]bool{}
+			byProject[path] = set
+		}
+		set[name] = true
+	}
+	for _, p := range m.DescribeGraph().Projects {
+		for _, n := range p.Nodes {
+			add(p.Path, n.Name)
+		}
+	}
+	for _, p := range m.All() {
+		for _, sp := range p.ResolvedSpells {
+			for _, t := range sp.Targets() {
+				add(p.Path, t)
+			}
+		}
+	}
+	return func(path, target string) bool { return byProject[path][target] }
+}
+
+// projectLabelFor renders a project's human name (never a bare ".") from its path.
+func projectLabelFor(m *magus.Magus, path string) string {
+	if p := m.Get(path); p != nil {
+		return types.ProjectLabel(p.Path, p.Dir)
+	}
+	return types.ProjectLabel(path, "")
 }
 
 // resolveProjectArg canonicalises a CLI project argument to a workspace-relative

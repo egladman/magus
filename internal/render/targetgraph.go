@@ -250,14 +250,7 @@ func EvalKey(path, target string) string { return path + "\x00" + target }
 // bare `.` is never used as a heading — a root project with no better label reads
 // as "(workspace root)".
 func projectLabel(p types.TargetGraphProject) string {
-	// Prefer the repo-relative path (describe pre-computes it, collapsing the root to
-	// the workspace dir name); fall back to the workspace path. types.ProjectLabel is
-	// the shared "never render '.'/''" rule. Dir is unknown here, so a bare root falls
-	// back to "(workspace root)".
-	if p.RelPath != "" && p.RelPath != "." {
-		return p.RelPath
-	}
-	return types.ProjectLabel(p.Path, "")
+	return p.Label() // the single "never render '.'" rule now lives on the type
 }
 
 // catalogOrder lists a project's targets primary-first: the targets you invoke

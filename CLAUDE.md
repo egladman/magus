@@ -36,6 +36,29 @@ change is to magus itself.
   breaking-change signal to surface (release first), not to paper over by
   quietly switching to `go run`.
 
+## Running the daemon locally
+
+The daemon is the long-lived process that serves MCP, keeps the knowledge graph
+warm, and runs background jobs (symbol auto-indexing). Start/stop it with:
+
+- `magus server start` (backgrounds it) / `magus server stop`. The MCP server
+  and the Dashboard come up alongside it.
+- Iterating on daemon code: `go run ./cmd/magus server start` runs HEAD, but the
+  process is long-lived, so a source edit does NOT take effect until you stop and
+  restart it: `magus server stop && go run ./cmd/magus server start`. There is no
+  hot reload.
+
+Do NOT wire a watch-rebuild loop for magus itself. magus is the task
+orchestrator, so a "rebuild on every file change" loop would have the tool
+rebuilding and restarting itself mid-run - it fights itself and thrashes. Rebuild
+deliberately instead:
+
+- One-off HEAD check: `go run ./cmd/magus <cmd>` (compiles fresh each invocation;
+  fine for a single command, slow as a loop).
+- Exercising a change repeatedly: `go build -o /tmp/magus ./cmd/magus` once, then
+  run `/tmp/magus ...`; rebuild when you change the code, not when any file moves.
+- The daemon: restart it (stop + start) after a rebuild to pick up new code.
+
 ## Layout
 
 - `magus.go` + root `*.go` - public API and composition root (`Open`, `Inspect`)

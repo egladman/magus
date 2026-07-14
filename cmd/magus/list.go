@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/egladman/magus/types"
 )
 
 // listProject is the structured view of a project emitted under -o
@@ -72,6 +74,7 @@ func ls(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
+		// Machine-consumable: emit the stable path ("." for the root), never the label.
 		for _, p := range out.Projects {
 			fmt.Println(p.Path)
 		}
@@ -81,7 +84,7 @@ func ls(ctx context.Context, root string, args []string) error {
 	// text and wide share the human-readable layout.
 	fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
 	for _, p := range out.Projects {
-		fmt.Printf("project: %s\n", p.Path)
+		fmt.Printf("project: %s\n", types.ProjectLabel(p.Path, p.Dir))
 		fmt.Printf("  dir:  %s\n", p.Dir)
 		if p.Spell != "" {
 			fmt.Printf("  spell: %s\n", p.Spell)

@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )
@@ -187,10 +187,10 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	fmt.Printf("definition: %s\n\n", out.Definition)
 	for _, p := range out.Projects {
 		if p.Engine != "buzz" {
-			fmt.Printf("project: %s  (engine %s — graph extraction not yet supported)\n\n", p.Path, p.Engine)
+			fmt.Printf("project: %s  (engine %s - graph extraction not yet supported)\n\n", p.Label(), p.Engine)
 			continue
 		}
-		fmt.Printf("project: %s  (%d targets)\n", p.Path, len(p.Nodes))
+		fmt.Printf("project: %s  (%d targets)\n", p.Label(), len(p.Nodes))
 		if len(p.Cycle) > 0 {
 			fmt.Printf("  CYCLE: %s\n", strings.Join(p.Cycle, " → "))
 		}
@@ -538,7 +538,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		fmt.Printf("definition: %s\n\n", out.Definition)
 		fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
 		for _, p := range out.Projects {
-			fmt.Printf("project: %s\n", p.Path)
+			fmt.Printf("project: %s\n", types.ProjectLabel(p.Path, p.Dir))
 			fmt.Printf("  dir:     %s\n", p.Dir)
 			if len(p.Sources) > 0 {
 				fmt.Printf("  sources: %v\n", p.Sources)
@@ -610,7 +610,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 	fmt.Printf("definition: %s\n\n", out.Definition)
 	fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
 	for _, p := range out.Projects {
-		fmt.Printf("project: %s\n", p.Path)
+		fmt.Printf("project: %s\n", types.ProjectLabel(p.Path, p.Dir))
 		fmt.Printf("  dir:  %s\n", p.Dir)
 		if p.Spell != "" {
 			fmt.Printf("  spell: %s\n", p.Spell)
