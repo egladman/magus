@@ -158,6 +158,14 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 	fmt.Fprintln(os.Stderr, "  fi")
 	fmt.Fprintln(os.Stderr, "")
 	interactive.Emit(os.Stderr, "stop with:  magus server stop")
+
+	// Point users at the agent surface. A hint, not a step: connecting a client
+	// is per-user and per-machine (it writes the client's config, not the repo),
+	// so it does not belong in repo bootstrap - init just says where to look.
+	interactive.Emit(os.Stderr, "")
+	interactive.Emit(os.Stderr, "let an AI agent use this workspace over the daemon (graph-aware skills + MCP tools):")
+	interactive.Emit(os.Stderr, "  magus agent install claude          # install skills (also: opencode, agents, codex)")
+	interactive.Emit(os.Stderr, "  magus config mcp connector create   # mint a token, then point your client at the MCP server")
 }
 
 // writeMagusfileStub writes a starter magusfile.buzz in dir when the directory has
