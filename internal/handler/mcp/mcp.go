@@ -9,6 +9,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/activity"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/observability"
@@ -171,7 +173,7 @@ var (
 	_ graphResolver = (*magus.Magus)(nil)
 )
 
-func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, audit *auditLog) {
+func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, trail *activity.Log) {
 	// The MCP tool ctx is not stamped with the telemetry provider, so grab the
 	// shared one here and close over it in wrap. Telemetry() returns a nil-safe
 	// disabledProvider when telemetry is off; a nil Magus (some test paths)
@@ -189,18 +191,19 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, audit, tel, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, trail, tel, adapt(t)))
 	}
 }
 
 // wrap injects origin markers and emits banner log lines around every tool
 // call so the human watching magus's stderr can immediately see when an agent
-// triggered an operation. It also persists one auditEvent per call to the audit
-// log (best-effort; a nil audit log is a no-op) - the durable form of the banner
-// that a later /dashboard activity view reads - and records the call to the
-// magus.mcp.tool.* metric family (attributed by tool + outcome only; never by
-// argument values or result content). A nil tel is a no-op.
-func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLog, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
+// triggered an operation. It also records one activity Event per call to the
+// activity trail (best-effort; a nil trail is a no-op) as a KIND_MCP_TOOL_CALL -
+// the durable form of the banner that the /dashboard activity view reads, with
+// both sides of the exchange captured as content-addressed blobs - and records
+// the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
+// only; never by argument values or result content). A nil tel is a no-op.
+func wrap(log *slog.Logger, agentFn func(context.Context) string, trail *activity.Log, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		agentID := agentFn(ctx)
 		toolName := req.Params.Name
@@ -214,7 +217,6 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 		ctx = withLogger(ctx, reqLog)
 
 		reqLog.Info("[AGENT] tool called")
-		startMs := nowMillis()
 		start := time.Now()
 
 		result, err := fn(ctx, req)
@@ -223,26 +225,29 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 		// reads, so its bytes belong in the output-size metric (its context cost).
 		decorateResult(result, toolName)
 
-		// Capture the full response text the agent received (the context returned FROM
-		// the tool) into the audit blob store, and keep only its ref/preview/size on the
-		// event. This is what makes the audit trail show both sides of the exchange.
+		// Capture both sides the agent exchanged with the tool as content-addressed blobs
+		// (prefixed "mcp"), keeping only refs on the event so a large body never bloats the
+		// trail line. Request = the tool arguments, response = the result text.
+		reqRef, reqBytes := trail.PutBlob("mcp", argsJSON(req.GetArguments()))
 		respText := allText(result)
-		respRef, respBytes := audit.putBlob([]byte(respText))
+		respRef, respBytes := trail.PutBlob("mcp", []byte(respText))
 
 		dur := time.Since(start)
-		ev := auditEvent{
-			Ts:          startMs,
-			Agent:       agentID,
-			Tool:        toolName,
-			Args:        auditArgs(req.GetArguments()),
-			DurMs:       dur.Milliseconds(),
-			Outcome:     "ok",
-			RespRef:     respRef,
-			RespBytes:   respBytes,
-			RespPreview: preview(respText, respPreviewLen),
+		ev := activity.Event{
+			TimeMs:        start.UnixMilli(),
+			Kind:          activity.KindMCPToolCall,
+			Actor:         agentID,
+			Action:        toolName,
+			Outcome:       activity.OutcomeOK,
+			DurationMs:    dur.Milliseconds(),
+			RequestRef:    reqRef,
+			RequestBytes:  reqBytes,
+			ResponseRef:   respRef,
+			ResponseBytes: respBytes,
+			Preview:       preview(respText, respPreviewLen),
 		}
 		if err != nil {
-			ev.Outcome = "error"
+			ev.Outcome = activity.OutcomeError
 			ev.Error = err.Error()
 			reqLog.Error(
 				"[AGENT] tool error",
@@ -252,21 +257,34 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 		} else {
 			reqLog.Info("[AGENT] tool done", slog.Duration("duration", dur))
 		}
-		audit.record(ev)
+		trail.Record(ev)
 		if tel != nil {
-			// INPUT = the serialized tool arguments (same bytes the audit record
-			// carries); OUTPUT = the total byte length of the result's text blocks.
-			// Attribute by tool + outcome only to keep cardinality bounded.
+			// INPUT = the serialized tool arguments; OUTPUT = the response text length
+			// (same bytes captured above). Attribute by tool + outcome only to keep
+			// metric cardinality bounded.
 			tel.RecordMCPCall(ctx, observability.MCPCall{
 				Tool:        toolName,
 				Outcome:     ev.Outcome,
-				InputBytes:  int64(len(ev.Args)),
-				OutputBytes: sumTextBytes(result),
+				InputBytes:  reqBytes,
+				OutputBytes: respBytes,
 				Duration:    dur.Seconds(),
 			})
 		}
 		return result, err
 	}
+}
+
+// argsJSON marshals a tool call's arguments map for capture into the activity blob store.
+// An empty map or a marshal failure yields nil (no request blob is stored), never a panic.
+func argsJSON(args map[string]any) []byte {
+	if len(args) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 // respPreviewLen bounds the inline response preview kept on each audit event, so a

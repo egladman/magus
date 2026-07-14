@@ -3,19 +3,16 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/activity"
 	"github.com/egladman/magus/internal/observability"
 )
 
@@ -96,38 +93,45 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	})
 }
 
-func TestWrapCapturesResponse(t *testing.T) {
+func TestWrapCapturesExchange(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	audit := openAuditLog(dir)
-	require.NotNil(t, audit)
+	trail := activity.Open(dir)
+	require.NotNil(t, trail)
 
 	agentFn := func(context.Context) string { return "test-agent" }
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 	const out = "hello world result payload"
-	h := wrap(quietLogger(), agentFn, audit, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), agentFn, trail, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText(out), nil
 	})
 
 	_, err := h(context.Background(), req)
 	require.NoError(t, err)
-	require.NoError(t, audit.Close())
+	require.NoError(t, trail.Close())
 
-	data, err := os.ReadFile(filepath.Join(dir, AuditDir, "mcp.jsonl"))
+	events, err := activity.ReadRecent(dir, 10)
 	require.NoError(t, err)
-	var ev auditEvent
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(string(data))), &ev))
+	require.Len(t, events, 1)
+	ev := events[0]
 
-	assert.Equal(t, "magus_query", ev.Tool)
-	assert.Equal(t, int64(len(out)), ev.RespBytes)
-	assert.Equal(t, out, ev.RespPreview) // a short response: the preview is the whole body
-	require.NotEmpty(t, ev.RespRef)
+	assert.Equal(t, activity.KindMCPToolCall, ev.Kind)
+	assert.Equal(t, "test-agent", ev.Actor)
+	assert.Equal(t, "magus_query", ev.Action)
+	assert.Equal(t, activity.OutcomeOK, ev.Outcome)
+	assert.Equal(t, int64(len(out)), ev.ResponseBytes)
+	assert.Equal(t, out, ev.Preview) // a short response: the preview is the whole body
+	require.NotEmpty(t, ev.ResponseRef)
+	require.NotEmpty(t, ev.RequestRef) // the request arguments were captured too
 
-	// The ref resolves back to the exact response the agent received.
-	body, err := audit.blob(ev.RespRef)
+	// Each ref resolves back to the exact bytes the agent exchanged.
+	resp, err := activity.Blob(dir, ev.ResponseRef)
 	require.NoError(t, err)
-	assert.Equal(t, out, string(body))
+	assert.Equal(t, out, string(resp))
+	reqBody, err := activity.Blob(dir, ev.RequestRef)
+	require.NoError(t, err)
+	assert.Contains(t, string(reqBody), "kind:target")
 }
 
 func TestAllText(t *testing.T) {

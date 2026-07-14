@@ -21,6 +21,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+
+	"github.com/egladman/magus/internal/activity"
 )
 
 // sseHeartbeat is how often the Streamable-HTTP server pings an open GET (SSE)
@@ -101,15 +103,15 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, agentFn
 		mcpserver.WithHooks(hooks),
 		mcpserver.WithRecovery(),
 	)
-	// The audit log is a process-lifetime append-only JSONL sidecar under the cache
-	// dir (next to the journal run logs). Opening is best-effort - a nil log is a no-op
+	// The activity trail is a process-lifetime append-only JSONL sidecar under the cache
+	// dir (next to the journal run logs). Opening is best-effort - a nil trail is a no-op
 	// - so a read-only or dirless workspace never blocks tool serving.
 	var cacheDir string
 	if opts.Magus != nil {
 		cacheDir = opts.Magus.CacheDir()
 	}
-	audit := openAuditLog(cacheDir)
-	registerTools(srv, opts, log, agentFn, audit)
+	trail := activity.Open(cacheDir)
+	registerTools(srv, opts, log, agentFn, trail)
 	return srv
 }
 

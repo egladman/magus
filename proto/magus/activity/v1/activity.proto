@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+// Package magus.activity.v1 is the versioned wire contract for the magus activity trail: a
+// time-ordered record of consequential actions taken against a workspace or its daemon, for
+// accountability. It is a sibling of the magus tool-page contracts (magus.viewer.v1,
+// magus.status.v1). It is deliberately NOT the execution journal (magus.viewer.v1, what a
+// build ran) nor metrics (magus.metrics.v1, aggregate counters): activity answers "who did
+// what, and did it succeed". The sources are MCP tool calls and connector-token lifecycle
+// today; the enum reserves the other governance sources the envelope is built to hold
+// (config mutations, sandbox denials) so they slot in with no schema change. buf-breaking
+// gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case, matching the
+// journal); this proto is the WIRE format only, mapped from that struct in the handler.
+package magus.activity.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "magus/query/v1/query.proto";
+
+// Kind classifies the recorded action by its source. A reader switches on kind; new sources
+// add a value without changing the envelope.
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  KIND_MCP_TOOL_CALL = 1;   // an agent invoked an MCP tool over the daemon
+  KIND_TOKEN_LIFECYCLE = 2; // a connector token was minted or revoked
+  KIND_CONFIG_CHANGE = 3;   // reserved: a `magus config set` mutation (not yet emitted)
+  KIND_SANDBOX_DENIAL = 4;  // reserved: a target attempted a disallowed filesystem write (not yet emitted)
+}
+
+// Outcome is how the action ended.
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  OUTCOME_OK = 1;
+  OUTCOME_ERROR = 2;
+}
+
+// ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
+// kind, action, outcome) is common to every kind; the payload refs point into the activity
+// blob store (fetched via GetPayload) so a large request/response body never bloats the line.
+// For an MCP tool call: actor is the agent id, action is the tool name, request is the
+// arguments, response is the result. For a token lifecycle event: actor is "cli", action is
+// "connector.create"/"connector.revoke", and the refs are empty.
+message ActivityEvent {
+  google.protobuf.Timestamp time = 1;    // when the action occurred
+  Kind kind = 2;
+  string actor = 3;                      // who: an agent id, "cli", a user
+  string action = 4;                     // the specific action: a tool name, "connector.create"
+  Outcome outcome = 5;
+  string error = 6;                      // error text when outcome is OUTCOME_ERROR
+  google.protobuf.Duration duration = 7; // wall-clock, on call-shaped actions
+
+  // Content-addressed payload refs, provenance-prefixed (an MCP payload is "mcp<hash>").
+  // Empty when the action has no such body. Resolve with GetPayload.
+  string request_ref = 8;
+  string response_ref = 9;
+  string preview = 10;                   // opening characters of the response, for list views
+  int64 request_bytes = 11;
+  int64 response_bytes = 12;
+}
+
+// ActivityService serves the trail to a viewer, mirroring magus.viewer.v1's shape: List a
+// page of events (newest first), Get a payload blob by ref. Mounted on the console's
+// human-facing API surface, never under /mcp (the agent protocol surface).
+service ActivityService {
+  // ListActivity returns a page of recent events, newest first, narrowed by filter.
+  rpc ListActivity(ListActivityRequest) returns (ListActivityResponse);
+  // GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
+  rpc GetPayload(GetPayloadRequest) returns (GetPayloadResponse);
+}
+
+// ActivityQuery narrows the listing server-side. Fields AND together; repeated values within
+// a field OR; the time window bounds it.
+message ActivityQuery {
+  repeated Kind kinds = 1;              // restrict to these action kinds
+  repeated string actors = 2;          // restrict to these actors
+  repeated string actions = 3;         // restrict to these actions (e.g. tool names)
+  magus.query.v1.TimeRange time = 4;   // action-time window
+}
+
+message ListActivityRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
+  string page_token = 2;
+  ActivityQuery filter = 3;
+}
+message ListActivityResponse {
+  repeated ActivityEvent events = 1;
+  string next_page_token = 2;  // set when more events remain
+}
+
+message GetPayloadRequest {
+  // A provenance-prefixed content ref: a short lowercase source tag followed by hex.
+  string ref = 1 [(buf.validate.field).string.pattern = "^[a-z]{2,8}[0-9a-f]+$"];
+}
+message GetPayloadResponse {
+  bytes body = 1;
+  int64 bytes = 2;
+}
