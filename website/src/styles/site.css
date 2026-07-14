@@ -92,6 +92,29 @@ html {
   border-bottom: 1px solid var(--pico-muted-border-color);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* subtle lift so it reads as a bar */
 }
+/* Installed-PWA title bar (Window Controls Overlay). When the app is installed and the OS
+   grants WCO (manifest display_override), the browser removes its own title bar and overlays the
+   window buttons on the page; the header then IS the title bar. env(titlebar-area-*) is the safe
+   band excluding those buttons, so the header sits inside it (never underlapping the controls) and
+   -webkit-app-region:drag lets it move the window. Interactive children opt back out so they stay
+   clickable. Placed in site.css (loaded on every page, unlike console.css) so a docs-page install
+   is handled too. Fully inert in a normal browser tab, so it cannot affect ordinary browsing. */
+@media (display-mode: window-controls-overlay) {
+  .site-header {
+    margin-left: env(titlebar-area-x, 0);
+    width: env(titlebar-area-width, 100%);
+    min-height: env(titlebar-area-height, 2.5rem);
+    -webkit-app-region: drag;
+  }
+  .site-header a,
+  .site-header button,
+  .site-header input,
+  .site-header select,
+  .site-header summary {
+    -webkit-app-region: no-drag;
+  }
+}
+
 /* Trim Pico's generous nav spacing so the bar stays compact. */
 .site-header nav {
   --pico-nav-element-spacing-vertical: 0.4rem;

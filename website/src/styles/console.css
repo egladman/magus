@@ -36,7 +36,29 @@
    token track the same stack. */
 body:has(.console-bar) {
   --pico-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Monospace too: code, command samples and the log body read in the platform's UI mono (SF Mono,
+     Cascadia, ...) so the whole surface tracks the OS, not a web font. Setting Pico's token makes
+     every <code>/<pre> follow it without a per-element rule. */
+  --pico-font-family-monospace: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
   font-family: var(--pico-font-family);
+}
+
+/* Native interaction feel (console surfaces only): a single-accent text selection, no mobile
+   tap-flash, and no rubber-band overscroll - so the apps read like a desktop window rather than a
+   scrolling web page. Scoped to pages carrying the app bar, like the typeface rule above. */
+body:has(.console-bar) {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+body:has(.console-bar) ::selection {
+  background: color-mix(in srgb, var(--c-info) 28%, transparent);
+}
+/* The chrome rails (top app bar, bottom status bar) are not selectable, like native window chrome;
+   only the content between them is. */
+.console-bar,
+.console-statusbar {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* App bar: reuse the site header's geometry (.site-header / .nav-right / .nav-toggle /
