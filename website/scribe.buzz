@@ -495,12 +495,12 @@ object Site {
     fun consoleRefLinks(app: str, root: str) > str {
         var seed: [str] = mut [];
         if (app == "graph") {
-            seed = ["knowledge.md", "console.md", "output-refs.md", "glossary.md", "conventions.md"];
+            seed = ["knowledge.md", "agents.md", "console.md", "output-refs.md", "glossary.md", "conventions.md"];
         } else if (app == "logs") {
             seed = ["output-refs.md", "console.md", "knowledge.md", "glossary.md", "conventions.md"];
         } else {
             // The dashboard is the hub, so it links every console-app doc plus the shared references.
-            seed = ["console.md", "knowledge.md", "output-refs.md", "mcp.md", "glossary.md", "conventions.md"];
+            seed = ["console.md", "knowledge.md", "agents.md", "output-refs.md", "mcp.md", "glossary.md", "conventions.md"];
         }
         var links: [{str: any}] = mut [<{str: any}>];
         foreach (name in seed) {

@@ -188,7 +188,11 @@ stream, and persists the set to `<cache>/knowledge/runtime.json`. This answers
 "what has this target tripped" - history the static `documents` edge cannot. The
 same shard also folds observed performance onto target nodes from the local timing
 history: `duration_p75_ms`, `cache_hit_rate`, and `run_samples`, so an agent
-planning work sees a target's cost without a separate history query. Timings for a
+planning work sees a target's cost without a separate history query. It also folds
+each target's `last_output_ref` (the `refxxxxxxxx` id of its most recent captured
+run) and `last_run_ok` (`true`/`false` for that run) from the local output store,
+so an agent goes query -> target -> the last captured output in two hops
+(`magus query output <ref>`). Timings and refs for a
 target no longer in any magusfile are dropped rather than left as phantom nodes.
 This is the graph's only non-deterministic input, so it is quarantined: a distinct
 shard, excluded from remote export, derived from local run records rather than
@@ -379,10 +383,44 @@ cursor is stateless and self-validating - it carries the query and a graph
 fingerprint, so a cursor reused against a different query or a graph that changed
 between pages is rejected rather than returning an incoherent slice.
 
-`magus agent install claude` writes a skill into `.claude/skills/magus/` that
-teaches an agent HOW to use these verbs (the repo's `MAGUS.md` says WHAT is in the
-workspace). The skill ships with the binary and teaches only the tool surface, so
-it stays current with the magus version rather than the workspace. Platform is an
-explicit argument; only `claude` is supported today. The installed file carries a
-version footer, and `magus graph verify` (with `--strict` for CI) reports when an
-installed skill has fallen behind the binary after an upgrade.
+`magus agent install claude` writes four skills into `.claude/skills/` that teach
+an agent HOW to use magus (the repo's `MAGUS.md` says WHAT is in the workspace):
+the knowledge-graph verbs, target-first execution, generated-file triage, and
+graph-grounded refactoring. The skills ship with the binary and teach only the
+tool surface, so they stay current with the magus version rather than the
+workspace. Platform is an explicit argument; only `claude` is supported today.
+Each installed file carries a version footer, and `magus graph verify` (with
+`--strict` for CI) reports when an installed skill has fallen behind the binary
+after an upgrade. See [Agents](agents.md) for the full surface.
+
+## Prior art
+
+Two projects shaped this design, and both deserve credit. The thread starts
+earlier than either: Andrej Karpathy's April 2026 post on X described keeping
+a raw folder of papers, notes, and screenshots and wanting to query across it
+without rereading every file. Graphify was built within days as a direct
+answer to that post, and the magus knowledge graph is a further step down the
+same path: the querying idea applied to the one domain a build tool already
+understands precisely.
+
+[Graphify](https://github.com/Graphify-Labs/graphify) established the pattern
+of a queryable, committable code knowledge graph with an honest audit trail,
+and its verb vocabulary was good enough that magus reuses it outright: query,
+explain, path. The two tools have different jobs, though. Graphify is a
+general corpus indexer - point it at any folder of code, docs, papers, or
+media and it extracts a graph, using an LLM pass for non-code content. magus
+only ever models its own domain, and its graph is assembled entirely from
+declarations it already verifies as a build tool (the project DAG, target
+sources and outputs, spell and module registries), so the build is
+deterministic, runs with zero LLM involvement, and stays cache-owned rather
+than committed. If you want a graph of an arbitrary corpus, Graphify is the
+right tool; the magus graph is narrower and, within its domain, checkable
+edge by edge.
+
+[Obsidian](https://obsidian.md) shaped the memory side, and its influence
+predates the AI wave entirely: durable knowledge as plain, linked markdown
+files the user owns, readable by any tool, has been its position for years. magus
+memory (status, progress, decisions) borrows that files-first stance
+deliberately - the files work without magus. Obsidian is a knowledge base for
+people; magus keeps three small files per repository for agents and the
+humans working alongside them, and stops there.
