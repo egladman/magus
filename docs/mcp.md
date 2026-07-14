@@ -8,7 +8,7 @@ tags: [mcp, model-context-protocol, ai, agents, claude, cursor, daemon, ide]
 
 When the daemon is running, it also exposes an **MCP (Model Context Protocol) server** over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.
 
-Magus targets humans first. MCP is an optional layer you can omit from the binary with the `!mcp` build tag.
+Magus targets humans first. MCP is always compiled in; it is a runtime layer you turn off with `mcp.enabled=false` (see [Enabling and disabling](#enabling-and-disabling)) when you do not want it.
 
 For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, durable memory, and the drift check - see [Agents](agents.md).
 
@@ -28,28 +28,98 @@ http://127.0.0.1:7391/mcp
 
 `magus doctor` reports whether MCP is reachable and prints the endpoint URL.
 
+## Is MCP actually reachable?
+
+An agent host connects to the MCP endpoint over HTTP; nothing starts that endpoint on
+its own, so if the daemon is not running the tools silently disappear from the host.
+`magus status` reports the endpoint's live health as its own block, checked independently
+of the daemon's job socket:
+
+```text
+mcp endpoint
+  url    http://127.0.0.1:7391/mcp
+  state  serving
+```
+
+The `state` is one of:
+
+| state         | meaning                                                              |
+| ------------- | ------------------------------------------------------------------- |
+| `serving`     | listening and a workspace is loaded - the tools are reachable       |
+| `not-ready`   | listening, but no workspace is loaded yet                           |
+| `unreachable` | nothing is listening; start the daemon with `magus server start`    |
+| `disabled`    | turned off by `mcp.enabled=false`                                   |
+
+For scripts and container probes, `magus status --probe=<kind>` exits `0` healthy / `1`
+unhealthy. The kinds are `liveness` (the daemon answers), `readiness` (a workspace is
+loaded), and `mcp` (this endpoint is reachable) - and they are comma-combinable, failing
+if any listed check does:
+
+```sh
+magus status --probe=mcp             # fail if the tools are unreachable
+magus status --probe=liveness,mcp    # fail if the daemon OR the endpoint is down
+```
+
+The daemon also serves `/livez`, `/readyz`, and `/healthz` on the same port. If `state` is
+`unreachable` even though you expect a daemon, see
+[Keeping the daemon running](daemon.md#keeping-the-daemon-running).
+
 ## Available tools
 
-| Tool                     | Purpose                                                               |
-| ------------------------ | --------------------------------------------------------------------- |
-| `magus_list_projects`    | List all projects discovered in the workspace                         |
-| `magus_list_targets`     | List registered build targets for a project                           |
-| `magus_where`            | Resolve a fuzzy project name to its absolute path                     |
-| `magus_describe_project` | Explain why a project is in the affected set                          |
-| `magus_run_target`       | Run a target (`build`, `test`, `lint`, ...) for one or more projects  |
-| `magus_run_affected`     | Run a target for all VCS-changed projects                             |
-| `magus_doctor`           | Validate workspace health                                             |
-| `magus_status`           | Inspect the live concurrency pool                                     |
-| `magus_affected_plan`    | Emit a CI shard plan for the affected set                             |
-| `magus_config_get`       | Read the resolved workspace config (read-only)                        |
-| `magus_tail_log`         | Retrieve the captured build log for a project                         |
-| `magus_scratchpad`       | Private per-workspace scratch file for the agent's intermediate notes |
+The daemon exposes 20 tools. This list is authoritative at the time of writing;
+`magus describe mcp-tools` (or the `magus_describe` tool with `kind: mcp_tools`) prints
+the live set with full parameters, so trust that over this table if they ever differ.
+
+Discover:
+
+| Tool                 | Purpose                                                                            |
+| -------------------- | --------------------------------------------------------------------------------- |
+| `magus_describe`     | Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools (pass `name` for one entity's detail) |
+| `magus_describe_file`| Classify paths against declared globs: owning project, and output (generated) vs source |
+| `magus_where`        | Resolve a fuzzy project name to its absolute path                                  |
+| `magus_config_get`   | Read the resolved workspace config (read-only)                                     |
+
+Run:
+
+| Tool                    | Purpose                                                          |
+| ----------------------- | ---------------------------------------------------------------- |
+| `magus_run_target`      | Run a target (`build`, `test`, `lint`, `ci`, ...) for one or more projects |
+| `magus_run_affected`    | Run a target on only the VCS-affected projects                   |
+| `magus_affected_plan`   | Emit a provider-neutral CI shard plan for the affected set       |
+| `magus_affected_explain`| Explain why a project is in the affected set                     |
+
+Inspect:
+
+| Tool             | Purpose                                                             |
+| ---------------- | ------------------------------------------------------------------ |
+| `magus_doctor`   | Validate workspace health (config, cache, cycles, tool availability) |
+| `magus_status`   | Report telemetry/cache settings and the live proc-server pool state |
+| `magus_tail_log` | Return the most recent captured build log for a project            |
+| `magus_output`   | Fetch one target execution's exact captured output by its `out...` ref |
+| `magus_insight`  | VCS-history lenses: hotspots, files, affinity, ownership, trend    |
+
+Knowledge graph:
+
+| Tool          | Purpose                                                                  |
+| ------------- | ------------------------------------------------------------------------ |
+| `magus_query` | Search the graph and return ranked matches plus their neighborhood       |
+| `magus_explain`| Show one node's data, edges with provenance, and how many nodes reach it |
+| `magus_path`  | Shortest path between two nodes: how two entities relate                  |
+| `magus_refs`  | Where a code symbol is defined and every file that references it (SCIP)   |
+| `magus_stats` | Graph shape: god nodes, orphans, doc coverage                            |
+
+Memory and scratch:
+
+| Tool               | Purpose                                                                         |
+| ------------------ | ------------------------------------------------------------------------------- |
+| `magus_memory`     | Durable per-repo `status` / `progress` / `decisions` files, shared across sessions |
+| `magus_scratchpad` | Private per-workspace scratch file for the agent's intermediate notes            |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 
 ## Enabling and disabling
 
-MCP is on by default when the binary is built with `-tags mcp` (the default). To disable it without rebuilding:
+MCP is on by default. To disable it:
 
 ```yaml
 # magus.yaml

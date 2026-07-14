@@ -78,6 +78,130 @@ These are complementary add-ons, not a runtime you depend on. Two things set the
 - **The binary serves no HTML.** magus never embeds a web server that ships a UI. The pages are a separate static site (built under [`website/gen/`](https://github.com/egladman/magus/tree/main/website/gen), hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/), or self-hosted from any file server). All the daemon exposes is a small read-only API over loopback (`/api/v1/...`) plus the MCP endpoint - no page serving, no write routes.
 - **Your data never leaves your machine.** The hosted page talks only to `127.0.0.1`/`[::1]` - a loopback lock the page enforces before any request - or receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: the daemon runs fine without it (`bridge.enabled: false`), and a binary built without `-tags mcp` has no browser API at all. See the [Console reference](https://eli.gladman.cc/magus/console/).
 
+## Architecture
+
+One process (`magus server start`) exposes the workspace through **two listeners**, one per audience, and every browser page is a **separate static asset** - the binary serves no HTML. The diagram below is the whole system: the clients, the two transports and their guards, the shared in-memory state, the background jobs and knowledge-graph pipeline that keep it warm, and how the progressive web app reaches (or does without) the daemon.
+
+```mermaid
+flowchart LR
+    cli(["Local CLI and shell<br/>magus run, status, query"])
+    agent(["AI agents<br/>Claude Code, Desktop, IDE"])
+    probe(["kubelet and scripts"])
+    vcs(["git hook / magus server sync"])
+
+    subgraph pwa["Progressive web app - project: website/ (static assets, loopback-locked, binary serves NO HTML)<br/>eli.gladman.cc/magus or self-hosted"]
+        dash["Dashboard"]
+        gexp["Graph Explorer"]
+        logs["Log viewer"]
+    end
+    serve["Ephemeral loopback server<br/>graph open --serve (Safari fallback)"]
+
+    sources["Declared sources<br/>magusfiles, docs, buzz,<br/>SCIP index, git history, CODEOWNERS"]
+    gjson["Graph export -o json<br/>docs/graph.json (offline PWA)<br/>MAGUS.md (routing index)"]
+
+    subgraph daemon["magus daemon - one process, magus server start (project: root Go module, cmd/magus + internal/*)"]
+        sock["Unix domain socket<br/>proc RPC, private 0700<br/>internal/proc"]
+
+        subgraph http["HTTP server on mcp.address, 127.0.0.1:7391<br/>internal/daemon, internal/handler/*, internal/httpx"]
+            guards{{"DNS-rebind + Bearer token + CORS<br/>internal/httpx, internal/auth"}}
+            mcpr["/mcp<br/>MCP Streamable HTTP + SSE<br/>internal/handler/mcp"]
+            apir["/api/v1<br/>graph, status, events, insight<br/>internal/handler/{graph,status}"]
+            conn["/magus.metrics.v1<br/>/magus.activity.v1 (Connect)<br/>internal/handler/{metrics,activity}"]
+            health["/livez /readyz /healthz<br/>UNGUARDED"]
+        end
+
+        subgraph jobs["Background jobs<br/>internal/file/watch, internal/proc"]
+            watch["File watchers<br/>graph invalidate + SSE"]
+            idx["SCIP auto-indexer"]
+            job["Graph-build job<br/>fire-and-forget, coalesced"]
+        end
+
+        subgraph st["Shared daemon state<br/>internal/knowledge, cache, service, trail"]
+            pool[("Concurrency pool")]
+            ws[("Workspace registry<br/>warm knowledge graph, SCIP, cache")]
+            runs[("Run registry")]
+            svc[("Service registry")]
+            trail[("Activity trail")]
+            otel[("OTel provider")]
+        end
+    end
+
+    cli -->|"Unix socket: adopt run/affected, status"| sock
+    cli -->|spawns| serve
+    agent -->|"MCP over HTTP, bearer token"| guards
+    probe -->|httpGet| health
+
+    dash -->|"status + events (SSE), metrics + activity, bearer"| guards
+    gexp -->|"graph + events (SSE), bearer"| guards
+    logs -->|"activity (Connect), bearer"| guards
+
+    cli -.->|"snapshot: graph / output via URL fragment"| pwa
+    serve -.->|"graph blob (#src)"| gexp
+
+    guards --> mcpr
+    guards --> apir
+    guards --> conn
+    health -.->|"reads status via"| sock
+
+    sock -->|"dispatch, concurrency"| pool
+    sock -->|"loaded workspaces"| ws
+    sock -->|"host shared services"| svc
+    mcpr -->|"query, describe, run"| ws
+    apir -->|"graph, events, insight"| ws
+    apir -->|"status: live runs"| runs
+    conn -->|"derived metrics"| otel
+    conn -->|"agent activity"| trail
+
+    vcs -->|"submit job, Unix socket"| sock
+    sock -->|"run background job"| job
+    job -->|"rebuild + reindex"| ws
+    watch -->|"invalidate warm graph"| ws
+    watch -->|"SSE graph event"| apir
+    idx -->|"refresh SCIP index"| ws
+    sources -->|"extract shards"| ws
+    ws -->|"graph export -o json"| gjson
+    gjson -.->|"offline graph (site default)"| gexp
+
+    classDef client fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;
+    classDef site fill:#ccfbf1,stroke:#14b8a6,color:#134e4a;
+    classDef unix fill:#dcfce7,stroke:#22c55e,color:#14532d;
+    classDef httproute fill:#ffedd5,stroke:#f97316,color:#7c2d12;
+    classDef guard fill:#fee2e2,stroke:#ef4444,color:#7f1d1d;
+    classDef health fill:#fef9c3,stroke:#ca8a04,color:#713f12;
+    classDef store fill:#ede9fe,stroke:#8b5cf6,color:#4c1d95;
+    classDef job fill:#e0e7ff,stroke:#6366f1,color:#312e81;
+
+    class cli,agent,probe,vcs client;
+    class dash,gexp,logs,serve site;
+    class sock unix;
+    class mcpr,apir,conn httproute;
+    class guards guard;
+    class health health;
+    class pool,ws,runs,svc,trail,otel store;
+    class sources,gjson store;
+    class watch,idx,job job;
+```
+
+**How to read it, and where each part is documented:**
+
+- **Green - the Unix domain socket** is the local control plane: it dispatches `run`/`affected` into one shared [concurrency pool](docs/daemon.md#concurrency), answers `magus status`, and adopts nested `magus` calls. Fast and private (`0700`); the local CLI and the `--probe=liveness`/`--probe=readiness` checks use it.
+- **Orange - the HTTP server** on `mcp.address` is the plane for clients that cannot reach a Unix socket. It carries [MCP](docs/mcp.md) for agents at `/mcp`, the read-only [`/api/v1` console routes](docs/console.md#what-the-console-serves), and Connect services for the dashboard's metrics and [activity trail](docs/output-refs.md). Its request/response types are protobuf-defined under [`proto/magus`](proto/magus) - [status](proto/magus/status/v1/status.proto), [graph](proto/magus/graph/v1/graph.proto), [query](proto/magus/query/v1/query.proto), [metrics](proto/magus/metrics/v1/metrics.proto), [activity](proto/magus/activity/v1/activity.proto), and [viewer](proto/magus/viewer/v1/viewer.proto) (the log viewer) - generated by `buf` and served over Connect/JSON.
+- **Red - every HTTP route except health passes one guard chain**: a [DNS-rebind](docs/console.md#how-it-is-secured) host check, a [bearer token](docs/mcp.md#security-keep-this-local) (the cli token plus named connector tokens), and CORS scoped to the site and loopback origins.
+- **Yellow - the health routes are deliberately unguarded** so a kubelet can probe them; they answer by querying the same Unix socket. See [Kubernetes and container probes](docs/daemon.md#kubernetes-and-container-probes).
+- **Purple - shared state is daemon-wide and warm**: the [knowledge graph](docs/knowledge.md) and SCIP index live in the workspace registry; runs, services, metrics, and the trail are daemon-wide registries. The same purple marks the graph's inputs and outputs - the declared sources it is extracted from, and the exports it produces.
+- **Indigo - background jobs keep that state fresh** without a foreground command. File watchers invalidate the warm graph (and push an SSE `event: graph` to the console) and a throttled SCIP auto-indexer keeps symbols current; a branch switch fires the git hook, which calls [`magus server sync`](docs/daemon.md) to submit one fire-and-forget, coalesced graph-build job over the socket.
+- **The graph pipeline (purple + indigo).** magus assembles the [knowledge graph](docs/knowledge.md) from declared sources as shards (the magusfile registry, docs, `@symbols` from SCIP, `@vcs` from git history, `CODEOWNERS`). `magus graph export -o json` serializes it to the committed `docs/graph.json` that the offline Graph Explorer loads, and `magus describe graph -o markdown` writes the `MAGUS.md` routing index. Live, the same graph is served byte-identical at [`/api/v1/graph`](docs/console.md#what-the-console-serves).
+- **Teal - the PWA is three static apps**, each hitting only the endpoints it needs (all through the same guard chain, bearer header, loopback-locked):
+  - **[Dashboard](https://eli.gladman.cc/magus/console/dashboard/)** - `/api/v1/status` + the `/api/v1/events` SSE stream, plus the metrics and activity Connect services.
+  - **[Graph Explorer](https://eli.gladman.cc/magus/console/graph/)** - `/api/v1/graph` (and its `flavor`/`level`/`select` variants) + the SSE stream for change events.
+  - **[Log viewer](https://eli.gladman.cc/magus/console/logs/)** - the activity Connect service for recent runs and their [output refs](docs/output-refs.md).
+
+  That is **live** mode. In **snapshot** mode an app needs no daemon at all: the graph (`docs/graph.json`) or a run's output arrives inline through a URL fragment, or from the ephemeral `graph open --serve` loopback server (the Safari fallback). Nothing is ever uploaded. Full detail in the [Console reference](docs/console.md).
+
+- **Boundaries.** Each region is tagged with the Go package or project that owns it, so the diagram doubles as a code map: the runtime is the root module (`cmd/magus` plus `internal/*`), the browser apps are the [`website/`](#project-layout) project, and the wire contracts are the [`proto/magus`](proto/magus) protobufs.
+
+Because the two listeners are separate, they can diverge - the proc socket can be healthy while the HTTP/MCP endpoint failed to bind - which is exactly why `magus status` reports each one on its own line.
+
 ---
 
 ## Development
