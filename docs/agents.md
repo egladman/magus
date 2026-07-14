@@ -91,6 +91,11 @@ magus graph verify                    # are the installed skills current? (per p
 magus graph verify --strict           # CI gate: non-zero exit when stale
 ```
 
+A host discovers skills at session start, so restart the agent session after a
+fresh install (or a `--force` refresh) before it can invoke the new skills - an
+already-open session keeps the skill set it launched with. The same launch-time
+rule applies to MCP tools; see [MCP](mcp.md) for connecting the daemon.
+
 Every installed file (and the AGENTS.md section marker) carries a generated
 stamp with the agent-skill version and the knowledge schema version.
 `magus graph verify` compares those stamps against the running binary for

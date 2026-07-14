@@ -95,12 +95,21 @@ The token must be presented in the `Authorization` header; the `/mcp` endpoint
 does not accept a token in the URL query string (RFC 6750 keeps secrets out of
 logs and history). How you connect depends on the client:
 
-- **Claude Code** connects to the loopback endpoint directly with a header:
+- **Claude Code** connects to the loopback endpoint directly with a header. Mint
+  a connector token, then register the server at `user` scope so every workspace
+  the daemon serves shares one connection (the daemon binds one loopback port for
+  all of them):
 
   ```text
-  claude mcp add --transport http magus http://127.0.0.1:7391/mcp \
+  magus config mcp connector create --name claude-code --expires never
+  claude mcp add --transport http --scope user magus http://127.0.0.1:7391/mcp \
     --header "Authorization: Bearer <token>"
   ```
+
+  `claude mcp list` should then report `magus ... - Connected`. **Restart the
+  Claude Code session** afterward: a session only discovers MCP tools (and skills
+  installed by `magus agent install claude`) at launch, so an already-open session
+  will not see them until it is restarted.
 
 - **Claude Desktop / other IDE plugins** that take a Streamable-HTTP URL plus
   headers use the same shape:
