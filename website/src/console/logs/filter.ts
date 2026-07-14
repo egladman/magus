@@ -6,7 +6,7 @@
 
 import type { ParsedQuery, Section, TargetSpan } from "./state";
 import { state } from "./state";
-import { statusToken, stripAnsi } from "./ansi";
+import { statusToken, stripAnsi } from "../render/ansi";
 import { el } from "./dom";
 import { clearMarks } from "./search";
 import { render } from "./render";

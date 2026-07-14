@@ -6,20 +6,10 @@
 // and the live buffer) to produce the invocation-sources every view is built from.
 
 import type { Command, Event, Invocation, Journal } from "../../gen/magus/viewer/v1/viewer_pb";
-
-// A foldable section of the log: a header line + its body lines. meta carries the structured
-// (label, status) the filter matches against when the section came from a Journal's events.
-export interface Section {
-  title: string | null;
-  lines: string[];
-  meta?: { label: string; status: string };
-}
-
-// The render model: the sections plus a count of titled (headed) ones.
-export interface RenderModel {
-  sections: Section[];
-  titled: number;
-}
+// Section/RenderModel are lifted to the shared render module so the activity view builds the
+// same shape; re-exported here so the log viewer's modules keep their one import path.
+import type { RenderModel, Section } from "../render/model";
+export type { RenderModel, Section };
 
 // The parsed filter query ({groups, texts, empty}) - see filter.ts parseQuery.
 export interface FilterGroup {

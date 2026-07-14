@@ -7,7 +7,8 @@
 
 import { state } from "./state";
 import { bodyEl, copyToClipboard, el, setBtnLabel } from "./dom";
-import { STATUS_RE, parseAnsi, statusToken, stripAnsi } from "./ansi";
+import { statusToken, stripAnsi } from "../render/ansi";
+import { renderContent, renderLine as renderSectionLine, toggleSection } from "../render/sections";
 import { matchAllTexts, matchGroup, sectionMeta } from "./filter";
 import { renderWaterfall, timelineAvailable, updateFocusUI } from "./waterfall";
 
@@ -27,7 +28,7 @@ export function render(): void {
     // in heuristic mode, the parsed section lines. Flat, line-numbered, no folds/badges.
     const flat = state.rawLines || state.model!.sections.flatMap((s) => s.lines);
     let n = 0;
-    for (const raw of flat) bodyEl.appendChild(renderLine(raw, ++n));
+    for (const raw of flat) bodyEl.appendChild(renderSectionLine(raw, ++n, onLineNumberClick));
     applyLineHighlight();
     return;
   }
@@ -47,7 +48,7 @@ export function render(): void {
       for (const raw of sec.lines) {
         const n = ++lineNo;
         const keep = !filtering || (q.groups.length === 0 && matchAllTexts(q, stripAnsi(raw)));
-        if (keep) { bodyEl.appendChild(renderLine(raw, n)); shown++; }
+        if (keep) { bodyEl.appendChild(renderSectionLine(raw, n, onLineNumberClick)); shown++; }
       }
       continue;
     }
@@ -147,7 +148,7 @@ export function render(): void {
     for (const raw of bodyLines) {
       const n = ++lineNo;
       if (!filtering || showAllBody || matchAllTexts(q, stripAnsi(raw))) {
-        linesWrap.appendChild(renderLine(raw, n));
+        linesWrap.appendChild(renderSectionLine(raw, n, onLineNumberClick));
         shown++;
       }
     }
@@ -163,58 +164,6 @@ export function render(): void {
     bodyEl.appendChild(note);
   }
   applyLineHighlight();
-}
-
-// renderContent fills host with a line, promoting a leading "[status]" token to a
-// styled badge (dropping the brackets) and rendering the remainder. Non-status lines
-// fall through to the ANSI renderer unchanged.
-function renderContent(host: HTMLElement, raw: string): void {
-  const plain = stripAnsi(raw);
-  const m = STATUS_RE.exec(plain);
-  if (!m) {
-    fillAnsi(host, raw);
-    return;
-  }
-  const badge = document.createElement("span");
-  badge.className = "log-badge badge-" + m[1].toLowerCase();
-  badge.textContent = m[1].toLowerCase();
-  host.appendChild(badge);
-  host.appendChild(document.createTextNode(plain.slice(m[0].length)));
-}
-
-function toggleSection(secEl: HTMLElement, head: HTMLElement): void {
-  const collapsed = secEl.classList.toggle("collapsed");
-  head.setAttribute("aria-expanded", collapsed ? "false" : "true");
-}
-
-function renderLine(raw: string, lineNo: number): HTMLElement {
-  const line = document.createElement("div");
-  line.className = "log-line";
-  const ln = document.createElement("span");
-  ln.className = "ln";
-  ln.textContent = String(lineNo);
-  // Clicking a line number deep-links it (GitHub-style #L<n>); shift-click extends a range.
-  ln.addEventListener("click", (ev) => onLineNumberClick(lineNo, ev));
-  const lc = document.createElement("span");
-  lc.className = "lc";
-  renderContent(lc, raw);
-  line.append(ln, lc);
-  return line;
-}
-
-// fillAnsi renders raw (an output line, possibly with ANSI SGR escapes) into host as
-// styled spans. Shared by body lines and section heads so both carry the same color.
-function fillAnsi(host: HTMLElement, raw: string): void {
-  for (const seg of parseAnsi(raw)) {
-    if (seg.cls.length) {
-      const span = document.createElement("span");
-      span.className = seg.cls.join(" ");
-      span.textContent = seg.text;
-      host.appendChild(span);
-    } else {
-      host.appendChild(document.createTextNode(seg.text));
-    }
-  }
 }
 
 // --- Line-range highlight (#L10-L20, GitHub-style) ----------------------------

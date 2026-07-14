@@ -8,7 +8,7 @@ import { Kind, Status } from "../../gen/magus/viewer/v1/viewer_pb";
 import type { Command } from "../../gen/magus/viewer/v1/viewer_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 import type { BuiltModel, InvocationView, RenderModel, Section, Source } from "./state";
-import { stripAnsi } from "./ansi";
+import { stripAnsi } from "../render/ansi";
 
 // --- Model: split the text into foldable sections -----------------------------
 // A section begins at a recognized header line (a run header, a target status line,

@@ -21,7 +21,7 @@ import {
   bodyEl, copyToClipboard, el, emptyEl, isTyping, panelEl, scrollEl,
   setBtnLabel, setRefIdentity, setStatus,
 } from "./dom";
-import { stripAnsi } from "./ansi";
+import { stripAnsi } from "../render/ansi";
 import { buildModel, buildModelMulti } from "./model";
 import { render, updateTimelineControl } from "./render";
 import { applyTimeRange, clearFocus } from "./waterfall";
