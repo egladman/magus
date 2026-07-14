@@ -45,6 +45,27 @@ type StatusReport struct {
 	// glance whether code symbols reflect current source. Empty when the workspace is
 	// unavailable or no project is symbol-capable.
 	SymbolIndexes []SymbolIndexStatus `json:"symbol_indexes,omitempty" yaml:"symbol_indexes,omitempty"`
+	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (Claude Code,
+	// IDEs, Desktop) actually connect to: its address and whether it is really serving.
+	// It is checked independently of the Pool fields above, which report the proc socket
+	// the daemon dispatches jobs on. The two listeners share a process in normal
+	// operation but can diverge (the MCP server failing to bind while the proc daemon is
+	// fine), so a "daemon is up" reading does not by itself prove the tools are reachable.
+	// Nil when reported by a process that does not probe it (e.g. the daemon's own report).
+	MCPEndpoint *MCPEndpointStatus `json:"mcp_endpoint,omitempty" yaml:"mcp_endpoint,omitempty"`
+}
+
+// MCPEndpointStatus is the runtime health of the MCP HTTP endpoint agent hosts connect
+// to. State is one of: serving (listening and a workspace is loaded), not-ready
+// (listening but no workspace yet), unreachable (nothing is listening), or disabled
+// (mcp.enabled=false).
+type MCPEndpointStatus struct {
+	Enabled   bool   `json:"enabled" yaml:"enabled"`
+	Address   string `json:"address,omitempty" yaml:"address,omitempty"`
+	URL       string `json:"url,omitempty" yaml:"url,omitempty"`
+	Reachable bool   `json:"reachable" yaml:"reachable"`
+	State     string `json:"state" yaml:"state"`
+	Note      string `json:"note,omitempty" yaml:"note,omitempty"`
 }
 
 // StatusConfig is the read-only slice of the daemon's resolved config surfaced on the status wire.
@@ -107,7 +128,6 @@ type StatusTargetRun struct {
 // the build-tag constants from cmd/magus.
 type BuildStatus struct {
 	SelfUpdate bool `json:"selfupdate" yaml:"selfupdate"`
-	MCP        bool `json:"mcp" yaml:"mcp"`
 }
 
 // TelemetryStatus reports the current telemetry configuration.

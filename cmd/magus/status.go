@@ -38,7 +38,7 @@ func (f *statusFlags) bind(fs *flag.FlagSet) {
 	fs.StringVar(&f.socket, "socket", "", "proc server address as unix:// URL or bare path (default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir)")
 	fs.BoolVar(&f.compact, "compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
 	fs.BoolVar(&f.compact, "c", false, "Short for --compact")
-	fs.StringVar(&f.probe, "probe", "", "exec-probe mode: liveness or readiness (exits 0=healthy, 1=unhealthy; ignores --watch/--compact)")
+	fs.StringVar(&f.probe, "probe", "", "exec-probe mode: liveness, readiness, mcp (comma-combinable, e.g. liveness,mcp); exits 0=healthy, 1=unhealthy; ignores --watch/--compact")
 	fs.StringVar(&f.workspace, "workspace", "", "workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
@@ -56,13 +56,14 @@ func status(ctx context.Context, args []string) error {
 	}
 
 	// Probe mode: exec-probe semantics — exit 0 healthy, exit 1 unhealthy.
-	// Ignores --watch, --compact, and -o formatting flags.
+	// Ignores --watch, --compact, and -o formatting flags. The value is
+	// comma-combinable (e.g. --probe=liveness,mcp), failing if any listed probe does.
 	if f.probe != "" {
-		kind, err := parseProbeKind(f.probe)
+		kinds, err := parseProbeKinds(f.probe)
 		if err != nil {
 			return err
 		}
-		return runProbe(ctx, f.socket, kind, f.workspace)
+		return runProbes(ctx, f.socket, globalCfg.MCP, kinds, f.workspace)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -147,17 +148,15 @@ func gridEnabled(opts OutputOptions, isTTY bool) bool {
 }
 
 // buildStatusBase constructs the static portions of a StatusReport that depend
-// on the selfUpdateCompiled build-tag constant and the resolved config. MCP is
-// always compiled in, so its Build.MCP flag is always true. Called at MCP-server
-// start to inject into dashboard.Options so the
-// bridge can serve the full types.StatusReport without importing cmd/magus.
+// on the selfUpdateCompiled build-tag constant and the resolved config. Called at
+// MCP-server start to inject into dashboard.Options so the bridge can serve the full
+// types.StatusReport without importing cmd/magus.
 func buildStatusBase() types.StatusBase {
 	return types.StatusBase{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Build: buildStatus{
 			SelfUpdate: selfUpdateCompiled,
-			MCP:        true,
 		},
 	}
 }
@@ -168,11 +167,14 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Build: buildStatus{
 			SelfUpdate: selfUpdateCompiled,
-			MCP:        true,
 		},
 		// Symbol-index freshness is workspace-local (a cache probe), independent of the
 		// daemon, so it is populated regardless of pool reachability.
 		SymbolIndexes: loadSymbolIndexStatus(ctx),
+		// MCP endpoint health is probed independently of the proc socket below: the
+		// endpoint an agent host connects to can be down while the proc daemon is up, or
+		// vice versa, so it is set before any early return on a proc-socket error.
+		MCPEndpoint: buildMCPEndpointStatus(ctx, globalCfg.MCP),
 	}
 	addr, err := resolveStatusSocket(ctx, socket)
 	if err != nil {
@@ -294,7 +296,6 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 		fmt.Fprintln(tw, "")
 		fmt.Fprintln(tw, "build")
 		fmt.Fprintf(tw, "  selfupdate\t%t\n", r.Build.SelfUpdate)
-		fmt.Fprintf(tw, "  mcp\t%t\n", r.Build.MCP)
 		fmt.Fprintf(tw, "  engine\tbuzz\n")
 	}
 	_ = tw.Flush()
@@ -341,7 +342,33 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 		fmt.Fprintln(w, "\ndaemon: off")
 	}
 
+	printMCPEndpointStatus(w, r.MCPEndpoint)
 	printSymbolIndexStatus(w, r.SymbolIndexes)
+}
+
+// printMCPEndpointStatus renders the runtime health of the MCP endpoint agent hosts
+// connect to. This is the answer to "are my magus tools actually reachable", separate
+// from the daemon/pool block above (which reports the proc socket). Omitted only when
+// the report carries no MCP section (e.g. a daemon self-report).
+func printMCPEndpointStatus(w io.Writer, m *types.MCPEndpointStatus) {
+	if m == nil {
+		return
+	}
+	fmt.Fprintln(w, "\nmcp endpoint")
+	if !m.Enabled {
+		fmt.Fprintf(w, "  state  %s\n", m.State)
+		if m.Note != "" {
+			fmt.Fprintf(w, "  %s\n", m.Note)
+		}
+		return
+	}
+	// Deliberately not a tabwriter: this block is short and reads fine aligned by hand,
+	// and it lets the note wrap as a full-width line rather than a padded cell.
+	fmt.Fprintf(w, "  url    %s\n", m.URL)
+	fmt.Fprintf(w, "  state  %s\n", m.State)
+	if m.Note != "" {
+		fmt.Fprintf(w, "  %s\n", m.Note)
+	}
 }
 
 // printSymbolIndexStatus renders the per-project SCIP index freshness section, omitted
@@ -404,7 +431,20 @@ func printStatusCompact(w io.Writer, r statusReport, now time.Time) {
 	if n := len(p.Workspaces); n > 0 {
 		parts = append(parts, fmt.Sprintf("%d ws", n))
 	}
+	if tok := compactMCPToken(r.MCPEndpoint); tok != "" {
+		parts = append(parts, tok)
+	}
 	fmt.Fprintln(w, strings.Join(parts, " · "))
+}
+
+// compactMCPToken renders the MCP endpoint as one sidebar-friendly token, or "" when
+// there is no MCP section to show. Only a degraded endpoint is worth the width in the
+// compact line: "mcp serving" is the expected steady state and would just be noise.
+func compactMCPToken(m *types.MCPEndpointStatus) string {
+	if m == nil || m.State == "serving" {
+		return ""
+	}
+	return "mcp " + m.State
 }
 
 func compactRunningParts(targets []types.StatusRunningTarget, now time.Time) []string {

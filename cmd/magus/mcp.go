@@ -9,32 +9,36 @@ import (
 	"os"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/daemon"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
 )
 
-// mcpAddrPort parses the MCP address from config, falling back to
-// DefaultAddress. The config validator guarantees the string is a valid
-// host:port, so this parse should never fail in practice.
-func mcpAddrPort() (netip.AddrPort, error) {
-	raw := globalCfg.MCP.Address
-	if raw == "" {
-		raw = internalmcp.DefaultAddress
+// mcpAddress returns the MCP host:port for a given MCP config, falling back to the
+// default when unset. It takes the config explicitly (rather than reading globalCfg)
+// so callers that already hold a config.MCP - including tests - resolve the address
+// without touching package state.
+func mcpAddress(mcp config.MCP) string {
+	if mcp.Address != "" {
+		return mcp.Address
 	}
-	return netip.ParseAddrPort(raw)
+	return internalmcp.DefaultAddress
 }
 
-// mcpAddrString returns the configured MCP address as a host:port string,
-// falling back to the default. Used by buildDaemonInfo so the bridge doctor
-// check knows which address to probe.
+// mcpAddrPort parses the configured MCP address, falling back to DefaultAddress. The
+// config validator guarantees the string is a valid host:port, so this parse should
+// never fail in practice.
+func mcpAddrPort() (netip.AddrPort, error) {
+	return netip.ParseAddrPort(mcpAddress(globalCfg.MCP))
+}
+
+// mcpAddrString returns the configured MCP address as a host:port string, falling back
+// to the default. Used by buildDaemonInfo so the bridge doctor check knows which
+// address to probe.
 func mcpAddrString() string {
-	raw := globalCfg.MCP.Address
-	if raw == "" {
-		raw = internalmcp.DefaultAddress
-	}
-	return raw
+	return mcpAddress(globalCfg.MCP)
 }
 
 // mcpCmd prints instructions for using the MCP server.
