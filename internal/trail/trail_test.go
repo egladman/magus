@@ -138,3 +138,37 @@ func TestPrune_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	}
 	prune("", 2) // must not panic
 }
+
+func TestPrune_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
+	dir := t.TempDir()
+	for i := 1; i <= 3; i++ {
+		Append(dir, Event{Ts: int64(i), Kind: KindJob, Action: "x"})
+	}
+	Prune(dir) // maxEvents is 10000, so this is a no-op that must not lose events
+	if evs, _ := ReadRecent(dir, 10); len(evs) != 3 {
+		t.Errorf("Prune under cap changed the trail: got %d events, want 3", len(evs))
+	}
+}
+
+func TestReadRecent_SkipsCorruptLines(t *testing.T) {
+	dir := t.TempDir()
+	Append(dir, Event{Ts: 1, Kind: KindJob, Action: "good-one"})
+	// Splice a non-JSON line into the middle of the trail; ReadRecent must skip it, not fail.
+	f, err := os.OpenFile(eventsPath(dir), os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatalf("open trail: %v", err)
+	}
+	if _, err := f.WriteString("this is not json\n"); err != nil {
+		t.Fatalf("write corrupt line: %v", err)
+	}
+	f.Close()
+	Append(dir, Event{Ts: 2, Kind: KindJob, Action: "good-two"})
+
+	events, err := ReadRecent(dir, 10)
+	if err != nil {
+		t.Fatalf("ReadRecent: %v", err)
+	}
+	if len(events) != 2 || events[0].Action != "good-two" || events[1].Action != "good-one" {
+		t.Fatalf("corrupt line not skipped cleanly: %+v", events)
+	}
+}
