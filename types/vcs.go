@@ -182,6 +182,16 @@ type MergeDriverInstaller interface {
 	CheckMergeDriver(ctx context.Context, root string) (bool, error)
 }
 
+// RefreshHookInstaller is an optional capability (sibling of MergeDriverInstaller) for
+// VCSDriver implementations that can install a hook firing on a history-changing event
+// (branch switch, merge, rebase) to run command. It shares the managed-section
+// convention the merge-driver install uses, so magus has one VCS-integration path, not
+// two. Callers type-assert for it and skip gracefully when a backend lacks it (e.g. jj
+// has no native hooks). It returns the labels of the hooks it installed, for a notice.
+type RefreshHookInstaller interface {
+	InstallRefreshHook(ctx context.Context, root, command string) ([]string, error)
+}
+
 // RemoteReporter is an optional capability for VCSDriver implementations that can
 // report the repository's default remote URL (e.g. git's "origin" fetch URL). It
 // lets callers derive a forge browse/blob URL for turning a workspace-relative

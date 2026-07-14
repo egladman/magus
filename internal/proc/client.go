@@ -111,6 +111,63 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 	return &reply, nil
 }
 
+// SubmitJob dials the proc server at addr and submits a fire-and-forget background job -
+// the daemon runs `magus <args>` asynchronously and this returns as soon as it is
+// accepted, with the job's invocation id (a Dashboard deep-link). It scopes the job to
+// the caller's working directory (computed here, like Forward, so there is no
+// transposition-prone dir argument); the daemon walks up from it to the workspace root.
+// Used by the VCS refresh hook, which must not block a checkout. addr accepts a unix://
+// URL or a path.
+func SubmitJob(ctx context.Context, addr string, args []string) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("proc: job: getwd: %w", err)
+	}
+	ep, err := endpoint.ParseEndpoint(addr)
+	if err != nil {
+		return "", fmt.Errorf("proc: job: invalid address: %w", err)
+	}
+	conn, err := ep.Dial(ctx)
+	if err != nil {
+		return "", fmt.Errorf("proc: job: dial %s: %w", ep, err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	deadline := time.Now().Add(statusQueryTimeout)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	_ = conn.SetDeadline(deadline)
+
+	req := JobRequest{Magic: JobMagic, Args: args, Protocol: ProtocolV2, Cwd: cwd}
+	if err := writeFrame(conn, typeJob, req); err != nil {
+		return "", fmt.Errorf("proc: job: write: %w", err)
+	}
+
+	typ, line, err := readFrame(conn)
+	if err != nil {
+		return "", fmt.Errorf("proc: job: read: %w", err)
+	}
+	if typ == typeError {
+		var er ErrorReply
+		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+			return "", fmt.Errorf("proc: job: server error: %s", er.Message)
+		}
+		return "", fmt.Errorf("proc: job: server error (undecodable)")
+	}
+	if typ != typeJobReply {
+		return "", fmt.Errorf("proc: job: unexpected reply type %q", typ)
+	}
+	var reply JobReply
+	if err := codec.Unmarshal(line, &reply); err != nil {
+		return "", fmt.Errorf("proc: job: decode reply: %w", err)
+	}
+	if reply.Err != "" {
+		return "", fmt.Errorf("proc: job: %s", reply.Err)
+	}
+	return reply.Inv, nil
+}
+
 // Shutdown dials the proc server at addr and requests a graceful shutdown.
 // addr accepts a unix:// URL or a bare path.
 func Shutdown(ctx context.Context, addr string) error {

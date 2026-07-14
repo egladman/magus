@@ -279,6 +279,9 @@ func (v hgVCS) culprit(ctx context.Context, dir string) (string, error) {
 const (
 	hgRCBegin = "# BEGIN magus-generated — do not edit this section manually"
 	hgRCEnd   = "# END magus-generated"
+
+	hgHookBegin = "# BEGIN magus-refresh — do not edit this section manually"
+	hgHookEnd   = "# END magus-refresh"
 )
 
 // InstallMergeDriver writes [merge-patterns] and [merge-tools] to .hg/hgrc.
@@ -305,4 +308,29 @@ func (v hgVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []
 func (v hgVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
 	data, _ := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
 	return strings.Contains(string(data), hgRCBegin), nil
+}
+
+// InstallRefreshHook implements types.RefreshHookInstaller: it registers an hg `update`
+// hook (fires after a working-directory change - checkout, pull-update) that runs
+// command. It shares replaceManagedSection with the merge-driver install, under its own
+// markers so the two managed sections coexist in .hg/hgrc. Returns the hook label.
+func (v hgVCS) InstallRefreshHook(_ context.Context, root, command string) ([]string, error) {
+	hgrcPath := filepath.Join(root, ".hg", "hgrc")
+	var section strings.Builder
+	section.WriteString(hgHookBegin + "\n")
+	section.WriteString("[hooks]\n")
+	fmt.Fprintf(&section, "update.magus-refresh = %s >/dev/null 2>&1 || true\n", command)
+	section.WriteString(hgHookEnd + "\n")
+	existing, err := os.ReadFile(hgrcPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("vcs: read %s: %w", hgrcPath, err)
+	}
+	updated := replaceManagedSection(string(existing), section.String(), hgHookBegin, hgHookEnd)
+	if updated == string(existing) {
+		return nil, nil
+	}
+	if err := os.WriteFile(hgrcPath, []byte(updated), 0o644); err != nil {
+		return nil, fmt.Errorf("vcs: write %s: %w", hgrcPath, err)
+	}
+	return []string{"update"}, nil
 }

@@ -369,7 +369,14 @@ const (
 	gitAttrsBegin  = "# BEGIN magus-generated — do not edit this section manually"
 	gitAttrsEnd    = "# END magus-generated"
 	gitMergeDriver = "magus merge-driver %O %A %B %L %P"
+
+	gitHookBegin = "# BEGIN magus-refresh — do not edit this section manually"
+	gitHookEnd   = "# END magus-refresh"
 )
+
+// gitRefreshHooks fire on a history-changing event that can stale the knowledge graph /
+// symbol index: a branch switch, a merge/pull, and a rebase/amend.
+var gitRefreshHooks = []string{"post-checkout", "post-merge", "post-rewrite"}
 
 // InstallMergeDriver writes .gitattributes entries and registers the magus merge driver.
 func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
@@ -409,6 +416,71 @@ func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
 		return fmt.Errorf("git config merge.magus.driver: %w\n%s", err, out)
 	}
 	return nil
+}
+
+// InstallRefreshHook implements types.RefreshHookInstaller: it writes (or refreshes) the
+// managed magus section into each of gitRefreshHooks so a history-changing event runs
+// command. It reuses replaceManagedSection - the same managed-section mechanism as the
+// merge-driver install - so it is idempotent and never clobbers a user's own hook body.
+// A non-git tree yields no error and no installs.
+func (v gitVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
+	hooksDir, err := vcsOutput(ctx, root, "git", "rev-parse", "--git-path", "hooks")
+	if err != nil {
+		return nil, nil // not a git repo (or git unavailable): nothing to install
+	}
+	if !filepath.IsAbs(hooksDir) {
+		hooksDir = filepath.Join(root, hooksDir)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		return nil, fmt.Errorf("vcs: mkdir %s: %w", hooksDir, err)
+	}
+	var installed []string
+	for _, name := range gitRefreshHooks {
+		changed, err := writeManagedHook(filepath.Join(hooksDir, name), gitHookBody(name, command))
+		if err != nil {
+			return installed, err
+		}
+		if changed {
+			installed = append(installed, name)
+		}
+	}
+	return installed, nil
+}
+
+// gitHookBody is the shell a hook runs. post-checkout also fires on file checkouts (git
+// checkout <path>), so it guards on the branch-checkout flag ($3==1); the others fire
+// only on a real history move. The command is best-effort (`|| true`) so a hook never
+// fails the git operation.
+func gitHookBody(name, command string) string {
+	guard := ""
+	if name == "post-checkout" {
+		guard = "[ \"$3\" = \"1\" ] || exit 0\n"
+	}
+	return guard + command + " >/dev/null 2>&1 || true\n"
+}
+
+// writeManagedHook inserts or updates the managed magus section in the hook at path,
+// giving a new file a POSIX-sh shebang and preserving any existing user body. It reports
+// whether the file changed and keeps the hook executable.
+func writeManagedHook(path, body string) (bool, error) {
+	section := gitHookBegin + "\n" + body + gitHookEnd + "\n"
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	var next string
+	if os.IsNotExist(err) {
+		next = "#!/bin/sh\n" + section
+	} else {
+		next = replaceManagedSection(string(existing), section, gitHookBegin, gitHookEnd)
+	}
+	if next == string(existing) {
+		return false, nil
+	}
+	if err := os.WriteFile(path, []byte(next), 0o755); err != nil {
+		return false, fmt.Errorf("vcs: write %s: %w", path, err)
+	}
+	return true, nil
 }
 
 // vcsOutput runs a VCS subcommand in dir and returns its trimmed stdout.

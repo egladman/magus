@@ -4,11 +4,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 func serverCmd(ctx context.Context, args []string) error {
@@ -22,8 +26,10 @@ func serverCmd(ctx context.Context, args []string) error {
 		return serverStart(ctx, rest)
 	case clihint.ServerStop.Leaf():
 		return serverStop(ctx, rest)
+	case "sync":
+		return serverSync(ctx, rest)
 	default:
-		return fmt.Errorf("magus server: unknown target %q (want start or stop); use `%s` to inspect daemon state", sub, clihint.Status)
+		return fmt.Errorf("magus server: unknown target %q (want start, stop, or sync); use `%s` to inspect daemon state", sub, clihint.Status)
 	}
 }
 
@@ -33,6 +39,7 @@ func serverUsage() {
 	fmt.Fprintln(os.Stderr, "Targets:")
 	fmt.Fprintln(os.Stderr, "  start   start a persistent daemon and block until stopped")
 	fmt.Fprintln(os.Stderr, "  stop    send a graceful shutdown request to a running daemon")
+	fmt.Fprintln(os.Stderr, "  sync    reconcile the graph now: ask a running daemon to rebuild+reindex in the background (no-op if none); safe from a VCS hook")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintf(os.Stderr, "Use `%s` to inspect daemon pool state and check reachability.\n", clihint.Status)
 	fmt.Fprintln(os.Stderr, "")
@@ -64,6 +71,8 @@ func serverStart(ctx context.Context, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "magus: daemon listening on %s\n", addr)
 	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", clihint.ServerStop)
+
+	installRefreshHooks(ctx)
 
 	// Start the MCP HTTP server alongside the daemon so MCP clients can
 	// connect without a separate process. No-op when mcp.enabled=false.
@@ -132,4 +141,80 @@ func resolveDaemonAddr(ctx context.Context, explicit string) (string, error) {
 
 func daemonDefaultAddr() string {
 	return "unix://" + filepath.Join(proc.SockDir(), "magus-daemon.sock")
+}
+
+// serverSync reconciles the knowledge graph to the current source: it asks a running
+// daemon to rebuild the graph and reindex code symbols as a background job, then returns
+// immediately. Named for the gitops "sync" idiom (reconcile actual to desired) - it is
+// the one-shot counterpart to the daemon's continuous background indexing. A no-op when
+// no daemon runs, so it is safe to call from a VCS hook: it never blocks a checkout.
+func serverSync(ctx context.Context, args []string) error {
+	_, err := cmdParse("server sync", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus server sync")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Reconcile the knowledge graph to current source: ask a running daemon to")
+			fmt.Fprintln(os.Stderr, "rebuild the graph and reindex code symbols in the background, then return")
+			fmt.Fprintln(os.Stderr, "immediately. The job shows in the Dashboard. A no-op when no daemon is")
+			fmt.Fprintln(os.Stderr, "running, so a VCS hook can call it unconditionally.")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	addr, err := resolveDaemonAddr(ctx, "")
+	if err != nil || addr == "" {
+		return nil // no daemon: quietly do nothing so a checkout hook is never delayed
+	}
+	// Only a PERSISTENT daemon (`server start`) runs a job that outlives this process; a
+	// per-process proc server (which magus may spin up for any command) would die when
+	// this invocation exits, silently dropping the job. Submit only when we see a real
+	// daemon; otherwise no-op, so a hook stays a safe no-op off the daemon.
+	st, serr := proc.QueryStatus(ctx, addr)
+	if serr != nil || st == nil || st.Mode != "daemon" {
+		return nil
+	}
+	inv, err := proc.SubmitJob(ctx, addr, []string{"graph", "build"})
+	if err != nil {
+		// Best-effort: a hook must not fail a checkout. Swallow and succeed; the daemon
+		// (or a manual `magus graph build`) will catch up.
+		slog.DebugContext(ctx, "server sync: submit failed", slog.String("error", err.Error()))
+		return nil
+	}
+	if inv != "" { // empty inv = the daemon coalesced this into an already-running sync
+		fmt.Fprintf(os.Stderr, "magus: syncing the graph in the background (job %s)\n", inv)
+	}
+	return nil
+}
+
+// installRefreshHooks installs the VCS refresh hook so a history change (branch switch,
+// merge, rebase) pokes this daemon to reconcile in the background. It reuses the same
+// per-VCS installer as the merge driver (types.RefreshHookInstaller), so there is one
+// VCS-integration path. Best-effort: a non-git tree, a VCS with no hook support (jj), or
+// a write failure is noted, never fatal to starting the daemon.
+func installRefreshHooks(ctx context.Context) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	res, err := vcs.Resolve(ctx, cwd, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return
+	}
+	installer, ok := res.VCS.(types.RefreshHookInstaller)
+	if !ok {
+		return // this VCS has no hook support
+	}
+	root, err := res.VCS.Root(ctx, cwd)
+	if err != nil {
+		root = cwd
+	}
+	installed, err := installer.InstallRefreshHook(ctx, root, "magus server sync")
+	if err != nil {
+		slog.WarnContext(ctx, "server start: could not install VCS refresh hook", slog.String("error", err.Error()))
+		return
+	}
+	if len(installed) > 0 {
+		fmt.Fprintf(os.Stderr, "magus: installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically\n", res.Name, strings.Join(installed, ", "))
+	}
 }

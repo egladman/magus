@@ -31,7 +31,35 @@ const (
 	typeServiceReleaseReply = "service.release.reply"
 	typeServiceStopAll      = "service.stopall"
 	typeServiceStopAllReply = "service.stopall.reply"
+
+	typeJob      = "job"
+	typeJobReply = "job.reply"
 )
+
+// JobMagic guards JobRequest: a fire-and-forget submission that the daemon runs in the
+// background is a privileged operation (it executes arbitrary magus args), so a request
+// without the magic is ignored, matching the StatusRequest/ShutdownRequest pattern.
+const JobMagic = "magus-job-v1"
+
+// JobRequest submits a background job: the daemon runs `magus <Args>` asynchronously and
+// replies immediately, unlike RunRequest which blocks until the run completes. Used by
+// the VCS refresh hook to kick a rebuild/reindex without delaying a checkout.
+type JobRequest struct {
+	Magic    string   `json:"magic"`
+	Args     []string `json:"args"`
+	Version  string   `json:"version,omitempty"`
+	Cwd      string   `json:"cwd"`
+	Protocol string   `json:"protocol"`
+	Root     string   `json:"root,omitempty"` // empty → daemon walks up from Cwd
+}
+
+// JobReply acknowledges a submitted job. Inv is the invocation id (a Dashboard deep-link
+// into the job's live log); Err is non-empty only when the job could not be accepted
+// (the job's own success/failure is observed via the Dashboard, not this reply).
+type JobReply struct {
+	Inv string `json:"inv,omitempty"`
+	Err string `json:"err,omitempty"`
+}
 
 // RunRequest is the JSONL payload sent from a child magus to its parent.
 type RunRequest struct {

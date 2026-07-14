@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -241,6 +242,19 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 		}
 		_ = writeFrame(conn, typeRunReply, reply)
 
+	case typeJob:
+		var req JobRequest
+		if err := codec.Unmarshal(line, &req); err != nil {
+			writeErr(conn, "proc: decode job request: "+err.Error())
+			return
+		}
+		var reply JobReply
+		if err := svc.submitJob(req, &reply); err != nil {
+			writeErr(conn, err.Error())
+			return
+		}
+		_ = writeFrame(conn, typeJobReply, reply)
+
 	case typeStatus:
 		var req StatusRequest
 		if err := codec.Unmarshal(line, &req); err != nil {
@@ -420,6 +434,76 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 		return nil
 	}
 	reply.ExitCode = 0
+	return nil
+}
+
+// submitJob accepts a fire-and-forget background job: it registers the invocation (so it
+// shows in the Dashboard like an adopted run), spawns the handler on the server's
+// long-lived context, and returns immediately - unlike run, which blocks until done. A
+// duplicate job already in flight (same workspace + args) is coalesced: no second run
+// starts, so a rapid series of checkouts collapses to one refresh. The job's own
+// success/failure is observed via the Dashboard/logs, not the reply.
+func (s *service) submitJob(req JobRequest, reply *JobReply) error {
+	if req.Magic != JobMagic {
+		return nil // ignore unauthenticated submissions, matching status/shutdown
+	}
+	if len(req.Args) > maxArgs {
+		return fmt.Errorf("proc: JobRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
+	}
+	if req.Protocol != "" && req.Protocol != ProtocolV2 {
+		return ErrProtocolSkew
+	}
+	if s.version != "" && req.Version != "" && req.Version != s.version {
+		return ErrVersionSkew
+	}
+
+	// Namespace the job key so it never collides with run's cycle-detection keyspace:
+	// a foreground `run` of the same args must not see a background job as a cycle (and
+	// vice versa). The prefix keeps job coalescing (dedupe identical in-flight jobs)
+	// separate from cycle detection.
+	key := "job\x00" + cycleKey(req.Root, req.Cwd, req.Args)
+	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
+		return nil // an identical job is already running; coalesce
+	}
+
+	// The Dashboard labels the job by workspace; when the caller left Root empty (the
+	// daemon resolves it from Cwd), fall back to Cwd so the label is never blank.
+	workspace := req.Root
+	if workspace == "" {
+		workspace = req.Cwd
+	}
+	inv := journal.NewInvocationID()
+	id := s.nextID.Add(1)
+	call := &activeCall{
+		Call:  Call{Args: req.Args, Workspace: workspace, StartedAt: time.Now(), Inv: inv},
+		SubOp: &SubOp{},
+	}
+	s.calls.Store(id, call)
+	reply.Inv = inv
+
+	// Run on the server's context, not the connection's: the job must outlive the
+	// socket round-trip that submitted it.
+	go func() {
+		defer s.inflight.Delete(key)
+		defer s.calls.Delete(id)
+
+		ctx, cancel := context.WithCancel(s.parentCtx)
+		defer cancel()
+		ctx = context.WithValue(ctx, rootCtxKey, req.Root)
+		ctx = context.WithValue(ctx, cwdCtxKey, req.Cwd)
+		ctx = journal.WithInvocationID(ctx, inv)
+		ctx = WithSubOp(ctx, call.SubOp)
+
+		if err := s.lim.Acquire(ctx); err != nil {
+			return
+		}
+		defer s.lim.Release()
+		// Yield the admission slot for the handler's duration, as run does, so the job
+		// competes fairly in the shared pool instead of pinning a slot.
+		if err := s.lim.Yield(ctx, func() error { return s.handler(ctx, req.Args) }); err != nil {
+			slog.WarnContext(ctx, "proc: background job failed", slog.Any("args", req.Args), slog.String("error", err.Error()))
+		}
+	}()
 	return nil
 }
 
