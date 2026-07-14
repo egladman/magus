@@ -11,6 +11,7 @@ import {
   parseHash, validateLiveHost, consumeLiveToken, wantsDemo,
 } from "../../lib/daemon";
 import { createStore } from "../../lib/store";
+import { persisted } from "../../lib/persist";
 import { initialState, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
 import { startDemo, type DemoHandle } from "./demo";
@@ -52,12 +53,12 @@ const el = (id: string): HTMLElement => document.getElementById(id) as HTMLEleme
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
 function setText(id: string, text: string): void { const e = opt(id); if (e) e.textContent = text; }
 
-// ---- daemon persistence (localStorage) -------------------------------------
-const LS_DAEMON = "magus-dashboard-daemon";
+// ---- daemon persistence ----------------------------------------------------
+const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const DISCONNECT_GRACE = 3; // consecutive stream failures before the pill flips to "disconnected"
-function saveDaemon(host: string): void { try { localStorage.setItem(LS_DAEMON, host); } catch { /* ignore */ } }
-function savedDaemon(): string | null { try { return localStorage.getItem(LS_DAEMON); } catch { return null; } }
-function forgetDaemon(): void { try { localStorage.removeItem(LS_DAEMON); } catch { /* ignore */ } }
+function saveDaemon(host: string): void { daemonCell.set(host); }
+function savedDaemon(): string | null { return daemonCell.get(); }
+function forgetDaemon(): void { daemonCell.set(null); }
 
 // ---- store + transport -----------------------------------------------------
 const store = createStore<DashboardState>(initialState());

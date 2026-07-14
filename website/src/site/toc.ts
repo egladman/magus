@@ -1,3 +1,5 @@
+import { persisted } from "../lib/persist";
+
 // Collapsible TOC. A labeled toggle button above the content hides the "On this
 // page" sidebar and lets the article reflow to the full container width; the
 // choice persists across pages. With no stored preference the sidebar starts
@@ -7,10 +9,9 @@ export function initTocToggle(): void {
   const grid = document.querySelector(".with-toc");
   if (!grid) return;
 
-  const KEY = "toc-collapsed";
-  let stored: string | null = null;
-  try { stored = localStorage.getItem(KEY); } catch (e) {}
-  let collapsed = stored === null ? window.innerWidth < 1024 : stored === "1";
+  // Durable, cross-tab collapse state. With nothing stored the fallback picks the
+  // default from the viewport (open on wide layouts, collapsed on narrow ones).
+  const collapsed = persisted("toc-collapsed", window.innerWidth < 1024);
 
   // A document-outline glyph (a page with heading lines), deliberately NOT a plain
   // three-line "list": the navbar's hamburger menu button is three lines, so a page
@@ -63,8 +64,8 @@ export function initTocToggle(): void {
   // A const arrow (not a hoisted function declaration) so the null-guard above
   // narrows grid to non-null inside it.
   const applyDesktop = (): void => {
-    grid.classList.toggle("toc-collapsed", collapsed);
-    setLabel(!collapsed);
+    grid.classList.toggle("toc-collapsed", collapsed.get());
+    setLabel(!collapsed.get());
   };
   function openSheet(): void {
     if (!tocAside) return;
@@ -101,8 +102,7 @@ export function initTocToggle(): void {
       if (tocAside && tocAside.classList.contains("toc-sheet-open")) closeSheet();
       else openSheet();
     } else {
-      collapsed = !collapsed;
-      try { localStorage.setItem(KEY, collapsed ? "1" : "0"); } catch (e) {}
+      collapsed.set(!collapsed.get());
       applyDesktop();
     }
   });

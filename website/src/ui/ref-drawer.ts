@@ -1,3 +1,5 @@
+import { persisted } from "../lib/persist";
+
 // ref-drawer.ts - a right-side slide-out reference panel shared by the console apps (graph
 // explorer, log viewer, ...). A page marks its reference blocks with .ref-section and supplies a
 // trigger (.ref-trigger), the drawer (#ref-drawer) and a backdrop (#ref-backdrop). This relocates
@@ -107,15 +109,12 @@ export function initRefDrawer(): void {
   const triggers = document.querySelectorAll(".ref-trigger");
   const pinBtn = drawer.querySelector(".ref-pin");
 
-  // Pinned state persists across pages (localStorage): pin it once and the panel stays docked as
-  // you navigate between the console apps. A pinned panel docks beside the content (no dim); an
-  // unpinned one is a temporary overlay with a dimming backdrop.
-  const LS_PINNED = "magus-ref-pinned";
-  let pinned = false;
-  try { pinned = localStorage.getItem(LS_PINNED) === "1"; } catch { /* ignore */ }
-  const savePinned = (v: boolean): void => {
-    try { if (v) localStorage.setItem(LS_PINNED, "1"); else localStorage.removeItem(LS_PINNED); } catch { /* ignore */ }
-  };
+  // Pinned state persists across pages: pin it once and the panel stays docked as you navigate
+  // between the console apps. A pinned panel docks beside the content (no dim); an unpinned one is
+  // a temporary overlay with a dimming backdrop. `pinned` is a local mirror of the durable cell.
+  const pinnedCell = persisted("ref-pinned", false);
+  let pinned = pinnedCell.get();
+  const savePinned = (v: boolean): void => pinnedCell.set(v);
 
   let isOpen = pinned; // a pinned panel is open on load
 

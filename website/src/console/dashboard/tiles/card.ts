@@ -8,6 +8,7 @@
 
 import type { DashboardState } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
+import { persisted } from "../../../lib/persist";
 
 export interface Tile {
   readonly el: HTMLElement;
@@ -15,27 +16,18 @@ export interface Tile {
   destroy(): void;
 }
 
-// Collapsed-card persistence: a set of card ids in localStorage. Super-basic UI
-// state, wrapped so a storage-disabled browser degrades to no persistence.
-const LS_COLLAPSED = "magus-dashboard-collapsed";
-
-function loadCollapsed(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(LS_COLLAPSED) || "[]") as string[]); } catch { return new Set(); }
-}
-function saveCollapsed(set: Set<string>): void {
-  try { localStorage.setItem(LS_COLLAPSED, JSON.stringify([...set])); } catch { /* ignore */ }
-}
+// Collapsed-card persistence: a set of card ids, stored as a JSON array in a durable
+// cell. Super-basic UI state; a storage-disabled browser degrades to no persistence.
+const collapsedCell = persisted<string[]>("dashboard-collapsed", []);
+function loadCollapsed(): Set<string> { return new Set(collapsedCell.get()); }
+function saveCollapsed(set: Set<string>): void { collapsedCell.set([...set]); }
 
 // A default-collapsed card (a heavy metric family) folds itself on FIRST sight only, so
 // the user's later expand sticks. `seeded` records which ids have had their default
 // applied; once seeded, the collapsed set alone (which the toggle edits) is authoritative.
-const LS_SEEDED = "magus-dashboard-collapse-seeded";
-function loadSeeded(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(LS_SEEDED) || "[]") as string[]); } catch { return new Set(); }
-}
-function saveSeeded(set: Set<string>): void {
-  try { localStorage.setItem(LS_SEEDED, JSON.stringify([...set])); } catch { /* ignore */ }
-}
+const seededCell = persisted<string[]>("dashboard-collapse-seeded", []);
+function loadSeeded(): Set<string> { return new Set(seededCell.get()); }
+function saveSeeded(set: Set<string>): void { seededCell.set([...set]); }
 
 export interface CardOptions {
   // A magus glossary term to deep-link from the heading (linked ONCE per tile).
