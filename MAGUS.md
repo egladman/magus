@@ -18,7 +18,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1696 nodes** and **2981 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1708 nodes** and **3191 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -30,17 +30,17 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 5 | [`magus query kind:project`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project) | `magus`, `website`, `gopherbuzz` |
+| project | 5 | [`magus query kind:project`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project) | `magus`, `gopherbuzz`, `website` |
 | target | 56 | [`magus query kind:target`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `generate` |
 | spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:spell) | `go`, `buf`, `docker` |
-| op | 43 | [`magus query kind:op`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
+| op | 47 | [`magus query kind:op`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
 | charm | 5 | [`magus query kind:charm`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:charm) | `rw`, `static`, `cd` |
 | module | 22 | [`magus query kind:module`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `env` |
 | method | 148 | [`magus query kind:method`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 26 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS4001`, `MGS5003` |
 | doc | 104 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
 | file | 196 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 984 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
+| function | 992 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
 | import | 91 | [`magus query kind:import`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
 | rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
 
@@ -941,9 +941,9 @@ magus run lint proto  # from the workspace root
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
 
 ```text
-sources  magusfile.buzz, magusfiles/**/*.buzz, website/magusfile.buzz, website/magusfiles/**/*.buzz
+sources  magusfile.buzz, magusfiles/**/*.buzz, website/**/*.js, website/**/*.json, website/**/*.jsx, website/**/*.ts, website/**/*.tsx, website/.npmrc, website/magusfile.buzz, website/magusfiles/**/*.buzz, website/npm-shrinkwrap.json, website/package-lock.json, website/package.json, website/pnpm-lock.yaml
 outputs  website/gen/**, website/MAGUS.md, website/src/gen/**
-spells   magusfile
+spells   magusfile, ts (claims: **/*.ts, **/*.tsx, **/*.mts, **/*.cts, **/*.js, **/*.mjs, **/*.cjs, **/*.jsx, **/*.json, **/*.jsonc, **/*.md, **/*.mdx, **/*.yaml, **/*.yml, **/*.css, **/*.scss, **/*.html)
 ```
 
 </details>

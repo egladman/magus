@@ -140,16 +140,20 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		log = slog.Default()
 	}
 	cacheDir := resolveCacheDir(root, cfg)
+	spells := ws.DescribeSpells()
 	in := knowledge.Inputs{
 		Graph:       ws.DescribeGraph(),
-		Spells:      ws.DescribeSpells(),
+		Spells:      spells,
 		Modules:     allModuleEntries(),
 		Diagnostics: types.AllDiagnosticCodes(),
 		Root:        root,
 		Runtime:     knowledge.LoadRuntimeEvents(cacheDir),
 		Timings:     loadKnowledgeTimings(ctx, cfg),
-		Symbols:     loadKnowledgeSymbols(cfg, root, log),
-		VCS:         loadKnowledgeVCS(ctx, cfg, root, cacheDir, log),
+		Symbols: loadKnowledgeSymbols(symbolIngestInputs{
+			cfg: cfg, root: root, cacheDir: cacheDir,
+			projects: ws.DescribeProjects(), spells: spells, log: log,
+		}),
+		VCS: loadKnowledgeVCS(ctx, cfg, root, cacheDir, log),
 	}
 	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
@@ -225,46 +229,115 @@ func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Describer, root s
 	return store.MergeSymbolShards(ctx, g)
 }
 
-// loadKnowledgeSymbols reads each declared SCIP index (best-effort) into per-project
-// symbol records for the @symbols shards. A missing index (its target has not run) or
-// an unreadable/undecodable one is skipped with a debug log, never an error - symbol
-// ingestion is an optional enrichment, so a bad index degrades to "no symbols for
-// that project" rather than failing every graph query.
-func loadKnowledgeSymbols(cfg config.Config, root string, log *slog.Logger) map[string][]types.KnowledgeSymbol {
-	if len(cfg.Knowledge.Symbols) == 0 {
+// loadKnowledgeSymbols reads each project's SCIP index (best-effort) into per-project
+// symbol records for the @symbols shards. Ingestion is AUTOMATIC: every project bound to
+// a symbol-capable spell (one exposing the reserved `scip` op) is read from that
+// project's cached index, so importing a language's spells is the only opt-in - no
+// per-project config. The index lives under the cache dir, not the tree: `magus run
+// <project>::scip` produces it there. An index that has not been built yet (its scip
+// target has not run) or an unreadable/undecodable one is skipped with a debug log,
+// never an error - symbol ingestion is optional enrichment, so a bad index degrades to
+// "no symbols for that project" rather than failing every graph query.
+func loadKnowledgeSymbols(in symbolIngestInputs) map[string][]types.KnowledgeSymbol {
+	log := in.log
+	decls := symbolIndexDeclarations(in)
+	if len(decls) == 0 {
 		return nil
 	}
 	out := map[string][]types.KnowledgeSymbol{}
-	for _, decl := range cfg.Knowledge.Symbols {
-		if decl.Project == "" || decl.Index == "" {
-			continue
-		}
-		// The index is declared as a workspace-relative path (typically a target
-		// output); reject one that escapes the root rather than reading an arbitrary file.
-		if !filepath.IsLocal(decl.Index) {
-			log.Warn("knowledge: symbol index path escapes the workspace, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(root, decl.Index))
+	for _, decl := range decls {
+		data, err := os.ReadFile(decl.path)
 		if err != nil {
-			// A not-yet-built index (the target has not run) is expected and quiet; any
-			// other read error (typo, permissions) is a misconfig the user asked about.
+			// A not-yet-built index (the scip target has not run) is expected and quiet;
+			// any other read error (permissions) is a misconfig worth surfacing.
 			if errors.Is(err, fs.ErrNotExist) {
-				log.Debug("knowledge: symbol index not built yet, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
+				log.Debug("knowledge: symbol index not built yet, skipping", slog.String("project", decl.project), slog.String("index", decl.path))
 			} else {
-				log.Warn("knowledge: cannot read declared symbol index", slog.String("project", decl.Project), slog.String("index", decl.Index), slog.String("error", err.Error()))
+				log.Warn("knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			}
 			continue
 		}
-		syms, err := symbols.ParseIndex(data)
+		syms, err := symbols.ParseIndex(data, decl.project)
 		if err != nil {
-			// A declared index that exists but will not decode is a real problem (wrong
-			// file, corrupt output), not a benign miss - surface it.
-			log.Warn("knowledge: cannot decode symbol index", slog.String("project", decl.Project), slog.String("index", decl.Index), slog.String("error", err.Error()))
+			// An index that exists but will not decode is a real problem (corrupt output),
+			// not a benign miss - surface it.
+			log.Warn("knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			continue
 		}
-		out[decl.Project] = syms
+		out[decl.project] = syms
 	}
+	return out
+}
+
+// resolvedSymbolIndex pairs a project with the absolute path of its SCIP index.
+type resolvedSymbolIndex struct {
+	project string
+	path    string
+}
+
+// symbolIngestInputs is the shared context for resolving and reading symbol indexes,
+// threaded as one value so loadKnowledgeSymbols and symbolIndexDeclarations cannot drift
+// out of lockstep as the input set grows.
+type symbolIngestInputs struct {
+	cfg      config.Config
+	root     string
+	cacheDir string
+	projects types.ProjectsOutput
+	spells   types.SpellsOutput
+	log      *slog.Logger
+}
+
+// symbolIndexDeclarations resolves which SCIP indexes to ingest, keyed by project so a
+// derived entry and an explicit override for the same project cannot both fire. It
+// derives one for every project bound to a symbol-capable spell (one exposing the
+// reserved `scip` op), pointing at that project's cached index (symbols.IndexPath, the
+// same location the op writes to) - the zero-config path. Explicit knowledge.symbols
+// entries are then merged in and win on the same project, pointing instead at a
+// workspace-relative path in the tree for a project whose indexer writes somewhere
+// non-standard. The result is sorted by project for deterministic ingestion.
+func symbolIndexDeclarations(in symbolIngestInputs) []resolvedSymbolIndex {
+	capable := map[string]bool{}
+	for _, sp := range in.spells.Spells {
+		if slices.Contains(sp.Targets, symbols.IndexOp) {
+			capable[sp.Name] = true
+		}
+	}
+
+	byProject := map[string]resolvedSymbolIndex{}
+	for _, p := range in.projects.Projects {
+		bound := p.Spells
+		if len(bound) == 0 && p.Spell != "" {
+			bound = []string{p.Spell}
+		}
+		for _, name := range bound {
+			if !capable[name] {
+				continue
+			}
+			// One index per project: the cache location is keyed by the project dir, so
+			// the first symbol-capable spell wins and the rest would name the same file.
+			absDir := filepath.Join(in.root, filepath.FromSlash(p.Path))
+			byProject[p.Path] = resolvedSymbolIndex{project: p.Path, path: symbols.IndexPath(in.cacheDir, absDir)}
+			break
+		}
+	}
+	for _, decl := range in.cfg.Knowledge.Symbols {
+		if decl.Project == "" || decl.Index == "" {
+			continue
+		}
+		// An explicit override names a path in the tree; reject one that escapes the
+		// workspace rather than reading an arbitrary file.
+		if !filepath.IsLocal(decl.Index) {
+			in.log.Warn("knowledge: symbol index path escapes the workspace, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
+			continue
+		}
+		byProject[decl.Project] = resolvedSymbolIndex{project: decl.Project, path: filepath.Join(in.root, decl.Index)}
+	}
+
+	out := make([]resolvedSymbolIndex, 0, len(byProject))
+	for _, d := range byProject {
+		out = append(out, d)
+	}
+	slices.SortFunc(out, func(a, b resolvedSymbolIndex) int { return cmp.Compare(a.project, b.project) })
 	return out
 }
 

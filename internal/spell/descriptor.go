@@ -70,6 +70,11 @@ type Descriptor struct {
 	Ops         map[string]types.SpellOp `json:"targets,omitempty"`
 	// VersionCmd argv prints the spell's toolchain version, mixed into the cache key; empty = no probe.
 	VersionCmd []string `json:"version_cmd,omitempty"`
+	// Language is the canonical source language this spell adapts (e.g. "go",
+	// "typescript"), declared by mgs_getLanguage. It tags the spell node so a
+	// `language:` query groups the adapter with the files and symbols of that language;
+	// empty for a spell that adapts no single source language (docker, cosign).
+	Language string `json:"language,omitempty"`
 	// DocOps names the ops authored as function handlers (sorted) — as opposed to
 	// plain {cmd,args} record ops. `magus doctor` requires a doc comment on each of
 	// these for a workspace-local Buzz spell. Not serialized: it is a resolution-path

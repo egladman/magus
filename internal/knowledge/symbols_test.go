@@ -19,7 +19,8 @@ func TestAssembleSymbols(t *testing.T) {
 		Defs:       []string{"pkg/foo/foo.go"},
 		Refs:       []types.KnowledgeSymbolRef{{Path: "pkg/baz/baz.go", Count: 2, Lines: []int{5, 8}}},
 	}}
-	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms)}).Output()
+	projects := []types.TargetGraphProject{{Path: "pkg/foo"}, {Path: "pkg/baz"}}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, projects)}).Output()
 
 	n, ok := nodeByID(out, "symbol:example.com/foo Bar#")
 	require.True(t, ok)
@@ -36,6 +37,15 @@ func TestAssembleSymbols(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, e.Provenance, "count=2")
 	assert.Contains(t, e.Provenance, "lines=5,8")
+
+	// Each indexed file is a browsable node the edges land on, linked to its owning
+	// project (the ref file to its own project, not this shard's).
+	fn, ok := nodeByID(out, "file:pkg/foo/foo.go")
+	require.True(t, ok, "the defining file is materialized as a node")
+	assert.Equal(t, types.KindFile, fn.Kind)
+	assert.True(t, hasEdge(out, "project:pkg/foo", "file:pkg/foo/foo.go", types.RelationContains))
+	assert.True(t, hasEdge(out, "project:pkg/baz", "file:pkg/baz/baz.go", types.RelationContains),
+		"a cross-project reference file is parented to its own project")
 }
 
 // TestAssembleShardsIngestsSymbols: a project with declared symbols yields a
@@ -80,7 +90,7 @@ func TestGraphRefs(t *testing.T) {
 			{Path: "pkg/a/a.go", Count: 2, Lines: []int{5, 8}},
 		},
 	}}
-	g := mergeAll([]Shard{assembleSymbols("pkg/foo", syms)})
+	g := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, nil)})
 
 	out, ok := g.Refs("symbol:example.com/foo Bar#")
 	require.True(t, ok)
@@ -100,7 +110,7 @@ func TestGraphRefs(t *testing.T) {
 // still resolves to the symbol, since refs is symbol-only.
 func TestGraphRefsPrefersSymbol(t *testing.T) {
 	g := mergeAll([]Shard{
-		assembleSymbols("pkg/foo", []types.KnowledgeSymbol{{Key: "example.com/foo Bar#", Label: "Bar"}}),
+		assembleSymbols("pkg/foo", []types.KnowledgeSymbol{{Key: "example.com/foo Bar#", Label: "Bar"}}, nil),
 	})
 	g.AddNode(types.KnowledgeNode{ID: "function:pkg/foo/foo.buzz:Bar", Kind: types.KindFunction, Label: "Bar"})
 
@@ -128,7 +138,7 @@ func TestAssembleSymbolsRefOnly(t *testing.T) {
 		Label: "Qux",
 		Refs:  []types.KnowledgeSymbolRef{{Path: "pkg/a/a.go", Count: 1, Lines: []int{3}}},
 	}}
-	out := mergeAll([]Shard{assembleSymbols("pkg/a", syms)}).Output()
+	out := mergeAll([]Shard{assembleSymbols("pkg/a", syms, nil)}).Output()
 
 	_, ok := nodeByID(out, "symbol:other.com/dep Qux#")
 	assert.True(t, ok, "reference-only symbol still gets a node")

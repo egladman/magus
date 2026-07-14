@@ -10,6 +10,11 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 export fun mgs_getVersionCommand() > [str] { return ["rustc", "--version"]; }
 
+// mgs_getLanguage names the source language this spell adapts, canonical and lowercase
+// so it matches the language attr on the Rust files and symbols SCIP ingests. It lets
+// `magus query language:rust` reach this adapter alongside the code it builds.
+export fun mgs_getLanguage() > str { return "rust"; }
+
 fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }
 fun cargoClean(target: Target) > Command { return Command{bin = "cargo", args = ["clean"]}; }
 fun cargoClippy(target: Target) > Command { return Command{bin = "cargo", args = ["clippy", "--", "-D", "warnings"]}; }
@@ -24,7 +29,14 @@ fun cargoFmt(target: Target) > Command {
     }};
 }
 fun cargoTest(target: Target) > Command { return Command{bin = "cargo", args = ["test"]}; }
+// scip is the reserved op that runs the Rust SCIP indexer for the knowledge graph.
+// magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never
+// lands in the tree; rust-analyzer's scip subcommand writes there via --output. Run
+// through sh so the env var expands.
+fun scip(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""]};
+}
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"cargo-build": cargoBuild, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy, "cargo-fmt": cargoFmt, "cargo-test": cargoTest};
+    return {"cargo-build": cargoBuild, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy, "cargo-fmt": cargoFmt, "cargo-test": cargoTest, "scip": scip};
 }

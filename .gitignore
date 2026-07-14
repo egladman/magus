@@ -17,6 +17,10 @@ coverage.out
 # magus runtime cache
 .magus/
 
+# SCIP code-symbol indexes are build artifacts (magus writes them under .magus, but a
+# manual `scip-*` run can drop one in the tree); never commit them.
+*.scip
+
 /magus-docs
 /buzz-playground
 

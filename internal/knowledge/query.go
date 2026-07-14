@@ -17,18 +17,19 @@ import (
 // full boolean grammar (OR/parens/wildcards) and the search.js conformance
 // fixture are a later increment.
 
-// SeedsSymbols reports whether an input (a query string, or an explain/path node
-// ref) targets symbol nodes, so a caller knows to lazily load the symbol shards the
-// default graph omits. True when the input names the symbol kind (exactly or via a
-// wildcard like kind:sym*), a symbol: node ID (including a wildcard id: that could
-// match one), or a defines/references relation. It MUST agree with what scoreNode
-// actually matches: a wildcard that reaches symbols but does not seed here would load
-// no shards and return an empty result. Over-eager is safe - it only loads more.
+// SeedsSymbols reports whether an input targets symbol nodes, so a caller knows to
+// lazily load the symbol shards the default graph omits: a symbol: ID, the symbol kind
+// (incl. wildcard), a defines/references relation, or any language filter. It must agree
+// with scoreNode - a match that reaches symbols without seeding here returns empty.
+// Over-eager is safe: it only loads shards a later filter may discard.
 func SeedsSymbols(input string) bool {
 	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
 		return true
 	}
 	q := parseQuery(input)
+	if len(q.fields["language"]) > 0 {
+		return true
+	}
 	for _, k := range q.fields["kind"] {
 		if k == types.KindSymbol || (hasWildcard(k) && globMatch(k, types.KindSymbol)) {
 			return true
@@ -44,11 +45,9 @@ func SeedsSymbols(input string) bool {
 	})
 }
 
-// wildcardCouldMatchPrefix reports whether a glob pattern could match some string that
-// starts with prefix - used to decide whether a wildcard id: query might target symbol
-// nodes (their IDs start with "symbol:") and so needs the symbol shards loaded. It
-// compares the pattern's literal head (before the first '*') against prefix; a leading
-// '*' (empty head) could match anything, so it seeds conservatively.
+// wildcardCouldMatchPrefix reports whether a glob could match a string starting with
+// prefix, by comparing the pattern's literal head (before the first '*') against it. A
+// leading '*' matches anything, so it seeds conservatively.
 func wildcardCouldMatchPrefix(pattern, prefix string) bool {
 	head, _, _ := strings.Cut(pattern, "*")
 	return strings.HasPrefix(prefix, head) || strings.HasPrefix(head, prefix)
@@ -63,9 +62,9 @@ const DefaultBudget = 50
 // kindRank and ID order break ties among wildcard matches.
 const wildcardTermScore = 1
 
-// knownFields are the recognized field:value prefixes. kind/project/id constrain
-// which nodes match; relation constrains which edges a neighborhood traverses.
-var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true}
+// knownFields are the recognized field:value prefixes. kind/project/id/language
+// constrain which nodes match; relation constrains which edges a neighborhood traverses.
+var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true, "language": true}
 
 type parsedQuery struct {
 	terms     []string            // positive free-text tokens (AND)
@@ -187,6 +186,16 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	if vals := q.negFields["id"]; containsAny(id, vals) {
 		return 0, false
 	}
+	// language filters on the node's language attr (set on file and symbol nodes), so
+	// `language:go` groups every source file and symbol of a language regardless of
+	// whether magus's AST walk or a foreign SCIP index produced it. A node without the
+	// attr never matches a positive language constraint.
+	if vals, ok := q.fields["language"]; ok && !slices.Contains(vals, n.Attrs["language"]) {
+		return 0, false
+	}
+	if vals := q.negFields["language"]; slices.Contains(vals, n.Attrs["language"]) {
+		return 0, false
+	}
 
 	// Negated free text must not appear anywhere in the node's text (a wildcard term
 	// excludes any node whose ID or label matches the glob).
@@ -235,11 +244,9 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	return total + kindRank(n.Kind), true
 }
 
-// kindRank biases resolution toward primary domain entities (target, spell, ...)
-// over source-level nodes (function, file, import, rationale, doc) when text
-// relevance ties, so a bare `explain build` resolves the target, not its source
-// function. The bonus is small relative to a real leaf match, so it only breaks
-// ties; it never lets a weaker text match outrank a stronger one.
+// kindRank biases resolution toward primary domain entities over source-level nodes on
+// a text-relevance tie, so a bare `explain build` resolves the target, not its function.
+// The bonus only breaks ties; it never outranks a stronger text match.
 func kindRank(kind string) int {
 	switch kind {
 	case types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
@@ -645,14 +652,10 @@ func containsAny(hay string, needles []string) bool {
 // hasWildcard reports whether a term or field value uses the '*' glob metacharacter.
 func hasWildcard(s string) bool { return strings.IndexByte(s, '*') >= 0 }
 
-// globMatch reports whether s matches a shell-style glob where '*' matches any run of
-// characters, INCLUDING none and including separators like '/' and ':' (node IDs are
-// full of both, so the gitignore-style "* stops at /" would be surprising here).
-// Case-insensitive. A pattern with no '*' is an exact match. (path.Match is rejected
-// because it treats '/' as significant and errors on some patterns.) The middle
-// segments are matched leftmost with no backtracking - provably correct for pure-'*'
-// globs since the surrounding '*' absorb any slack, and cheap for the short,
-// separator-dense patterns this sees.
+// globMatch reports whether s matches a case-insensitive glob where '*' matches any run
+// of characters, separators ('/', ':') included - node IDs are full of them, so path.Match's
+// slash-significance would surprise. No '*' means exact match. Middle segments match
+// leftmost without backtracking, which is correct because the surrounding '*' absorb any slack.
 func globMatch(pattern, s string) bool {
 	p, str := strings.ToLower(pattern), strings.ToLower(s)
 	parts := strings.Split(p, "*")

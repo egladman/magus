@@ -37,6 +37,7 @@ type Spell struct {
 	claims              []string
 	outputs             []string
 	targets             []string
+	language            string          // canonical source language the spell adapts; "" when it adapts none
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
 	targetSources       map[string][]string
@@ -77,6 +78,11 @@ func (s *Spell) Sources() []string { return s.sources }
 func (s *Spell) Claims() []string  { return s.claims }
 func (s *Spell) Outputs() []string { return s.outputs }
 func (s *Spell) Targets() []string { return s.targets }
+
+// Language returns the canonical source language the spell adapts (e.g. "go",
+// "typescript"), or "" when it adapts no single language. It tags the spell node so a
+// `language:` query groups the adapter with that language's files and symbols.
+func (s *Spell) Language() string { return s.language }
 
 // IsServiceTarget reports whether target name is backed by a service op (a
 // long-running process). The runner forces such targets uncacheable.
@@ -201,6 +207,12 @@ func WithServiceTargets(names ...string) SpellOption {
 			s.serviceTargets[n] = true
 		}
 	}
+}
+
+// WithLanguage sets the canonical source language the spell adapts, used to tag the
+// spell node so a `language:` query reaches the adapter alongside that language's code.
+func WithLanguage(language string) SpellOption {
+	return func(s *Spell) { s.language = language }
 }
 
 // WithOpaque marks the spell as opaque: it delegates to a foreign process that

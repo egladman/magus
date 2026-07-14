@@ -59,6 +59,9 @@ var ConfigFlags = []ConfigFlag{
 	{"knowledge-max-size-mb", "MAGUS_KNOWLEDGE_MAX_SIZE_MB", "int"},
 	{"knowledge-vcs-enabled", "MAGUS_KNOWLEDGE_VCS_ENABLED", "bool"},
 	{"knowledge-vcs-max-commits", "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS", "int"},
+	{"knowledge-symbol-indexing-disabled", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED", "bool"},
+	{"knowledge-symbol-indexing-quiet-seconds", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS", "int"},
+	{"knowledge-symbol-indexing-min-interval-seconds", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS", "int"},
 	{"concurrency", "MAGUS_CONCURRENCY", "int"},
 	{"history-path", "MAGUS_HISTORY_PATH", "string"},
 	{"dry-run", "MAGUS_DRY_RUN", "bool"},
@@ -109,6 +112,9 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.IntVar(&cfg.Knowledge.MaxSizeMB, "knowledge-max-size-mb", cfg.Knowledge.MaxSizeMB, "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When")
 	fs.BoolVar(&cfg.Knowledge.VCS.Enabled, "knowledge-vcs-enabled", cfg.Knowledge.VCS.Enabled, "MAGUS_KNOWLEDGE_VCS_ENABLED")
 	fs.IntVar(&cfg.Knowledge.VCS.MaxCommits, "knowledge-vcs-max-commits", cfg.Knowledge.VCS.MaxCommits, "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits. 0 uses a")
+	fs.BoolVar(&cfg.Knowledge.SymbolIndexing.Disabled, "knowledge-symbol-indexing-disabled", cfg.Knowledge.SymbolIndexing.Disabled, "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED: Disabled opts out of background auto-indexing. Auto-indexing is on by default")
+	fs.IntVar(&cfg.Knowledge.SymbolIndexing.QuietSeconds, "knowledge-symbol-indexing-quiet-seconds", cfg.Knowledge.SymbolIndexing.QuietSeconds, "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS: QuietSeconds is how long a project's sources must be quiet after the last change")
+	fs.IntVar(&cfg.Knowledge.SymbolIndexing.MinIntervalSeconds, "knowledge-symbol-indexing-min-interval-seconds", cfg.Knowledge.SymbolIndexing.MinIntervalSeconds, "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).")
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")

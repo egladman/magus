@@ -28,11 +28,32 @@ func IsSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsSh
 // assembleSymbols builds one project's symbol shard from the ingested records: a
 // symbol node per record, a `defines` edge from each defining file, and a
 // `references` edge from each using file (one per file, carrying the occurrence
-// count and capped lines in its provenance). Edges connect to file nodes the buzz
-// shard defines by the same rel path; a record with neither a def nor a ref in the
-// workspace still yields its node so an explain has something to land on.
-func assembleSymbols(project string, syms []types.KnowledgeSymbol) Shard {
+// count and capped lines in its provenance). It also materializes a `file` node for
+// every path the index touched - so a SCIP-indexed source file is a browsable node
+// the def/ref edges land on, not a dangling ID - and links each to the project that
+// owns it (longest-prefix over the full project list, so a cross-project reference
+// file is parented to its own project, not this shard's). File nodes and their
+// project links ride in this lazy shard, so they surface on symbol-seeded queries;
+// AddNode/AddEdge dedup by ID, so a file two indexes share merges cleanly. A record
+// with neither a def nor a ref in the workspace still yields its node so an explain
+// has something to land on.
+func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []types.TargetGraphProject) Shard {
 	s := Shard{Name: SymbolsShardName(project)}
+	seenFiles := map[string]bool{}
+	noteFile := func(path, language string) {
+		if path == "" || seenFiles[path] {
+			return
+		}
+		seenFiles[path] = true
+		var attrs map[string]string
+		if language != "" {
+			attrs = map[string]string{"language": language}
+		}
+		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Label: path, Source: path, Attrs: attrs})
+		if owner, ok := owningProjectPath(path, projects); ok {
+			s.Edges = append(s.Edges, extractedEdge(projectID(owner), fileID(path), types.RelationContains, path))
+		}
+	}
 	for _, sym := range syms {
 		sID := symbolID(sym.Key)
 		attrs := map[string]string{}
@@ -53,9 +74,11 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol) Shard {
 			Attrs:  nilIfEmpty(attrs),
 		})
 		for _, def := range sym.Defs {
+			noteFile(def, sym.Language)
 			s.Edges = append(s.Edges, extractedEdge(fileID(def), sID, types.RelationDefines, def))
 		}
 		for _, ref := range sym.Refs {
+			noteFile(ref.Path, sym.Language)
 			s.Edges = append(s.Edges, extractedEdge(fileID(ref.Path), sID, types.RelationReferences, refProvenance(ref)))
 		}
 	}

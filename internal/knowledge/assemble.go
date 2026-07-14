@@ -86,13 +86,21 @@ func AssembleShards(in Inputs) []Shard {
 		}
 		fileNodePaths := map[string]bool{}
 		if b := assembleBuzz(in.Root); len(b.Nodes) > 0 {
-			shards = append(shards, b)
 			for _, n := range b.Nodes {
-				if n.Kind == types.KindFile {
-					owned = append(owned, ownedNode{ID: n.ID, Path: n.Source})
-					fileNodePaths[n.Source] = true
+				if n.Kind != types.KindFile {
+					continue
+				}
+				owned = append(owned, ownedNode{ID: n.ID, Path: n.Source})
+				fileNodePaths[n.Source] = true
+				// Link each source file to the project that owns it. Without this a file
+				// (and any symbol defined in it) reaches only its functions and imports,
+				// never up to its project or the workspace. Edges added before the shard
+				// is appended, since a Shard is stored by value.
+				if owner, ok := owningProjectPath(n.Source, in.Graph.Projects); ok {
+					b.Edges = append(b.Edges, extractedEdge(projectID(owner), n.ID, types.RelationContains, n.Source))
 				}
 			}
+			shards = append(shards, b)
 		}
 		if o := assembleOwners(in.Root, owned); len(o.Edges) > 0 {
 			shards = append(shards, o)
@@ -112,11 +120,35 @@ func AssembleShards(in Inputs) []Shard {
 	// One @symbols shard per project that declared an index, in sorted project order
 	// so the shard slice is deterministic despite the map input.
 	for _, project := range slices.Sorted(maps.Keys(in.Symbols)) {
-		if s := assembleSymbols(project, in.Symbols[project]); len(s.Nodes) > 0 {
+		if s := assembleSymbols(project, in.Symbols[project], in.Graph.Projects); len(s.Nodes) > 0 {
 			shards = append(shards, s)
 		}
 	}
 	return shards
+}
+
+// owningProjectPath returns the path of the project that contains file: the longest
+// project path that is a path-prefix of the file, or ok=false when no project claims
+// it. The workspace-root project (".") owns any file not under a more specific nested
+// project, so the longest-match rule keeps a file with the closest project.
+func owningProjectPath(file string, projects []types.TargetGraphProject) (string, bool) {
+	best, found := "", false
+	for _, p := range projects {
+		if !projectContainsFile(p.Path, file) {
+			continue
+		}
+		if !found || len(p.Path) > len(best) {
+			best, found = p.Path, true
+		}
+	}
+	return best, found
+}
+
+// projectContainsFile reports whether the project at projectPath owns file. The root
+// project (".") owns everything; any other project owns a file equal to its path or
+// beneath it. The trailing "/" guard stops "foo" from claiming "foobar/x".
+func projectContainsFile(projectPath, file string) bool {
+	return projectPath == "." || file == projectPath || strings.HasPrefix(file, projectPath+"/")
 }
 
 // knownTargetIDs collects every target node ID the project shards will define, so
@@ -140,10 +172,18 @@ func assembleRegistry(in Inputs) Shard {
 
 	for _, sp := range in.Spells.Spells {
 		sID := spellID(sp.Name)
+		var spellAttrs map[string]string
+		if sp.Language != "" {
+			// Tag the adapter with the language it builds, so `language:go` reaches the
+			// go spell alongside the Go files and symbols it governs - the same attr
+			// key the file/symbol nodes carry.
+			spellAttrs = map[string]string{"language": sp.Language}
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:    sID,
 			Kind:  types.KindSpell,
 			Label: sp.Name,
+			Attrs: spellAttrs,
 		})
 		for _, op := range sp.Targets {
 			oID := opID(sp.Name, op)

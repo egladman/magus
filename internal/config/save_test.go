@@ -61,6 +61,7 @@ func TestKnownKeys(t *testing.T) {
 		"spells.allow_shadow.<name>.name": true, "spells.allow_shadow.<name>.reason": true,
 		"graph.direction": true, "graph.spell": true, "graph.depth": true, "graph.roots": true,
 		"knowledge.workspaces": true, "knowledge.max_size_mb": true, "knowledge.vcs.enabled": true, "knowledge.vcs.max_commits": true,
+		"knowledge.symbol_indexing.disabled": true, "knowledge.symbol_indexing.quiet_seconds": true, "knowledge.symbol_indexing.min_interval_seconds": true,
 		"log.format": true, "log.level": true, "log.silent": true, "concurrency": true, "history_path": true, "dry_run": true,
 		"mcp.address":       true,
 		"bridge.enabled":    true,

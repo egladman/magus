@@ -22,6 +22,33 @@ func ProjectLabel(path, dir string) string {
 	return "(workspace root)"
 }
 
+// ProjectRef identifies a project for end-user output, carrying BOTH its stable machine
+// identifier and its human name so no display surface has to re-derive one from the
+// other (the "never print '.'" fix, applied once instead of per call site). Path is the
+// workspace-relative identifier used for addressing, RPC, and cache keys ("." for the
+// workspace root); Name is the readable label (ProjectLabel: the repo/dir base name for
+// the root, e.g. "magus", the path otherwise). They coincide for a nested project and
+// diverge for the root, so surfaces carry both rather than pick one and lose information.
+type ProjectRef struct {
+	Path string `json:"path" yaml:"path"`
+	Name string `json:"name" yaml:"name"`
+}
+
+// NewProjectRef builds a display ref from a project's workspace-relative path and its
+// absolute directory (dir feeds the root project's name via ProjectLabel).
+func NewProjectRef(path, dir string) ProjectRef {
+	return ProjectRef{Path: path, Name: ProjectLabel(path, dir)}
+}
+
+// Display returns "Name" when path and name coincide, else "Name (path)" - the explicit
+// both-values form for a single-line human render where the path adds disambiguation.
+func (r ProjectRef) Display() string {
+	if r.Name == r.Path || r.Path == "" {
+		return r.Name
+	}
+	return r.Name + " (" + r.Path + ")"
+}
+
 // Binding is the per-spell registration state attached to a project.
 // One Binding is created per WithSpell call.
 type Binding struct {

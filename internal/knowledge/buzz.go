@@ -53,7 +53,10 @@ func assembleBuzz(root string) Shard {
 		}
 		content := string(src)
 		fID := fileID(rel)
-		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fID, Kind: types.KindFile, Label: rel, Source: rel})
+		// The language attr gives buzz file nodes parity with the SCIP file nodes, so
+		// `language:` groups every source file the same way regardless of how it was
+		// extracted (magus's own AST walk here, a foreign indexer there).
+		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fID, Kind: types.KindFile, Label: rel, Source: rel, Attrs: map[string]string{"language": "buzz"}})
 
 		prog, err := buzz.ParseEmbedded(content)
 		if err != nil || prog == nil {

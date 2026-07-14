@@ -22,6 +22,7 @@ func spellHandleFromMeta(m ispell.Descriptor) vm.Value {
 	h.MapSet("provides", strSliceToBuzzList(m.Provides))
 	h.MapSet("claims", strSliceToBuzzList(m.Claims))
 	h.MapSet("version_cmd", strSliceToBuzzList(m.VersionCmd))
+	h.MapSet("language", vm.StrValue(m.Language))
 	h.MapSet("opaque", vm.BoolValue(m.Opaque))
 	h.MapSet("ops", targetsToBuzzMap(m.Ops))
 	bindBuzzTargetDispatch(h, m.Ops)

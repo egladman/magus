@@ -19,6 +19,20 @@ func TestProjectLabel(t *testing.T) {
 	assert.Equal(t, "(workspace root)", ProjectLabel("", "."))
 }
 
+func TestProjectRef(t *testing.T) {
+	t.Parallel()
+	// Root project: path and name diverge, so Display carries both explicitly.
+	root := NewProjectRef(".", "/home/user/magus")
+	assert.Equal(t, ".", root.Path)
+	assert.Equal(t, "magus", root.Name)
+	assert.Equal(t, "magus (.)", root.Display(), "the root shows name and path, never a bare '.'")
+
+	// Nested project: path == name, so Display shows it once.
+	nested := NewProjectRef("pkg/foo", "/home/user/magus/pkg/foo")
+	assert.Equal(t, "pkg/foo", nested.Name)
+	assert.Equal(t, "pkg/foo", nested.Display())
+}
+
 func TestProject_AttachSpell(t *testing.T) {
 	goSpell := NewSpell("go",
 		WithSources("**/*.go"),

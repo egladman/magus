@@ -214,6 +214,25 @@ func (c *Cache) Stats() Stats {
 // ride the same backend as build artifacts, under the same signing/verification.
 func (c *Cache) Remote() RemoteBackend { return c.remote }
 
+// Dir returns the cache's root directory. Subsystems that write sibling artifacts
+// next to the cache (the symbol index a `scip` op produces) resolve their paths under
+// it, so those artifacts stay out of the working tree.
+func (c *Cache) Dir() string { return c.dir }
+
+// Fresh reports whether step s would replay from cache rather than run: its inputs hash
+// to a manifest already present locally. It is Run's hash-and-lookup without the
+// execution or the remote fetch - a read-only "is this up to date?" probe (e.g. status
+// reporting whether a project's symbol index reflects current sources). A missing
+// manifest is "not fresh", not an error; only a hashing failure returns one.
+func (c *Cache) Fresh(ctx context.Context, s Step) (bool, error) {
+	hash, err := c.hashStep(ctx, &s)
+	if err != nil {
+		return false, err
+	}
+	_, mErr := c.readManifest(s.ProjectPath, hash)
+	return mErr == nil, nil
+}
+
 // Run executes fn under the cache. On a hash match it replays recorded outputs;
 // otherwise fn runs and its outputs are snapshotted. Per-hash locking prevents
 // manifest races when multiple RunAll goroutines share the same key.

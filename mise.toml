@@ -36,3 +36,13 @@ tinygo = "0.41.1"
 # breaking; buf-breaking gates the wire contract in ci. Go codegen uses protoc-gen-go
 # (proto/buf.gen.yaml); JS uses @bufbuild/protoc-gen-es (website pnpm dep).
 "aqua:bufbuild/buf" = "1.58.0"
+# SCIP code-symbol indexers the language spells' `scip` op forks (go, ts) to feed the
+# knowledge graph - `magus graph build` and the daemon's background auto-indexer run
+# them. Installed as PATH bins so the ops fork them directly. Only the languages this
+# repo actually has (Go at the root, TypeScript in website/); add scip-python /
+# rust-analyzer if a project of that language appears. NOTE: pin these to exact versions
+# (mise use go:.../scip-go@<ver>, npm:@sourcegraph/scip-typescript@<ver>) to match the
+# repo's exact-pin convention; left at latest here because the current release could not
+# be verified offline.
+"go:github.com/scip-code/scip-go/cmd/scip-go" = "latest"
+"npm:@sourcegraph/scip-typescript" = "latest"

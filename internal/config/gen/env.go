@@ -193,6 +193,19 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Knowledge.VCS.MaxCommits = n
 		}
 	}
+	if v := getenv("MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED"); v != "" {
+		cfg.Knowledge.SymbolIndexing.Disabled = parseBoolEnv(v, cfg.Knowledge.SymbolIndexing.Disabled)
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Knowledge.SymbolIndexing.QuietSeconds = n
+		}
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Knowledge.SymbolIndexing.MinIntervalSeconds = n
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Concurrency = n

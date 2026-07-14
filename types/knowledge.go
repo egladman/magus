@@ -115,6 +115,25 @@ type KnowledgeSymbol struct {
 	Refs   []KnowledgeSymbolRef
 }
 
+// SymbolIndexFreshness is the state of a project's cached SCIP index relative to its
+// current sources, reported by `magus status` and the dashboard.
+type SymbolIndexFreshness string
+
+const (
+	SymbolIndexFresh    SymbolIndexFreshness = "up-to-date"  // index reflects current sources
+	SymbolIndexStale    SymbolIndexFreshness = "out-of-date" // sources changed since the index was built
+	SymbolIndexNotBuilt SymbolIndexFreshness = "not-indexed" // no index has been produced yet
+)
+
+// SymbolIndexStatus is one symbol-capable project's index freshness, for status output.
+// Project carries both the machine path and the human name so the workspace-root project
+// renders as its repo name, not the bare ".".
+type SymbolIndexStatus struct {
+	Project   ProjectRef           `json:"project"`
+	Language  string               `json:"language,omitempty"`
+	Freshness SymbolIndexFreshness `json:"freshness"`
+}
+
 // KnowledgeSymbolRef is one referencing file: its path, how many times the symbol
 // appears, and a capped list of the first occurrence lines (bounded so a hot symbol
 // cannot blow up the edge's provenance).

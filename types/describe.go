@@ -16,6 +16,11 @@ type SpellEntry struct {
 	Claims  []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
 	Targets []string `json:"targets,omitempty" yaml:"targets,omitempty"`
 	Opaque  bool     `json:"opaque,omitempty" yaml:"opaque,omitempty"`
+	// Language is the canonical source language the spell adapts (e.g. "go",
+	// "typescript"), empty for a spell tied to no single language. It tags the spell
+	// node so `magus query language:go` reaches the adapter alongside that language's
+	// files and symbols.
+	Language string `json:"language,omitempty" yaml:"language,omitempty"`
 	// TargetDocs maps a target name to its handler's doc comment, where one
 	// exists. Populated only for workspace-local Buzz spells (built-in docs are
 	// not serialized in bytecode).
@@ -148,6 +153,16 @@ type TargetGraphProject struct {
 	// is "."). Display-only and repo-derived, so it is not serialized; the run path
 	// still addresses the project by Path. Empty outside a repo.
 	RelPath string `json:"-" yaml:"-"`
+}
+
+// Label is the human display name for this project, the single source every render site
+// uses so none prints a bare ".": the pre-collapsed RelPath (which reads as the repo
+// name for the workspace root), falling back to the shared never-'.' rule on Path.
+func (p TargetGraphProject) Label() string {
+	if p.RelPath != "" && p.RelPath != "." {
+		return p.RelPath
+	}
+	return ProjectLabel(p.Path, "")
 }
 
 // TargetGraphOutput is the top-level result for "describe graph".

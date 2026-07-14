@@ -24,6 +24,11 @@ export fun mgs_isOpaque() > bool { return true; }
 
 export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 
+// mgs_getLanguage names the source language this spell adapts, canonical and lowercase
+// so it matches the language attr on the TypeScript files and symbols SCIP ingests. It
+// lets `magus query language:typescript` reach this adapter alongside the code it builds.
+export fun mgs_getLanguage() > str { return "typescript"; }
+
 fun eslint(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "eslint", "."]}; }
 // preflight is a no-op marker op (no command).
 fun preflight(target: Target) > Command { return Command{}; }
@@ -39,7 +44,15 @@ fun vitest(target: Target) > Command {
         "gha": append(["--reporter=github-actions"]),
     }};
 }
+// scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge
+// graph. The indexer is a PATH binary (install it with mise, not as a project dep), so
+// the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination,
+// so the index never lands in the tree; scip-typescript writes there via --output. Run
+// through sh so the env var expands.
+fun scip(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "scip-typescript index --output \"$MAGUS_SYMBOL_INDEX\""]};
+}
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc, "vitest": vitest};
+    return {"eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc, "vitest": vitest, "scip": scip};
 }

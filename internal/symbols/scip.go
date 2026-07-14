@@ -8,6 +8,7 @@ package symbols
 
 import (
 	"cmp"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,7 +30,14 @@ const MaxRefLines = 20
 // `local N` symbols (index-scoped, not stable across builds) are skipped; the version
 // segment is dropped from the key so a dependency bump does not churn every symbol
 // node. Output is sorted by key for deterministic assembly.
-func ParseIndex(data []byte) ([]types.KnowledgeSymbol, error) {
+//
+// projectPath is the ingested project's workspace-relative path. SCIP document paths are
+// relative to the INDEXER's root (the project dir, where magus runs the indexer), so
+// each is joined onto projectPath to become workspace-relative - the same spine the buzz
+// file nodes and project->file edges use, so a nested project's symbols land on the right
+// files instead of dangling at the workspace root. projectPath "" or "." leaves paths
+// unchanged (the root project's paths are already workspace-relative).
+func ParseIndex(data []byte, projectPath string) ([]types.KnowledgeSymbol, error) {
 	var idx scip.Index
 	if err := proto.Unmarshal(data, &idx); err != nil {
 		return nil, err
@@ -55,6 +63,8 @@ func ParseIndex(data []byte) ([]types.KnowledgeSymbol, error) {
 	byKey := map[string]*acc{}
 
 	for _, doc := range idx.Documents {
+		// Rebase the indexer-relative document path onto the workspace once per document.
+		docPath := workspacePath(projectPath, doc.RelativePath)
 		for _, occ := range doc.Occurrences {
 			moniker := occ.Symbol
 			if moniker == "" || scip.IsLocalSymbol(moniker) {
@@ -67,7 +77,10 @@ func ParseIndex(data []byte) ([]types.KnowledgeSymbol, error) {
 			a := byKey[key]
 			if a == nil {
 				a = &acc{
-					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: label, Language: doc.Language},
+					// Canonicalize the language: indexers disagree on casing ("Go" vs "go",
+					// "TypeScript"), so lowercasing lines it up with the spells' declared
+					// values and makes `language:` a reliable join across both.
+					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: label, Language: strings.ToLower(strings.TrimSpace(doc.Language))},
 					defs: map[string]bool{},
 					refs: map[string]*types.KnowledgeSymbolRef{},
 				}
@@ -81,17 +94,17 @@ func ParseIndex(data []byte) ([]types.KnowledgeSymbol, error) {
 			}
 			line := occurrenceLine(occ)
 			if occ.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 {
-				a.defs[doc.RelativePath] = true
+				a.defs[docPath] = true
 				// First definition seen (in document then occurrence order, both stable
 				// slices) wins the Source; later defs still add their defines edge.
 				if a.sym.Source == "" {
-					a.sym.Source = doc.RelativePath + ":" + strconv.Itoa(line)
+					a.sym.Source = docPath + ":" + strconv.Itoa(line)
 				}
 			} else {
-				r := a.refs[doc.RelativePath]
+				r := a.refs[docPath]
 				if r == nil {
-					r = &types.KnowledgeSymbolRef{Path: doc.RelativePath}
-					a.refs[doc.RelativePath] = r
+					r = &types.KnowledgeSymbolRef{Path: docPath}
+					a.refs[docPath] = r
 				}
 				r.Count++
 				if len(r.Lines) < MaxRefLines {
@@ -110,6 +123,17 @@ func ParseIndex(data []byte) ([]types.KnowledgeSymbol, error) {
 	// byKey iteration is unordered; the sort is what makes the output deterministic.
 	slices.SortFunc(out, func(x, y types.KnowledgeSymbol) int { return cmp.Compare(x.Key, y.Key) })
 	return out, nil
+}
+
+// workspacePath rebases an indexer-relative document path onto the workspace by joining
+// it under the project's workspace-relative path. A root project ("" or ".") leaves the
+// path unchanged. path.Join also cleans a leading "./" or stray separators the indexer
+// may emit, so the result matches the file IDs the rest of the graph uses.
+func workspacePath(projectPath, rel string) string {
+	if projectPath == "" || projectPath == "." {
+		return path.Clean(rel)
+	}
+	return path.Join(projectPath, rel)
 }
 
 // parseMoniker turns a SCIP moniker into a stable, version-free node key and a

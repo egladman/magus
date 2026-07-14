@@ -36,6 +36,7 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 			Claims:     p.Claims(),
 			Targets:    p.Targets(),
 			Opaque:     p.Opaque(),
+			Language:   p.Language(),
 			TargetDocs: docs,
 		})
 	}

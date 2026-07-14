@@ -235,12 +235,14 @@ type Knowledge struct {
 	// (default) is unlimited - the store self-reconciles deleted projects, so a cap
 	// mainly bounds transient bloat.
 	MaxSizeMB int `yaml:"max_size_mb" validate:"gte=0"`
-	// Symbols declares SCIP index files to ingest as per-project symbol shards. Each
-	// entry names a project and a workspace-relative path to a .scip file a
-	// per-language indexer (scip-go, scip-typescript, ...) produced - usually a target
-	// output. Ingestion is EXPLICIT and opt-in: no declaration, no symbol shard. A
-	// declared index that does not exist yet (its target has not run) is simply
-	// skipped, so the shard appears once the index is built.
+	// Symbols overrides symbol ingestion for specific projects. Ingestion is normally
+	// AUTOMATIC: every project bound to a symbol-capable spell (go, ts, py, rust - any
+	// spell exposing the reserved `scip` op) is ingested from its cached index with no
+	// config here. Each entry below instead points a named project at a
+	// workspace-relative .scip path your own build emits, for a project whose index does
+	// not come from a magus `scip` op. A declared (or derived) index that does not exist
+	// yet (the scip target has not run) is simply skipped, so the shard appears once the
+	// index is built.
 	Symbols []SymbolIndex `yaml:"symbols"`
 	// VCS enables folding git history metadata (last-commit SHA and time, commit
 	// count) onto file nodes as a @vcs shard. Opt-in and best-effort: disabled by
@@ -248,6 +250,29 @@ type Knowledge struct {
 	// bounded and cached against HEAD, so it runs at build time on a commit change,
 	// never per query.
 	VCS VCSConfig `yaml:"vcs"`
+	// SymbolIndexing configures the daemon's background auto-indexing: it runs each
+	// symbol-capable project's `scip` op for you when its sources change, so symbols
+	// stay fresh with no manual `magus run ::scip`. ON by default in the daemon (a
+	// one-shot CLI never auto-indexes); throttled and idle-gated so it never delays
+	// your own work. Set disabled to opt out.
+	SymbolIndexing SymbolIndexingConfig `yaml:"symbol_indexing"`
+}
+
+// SymbolIndexingConfig tunes daemon background symbol auto-indexing (see
+// Knowledge.SymbolIndexing). Zero value = enabled with built-in timings.
+type SymbolIndexingConfig struct {
+	// Disabled opts out of background auto-indexing. Auto-indexing is on by default
+	// in the daemon, so this is the switch to turn it off (e.g. the indexers are not
+	// installed and you index in CI instead).
+	Disabled bool `yaml:"disabled"`
+	// QuietSeconds is how long a project's sources must be quiet after the last change
+	// before it is re-indexed, so a burst of edits coalesces into one run. 0 uses a
+	// built-in default.
+	QuietSeconds int `yaml:"quiet_seconds" validate:"gte=0"`
+	// MinIntervalSeconds is the minimum time between re-index runs for one project, a
+	// ceiling on how often the indexer fires however often files change. 0 uses a
+	// built-in default.
+	MinIntervalSeconds int `yaml:"min_interval_seconds" validate:"gte=0"`
 }
 
 // VCSConfig configures git-history ingestion into the @vcs shard (see Knowledge.VCS).

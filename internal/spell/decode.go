@@ -46,10 +46,12 @@ func Decode(src Obj) (Descriptor, error) {
 	if name == "" {
 		return Descriptor{}, fmt.Errorf("spell: name is required")
 	}
+	language, _ := src.Str("language")
 	m := Descriptor{
 		Name:       name,
 		Claims:     src.Strs("claims"),
 		VersionCmd: src.Strs("version_cmd"),
+		Language:   language,
 		Opaque:     src.Bool("opaque"),
 	}
 

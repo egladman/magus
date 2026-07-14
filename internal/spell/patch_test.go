@@ -239,6 +239,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Name:       "go",
 		Needs:      []string{"**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		VersionCmd: []string{"go", "version"},
+		Language:   "go",
 		Ops: map[string]types.SpellOp{
 			"go-build":    {Command: types.Command{Bin: "go", Args: []string{"build"}}},
 			"go-clean":    {Command: types.Command{Bin: "go", Args: []string{"clean", "./..."}}},
@@ -264,6 +265,7 @@ var goldenBuiltins = map[string]Descriptor{
 			}}},
 			"go-vet":      {Command: types.Command{Bin: "go", Args: []string{"vet", "./..."}}},
 			"govulncheck": {Command: types.Command{Bin: "go", Args: []string{"tool", "govulncheck", "./..."}}},
+			"scip":        {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"markdown": {
@@ -284,6 +286,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Name:       "py",
 		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
 		VersionCmd: []string{"python3", "--version"},
+		Language:   "python",
 		Ops: map[string]types.SpellOp{
 			"uv-build": {Command: types.Command{Bin: "uv", Args: []string{"build"}}},
 			"uv-clean": {Command: types.Command{Bin: "uv", Args: []string{"clean"}}},
@@ -298,12 +301,14 @@ var goldenBuiltins = map[string]Descriptor{
 			"ruff-format": {Command: types.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
+			"scip": {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-python index . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"rust": {
 		Name:       "rs",
 		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		VersionCmd: []string{"rustc", "--version"},
+		Language:   "rust",
 		Ops: map[string]types.SpellOp{
 			"cargo-build":  {Command: types.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
 			"cargo-clean":  {Command: types.Command{Bin: "cargo", Args: []string{"clean"}}},
@@ -312,6 +317,7 @@ var goldenBuiltins = map[string]Descriptor{
 				"rw": {Ops: []types.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
 			"cargo-test": {Command: types.Command{Bin: "cargo", Args: []string{"test"}}},
+			"scip":       {Command: types.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"typescript": {
@@ -320,6 +326,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Claims:     []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
+		Language:   "typescript",
 		Ops: map[string]types.SpellOp{
 			"eslint":    {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}}},
 			"preflight": {},
@@ -330,6 +337,7 @@ var goldenBuiltins = map[string]Descriptor{
 			"vitest": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]types.Charm{
 				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
 			}}},
+			"scip": {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-typescript index --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 }

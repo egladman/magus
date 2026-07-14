@@ -13,7 +13,16 @@ import "project/../gopherbuzz" as gopherbuzz;
 // The static site generator, a sibling module; the targets call its entry points.
 import "scribe";
 
+// magusfile binds this file's own exported targets (generate, serve, ci, ...); ts adds
+// the TypeScript spell so the client bundles under src/ are symbol-capable - its `scip`
+// op indexes them (via tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns
+// the dependency graph; informational) and does not run in this project's ci, which uses
+// the custom targets below; it just makes the project's TypeScript browsable as symbols.
+import "magus/spell/magusfile";
+import "magus/spell/ts";
+
 magus.project({
+    "spells": [magusfile, ts],
     // Affected/drift tracks this sources glob, not the import graph, so scribe.buzz
     // (and every other input) must be named to be watched. Both src/**/*.js AND src/**/*.ts
     // are named: the client bundles are increasingly TypeScript (esbuild strips the types),

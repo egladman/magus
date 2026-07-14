@@ -24,6 +24,11 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
 
+// mgs_getLanguage names the source language this spell adapts, canonical and lowercase
+// so it matches the language attr on the Go files and symbols SCIP ingests. It lets
+// `magus query language:go` reach this adapter alongside the code it builds.
+export fun mgs_getLanguage() > str { return "go"; }
+
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"]}; }
 fun goClean(target: Target) > Command { return Command{bin = "go", args = ["clean", "./..."]}; }
 fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["generate", "./..."]}; }
@@ -62,6 +67,14 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // Scans for known vulnerabilities in the module's call graph. Command as a `go tool`
 // (like golangci-lint) so it resolves from go.mod's tool block, not PATH.
 fun goVulncheck(target: Target) > Command { return Command{bin = "go", args = ["tool", "govulncheck", "./..."]}; }
+// scip is the reserved op that runs the language's SCIP indexer for the knowledge
+// graph. Named for the format, not the binary, so the same verb produces symbols
+// across every language spell (`magus run <project>::scip`). magus injects
+// MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the
+// tree; scip-go writes there via --output. Run through sh so the env var expands.
+fun scipGo(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""]};
+}
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
@@ -74,5 +87,6 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-mod-tidy": goModTidy,
         "go-vet": goVet,
         "govulncheck": goVulncheck,
+        "scip": scipGo,
     };
 }

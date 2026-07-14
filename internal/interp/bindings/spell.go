@@ -5,15 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/serviceident"
 	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -48,6 +51,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		}
 		if len(spec.VersionCmd) > 0 {
 			opts = append(opts, types.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
+		}
+		if spec.Language != "" {
+			opts = append(opts, types.WithLanguage(spec.Language))
 		}
 		project.DefaultSpellRegistry().RegisterSpell(types.NewSpell(spec.Name, opts...))
 	}
@@ -228,8 +234,44 @@ func dispatchOp(ctx context.Context, ops map[string]types.SpellOp, req types.Inv
 		return noResult()
 	}
 	slog.DebugContext(ctx, "spell: dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
-	_, err := runCommand(ctx, op, commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)})
+	opts := commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)}
+	// The reserved `scip` op writes its index into the cache, not the tree: magus
+	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command
+	// (`... --output "$MAGUS_SYMBOL_INDEX"`) needs no knowledge of where the cache is.
+	if req.Target == symbols.IndexOp {
+		env, err := symbolIndexEnv(ctx, req.Dir)
+		if err != nil {
+			return nil, err
+		}
+		opts.env = env
+	}
+	_, err := runCommand(ctx, op, opts)
 	return nil, err
+}
+
+// symbolIndexEnv resolves the cache destination for a `scip` op run and returns it as
+// the MAGUS_SYMBOL_INDEX environment binding, having created the containing dir. It
+// requires the active cache (the op runs inside a cached target), so the index lands
+// where ingestion later looks; run outside that path it errors rather than emit an
+// index the graph will never find.
+func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, error) {
+	c := cache.CacheFromContext(ctx)
+	if c == nil {
+		return nil, fmt.Errorf("spell: the %q op must run as a magus target so its index lands in the cache", symbols.IndexOp)
+	}
+	abs := projectDir
+	if !filepath.IsAbs(abs) {
+		cwd, err := std.EffectiveCwd(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("spell: resolve %q op dir: %w", symbols.IndexOp, err)
+		}
+		abs = filepath.Join(cwd, abs)
+	}
+	path := symbols.IndexPath(c.Dir(), abs)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("spell: prepare symbol index dir: %w", err)
+	}
+	return map[string]string{symbols.IndexEnvVar: path}, nil
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
@@ -326,6 +368,9 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 	}
 	if m.Opaque {
 		opts = append(opts, types.WithOpaque())
+	}
+	if m.Language != "" {
+		opts = append(opts, types.WithLanguage(m.Language))
 	}
 	if len(m.VersionCmd) > 0 {
 		opts = append(opts, types.WithVersionProbe(newVersionProbe(m.VersionCmd)))

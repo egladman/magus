@@ -11,6 +11,11 @@ export fun mgs_listRequiredGlobs(root: str) > [str] {
 
 export fun mgs_getVersionCommand() > [str] { return ["python3", "--version"]; }
 
+// mgs_getLanguage names the source language this spell adapts, canonical and lowercase
+// so it matches the language attr on the Python files and symbols SCIP ingests. It lets
+// `magus query language:python` reach this adapter alongside the code it builds.
+export fun mgs_getLanguage() > str { return "python"; }
+
 // build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
 // so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.
 fun uvBuild(target: Target) > Command { return Command{bin = "uv", args = ["build"]}; }
@@ -34,7 +39,15 @@ fun ruffFormat(target: Target) > Command {
         "rw": drop(args, "--check"),
     }};
 }
+// scip is the reserved op that runs the Python SCIP indexer for the knowledge graph.
+// The indexer is a PATH binary (install it with mise, not as a project dep), so the op
+// forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the
+// index never lands in the tree; scip-python writes there via --output. Run through sh
+// so the env var expands.
+fun scip(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "scip-python index . --output \"$MAGUS_SYMBOL_INDEX\""]};
+}
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat};
+    return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat, "scip": scip};
 }
