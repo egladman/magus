@@ -144,3 +144,22 @@ func TestInstrumentRemoteBackend_PrunePreserved(t *testing.T) {
 	assert.True(t, fp.pruned, "underlying prune not invoked")
 	assert.Equal(t, []string{"magus.cache.remote.prune"}, rec.spans)
 }
+
+func TestCacheTracer(t *testing.T) {
+	t.Parallel()
+	// A nil or disabled provider yields a nil Tracer; cache stores that as a no-op.
+	assert.Nil(t, CacheTracer(nil))
+	assert.Nil(t, CacheTracer(&graphRecorder{enabled: false}))
+
+	// An enabled provider yields a Tracer that delegates StartSpan through to it.
+	rec := &recorder{}
+	tr := CacheTracer(rec)
+	require.NotNil(t, tr)
+
+	ctx, done := tr.StartSpan(context.Background(), "cache.hash")
+	require.NotNil(t, ctx)
+	require.NotNil(t, done)
+	done(nil) // the finish func must be safe to call
+
+	assert.Equal(t, []string{"cache.hash"}, rec.spans)
+}
