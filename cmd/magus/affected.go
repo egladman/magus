@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
@@ -23,7 +23,15 @@ import (
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+	// Bare `magus affected` (no target) is a usage error, not a help request: a target
+	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `magus affected ci`)")
+		fmt.Fprintln(os.Stderr, "")
+		affectedUsage()
+		return errSilent{exitCode: 2}
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		affectedUsage()
 		return flag.ErrHelp
 	}

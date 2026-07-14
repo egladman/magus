@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"golang.org/x/term"
 )
 

@@ -74,6 +74,45 @@ func TestOutputStorePerExecutionRefsAreDistinct(t *testing.T) {
 	assert.Equal(t, ref2, s.LatestRef(key), "latestRef returns the newest execution's ref")
 }
 
+// TestLatestRefsByTarget: the newest execution per (project, target) is returned, keyed
+// by descriptor timestamp; the charm suffix reproTarget stores ("build:rw") is collapsed
+// to the bare declared target, so a target's newest run is picked across its charm
+// variants; project-scoped outputs (no target) are skipped; the result is sorted by
+// project then bare target.
+func TestLatestRefsByTarget(t *testing.T) {
+	s := NewOutputStore(t.TempDir())
+
+	// pkg/a:build ran twice under different charms; the later timestamp wins even though
+	// the two carry distinct repro targets ("build:ro" then "build:rw").
+	older, err := s.Persist("ka1", []byte("old\n"), OutputDescriptor{Project: "pkg/a", Target: "build:ro", TimestampMs: 100, Failed: true})
+	require.NoError(t, err)
+	newer, err := s.Persist("ka2", []byte("new\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 200, Failed: false})
+	require.NoError(t, err)
+	// A different target, and a project-scoped output that must be skipped.
+	testRef, err := s.Persist("kb", []byte("t\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 150})
+	require.NoError(t, err)
+	_, err = s.Persist("kc", []byte("proj\n"), OutputDescriptor{Project: "pkg/a", TimestampMs: 999}) // no target -> skipped
+	require.NoError(t, err)
+
+	got := s.LatestRefsByTarget()
+	require.Len(t, got, 2, "one entry per (project, bare target); charm variants collapse, the target-less run is skipped")
+
+	assert.Equal(t, "pkg/a", got[0].Project)
+	assert.Equal(t, "build", got[0].Target, "charm suffix stripped; sorted build before test")
+	assert.Equal(t, newer, got[0].Ref, "the newer timestamp wins across charm variants")
+	assert.False(t, got[0].Failed, "the winning run's outcome rides along")
+	assert.NotEqual(t, older, got[0].Ref)
+
+	assert.Equal(t, "test", got[1].Target)
+	assert.Equal(t, testRef, got[1].Ref)
+}
+
+// TestLatestRefsByTargetEmpty: an output store with nothing persisted returns no refs
+// (nil), so the graph builder simply omits the last-output attrs.
+func TestLatestRefsByTargetEmpty(t *testing.T) {
+	assert.Nil(t, NewOutputStore(t.TempDir()).LatestRefsByTarget())
+}
+
 // TestOutputStoreKeepLastK bounds retention to defaultOutputKeepLast newest executions
 // per cache key; the newest survives.
 func TestOutputStoreKeepLastK(t *testing.T) {

@@ -222,7 +222,7 @@ func TestAssembleRuntimeEmitsEdges(t *testing.T) {
 		{Unit: "pkg/bar", Code: types.SandboxPolicyMismatch},
 		{Unit: "", Code: types.ExecDenied}, // no unit -> skipped
 	}
-	s := assembleRuntime(events, nil, nil)
+	s := assembleRuntime(events, nil, nil, nil)
 	require.Equal(t, RuntimeShardName, s.Name)
 	require.Len(t, s.Edges, 2)
 
@@ -254,7 +254,7 @@ func TestAssembleRuntimeTimingAttrs(t *testing.T) {
 		{Project: "pkg/a", Target: "ghost", P75Ms: 100, Samples: 3, HitRateSamples: 3}, // unknown target -> dropped
 		{Project: "pkg/a", Target: "cold", HitRateSamples: 0},                          // no signal at all -> no node
 	}
-	s := assembleRuntime(nil, timings, known)
+	s := assembleRuntime(nil, timings, nil, known)
 
 	require.Len(t, s.Nodes, 1, "only the known, signal-bearing target yields a node")
 	n := s.Nodes[0]
@@ -278,6 +278,40 @@ func TestRuntimeTimingMergesOntoTarget(t *testing.T) {
 	assert.Equal(t, "500", build.Attrs[AttrDurationP75Ms])
 	assert.Equal(t, "0.50", build.Attrs[AttrCacheHitRate])
 	assert.Equal(t, "buzz", build.Attrs[AttrEngine], "static engine attr survives the timing merge")
+}
+
+func TestAssembleRuntimeOutputRefAttrs(t *testing.T) {
+	known := map[string]bool{"target:pkg/a:build": true}
+	refs := []types.KnowledgeOutputRef{
+		{Project: "pkg/a", Target: "build", Ref: "ref1a2b3c", OK: true},
+		{Project: "pkg/a", Target: "test", Ref: "refdeadbe", OK: false}, // unknown target -> dropped
+		{Project: "pkg/a", Target: "gen", Ref: ""},                      // no ref -> no node, no empty attr
+	}
+	s := assembleRuntime(nil, nil, refs, known)
+
+	require.Len(t, s.Nodes, 1, "only the known target with a ref yields a node")
+	n := s.Nodes[0]
+	assert.Equal(t, "target:pkg/a:build", n.ID)
+	assert.Equal(t, types.KindTarget, n.Kind, "typed so the merge is order-independent")
+	assert.Equal(t, "ref1a2b3c", n.Attrs[AttrLastOutputRef])
+	assert.Equal(t, "true", n.Attrs[AttrLastRunOK])
+}
+
+// TestRuntimeOutputRefMergesOntoTarget: a failing run's ref merges its attrs onto the
+// project shard's target node alongside the static engine attr, and a timing ref for
+// the same target folds together with the timing attrs (both partial nodes coalesce).
+func TestRuntimeOutputRefMergesOntoTarget(t *testing.T) {
+	in := sampleInputs()
+	in.Timings = []types.KnowledgeTiming{{Project: "pkg/a", Target: "build", P75Ms: 500, Samples: 5, HitRate: 0.5, HitRateSamples: 8}}
+	in.OutputRefs = []types.KnowledgeOutputRef{{Project: "pkg/a", Target: "build", Ref: "reff00dfa", OK: false}}
+	out := mergeAll(AssembleShards(in)).Output()
+
+	build, ok := nodeByID(out, "target:pkg/a:build")
+	require.True(t, ok)
+	assert.Equal(t, "reff00dfa", build.Attrs[AttrLastOutputRef])
+	assert.Equal(t, "false", build.Attrs[AttrLastRunOK])
+	assert.Equal(t, "500", build.Attrs[AttrDurationP75Ms], "timing attrs coexist with ref attrs")
+	assert.Equal(t, "buzz", build.Attrs[AttrEngine], "static engine attr survives the ref merge")
 }
 
 func TestIsRuntimeShard(t *testing.T) {

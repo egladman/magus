@@ -28,6 +28,7 @@ var describeAlias = map[string]string{
 	"workspace": "workspace", "workspaces": "workspace",
 	"module": "module", "modules": "module",
 	"mcp-tool": "mcp-tool", "mcp-tools": "mcp-tool",
+	"file": "file", "files": "file",
 }
 
 func describeCmd(ctx context.Context, root string, args []string) error {
@@ -54,6 +55,8 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 		return describeModules(rest)
 	case "mcp-tool":
 		return describeMCPTools(rest)
+	case "file":
+		return describeFiles(ctx, root, rest)
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.
@@ -90,6 +93,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "  workspace    the active workspace root and its config")
 	fmt.Fprintln(os.Stderr, "  module       magus stdlib modules; `module <name>` lists its methods + signatures")
 	fmt.Fprintln(os.Stderr, "  mcp-tool     tools exposed to AI agents via the MCP daemon")
+	fmt.Fprintln(os.Stderr, "  file         classify paths against declared globs: generated output, source, or unclaimed")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
 	fmt.Fprintln(os.Stderr, "See also: `magus config view` for runtime configuration; `magus graph` for")
@@ -158,21 +162,11 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	case outputMermaid:
 		return render.WriteTargetGraphMermaid(os.Stdout, out)
 	case outputMarkdown:
-		// `magus.cmd(["describe","graph","-o","markdown"])` captures this to generate MAGUS.md.
-		// The static graph alone lacks the dispatch plan (sources/outputs/spells/command/
-		// policy), so evaluate each target and pass the lookup alongside.
-		eval := map[string]types.EvaluatedTargetEntry{}
-		for _, p := range out.Projects {
-			for _, n := range p.Nodes {
-				et, err := ws.DescribeTarget(types.Target{Path: p.Path, Name: n.Name})
-				if err != nil {
-					continue // best-effort: a target we can't evaluate just omits its plan
-				}
-				for _, e := range et.Targets {
-					eval[render.EvalKey(e.Project, e.Target)] = e
-				}
-			}
-		}
+		// `magus.cmd(["describe","graph","-o","markdown"])` captures this to generate
+		// MAGUS.md, a routing index. It deliberately omits each target's evaluated
+		// dispatch plan (that is `magus describe target <name>` away), so the static
+		// graph is all the renderer needs - no per-target evaluation here.
+		//
 		// Build the knowledge graph to drive MAGUS.md's "query first" routing
 		// section; best-effort, so a graph build failure just omits the section.
 		var routing *types.KnowledgeRouting
@@ -180,7 +174,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 			r := g.Routing()
 			routing = &r
 		}
-		return render.WriteTargetGraphMarkdown(os.Stdout, out, eval, routing, graphExplorerLink(ctx, root))
+		return render.WriteTargetGraphMarkdown(os.Stdout, out, routing, graphExplorerLink(ctx, root), globalCfg.DefaultCharms)
 	}
 
 	// text / wide
@@ -922,6 +916,73 @@ func describeMCPTools(args []string) error {
 			}
 			fmt.Printf("    param %s <%s>%s: %s\n", p.Name, p.Type, req, p.Description)
 		}
+	}
+	return nil
+}
+
+// describeFiles renders `magus describe file <path>...`: each path classified
+// against the workspace's declared source/output globs. Paths come straight from
+// the shell (or `git status --porcelain` piped through xargs), so several at a
+// time is the normal case.
+func describeFiles(ctx context.Context, root string, args []string) error {
+	pos, err := cmdParse("describe file", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus describe file <path> [<path>...] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, types.FileDefinition)
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) == 0 {
+		fmt.Fprintln(os.Stderr, "magus describe file: requires at least one <path> argument")
+		return errSilent{exitCode: 2}
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+
+	out := ws.DescribeFiles(pos)
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, out)
+	case outputName:
+		for _, f := range out.Files {
+			fmt.Printf("%s\t%s\n", f.Path, f.Role)
+		}
+		return nil
+	}
+
+	// text / wide
+	fmt.Printf("definition: %s\n\n", out.Definition)
+	for _, f := range out.Files {
+		fmt.Printf("%s\n", f.Path)
+		if f.Project != "" {
+			fmt.Printf("  project: %s\n", f.Project)
+		}
+		fmt.Printf("  role: %s\n", f.Role)
+		if len(f.OutputOf) > 0 {
+			fmt.Printf("  output_of: %v\n", f.OutputOf)
+		}
+		if len(f.SourceOf) > 0 {
+			fmt.Printf("  source_of: %v\n", f.SourceOf)
+		}
+		if f.Hint != "" {
+			fmt.Printf("  hint: %s\n", f.Hint)
+		}
+		fmt.Println()
 	}
 	return nil
 }

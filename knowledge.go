@@ -149,6 +149,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		Root:        root,
 		Runtime:     knowledge.LoadRuntimeEvents(cacheDir),
 		Timings:     loadKnowledgeTimings(ctx, cfg),
+		OutputRefs:  loadKnowledgeOutputRefs(cacheDir),
 		Symbols: loadKnowledgeSymbols(symbolIngestInputs{
 			cfg: cfg, root: root, cacheDir: cacheDir,
 			projects: ws.DescribeProjects(), spells: spells, log: log,
@@ -194,6 +195,30 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 		}
 		return cmp.Compare(a.Target, b.Target)
 	})
+	return out
+}
+
+// loadKnowledgeOutputRefs reads the local output store (best-effort) for each target's
+// most recent captured-output reference, so the @runtime shard can fold last_output_ref
+// and last_run_ok onto the target node. The forecast timing history is cache-safety-locked
+// and records no refs, so the output store - which already persists one OutputDescriptor
+// per execution - is the source. A missing or unreadable store yields no refs, so the
+// attrs are simply absent, never an error. The store already sorts by project:target, so
+// assembly stays deterministic.
+func loadKnowledgeOutputRefs(cacheDir string) []types.KnowledgeOutputRef {
+	descs := cache.NewOutputStore(cacheDir).LatestRefsByTarget()
+	if len(descs) == 0 {
+		return nil
+	}
+	out := make([]types.KnowledgeOutputRef, 0, len(descs))
+	for _, d := range descs {
+		out = append(out, types.KnowledgeOutputRef{
+			Project: d.Project,
+			Target:  d.Target,
+			Ref:     d.Ref,
+			OK:      !d.Failed,
+		})
+	}
 	return out
 }
 

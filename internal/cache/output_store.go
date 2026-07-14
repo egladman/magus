@@ -183,6 +183,82 @@ func (s *OutputStore) LatestRef(cacheKey string) string {
 	return bestID
 }
 
+// LatestRefsByTarget returns the newest stored execution per (project, target): one
+// OutputDescriptor each, the most recent by TimestampMs (ties broken by ref id so the
+// choice is stable regardless of directory iteration order). It scans every cache-key
+// directory's descriptor sidecars. This is what folds each target's last output ref onto
+// its knowledge-graph node without the graph builder parsing the store's on-disk layout.
+//
+// Descriptors store the REPRO target (bare name plus charm suffix, e.g. "build:rw", the
+// exact re-runnable invocation - see reproTarget); this collapses that back to the bare
+// declared target so the newest run is picked across a target's charm variants and the
+// returned Target matches a knowledge-graph target node. Descriptors without a target
+// (project-scoped output) are skipped. Best-effort: an absent or unreadable store, or an
+// undecodable descriptor, is skipped - fewer entries, never an error. The result is
+// sorted by project then bare target for deterministic assembly.
+func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
+	keys, err := os.ReadDir(s.outputsDir())
+	if err != nil {
+		return nil
+	}
+	latest := map[string]OutputDescriptor{}
+	for _, k := range keys {
+		if !k.IsDir() {
+			continue
+		}
+		dir := filepath.Join(s.outputsDir(), k.Name())
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if !strings.HasSuffix(f.Name(), descExt) {
+				continue
+			}
+			d, err := readDescriptor(filepath.Join(dir, f.Name()))
+			if err != nil || d.Ref == "" || d.Target == "" {
+				continue
+			}
+			d.Target = bareTarget(d.Target)
+			key := d.Project + "\x00" + d.Target
+			if cur, ok := latest[key]; ok && !newerDescriptor(d, cur) {
+				continue
+			}
+			latest[key] = d
+		}
+	}
+	out := make([]OutputDescriptor, 0, len(latest))
+	for _, d := range latest {
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Project != out[j].Project {
+			return out[i].Project < out[j].Project
+		}
+		return out[i].Target < out[j].Target
+	})
+	return out
+}
+
+// bareTarget strips the charm suffix reproTarget appends ("build:rw" -> "build"), so a
+// stored repro target maps back to the declared target name. reproTarget builds
+// "<target>:<charms>", and declared target names carry no colon, so cutting at the first
+// colon recovers the name; a suffix-less target (no charms) is returned unchanged.
+func bareTarget(reproTarget string) string {
+	name, _, _ := strings.Cut(reproTarget, ":")
+	return name
+}
+
+// newerDescriptor reports whether a is the more recent execution than b: a later
+// timestamp wins, and an equal timestamp is broken by the higher ref id so the pick is
+// deterministic (two runs minted in the same millisecond still resolve the same way).
+func newerDescriptor(a, b OutputDescriptor) bool {
+	if a.TimestampMs != b.TimestampMs {
+		return a.TimestampMs > b.TimestampMs
+	}
+	return a.Ref > b.Ref
+}
+
 // resolveRef resolves a ref - or a unique ref prefix, git-style - to the path of its .out
 // blob. Exact id wins; else a unique prefix resolves; an ambiguous prefix returns
 // *AmbiguousRefError; no match returns fs.ErrNotExist.

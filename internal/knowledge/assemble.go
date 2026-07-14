@@ -42,6 +42,11 @@ type Inputs struct {
 	// in the @runtime shard; it annotates existing target nodes rather than adding
 	// edges.
 	Timings []types.KnowledgeTiming
+	// OutputRefs carries each target's most recent captured-output reference from the
+	// local output store. Like Timings it is non-deterministic and lands in the @runtime
+	// shard, folding last_output_ref / last_run_ok attrs onto existing target nodes rather
+	// than adding edges - the query -> target -> last output two-hop.
+	OutputRefs []types.KnowledgeOutputRef
 	// Symbols maps a project path to the code symbols ingested from its SCIP index
 	// (empty unless the project declares one in config). Each becomes a per-project
 	// @symbols shard - deterministic, so remote-shareable like the other extracted
@@ -114,7 +119,7 @@ func AssembleShards(in Inputs) []Shard {
 	// The runtime shard carries both non-deterministic inputs: emits edges from
 	// prior diagnostics and timing attrs on existing targets. Timings are filtered
 	// to targets that actually exist so stale history never conjures a phantom node.
-	if r := assembleRuntime(in.Runtime, in.Timings, knownTargetIDs(in.Graph)); len(r.Edges) > 0 || len(r.Nodes) > 0 {
+	if r := assembleRuntime(in.Runtime, in.Timings, in.OutputRefs, knownTargetIDs(in.Graph)); len(r.Edges) > 0 || len(r.Nodes) > 0 {
 		shards = append(shards, r)
 	}
 	// One @symbols shard per project that declared an index, in sorted project order
@@ -343,23 +348,26 @@ func nilIfEmpty(m map[string]string) map[string]string {
 	return m
 }
 
-// The runtime shard carries the graph's non-deterministic inputs, both derived from
+// The runtime shard carries the graph's non-deterministic inputs, all derived from
 // local run records (see the persistence half in store.go), not workspace sources,
 // so they are isolated in a dedicated @runtime shard and excluded from remote
 // export: "emits" edges from a unit to each MGS code it tripped in actual runs
 // ("what has this target tripped" - history the static "documents" edge cannot),
-// and observed performance attrs (p75 duration, cache hit rate) on target nodes.
+// observed performance attrs (p75 duration, cache hit rate) on target nodes, and the
+// last captured-output ref plus its outcome (last_output_ref / last_run_ok) so an agent
+// can hop from a target to its last output.
 
 // RuntimeShardName is the isolated shard holding runtime "emits" edges; the leading
 // "@" keeps it clear of any project path and is the remote-export exclusion key.
 const RuntimeShardName = "@runtime"
 
-// assembleRuntime builds the isolated shard from the two non-deterministic inputs:
+// assembleRuntime builds the isolated shard from the non-deterministic inputs:
 // one "emits" edge per (unit, code) from the target/project node to the diagnostic
-// node, plus a partial target node per timing carrying observed performance attrs.
-// Both connect to nodes the registry and project shards define; timings for a
-// target no longer in known are dropped so stale history never adds a phantom node.
-func assembleRuntime(events []types.DiagnosticEvent, timings []types.KnowledgeTiming, known map[string]bool) Shard {
+// node, a partial target node per timing carrying observed performance attrs, and a
+// partial target node per output ref carrying the last-output attrs. All connect to
+// nodes the registry and project shards define; timings and refs for a target no longer
+// in known are dropped so stale history never adds a phantom node.
+func assembleRuntime(events []types.DiagnosticEvent, timings []types.KnowledgeTiming, refs []types.KnowledgeOutputRef, known map[string]bool) Shard {
 	s := Shard{Name: RuntimeShardName}
 	seen := map[string]bool{}
 	for _, ev := range events {
@@ -391,6 +399,26 @@ func assembleRuntime(events []types.DiagnosticEvent, timings []types.KnowledgeTi
 			Kind:  types.KindTarget,
 			Label: t.Target,
 			Attrs: attrs,
+		})
+	}
+	for _, r := range refs {
+		if r.Ref == "" {
+			continue // no ref minted -> no attr; never an empty last_output_ref
+		}
+		tID := targetID(r.Project, r.Target)
+		if !known[tID] {
+			continue
+		}
+		// Same typed-partial-node merge as timings: a target with both timing and a ref
+		// yields two partial nodes whose attrs fold together onto the project shard's node.
+		s.Nodes = append(s.Nodes, types.KnowledgeNode{
+			ID:    tID,
+			Kind:  types.KindTarget,
+			Label: r.Target,
+			Attrs: map[string]string{
+				AttrLastOutputRef: r.Ref,
+				AttrLastRunOK:     strconv.FormatBool(r.OK),
+			},
 		})
 	}
 	return s

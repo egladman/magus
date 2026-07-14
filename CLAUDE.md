@@ -5,8 +5,17 @@ Users declare targets in `magusfile.buzz` (Buzz, an embedded scripting language)
 magus resolves spells/ops, sandboxes execution, and caches results. This repo
 builds itself with magus - see `magusfile.buzz` at the root.
 
-Start with `MAGUS.md`: the generated target catalog and entry point. Do not
+Start with `MAGUS.md`: the generated routing index and entry point. Do not
 hand-edit it.
+
+## Agent surface
+
+- `.claude/skills/magus-*` are INSTALLED copies (stamped, checked by
+  `magus graph verify`); edit the sources in `cmd/magus/skills/` and re-run
+  `magus agent install claude --force`. Exception: `magus-skill-authoring`
+  is hand-authored - read it before touching the agent surface.
+- Record decisions worth keeping (with the why) via the `magus_memory` MCP
+  tool; read its status/decisions files at session start.
 
 ## Commands
 

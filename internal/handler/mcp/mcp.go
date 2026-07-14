@@ -141,6 +141,7 @@ func allMCPTools(opts Options) []types.SpellDriver {
 	}
 	return []types.SpellDriver{
 		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
+		&describeFileTool{ws: opts.Magus},
 		&whereTool{ws: opts.Magus},
 		&affectedExplainTool{ws: opts.Magus},
 		&insightTool{ws: opts.Magus},
@@ -152,6 +153,7 @@ func allMCPTools(opts Options) []types.SpellDriver {
 		&configGetTool{cfg: opts.Config},
 		&tailLogTool{opts: opts},
 		&scratchpadTool{opts: opts},
+		&memoryTool{opts: opts},
 		&queryTool{graph: opts.Magus},
 		&outputTool{reader: opts.Magus},
 		&explainTool{graph: opts.Magus},

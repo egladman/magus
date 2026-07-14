@@ -123,6 +123,17 @@ func TestGraphRefsPrefersSymbol(t *testing.T) {
 	assert.False(t, ok, "grammar tokens in the ref cannot resolve a non-symbol node")
 }
 
+func TestGraphHasSymbols(t *testing.T) {
+	// A domain-only graph (a project node, no symbols) reports no index: refs uses
+	// this to tell "no index built" apart from "index built, symbol absent".
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "project:pkg/a", Kind: types.KindProject, Label: "pkg/a"})
+	assert.False(t, g.HasSymbols())
+
+	g.AddNode(types.KnowledgeNode{ID: "symbol:example.com/foo Bar#", Kind: types.KindSymbol, Label: "Bar"})
+	assert.True(t, g.HasSymbols())
+}
+
 func TestSymbolsShardNaming(t *testing.T) {
 	assert.Equal(t, "pkg/foo@symbols", SymbolsShardName("pkg/foo"))
 	assert.True(t, IsSymbolsShard("pkg/foo@symbols"))

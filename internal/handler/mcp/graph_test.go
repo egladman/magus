@@ -219,6 +219,19 @@ func TestPagedRefsRejectsStaleCursor(t *testing.T) {
 }
 
 func TestPagedRefsNoSuchSymbol(t *testing.T) {
+	// A graph that HAS symbols but not this one keeps the "wrong name" message.
 	_, err := pagedRefs(refsGraph(1), "symbol:nope Missing#", 0, "")
 	assert.ErrorContains(t, err, "no symbol matches")
+}
+
+func TestPagedRefsNoIndexBuilt(t *testing.T) {
+	// A graph with zero symbol nodes means no index was ingested at all: the error
+	// must say so and point at how to build one, not imply the name is wrong.
+	g := knowledge.NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "project:pkg/a", Kind: types.KindProject, Label: "pkg/a"})
+	_, err := pagedRefs(g, "Foo", 0, "")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "no symbol index has been built")
+	assert.ErrorContains(t, err, "graph build")
+	assert.NotContains(t, err.Error(), "no symbol matches")
 }

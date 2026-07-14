@@ -21,33 +21,16 @@ import (
 // of truth on the docs site.
 const glossaryDocURL = "https://eli.gladman.cc/magus/glossary/"
 
-// fragmentCap is the per-project ceiling for deep-link fragments emitted in
-// MAGUS.md. Fragments above this are silently omitted rather than emitting a
-// link that will not open in constrained browsers.
-//
-// The limit is set to 64 KB, matching the older Firefox URL cap (the tightest
-// common floor). Safari caps near 80 KB; Chrome handles multi-megabyte URLs.
-// The knowledge-graph path (graph_open.go) warns at 48 KB and points the user
-// at --serve for large graphs; MAGUS.md deep links have no serve fallback, so
-// we hard-skip at the 64 KB floor rather than emitting a broken link.
-//
-// NOTE: the original value was 200 KB (from the initial plan document). That
-// value contradicts the comment below it which named the 64 KB Firefox floor
-// and the 80 KB Safari cap, and would have emitted per-project links that do
-// not open in either browser. The plan's intent was usable deep links; 64 KB
-// satisfies that intent.
-const fragmentCap = 64 * 1024
-
 // EncodeFragment JSON-marshals v, gzip-compresses (BestCompression) the result,
 // and returns a base64url-encoded string (no padding) suitable for use as a
 // #data= URL fragment. The browser reverses it with DecompressionStream('gzip').
 // gzip header fields are left at their zero values to guarantee byte-stable
-// output across calls - a necessary property for the MAGUS.md drift gate.
+// output across calls.
 //
-// This is the single canonical encoder shared by the render package
-// (per-project deep links in MAGUS.md) and cmd/magus (graph open --targets
-// and the knowledge-graph #data= path). Both feed the same browser decode
-// contract, so byte-for-byte wire-format parity is required.
+// This is the single canonical encoder shared by the render package and
+// cmd/magus (graph open --targets and the knowledge-graph #data= path). Both
+// feed the same browser decode contract, so byte-for-byte wire-format parity is
+// required.
 func EncodeFragment(v any) (string, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -81,18 +64,10 @@ func encodeFragmentRaw(raw []byte) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf.Bytes()), nil
 }
 
-// encodeDataFragment gzip-compresses then base64url-encodes (no padding) a value
-// for use in a #data= URL fragment. The browser reverses it with
-// DecompressionStream('gzip'). gzip header fields are left at their zero values
-// to guarantee byte-stable output across calls.
-func encodeDataFragment(v any) (string, error) {
-	return EncodeFragment(v)
-}
-
 // stripFragment returns url with any existing fragment (the '#' and everything
 // after it) removed. Used to strip a #src= or #data= from explorerURL before
-// appending a new #q= or #data= fragment, ensuring the resulting URL has
-// exactly one fragment and is valid.
+// appending a new #q= fragment, ensuring the resulting URL has exactly one
+// fragment and is valid.
 func stripFragment(rawURL string) string {
 	if i := strings.IndexByte(rawURL, '#'); i >= 0 {
 		return rawURL[:i]
@@ -118,28 +93,53 @@ func queryCell(query, explorerURL string) string {
 	return md.Link(md.Code(query), strings.TrimRight(base, "/")+"/#q="+url.PathEscape(query))
 }
 
-// WriteTargetGraphMarkdown renders a workspace's target graph as a one-stop
-// MAGUS.md cheat sheet: a quick-start, then a per-project section where every
-// project section opens with that project's own Mermaid dependency graph, then
-// every target carries its doc, both invocation forms, the charm example commands,
-// its dependencies, and any rendered command or non-default policy. Term
-// definitions live on the hosted docs (glossaryDocURL), not in this output.
-// eval supplies the fully-evaluated
-// dispatch plan keyed by EvalKey(path, target); when it is nil (e.g. a unit test
-// that has only the static graph) the dispatch-derived bits are simply omitted.
-// It is engine- and repo-agnostic — `magus describe graph -o markdown` produces
-// it for any magus workspace, which is how a project's MAGUS.md is generated and
-// drift-checked. Markdown is target-graph-only (it backs MAGUS.md); the project
-// dependency graph offers only Mermaid/DOT (WriteGraphMermaid / WriteGraphDOT).
-func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map[string]types.EvaluatedTargetEntry, routing *types.KnowledgeRouting, explorerURL string) error {
+// WriteTargetGraphMarkdown renders a workspace's MAGUS.md: a routing index, not a
+// catalog. It leads with the knowledge-graph "query first" section, then lists
+// every project's targets with a one-line summary each, and points the reader at
+// the two commands that expand any entry - `magus describe target <name>` for a
+// target's fully-evaluated dispatch plan, `magus describe mcp-tools` for the agent
+// tool list. The per-target dispatch plan and the Mermaid graphs deliberately do
+// not live here: their bulk made the file useless as in-context routing, and both
+// are one command (or the Graph Explorer link) away. It is engine- and
+// repo-agnostic - `magus describe graph -o markdown` produces it for any magus
+// workspace, which is how a project's MAGUS.md is generated and drift-checked.
+// Output is deterministic (no timestamps) so it can back a drift gate.
+func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, routing *types.KnowledgeRouting, explorerURL string, defaultCharms []string) error {
 	var b md.Builder
 
 	b.Heading(1, "Targets")
 	b.Comment("Generated by `magus describe graph -o markdown`. Do not edit by hand.")
+
+	// Staleness contract, right under the header: this file is a generated snapshot,
+	// only as fresh as the last `generate`. When its counts look stale, the live
+	// query tools - not this file - are the source of truth.
+	b.Paragraph("Generated by " + md.Code("magus describe graph -o markdown") + " via the generate target. " +
+		"If the counts here look stale, trust the live tools (" + md.Code("magus query") + ") over this file.")
+
+	// Default charms apply to every local `magus run`; surfaced only when the
+	// workspace config sets them. Omitted entirely when there are none, so the
+	// header carries no empty line to read past.
+	if len(defaultCharms) > 0 {
+		b.Paragraph("Default charms: " + strings.Join(defaultCharms, ", ") +
+			" (local runs write; CI strips them with " + md.Code("--no-default-charms") + ").")
+	}
+
 	b.Paragraph("A **target** is a named operation (build, test, lint, …) declared as an `export fun` in a " +
-		"project's magusfile. This cheat sheet (the per-target catalog and run-order graph below) is " +
-		"extracted statically from the magusfile source, so it stays in lockstep with how the project " +
-		"actually builds.")
+		"project's magusfile. This is a routing index: every target with a one-line summary, plus the " +
+		"commands that expand any one of them. It is extracted statically from the magusfile source, so it " +
+		"stays in lockstep with how the project actually builds.")
+
+	// Route by question, front-loaded as the first section: an agent lands on the
+	// exact command before scrolling any table. Static routing text - none of it is
+	// derived from the graph.
+	b.Heading(2, "Route by question")
+	b.Table([]string{"To find out", "Run"}, []md.Align{md.Left, md.Left}, [][]string{
+		{"what exists / what relates", md.Code(`magus query "<terms>"`)},
+		{"is this file generated", md.Code("magus describe file <path>")},
+		{"what a target runs", md.Code("magus describe target <name>")},
+		{"what my change affected", md.Code("magus affected ci")},
+		{"a failing run's output", md.Code("magus query output <ref>")},
+	})
 
 	b.Heading(2, "Quick start")
 	b.AlignedCodeBlock("sh", []md.CodeLine{
@@ -149,8 +149,15 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 	})
 	b.Paragraph("Unfamiliar with a term? See the " + md.Link("Glossary", glossaryDocURL) + ".")
 
+	// The bulk this index leaves out is one command away: a target's full
+	// evaluated dispatch plan, and the tools exposed to AI agents.
+	b.Paragraph("Need the detail this index leaves out? Run " + md.Code("magus describe target <name>") +
+		" for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and " +
+		md.Code("magus describe mcp-tools") + " for the tools this workspace exposes to AI agents.")
+
 	// Prefer a picture: a link to the hosted Graph Explorer preloaded with this
-	// repo's committed graph.json (emitted only when that link resolves).
+	// repo's committed graph.json (emitted only when that link resolves). The
+	// interactive view replaces the Mermaid graphs this file used to embed.
 	if explorerURL != "" {
 		b.Paragraph("Prefer a picture? Explore this graph in the " + md.Link("Graph Explorer", explorerURL) +
 			" - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).")
@@ -160,45 +167,30 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, eval map
 		writeRouting(&b, *routing, explorerURL)
 	}
 
-	projects := nonEmptyProjects(out)
-	if len(projects) > 0 {
-		if err := writeLegend(&b); err != nil {
-			return err // the builder never errors; satisfies the emitter interface
-		}
-	}
-	for _, p := range projects {
+	for _, p := range nonEmptyProjects(out) {
 		b.Heading(2, "Project: "+projectLabel(p))
 		if len(p.Cycle) > 0 {
 			b.Paragraph("> dependency cycle: " + strings.Join(p.Cycle, " -> "))
 		}
-		writeDispatchDefaults(&b, p.Path, projectLabel(p), eval)
-		if err := writeProjectGraph(&b, p); err != nil {
-			return err // the builder never errors; satisfies the emitter interface
-		}
-		if err := writeToolchainGraph(&b, p); err != nil {
-			return err // the builder never errors; satisfies the emitter interface
-		}
-		if explorerURL != "" {
-			singleOut := types.TargetGraphOutput{
-				Definition: out.Definition,
-				Projects:   []types.TargetGraphProject{p},
-			}
-			if frag, err := encodeDataFragment(singleOut); err == nil && len(frag) <= fragmentCap {
-				// explorerURL may carry a #src= or other fragment (from graphExplorerLink);
-				// strip it so the per-project #data= link is valid and self-contained.
-				base := stripFragment(explorerURL)
-				link := md.Link("Explore this project's graph interactively", strings.TrimRight(base, "/")+"/#data="+frag)
-				b.Paragraph(link)
-			}
-			// If encoding fails or the fragment exceeds the cap, skip silently.
-		}
+		rows := make([][]string, 0, len(p.Nodes))
 		for _, n := range catalogOrder(p.Nodes) {
-			writeTargetSection(&b, p.Path, n, eval)
+			rows = append(rows, []string{md.Code(n.Name), firstDocLine(n.Doc)})
 		}
+		b.Table([]string{"Target", "What it does"}, []md.Align{md.Left, md.Left}, rows)
 	}
 
 	_, err := b.WriteTo(w)
 	return err
+}
+
+// firstDocLine returns the first line of a target's doc comment, trimmed, with
+// any pipe escaped so it can sit in a Markdown table cell. Empty for an
+// undocumented target.
+func firstDocLine(doc string) string {
+	if i := strings.IndexByte(doc, '\n'); i >= 0 {
+		doc = doc[:i]
+	}
+	return strings.ReplaceAll(strings.TrimSpace(doc), "|", `\|`)
 }
 
 // writeRouting emits the "query first" section from the knowledge graph: the
@@ -239,14 +231,9 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 		[]md.Align{md.Left, md.Right}, projectRows)
 }
 
-// EvalKey is the lookup key for an evaluated target, joining project path and
-// target name on a NUL that can't occur in either.
-func EvalKey(path, target string) string { return path + "\x00" + target }
-
 // projectLabel is the heading shown for a project: its path relative to the repo
 // root (so a project at the workspace root reads as e.g. `magus`, not the
 // ambiguous `.`), falling back to the workspace-relative path outside a repo. The
-// `magus run <target> <path>` examples still use the workspace-relative Path. The
 // bare `.` is never used as a heading — a root project with no better label reads
 // as "(workspace root)".
 func projectLabel(p types.TargetGraphProject) string {
@@ -276,361 +263,21 @@ func catalogOrder(nodes []types.TargetGraphNode) []types.TargetGraphNode {
 	return append(primary, workers...)
 }
 
-// charmGloss is the one-line "what it does" for the charms magus ships knowledge
-// of, so a target's `name:charm` example command reads as documentation. A charm
-// not listed here still gets an example line, just with a generic note.
-var charmGloss = map[string]string{
-	types.CharmReadWrite: "mutate in place instead of checking",
-	"container":          "build the container image instead of the host binary",
-}
-
-// writeDispatchDefaults emits, once per project, the collapsed block of inputs,
-// outputs, and spells that every target in the project shares (they all key off
-// the project's base spec). Pulled from any one evaluated target; skipped when no
-// evaluated data is available.
-func writeDispatchDefaults(b *md.Builder, path, label string, eval map[string]types.EvaluatedTargetEntry) {
-	def, ok := projectDefaults(path, eval)
-	if !ok {
-		return
-	}
-	summary := fmt.Sprintf("<b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>%s</code>", label)
-	b.Details(summary, func(b *md.Builder) {
-		var lines []string
-		if s := uniqSorted(def.Sources); len(s) > 0 {
-			lines = append(lines, "sources  "+strings.Join(s, ", "))
-		}
-		if len(def.Outputs) > 0 {
-			lines = append(lines, "outputs  "+strings.Join(def.Outputs, ", "))
-		}
-		if line := spellsLine(def.Spells); line != "" {
-			lines = append(lines, "spells   "+line)
-		}
-		b.CodeBlock("text", lines...)
-	})
-}
-
-// targetRoleClasses style target nodes by role; externalClass styles a
-// cross-project dependency node. Shared by the per-project graphs and the legend
-// so the key always matches what it documents.
+// targetRoleClasses style target nodes by role in the target dependency graph.
 //
-// ANTI-DRIFT: the classDef names below ("anchor", "target") and externalClass
-// ("external") and spellClass ("spell") are mirrored verbatim in
-// website/src/console/graph/mermaid.ts (toMermaid / targets flavor). A rename here must
-// be matched there. internal/render/mermaid_drift_test.go asserts this in CI.
+// ANTI-DRIFT: the classDef names below ("anchor", "target") are mirrored verbatim
+// in website/src/console/graph/mermaid.ts (toMermaid / targets flavor). A rename
+// here must be matched there. internal/render/mermaid_drift_test.go asserts this
+// in CI.
 var targetRoleClasses = []renderClass{
 	{Name: "anchor", Style: "fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px"},
 	{Name: "target", Style: "fill:#e2e8f0,color:#0f172a,stroke:#94a3b8"},
 }
 
-var externalClass = renderClass{Name: "external", Style: "fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3"}
-
-// writeLegend emits a one-off Mermaid key for the per-project graphs below: the
-// role colors and the external-project shape, plus a note for the two conventions
-// a legend node can't show on its own (the spell box and the dotted cross-project
-// arrow).
-func writeLegend(b *md.Builder) error {
-	b.Heading(2, "Reading the graphs")
-	g := renderGraph{Direction: "LR"}
-	g.Groups = []renderGroup{{ID: "legend", Label: "Legend"}}
-	g.Nodes = []renderNode{
-		{ID: "lg_anchor", Label: "Top-level target", Shape: shapeRounded, Classes: []string{"anchor"}, Group: "legend"},
-		{ID: "lg_target", Label: "Target", Shape: shapeRounded, Classes: []string{"target"}, Group: "legend"},
-		{ID: "lg_ext", Label: "Other project", Shape: shapeSubroutine, Classes: []string{"external"}, Group: "legend"},
-		{ID: "lg_spell", Label: "Spell", Shape: shapeHexagon, Classes: []string{"spell"}, Group: "legend"},
-	}
-	g.Classes = append(slices.Clone(targetRoleClasses), externalClass, spellClass)
-	if err := b.Fenced("mermaid", func(w io.Writer) error { return writeMermaid(w, g) }); err != nil {
-		return err
-	}
-	b.List(
-		"Every rounded box is a **target** you can `magus run`. **Blue** is a top-level "+
-			"target (nothing else depends on it — a typical entry point); **gray** ones are pulled in as "+
-			"dependencies.",
-		"Arrows show **run order**: a target's dependencies run before it, so the graph flows "+
-			"left -> right (e.g. `preflight` runs first, `ci` last).",
-		"A dotted arrow marks a **cross-project dependency** (the other project's target runs first).",
-		"Each project's **Toolchain** graph (top-down) shows which **spell** each target drives.",
-	)
-	return nil
-}
-
-// writeProjectGraph emits the project's own Mermaid run-order graph (LR) under a
-// bold label, inline at the top of its section: its targets, coloured by role, edges
-// in run order (a dependency points at the target that needs it), and a dotted edge
-// from each [[project:target]] it depends on across project boundaries (declared via
-// project imports). A target's spells live in writeToolchainGraph, not here.
-func writeProjectGraph(b *md.Builder, p types.TargetGraphProject) error {
-	b.Paragraph(md.Bold("Run order"))
-	g := targetGraphIR(types.TargetGraphOutput{Projects: []types.TargetGraphProject{p}})
-	addEntryPointCluster(&g, p)
-	addCrossTargetDependencies(&g, p)
-	return b.Fenced("mermaid", func(w io.Writer) error { return writeMermaid(w, g) })
-}
-
-// addEntryPointCluster groups a project's entry-point targets (the ones nothing
-// depends on) into one *invisible* subgraph — transparent fill and stroke, blank
-// label — so dagre keeps them together in the layout without drawing a box. No-op
-// for fewer than two entry points (nothing to cluster). The grouping carries no
-// styling of its own; the nodes keep their role colors.
-func addEntryPointCluster(g *renderGraph, p types.TargetGraphProject) {
-	anchors := anchorNames(p.Nodes)
-	if len(anchors) < 2 {
-		return
-	}
-	anchorIDs := make(map[string]bool, len(anchors))
-	for name := range anchors {
-		anchorIDs[mermaidID(name)] = true // per-project graph is single-project: no id prefix
-	}
-	const clusterID = "entry_cluster"
-	moved := 0
-	for i := range g.Nodes {
-		if anchorIDs[g.Nodes[i].ID] && g.Nodes[i].Group == "" {
-			g.Nodes[i].Group = clusterID
-			moved++
-		}
-	}
-	if moved < 2 {
-		return
-	}
-	g.Groups = append(g.Groups, renderGroup{ID: clusterID, Label: " ", Style: "fill:transparent,stroke:transparent"})
-}
-
-// anchorNames returns the targets nothing else in the project depends on — the
-// entry points you invoke directly.
-func anchorNames(nodes []types.TargetGraphNode) map[string]bool {
-	incoming := map[string]bool{}
-	for _, n := range nodes {
-		for _, d := range n.Dependencies {
-			incoming[d] = true
-		}
-	}
-	anchors := make(map[string]bool)
-	for _, n := range nodes {
-		if !incoming[n.Name] {
-			anchors[n.Name] = true
-		}
-	}
-	return anchors
-}
-
-// spellClass styles a spell node in the Toolchain graph (and its legend entry).
-var spellClass = renderClass{Name: "spell", Style: "fill:#ede9fe,color:#4c1d95,stroke:#a78bfa"}
-
-// writeToolchainGraph emits a project's Toolchain graph: a top-down (TB) Mermaid
-// chart drawing each spell-driving target to the spell it drives, with the tool-
-// native operations on the edge. It is a deliberately separate graph from the LR
-// dependency graph above — spells are a different relationship, and Mermaid can't
-// reliably mix flow directions within one diagram. Skipped when no target in the
-// project drives a spell.
-func writeToolchainGraph(b *md.Builder, p types.TargetGraphProject) error {
-	hasSpell := false
-	for _, n := range p.Nodes {
-		if len(n.Spells) > 0 {
-			hasSpell = true
-			break
-		}
-	}
-	if !hasSpell {
-		return nil
-	}
-
-	b.Paragraph(md.Bold("Toolchain"))
-	b.Paragraph("Which spell each target drives; edge labels are the tool-native operations.")
-	g := renderGraph{Direction: "TB"}
-	spellSeen := map[string]bool{}
-	for _, n := range p.Nodes {
-		if len(n.Spells) == 0 {
-			continue
-		}
-		tid := "t_" + mermaidID(n.Name)
-		g.Nodes = append(g.Nodes, renderNode{ID: tid, Label: n.Name, Shape: shapeRounded})
-		for _, s := range n.Spells {
-			sid := "sp_" + mermaidID(s.Spell)
-			if !spellSeen[s.Spell] {
-				spellSeen[s.Spell] = true
-				g.Nodes = append(g.Nodes, renderNode{ID: sid, Label: s.Spell, Shape: shapeHexagon, Classes: []string{"spell"}})
-			}
-			g.Edges = append(g.Edges, renderEdge{From: tid, To: sid, Label: strings.Join(s.Ops, ", ")})
-		}
-	}
-	g.Classes = []renderClass{spellClass}
-	return b.Fenced("mermaid", func(w io.Writer) error { return writeMermaid(w, g) })
-}
-
-// addCrossTargetDependencies draws p's target-level cross-project dependencies
-// (node.CrossDependencies, from project imports): a dotted "needs" edge from the
-// specific target to an external [[project:target]] node, deduped. This is the only
-// cross-project representation — project-level depends_on is an affected/scheduling
-// concern that isn't drawn (a magusfile that wants the edge in the graph declares it
-// at the target via a project import). No-op when p has no cross-target deps.
-func addCrossTargetDependencies(g *renderGraph, p types.TargetGraphProject) {
-	extSeen := map[string]bool{}
-	for _, n := range p.Nodes {
-		to := mermaidID(n.Name)
-		for _, ref := range n.CrossDependencies {
-			id := "xt_" + mermaidID(ref.Project) + "_" + mermaidID(ref.Target)
-			if !extSeen[id] {
-				extSeen[id] = true
-				g.Nodes = append(g.Nodes, renderNode{ID: id, Label: ref.Project + ":" + ref.Target, Shape: shapeSubroutine, Classes: []string{"external"}})
-			}
-			// Run order: the other project's target runs first, so it points in. The
-			// dotted style (keyed in the legend) marks it as a cross-project edge.
-			g.Edges = append(g.Edges, renderEdge{From: id, To: to, Dashed: true})
-		}
-	}
-	if len(extSeen) > 0 {
-		g.Classes = append(g.Classes, externalClass)
-	}
-}
-
-// writeCommandBlock renders a bold label followed by a fenced sh block of the
-// given command lines, with their `# note` comments aligned into a column.
-func writeCommandBlock(b *md.Builder, label string, lines []md.CodeLine) {
-	b.Paragraph(md.Bold(label))
-	b.AlignedCodeBlock("sh", lines)
-}
-
-// writeTargetSection renders one target: heading, doc, the base invocation block,
-// a separate charm-variant block when the target branches on charms, dependencies,
-// and the dispatch-derived extras (rendered command, non-default details) when
-// eval carries them.
-func writeTargetSection(b *md.Builder, path string, n types.TargetGraphNode, eval map[string]types.EvaluatedTargetEntry) {
-	b.Heading(3, md.Code(n.Name))
-	if n.Doc != "" {
-		b.Paragraph(n.Doc)
-	}
-
-	// One canonical invocation, runnable from the workspace root and unambiguous:
-	// the root project needs no path (it *is* the workspace root); a nested project
-	// names its path so a copy-paste from the repo root hits the right project, not
-	// the cwd one. The shorter in-the-project-directory form (and this path form)
-	// are documented once in Quick start, so per-target blocks don't repeat both.
-	// Charm variants get their own block below.
-	run := fmt.Sprintf("magus run %s", n.Name)
-	if path != "." && path != "" {
-		run = fmt.Sprintf("magus run %s %s", n.Name, path)
-	}
-	writeCommandBlock(b, "Defaults", []md.CodeLine{
-		{Code: run, Note: "from the workspace root"},
-	})
-
-	if len(n.Charms) > 0 {
-		charmLines := make([]md.CodeLine, 0, len(n.Charms))
-		for _, c := range n.Charms {
-			note := charmGloss[c]
-			if note == "" {
-				note = fmt.Sprintf("apply the %s charm", c)
-			}
-			charmLines = append(charmLines, md.CodeLine{Code: fmt.Sprintf("magus run %s:%s", n.Name, c), Note: note})
-		}
-		writeCommandBlock(b, "Charms", charmLines)
-	}
-
-	if len(n.Dependencies) > 0 {
-		b.Paragraph(md.Bold("Depends on:"))
-		deps := make([]string, 0, len(n.Dependencies))
-		for _, d := range n.Dependencies {
-			// Link each dependency to its own section. GitHub derives a heading's
-			// anchor by lowercasing and stripping the backticks, so `man-generate`
-			// resolves to #man-generate.
-			deps = append(deps, md.Link(md.Code(d), "#"+strings.ToLower(d)))
-		}
-		b.List(deps...)
-	}
-
-	// Note: a target's spells are not restated here — they ride in its graph node
-	// (as per-spell boxes inside the target's subgraph), which is the section's
-	// authoritative view of the toolchain a target drives. A prose block would only
-	// duplicate that, the way `**Depends on:**` does not (it earns its place with
-	// anchor links spells lack).
-
-	e, ok := eval[EvalKey(path, n.Name)]
-	if !ok {
-		return
-	}
-	if cmds := renderedCommands(e); len(cmds) > 0 {
-		b.Paragraph(md.Bold("Executes"))
-		b.CodeBlock("sh", cmds...)
-	}
-	if notes := policyNotes(e.Policy); len(notes) > 0 {
-		b.Paragraph(md.Bold("Details:") + " " + strings.Join(notes, " · "))
-	}
-}
-
-// projectDefaults returns the evaluated target that stands in for path's shared
-// defaults. Every target in a project keys off the same base spec, so any of them
-// carries the same sources, outputs, and spells. We pick the one with the
-// lexicographically-smallest target name rather than ranging the map and taking
-// whatever comes first: Go randomizes map iteration order, so "first match" makes
-// the rendered defaults block nondeterministic the moment that invariant is even
-// slightly off. The bool is false when eval carries nothing for the path.
-func projectDefaults(path string, eval map[string]types.EvaluatedTargetEntry) (types.EvaluatedTargetEntry, bool) {
-	var best types.EvaluatedTargetEntry
-	found := false
-	for _, e := range eval {
-		if e.Project != path {
-			continue
-		}
-		if !found || e.Target < best.Target {
-			best, found = e, true
-		}
-	}
-	return best, found
-}
-
-// spellsLine renders the project's spells as a comma-separated list, annotating
-// any spell that carries effective claims.
-func spellsLine(spells []types.EvaluatedSpellEntry) string {
-	parts := make([]string, 0, len(spells))
-	for _, s := range spells {
-		if len(s.EffectiveClaims) > 0 {
-			parts = append(parts, fmt.Sprintf("%s (claims: %s)", s.Name, strings.Join(s.EffectiveClaims, ", ")))
-		} else {
-			parts = append(parts, s.Name)
-		}
-	}
-	return strings.Join(parts, ", ")
-}
-
-// renderedCommands returns the statically-known argv of each spell that resolves
-// to one, one command per string. Empty for function-op targets whose body isn't
-// a declarative spell op.
-func renderedCommands(e types.EvaluatedTargetEntry) []string {
-	var out []string
-	for _, s := range e.Spells {
-		if len(s.Command) > 0 {
-			out = append(out, strings.Join(s.Command, " "))
-		}
-	}
-	return out
-}
-
-// policyNotes describes the non-default behavioural policy of a target, or nil
-// when the policy is unset or all-default.
-func policyNotes(p *types.Target) []string {
-	if p == nil {
-		return nil
-	}
-	var out []string
-	if p.FailOnDrift {
-		out = append(out, "fail-on-drift (fails if the tree is dirty afterward)")
-	}
-	if p.RetryOnVolatile {
-		out = append(out, "volatility-tracked (retries a volatile failure)")
-	}
-	if p.SkipCache {
-		out = append(out, "uncached (always runs)")
-	}
-	if p.Exclusive {
-		out = append(out, "exclusive (runs alone, no concurrent targets)")
-	}
-	return out
-}
-
 // WriteTargetGraphMermaid emits a target dependency graph as a Mermaid flowchart.
 // It is the one Mermaid emitter for the target graph: `magus describe graph -o
-// mermaid` and the markdown doc both route through it. See targetGraphIR for the
-// stage-boxing and role-styling rules.
+// mermaid` routes through it. See targetGraphIR for the stage-boxing and
+// role-styling rules.
 func WriteTargetGraphMermaid(w io.Writer, out types.TargetGraphOutput) error {
 	return writeMermaid(w, targetGraphIR(out))
 }
@@ -693,11 +340,10 @@ func targetGraphIR(out types.TargetGraphOutput) renderGraph {
 			if s := stageOf[n.Name]; s != "" {
 				group = prefix + "stage_" + mermaidID(s)
 			}
-			// Every target is a single node coloured by role; the spells it drives
-			// live in the project's separate Toolchain graph (writeToolchainGraph), not
-			// boxed inside this one. Two roles only: a top-level target (nothing depends
-			// on it — a typical entry point) versus a plain target pulled in as a
-			// dependency. Both are runnable; the split is a hint, not a rule.
+			// Every target is a single node coloured by role; spells are not boxed
+			// inside it. Two roles only: a top-level target (nothing depends on it — a
+			// typical entry point) versus a plain target pulled in as a dependency.
+			// Both are runnable; the split is a hint, not a rule.
 			role := "target"
 			if !incoming[n.Name] {
 				role = "anchor"
@@ -785,18 +431,18 @@ func stageGroups(nodes []types.TargetGraphNode) (map[string]string, []string) {
 	return stageOf, order
 }
 
+// uniqSorted returns s sorted with duplicates removed.
+func uniqSorted(s []string) []string {
+	slices.Sort(s)
+	return slices.Compact(s)
+}
+
 // lastSegment returns the text after the final '-', or the whole name if none.
 func lastSegment(name string) string {
 	if i := strings.LastIndexByte(name, '-'); i >= 0 {
 		return name[i+1:]
 	}
 	return name
-}
-
-// uniqSorted returns s sorted with duplicates removed.
-func uniqSorted(s []string) []string {
-	slices.Sort(s)
-	return slices.Compact(s)
 }
 
 // WriteTargetGraphDOT emits the target graph as Graphviz DOT, nodes qualified by

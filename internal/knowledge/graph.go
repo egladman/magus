@@ -21,6 +21,10 @@ type Graph struct {
 	// stable thereafter (queries run after load/merge completes).
 	out map[string][]types.KnowledgeEdge // by source ID
 	in  map[string][]types.KnowledgeEdge // by target ID
+
+	// Project paths sorted longest-first, built lazily for source-path ownership
+	// resolution (the project: query filter). Invalidated with the adjacency.
+	projPaths []string
 }
 
 // edgeKey collapses parallel edges: at most one edge per (source, target,
@@ -97,7 +101,7 @@ func (g *Graph) AddEdge(e types.KnowledgeEdge) {
 		return
 	}
 	g.edges[k] = e
-	g.out, g.in = nil, nil // invalidate adjacency; rebuilt on next query
+	g.out, g.in, g.projPaths = nil, nil, nil // invalidate lazy indices; rebuilt on next query
 }
 
 func (g *Graph) node(id string) (types.KnowledgeNode, bool) {

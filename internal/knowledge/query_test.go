@@ -203,3 +203,43 @@ func TestSelectNoMatchEmpty(t *testing.T) {
 	assert.Empty(t, sub.Nodes)
 	assert.Empty(t, sub.Links)
 }
+
+// TestResolveProjectOwnsContainedNodes guards the project: filter reaching the
+// entities a project contains (files, functions via their source path), not just
+// the project node and its targets - the trap where `project:web kind:function`
+// silently returned nothing.
+func TestResolveProjectOwnsContainedNodes(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "project:.", Kind: types.KindProject, Label: "root", Source: "."})
+	g.AddNode(types.KnowledgeNode{ID: "project:web", Kind: types.KindProject, Label: "web", Source: "web"})
+	g.AddNode(types.KnowledgeNode{ID: "file:web/site.buzz", Kind: types.KindFile, Label: "site.buzz", Source: "web/site.buzz"})
+	g.AddNode(types.KnowledgeNode{ID: "function:web/site.buzz:render", Kind: types.KindFunction, Label: "render", Source: "web/site.buzz:10"})
+	g.AddNode(types.KnowledgeNode{ID: "file:magusfile.buzz", Kind: types.KindFile, Label: "magusfile.buzz", Source: "magusfile.buzz"})
+
+	ids := matchIDs(g.Resolve("project:web", 0))
+	assert.ElementsMatch(t, []string{"project:web", "file:web/site.buzz", "function:web/site.buzz:render"}, ids)
+
+	// Nested ownership: the root project owns only what no nested project claims.
+	ids = matchIDs(g.Resolve("project:. kind:file", 0))
+	assert.Equal(t, []string{"file:magusfile.buzz"}, ids)
+
+	// The combination that used to return zero.
+	ids = matchIDs(g.Resolve("project:web kind:function render", 0))
+	assert.Equal(t, []string{"function:web/site.buzz:render"}, ids)
+
+	// Negation excludes the contained nodes too.
+	ids = matchIDs(g.Resolve("kind:file -project:web", 0))
+	assert.Equal(t, []string{"file:magusfile.buzz"}, ids)
+}
+
+// TestResolveFreeTextReachesFullID guards the documented "free text over IDs"
+// promise: a term matching a non-leaf path segment of a slash-heavy ID (where
+// LeafScore goes zero or negative) still matches, ranked below leaf hits.
+func TestResolveFreeTextReachesFullID(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "function:web/deep/dir/site.buzz:render", Kind: types.KindFunction, Label: "render", Source: "web/deep/dir/site.buzz:1"})
+	g.AddNode(types.KnowledgeNode{ID: "function:web/deep/dir/site.buzz:parse", Kind: types.KindFunction, Label: "parse", Source: "web/deep/dir/site.buzz:2"})
+
+	ids := matchIDs(g.Resolve("kind:function web render", 0))
+	assert.Equal(t, []string{"function:web/deep/dir/site.buzz:render"}, ids)
+}

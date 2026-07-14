@@ -120,4 +120,13 @@ const (
 	// AttrRunSamples is how many timed runs back the duration percentile - the
 	// confidence behind duration_p75_ms.
 	AttrRunSamples = "run_samples"
+	// AttrLastOutputRef is the output reference id (the "ref1a2b3c" token) of the
+	// target's most recent captured execution, so an agent can jump from a target node
+	// straight to its last output with `magus query output <ref>` - the query -> target
+	// -> output two-hop. Sourced from the output store (the timing history carries no
+	// refs); absent when the store holds no execution for the target.
+	AttrLastOutputRef = "last_output_ref"
+	// AttrLastRunOK is whether that most recent execution succeeded ("true"/"false"), so
+	// the ref's outcome is legible from the node without fetching the output.
+	AttrLastRunOK = "last_run_ok"
 )

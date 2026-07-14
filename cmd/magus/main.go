@@ -126,6 +126,21 @@ type dispatchProfile struct {
 	needsWorkspace bool // call loadMagus + start per-process proc server
 }
 
+// isUsageOnlyInvocation reports whether a run/affected invocation only wants usage
+// text: no target given, or the first token is a help flag. It mirrors the guards at
+// the top of runTarget and affected exactly, so the forward decision agrees with what
+// those handlers do locally.
+func isUsageOnlyInvocation(subArgs []string) bool {
+	if len(subArgs) == 0 {
+		return true
+	}
+	switch subArgs[0] {
+	case "-h", "--help", "help":
+		return true
+	}
+	return false
+}
+
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
@@ -142,6 +157,17 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
+	case "run", "affected":
+		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
+		// must print its per-verb usage on the CALLER's stderr. run and affected are
+		// the only daemon-adoptable verbs, so forwarding one of these would run the
+		// usage path inside the daemon: usage lands on the daemon's stderr (invisible
+		// here) and the client is left with a bare, silent non-zero exit. Skip both the
+		// forward and the workspace load so the local dispatch prints usage directly.
+		if isUsageOnlyInvocation(subArgs) {
+			return dispatchProfile{needsConfig: true}
+		}
+		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
 	case "config":
 		// config history/cache need the workspace; view/set/help do not.
 		if len(subArgs) > 0 {
@@ -293,7 +319,15 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			if fwdErr == nil {
 				return startupResult{cleanup: cleanup}, code
 			}
-			slog.Warn("proc forward failed; running locally", slog.String("error", fwdErr.Error()))
+			// A live daemon declining a non-adoptable subcommand (only run/affected
+			// adopt) is the normal path for every other verb: run it locally as a leaf
+			// without alarming the user. Reserve warn for genuine forward failures of
+			// an adoptable subcommand (transport error, dead daemon).
+			if errors.Is(fwdErr, proc.ErrNotAdoptable) {
+				slog.Debug("proc forward declined; running locally", slog.String("error", fwdErr.Error()))
+			} else {
+				slog.Warn("proc forward failed; running locally", slog.String("error", fwdErr.Error()))
+			}
 			// Tell apart a live parent that simply won't adopt this subcommand (only
 			// run/affected adopt) from an unreachable one. When alive, keep
 			// MAGUS_DAEMON_SOCKET pointed at it: this process runs the command locally
@@ -503,6 +537,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  path           show the shortest path between two knowledge-graph nodes")
 	fmt.Fprintln(os.Stderr, "  refs           list where an ingested code symbol is defined and referenced")
 	fmt.Fprintln(os.Stderr, "  graph          the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)")
+	fmt.Fprintln(os.Stderr, "  insight        VCS-history analytics: hotspots, affinity, ownership, trend, volatility")
 	fmt.Fprintln(os.Stderr, "  watch          emit changed file paths (pipe into affected --stdin)")
 	fmt.Fprintln(os.Stderr, "  status         inspect the concurrency pool of a running parent magus")
 	fmt.Fprintln(os.Stderr, "  clean          remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]")

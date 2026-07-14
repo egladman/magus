@@ -393,3 +393,39 @@ type WorkspaceConfig struct {
 	CacheDir    string
 	Concurrency int
 }
+
+// FileDefinition is the human-readable description printed by "magus describe file".
+const FileDefinition = "Describe file classifies paths against the workspace's declared " +
+	"globs: the project that owns each path, whether it is a declared output (generated: " +
+	"regenerate it, never hand-edit) or a declared source (it feeds cache keys and the " +
+	"affected set), and which projects claim it either way. It answers \"can I disregard " +
+	"this changed file\" from the workspace's own declarations."
+
+// FileEntry classifies one workspace-relative path.
+type FileEntry struct {
+	Path string `json:"path" yaml:"path"`
+	// Project is the owning project by directory containment (longest project
+	// path prefixing the file), empty when no project dir contains it.
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	// Role summarizes the strongest claim: "output" (a declared output glob
+	// matches - the file is generated), "source" (a declared source glob
+	// matches), or "unclaimed" (no project declares it; it invalidates no cache
+	// key and affects no target).
+	Role string `json:"role" yaml:"role"`
+	// OutputOf and SourceOf list the projects whose declared output/source globs
+	// match the path. A path can be both (a committed generated file is often a
+	// source of downstream targets); Role reports output in that case because
+	// the regeneration rule dominates how the file should be treated.
+	OutputOf []string `json:"output_of,omitempty" yaml:"output_of,omitempty"`
+	SourceOf []string `json:"source_of,omitempty" yaml:"source_of,omitempty"`
+	// Hint is the one-line handling rule for the role, ready to surface to a
+	// human or an agent.
+	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
+}
+
+// FilesOutput is the top-level result for "describe file <path>...".
+type FilesOutput struct {
+	Definition string      `json:"definition" yaml:"definition"`
+	Count      int         `json:"count"      yaml:"count"`
+	Files      []FileEntry `json:"files"      yaml:"files"`
+}

@@ -72,6 +72,10 @@ func (f *fakeWS) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 	panic("not used")
 }
 
+func (f *fakeWS) DescribeFiles([]string) types.FilesOutput {
+	panic("not used")
+}
+
 // writeFile creates path with content and an explicit mtime so tests
 // don't race with the filesystem's clock resolution.
 func writeFile(t *testing.T, path, content string, mtime time.Time) {

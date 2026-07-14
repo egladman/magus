@@ -11,8 +11,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )

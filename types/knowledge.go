@@ -80,6 +80,21 @@ type KnowledgeTiming struct {
 	HitRateSamples int
 }
 
+// KnowledgeOutputRef is one target's most recent captured-output reference, gathered
+// from the local output store (see internal/cache OutputStore) and folded onto the target
+// node as observed attrs in the @runtime shard (non-deterministic, never remote-shared).
+// Like KnowledgeTiming it is an assembly input, not a wire type: Project and Target name
+// the node, Ref is the output reference id (the "ref1a2b3c" token) minted for that run,
+// and OK is whether that run succeeded. It lets an agent go query -> target node -> the
+// last captured output in two hops. The forecast history the timing attrs ride does not
+// (and by its cache-safety lock must not) record refs, so the output store is the source.
+type KnowledgeOutputRef struct {
+	Project string
+	Target  string
+	Ref     string
+	OK      bool
+}
+
 // KnowledgeVCS is one file's git history metadata (an assembly input, not a wire type),
 // folded onto the file node as attrs in the @vcs shard. It is EXTRACTED from git, not
 // inferred, and deterministic per commit: the same HEAD yields the same values, so the

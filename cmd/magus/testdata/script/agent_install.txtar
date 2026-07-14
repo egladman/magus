@@ -1,19 +1,34 @@
-# magus agent install writes the knowledge-graph skill into the repo
+# magus agent install writes the four skills into the repo
 exec magus agent install claude
-exists .claude/skills/magus/SKILL.md
-grep 'name: magus-knowledge-graph' .claude/skills/magus/SKILL.md
-grep 'agent-skill-version: \d' .claude/skills/magus/SKILL.md
+exists .claude/skills/magus-query/SKILL.md
+exists .claude/skills/magus-run/SKILL.md
+exists .claude/skills/magus-vcs/SKILL.md
+exists .claude/skills/magus-architecture/SKILL.md
+grep 'name: magus-query' .claude/skills/magus-query/SKILL.md
+grep 'agent-skill-version: \d' .claude/skills/magus-query/SKILL.md
 
-# a second install refuses to clobber without --force
+# every skill-dir platform receives the same tree at its own destination
+exec magus agent install opencode
+exists .opencode/skills/magus-query/SKILL.md
+exec magus agent install agents
+exists .agents/skills/magus-query/SKILL.md
+
+# codex installs a managed AGENTS.md section; re-install replaces, never duplicates
+exec magus agent install codex
+grep 'magus:skills:begin' AGENTS.md
+exec magus agent install codex
+grep -count=1 'magus:skills:begin' AGENTS.md
+
+# a second skill-dir install refuses to clobber without --force
 ! exec magus agent install claude
 stderr 'already exists'
 
 # --force overwrites in place
 exec magus agent install claude --force
-exists .claude/skills/magus/SKILL.md
+exists .claude/skills/magus-query/SKILL.md
 
 # an unsupported platform errors explicitly rather than doing nothing
-! exec magus agent install codex
+! exec magus agent install cursor
 stderr 'not supported yet'
 
 # a missing platform is an error

@@ -48,7 +48,13 @@ func (t *scratchpadTool) Invoke(_ context.Context, req types.InvokeRequest) (typ
 // the scratch/ directory that holds the single scratchpad.md file; it is created
 // (0755) on write/append. An unknown op is rejected before any file access.
 func scratchpadOp(dir, op, content string) (scratchpadResult, error) {
-	path := filepath.Join(dir, "scratchpad.md")
+	return scratchpadOpFile(dir, "scratchpad.md", op, content)
+}
+
+// scratchpadOpFile is scratchpadOp generalized to a named file under dir; the
+// durable magus_memory files share these exact read/write/append/clear semantics.
+func scratchpadOpFile(dir, name, op, content string) (scratchpadResult, error) {
+	path := filepath.Join(dir, name)
 
 	switch op {
 	case "read":

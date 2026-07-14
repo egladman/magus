@@ -10,6 +10,8 @@ When the daemon is running, it also exposes an **MCP (Model Context Protocol) se
 
 Magus targets humans first. MCP is an optional layer you can omit from the binary with the `!mcp` build tag.
 
+For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, durable memory, and the drift check - see [Agents](agents.md).
+
 ## Starting the daemon starts MCP
 
 You don't need a separate process. Start the daemon as usual:

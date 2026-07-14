@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/types"
 )
@@ -106,6 +107,12 @@ func (t *refsTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.I
 func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string) (paginatedRefs, error) {
 	out, ok := g.Refs(symbol)
 	if !ok {
+		// No symbol index at all is a distinct, more common failure than a wrong
+		// name: nothing could ever match, so tell the agent to build the index (via
+		// the CLI, since no MCP tool builds it) rather than to fix the symbol name.
+		if !g.HasSymbols() {
+			return paginatedRefs{}, errors.New("mcp: no symbol index has been built, so there are no symbols to match " + symbol + "; build one with `" + clihint.GraphBuild.String() + "` (the daemon auto-indexer also keeps it current while the server runs)")
+		}
 		return paginatedRefs{}, errors.New("mcp: no symbol matches " + symbol)
 	}
 	if limit <= 0 && cursor == "" {

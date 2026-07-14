@@ -61,6 +61,7 @@ var (
 	GraphOpen        = cmd("graph", "open")
 	GraphExport      = cmd("graph", "export")
 	GraphStats       = cmd("graph", "stats")
+	GraphBuild       = cmd("graph", "build")
 	ServerStart      = cmd("server", "start")
 	ServerStop       = cmd("server", "stop")
 	Status           = cmd("status")
@@ -73,7 +74,7 @@ var (
 // All is every canonical command referenced in output, for the drift test to
 // walk. Keep new Command values registered here.
 var All = []Command{
-	Run, QueryOutput, GraphOpen, GraphExport, GraphStats,
+	Run, QueryOutput, GraphOpen, GraphExport, GraphStats, GraphBuild,
 	ServerStart, ServerStop, Status, Watch, Affected,
 	DescribeTargets, MCPTokenGenerate,
 }

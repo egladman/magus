@@ -10,8 +10,8 @@ import (
 	"golang.org/x/term"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
 )
