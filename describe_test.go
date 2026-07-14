@@ -408,3 +408,66 @@ func TestDescribeWorkspaces_SingleWorkspace(t *testing.T) {
 	assert.NotZero(t, entry.ProjectCount, "ProjectCount = 0, want > 0")
 	assert.NotEmpty(t, out.Definition, "Definition is empty")
 }
+
+// TestDescribeFiles_Classification covers the roles end to end: a declared
+// output, a declared source, an unclaimed path, and nested-project ownership.
+// Globs come from registered spells, the same channel real projects declare
+// them through.
+func TestDescribeFiles_Classification(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	const rootSpell, webSpell = "zzz-df-root", "zzz-df-web"
+	project.DefaultSpellRegistry().RegisterSpell(
+		types.NewSpell(rootSpell, types.WithSources("docs/**/*.md"), types.WithSpellOutputs("GEN.md", "gen/**")))
+	project.DefaultSpellRegistry().RegisterSpell(
+		types.NewSpell(webSpell, types.WithSources("**/*.ts"), types.WithSpellOutputs("dist/**")))
+	t.Cleanup(func() {
+		project.DefaultSpellRegistry().UnregisterSpell(rootSpell)
+		project.DefaultSpellRegistry().UnregisterSpell(webSpell)
+	})
+
+	root := t.TempDir()
+	for _, rel := range []string{"magusfile.buzz", "web/magusfile.buzz"} {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+	}
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(rootSpell))
+	reg.RegisterProject("web", WithSpell(webSpell))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+
+	out := ws.DescribeFiles([]string{"GEN.md", "docs/guide.md", "web/dist/app.js", "web/app.ts", "scratch.tmp", "./web/magusfile.buzz"})
+	require.Equal(t, 6, out.Count)
+	require.NotEmpty(t, out.Definition)
+	byPath := map[string]types.FileEntry{}
+	for _, f := range out.Files {
+		byPath[f.Path] = f
+	}
+
+	gen := byPath["GEN.md"]
+	assert.Equal(t, ".", gen.Project)
+	assert.Equal(t, "output", gen.Role)
+	assert.Equal(t, []string{"."}, gen.OutputOf)
+	assert.Contains(t, gen.Hint, "generated")
+
+	assert.Equal(t, "source", byPath["docs/guide.md"].Role)
+	assert.Equal(t, []string{"."}, byPath["docs/guide.md"].SourceOf)
+
+	// Nested project claims ownership and the output role.
+	dist := byPath["web/dist/app.js"]
+	assert.Equal(t, "web", dist.Project)
+	assert.Equal(t, "output", dist.Role)
+	assert.Equal(t, []string{"web"}, dist.OutputOf)
+
+	assert.Equal(t, "source", byPath["web/app.ts"].Role)
+	assert.Equal(t, []string{"web"}, byPath["web/app.ts"].SourceOf)
+
+	unclaimed := byPath["scratch.tmp"]
+	assert.Equal(t, "unclaimed", unclaimed.Role)
+	assert.Empty(t, unclaimed.OutputOf)
+	assert.Contains(t, unclaimed.Hint, "no project declares")
+
+	// A ./ prefix normalizes away; magusfiles always count as sources.
+	assert.Equal(t, "source", byPath["web/magusfile.buzz"].Role)
+}

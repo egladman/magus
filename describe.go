@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
@@ -510,4 +512,83 @@ func appendUniq(s []string, v string) []string {
 		}
 	}
 	return append(s, v)
+}
+
+// DescribeFiles classifies workspace-relative paths against every project's
+// declared source and output globs (the same workspace-rooted globs baseStep
+// feeds the cache), plus directory containment for ownership. It is pure
+// declaration lookup - no target evaluation, no VCS - so it is cheap enough to
+// run over a whole dirty tree. An absolute path is re-rooted onto the workspace;
+// a path outside it (or matching nothing) reports as unclaimed.
+func (m *Magus) DescribeFiles(paths []string) types.FilesOutput {
+	all := m.ws.All()
+	// Longest project path first, so nested projects claim ownership before ".".
+	owners := slices.Clone(all)
+	slices.SortFunc(owners, func(a, b *types.Project) int {
+		if c := cmp.Compare(len(b.Path), len(a.Path)); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Path, b.Path)
+	})
+
+	entries := make([]types.FileEntry, 0, len(paths))
+	for _, raw := range paths {
+		entries = append(entries, m.describeFile(raw, all, owners))
+	}
+	return types.FilesOutput{
+		Definition: types.FileDefinition,
+		Count:      len(entries),
+		Files:      entries,
+	}
+}
+
+func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.FileEntry {
+	path := filepath.ToSlash(raw)
+	if filepath.IsAbs(raw) {
+		if rel, err := filepath.Rel(m.ws.Root, raw); err == nil && !strings.HasPrefix(rel, "..") {
+			path = filepath.ToSlash(rel)
+		}
+	}
+	path = strings.TrimPrefix(path, "./")
+
+	entry := types.FileEntry{Path: path, Role: "unclaimed"}
+	for _, p := range owners {
+		if p.Path == "." || path == p.Path || strings.HasPrefix(path, p.Path+"/") {
+			entry.Project = p.Path
+			break
+		}
+	}
+	for _, p := range all {
+		step := m.baseStep(p)
+		if matchAnyGlob(step.Outputs, path) {
+			entry.OutputOf = append(entry.OutputOf, p.Path)
+		}
+		if matchAnyGlob(step.Sources, path) {
+			entry.SourceOf = append(entry.SourceOf, p.Path)
+		}
+	}
+
+	switch {
+	case len(entry.OutputOf) > 0:
+		entry.Role = "output"
+		entry.Hint = "generated: never hand-edit or read its diff; change the source of truth, regenerate (magus run generate), and commit it with the source change"
+	case len(entry.SourceOf) > 0:
+		entry.Role = "source"
+		entry.Hint = "declared source: edits invalidate the owning project's cache keys and pull it into the affected set"
+	default:
+		entry.Hint = "no project declares this path: it invalidates no cache key and affects no target; check your VCS ignore rules before committing it"
+	}
+	return entry
+}
+
+// matchAnyGlob reports whether path matches any of the workspace-rooted
+// doublestar globs. Same matcher family the cache uses for these globs; an
+// invalid pattern simply never matches, mirroring the cache's tolerance.
+func matchAnyGlob(globs []string, path string) bool {
+	for _, g := range globs {
+		if ok, _ := doublestar.Match(g, path); ok {
+			return true
+		}
+	}
+	return false
 }

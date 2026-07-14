@@ -60,6 +60,7 @@ type Describer interface {
 	DescribeWorkspaces(cfg WorkspaceConfig) WorkspacesOutput
 	DescribeTarget(t Target) (EvaluatedTargetsOutput, error)
 	DescribeEvaluatedProjects() EvaluatedProjectsOutput
+	DescribeFiles(paths []string) FilesOutput
 }
 
 // WorkspaceRepository is the full domain interface for a discovered workspace.
