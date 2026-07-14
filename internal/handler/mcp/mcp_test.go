@@ -3,9 +3,13 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
@@ -90,6 +94,56 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
+}
+
+func TestWrapCapturesResponse(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	audit := openAuditLog(dir)
+	require.NotNil(t, audit)
+
+	agentFn := func(context.Context) string { return "test-agent" }
+	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
+	const out = "hello world result payload"
+	h := wrap(quietLogger(), agentFn, audit, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		return mcplib.NewToolResultText(out), nil
+	})
+
+	_, err := h(context.Background(), req)
+	require.NoError(t, err)
+	require.NoError(t, audit.Close())
+
+	data, err := os.ReadFile(filepath.Join(dir, AuditDir, "mcp.jsonl"))
+	require.NoError(t, err)
+	var ev auditEvent
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(string(data))), &ev))
+
+	assert.Equal(t, "magus_query", ev.Tool)
+	assert.Equal(t, int64(len(out)), ev.RespBytes)
+	assert.Equal(t, out, ev.RespPreview) // a short response: the preview is the whole body
+	require.NotEmpty(t, ev.RespRef)
+
+	// The ref resolves back to the exact response the agent received.
+	body, err := audit.blob(ev.RespRef)
+	require.NoError(t, err)
+	assert.Equal(t, out, string(body))
+}
+
+func TestAllText(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "", allText(nil))
+	assert.Equal(t, "abc", allText(mcplib.NewToolResultText("abc")))
+
+	multi := &mcplib.CallToolResult{
+		Content: []mcplib.Content{
+			mcplib.TextContent{Type: "text", Text: "ab"},
+			mcplib.ImageContent{Type: "image", Data: "ignored"},
+			mcplib.TextContent{Type: "text", Text: "cde"},
+		},
+	}
+	assert.Equal(t, "abcde", allText(multi))
 }
 
 func TestSumTextBytes(t *testing.T) {

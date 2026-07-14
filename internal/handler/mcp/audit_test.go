@@ -85,3 +85,73 @@ func TestAuditArgs_OmitsEmpty(t *testing.T) {
 		t.Errorf("auditArgs = %q", string(got))
 	}
 }
+
+func TestAuditBlobs_PutGetRoundTrip(t *testing.T) {
+	b := openAuditBlobs(t.TempDir())
+	if b == nil {
+		t.Fatal("openAuditBlobs returned nil for a writable dir")
+	}
+	ref := b.put([]byte("payload one"))
+	if ref == "" {
+		t.Fatal("put returned an empty ref")
+	}
+	body, err := b.get(ref)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if string(body) != "payload one" {
+		t.Errorf("round trip = %q, want %q", body, "payload one")
+	}
+}
+
+func TestAuditBlobs_DedupesByContent(t *testing.T) {
+	b := openAuditBlobs(t.TempDir())
+	r1 := b.put([]byte("same"))
+	r2 := b.put([]byte("same"))
+	if r1 != r2 {
+		t.Errorf("identical content got different refs: %q vs %q", r1, r2)
+	}
+	if r3 := b.put([]byte("different")); r3 == r1 {
+		t.Errorf("different content collided on ref %q", r3)
+	}
+}
+
+func TestAuditBlobs_EmptyAndNilAreNoOps(t *testing.T) {
+	b := openAuditBlobs(t.TempDir())
+	if got := b.put(nil); got != "" {
+		t.Errorf("put(nil) = %q, want empty", got)
+	}
+	if got := b.put([]byte{}); got != "" {
+		t.Errorf("put(empty) = %q, want empty", got)
+	}
+	var nilStore *auditBlobs
+	if got := nilStore.put([]byte("x")); got != "" {
+		t.Errorf("nil store put = %q, want empty", got)
+	}
+}
+
+func TestAuditBlobs_GetRejectsUnsafeRefs(t *testing.T) {
+	b := openAuditBlobs(t.TempDir())
+	// None of these is exactly 16 lowercase-hex chars, so none may reach the filesystem.
+	for _, bad := range []string{"", "..", "../mcp.jsonl", "abc/def0123456789", "ABCDEF0123456789", "short", "zzzzzzzzzzzzzzzz"} {
+		if _, err := b.get(bad); err == nil {
+			t.Errorf("get(%q) = nil error, want rejected", bad)
+		}
+	}
+}
+
+func TestPreview(t *testing.T) {
+	if got := preview("hello", 10); got != "hello" {
+		t.Errorf("short preview = %q, want %q", got, "hello")
+	}
+	if got := preview("hello world", 5); got != "hello..." {
+		t.Errorf("truncated preview = %q, want %q", got, "hello...")
+	}
+	if got := preview("abc", 0); got != "" {
+		t.Errorf("zero-max preview = %q, want empty", got)
+	}
+	// Rune-aware: cutting at 2 keeps two full runes, never splitting the multibyte one.
+	if got := preview("héllo", 2); got != "hé..." {
+		t.Errorf("rune preview = %q, want %q", got, "hé...")
+	}
+}

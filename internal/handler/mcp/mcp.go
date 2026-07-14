@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
@@ -222,14 +223,23 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 		// reads, so its bytes belong in the output-size metric (its context cost).
 		decorateResult(result, toolName)
 
+		// Capture the full response text the agent received (the context returned FROM
+		// the tool) into the audit blob store, and keep only its ref/preview/size on the
+		// event. This is what makes the audit trail show both sides of the exchange.
+		respText := allText(result)
+		respRef, respBytes := audit.putBlob([]byte(respText))
+
 		dur := time.Since(start)
 		ev := auditEvent{
-			Ts:      startMs,
-			Agent:   agentID,
-			Tool:    toolName,
-			Args:    auditArgs(req.GetArguments()),
-			DurMs:   dur.Milliseconds(),
-			Outcome: "ok",
+			Ts:          startMs,
+			Agent:       agentID,
+			Tool:        toolName,
+			Args:        auditArgs(req.GetArguments()),
+			DurMs:       dur.Milliseconds(),
+			Outcome:     "ok",
+			RespRef:     respRef,
+			RespBytes:   respBytes,
+			RespPreview: preview(respText, respPreviewLen),
 		}
 		if err != nil {
 			ev.Outcome = "error"
@@ -259,18 +269,40 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, audit *auditLo
 	}
 }
 
-// sumTextBytes totals the byte length (len) of every text block in a tool
-// result. A nil result (the transport-error path) contributes zero; non-text
-// content blocks are ignored.
-func sumTextBytes(result *mcplib.CallToolResult) int64 {
+// respPreviewLen bounds the inline response preview kept on each audit event, so a
+// list view can show what came back without fetching every full body from the blob store.
+const respPreviewLen = 240
+
+// allText concatenates every text block of a tool result in order. A nil result (the
+// transport-error path) yields "", and non-text content blocks are ignored.
+func allText(result *mcplib.CallToolResult) string {
 	if result == nil {
-		return 0
+		return ""
 	}
-	var n int64
+	var b strings.Builder
 	for _, c := range result.Content {
 		if tc, ok := c.(mcplib.TextContent); ok {
-			n += int64(len(tc.Text))
+			b.WriteString(tc.Text)
 		}
 	}
-	return n
+	return b.String()
+}
+
+// sumTextBytes totals the byte length of every text block in a tool result. Equal to
+// len(allText(result)); kept as the metric's name for the output-size instrument.
+func sumTextBytes(result *mcplib.CallToolResult) int64 {
+	return int64(len(allText(result)))
+}
+
+// preview returns the first max runes of s, appending an ellipsis marker when it had
+// to cut. Rune-aware so it never splits a multibyte character mid-way.
+func preview(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "..."
 }
