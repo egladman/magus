@@ -267,6 +267,14 @@ body.console-fill > main {
   padding-block: 0.6rem;    /* tight vertical gutter so the card reads as full-bleed */
   display: flex;
   flex-direction: column;   /* the single app card stretches as a flex child (below) */
+  /* Full-bleed: the tool pages (logs/graph) cap main.container-fluid to --content-wide and
+     center it (the docs page idiom, in their own page CSS). In the fill layout that leaves
+     wasted side gutters on a wide window - the single panel should occupy the whole width,
+     like the dashboard board. Override the cap here (this selector outweighs the page rule);
+     Pico's .container-fluid keeps its small horizontal padding so the card is not flush to
+     the edge. Prose disclosure blocks keep their own readable measure via .url-help. */
+  max-width: none;
+  margin-inline: 0;
 }
 /* The app card stretches to fill the main region as a flex child - more robust than a
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
