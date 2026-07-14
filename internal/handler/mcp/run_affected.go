@@ -39,6 +39,8 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req types.InvokeRequest) (
 	// and a process-global observer would interleave their graph events.
 	ctx = types.ContextWithGraphObserver(ctx, rw.GraphObserver())
 
+	charms := effectiveCharms(parsed.Charms, t.opts.Config.DefaultCharms)
+
 	runOpts := []magus.RunOption{magus.WithReport(rw)}
 	if dryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
@@ -46,8 +48,8 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req types.InvokeRequest) (
 	if base != "" {
 		runOpts = append(runOpts, magus.WithBaseRef(base))
 	}
-	if len(parsed.Charms) > 0 {
-		runOpts = append(runOpts, magus.WithCharms(parsed.Charms...))
+	if len(charms) > 0 {
+		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
 
 	start := time.Now()
@@ -59,6 +61,7 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req types.InvokeRequest) (
 	events := parseEventLines(&buf)
 	out := runResult{
 		OK:         runErr == nil,
+		Charms:     charms,
 		DurationMs: dur.Milliseconds(),
 		Events:     events,
 	}

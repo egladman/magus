@@ -24,9 +24,17 @@ type ToolDescriptor struct {
 var Registry = []ToolDescriptor{
 	{
 		Name:        string(ToolDescribe),
-		Description: "Describe a magus concept and list every entity of that kind in the workspace: spells (language/runtime adapters), targets (targets), projects, workspaces, or mcp_tools.",
+		Description: "Describe a magus concept and list every entity of that kind in the workspace: spells (language/runtime adapters), targets (targets), projects, workspaces, or mcp_tools. Pass name to narrow the list to one entity's detail: for targets it returns the fully-evaluated dispatch plan (sources, outputs, spells, rendered command, charms, policy).",
 		Params: []ParamDescriptor{
 			{Name: "kind", Type: "string", Required: true, Description: "One of: spells, targets, projects, workspaces, mcp_tools."},
+			{Name: "name", Type: "string", Description: "Optional. Narrow the list to one entity's detail (kinds spells, targets, projects). For targets, a target name optionally followed by a project path (e.g. \"build\", \"lint:rw\", or \"build api\"); omit the project to evaluate every project. For spells, a spell name; for projects, a project path. Unknown name returns the valid values."},
+		},
+	},
+	{
+		Name:        string(ToolDescribeFile),
+		Description: "Classify paths against the workspace's declared globs: the owning project, whether each path is a declared output (generated: regenerate it, never hand-edit) or a declared source (feeds cache keys and the affected set), and which projects claim it. Answers \"can I disregard this changed file\" from the workspace's own declarations - run it over a whole dirty tree before reading diffs or committing.",
+		Params: []ParamDescriptor{
+			{Name: "paths", Type: "string", Required: true, Description: "One or more workspace-relative paths, space-separated (e.g. \"MAGUS.md web/gen/index.html cmd/api/main.go\")."},
 		},
 	},
 	{
@@ -55,7 +63,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolRunTarget),
-		Description: "Run a build target for one or more projects. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Without projects, the cwd project (or all) is selected.",
+		Description: "Run a build target for one or more projects. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Without projects, the cwd project (or all) is selected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run, e.g. \"build\", \"test\", \"lint\", \"format\", \"ci\", or an op-direct spell-qualified form like \"go::go-test\"."},
 			{Name: "projects", Type: "string", Description: "Space-separated project paths. Use \"/\" for all. Omit for cwd-scoped selection."},
@@ -64,7 +72,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolRunAffected),
-		Description: "Run a build target on only the projects affected by VCS changes. Equivalent to `" + clihint.Affected.With("<target>") + "`.",
+		Description: "Run a build target on only the projects affected by VCS changes. Equivalent to `" + clihint.Affected.With("<target>") + "`. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run on affected projects (e.g. \"test\", \"lint\", \"ci\")."},
 			{Name: "base", Type: "string", Description: "Override VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
@@ -103,6 +111,16 @@ var Registry = []ToolDescriptor{
 		Params: []ParamDescriptor{
 			{Name: "op", Type: "string", Description: "One of: read (default; returns current contents, empty if never written), write (overwrite with content), append (add content on a new line), clear (empty the scratchpad)."},
 			{Name: "content", Type: "string", Description: "The text to write or append. Required for write and append; ignored for read and clear."},
+		},
+	},
+	{
+		Name:        string(ToolMemory),
+		Description: "Durable per-repository memory shared across sessions, models, and agent hosts: three plain-markdown files kept OUTSIDE the repo in the user state directory (worktrees of one repo share them). Files: status (the current snapshot - where work stands, next action, blockers; overwrite with op=write), progress (dated work journal; op=append), decisions (dated log of decisions made and WHY; op=append). Read status and decisions at the start of a session to ramp on what earlier sessions - possibly a different model - established; append as you work. Appends to progress/decisions are date-stamped automatically. For intra-session scratch notes use magus_scratchpad instead.",
+		Params: []ParamDescriptor{
+			{Name: "file", Type: "string", Required: true, Description: "One of: status, progress, decisions."},
+			{Name: "op", Type: "string", Description: "One of: read (default), write (overwrite), append, clear."},
+			{Name: "content", Type: "string", Description: "The text to write or append. Required for write and append."},
+			{Name: "title", Type: "string", Description: "Optional, append only: a few-word summary folded into the entry's dated heading, so scanning the headings reads as a table of contents. Title every decisions entry."},
 		},
 	},
 	{

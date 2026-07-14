@@ -1,0 +1,20 @@
+# run -h prints per-verb usage to stderr and exits 0
+exec magus run -h
+stderr 'Usage: magus run <target>'
+
+# run --help behaves the same
+exec magus run --help
+stderr 'Usage: magus run <target>'
+
+# affected -h prints per-verb usage to stderr and exits 0
+exec magus affected -h
+stderr 'Usage: magus affected <target>'
+
+# affected --help behaves the same
+exec magus affected --help
+stderr 'Usage: magus affected <target>'
+
+# bare affected (no target) is a usage error: prints a clear message plus usage and exits non-zero
+! exec magus affected
+stderr 'a target is required'
+stderr 'Usage: magus affected <target>'

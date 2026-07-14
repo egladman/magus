@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
 )
 
@@ -49,6 +50,14 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	out, ok := g.Refs(pos[0])
 	if !ok {
+		// Distinguish the two failure modes: with no symbol index built at all,
+		// nothing could ever match, so point at how to build one instead of implying
+		// the symbol name is wrong.
+		if !g.HasSymbols() {
+			fmt.Fprintf(os.Stderr, "magus refs: no symbol index has been built, so there are no symbols to match %q\n", pos[0])
+			fmt.Fprintf(os.Stderr, "build one with `%s`; the daemon's auto-indexer also keeps it current while `%s` runs\n", clihint.GraphBuild, clihint.ServerStart)
+			return errSilent{exitCode: 2}
+		}
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
 		return errSilent{exitCode: 2}
 	}

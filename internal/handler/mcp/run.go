@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,10 +16,33 @@ import (
 )
 
 type runResult struct {
-	OK         bool               `json:"ok"`
-	Error      string             `json:"error,omitempty"`
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+	// Charms lists the execution charms actually applied to this run: the
+	// workspace default_charms merged with any charm suffix on the target
+	// param. Omitted when empty. Lets the agent see whether writes (rw) were
+	// enabled and avoid redundantly re-invoking a :rw form.
+	Charms     []string           `json:"charms,omitempty"`
 	DurationMs int64              `json:"duration_ms"`
 	Events     []codec.RawMessage `json:"events"`
+}
+
+// effectiveCharms merges the workspace default_charms with the per-run charm
+// suffix parsed from the target, mirroring cmd/magus withDefaultCharms:
+// defaults first, per-run stacked on top, exact duplicates dropped. The MCP run
+// tools are the daemon equivalent of `magus run`, so default_charms apply here
+// too (there is no --no-default-charms escape hatch over MCP).
+func effectiveCharms(perRun, defaults []string) []string {
+	if len(defaults) == 0 {
+		return perRun
+	}
+	out := slices.Clone(defaults)
+	for _, c := range perRun {
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 type runTargetTool struct {
@@ -89,12 +113,14 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 	// no graph observer. (Graph events come from the affected path; see
 	// tool_affected, which routes them request-scoped via context.)
 
+	charms := effectiveCharms(parsed.Charms, t.opts.Config.DefaultCharms)
+
 	runOpts := []magus.RunOption{magus.WithReport(rw)}
 	if dryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
 	}
-	if len(parsed.Charms) > 0 {
-		runOpts = append(runOpts, magus.WithCharms(parsed.Charms...))
+	if len(charms) > 0 {
+		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
 	if spellFilter != "" {
 		runOpts = append(runOpts, magus.WithSpellFilter(spellFilter))
@@ -109,6 +135,7 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 	events := parseEventLines(&buf)
 	out := runResult{
 		OK:         runErr == nil,
+		Charms:     charms,
 		DurationMs: dur.Milliseconds(),
 		Events:     events,
 	}
