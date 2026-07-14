@@ -174,11 +174,16 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	if vals := q.negFields["kind"]; matchesKind(n.Kind, vals) {
 		return 0, false
 	}
-	if vals, ok := q.fields["project"]; ok && !matchesAnyProject(id, vals) {
-		return 0, false
+	if vals, ok := q.fields["project"]; ok {
+		proj, owned := g.projectOf(n, id)
+		if !owned || !matchesProject(proj, vals) {
+			return 0, false
+		}
 	}
-	if vals := q.negFields["project"]; matchesAnyProject(id, vals) {
-		return 0, false
+	if vals := q.negFields["project"]; len(vals) > 0 {
+		if proj, owned := g.projectOf(n, id); owned && matchesProject(proj, vals) {
+			return 0, false
+		}
 	}
 	if vals, ok := q.fields["id"]; ok && !containsAny(id, vals) {
 		return 0, false
@@ -233,11 +238,18 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 			continue
 		}
 		best := max(interactive.LeafScore(id, t), interactive.LeafScore(n.Label, t))
-		if best == 0 {
-			if !strings.Contains(strings.ToLower(n.Doc), strings.ToLower(t)) {
+		if best <= 0 {
+			// LeafScore anchors on the leaf and charges 10 per '/', so a non-leaf hit
+			// inside a slash-heavy ID (kind:function website -> function:website/f.buzz:x)
+			// comes back zero or negative. A substring hit anywhere in the ID or doc still
+			// matches, with the flat doc-hit credit, instead of dropping the node.
+			switch lt := strings.ToLower(t); {
+			case strings.Contains(strings.ToLower(id), lt),
+				strings.Contains(strings.ToLower(n.Doc), lt):
+				best = 1
+			default:
 				return 0, false
 			}
-			best = 1
 		}
 		total += best
 	}
@@ -502,6 +514,20 @@ func (g *Graph) resolveOne(ref string) (string, bool) {
 	return matches[0].ID, true
 }
 
+// HasSymbols reports whether the graph holds any ingested code symbol node. refs
+// and a symbol-seeded query load the @symbols shards lazily, so when this returns
+// false after that load, no SCIP index has been ingested at all. Callers use it to
+// tell "no index built" apart from "index built, but this symbol is absent": the
+// former is fixed by building the index, the latter by correcting the symbol.
+func (g *Graph) HasSymbols() bool {
+	for _, n := range g.nodes {
+		if n.Kind == types.KindSymbol {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveSymbol maps a ref to a SYMBOL node specifically, so `magus refs Foo` resolves
 // to the ingested symbol rather than a same-named buzz function or target. An exact
 // symbol-ID hit wins; otherwise ref is resolved as-is and the highest-ranked SYMBOL
@@ -616,21 +642,67 @@ func (g *Graph) touchesRelation(id string, rels []string) bool {
 	return false
 }
 
-// matchesAnyProject reports whether a node ID belongs to any of the given
-// projects (the project node itself or one of its targets).
-func matchesAnyProject(id string, projects []string) bool {
-	for _, p := range projects {
-		if hasWildcard(p) {
-			if proj, ok := projectPathOf(id); ok && globMatch(p, proj) {
+// matchesProject reports whether a node's owning project path matches any of the
+// given values: a value with '*' by glob, otherwise by exact path (project paths
+// are a small fixed set, so substring would over-match).
+func matchesProject(proj string, vals []string) bool {
+	for _, v := range vals {
+		if hasWildcard(v) {
+			if globMatch(v, proj) {
 				return true
 			}
-			continue
-		}
-		if id == types.KindProject+":"+p || strings.HasPrefix(id, types.KindTarget+":"+p+":") {
+		} else if proj == v {
 			return true
 		}
 	}
 	return false
+}
+
+// projectOf resolves the workspace-relative project path owning a node: the path
+// itself for a project node, the declaring project for a target, and for every
+// other kind the longest project path prefixing its source (files, functions,
+// docs, and symbols all carry one). This is what makes `project:web kind:function`
+// select the functions INSIDE web, not just the project node and its targets.
+// A node with no source (e.g. an unresolved import) is owned by nothing.
+func (g *Graph) projectOf(n types.KnowledgeNode, id string) (string, bool) {
+	if p, ok := projectPathOf(id); ok {
+		return p, true
+	}
+	src := n.Source
+	if i := strings.IndexByte(src, ':'); i >= 0 {
+		src = src[:i] // strip a :line suffix
+	}
+	if src == "" {
+		return "", false
+	}
+	for _, p := range g.projectPaths() {
+		if p == "." || src == p || strings.HasPrefix(src, p+"/") {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// projectPaths returns every project node's path, longest first so projectOf's
+// prefix scan resolves nested projects before the root "." catch-all. Built
+// lazily and invalidated with the adjacency indices.
+func (g *Graph) projectPaths() []string {
+	if g.projPaths != nil {
+		return g.projPaths
+	}
+	for id := range g.nodes {
+		if p, ok := strings.CutPrefix(id, types.KindProject+":"); ok {
+			g.projPaths = append(g.projPaths, p)
+		}
+	}
+	// Longest first; ties break lexically so the order is deterministic.
+	slices.SortFunc(g.projPaths, func(a, b string) int {
+		if c := cmp.Compare(len(b), len(a)); c != 0 {
+			return c
+		}
+		return cmp.Compare(a, b)
+	})
+	return g.projPaths
 }
 
 // containsAny reports whether hay matches any needle: a needle with a '*' matches by
