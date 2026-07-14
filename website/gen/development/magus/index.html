@@ -92,7 +92,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <p>Prefer a picture? Explore this graph in the <a href="https://eli.gladman.cc/magus/console/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>1696 nodes</strong> and <strong>2981 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>1708 nodes</strong> and <strong>3191 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -113,7 +113,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>project</td>
 <td style="text-align:right">5</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:project</code></a></td>
-<td><code>magus</code>, <code>website</code>, <code>gopherbuzz</code></td>
+<td><code>magus</code>, <code>gopherbuzz</code>, <code>website</code></td>
 </tr>
 <tr>
 <td>target</td>
@@ -129,7 +129,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>op</td>
-<td style="text-align:right">43</td>
+<td style="text-align:right">47</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:op</code></a></td>
 <td><code>go-build</code>, <code>go-test</code>, <code>go-fmt</code></td>
 </tr>
@@ -171,7 +171,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">984</td>
+<td style="text-align:right">992</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:function</code></a></td>
 <td><code>sel</code>, <code>site_render</code>, <code>sendObject</code></td>
 </tr>
@@ -829,9 +829,9 @@ graph LR
 <h2 id="project-website">Project: website</h2>
 <details>
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
-<pre><code class="language-text">sources  magusfile.buzz, magusfiles/**/*.buzz, website/magusfile.buzz, website/magusfiles/**/*.buzz
+<pre><code class="language-text">sources  magusfile.buzz, magusfiles/**/*.buzz, website/**/*.js, website/**/*.json, website/**/*.jsx, website/**/*.ts, website/**/*.tsx, website/.npmrc, website/magusfile.buzz, website/magusfiles/**/*.buzz, website/npm-shrinkwrap.json, website/package-lock.json, website/package.json, website/pnpm-lock.yaml
 outputs  website/gen/**, website/MAGUS.md, website/src/gen/**
-spells   magusfile
+spells   magusfile, ts (claims: **/*.ts, **/*.tsx, **/*.mts, **/*.cts, **/*.js, **/*.mjs, **/*.cjs, **/*.jsx, **/*.json, **/*.jsonc, **/*.md, **/*.mdx, **/*.yaml, **/*.yml, **/*.css, **/*.scss, **/*.html)
 </code></pre>
 </details>
 <p><strong>Run order</strong></p>

@@ -91,7 +91,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>525 nodes</strong> and <strong>659 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>530 nodes</strong> and <strong>688 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -124,11 +124,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>spell</td>
 <td style="text-align:right">11</td>
 <td><code>magus query kind:spell</code></td>
-<td><code>go</code>, <code>buf</code>, <code>py</code></td>
+<td><code>go</code>, <code>py</code>, <code>rs</code></td>
 </tr>
 <tr>
 <td>op</td>
-<td style="text-align:right">43</td>
+<td style="text-align:right">47</td>
 <td><code>magus query kind:op</code></td>
 <td><code>shellcheck</code>, <code>buf-breaking</code>, <code>buf-build</code></td>
 </tr>
@@ -170,7 +170,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>import</td>
-<td style="text-align:right">24</td>
+<td style="text-align:right">25</td>
 <td><code>magus query kind:import</code></td>
 <td><code>magus</code>, <code>magus/spell/go</code>, <code>assert</code></td>
 </tr>
@@ -221,9 +221,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <h2 id="project-website">Project: website</h2>
 <details>
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
-<pre><code class="language-text">sources  magusfile.buzz, magusfiles/**/*.buzz
+<pre><code class="language-text">sources  **/*.js, **/*.json, **/*.jsx, **/*.ts, **/*.tsx, .npmrc, magusfile.buzz, magusfiles/**/*.buzz, npm-shrinkwrap.json, package-lock.json, package.json, pnpm-lock.yaml
 outputs  gen/**, MAGUS.md, src/gen/**
-spells   magusfile
+spells   magusfile, ts (claims: **/*.ts, **/*.tsx, **/*.mts, **/*.cts, **/*.js, **/*.mjs, **/*.cjs, **/*.jsx, **/*.json, **/*.jsonc, **/*.md, **/*.mdx, **/*.yaml, **/*.yml, **/*.css, **/*.scss, **/*.html)
 </code></pre>
 </details>
 <p><strong>Run order</strong></p>

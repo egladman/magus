@@ -81,7 +81,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">11 min read</small>
+    <small class="reading-time" title="Estimated reading time">13 min read</small>
     <article>
 <h1 id="knowledge-graph">Knowledge graph</h1>
 <p>The knowledge graph is a deterministic, cache-backed graph of the magus domain.
@@ -261,19 +261,50 @@ workspace sources.</p>
 <p>magus never parses source code. To bring code symbols into the graph, it ingests a
 <a href="https://docs.sourcegraph.com/code_navigation/explanations/scip" rel="noopener noreferrer" target="_blank" data-external>SCIP</a> index file
 that a per-language indexer (<code>scip-go</code>, <code>scip-typescript</code>, ...) emits - so any
-language with an indexer works, with no magus code per language. The index is a
-declared target output; point config at it (explicit, opt-in, never auto-detected):</p>
+language with an indexer works, with no magus code per language.</p>
+<p><strong>This is automatic.</strong> Every symbol-capable spell (go, ts, py, rust) exposes a reserved
+<code>scip</code> op that runs its indexer. Importing the language's spells is the entire opt-in:
+each project bound to such a spell is ingested with no <code>knowledge:</code> config. Build the
+index the same way you run any target:</p>
+<pre><code class="language-sh">magus run pkg/foo::scip   # forks the language's SCIP indexer
+</code></pre>
+<p>The index is a build artifact, so it lives under the magus cache dir, never in the
+source tree: magus hands the indexer the destination through a <code>MAGUS_SYMBOL_INDEX</code>
+environment variable it injects for the <code>scip</code> op, and reads that same path back at
+query time. The next graph query folds the symbols in.</p>
+<p><strong>The daemon keeps it fresh for you.</strong> While the daemon runs, background auto-indexing
+re-runs each symbol-capable project's <code>scip</code> op when its sources change, so symbols stay
+current with no manual step. It is deliberately unobtrusive: a burst of edits coalesces
+into one run (a quiet window), a project re-indexes at most once per interval, a run
+starts only when nothing else is running, and it cancels itself the moment your own work
+needs a slot. Each run goes through the normal path, so it shows up as an ordinary
+journaled job, not hidden work. It is on by default in the daemon; a one-shot CLI never
+auto-indexes. Tune or disable it under <code>knowledge.symbol_indexing</code> (<code>disabled</code>,
+<code>quiet_seconds</code>, <code>min_interval_seconds</code>). If an indexer is not installed the background
+run just fails and backs off - run <code>magus run &lt;project&gt;::scip</code> yourself, or index in CI.</p>
+<p>An index that has not been built yet is simply skipped, so symbols appear once the
+<code>scip</code> target has run. To point a project at an index your own build already emits
+somewhere in the tree instead, override it:</p>
 <pre><code class="language-yaml"># magus.yaml
 knowledge:
   symbols:
     - project: pkg/foo
-      index: pkg/foo/index.scip # produced by a `pkg/foo:scip` target
+      index: build/custom.scip # a workspace-relative path magus reads as-is
 </code></pre>
-<p>Each declared index becomes a per-project <code>&lt;project&gt;@symbols</code> shard: <code>symbol</code> nodes
+<p>Each ingested index becomes a per-project <code>&lt;project&gt;@symbols</code> shard: <code>symbol</code> nodes
 (keyed by their version-stripped SCIP moniker), <code>defines</code> edges from the defining
 file, and <code>references</code> edges from each using file (one per file, carrying an
 occurrence count and capped lines). A symbol seen only as a reference still gets a
-node, so cross-project usage resolves.</p>
+node, so cross-project usage resolves. Every indexed source file also becomes a
+browsable <code>file</code> node the edges land on, linked to the project that owns it - so a
+<code>.go</code> or <code>.ts</code> file sits in the graph the same way a <code>.buzz</code> file does, reachable from
+its project and the workspace. SCIP paths are relative to the indexer's root, so magus
+rebases them onto the project's workspace path; a nested project's files land under the
+right project, not the workspace root.</p>
+<p>Both file and symbol nodes carry a <code>language</code> attr, so <code>magus query language:go</code>
+groups every Go source file and symbol - and <code>language:buzz</code> the buzz sources - one
+filter across everything the graph knows, however it was extracted (magus's own AST
+walk or a foreign SCIP index).</p>
 <p>Symbol shards can dwarf the domain graph, so they are <strong>lazily loaded</strong>: the default
 query/stats/<code>graph open</code>/warm graph never touch them. They load only when a query is
 symbol-seeded - <code>kind:symbol</code>, a <code>symbol:</code> ID, <code>relation:defines</code>/<code>references</code>, or

@@ -91,7 +91,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>938 nodes</strong> and <strong>1492 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>942 nodes</strong> and <strong>1555 edges</strong> (schema v1). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -124,11 +124,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>spell</td>
 <td style="text-align:right">11</td>
 <td><code>magus query kind:spell</code></td>
-<td><code>go</code>, <code>buf</code>, <code>py</code></td>
+<td><code>go</code>, <code>py</code>, <code>rs</code></td>
 </tr>
 <tr>
 <td>op</td>
-<td style="text-align:right">43</td>
+<td style="text-align:right">47</td>
 <td><code>magus query kind:op</code></td>
 <td><code>go-build</code>, <code>go-fmt</code>, <code>go-mod-tidy</code></td>
 </tr>

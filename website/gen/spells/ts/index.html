@@ -76,7 +76,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#eslint" title="eslint">eslint</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#preflight" title="preflight">preflight</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#prettier" title="prettier">prettier</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#tsc" title="tsc">tsc</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#vitest" title="vitest">vitest</a><ul><li><a href="#gha" title="gha">gha</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#eslint" title="eslint">eslint</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#preflight" title="preflight">preflight</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#prettier" title="prettier">prettier</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li><li><a href="#tsc" title="tsc">tsc</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#vitest" title="vitest">vitest</a><ul><li><a href="#gha" title="gha">gha</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -104,25 +104,25 @@
 <td><code>args</code></td>
 <td><code>[str]</code></td>
 <td>Extra arguments appended to the resolved command. Omit it and a bare <code>ts[&quot;&lt;op&gt;&quot;]()</code> forwards <code>magus run &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>cwd</code></td>
 <td><code>str</code></td>
 <td>Working directory the command runs in. Defaults to the project directory.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L104" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>env</code></td>
 <td><code>{str: str}</code></td>
 <td>Environment variables set for the process, on top of the inherited environment.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L112" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>stdin</code></td>
 <td><code>str</code></td>
 <td>Data written to the command's standard input.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L119" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L120" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 </tbody>
 </table></figure>
@@ -183,6 +183,9 @@ export fun format(args: [str]) &gt; void {
     ts[&quot;prettier&quot;]();
 }
 </code></pre>
+<h2 id="scip">scip</h2>
+<p>scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. Run through sh so the env var expands.</p>
+<p><strong>Command:</strong> <code>sh -c scip-typescript index --output &quot;$MAGUS_SYMBOL_INDEX&quot;</code></p>
 <h2 id="tsc">tsc</h2>
 <p><strong>Command:</strong> <code>pnpm exec tsc</code></p>
 <h3 id="example-3">Example</h3>

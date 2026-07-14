@@ -76,7 +76,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#go-build" title="go-build">go-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#go-clean" title="go-clean">go-clean</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#go-fmt" title="go-fmt">go-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#go-generate" title="go-generate">go-generate</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#go-mod-tidy" title="go-mod-tidy">go-mod-tidy</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#go-test" title="go-test">go-test</a><ul><li><a href="#cd" title="cd">cd</a></li><li><a href="#debug" title="debug">debug</a></li><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#go-vet" title="go-vet">go-vet</a><ul><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#golangci-lint" title="golangci-lint">golangci-lint</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#govulncheck" title="govulncheck">govulncheck</a><ul><li><a href="#example-8" title="Example">Example</a></li></ul></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#go-build" title="go-build">go-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#go-clean" title="go-clean">go-clean</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#go-fmt" title="go-fmt">go-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#go-generate" title="go-generate">go-generate</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#go-mod-tidy" title="go-mod-tidy">go-mod-tidy</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#go-test" title="go-test">go-test</a><ul><li><a href="#cd" title="cd">cd</a></li><li><a href="#debug" title="debug">debug</a></li><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#go-vet" title="go-vet">go-vet</a><ul><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#golangci-lint" title="golangci-lint">golangci-lint</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#govulncheck" title="govulncheck">govulncheck</a><ul><li><a href="#example-8" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -103,25 +103,25 @@
 <td><code>args</code></td>
 <td><code>[str]</code></td>
 <td>Extra arguments appended to the resolved command. Omit it and a bare <code>go[&quot;&lt;op&gt;&quot;]()</code> forwards <code>magus run &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>cwd</code></td>
 <td><code>str</code></td>
 <td>Working directory the command runs in. Defaults to the project directory.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L104" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>env</code></td>
 <td><code>{str: str}</code></td>
 <td>Environment variables set for the process, on top of the inherited environment.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L112" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>stdin</code></td>
 <td><code>str</code></td>
 <td>Data written to the command's standard input.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L119" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L120" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 </tbody>
 </table></figure>
@@ -348,6 +348,9 @@ export fun lint(args: [str]) &gt; void {
     go[&quot;govulncheck&quot;]();
 }
 </code></pre>
+<h2 id="scip">scip</h2>
+<p>scip is the reserved op that runs the language's SCIP indexer for the knowledge graph. Named for the format, not the binary, so the same verb produces symbols across every language spell (<code>magus run &lt;project&gt;::scip</code>). magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. Run through sh so the env var expands.</p>
+<p><strong>Command:</strong> <code>sh -c scip-go --output &quot;$MAGUS_SYMBOL_INDEX&quot;</code></p>
     </article>
     </div>
     </div>
