@@ -253,6 +253,18 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, ar
 	return dispatchAdopted(withMagus(ctx, e.m), root, rc, args)
 }
 
+// cacheDir returns the cache directory of the loaded workspace at root, or "" when it is not
+// currently loaded. A cheap read (no lease): callers record best-effort activity for a job that
+// just ran in this workspace, so the entry is warm.
+func (r *wsRegistry) cacheDir(root string) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if e := r.entries[root]; e != nil && e.m != nil {
+		return e.m.CacheDir()
+	}
+	return ""
+}
+
 // status returns a snapshot of loaded workspaces for the Status RPC.
 func (r *wsRegistry) status() []proc.Workspace {
 	r.mu.Lock()

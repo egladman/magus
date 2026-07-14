@@ -143,6 +143,33 @@ func (l *Log) Close() error {
 	return l.f.Close()
 }
 
+// Append records a single event to the trail under cacheDir without holding a handle or
+// pruning - for low-frequency, payload-less producers (a daemon job, a config change, a token
+// mint) that record occasionally, unlike the MCP path which holds a *Log for every call. Best-
+// effort: an empty cacheDir or any I/O error is dropped, because the trail is never a
+// precondition for the action it records.
+func Append(cacheDir string, e Event) {
+	if cacheDir == "" {
+		return
+	}
+	dir := filepath.Join(cacheDir, Dir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	line, err := json.Marshal(e)
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(dir, eventsFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	// A single write() of a short line is atomic on a local fs; concurrent Appends from
+	// different producers do not interleave the way arbitrary large writes could.
+	_, _ = f.Write(append(line, '\n'))
+	_ = f.Close()
+}
+
 // ReadRecent returns up to limit events from the tail of the trail, newest first. A missing or
 // empty trail yields no events and no error. The file is opened read-only, so it is safe to
 // call while a writer appends. A corrupt line is skipped, not fatal.

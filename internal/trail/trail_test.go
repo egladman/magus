@@ -122,6 +122,34 @@ func TestPrune_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	}
 }
 
+func TestAppend_StatelessAndReadable(t *testing.T) {
+	dir := t.TempDir()
+	Append(dir, Event{Ts: 1, Kind: KindJob, Actor: "daemon", Action: "graph build", Outcome: OutcomeOK, DurMs: 50})
+	Append(dir, Event{Ts: 2, Kind: KindJob, Actor: "daemon", Action: "reindex", Outcome: OutcomeError, Error: "boom"})
+
+	events, err := ReadRecent(dir, 10)
+	if err != nil {
+		t.Fatalf("ReadRecent: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2", len(events))
+	}
+	if events[0].Action != "reindex" || events[0].Kind != KindJob || events[0].Outcome != OutcomeError {
+		t.Errorf("appended event not round-tripped: %+v", events[0])
+	}
+
+	// Append coexists with a held Log writing the same trail.
+	l := Open(dir)
+	l.Record(Event{Ts: 3, Kind: KindMCPToolCall, Action: "q"})
+	if err := l.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	events, _ = ReadRecent(dir, 10)
+	if len(events) != 3 {
+		t.Errorf("Append + Log.Record share the trail: got %d events, want 3", len(events))
+	}
+}
+
 func TestPutBlob_RejectsBadPrefix(t *testing.T) {
 	l := Open(t.TempDir())
 	for _, bad := range []string{"", "m", "MCP", "toolong99", "a1"} {

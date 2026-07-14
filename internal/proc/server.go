@@ -67,6 +67,11 @@ type Options struct {
 	WorkspaceLister func() []Workspace                             // optional; used by daemon Status RPC
 	ServiceLister   func() []types.StatusService                   // optional; hosted-services snapshot for the daemon Status RPC
 	ServiceHost     ServiceHost                                    // optional; hosts shared services across invocations (daemon only)
+	// OnJob, if set, is called after every BACKGROUND job (submitJob) completes - never for
+	// an adopted foreground run - with the job's args, wall-clock duration, and outcome. The
+	// ctx still carries Root/Cwd. The daemon uses it to record a KIND_JOB activity event; proc
+	// stays decoupled from the trail and cache layout.
+	OnJob func(ctx context.Context, args []string, dur time.Duration, err error)
 }
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
@@ -145,6 +150,7 @@ func New(opts Options) (*Server, error) {
 		version:         opts.Version,
 		workspaceLister: opts.WorkspaceLister,
 		serviceLister:   opts.ServiceLister,
+		onJob:           opts.OnJob,
 	}
 	srv := &Server{
 		ep:     ep,
@@ -356,6 +362,7 @@ type service struct {
 	workspaceLister func() []Workspace
 	serviceLister   func() []types.StatusService
 	serviceHost     ServiceHost
+	onJob           func(ctx context.Context, args []string, dur time.Duration, err error)
 	inflight        sync.Map // cycleKey → struct{}, for cycle detection
 	calls           sync.Map // uint64 id → *activeCall, for Status reporting
 	nextID          atomic.Uint64
@@ -500,7 +507,12 @@ func (s *service) submitJob(req JobRequest, reply *JobReply) error {
 		defer s.lim.Release()
 		// Yield the admission slot for the handler's duration, as run does, so the job
 		// competes fairly in the shared pool instead of pinning a slot.
-		if err := s.lim.Yield(ctx, func() error { return s.handler(ctx, req.Args) }); err != nil {
+		jobStart := time.Now()
+		err := s.lim.Yield(ctx, func() error { return s.handler(ctx, req.Args) })
+		if s.onJob != nil {
+			s.onJob(ctx, req.Args, time.Since(jobStart), err)
+		}
+		if err != nil {
 			slog.WarnContext(ctx, "proc: background job failed", slog.Any("args", req.Args), slog.String("error", err.Error()))
 		}
 	}()

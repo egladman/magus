@@ -2,6 +2,7 @@ package proc
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -36,6 +37,30 @@ func TestSubmitJobRunsAsync(t *testing.T) {
 		assert.Equal(t, []string{"graph", "build"}, got, "the handler runs with the submitted args")
 	case <-time.After(2 * time.Second):
 		t.Fatal("handler did not run")
+	}
+}
+
+func TestSubmitJobInvokesOnJob(t *testing.T) {
+	type call struct {
+		args []string
+		err  error
+	}
+	done := make(chan call, 1)
+	s := newJobService(func(context.Context, []string) error { return errors.New("boom") })
+	s.onJob = func(_ context.Context, args []string, dur time.Duration, err error) {
+		assert.GreaterOrEqual(t, dur, time.Duration(0))
+		done <- call{args, err}
+	}
+
+	var reply JobReply
+	require.NoError(t, s.submitJob(JobRequest{Magic: JobMagic, Args: []string{"reindex"}}, &reply))
+
+	select {
+	case got := <-done:
+		assert.Equal(t, []string{"reindex"}, got.args, "onJob sees the job args")
+		require.Error(t, got.err, "onJob sees the handler's error so the trail records it as error")
+	case <-time.After(2 * time.Second):
+		t.Fatal("onJob was not called for a background job")
 	}
 }
 

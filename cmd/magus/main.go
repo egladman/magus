@@ -62,6 +62,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -711,6 +712,9 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 			hctx = console.WithRunSink(hctx, daemonRuns)
 			return reg.dispatch(hctx, root, rc, args)
 		},
+		OnJob: func(jctx context.Context, args []string, dur time.Duration, err error) {
+			recordJobActivity(reg, jctx, args, dur, err)
+		},
 		WorkspaceLister: reg.status,
 		ServiceLister:   func() []types.StatusService { return serviceStatuses(svcReg) },
 		ServiceHost:     serviceHost{svcReg},
@@ -737,6 +741,33 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		svcReg.Shutdown() // stop every hosted service on daemon teardown
 		reg.close()
 	}()
+}
+
+// recordJobActivity writes a KIND_JOB event to the workspace's activity trail after a
+// background job (reindex, graph build, VCS refresh) completes. Best-effort: an unresolved or
+// evicted workspace is skipped. Ts is the job's start (completion minus its duration).
+func recordJobActivity(reg *wsRegistry, ctx context.Context, args []string, dur time.Duration, err error) {
+	root := proc.RootFromContext(ctx)
+	if root == "" {
+		root = proc.CwdFromContext(ctx)
+	}
+	cacheDir := reg.cacheDir(root)
+	if cacheDir == "" {
+		return
+	}
+	ev := trail.Event{
+		Ts:      time.Now().Add(-dur).UnixMilli(),
+		Kind:    trail.KindJob,
+		Actor:   "daemon",
+		Action:  strings.Join(args, " "),
+		Outcome: trail.OutcomeOK,
+		DurMs:   dur.Milliseconds(),
+	}
+	if err != nil {
+		ev.Outcome = trail.OutcomeError
+		ev.Error = err.Error()
+	}
+	trail.Append(cacheDir, ev)
 }
 
 func extractRootFlag(args []string) string {
