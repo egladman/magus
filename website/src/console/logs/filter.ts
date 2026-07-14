@@ -10,24 +10,11 @@ import { statusToken, stripAnsi } from "./ansi";
 import { el } from "./dom";
 import { clearMarks } from "./search";
 import { render } from "./render";
+import { parseQuery } from "./query";
 
-export function parseQuery(q: string): ParsedQuery {
-  const groups: ParsedQuery["groups"] = [];
-  const texts: string[] = [];
-  for (const tok of (q || "").trim().split(/\s+/)) {
-    if (!tok) continue;
-    const ci = tok.indexOf(":");
-    if (ci > 0) {
-      const key = tok.slice(0, ci).toLowerCase();
-      const val = tok.slice(ci + 1).toLowerCase();
-      if (val && (key === "target" || key === "status")) { groups.push({ key, value: val }); continue; }
-      if (val && key === "step") { texts.push(val); continue; }
-      // Unknown key (or empty value): fall through and treat the whole token as free text.
-    }
-    texts.push(tok.toLowerCase());
-  }
-  return { groups, texts, empty: groups.length === 0 && texts.length === 0 };
-}
+// parseQuery is the pure grammar; it lives in query.ts (DOM-free, unit-tested) and is
+// re-exported here so existing importers keep resolving it from filter.ts.
+export { parseQuery };
 
 // setFilter records a new filter string and its parsed form; render()/renderWaterfall read the
 // shared state.filterParsed, so every mode (static, live, demo) filters through the one path.
