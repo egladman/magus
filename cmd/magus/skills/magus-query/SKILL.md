@@ -1,5 +1,5 @@
 ---
-name: magus-knowledge-graph
+name: magus-query
 description: Use the magus knowledge graph to find and relate magus-domain entities (projects, targets, spells, ops, charms, modules, diagnostics, docs) instead of grepping. Trigger when working in a repo that uses magus and you need to know what exists, what depends on what, or how two entities relate.
 ---
 
@@ -10,6 +10,14 @@ find and relate entities instead of grepping source. This skill teaches HOW to u
 the tools; the repo's committed `MAGUS.md` says WHAT is in this specific workspace.
 The division is strict, so this skill never goes stale when a workspace changes -
 only when the tool surface does.
+
+FAST PATH: in a magus workspace (MAGUS.md at the root), any question shaped
+like "what exists / what depends on X / where is Y used / how do A and B
+relate" is a graph query FIRST - do not open Grep or Glob for it. Unlike a
+grep hit, a graph answer is verified: every edge is extracted from a declared
+source or scored by a rubric, and says which. If the graph cannot answer,
+say so and then fall back - a silent fallback hides the gap that should be
+reported.
 
 ## Act in this order
 
@@ -33,7 +41,15 @@ only when the tool surface does.
    Prefer these over grep and glob for anything in the magus domain. `magus_refs`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it
    is the occurrence-shaped def/references answer, so use it over `magus_query` for a
-   symbol's fan-in.
+   symbol's fan-in. When refs (or `kind:symbol`) reports no match for a symbol that
+   plainly exists, the index is probably unbuilt, not the name wrong: `magus status`
+   lists each project's symbol-index state; `magus graph build` indexes and rebuilds.
+
+   The graph relates entities; the evaluated dispatch plan lives one verb over.
+   `magus describe target <name>` prints, per project, the resolved source globs,
+   output globs (the generated files), spells, and policy for that target - use it
+   when the question is "what feeds or comes out of this target", not "what relates
+   to it".
 
 ## Query grammar
 
@@ -41,7 +57,9 @@ Free-text terms (AND) plus field filters and negation:
 
 - `build` - free text over IDs, labels, and docs
 - `kind:spell` - only that node kind
-- `project:pkg/foo` - a project and its targets
+- `project:pkg/foo` - everything the project owns: the project node, its
+  targets, and the files/functions/docs whose source lives under it (nested
+  projects claim their own; the root `.` owns only what no nested project does)
 - `relation:uses` - seed from nodes touching that edge
 - `id:build` - substring match on the node ID
 - `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
@@ -61,8 +79,11 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
   source) or `inferred` (a rubric score) - plus `provenance` (where it came from).
 - Node `attrs` surface metadata: a project's `engine` and `target_count`, a
   target's inherited `engine`, a doc's `title` and `tags`. The `duration_p75_ms`,
-  `cache_hit_rate`, and `run_samples` attrs are OBSERVED from local run history, not
-  derived from sources - read them as history, not guarantees. When `knowledge.vcs` is
+  `cache_hit_rate`, `run_samples`, `last_output_ref`, and `last_run_ok` attrs are
+  OBSERVED from local run history, not derived from sources - read them as history, not
+  guarantees. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
+  captured run (with `last_run_ok` its `true`/`false` outcome), so `magus query output
+  <ref>` on it fetches that output - a target-to-output hop. When `knowledge.vcs` is
   enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
   `vcs_commits` extracted from git history.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
