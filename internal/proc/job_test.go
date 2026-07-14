@@ -40,14 +40,14 @@ func TestSubmitJobRunsAsync(t *testing.T) {
 	}
 }
 
-func TestSubmitJobInvokesOnJob(t *testing.T) {
+func TestSubmitJobInvokesOnJobDone(t *testing.T) {
 	type call struct {
 		args []string
 		err  error
 	}
 	done := make(chan call, 1)
 	s := newJobService(func(context.Context, []string) error { return errors.New("boom") })
-	s.onJob = func(_ context.Context, args []string, dur time.Duration, err error) {
+	s.onJobDone = func(_ context.Context, args []string, dur time.Duration, err error) {
 		assert.GreaterOrEqual(t, dur, time.Duration(0))
 		done <- call{args, err}
 	}
@@ -57,10 +57,10 @@ func TestSubmitJobInvokesOnJob(t *testing.T) {
 
 	select {
 	case got := <-done:
-		assert.Equal(t, []string{"reindex"}, got.args, "onJob sees the job args")
-		require.Error(t, got.err, "onJob sees the handler's error so the trail records it as error")
+		assert.Equal(t, []string{"reindex"}, got.args, "onJobDone sees the job args")
+		require.Error(t, got.err, "onJobDone sees the handler's error so the trail records it as error")
 	case <-time.After(2 * time.Second):
-		t.Fatal("onJob was not called for a background job")
+		t.Fatal("onJobDone was not called for a background job")
 	}
 }
 

@@ -120,9 +120,13 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 // without requiring a workspace fixture, so it doubles as a guard against
 // the refactor accidentally calling os.Exit directly.
 func TestStartupNoArgsReturnsExitZero(t *testing.T) {
-	// Suppress any inherited daemon socket so the test doesn't forward to
-	// a real magus daemon on the host.
+	// Isolate socket discovery from the host: clearing MAGUS_DAEMON_SOCKET is not
+	// enough, because startup still scans proc.SockDir() for the stable daemon
+	// socket. Point that dir (XDG_RUNTIME_DIR/magus) at an empty temp dir so a real
+	// `magus server start` daemon running on the developer's machine is not found
+	// and forwarded to - otherwise its exit code, not this path's, is returned.
 	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
 	res, code := startup(context.Background(), nil)
 	if res.cleanup != nil {

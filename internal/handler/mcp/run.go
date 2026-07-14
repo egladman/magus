@@ -132,7 +132,7 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 
 	// Close the writer to flush the drain goroutine before parsing.
 	_ = rw.Close()
-	events := parseEventLines(&buf)
+	events := parseRunEvents(&buf)
 	out := runResult{
 		OK:         runErr == nil,
 		Charms:     charms,
@@ -147,8 +147,8 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 
 var _ types.SpellDriver = (*runTargetTool)(nil)
 
-// parseEventLines parses JSONL from buf into a slice of raw JSON objects.
-func parseEventLines(buf *bytes.Buffer) []codec.RawMessage {
+// parseRunEvents decodes the run report's JSONL buffer into a slice of raw JSON event objects.
+func parseRunEvents(buf *bytes.Buffer) []codec.RawMessage {
 	// Use a 1 MB scanner buffer — report lines can be large on wide workspaces.
 	scanner := bufio.NewScanner(buf)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)

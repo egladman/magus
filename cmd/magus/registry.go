@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
@@ -253,16 +255,39 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, ar
 	return dispatchAdopted(withMagus(ctx, e.m), root, rc, args)
 }
 
-// cacheDir returns the cache directory of the loaded workspace at root, or "" when it is not
-// currently loaded. A cheap read (no lease): callers record best-effort activity for a job that
-// just ran in this workspace, so the entry is warm.
-func (r *wsRegistry) cacheDir(root string) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if e := r.entries[root]; e != nil && e.m != nil {
-		return e.m.CacheDir()
+// recordJobActivity appends a KIND_JOB event to the daemon-wide activity trail after a background
+// job (reindex, graph build, VCS refresh) completes. It is the proc OnJobDone callback. The event
+// carries the job's workspace root (resolved from the context the same way the run handler does,
+// since the context holds the caller's cwd, not necessarily the root) so the single trail stays
+// disambiguated. Best-effort: an unresolvable root or an unset trail base (bridge not up) drops
+// the record. Ts is the job's start, completion minus its measured duration.
+func recordJobActivity(ctx context.Context, args []string, dur time.Duration, err error) {
+	base := daemonTrailBase
+	if base == "" {
+		return
 	}
-	return ""
+	root := proc.RootFromContext(ctx)
+	if root == "" {
+		resolved, ferr := magus.FindRoot(proc.CwdFromContext(ctx))
+		if ferr != nil {
+			return
+		}
+		root = resolved
+	}
+	ev := trail.Event{
+		Ts:        time.Now().Add(-dur).UnixMilli(),
+		Kind:      trail.KindJob,
+		Actor:     "daemon",
+		Workspace: root,
+		Action:    strings.Join(args, " "),
+		Outcome:   trail.OutcomeOK,
+		DurMs:     dur.Milliseconds(),
+	}
+	if err != nil {
+		ev.Outcome = trail.OutcomeError
+		ev.Error = err.Error()
+	}
+	trail.Append(base, ev)
 }
 
 // status returns a snapshot of loaded workspaces for the Status RPC.

@@ -173,7 +173,7 @@ var (
 	_ graphResolver = (*magus.Magus)(nil)
 )
 
-func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, tr *trail.Log) {
+func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, trailDir string) {
 	// The MCP tool ctx is not stamped with the telemetry provider, so grab the
 	// shared one here and close over it in wrap. Telemetry() returns a nil-safe
 	// disabledProvider when telemetry is off; a nil Magus (some test paths)
@@ -191,7 +191,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, tr, tel, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, trailDir, tel, adapt(t)))
 	}
 }
 
@@ -203,7 +203,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 // both sides of the exchange captured as content-addressed blobs - and records
 // the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
 // only; never by argument values or result content). A nil tel is a no-op.
-func wrap(log *slog.Logger, agentFn func(context.Context) string, tr *trail.Log, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
+func wrap(log *slog.Logger, agentFn func(context.Context) string, trailDir string, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		agentID := agentFn(ctx)
 		toolName := req.Params.Name
@@ -228,9 +228,9 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, tr *trail.Log,
 		// Capture both sides the agent exchanged with the tool as content-addressed blobs
 		// (prefixed "mcp"), keeping only refs on the event so a large body never bloats the
 		// trail line. Request = the tool arguments, response = the result text.
-		reqRef, reqBytes := tr.PutBlob("mcp", argsJSON(req.GetArguments()))
+		reqRef, reqBytes := trail.WriteBlob(trailDir, "mcp", argsJSON(req.GetArguments()))
 		respText := allText(result)
-		respRef, respBytes := tr.PutBlob("mcp", []byte(respText))
+		respRef, respBytes := trail.WriteBlob(trailDir, "mcp", []byte(respText))
 
 		dur := time.Since(start)
 		ev := trail.Event{
@@ -246,10 +246,10 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, tr *trail.Log,
 			ResponseBytes: respBytes,
 			Preview:       preview(respText, respPreviewLen),
 		}
-		// A failure is either a transport error (err != nil) OR a soft tool error: adapt()
-		// turns a validation/soft failure into an IsError result with a nil err, which is
-		// the COMMON failure mode. Both must read as error on the trail (and the metric,
-		// which takes ev.Outcome), or the audit view shows green for calls that failed.
+		// adapt() turns every validation/soft failure into an IsError result with a nil err, so
+		// result.IsError is the reachable failure signal; the err != nil arm is defensive against
+		// a future fn that returns a transport error. Both must read as error on the trail AND
+		// the metric (which takes ev.Outcome), or the view shows green for calls that failed.
 		switch {
 		case err != nil:
 			ev.Outcome = trail.OutcomeError
@@ -261,7 +261,7 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, tr *trail.Log,
 		default:
 			reqLog.Info("[AGENT] tool done", slog.Duration("duration", dur))
 		}
-		tr.Record(ev)
+		trail.Append(trailDir, ev)
 		if tel != nil {
 			// INPUT = the serialized tool arguments; OUTPUT = the response text length
 			// (same bytes captured above). Attribute by tool + outcome only to keep

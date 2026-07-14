@@ -25,7 +25,7 @@ enum Kind {
   // The remaining sources share this envelope; each is emitted once its producer records into
   // the trail, with no schema change. A reader/dashboard selects the kinds it wants (see
   // ActivityQuery.kinds), so one stream serves the agent view, a jobs view, and a full log.
-  KIND_JOB = 2;             // reserved: a daemon background job (SCIP reindex, graph build, VCS refresh)
+  KIND_JOB = 2;             // a daemon background job: SCIP reindex, graph build, VCS refresh (emitted)
   KIND_CONFIG_CHANGE = 3;   // reserved: magus.yaml changed on reload, or a `magus config set` mutation
   KIND_TOKEN_LIFECYCLE = 4; // reserved: a connector token was minted or revoked
   KIND_SANDBOX_DENIAL = 5;  // reserved: a target attempted a disallowed filesystem write
@@ -60,6 +60,11 @@ message ActivityEvent {
   string preview = 10;                   // opening characters of the response, for list views
   int64 request_bytes = 11;
   int64 response_bytes = 12;
+
+  // The workspace root the action pertained to; empty for a daemon-wide action not bound to one
+  // workspace (an MCP call). The trail is a single daemon-wide stream, so this disambiguates a
+  // job by its workspace rather than fragmenting the record across per-workspace directories.
+  string workspace = 13;
 }
 
 // ActivityService serves the trail to a viewer, mirroring magus.viewer.v1's shape: List a

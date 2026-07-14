@@ -58,7 +58,7 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req types.InvokeRequest) (
 
 	// Close the writer to flush the drain goroutine before parsing.
 	_ = rw.Close()
-	events := parseEventLines(&buf)
+	events := parseRunEvents(&buf)
 	out := runResult{
 		OK:         runErr == nil,
 		Charms:     charms,

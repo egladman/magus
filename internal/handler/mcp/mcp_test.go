@@ -48,7 +48,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
 		tel := &fakeTel{}
 		const out = "hello world result"
-		h := wrap(quietLogger(), agentFn, nil, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), agentFn, "", tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText(out), nil
 		})
 
@@ -67,7 +67,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 
 	t.Run("error outcome nil result contributes zero output", func(t *testing.T) {
 		tel := &fakeTel{}
-		h := wrap(quietLogger(), agentFn, nil, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), agentFn, "", tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return nil, errors.New("boom")
 		})
 
@@ -84,7 +84,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	})
 
 	t.Run("nil telemetry is a no-op", func(t *testing.T) {
-		h := wrap(quietLogger(), agentFn, nil, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), agentFn, "", nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText("ok"), nil
 		})
 		result, err := h(context.Background(), req)
@@ -97,19 +97,16 @@ func TestWrapCapturesExchange(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	tr := trail.Open(dir)
-	require.NotNil(t, tr)
 
 	agentFn := func(context.Context) string { return "test-agent" }
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 	const out = "hello world result payload"
-	h := wrap(quietLogger(), agentFn, tr, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), agentFn, dir, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText(out), nil
 	})
 
 	_, err := h(context.Background(), req)
 	require.NoError(t, err)
-	require.NoError(t, tr.Close())
 
 	events, err := trail.ReadRecent(dir, 10)
 	require.NoError(t, err)
@@ -140,16 +137,14 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	// adapt() turns a soft failure into an IsError result with a nil err. The trail (and the
 	// metric) must record it as error, not ok - the regression the review caught.
 	dir := t.TempDir()
-	tr := trail.Open(dir)
 	tel := &fakeTel{}
 	agentFn := func(context.Context) string { return "a" }
-	h := wrap(quietLogger(), agentFn, tr, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), agentFn, dir, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
 	})
 
 	_, err := h(context.Background(), callRequest("magus_query", map[string]any{"q": "x"}))
 	require.NoError(t, err) // the handler itself does not error
-	require.NoError(t, tr.Close())
 
 	events, err := trail.ReadRecent(dir, 10)
 	require.NoError(t, err)
@@ -200,25 +195,25 @@ func TestParamFloat(t *testing.T) {
 	assert.Equal(t, 2.0, paramFloat(nil, "n", 2.0))
 }
 
-func TestParseEventLines(t *testing.T) {
+func TestParseRunEvents(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty", func(t *testing.T) {
-		assert.Empty(t, parseEventLines(bytes.NewBufferString("")))
+		assert.Empty(t, parseRunEvents(bytes.NewBufferString("")))
 	})
 	t.Run("blank lines only", func(t *testing.T) {
-		assert.Empty(t, parseEventLines(bytes.NewBufferString("\n\n")))
+		assert.Empty(t, parseRunEvents(bytes.NewBufferString("\n\n")))
 	})
 	t.Run("single event", func(t *testing.T) {
-		assert.Len(t, parseEventLines(bytes.NewBufferString(`{"type":"run"}`)), 1)
+		assert.Len(t, parseRunEvents(bytes.NewBufferString(`{"type":"run"}`)), 1)
 	})
 	t.Run("two events", func(t *testing.T) {
-		assert.Len(t, parseEventLines(bytes.NewBufferString("{\"type\":\"a\"}\n{\"type\":\"b\"}")), 2)
+		assert.Len(t, parseRunEvents(bytes.NewBufferString("{\"type\":\"a\"}\n{\"type\":\"b\"}")), 2)
 	})
 	t.Run("whitespace around", func(t *testing.T) {
-		assert.Len(t, parseEventLines(bytes.NewBufferString("  {\"k\":1}  \n")), 1)
+		assert.Len(t, parseRunEvents(bytes.NewBufferString("  {\"k\":1}  \n")), 1)
 	})
 	t.Run("invalid json skipped", func(t *testing.T) {
-		assert.Len(t, parseEventLines(bytes.NewBufferString("not-json\n{\"ok\":true}")), 1)
+		assert.Len(t, parseRunEvents(bytes.NewBufferString("not-json\n{\"ok\":true}")), 1)
 	})
 }

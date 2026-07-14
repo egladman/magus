@@ -13,7 +13,7 @@ import (
 // names a target's output ref and that hints.go's chain hint fires on it. It
 // reconstructs the exact production path: the run engine records a target.result
 // event carrying the execution's ref (report.RunOptions copies cache.Result.Ref),
-// the run tool lifts those events into runResult via parseEventLines and marshals
+// the run tool lifts those events into runResult via parseRunEvents and marshals
 // it as the tool's JSON text, then decorateResult scans that text and appends the
 // magus_output chain hint naming the ref.
 func TestRunResultCarriesRefAndFiresChainHint(t *testing.T) {
@@ -31,7 +31,7 @@ func TestRunResultCarriesRefAndFiresChainHint(t *testing.T) {
 
 	// Build the tool result the way the run tools do, then marshal it to the JSON
 	// text the agent parses.
-	out := runResult{OK: true, DurationMs: 12, Events: parseEventLines(&buf)}
+	out := runResult{OK: true, DurationMs: 12, Events: parseRunEvents(&buf)}
 	require.Len(t, out.Events, 1, "expected the recorded target.result event")
 
 	result, err := jsonResult(out)

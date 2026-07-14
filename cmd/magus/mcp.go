@@ -83,6 +83,9 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 		slog.Warn("[AGENT] skipping: workspace unavailable", slog.String("error", err.Error()))
 		return
 	}
+	// Publish the daemon-wide activity-trail base so background-job recording lands in the same
+	// trail the MCP handler writes and the ActivityService reads (both off this Magus's cache dir).
+	daemonTrailBase = m.CacheDir()
 	// Keep a warm knowledge graph for MCP queries: the watcher invalidates it on
 	// source changes, so query/explain/path/stats answer from memory without
 	// re-parsing every magusfile per call. Non-fatal if it cannot start - the

@@ -62,7 +62,6 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -634,6 +633,15 @@ var daemonRuns *console.RunRegistry
 // runs. Same process, sequential, so the write happens-before the reads.
 var daemonServices *service.Registry
 
+// daemonTrailBase is the ONE daemon-wide activity-trail location: the bridge Magus's cache dir,
+// the same base the MCP handler writes to and the ActivityService reads from. startMCPWithDaemon
+// sets it after loading the bridge Magus; the proc OnJobDone callback reads it so every producer
+// (MCP calls, background jobs) appends to a single trail, disambiguated by Event.Workspace rather
+// than fragmented across per-workspace directories. Empty until the bridge starts (and stays
+// empty when MCP is disabled, when there is no console to read the trail anyway), so a job that
+// completes in that window is dropped best-effort.
+var daemonTrailBase string
+
 // startMultiWorkspaceDaemon starts the stable multi-workspace proc server for `magus server start`.
 // When cfg.Daemon.Workspaces is non-empty it eagerly loads declared workspaces and applies landlock.
 func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
@@ -712,9 +720,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 			hctx = console.WithRunSink(hctx, daemonRuns)
 			return reg.dispatch(hctx, root, rc, args)
 		},
-		OnJob: func(jctx context.Context, args []string, dur time.Duration, err error) {
-			recordJobActivity(reg, jctx, args, dur, err)
-		},
+		OnJobDone:       recordJobActivity,
 		WorkspaceLister: reg.status,
 		ServiceLister:   func() []types.StatusService { return serviceStatuses(svcReg) },
 		ServiceHost:     serviceHost{svcReg},
@@ -741,33 +747,6 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		svcReg.Shutdown() // stop every hosted service on daemon teardown
 		reg.close()
 	}()
-}
-
-// recordJobActivity writes a KIND_JOB event to the workspace's activity trail after a
-// background job (reindex, graph build, VCS refresh) completes. Best-effort: an unresolved or
-// evicted workspace is skipped. Ts is the job's start (completion minus its duration).
-func recordJobActivity(reg *wsRegistry, ctx context.Context, args []string, dur time.Duration, err error) {
-	root := proc.RootFromContext(ctx)
-	if root == "" {
-		root = proc.CwdFromContext(ctx)
-	}
-	cacheDir := reg.cacheDir(root)
-	if cacheDir == "" {
-		return
-	}
-	ev := trail.Event{
-		Ts:      time.Now().Add(-dur).UnixMilli(),
-		Kind:    trail.KindJob,
-		Actor:   "daemon",
-		Action:  strings.Join(args, " "),
-		Outcome: trail.OutcomeOK,
-		DurMs:   dur.Milliseconds(),
-	}
-	if err != nil {
-		ev.Outcome = trail.OutcomeError
-		ev.Error = err.Error()
-	}
-	trail.Append(cacheDir, ev)
 }
 
 func extractRootFlag(args []string) string {

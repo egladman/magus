@@ -436,7 +436,7 @@ func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 	return journal.InvocationFromEvents(inv, events), nil
 }
 
-// refPattern matches a full ref id or a hex prefix of one: the literal "ref" then
+// refPattern matches a full ref id or a hex prefix of one: the literal "out" then
 // one or more lowercase hex digits, anchored. The anchored hex tail is what makes
 // the no-delimiter prefix safe as a router key.
 var refPattern = regexp.MustCompile("^" + RefPrefix + "[0-9a-f]+$")
@@ -449,11 +449,11 @@ func LooksLikeRef(s string) bool {
 	return refPattern.MatchString(s)
 }
 
-// IsMintedRef reports whether s is a fully-minted reference id: the "ref" prefix followed
+// IsMintedRef reports whether s is a fully-minted reference id: the "out" prefix followed
 // by exactly refHexLen hex digits. Unlike LooksLikeRef, which accepts any-length hex prefix
 // so `magus query output` can take a git-style short ref, this rejects prefixes. Use it when
 // scanning free text for a chainable ref, so short English words whose tail is coincidentally
-// hex ("outace", "refed") are not mistaken for a ref.
+// hex ("outed", "outface") are not mistaken for a ref.
 func IsMintedRef(s string) bool {
 	return len(s) == len(RefPrefix)+refHexLen && refPattern.MatchString(s)
 }

@@ -54,9 +54,27 @@ func (s *Service) ListActivity(_ context.Context, req *connect.Request[activityv
 	filter := req.Msg.GetFilter()
 	out := make([]*activityv1.ActivityEvent, 0, len(events))
 	for _, e := range events {
-		if matchFilter(e, filter) {
-			out = append(out, toProto(e))
+		if !matchFilter(e, filter) {
+			continue
 		}
+		pe := &activityv1.ActivityEvent{
+			Time:          timestamppb.New(time.UnixMilli(e.Ts)),
+			Kind:          encodeKind(e.Kind),
+			Actor:         e.Actor,
+			Workspace:     e.Workspace,
+			Action:        e.Action,
+			Outcome:       encodeOutcome(e.Outcome),
+			Error:         e.Error,
+			RequestRef:    e.RequestRef,
+			ResponseRef:   e.ResponseRef,
+			Preview:       e.Preview,
+			RequestBytes:  e.RequestBytes,
+			ResponseBytes: e.ResponseBytes,
+		}
+		if e.DurMs > 0 {
+			pe.Duration = durationpb.New(time.Duration(e.DurMs) * time.Millisecond)
+		}
+		out = append(out, pe)
 	}
 	return connect.NewResponse(&activityv1.ListActivityResponse{Events: out}), nil
 }
@@ -94,26 +112,6 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 		}
 	}
 	return true
-}
-
-func toProto(e trail.Event) *activityv1.ActivityEvent {
-	pe := &activityv1.ActivityEvent{
-		Time:          timestamppb.New(time.UnixMilli(e.Ts)),
-		Kind:          encodeKind(e.Kind),
-		Actor:         e.Actor,
-		Action:        e.Action,
-		Outcome:       encodeOutcome(e.Outcome),
-		Error:         e.Error,
-		RequestRef:    e.RequestRef,
-		ResponseRef:   e.ResponseRef,
-		Preview:       e.Preview,
-		RequestBytes:  e.RequestBytes,
-		ResponseBytes: e.ResponseBytes,
-	}
-	if e.DurMs > 0 {
-		pe.Duration = durationpb.New(time.Duration(e.DurMs) * time.Millisecond)
-	}
-	return pe
 }
 
 func encodeKind(k string) activityv1.Kind {

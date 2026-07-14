@@ -46,7 +46,7 @@ const (
 	// The remaining sources share this envelope; each is emitted once its producer records into
 	// the trail, with no schema change. A reader/dashboard selects the kinds it wants (see
 	// ActivityQuery.kinds), so one stream serves the agent view, a jobs view, and a full log.
-	Kind_KIND_JOB             Kind = 2 // reserved: a daemon background job (SCIP reindex, graph build, VCS refresh)
+	Kind_KIND_JOB             Kind = 2 // a daemon background job: SCIP reindex, graph build, VCS refresh (emitted)
 	Kind_KIND_CONFIG_CHANGE   Kind = 3 // reserved: magus.yaml changed on reload, or a `magus config set` mutation
 	Kind_KIND_TOKEN_LIFECYCLE Kind = 4 // reserved: a connector token was minted or revoked
 	Kind_KIND_SANDBOX_DENIAL  Kind = 5 // reserved: a target attempted a disallowed filesystem write
@@ -171,6 +171,10 @@ type ActivityEvent struct {
 	Preview       string `protobuf:"bytes,10,opt,name=preview,proto3" json:"preview,omitempty"` // opening characters of the response, for list views
 	RequestBytes  int64  `protobuf:"varint,11,opt,name=request_bytes,json=requestBytes,proto3" json:"request_bytes,omitempty"`
 	ResponseBytes int64  `protobuf:"varint,12,opt,name=response_bytes,json=responseBytes,proto3" json:"response_bytes,omitempty"`
+	// The workspace root the action pertained to; empty for a daemon-wide action not bound to one
+	// workspace (an MCP call). The trail is a single daemon-wide stream, so this disambiguates a
+	// job by its workspace rather than fragmenting the record across per-workspace directories.
+	Workspace     string `protobuf:"bytes,13,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -287,6 +291,13 @@ func (x *ActivityEvent) GetResponseBytes() int64 {
 		return x.ResponseBytes
 	}
 	return 0
+}
+
+func (x *ActivityEvent) GetWorkspace() string {
+	if x != nil {
+		return x.Workspace
+	}
+	return ""
 }
 
 // ActivityQuery narrows the listing server-side. Fields AND together; repeated values within
@@ -572,7 +583,7 @@ var File_magus_activity_v1_activity_proto protoreflect.FileDescriptor
 
 const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\n" +
-	" magus/activity/v1/activity.proto\x12\x11magus.activity.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1amagus/query/v1/query.proto\"\xc7\x03\n" +
+	" magus/activity/v1/activity.proto\x12\x11magus.activity.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1amagus/query/v1/query.proto\"\xe5\x03\n" +
 	"\rActivityEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12+\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x17.magus.activity.v1.KindR\x04kind\x12\x14\n" +
@@ -587,7 +598,8 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\apreview\x18\n" +
 	" \x01(\tR\apreview\x12#\n" +
 	"\rrequest_bytes\x18\v \x01(\x03R\frequestBytes\x12%\n" +
-	"\x0eresponse_bytes\x18\f \x01(\x03R\rresponseBytes\"\x9f\x01\n" +
+	"\x0eresponse_bytes\x18\f \x01(\x03R\rresponseBytes\x12\x1c\n" +
+	"\tworkspace\x18\r \x01(\tR\tworkspace\"\x9f\x01\n" +
 	"\rActivityQuery\x12-\n" +
 	"\x05kinds\x18\x01 \x03(\x0e2\x17.magus.activity.v1.KindR\x05kinds\x12\x16\n" +
 	"\x06actors\x18\x02 \x03(\tR\x06actors\x12\x18\n" +

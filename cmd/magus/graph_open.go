@@ -110,11 +110,15 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
 	}
 
-	// Zero-arg default: when no explicit delivery mode is chosen and no --targets,
-	// probe the ACTUAL console first (not just the proc socket - a proc daemon
-	// can be up with no bridge running). If it is reachable, use --live for an
-	// always-fresh view; otherwise fall through to fragment mode.
-	if !useLive && !serve {
+	// Zero-arg default for the interactive open: when no explicit delivery mode is
+	// chosen and no --targets, probe the ACTUAL console first (not just the proc
+	// socket - a proc daemon can be up with no bridge running). If it is reachable,
+	// use --live for an always-fresh view; otherwise fall through to fragment mode.
+	// Skip the auto-probe under --print: that flag exists for scriptable, copyable
+	// output, so its URL must be deterministic (the static data fragment) rather than
+	// flipping to a live+token URL whenever a daemon happens to be listening. Explicit
+	// --live --print still prints the live URL.
+	if !useLive && !serve && !printOnly {
 		if liveBridgeReachable(ctx) {
 			useLive = true
 		}
