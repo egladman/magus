@@ -64,6 +64,8 @@ type Magus struct {
 	warmGraphOnce sync.Once
 	warmGraph     *warmGraph
 
+	symbolStatus symbolStatusCache
+
 	wsReg *WorkspaceRegistry
 
 	tel            observability.Provider

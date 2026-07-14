@@ -148,6 +148,11 @@ func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
 	if s.servicesFn != nil {
 		out.Services = s.servicesFn()
 	}
+	// Per-project SCIP index freshness, computed from this daemon's opened workspace so
+	// the dashboard shows the same "up to date / out of date" the CLI status does.
+	if s.magus != nil {
+		out.SymbolIndexes = s.magus.SymbolIndexStatus(ctx)
+	}
 	return out
 }
 

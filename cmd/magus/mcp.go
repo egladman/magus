@@ -91,6 +91,13 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	if _, werr := m.WatchKnowledgeGraph(ctx); werr != nil {
 		slog.Warn("[AGENT] knowledge-graph watcher unavailable; MCP queries will rebuild per call", slog.String("error", werr.Error()))
 	}
+	// Keep each symbol-capable project's SCIP index fresh in the background, so
+	// symbol queries and `magus refs` see current code without a manual scip run.
+	// Throttled and idle-gated; non-fatal if the watcher cannot start (symbols then
+	// go stale until a manual `magus run ::scip`).
+	if _, werr := m.WatchSymbolIndexing(ctx); werr != nil {
+		slog.Warn("[AGENT] symbol auto-indexer unavailable; symbol indexes will not refresh automatically", slog.String("error", werr.Error()))
+	}
 	// Capture the daemon's own socket now (set by startMultiWorkspaceDaemon)
 	// so the health handlers query this daemon, not whatever a per-request
 	// discovery scan happens to find.

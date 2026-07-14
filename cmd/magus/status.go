@@ -170,6 +170,9 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 			SelfUpdate: selfUpdateCompiled,
 			MCP:        true,
 		},
+		// Symbol-index freshness is workspace-local (a cache probe), independent of the
+		// daemon, so it is populated regardless of pool reachability.
+		SymbolIndexes: loadSymbolIndexStatus(ctx),
 	}
 	addr, err := resolveStatusSocket(ctx, socket)
 	if err != nil {
@@ -183,6 +186,19 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 	}
 	report.Pool = statusOutputFromReply(reply)
 	return report
+}
+
+// loadSymbolIndexStatus computes each symbol-capable project's SCIP index freshness,
+// best-effort: it opens the workspace read/write (a full load is needed for the cache
+// probe) and returns nil when there is no workspace here, so `magus status` outside a
+// magus tree simply omits the section.
+func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
+	m, err := loadMagus(ctx, "")
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = m.Close() }()
+	return m.SymbolIndexStatus(ctx)
 }
 
 // statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput.
@@ -323,6 +339,27 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 		}
 	} else {
 		fmt.Fprintln(w, "\ndaemon: off")
+	}
+
+	printSymbolIndexStatus(w, r.SymbolIndexes)
+}
+
+// printSymbolIndexStatus renders the per-project SCIP index freshness section, omitted
+// when no project is symbol-capable.
+func printSymbolIndexStatus(w io.Writer, indexes []types.SymbolIndexStatus) {
+	if len(indexes) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nsymbol indexes (%d)\n", len(indexes))
+	fmt.Fprintln(w, strings.Repeat("-", 60))
+	for _, s := range indexes {
+		lang := s.Language
+		if lang == "" {
+			lang = "-"
+		}
+		// Project.Display() shows the name, adding the path only when it differs (the
+		// workspace root: "magus (.)"), so the root never renders as a bare ".".
+		fmt.Fprintf(w, "  %-12s  %-30s  %s\n", s.Freshness, s.Project.Display(), lang)
 	}
 }
 

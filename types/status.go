@@ -40,6 +40,11 @@ type StatusReport struct {
 	// the daemon is set to do - the default charms it applies, the concurrency cap - without a
 	// round-trip to the terminal. Additive JSON, not on the proto event wire.
 	Config StatusConfig `json:"config,omitempty" yaml:"config,omitempty"`
+	// SymbolIndexes reports each symbol-capable project's SCIP index freshness (up to
+	// date / out of date / not indexed), so `magus status` and the dashboard show at a
+	// glance whether code symbols reflect current source. Empty when the workspace is
+	// unavailable or no project is symbol-capable.
+	SymbolIndexes []SymbolIndexStatus `json:"symbol_indexes,omitempty" yaml:"symbol_indexes,omitempty"`
 }
 
 // StatusConfig is the read-only slice of the daemon's resolved config surfaced on the status wire.
