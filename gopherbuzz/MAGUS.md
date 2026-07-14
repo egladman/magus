@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary
 
 ## Query first
 
-This workspace has a knowledge graph of **938 nodes** and **1492 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **942 nodes** and **1555 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -30,8 +30,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `gopherbuzz` |
 | target | 9 | `magus query kind:target` | `format`, `generate`, `build` |
-| spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
-| op | 43 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
+| spell | 11 | `magus query kind:spell` | `go`, `py`, `rs` |
+| op | 47 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |

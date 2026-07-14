@@ -16,7 +16,7 @@ Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary
 
 ## Query first
 
-This workspace has a knowledge graph of **525 nodes** and **659 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **530 nodes** and **688 edges** (schema v1). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -30,15 +30,15 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `website` |
 | target | 14 | `magus query kind:target` | `generate`, `ci`, `preflight` |
-| spell | 11 | `magus query kind:spell` | `go`, `buf`, `py` |
-| op | 43 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
+| spell | 11 | `magus query kind:spell` | `go`, `py`, `rs` |
+| op | 47 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 26 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
 | file | 23 | `magus query kind:file` | `scribe.buzz`, `magusfile.buzz`, `scribe_html.buzz` |
 | function | 212 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
-| import | 24 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
+| import | 25 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
@@ -76,9 +76,9 @@ graph LR
 <summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
 
 ```text
-sources  magusfile.buzz, magusfiles/**/*.buzz
+sources  **/*.js, **/*.json, **/*.jsx, **/*.ts, **/*.tsx, .npmrc, magusfile.buzz, magusfiles/**/*.buzz, npm-shrinkwrap.json, package-lock.json, package.json, pnpm-lock.yaml
 outputs  gen/**, MAGUS.md, src/gen/**
-spells   magusfile
+spells   magusfile, ts (claims: **/*.ts, **/*.tsx, **/*.mts, **/*.cts, **/*.js, **/*.mjs, **/*.cjs, **/*.jsx, **/*.json, **/*.jsonc, **/*.md, **/*.mdx, **/*.yaml, **/*.yml, **/*.css, **/*.scss, **/*.html)
 ```
 
 </details>
