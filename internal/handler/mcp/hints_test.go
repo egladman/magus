@@ -119,7 +119,7 @@ func TestWrapAppliesHintsAndCountsTheirBytes(t *testing.T) {
 		assert.Contains(t, resultText(result), "magus_query")
 
 		require.Len(t, tel.calls, 1)
-		assert.Equal(t, sumTextBytes(result), tel.calls[0].OutputBytes, "hint bytes count toward output size")
+		assert.Equal(t, int64(len(allText(result))), tel.calls[0].OutputBytes, "hint bytes count toward output size")
 	})
 
 	t.Run("plain success is not decorated", func(t *testing.T) {

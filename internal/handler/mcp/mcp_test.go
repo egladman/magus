@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/activity"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/trail"
 )
 
 // fakeTel records MCP calls for assertions. It embeds the wide Provider
@@ -97,41 +97,66 @@ func TestWrapCapturesExchange(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	trail := activity.Open(dir)
-	require.NotNil(t, trail)
+	tr := trail.Open(dir)
+	require.NotNil(t, tr)
 
 	agentFn := func(context.Context) string { return "test-agent" }
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 	const out = "hello world result payload"
-	h := wrap(quietLogger(), agentFn, trail, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), agentFn, tr, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText(out), nil
 	})
 
 	_, err := h(context.Background(), req)
 	require.NoError(t, err)
-	require.NoError(t, trail.Close())
+	require.NoError(t, tr.Close())
 
-	events, err := activity.ReadRecent(dir, 10)
+	events, err := trail.ReadRecent(dir, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	ev := events[0]
 
-	assert.Equal(t, activity.KindMCPToolCall, ev.Kind)
+	assert.Equal(t, trail.KindMCPToolCall, ev.Kind)
 	assert.Equal(t, "test-agent", ev.Actor)
 	assert.Equal(t, "magus_query", ev.Action)
-	assert.Equal(t, activity.OutcomeOK, ev.Outcome)
+	assert.Equal(t, trail.OutcomeOK, ev.Outcome)
 	assert.Equal(t, int64(len(out)), ev.ResponseBytes)
 	assert.Equal(t, out, ev.Preview) // a short response: the preview is the whole body
 	require.NotEmpty(t, ev.ResponseRef)
 	require.NotEmpty(t, ev.RequestRef) // the request arguments were captured too
 
 	// Each ref resolves back to the exact bytes the agent exchanged.
-	resp, err := activity.Blob(dir, ev.ResponseRef)
+	resp, err := trail.ReadBlob(dir, ev.ResponseRef)
 	require.NoError(t, err)
 	assert.Equal(t, out, string(resp))
-	reqBody, err := activity.Blob(dir, ev.RequestRef)
+	reqBody, err := trail.ReadBlob(dir, ev.RequestRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(reqBody), "kind:target")
+}
+
+func TestWrapRecordsSoftErrorAsError(t *testing.T) {
+	t.Parallel()
+
+	// adapt() turns a soft failure into an IsError result with a nil err. The trail (and the
+	// metric) must record it as error, not ok - the regression the review caught.
+	dir := t.TempDir()
+	tr := trail.Open(dir)
+	tel := &fakeTel{}
+	agentFn := func(context.Context) string { return "a" }
+	h := wrap(quietLogger(), agentFn, tr, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
+	})
+
+	_, err := h(context.Background(), callRequest("magus_query", map[string]any{"q": "x"}))
+	require.NoError(t, err) // the handler itself does not error
+	require.NoError(t, tr.Close())
+
+	events, err := trail.ReadRecent(dir, 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, trail.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
+	require.Len(t, tel.calls, 1)
+	assert.Equal(t, trail.OutcomeError, tel.calls[0].Outcome, "the metric must also see error")
 }
 
 func TestAllText(t *testing.T) {
@@ -148,22 +173,6 @@ func TestAllText(t *testing.T) {
 		},
 	}
 	assert.Equal(t, "abcde", allText(multi))
-}
-
-func TestSumTextBytes(t *testing.T) {
-	t.Parallel()
-
-	assert.Zero(t, sumTextBytes(nil))
-	assert.Equal(t, int64(len("abc")), sumTextBytes(mcplib.NewToolResultText("abc")))
-
-	multi := &mcplib.CallToolResult{
-		Content: []mcplib.Content{
-			mcplib.TextContent{Type: "text", Text: "ab"},
-			mcplib.ImageContent{Type: "image", Data: "ignored"},
-			mcplib.TextContent{Type: "text", Text: "cde"},
-		},
-	}
-	assert.Equal(t, int64(5), sumTextBytes(multi))
 }
 
 func TestParamString(t *testing.T) {

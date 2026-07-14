@@ -19,10 +19,10 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/activity"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -173,7 +173,7 @@ var (
 	_ graphResolver = (*magus.Magus)(nil)
 )
 
-func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, trail *activity.Log) {
+func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, tr *trail.Log) {
 	// The MCP tool ctx is not stamped with the telemetry provider, so grab the
 	// shared one here and close over it in wrap. Telemetry() returns a nil-safe
 	// disabledProvider when telemetry is off; a nil Magus (some test paths)
@@ -191,7 +191,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, trail, tel, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, tr, tel, adapt(t)))
 	}
 }
 
@@ -203,7 +203,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 // both sides of the exchange captured as content-addressed blobs - and records
 // the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
 // only; never by argument values or result content). A nil tel is a no-op.
-func wrap(log *slog.Logger, agentFn func(context.Context) string, trail *activity.Log, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
+func wrap(log *slog.Logger, agentFn func(context.Context) string, tr *trail.Log, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		agentID := agentFn(ctx)
 		toolName := req.Params.Name
@@ -228,36 +228,40 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, trail *activit
 		// Capture both sides the agent exchanged with the tool as content-addressed blobs
 		// (prefixed "mcp"), keeping only refs on the event so a large body never bloats the
 		// trail line. Request = the tool arguments, response = the result text.
-		reqRef, reqBytes := trail.PutBlob("mcp", argsJSON(req.GetArguments()))
+		reqRef, reqBytes := tr.PutBlob("mcp", argsJSON(req.GetArguments()))
 		respText := allText(result)
-		respRef, respBytes := trail.PutBlob("mcp", []byte(respText))
+		respRef, respBytes := tr.PutBlob("mcp", []byte(respText))
 
 		dur := time.Since(start)
-		ev := activity.Event{
-			TimeMs:        start.UnixMilli(),
-			Kind:          activity.KindMCPToolCall,
+		ev := trail.Event{
+			Ts:            start.UnixMilli(),
+			Kind:          trail.KindMCPToolCall,
 			Actor:         agentID,
 			Action:        toolName,
-			Outcome:       activity.OutcomeOK,
-			DurationMs:    dur.Milliseconds(),
+			Outcome:       trail.OutcomeOK,
+			DurMs:         dur.Milliseconds(),
 			RequestRef:    reqRef,
 			RequestBytes:  reqBytes,
 			ResponseRef:   respRef,
 			ResponseBytes: respBytes,
 			Preview:       preview(respText, respPreviewLen),
 		}
-		if err != nil {
-			ev.Outcome = activity.OutcomeError
+		// A failure is either a transport error (err != nil) OR a soft tool error: adapt()
+		// turns a validation/soft failure into an IsError result with a nil err, which is
+		// the COMMON failure mode. Both must read as error on the trail (and the metric,
+		// which takes ev.Outcome), or the audit view shows green for calls that failed.
+		switch {
+		case err != nil:
+			ev.Outcome = trail.OutcomeError
 			ev.Error = err.Error()
-			reqLog.Error(
-				"[AGENT] tool error",
-				slog.Duration("duration", dur),
-				slog.String("error", err.Error()),
-			)
-		} else {
+			reqLog.Error("[AGENT] tool error", slog.Duration("duration", dur), slog.String("error", err.Error()))
+		case result != nil && result.IsError:
+			ev.Outcome = trail.OutcomeError // the error text is the response body, captured above
+			reqLog.Warn("[AGENT] tool failed", slog.Duration("duration", dur))
+		default:
 			reqLog.Info("[AGENT] tool done", slog.Duration("duration", dur))
 		}
-		trail.Record(ev)
+		tr.Record(ev)
 		if tel != nil {
 			// INPUT = the serialized tool arguments; OUTPUT = the response text length
 			// (same bytes captured above). Attribute by tool + outcome only to keep
@@ -306,21 +310,15 @@ func allText(result *mcplib.CallToolResult) string {
 	return b.String()
 }
 
-// sumTextBytes totals the byte length of every text block in a tool result. Equal to
-// len(allText(result)); kept as the metric's name for the output-size instrument.
-func sumTextBytes(result *mcplib.CallToolResult) int64 {
-	return int64(len(allText(result)))
-}
-
-// preview returns the first max runes of s, appending an ellipsis marker when it had
-// to cut. Rune-aware so it never splits a multibyte character mid-way.
-func preview(s string, max int) string {
-	if max <= 0 {
+// preview returns the first n runes of s, appending an ellipsis marker when it had to cut.
+// Rune-aware so it never splits a multibyte character mid-way.
+func preview(s string, n int) string {
+	if n <= 0 {
 		return ""
 	}
 	r := []rune(s)
-	if len(r) <= max {
+	if len(r) <= n {
 		return s
 	}
-	return string(r[:max]) + "..."
+	return string(r[:n]) + "..."
 }

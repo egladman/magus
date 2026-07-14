@@ -22,7 +22,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
-	"github.com/egladman/magus/internal/activity"
+	"github.com/egladman/magus/internal/trail"
 )
 
 // sseHeartbeat is how often the Streamable-HTTP server pings an open GET (SSE)
@@ -110,8 +110,8 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, agentFn
 	if opts.Magus != nil {
 		cacheDir = opts.Magus.CacheDir()
 	}
-	trail := activity.Open(cacheDir)
-	registerTools(srv, opts, log, agentFn, trail)
+	tr := trail.Open(cacheDir)
+	registerTools(srv, opts, log, agentFn, tr)
 	return srv
 }
 

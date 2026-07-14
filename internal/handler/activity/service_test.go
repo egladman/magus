@@ -8,24 +8,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	activitystore "github.com/egladman/magus/internal/activity"
+	"github.com/egladman/magus/internal/trail"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
 )
 
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()
 	dir = t.TempDir()
-	l := activitystore.Open(dir)
+	l := trail.Open(dir)
 	require.NotNil(t, l)
 	respRef, _ = l.PutBlob("mcp", []byte("the result body"))
-	l.Record(activitystore.Event{
-		TimeMs: 1, Kind: activitystore.KindMCPToolCall, Actor: "claude",
-		Action: "magus_query", Outcome: activitystore.OutcomeOK,
-		ResponseRef: respRef, Preview: "the result body", DurationMs: 12,
+	l.Record(trail.Event{
+		Ts: 1, Kind: trail.KindMCPToolCall, Actor: "claude",
+		Action: "magus_query", Outcome: trail.OutcomeOK,
+		ResponseRef: respRef, Preview: "the result body", DurMs: 12,
 	})
-	l.Record(activitystore.Event{
-		TimeMs: 2, Kind: activitystore.KindTokenLifecycle, Actor: "cli",
-		Action: "connector.create", Outcome: activitystore.OutcomeOK,
+	l.Record(trail.Event{
+		Ts: 2, Kind: trail.KindTokenLifecycle, Actor: "cli",
+		Action: "connector.create", Outcome: trail.OutcomeOK,
 	})
 	require.NoError(t, l.Close())
 	return dir, respRef
