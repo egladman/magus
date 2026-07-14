@@ -121,3 +121,44 @@ state directory outside the repo, shared across branches, worktrees, sessions,
 and models). Both are pull-based: nothing is injected into an agent's context;
 an agent reads them when it chooses to. Captured build output is addressed by
 [output references](output-refs.md).
+
+## Why a daemon, not a wrapper
+
+The skeptical read is reasonable. If an agent can already run `magus query` in a
+shell, what does an MCP server add? If the server only ran the CLI and handed back
+its stdout, the answer would be nothing, plus a round trip. That is not what this
+server does, and the difference is the context the agent has to work with.
+
+An agent working through a shell falls back on the habits it learned everywhere
+else: grep and cat over the files. Those return text matches. They do not return
+the project DAG, the declared outputs, the affected set, or the blast radius of a
+symbol, because none of that is written in the files. It lives in the graph the
+daemon keeps warm. So the agent reasons one layer below the structure it is trying
+to understand, and it fills the gap by guessing: this file looks generated, these
+two packages probably change together. Those guesses are frequently wrong, and the
+agent has no way to check them.
+
+The tools answer from what the workspace declares. Ask `magus_describe_file` about
+a path and it does not read the filename and infer; it checks the project's own
+globs and reports `role: output` with the note "generated: never hand-edit,
+regenerate." In one case an agent spent close to an hour working out whether a
+committed `gen/` file was safe to edit, running generate repeatedly, planting
+sentinel writes, and diffing file timestamps, when one call to that tool would have
+answered it in a line. The fact was available the whole time. The shell path never
+retrieved it, because grep has no way to ask that question.
+
+The server adds three things a shell-out leaves on the floor. The first is
+discovery: the tools arrive in the model's context with their descriptions and
+parameters, so the agent knows they exist and how to call them without reading
+`--help` first. A shelled command only helps an agent that already knew to run it.
+The second is shape: results come back structured and sized for a model, carrying
+the fields that answer the question rather than a human-formatted table wrapped in
+color codes and pagination the model has to scrape and pay for by the token. The
+third is ground truth: the daemon reports what the workspace declares, which the
+agent can rely on, rather than what a text pattern happened to match, which it
+cannot.
+
+None of this comes from the protocol itself. A server that only shelled out would
+be a wrapper whether or not it spoke MCP. It earns its place by holding the warm
+graph and answering in the terms the agent reasons in. MCP is how that reaches the
+model; the value is in the graph and the curation.
