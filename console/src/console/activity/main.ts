@@ -33,43 +33,64 @@ interface Refs {
   refresh: HTMLButtonElement;
 }
 
-// buildScaffold assembles the surface DOM, reusing the log viewer's panel/toolbar/scroll classes
-// (logs.css) so the trail wears the same chrome as a run's output.
+// buildScaffold assembles the surface DOM on PatternFly - a PF Toolbar for the chrome, PF Buttons, and
+// a PF EmptyState for the cold state - matching the log viewer's migrated surface, so a run's output
+// and the trail read as one design. The trail entries themselves reuse the shared buildSection render
+// model into .log-body (kept + token-repointed in logs.css); .panel/.log-scroll/.log-body are the
+// escape-hatch frame classes logs.css still provides. The empty state carries the log-empty class
+// alongside the PF class only for logs.css's `.log-empty[hidden] { display: none }` toggle rule (PF's
+// EmptyState is display:flex, which would otherwise beat the hidden attribute).
 function buildScaffold(host: HTMLElement): Refs {
   const panel = h("section", "panel activity-app");
 
-  const bar = h("header", "file-bar");
-  const id = h("div", "file-bar-id");
-  id.append(h("span", "name", "Activity trail"));
+  // Toolbar: the trail title on the left, the connection note + Refresh button aligned to the right.
+  const bar = h("header", "pf-v6-c-toolbar");
+  const idContent = h("div", "pf-v6-c-toolbar__content");
+  const idSection = h("div", "pf-v6-c-toolbar__content-section");
+  const idItem = h("div", "pf-v6-c-toolbar__item");
+  idItem.append(h("span", "name", "Activity trail"));
+  idSection.append(idItem);
+  idContent.append(idSection);
+
+  const ctrlContent = h("div", "pf-v6-c-toolbar__content");
+  const ctrlSection = h("div", "pf-v6-c-toolbar__content-section");
+  const actionGroup = h("div", "pf-v6-c-toolbar__group pf-m-action-group pf-m-align-end");
+  const connItem = h("div", "pf-v6-c-toolbar__item");
   const conn = h("span", "activity-conn");
-  const actions = h("div", "log-actions");
-  const group = h("div", "btn-group");
-  const refresh = h("button", "outline") as HTMLButtonElement;
+  connItem.append(conn);
+  const btnItem = h("div", "pf-v6-c-toolbar__item");
+  const refresh = h("button", "pf-v6-c-button pf-m-secondary pf-m-small") as HTMLButtonElement;
   refresh.type = "button";
   refresh.title = "Reload the trail";
-  refresh.append(h("span", "btn-label", "Refresh"));
-  group.append(refresh);
-  actions.append(conn, group);
-  bar.append(id, actions);
+  const refreshIcon = h("span", "pf-v6-c-button__icon pf-m-start");
+  refreshIcon.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>';
+  refresh.append(refreshIcon, h("span", "pf-v6-c-button__text btn-label", "Refresh"));
+  btnItem.append(refresh);
+  actionGroup.append(connItem, btnItem);
+  ctrlSection.append(actionGroup);
+  ctrlContent.append(ctrlSection);
+  bar.append(idContent, ctrlContent);
 
   const scroll = h("div", "log-scroll");
   const body = h("div", "log-body");
 
-  const empty = h("div", "log-empty");
-  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  icon.setAttribute("class", "console-empty-icon");
-  icon.setAttribute("viewBox", "0 0 24 24");
-  icon.setAttribute("fill", "none");
-  icon.setAttribute("stroke", "currentColor");
-  icon.setAttribute("stroke-width", "1.5");
-  icon.innerHTML = '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/>';
-  const emptyTitle = h("p", "console-empty-title", "No daemon connected");
-  const emptySub = h("p", "console-empty-sub");
+  const empty = h("div", "pf-v6-c-empty-state log-empty");
+  const emptyContent = h("div", "pf-v6-c-empty-state__content");
+  const emptyIcon = h("div", "pf-v6-c-empty-state__icon");
+  emptyIcon.setAttribute("aria-hidden", "true");
+  emptyIcon.innerHTML = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/></svg>';
+  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "No daemon connected");
+  const emptyBody = h("div", "pf-v6-c-empty-state__body");
+  const emptySub = h("p");
   emptySub.textContent = "The activity trail records what the daemon did - MCP calls, jobs, config changes. Start the daemon and open the live link, or see the demo.";
-  const demoBtn = h("button", "outline") as HTMLButtonElement;
+  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
+  const demoBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small") as HTMLButtonElement;
   demoBtn.type = "button";
-  demoBtn.append(h("span", "btn-label", "See the demo"));
-  empty.append(icon, emptyTitle, emptySub, demoBtn);
+  demoBtn.append(h("span", "pf-v6-c-button__text btn-label", "See the demo"));
+  emptyActions.append(demoBtn);
+  emptyBody.append(emptySub, emptyActions);
+  emptyContent.append(emptyIcon, emptyTitle, emptyBody);
+  empty.append(emptyContent);
 
   scroll.append(body, empty);
   panel.append(bar, scroll);
