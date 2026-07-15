@@ -30,6 +30,27 @@ func TestDiagEventFromError(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestMakeHandler_PreflightGenerateFireOnVariantSpellings(t *testing.T) {
+	// makeHandler special-cases the exact strings "preflight"/"generate"
+	// (run.go). types.ParseTarget normalizes the CLI's raw spelling before it
+	// ever reaches makeHandler, so a variant invocation still resolves to the
+	// canonical name the special-casing checks against.
+	for _, in := range []string{"preflight", "Preflight", "PREFLIGHT"} {
+		parsed, err := types.ParseTarget(in)
+		assert.NoErrorf(t, err, "ParseTarget(%q)", in)
+		assert.Equalf(t, "preflight", parsed.Name, "ParseTarget(%q).Name", in)
+	}
+	for _, in := range []string{"generate", "Generate", "GENERATE"} {
+		parsed, err := types.ParseTarget(in)
+		assert.NoErrorf(t, err, "ParseTarget(%q)", in)
+		assert.Equalf(t, "generate", parsed.Name, "ParseTarget(%q).Name", in)
+	}
+
+	var m *Magus
+	h := m.makeHandler("generate")
+	assert.NotNil(t, h)
+}
+
 func TestDiagCollectorCollects(t *testing.T) {
 	d := &diagCollector{} // nil report writer: RecordDiagnostic must still collect
 	d.RecordDiagnostic(types.DiagnosticEvent{Unit: "a:build", Code: types.ExecDenied})

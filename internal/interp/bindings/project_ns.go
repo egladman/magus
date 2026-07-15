@@ -153,6 +153,9 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			if !ok || !pv.IsMap() {
 				continue
 			}
+			// name is normalized by workspace.WithTarget, so a policy declared
+			// under any spelling (skipCache/skip_cache aside) matches a target
+			// invoked under any other.
 			if sv, ok := pv.MapGet("skipCache"); ok && sv.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache()))
 			}

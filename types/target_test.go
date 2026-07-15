@@ -30,6 +30,14 @@ func TestParseTarget(t *testing.T) {
 	assert.Equal(t, Target{Name: "api", Charms: []string{"build"}}, got)
 }
 
+func TestParseTarget_NormalizesName(t *testing.T) {
+	for _, in := range []string{"go-build", "go_build", "goBuild"} {
+		got, err := ParseTarget(in)
+		require.NoError(t, err)
+		assert.Equalf(t, Target{Name: "go-build"}, got, "ParseTarget(%q)", in)
+	}
+}
+
 func TestParseTarget_Errors(t *testing.T) {
 	invalid := []string{
 		"lint:",           // empty charm

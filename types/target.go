@@ -144,6 +144,7 @@ func ParseTarget(s string) (Target, error) {
 	if err := ValidateTargetName(target); err != nil {
 		return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 	}
+	target = DefaultTargetNameNormalizer.NormalizeTargetName(target)
 	return Target{Name: target, Charms: charms}, nil
 }
 

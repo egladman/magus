@@ -282,11 +282,12 @@ func (r *Tracer) traceProject(path string, opts vm.Value) {
 			}
 		}
 		if v, ok := opts.MapGet("targets"); ok && v.IsMap() {
-			for _, name := range v.MapKeys() {
-				pv, ok := v.MapGet(name)
+			for _, rawName := range v.MapKeys() {
+				pv, ok := v.MapGet(rawName)
 				if !ok || !pv.IsMap() {
 					continue
 				}
+				name := types.DefaultTargetNameNormalizer.NormalizeTargetName(rawName)
 				// Per-target policy mirrors the real binding (project_ns.go):
 				// skipCache opts the target out of the cache; exclusive runs it
 				// alone against the batch.

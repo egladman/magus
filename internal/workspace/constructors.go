@@ -52,8 +52,11 @@ func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	}
 }
 
-// WithTarget attaches a behavioural policy to the named target.
+// WithTarget attaches a behavioural policy to the named target. name is
+// normalized (see types.DefaultTargetNameNormalizer) so a policy declared
+// under any spelling matches the target under any other.
 func WithTarget(name string, opts ...TargetOption) ProjectOption {
+	name = types.DefaultTargetNameNormalizer.NormalizeTargetName(name)
 	return func(p *types.Project) error {
 		if p.TargetPolicies == nil {
 			p.TargetPolicies = make(map[string]types.Target)
