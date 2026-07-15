@@ -199,7 +199,7 @@ type KnowledgeEdge struct {
 	Provenance string  `json:"provenance,omitempty" yaml:"provenance,omitempty"`
 }
 
-// Retrieval-verb definitions (query/explain/path). These complement describe
+// Retrieval-subcommand definitions (query/explain/path). These complement describe
 // ("what is declared"): explain answers "how is it connected".
 const (
 	KnowledgeQueryDefinition = "query resolves search terms to knowledge-graph " +

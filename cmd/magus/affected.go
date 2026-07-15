@@ -292,7 +292,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// registry, carried on ctx; a plain CLI run has no sink, so this is empty there.
 	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
-		Verb: "affected", Args: args, Cwd: cwd, Trigger: trigger,
+		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
 

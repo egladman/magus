@@ -66,6 +66,13 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if sym.Moniker != "" {
 			attrs["moniker"] = sym.Moniker
 		}
+		// Tested-by lens: how many referencing files are tests. Derived from the same
+		// SCIP reference edges (no new data), so it rides this deterministic shard rather
+		// than the observed coverage overlay. Absent (0) means no test directly names the
+		// symbol - a coverage-independent hint that a symbol may be under-tested.
+		if n := testRefCount(sym.Refs); n > 0 {
+			attrs[AttrTestRefs] = strconv.Itoa(n)
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     sID,
 			Kind:   types.KindSymbol,
@@ -83,6 +90,19 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 	}
 	return s
+}
+
+// testRefCount counts the referencing files that are Go test files (path ends in
+// "_test.go"). One entry per file (SCIP collapses a file's occurrences), so this is the
+// number of distinct test files that name the symbol, not the raw occurrence count.
+func testRefCount(refs []types.KnowledgeSymbolRef) int {
+	n := 0
+	for _, ref := range refs {
+		if strings.HasSuffix(ref.Path, "_test.go") {
+			n++
+		}
+	}
+	return n
 }
 
 // refProvenance encodes a reference's occurrence count and capped line list into the

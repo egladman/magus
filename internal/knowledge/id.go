@@ -149,3 +149,26 @@ const (
 	// the ref's outcome is legible from the node without fetching the output.
 	AttrLastRunOK = "last_run_ok"
 )
+
+// Coverage attribute keys. Like the runtime keys these are OBSERVED - parsed from the
+// local Go coverage profile magus produces (`magus run coverage`), not from workspace
+// sources - so they ride an isolated, lazily-loaded @coverage shard that folds onto the
+// file and symbol nodes SCIP already minted. They answer "which code lacks coverage"
+// straight off a node. Absent when no profile covers the file/symbol.
+const (
+	// AttrCoverage is the covered-statement ratio, formatted "0.NN" (0.00 = fully
+	// uncovered, 1.00 = fully covered). The headline "which code lacks coverage" signal.
+	AttrCoverage = "coverage"
+	// AttrCoveredStmts is how many statements the profile recorded at least one hit for.
+	AttrCoveredStmts = "covered_stmts"
+	// AttrTotalStmts is the instrumented statement count backing the ratio - the
+	// denominator, so a 0/0 file is distinguishable from a small sample.
+	AttrTotalStmts = "total_stmts"
+)
+
+// AttrTestRefs is a symbol's count of referencing files whose path ends in _test.go -
+// the cheap "tested-by" lens derived from the SCIP reference edges already in the
+// @symbols shard (no new data source). A zero count is omitted, so its presence means
+// "some test references this symbol"; absence means none do (a coverage-independent
+// signal, since a symbol can be exercised transitively without a direct test reference).
+const AttrTestRefs = "test_refs"

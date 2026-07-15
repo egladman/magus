@@ -67,8 +67,8 @@ enum Trigger {
 
 // Command is the invoking command line and context - what was asked of magus.
 message Command {
-  string verb = 1;             // the subcommand: run, affected, ci, x, watch, ...
-  repeated string args = 2;    // the argument vector after the verb (targets, projects, flags)
+  repeated string arguments = 1;  // the full argument vector, subcommand included (e.g. ["run", "build", "api"])
+  reserved 2;                     // was: repeated string args (merged into arguments)
   string cwd = 3;              // directory the command was invoked in
   Trigger trigger = 4;
 }

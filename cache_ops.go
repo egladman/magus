@@ -126,7 +126,7 @@ func (m *Magus) OutputByRef(ref string) ([]byte, cache.OutputDescriptor, error) 
 }
 
 // InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header - the command
-// lineage (verb/args/trigger), timing, and outcome - read from the union run log. It is the
+// lineage (subcommand/args/trigger), timing, and outcome - read from the union run log. It is the
 // lineage source for `magus query output <ref> --meta` and the viewer. Returns fs.ErrNotExist when
 // the run log has aged out.
 func (m *Magus) InvocationByID(inv string) (journal.Invocation, error) {

@@ -13,7 +13,7 @@ import (
 // copy can fall behind, and nothing else notices. Run in CI (`--strict` makes drift
 // a non-zero exit) to catch a stale install before it misleads an agent. Other
 // derived artifacts (the committed MAGUS.md routing table, immutable-cache shards)
-// are candidates for this same verb later.
+// are candidates for this same subcommand later.
 func graphVerify(_ context.Context, root string, args []string) error {
 	fset := flag.NewFlagSet("graph verify", flag.ContinueOnError)
 	strict := fset.Bool("strict", false, "exit non-zero when any drift is found (CI guard)")

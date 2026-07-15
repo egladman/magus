@@ -19,7 +19,7 @@ func TestLogViewerURL(t *testing.T) {
 		{Ts: 2, Kind: journal.KindResult, Status: journal.StatusFail, Ref: "outdeadbeef"},
 	}
 	url, err := LogViewerURL(base, "outdeadbeef", events,
-		journal.Invocation{ID: "inv1", Command: journal.Command{Verb: "run", Args: []string{"build"}}})
+		journal.Invocation{ID: "inv1", Command: journal.Command{Arguments: []string{"run", "build"}}})
 	require.NoError(t, err)
 
 	assert.True(t, strings.HasPrefix(url, base+"#ref=outdeadbeef&data="),

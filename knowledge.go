@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
+	"golang.org/x/mod/modfile"
 )
 
 // BuildGlobalKnowledgeGraph unions the current workspace with each registered one
@@ -157,6 +158,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		}),
 		VCS:      loadKnowledgeVCS(ctx, cfg, root, cacheDir, log),
 		Commands: loadKnowledgeCommands(ws, graph, log),
+		Coverage: loadKnowledgeCoverage(root),
 	}
 	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
@@ -198,6 +200,33 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 		return cmp.Compare(a.Target, b.Target)
 	})
 	return out
+}
+
+// loadKnowledgeCoverage reads the local Go coverage profile (best-effort) into per-file
+// coverage for the observed @coverage overlay. The profile is coverage.out at the
+// workspace root - what `magus run coverage` writes - and its lines are module-qualified,
+// so the module path from go.mod is stripped to recover the workspace-relative paths the
+// file/symbol nodes use. A missing profile, an unreadable go.mod, or a profile with no
+// data yields no coverage, so the attrs are simply absent, never an error: a workspace
+// that never ran coverage behaves exactly as before. Re-read each build, mirroring the
+// timing/output-ref overlays, so the ratio stays fresh without a schema bump.
+func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
+	if root == "" {
+		return nil
+	}
+	profile, err := os.ReadFile(filepath.Join(root, "coverage.out"))
+	if err != nil {
+		return nil // no profile produced yet
+	}
+	gomod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return nil // without the module path the qualified profile paths cannot be rebased
+	}
+	module := modfile.ModulePath(gomod)
+	if module == "" {
+		return nil
+	}
+	return knowledge.ParseCoverage(profile, module)
 }
 
 // loadKnowledgeOutputRefs reads the local output store (best-effort) for each target's

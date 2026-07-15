@@ -245,7 +245,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// carried on ctx; a plain CLI run has no sink, so this is empty there.
 	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
-		Verb: "run", Args: args, Cwd: cwd, Trigger: trigger,
+		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
 

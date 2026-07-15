@@ -13,10 +13,9 @@ const (
 // Command is the invoking command line and context, captured at the CLI edge so the viewer
 // can show a run's lineage - what was asked of magus.
 type Command struct {
-	Verb    string   `json:"verb"`              // the subcommand: run, affected, ci, x, watch, ...
-	Args    []string `json:"args,omitempty"`    // the argument vector after the verb
-	Cwd     string   `json:"cwd,omitempty"`     // directory the command was invoked in
-	Trigger string   `json:"trigger,omitempty"` // one of the Trigger* constants
+	Arguments []string `json:"arguments,omitempty"` // the full argument vector, subcommand included (e.g. ["run", "build", "api"])
+	Cwd       string   `json:"cwd,omitempty"`       // directory the command was invoked in
+	Trigger   string   `json:"trigger,omitempty"`   // one of the Trigger* constants
 }
 
 // Invocation is one magus command, launch to exit - the thing that produces a journal of

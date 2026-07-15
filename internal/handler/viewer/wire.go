@@ -56,10 +56,9 @@ func invocationToProto(inv journal.Invocation) *viewerv1.Invocation {
 
 func commandToProto(c journal.Command) *viewerv1.Command {
 	return &viewerv1.Command{
-		Verb:    c.Verb,
-		Args:    c.Args,
-		Cwd:     c.Cwd,
-		Trigger: triggerToProto(c.Trigger),
+		Arguments: c.Arguments,
+		Cwd:       c.Cwd,
+		Trigger:   triggerToProto(c.Trigger),
 	}
 }
 

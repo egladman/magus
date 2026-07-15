@@ -75,6 +75,59 @@ A query resolves terms to seed nodes, then collects the induced neighborhood up
 to a node budget (`--budget`, default 50), so a match on a high-degree node
 cannot pull in the whole graph.
 
+## Questions you can ask
+
+Recipes for the graph as a lens on the workspace. Rebuild first with `magus graph
+build` if you want it fresh; combine field filters freely.
+
+**What commands does the workspace actually run?** magus owns the task layer, so it
+knows the concrete tool invocations behind every target - not just the source.
+
+```sh
+magus query "kind:command"                # every concrete command a target runs
+magus explain "command:tool:go"           # everywhere the workspace shells out to go
+magus query "kind:command language:go"    # commands the go toolchain runs
+```
+
+Command nodes are extracted from each target's evaluated dispatch plan, so they
+carry the real argv (on the `argv` attr); the `command:tool:<tool>` grouping node
+links every command that runs the same base tool.
+
+**Where does a function or symbol live (as `path:line`), and where is it used?**
+
+```sh
+magus refs <name>                          # the definition + every reference, each as path:line
+magus explain "symbol:<id>"                # the node's `source` is the definition's path:line
+magus query "kind:symbol <name>" -o json   # each match's `.source` is "path:line"
+```
+
+Symbol nodes carry their definition as `source: "path:line"`, and `refs` returns
+every reference the same way. An agent (or an MCP tool) can read the exact line
+straight from the graph and edit surgically instead of loading the whole file.
+
+**Where does risk concentrate?**
+
+```sh
+magus insight hotspots    # churn x complexity per project, with blast radius
+magus insight affinity    # projects that change together: hidden coupling
+magus insight ownership   # author concentration and bus factor
+magus explain <node>      # a node's edges and how many nodes reach it (blast radius)
+magus path <a> <b>        # the shortest edge chain between two nodes
+```
+
+**Which code lacks test coverage?** magus runs the tests, so it owns the coverage
+profile - a pure code-graph tool cannot answer this.
+
+```sh
+magus explain "symbol:<id>"      # a function's coverage ratio + test_refs (test files that reference it)
+magus query "kind:file" -o json  # each file node's attrs.coverage (covered/total statements)
+```
+
+After `magus run coverage` (or `ci`), a `coverage` attr (with `covered_stmts` /
+`total_stmts`) folds onto file and symbol nodes, and `test_refs` counts the test files
+that reference a symbol. Sort symbols by `coverage` ascending for "what is untested",
+or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
+
 ## Graph Explorer
 
 `magus graph open` opens the graph in an interactive, force-directed

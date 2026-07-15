@@ -63,6 +63,12 @@ type Inputs struct {
 	// (empty Command) are skipped. Deterministic (static argv, no charms), so it rides the
 	// project shard rather than the isolated @runtime one.
 	Commands []types.KnowledgeCommand
+	// Coverage carries per-file statement coverage parsed from the local Go coverage
+	// profile (empty unless a profile is present). Like Runtime/Timings it is observed,
+	// not extracted, so it lands in the isolated @coverage shard - folding a coverage
+	// ratio onto the file (and, via SCIP def lines, symbol) nodes rather than churning
+	// the deterministic @symbols shards it annotates.
+	Coverage []FileCoverage
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -148,6 +154,12 @@ func AssembleShards(in Inputs) []Shard {
 		if s := assembleSymbols(project, in.Symbols[project], in.Graph.Projects); len(s.Nodes) > 0 {
 			shards = append(shards, s)
 		}
+	}
+	// The observed coverage overlay: a single isolated shard folding a coverage ratio
+	// onto the file/symbol nodes above. Lazily loaded (its targets are), so an empty
+	// shard is dropped rather than persisted.
+	if c := assembleCoverage(in.Coverage, in.Symbols); len(c.Nodes) > 0 {
+		shards = append(shards, c)
 	}
 	return shards
 }

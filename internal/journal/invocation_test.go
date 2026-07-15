@@ -11,7 +11,7 @@ import (
 // supplies the end time and outcome - no separate metadata file.
 func TestInvocationFromEvents(t *testing.T) {
 	events := []Event{
-		{Ts: 100, Kind: KindStarted, MagusVersion: "v2", Command: &Command{Verb: "affected", Args: []string{"ci"}, Trigger: TriggerCI}},
+		{Ts: 100, Kind: KindStarted, MagusVersion: "v2", Command: &Command{Arguments: []string{"affected", "ci"}, Trigger: TriggerCI}},
 		{Ts: 150, Kind: KindOutput, Text: "building"},
 		{Ts: 220, Kind: KindResult, Status: StatusPass},
 		{Ts: 230, Kind: KindFinished, Status: StatusFail},
@@ -22,14 +22,14 @@ func TestInvocationFromEvents(t *testing.T) {
 	assert.Equal(t, int64(230), inv.FinishedMs, "finish is the finished event's timestamp")
 	assert.Equal(t, StatusFail, inv.Status, "overall outcome comes from the finished event")
 	assert.Equal(t, "v2", inv.MagusVersion)
-	assert.Equal(t, Command{Verb: "affected", Args: []string{"ci"}, Trigger: TriggerCI}, inv.Command)
+	assert.Equal(t, Command{Arguments: []string{"affected", "ci"}, Trigger: TriggerCI}, inv.Command)
 }
 
 // TestInvocationFromEventsNoFinished confirms an interrupted stream (no finished event)
 // falls back to the last event's timestamp for finish.
 func TestInvocationFromEventsNoFinished(t *testing.T) {
 	inv := InvocationFromEvents("inv1", []Event{
-		{Ts: 500, Kind: KindStarted, Command: &Command{Verb: "run"}},
+		{Ts: 500, Kind: KindStarted, Command: &Command{Arguments: []string{"run"}}},
 		{Ts: 560, Kind: KindOutput, Text: "line"},
 	})
 	assert.Equal(t, int64(500), inv.StartedMs)

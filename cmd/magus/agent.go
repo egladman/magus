@@ -47,9 +47,9 @@ var agentsSection string
 //
 //	v1: initial skill (verbs, grammar, reading results, MCP, --global, pagination)
 //	v2: teach CODEOWNERS ownership and the owns relation
-//	v3: teach the refs verb / magus_refs (SCIP symbol def+references)
+//	v3: teach the refs subcommand / magus_refs (SCIP symbol def+references)
 //	v4: teach the * wildcard in the query grammar
-//	v5: teach the graph diff verb (PR blast-radius against a baseline export)
+//	v5: teach the graph diff subcommand (PR blast-radius against a baseline export)
 //	v6: teach the opt-in @vcs git-history attrs on file nodes
 //	v7: purpose-named skill set (magus-query, magus-run, magus-vcs,
 //	    magus-architecture, magus-memory); multi-platform install (claude/
@@ -84,7 +84,7 @@ func platformNames() []string {
 }
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
-// Today the one verb is `install <platform>`, which writes the embedded skill into
+// Today the one subcommand is `install <platform>`, which writes the embedded skill into
 // the consuming repo. Platform is an explicit argument, never auto-detected (per
 // the explicit-and-granular preference); writing into a repo's agent-config dirs
 // happens only through this command, never as a side effect of another.

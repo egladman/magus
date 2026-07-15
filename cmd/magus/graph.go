@@ -76,7 +76,7 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "See also: magus query/explain/path (read the graph), magus insight (git-history analytics).")
 }
 
-// graphBuild is the explicit "build the graph now" verb: it reindexes code symbols
+// graphBuild is the explicit "build the graph now" subcommand: it reindexes code symbols
 // (runs each symbol-capable project's scip op to refresh its cached SCIP index) and
 // then forces a full knowledge-graph rebuild, re-ingesting those indexes. It exists
 // because building is otherwise implicit (cache-first, on read), which leaves no obvious
@@ -175,7 +175,7 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 // graph (projects, targets, spells, ops, charms, modules, methods, diagnostics,
 // docs, buzz sources), persists it as fingerprinted shards under
 // <cache>/knowledge, and writes the node-link export. The cache-first loader
-// makes building implicit - there is no separate build verb.
+// makes building implicit - there is no separate build subcommand.
 func graphExport(ctx context.Context, root string, args []string) error {
 	var (
 		refresh     bool

@@ -14,7 +14,7 @@ import (
 // mints an invocation id, opens the union event log (<cacheDir>/runs/<inv>.jsonl) behind a
 // capture *slog.Logger, threads that logger + the id onto ctx so every captured event
 // (subprocess output + target results) streams into it, and emits the invocation's opening
-// lifecycle event: a started event carrying the command lineage (verb/args/cwd/trigger) and
+// lifecycle event: a started event carrying the command lineage (subcommand/args/cwd/trigger) and
 // magus version. Folding the identity into the stream this way means both the durable file
 // and any live watcher learn which command produced the run from frame one - there is no
 // separate metadata file. Extra handlers (e.g. a live SSE broadcaster) fan out from the same

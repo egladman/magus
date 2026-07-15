@@ -274,9 +274,8 @@ func (Trigger) EnumDescriptor() ([]byte, []int) {
 // Command is the invoking command line and context - what was asked of magus.
 type Command struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Verb          string                 `protobuf:"bytes,1,opt,name=verb,proto3" json:"verb,omitempty"` // the subcommand: run, affected, ci, x, watch, ...
-	Args          []string               `protobuf:"bytes,2,rep,name=args,proto3" json:"args,omitempty"` // the argument vector after the verb (targets, projects, flags)
-	Cwd           string                 `protobuf:"bytes,3,opt,name=cwd,proto3" json:"cwd,omitempty"`   // directory the command was invoked in
+	Arguments     []string               `protobuf:"bytes,1,rep,name=arguments,proto3" json:"arguments,omitempty"` // the full argument vector, subcommand included (e.g. ["run", "build", "api"])
+	Cwd           string                 `protobuf:"bytes,3,opt,name=cwd,proto3" json:"cwd,omitempty"`             // directory the command was invoked in
 	Trigger       Trigger                `protobuf:"varint,4,opt,name=trigger,proto3,enum=magus.viewer.v1.Trigger" json:"trigger,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -312,16 +311,9 @@ func (*Command) Descriptor() ([]byte, []int) {
 	return file_magus_viewer_v1_viewer_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Command) GetVerb() string {
+func (x *Command) GetArguments() []string {
 	if x != nil {
-		return x.Verb
-	}
-	return ""
-}
-
-func (x *Command) GetArgs() []string {
-	if x != nil {
-		return x.Args
+		return x.Arguments
 	}
 	return nil
 }
@@ -1106,12 +1098,11 @@ var File_magus_viewer_v1_viewer_proto protoreflect.FileDescriptor
 
 const file_magus_viewer_v1_viewer_proto_rawDesc = "" +
 	"\n" +
-	"\x1cmagus/viewer/v1/viewer.proto\x12\x0fmagus.viewer.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1amagus/query/v1/query.proto\"w\n" +
-	"\aCommand\x12\x12\n" +
-	"\x04verb\x18\x01 \x01(\tR\x04verb\x12\x12\n" +
-	"\x04args\x18\x02 \x03(\tR\x04args\x12\x10\n" +
+	"\x1cmagus/viewer/v1/viewer.proto\x12\x0fmagus.viewer.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1amagus/query/v1/query.proto\"s\n" +
+	"\aCommand\x12\x1c\n" +
+	"\targuments\x18\x01 \x03(\tR\targuments\x12\x10\n" +
 	"\x03cwd\x18\x03 \x01(\tR\x03cwd\x122\n" +
-	"\atrigger\x18\x04 \x01(\x0e2\x18.magus.viewer.v1.TriggerR\atrigger\"\xe7\x01\n" +
+	"\atrigger\x18\x04 \x01(\x0e2\x18.magus.viewer.v1.TriggerR\atriggerJ\x04\b\x02\x10\x03\"\xe7\x01\n" +
 	"\n" +
 	"Invocation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +

@@ -24,7 +24,7 @@ import (
 // substrate as `magus graph export`. query resolves terms to nodes and returns
 // the neighborhood; explain shows one node's context; path connects two nodes.
 //
-// query also doubles as the retrieval verb for target-output reference ids through
+// query also doubles as the retrieval subcommand for target-output reference ids through
 // an EXPLICIT `output` subcommand: `magus query output out1a2b3c` prints that
 // execution's captured output instead of searching the graph. It is a subcommand,
 // not a shape-routed positional, so a free-text search term can never collide with a

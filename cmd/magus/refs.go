@@ -15,7 +15,7 @@ import (
 // refsCmd implements `magus refs <symbol>`: list where an ingested code symbol is
 // defined and every file that references it. refs is always symbol-seeded, so it
 // loads the lazily-loaded @symbols shards. Its output is occurrence-shaped (file:line
-// rows), which is why it is a distinct verb rather than a `magus query` neighborhood.
+// rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
 func refsCmd(ctx context.Context, root string, args []string) error {
 	var refresh bool
 	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {

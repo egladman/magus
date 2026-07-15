@@ -4,9 +4,9 @@ import "testing"
 
 // TestResolveProfileRunAffectedUsageSkipsForward pins the fix for the silent
 // `run -h` / `affected -h` / bare `affected` bug: a usage-only invocation of an
-// adoptable verb must NOT forward to the daemon (which would print usage on the
+// adoptable subcommand must NOT forward to the daemon (which would print usage on the
 // daemon's stderr and hand the caller a bare non-zero exit). It runs locally with
-// only config loaded, so the per-verb usage reaches the caller's stderr.
+// only config loaded, so the per-subcommand usage reaches the caller's stderr.
 func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 	usageOnly := dispatchProfile{needsConfig: true}
 	full := dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}

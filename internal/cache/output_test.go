@@ -171,15 +171,14 @@ func TestInvocationByID(t *testing.T) {
 	f, err := os.Create(filepath.Join(runs, "inv123.jsonl"))
 	require.NoError(t, err)
 	enc := json.NewEncoder(f)
-	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Verb: "run", Args: []string{"build"}, Trigger: "agent"}}))
+	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindStarted, Command: &journal.Command{Arguments: []string{"run", "build"}, Trigger: "agent"}}))
 	require.NoError(t, enc.Encode(journal.Event{Kind: journal.KindFinished, Status: journal.StatusPass}))
 	require.NoError(t, f.Close())
 
 	inv, err := NewOutputStore(dir).InvocationByID("inv123")
 	require.NoError(t, err)
 	assert.Equal(t, "inv123", inv.ID)
-	assert.Equal(t, "run", inv.Command.Verb)
-	assert.Equal(t, []string{"build"}, inv.Command.Args)
+	assert.Equal(t, []string{"run", "build"}, inv.Command.Arguments)
 
 	_, err = NewOutputStore(dir).InvocationByID("missing")
 	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")

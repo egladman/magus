@@ -51,11 +51,11 @@ func TestEventToProtoCarriesStartedCommand(t *testing.T) {
 	started := eventToProto(journal.Event{
 		Kind:         journal.KindStarted,
 		MagusVersion: "v9",
-		Command:      &journal.Command{Verb: "affected", Args: []string{"ci"}, Trigger: journal.TriggerCI},
+		Command:      &journal.Command{Arguments: []string{"affected", "ci"}, Trigger: journal.TriggerCI},
 	})
 	assert.Equal(t, viewerv1.Kind_KIND_STARTED, started.GetKind())
 	assert.Equal(t, "v9", started.GetMagusVersion())
-	assert.Equal(t, "affected", started.GetCommand().GetVerb())
+	assert.Equal(t, []string{"affected", "ci"}, started.GetCommand().GetArguments())
 	assert.Equal(t, viewerv1.Trigger_TRIGGER_CI, started.GetCommand().GetTrigger())
 
 	plain := eventToProto(journal.Event{Kind: journal.KindOutput, Text: "hi"})
@@ -70,7 +70,7 @@ func TestEncodeJournalFragmentRoundTrip(t *testing.T) {
 		{Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: "building..."},
 		{Kind: journal.KindResult, Project: "web", Target: "build", Status: journal.StatusPass, Ref: "outabc", DurMs: 10},
 	}
-	inv := journal.Invocation{ID: "inv7", MagusVersion: "v1.2.3", Command: journal.Command{Verb: "affected", Args: []string{"ci"}, Trigger: journal.TriggerCI}}
+	inv := journal.Invocation{ID: "inv7", MagusVersion: "v1.2.3", Command: journal.Command{Arguments: []string{"affected", "ci"}, Trigger: journal.TriggerCI}}
 	frag, err := EncodeJournalFragment(inv, events)
 	require.NoError(t, err)
 
@@ -148,13 +148,13 @@ func TestEnumMappingsExhaustive(t *testing.T) {
 func TestInvocationToProtoMapsHeader(t *testing.T) {
 	p := invocationToProto(journal.Invocation{
 		ID: "inv42", StartedMs: 1000, FinishedMs: 2000, MagusVersion: "v3",
-		Command: journal.Command{Verb: "run", Args: []string{"build"}, Cwd: "/w", Trigger: journal.TriggerWatch},
+		Command: journal.Command{Arguments: []string{"run", "build"}, Cwd: "/w", Trigger: journal.TriggerWatch},
 	})
 	assert.Equal(t, "inv42", p.GetId())
 	assert.Equal(t, "v3", p.GetMagusVersion())
 	assert.Equal(t, int64(1000), p.GetStartTime().AsTime().UnixMilli())
 	assert.Equal(t, int64(2000), p.GetEndTime().AsTime().UnixMilli())
-	assert.Equal(t, "run", p.GetCommand().GetVerb())
+	assert.Equal(t, []string{"run", "build"}, p.GetCommand().GetArguments())
 	assert.Equal(t, "/w", p.GetCommand().GetCwd())
 	assert.Equal(t, viewerv1.Trigger_TRIGGER_WATCH, p.GetCommand().GetTrigger())
 }

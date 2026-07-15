@@ -160,7 +160,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
-		// must print its per-verb usage on the CALLER's stderr. run and affected are
+		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
 		// the only daemon-adoptable verbs, so forwarding one of these would run the
 		// usage path inside the daemon: usage lands on the daemon's stderr (invisible
 		// here) and the client is left with a bare, silent non-zero exit. Skip both the
