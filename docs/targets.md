@@ -103,6 +103,33 @@ Tool operations compose **into** these targets; they are not targets of their ow
 
 Custom target names must use the target-name charset: letters, digits, `-`, `_` (`types.ValidateTargetName`). `:`, `@`, and `/` are reserved for the grammar above.
 
+### When does a name earn canonical status?
+
+The seven names above are a closed, deliberate set, not a starting point. A new
+name earns a place in it only if it passes all four:
+
+1. **Universality** - the phase must mean something in every toolchain magus
+   adapts. A phase that only makes sense for one language fails this test:
+   `typecheck` is universal-sounding but Go and Rust type-check as part of
+   `build`, not as a separate phase, so it does not earn a canonical slot.
+2. **Distinctness** - it must be a genuine phase, not a subset of an existing
+   one. `vet`, `audit`, `security`, and `typecheck` are all static analysis or
+   formatting fragments of `lint`/`format` (see [MGS1003](codes/magusfile/MGS1003.md)),
+   not phases of their own.
+3. **Pipeline membership** - `ci` must need to order it against the other
+   phases. A step nobody's `ci` ever sequences against `build`/`test`/`lint`
+   has no claim on the canonical vocabulary.
+4. **Tooling weight** - a canonical name can carry engine semantics beyond
+   "a bucket of ops": `preflight`/`generate` get drift-gating (see
+   [operations.md](operations.md)) precisely because they are canonical, not
+   custom.
+
+The v1 decision: this set is frozen at the seven above plus `ci`. `deploy`,
+`release`, and `serve` stay custom by design - they are real, common phases,
+but they are workspace-specific enough (which environment, which registry,
+which port) that forcing one shape on them would be more prescriptive than
+useful.
+
 ### Name normalization (casing & delimiters)
 
 Target names are matched **case- and delimiter-insensitively**. magus normalizes every name to canonical kebab-case (`lo.KebabCase`, via `types.DefaultTargetNameNormalizer`) on **both** sides: when a magusfile _declares_ a target and when you _reference_ one on the CLI or in `depends_on`. A target declared as `go_build` is reachable by any spelling that normalizes to `go-build`:
