@@ -40,8 +40,81 @@ import { persisted } from "../../lib/persist";
 function init(): void {
   wireControls();
   wireCommands();
+  wireZoom();
   wireInput();
   loadFromURL();
+}
+
+// --- Zoom -------------------------------------------------------------------
+// A content zoom for the viewer body: in the text view it enlarges the log text (which re-wraps),
+// in the waterfall it magnifies the timeline with scroll. Implemented with CSS `zoom` on the body
+// so both views scale uniformly and the scroll container grows to match. Driven by the -/+ control
+// in the status bar and the =/-/0 keys; the level persists so it sticks across loads.
+const ZOOM_MIN = 0.7;
+const ZOOM_MAX = 2.2;
+const ZOOM_STEP = 0.1;
+const zoomCell = persisted<number>("logs-zoom", 1);
+
+function clampZoom(z: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+}
+
+function applyZoom(): void {
+  const z = clampZoom(zoomCell.get());
+  // One knob, two levers (in logs.css): the text view scales font-size; the waterfall zooms its
+  // SVG so it grows past the panel and the scroll box picks it up. A width:100% SVG would just
+  // re-fit under a plain body zoom, so the waterfall needs its own.
+  bodyEl.style.setProperty("--log-zoom", String(z));
+  const readout = el("zoom-readout");
+  if (readout) readout.textContent = Math.round(z * 100) + "%";
+}
+
+function setZoom(z: number): void {
+  zoomCell.set(clampZoom(z));
+  applyZoom();
+}
+
+// zoomSeg builds one control span (a role=button so Pico's button theming never touches it).
+function zoomSeg(key: string, label: string, aria: string): HTMLElement {
+  const s = document.createElement("span");
+  s.className = key === "reset" ? "zoom-readout" : "zoom-btn";
+  if (key === "reset") s.id = "zoom-readout"; // applyZoom updates the percent readout by this id
+  s.dataset.zoom = key;
+  s.textContent = label;
+  // Deliberately NO role="button": Pico themes [role=button] as a solid primary button (blue), the
+  // same trap the switch hit. tabindex keeps it keyboard-focusable and the =/-/0 keys zoom too.
+  s.setAttribute("tabindex", "0");
+  s.setAttribute("aria-label", aria);
+  s.title = aria;
+  return s;
+}
+
+function wireZoom(): void {
+  // The control lives in the shared status bar's right cluster, by the event count.
+  const right = document.querySelector(".console-statusbar .statusbar-right");
+  if (right) {
+    const ctl = document.createElement("div");
+    ctl.className = "zoom-ctl status-item";
+    ctl.setAttribute("role", "group");
+    ctl.setAttribute("aria-label", "Zoom");
+    ctl.append(zoomSeg("out", "-", "Zoom out"), zoomSeg("reset", "100%", "Reset zoom"), zoomSeg("in", "+", "Zoom in"));
+    ctl.addEventListener("click", (ev) => {
+      const t = (ev.target as HTMLElement).closest("[data-zoom]") as HTMLElement | null;
+      if (!t) return;
+      const k = t.dataset.zoom;
+      if (k === "in") setZoom(zoomCell.get() + ZOOM_STEP);
+      else if (k === "out") setZoom(zoomCell.get() - ZOOM_STEP);
+      else setZoom(1);
+    });
+    ctl.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); (ev.target as HTMLElement).click(); }
+    });
+    right.prepend(ctl);
+  }
+  registerCommand({ id: "logs.zoomIn", label: "Zoom in", group: "Log viewer", run: () => setZoom(zoomCell.get() + ZOOM_STEP) });
+  registerCommand({ id: "logs.zoomOut", label: "Zoom out", group: "Log viewer", run: () => setZoom(zoomCell.get() - ZOOM_STEP) });
+  registerCommand({ id: "logs.zoomReset", label: "Reset zoom", group: "Log viewer", run: () => setZoom(1) });
+  applyZoom();
 }
 
 // --- Keyboard commands --------------------------------------------------------
@@ -52,10 +125,13 @@ function init(): void {
 // keyboard-driven reader, like less/gh) and deliberately avoiding browser-owned combos
 // (mod+r reload, mod+t/mod+shift+t tab). A user override lives in the shared persisted keymap.
 const LOGS_KEYMAP: Keymap = {
-  "logs.filter": "/",   // focus the filter box
-  "logs.raw": "r",      // toggle raw / pretty
-  "logs.timeline": "t", // toggle timeline / log
-  "logs.fold": "f",     // collapse / expand all
+  "logs.filter": "/",     // focus the filter box
+  "logs.raw": "r",        // toggle raw / pretty
+  "logs.timeline": "t",   // toggle timeline / log
+  "logs.fold": "f",       // collapse / expand all
+  "logs.zoomIn": "=",     // enlarge the view (text bigger / waterfall magnified)
+  "logs.zoomOut": "-",    // shrink the view
+  "logs.zoomReset": "0",  // back to 100%
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 

@@ -134,6 +134,26 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
 .file-bar .seg-toggle:disabled { opacity: 0.5; }
 .file-bar .seg-toggle:focus-visible { outline: none; }
 .file-bar .seg-toggle:focus-visible .seg-track { outline: 2px solid var(--pico-primary); outline-offset: 1px; }
+
+/* Zoom control in the status bar's right cluster (by the event count): a compact -/readout/+ that
+   scales the viewer body. Built from spans (role=button), NOT <button>, so Pico's button theming
+   never applies - the same trap the segmented switch hit. Text matches the muted status-bar color. */
+/* margin:0 is load-bearing: a bare <div> gets Pico's default block bottom-margin (1rem), which on
+   a flex item inflates the whole status bar's height. */
+.zoom-ctl { display: inline-flex; align-items: center; gap: 0.1rem; margin: 0; }
+.zoom-ctl .zoom-btn, .zoom-ctl .zoom-readout {
+  cursor: pointer; color: var(--pico-muted-color); user-select: none;
+  border-radius: var(--pico-border-radius); transition: color 0.12s, background 0.12s;
+}
+.zoom-ctl .zoom-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.15rem; height: 1.15rem; font-size: 0.95rem; line-height: 1;
+}
+.zoom-ctl .zoom-readout { min-width: 2.7rem; text-align: center; font-variant-numeric: tabular-nums; padding: 0 0.15rem; }
+.zoom-ctl .zoom-btn:hover, .zoom-ctl .zoom-readout:hover {
+  color: var(--pico-contrast); background: var(--pico-card-sectioning-background-color);
+}
+.zoom-ctl :focus-visible { outline: 2px solid var(--pico-primary); outline-offset: 1px; }
 /* Disabled controls gray out in place rather than disappearing, so the toolbar never
    reflows as buttons become (in)applicable (e.g. Raw is disabled in waterfall mode, not
    hidden). */
@@ -197,9 +217,13 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
    line numbers and folding can attach per-line without breaking wrapping. */
 .log-body {
   font-family: var(--pico-font-family-monospace);
-  font-size: 0.8rem; line-height: 1.6;
+  /* --log-zoom (set by applyZoom in main.ts) scales the text view; it defaults to 1. */
+  font-size: calc(0.8rem * var(--log-zoom, 1)); line-height: 1.6;
   padding: 0.4rem 0;
 }
+/* Waterfall zoom: magnify the SVG itself (a width:100% SVG re-fits under a body zoom, so it needs
+   its own). CSS `zoom` grows its layout box past the panel, so .log-scroll gains scrollbars. */
+.log-body.wf-mode .wf-svg { zoom: var(--log-zoom, 1); }
 .log-body.empty { display: none; }
 
 /* A section: a collapsible group with a clickable header row.
