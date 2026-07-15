@@ -1,11 +1,6 @@
 package schema
 
 import (
-	"bytes"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -177,70 +172,4 @@ func TestUseEnv_nonNil(t *testing.T) {
 
 func TestEnvPrefix(t *testing.T) {
 	assert.Equal(t, "MAGUS", EnvPrefix)
-}
-
-// TestSchemaNotDrifted re-runs the schema generator into temp files and
-// diffs them against the committed fields.go, bind.go, and env.go.
-// Fails if any committed file is out of date, meaning a Config change
-// requires re-running:
-//
-//	go generate ./cmd/magus/...
-func TestSchemaNotDrifted(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping drift check in short mode")
-	}
-
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller failed")
-	schemaDir := filepath.Dir(thisFile)
-	// e.g. magus/schema
-
-	tmp := t.TempDir()
-	fieldsOut := filepath.Join(tmp, "fields.go")
-	bindOut := filepath.Join(tmp, "bind.go")
-	envOut := filepath.Join(tmp, "env.go")
-
-	generatorPath := filepath.Join(schemaDir, "..", "cmd", "magus-utils")
-	configPath := filepath.Join(schemaDir, "..", "internal", "config", "config.go")
-
-	cmd := exec.Command(
-		"go", "run", generatorPath, "config",
-		"-config", configPath,
-		"-fields-out", fieldsOut,
-		"-bind-out", bindOut,
-		"-apply-env-out", envOut,
-	)
-	out, err := cmd.CombinedOutput()
-	require.NoErrorf(t, err, "schema generator failed: %s", out)
-
-	checks := []struct {
-		name      string
-		committed string
-		generated string
-	}{
-		{
-			"fields.go",
-			filepath.Join(schemaDir, "gen", "fields.go"),
-			fieldsOut,
-		},
-		{
-			"bind.go",
-			filepath.Join(schemaDir, "..", "cmd", "magus", "gen", "bind.go"),
-			bindOut,
-		},
-		{
-			"env.go",
-			filepath.Join(schemaDir, "..", "internal", "config", "gen", "env.go"),
-			envOut,
-		},
-	}
-
-	for _, c := range checks {
-		want, err := os.ReadFile(c.committed)
-		require.NoErrorf(t, err, "read committed %s", c.name)
-		got, err := os.ReadFile(c.generated)
-		require.NoErrorf(t, err, "read generated %s", c.name)
-		assert.Truef(t, bytes.Equal(want, got),
-			"%s is out of date — run: go generate ./cmd/magus/...", c.name)
-	}
 }

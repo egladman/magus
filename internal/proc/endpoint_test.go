@@ -357,9 +357,9 @@ func TestWireIsJSONL(t *testing.T) {
 	assert.True(t, json.Valid(inner), "reply is not valid JSON: %q", inner)
 }
 
-// TestProtocolSkewRejectsV1 verifies that sending "protocol":"v1" causes
+// TestProtocolMismatchRejectsV1 verifies that sending "protocol":"v1" causes
 // the server to return an error frame and Forward surfaces it as a Go error.
-func TestProtocolSkewRejectsV1(t *testing.T) {
+func TestProtocolMismatchRejectsV1(t *testing.T) {
 	srv, err := New(Options{
 		Handler: func(_ context.Context, _ []string) error { return nil },
 	})

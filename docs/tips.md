@@ -1,7 +1,7 @@
 ---
 title: Tips and tricks
-description: Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, and recursive invocation.
-tags: [tips, status, step, watch, repl, recursion, magus.cmd, magus status]
+description: Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, output field discovery, and recursive invocation.
+tags: [tips, status, step, watch, repl, recursion, magus.cmd, magus status, output, template, fields]
 ---
 
 # Tips and tricks
@@ -53,6 +53,38 @@ done
 magus status
 magus status -o json   # machine-readable output
 ```
+
+## Discover an output's fields for -o json and -o template
+
+Any command that emits structured data documents its own shape. Run it with a bare `-o template` (no template body) and it prints the fields instead of rendering - the json keys usable in both `-o json` and `-o template`, with each field's type and doc. Referenced output types are listed too, so you can drill into a `[]ProjectEntry` without reading source:
+
+```sh
+magus describe projects -o template
+```
+
+Sample output:
+
+```text
+# fields for -o json / -o template (bare -o template lists these):
+
+ProjectsOutput:
+  definition  string
+  count       int
+  projects    []ProjectEntry
+
+ProjectEntry:
+  path        string
+  spell       string
+  depends_on  []string
+```
+
+Then write the template (or `jq` filter) against those keys:
+
+```sh
+magus describe projects -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'
+```
+
+The field names are always the json keys - `-o json` and `-o template` share one vocabulary - so `-o json` output doubles as the field reference.
 
 ## Interactive debugging entry points
 

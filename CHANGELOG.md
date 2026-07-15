@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `daemon.enabled` (flag `--daemon-enabled`, env `MAGUS_DAEMON_ENABLED`, default true):
+  set false to run each invocation self-contained in its own per-process pool instead
+  of discovering and adopting the shared `magus server start` daemon - handy for a
+  worktree that should not touch a shared daemon. Recursive `magus` calls still forward
+  over a per-process socket to share the concurrency budget; only the shared daemon is
+  opted out of.
+- Self-documenting output templates: bare `-o template` (no body) lists the
+  command's output fields - the json keys usable in `-o json` and `-o template`,
+  with each field's type and doc, drilling into nested output types. Previously an
+  empty template was an error. No new command or format: it rides the existing
+  `-o template` surface.
 - Spell authoring kit: `magus init spell` scaffolds a spell, `magus buzz -t` runs a
   spell's in-file test blocks, and `magus buzz lsp` serves diagnostics and
   completion to an editor over stdio.
@@ -39,12 +50,23 @@ target ...:a,b` before a run. Disjoint edits never trip it.
 
 ### Fixed
 
+- Forwarding to a daemon of a different build no longer warns. A version/protocol
+  mismatch means the daemon is alive but will not adopt a mismatched client, so the
+  command now falls back to local execution quietly (a debug line, not a `[warn]
+  proc forward failed` line). This is routine when multiple worktrees run different
+  builds against one shared per-user daemon.
 - A workspace-local Buzz spell could not declare a service op: the host-registered
   `magus/target` module omitted the `Service` type (present only on the dry-run
   host), so `Service{...}` failed to compile. Both hosts now register it.
 
 ### Changed
 
+- Breaking: `-o template=<go-template>` now renders against the JSON-normalized
+  value, so template field names are the json-tag keys (`{{range .projects}}{{.path}}{{end}}`),
+  identical to what `-o json` emits, instead of the PascalCase Go struct fields
+  (`{{.Projects}}`/`{{.Path}}`) it exposed before. This makes `-o json` a faithful
+  reference for authoring templates. Numbers arrive as float64 (coerce with `int`
+  before numeric comparison); `join` now accepts any list, not just `[]string`.
 - Breaking: `magus describe knowledge` is now `magus graph export`, and
   `magus insight structure` is now `magus graph stats`; the old spellings error
   with a pointer to the new home. `insight report` still embeds the graph-stats

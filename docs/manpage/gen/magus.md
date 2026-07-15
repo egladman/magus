@@ -35,7 +35,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Config file path. Default: search for magus.yaml in CWD, workspace root, and $XDG_CONFIG_HOME/magus/. Must precede the subcommand.
 
 **--output** *fmt*, **-o** *fmt*
-: Output format: text (default), json, yaml, name, or template=\<go-template\>. Honoured by subcommands that emit structured data.
+: Output format: text (default), json, yaml, name, jsonl, or template[=\<go-template\>]. Honoured by subcommands that emit structured data. A template body renders a Go text/template over the same value -o json emits (field names are the json keys); a bare -o template with no body lists that output's fields instead of rendering - the json keys usable in -o json and -o template, with each field's type and doc.
 
 **--concurrency** *N*
 : Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or min(NumCPU,8)).

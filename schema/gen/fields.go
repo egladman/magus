@@ -180,6 +180,14 @@ func init() {
 			Usage:    "MAGUS_TELEMETRY_SAMPLE_RATIO",
 		},
 		{
+			GoPath:   "Daemon.Enabled",
+			YamlPath: "daemon.enabled",
+			EnvVar:   "MAGUS_DAEMON_ENABLED",
+			Flag:     FlagNames{Long: "daemon-enabled"},
+			Kind:     KindBool,
+			Usage:    "MAGUS_DAEMON_ENABLED: Enabled uses a shared, persistent daemon; false runs each invocation self-contained. Default true.",
+		},
+		{
 			GoPath:   "Daemon.Address",
 			YamlPath: "daemon.address",
 			EnvVar:   "MAGUS_DAEMON_ADDRESS",

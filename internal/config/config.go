@@ -194,6 +194,12 @@ type Bridge struct {
 
 // Daemon controls the proc server's listen address and multi-workspace behaviour.
 type Daemon struct {
+	// Enabled uses a shared, persistent daemon; false runs each invocation self-contained. Default true.
+	// The shared daemon is the one from `magus server start`; with Enabled false an
+	// invocation never discovers or adopts it and hosts its own per-process pool.
+	// Recursive magus calls still forward over a per-process socket to share the
+	// concurrency budget - only the SHARED daemon is opted out of.
+	Enabled bool `yaml:"enabled"`
 	// Address is the unix:// socket the parent listens on; empty auto-generates one.
 	Address string `yaml:"address" validate:"omitempty,magus_endpoint"`
 	// IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.
@@ -372,6 +378,7 @@ func EnvVarDocs() []EnvVarDoc {
 func Defaults() Config {
 	return Config{
 		CI:          CI{MaxShards: 8},
+		Daemon:      Daemon{Enabled: true},
 		HistoryPath: DefaultHistoryPath(),
 		Volatility: Volatility{
 			Enabled:          true,

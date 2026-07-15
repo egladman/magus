@@ -32,6 +32,7 @@
 // Run any subcommand with -h/--help for its own flag list.
 //
 //go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
+//go:generate go run ../magus-utils output -types ../../types -out ../../schema/gen/outputs.go
 //go:generate go run ../magus-configdocs -out ../../docs/config.md
 package main
 
@@ -46,6 +47,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -269,6 +271,12 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	configgen.ApplyEnv(&cfg, os.Getenv)
 	// Pass config to the workspace singletons via package-level state.
 	globalCfg = cfg
+	// The shared-daemon discovery below runs before the main flag parse, so peek the
+	// --daemon-enabled flag early (like --root/--quiet) to let it override yaml/env for
+	// this invocation. yaml/env already land via LoadWithRoot + ApplyEnv above.
+	if v, set := extractDaemonEnabledFlag(args); set {
+		globalCfg.Daemon.Enabled = v
+	}
 	// Hints default on when Hints.Enabled is nil.
 	hintsOn := cfg.Hints.Enabled == nil || *cfg.Hints.Enabled
 	interactive.SetEnabled(hintsOn)
@@ -286,7 +294,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 
 	// parentLive records whether a parent daemon is alive and reachable: true only
-	// when a forward reached it but it declined this subcommand (ErrNotAdoptable).
+	// when a forward reached it but it did not adopt this subcommand (ErrNotAdoptable).
 	// It gates leaf behavior below: a nested process suppresses its own server
 	// only while it has a live parent to forward to.
 	parentLive := false
@@ -295,11 +303,18 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		sock := os.Getenv("MAGUS_DAEMON_SOCKET")
 		stableSock := false
 		if sock == "" {
-			if s, ok := proc.LookupStableSocket(rootCtx); ok {
-				sock = s
-				stableSock = true
-				// Propagate to child processes spawned by this invocation.
-				_ = os.Setenv("MAGUS_DAEMON_SOCKET", sock)
+			// daemon.enabled gates discovery of the SHARED, persistent daemon only.
+			// When off, this invocation never adopts the stable per-user daemon and
+			// runs self-contained. It does NOT disable recursion: a child with
+			// MAGUS_DAEMON_SOCKET already set (below) still forwards to its parent, and
+			// a top-level still stands up its own per-process pool for its children.
+			if globalCfg.Daemon.Enabled {
+				if s, ok := proc.LookupStableSocket(rootCtx); ok {
+					sock = s
+					stableSock = true
+					// Propagate to child processes spawned by this invocation.
+					_ = os.Setenv("MAGUS_DAEMON_SOCKET", sock)
+				}
 			}
 		} else {
 			stableSock = strings.HasSuffix(sock, "/"+proc.StableSocketName())
@@ -319,22 +334,28 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			if fwdErr == nil {
 				return startupResult{cleanup: cleanup}, code
 			}
-			// A live daemon declining a non-adoptable subcommand (only run/affected
-			// adopt) is the normal path for every other verb: run it locally as a leaf
-			// without alarming the user. Reserve warn for genuine forward failures of
-			// an adoptable subcommand (transport error, dead daemon).
-			if errors.Is(fwdErr, proc.ErrNotAdoptable) {
-				slog.Debug("proc forward declined; running locally", slog.String("error", fwdErr.Error()))
+			// A call the daemon did not adopt is the normal path here: run locally
+			// without alarming the user. The daemon does not adopt a subcommand that
+			// never adopts (only run/affected do), nor a client whose build or protocol
+			// differs from its own (version/protocol mismatch) - in every case the daemon
+			// is alive and answered, it just will not take THIS call, and retrying it
+			// will not help. A version mismatch is common when multiple worktrees run
+			// different builds against one shared per-user daemon; it is not a failure,
+			// so it must not warn. Reserve warn for a genuine forward failure (transport
+			// error, dead daemon). proc.NotAdopted owns the classification - the errors
+			// carry it (a NotAdopted() method).
+			if proc.NotAdopted(fwdErr) {
+				slog.Debug("proc forward not adopted; running locally", slog.String("error", fwdErr.Error()))
 			} else {
 				slog.Warn("proc forward failed; running locally", slog.String("error", fwdErr.Error()))
 			}
-			// Tell apart a live parent that simply won't adopt this subcommand (only
-			// run/affected adopt) from an unreachable one. When alive, keep
-			// MAGUS_DAEMON_SOCKET pointed at it: this process runs the command locally
-			// as a leaf, but deeper adoptable calls still forward to the single
-			// top-level pool and probes (e.g. doctor's daemon check) see the real
-			// daemon. On a transport failure the daemon is gone: clear the pointer so
-			// nothing keeps dialing a corpse, and fall through to hosting our own pool.
+			// parentLive is a narrower question than "not adopted": keep MAGUS_DAEMON_SOCKET
+			// pointed at the parent only when it is a usable pool for deeper adoptable
+			// calls. A not-adoptable subcommand leaves a live, same-version daemon worth
+			// forwarding to (nested adoptable calls hit the single top-level pool; probes
+			// like doctor's daemon check see the real daemon). A version/protocol mismatch
+			// - like a transport failure - leaves a daemon we cannot use: clear the
+			// pointer so nothing keeps dialing it, and fall through to hosting our own pool.
 			parentLive = errors.Is(fwdErr, proc.ErrNotAdoptable)
 			if !parentLive {
 				_ = os.Unsetenv("MAGUS_DAEMON_SOCKET")
@@ -772,6 +793,26 @@ func extractQuietFlag(args []string) bool {
 		}
 	}
 	return false
+}
+
+// extractDaemonEnabledFlag peeks the --daemon-enabled bool flag before the main flag
+// parse, so it can gate the shared-daemon discovery that runs during early startup
+// (mirrors extractRootFlag/extractQuietFlag). Returns the parsed value and whether the
+// flag was present; a bare --daemon-enabled means true (Go bool-flag convention).
+func extractDaemonEnabledFlag(args []string) (val, set bool) {
+	for _, a := range args {
+		switch {
+		case a == "-daemon-enabled" || a == "--daemon-enabled":
+			return true, true
+		case strings.HasPrefix(a, "-daemon-enabled="), strings.HasPrefix(a, "--daemon-enabled="):
+			_, v, _ := strings.Cut(a, "=")
+			if b, err := strconv.ParseBool(v); err == nil {
+				return b, true
+			}
+			return false, false
+		}
+	}
+	return false, false
 }
 
 func extractVerbosityCount(args []string) int {

@@ -62,7 +62,7 @@ type Options struct {
 	Context         context.Context                                // nil → context.Background
 	Limiter         *cache.Limiter                                 // shared budget; nil → private limiter
 	Concurrency     int                                            // ignored when Limiter is set; 0 → default
-	Version         string                                         // "" disables version-skew check
+	Version         string                                         // "" disables version-mismatch check
 	Address         string                                         // "" → auto-generate in SockDir()
 	WorkspaceLister func() []Workspace                             // optional; used by daemon Status RPC
 	ServiceLister   func() []types.StatusService                   // optional; hosted-services snapshot for the daemon Status RPC
@@ -374,11 +374,11 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 		return fmt.Errorf("proc: RunRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
 	}
 	if req.Protocol != "" && req.Protocol != ProtocolV2 {
-		return ErrProtocolSkew
+		return ErrProtocolMismatch
 	}
 	// Both-empty intentionally passes (test injection / pre-versioning clients).
 	if s.version != "" && req.Version != "" && req.Version != s.version {
-		return ErrVersionSkew
+		return ErrVersionMismatch
 	}
 
 	ctx, cancel := context.WithCancel(s.parentCtx)
@@ -458,10 +458,10 @@ func (s *service) submitJob(req JobRequest, reply *JobReply) error {
 		return fmt.Errorf("proc: JobRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
 	}
 	if req.Protocol != "" && req.Protocol != ProtocolV2 {
-		return ErrProtocolSkew
+		return ErrProtocolMismatch
 	}
 	if s.version != "" && req.Version != "" && req.Version != s.version {
-		return ErrVersionSkew
+		return ErrVersionMismatch
 	}
 
 	// Namespace the job key so it never collides with run's cycle-detection keyspace:
@@ -524,7 +524,7 @@ func (s *service) status(req StatusRequest, reply *StatusReply) error {
 		return nil
 	}
 	if req.Protocol != "" && req.Protocol != ProtocolV2 {
-		return ErrProtocolSkew
+		return ErrProtocolMismatch
 	}
 	reply.ParentPID = os.Getpid()
 	reply.DaemonVersion = s.version
@@ -562,7 +562,7 @@ func (s *service) shutdown(req ShutdownRequest, _ *ShutdownReply) error {
 		return nil
 	}
 	if req.Protocol != "" && req.Protocol != ProtocolV2 {
-		return ErrProtocolSkew
+		return ErrProtocolMismatch
 	}
 	if s.shutdownFn != nil {
 		go s.shutdownFn()

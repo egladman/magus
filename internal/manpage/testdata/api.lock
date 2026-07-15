@@ -9,6 +9,7 @@ config ci.max_shards
 config ci.runner_pool_budget
 config concurrency
 config daemon.address
+config daemon.enabled
 config daemon.idle_ttl
 config daemon.socket
 config daemon.workspaces

@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 func TestResolveOutput(t *testing.T) {
@@ -28,32 +30,35 @@ func TestResolveOutput(t *testing.T) {
 	assertResolve("yaml", outputYAML, "")
 	assertResolve("jsonl", outputJSONL, "")
 	assertResolve("name", outputName, "")
-	assertResolve("template={{.Path}}", outputTemplate, "{{.Path}}")
+	assertResolve("template={{.path}}", outputTemplate, "{{.path}}")
 	assertResolve(
-		`template={{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`, outputTemplate,
-		`{{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`,
+		`template={{range .projects}}{{.path}}={{.spell}}{{"\n"}}{{end}}`, outputTemplate,
+		`{{range .projects}}{{.path}}={{.spell}}{{"\n"}}{{end}}`,
 	)
+	// Bare "-o template" (and an empty body) resolve to the template format with no
+	// body: that lists the output's fields rather than erroring.
+	assertResolve("template", outputTemplate, "")
+	assertResolve("template=", outputTemplate, "")
 
-	t.Run("err/empty-template", func(t *testing.T) {
-		_, err := ResolveOutput("template=")
-		assert.Error(t, err)
-	})
 	t.Run("err/unknown", func(t *testing.T) {
 		_, err := ResolveOutput("unknown")
 		assert.Error(t, err)
 	})
 }
 
+// -o template renders against the JSON-normalized value, so template field names are
+// the json-tag keys (lowercase here), exactly what -o json emits - NOT the PascalCase
+// Go fields. The fixtures carry json tags to exercise that contract.
 func TestWriteTemplate(t *testing.T) {
 	type project struct {
-		Path  string
-		Spell string
-		Deps  []string
+		Path  string   `json:"path"`
+		Spell string   `json:"spell"`
+		Deps  []string `json:"deps"`
 	}
 	v := struct {
-		Workspace string
-		Count     int
-		Projects  []project
+		Workspace string    `json:"workspace"`
+		Count     int       `json:"count"`
+		Projects  []project `json:"projects"`
 	}{
 		Workspace: "/tmp/ws",
 		Count:     2,
@@ -71,17 +76,20 @@ func TestWriteTemplate(t *testing.T) {
 		})
 	}
 
+	// count is an int in Go but arrives as float64 after json-normalization;
+	// text/template prints it without a fractional part.
 	assertTmpl("simple field",
-		"{{.Workspace}} ({{.Count}})",
+		"{{.workspace}} ({{.count}})",
 		"/tmp/ws (2)")
 	assertTmpl("range with newline",
-		`{{range .Projects}}{{.Path}}={{.Spell}}{{"\n"}}{{end}}`,
+		`{{range .projects}}{{.path}}={{.spell}}{{"\n"}}{{end}}`,
 		"api=go\nweb=typescript\n")
+	// join over a list field (now []any) - templateJoin handles it where strings.Join could not.
 	assertTmpl("join helper",
-		`{{range .Projects}}{{.Path}}: {{join .Deps ","}}{{"\n"}}{{end}}`,
+		`{{range .projects}}{{.path}}: {{join .deps ","}}{{"\n"}}{{end}}`,
 		"api: internal/db\nweb: \n")
 	assertTmpl("upper helper",
-		`{{upper .Workspace}}`,
+		`{{upper .workspace}}`,
 		"/TMP/WS")
 }
 
@@ -94,12 +102,12 @@ func TestWriteTemplateBadSyntax(t *testing.T) {
 
 func TestWriteTemplateSprigHelpers(t *testing.T) {
 	type item struct {
-		Name string
-		Tags []string
+		Name string   `json:"name"`
+		Tags []string `json:"tags"`
 	}
 	v := struct {
-		Items []item
-		Count int
+		Items []item `json:"items"`
+		Count int    `json:"count"`
 	}{
 		Items: []item{
 			{Name: "foo-bar", Tags: []string{"a", "b"}},
@@ -117,11 +125,12 @@ func TestWriteTemplateSprigHelpers(t *testing.T) {
 	}
 
 	assertTmpl("quote helper",
-		`{{range .Items}}{{quote .Name}} {{end}}`,
+		`{{range .items}}{{quote .name}} {{end}}`,
 		`"foo-bar" "baz" `)
+	// toJson renders the json-normalized element, so its keys are the json tags (lowercase).
 	assertTmpl("toJson helper",
-		`{{index .Items 0 | toJson}}`,
-		`{"Name":"foo-bar","Tags":["a","b"]}`)
+		`{{index .items 0 | toJson}}`,
+		`{"name":"foo-bar","tags":["a","b"]}`)
 	assertTmpl("default helper",
 		`{{$zero := ""}}{{default "fallback" $zero}}`,
 		"fallback")
@@ -134,12 +143,53 @@ func TestWriteTemplateSprigHelpers(t *testing.T) {
 	assertTmpl("base path helper",
 		`{{base "a/b/c"}}`,
 		"c")
+	// count arrives as float64; compare numerics by coercing with sprig's int
+	// (the real-world pattern under the json-shape model).
 	assertTmpl("ternary helper",
-		`{{ternary "yes" "no" (eq .Count 2)}}`,
+		`{{ternary "yes" "no" (eq (int .count) 2)}}`,
 		"yes")
 	assertTmpl("sortAlpha helper",
 		`{{$s := list "c" "a" "b" | sortAlpha}}{{join $s ","}}`,
 		"a,b,c")
+}
+
+func TestBaseTypeName(t *testing.T) {
+	cases := map[string]string{
+		"string":            "string",
+		"int":               "int",
+		"[]string":          "string",
+		"[]ProjectEntry":    "ProjectEntry",
+		"*Target":           "Target",
+		"[]*Target":         "Target",
+		"map[string]Target": "Target",
+		"*time.Time":        "time.Time",
+	}
+	for in, want := range cases {
+		assert.Equalf(t, want, baseTypeName(in), "baseTypeName(%q)", in)
+	}
+}
+
+// Bare "-o template" lists a value's fields (json keys), sourced from the generated
+// schemagen.OutputTypes descriptor, and drills into referenced output types.
+func TestWriteTemplateFields(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeTemplateFields(&buf, types.ProjectsOutput{
+		Projects: []types.ProjectEntry{{Path: "api"}},
+	}))
+	out := buf.String()
+	// Root fields (json keys, not Go names) and the drilled-in referenced type.
+	assert.Contains(t, out, "projects")
+	assert.Contains(t, out, "[]ProjectEntry")
+	assert.Contains(t, out, "ProjectEntry:")
+	assert.Contains(t, out, "path")
+	assert.NotContains(t, out, "Projects ", "should list json keys, not Go field names")
+}
+
+func TestWriteTemplateFields_unknownType(t *testing.T) {
+	var buf bytes.Buffer
+	err := writeTemplateFields(&buf, struct{ X int }{})
+	require.Error(t, err, "a type absent from the descriptor should error")
+	assert.Contains(t, err.Error(), "no field list")
 }
 
 func TestWriteTemplateEnvBlocked(t *testing.T) {

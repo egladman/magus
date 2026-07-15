@@ -40,6 +40,7 @@ var ConfigFlags = []ConfigFlag{
 	{"telemetry-insecure", "MAGUS_TELEMETRY_INSECURE", "bool"},
 	{"telemetry-service-name", "MAGUS_TELEMETRY_SERVICE_NAME", "string"},
 	{"telemetry-sample-ratio", "MAGUS_TELEMETRY_SAMPLE_RATIO", "float64"},
+	{"daemon-enabled", "MAGUS_DAEMON_ENABLED", "bool"},
 	{"daemon-address", "MAGUS_DAEMON_ADDRESS", "string"},
 	{"daemon-idle-ttl", "MAGUS_DAEMON_IDLE_TTL", "duration"},
 	{"daemon-socket", "MAGUS_DAEMON_SOCKET", "string"},
@@ -101,6 +102,7 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.BoolVar(&cfg.Telemetry.Insecure, "telemetry-insecure", cfg.Telemetry.Insecure, "MAGUS_TELEMETRY_INSECURE")
 	fs.StringVar(&cfg.Telemetry.ServiceName, "telemetry-service-name", cfg.Telemetry.ServiceName, "MAGUS_TELEMETRY_SERVICE_NAME")
 	fs.Float64Var(&cfg.Telemetry.SampleRatio, "telemetry-sample-ratio", cfg.Telemetry.SampleRatio, "MAGUS_TELEMETRY_SAMPLE_RATIO")
+	fs.BoolVar(&cfg.Daemon.Enabled, "daemon-enabled", cfg.Daemon.Enabled, "MAGUS_DAEMON_ENABLED: Enabled uses a shared, persistent daemon; false runs each invocation self-contained. Default true.")
 	fs.StringVar(&cfg.Daemon.Address, "daemon-address", cfg.Daemon.Address, "MAGUS_DAEMON_ADDRESS: Address is the unix:// socket the parent listens on; empty auto-generates one.")
 	fs.DurationVar(&cfg.Daemon.IdleTTL, "daemon-idle-ttl", cfg.Daemon.IdleTTL, "MAGUS_DAEMON_IDLE_TTL: IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.")
 	fs.StringVar(&cfg.Daemon.Socket, "daemon-socket", cfg.Daemon.Socket, "MAGUS_DAEMON_SOCKET: Socket is the runtime socket path set by the daemon for forwarded children; unix:// URL or bare path.")

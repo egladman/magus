@@ -2,10 +2,8 @@ package proc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -50,7 +48,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	if typ == typeError {
 		var er ErrorReply
 		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
-			return 0, remapSkewError(er.Message)
+			return 0, decodeWireError(er.Message)
 		}
 		return 0, fmt.Errorf("proc: forward: server error (undecodable)")
 	}
@@ -324,22 +322,6 @@ func StopAllServices(ctx context.Context, addr string) (int, error) {
 		return 0, fmt.Errorf("proc: service.stopall: decode reply: %w", err)
 	}
 	return reply.Count, nil
-}
-
-// remapSkewError converts a server-side error string back to its typed sentinel to preserve errors.Is() behaviour.
-func remapSkewError(msg string) error {
-	switch msg {
-	case ErrProtocolSkew.Error():
-		return ErrProtocolSkew
-	case ErrVersionSkew.Error():
-		return ErrVersionSkew
-	case ErrCycleDetected.Error():
-		return ErrCycleDetected
-	}
-	if strings.HasPrefix(msg, ErrNotAdoptable.Error()+":") {
-		return fmt.Errorf("%w%s", ErrNotAdoptable, strings.TrimPrefix(msg, ErrNotAdoptable.Error()))
-	}
-	return errors.New(msg)
 }
 
 // RunChildSync yields the caller's concurrency slot for the duration of fn so a

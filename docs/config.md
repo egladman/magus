@@ -36,6 +36,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | Config key | Environment variable | Flag | Type |
 |------------|----------------------|------|------|
 | `daemon.address` | `MAGUS_DAEMON_ADDRESS` | `--daemon-address` | string |
+| `daemon.enabled` | `MAGUS_DAEMON_ENABLED` | `--daemon-enabled` | bool |
 | `daemon.idle_ttl` | `MAGUS_DAEMON_IDLE_TTL` | `--daemon-idle-ttl` | duration |
 | `daemon.socket` | `MAGUS_DAEMON_SOCKET` | `--daemon-socket` | string |
 | `daemon.workspaces` | `MAGUS_DAEMON_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |

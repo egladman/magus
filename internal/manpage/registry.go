@@ -52,13 +52,13 @@ pack, source files, outputs, dependencies, and tool requirements.
 Output defaults to a human-readable text format. Use the global -o flag with
 json or yaml for structured output suitable for scripting. -o name prints one
 project path per line. -o template accepts a Go text/template evaluated
-against the same struct that -o json emits.`,
+against the value -o json emits, so its field names are the json keys.`,
 	Usage: "magus ls [flags]",
 	Examples: []Example{
 		{"List all projects", "magus ls"},
 		{"Pipe-friendly: one path per line", "magus ls -o name"},
 		{"JSON output", "magus ls -o json"},
-		{"Custom Go template", `magus ls -o template='{{range .Projects}}{{.Path}}{{"\n"}}{{end}}'`},
+		{"Custom Go template", `magus ls -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'`},
 	},
 }
 

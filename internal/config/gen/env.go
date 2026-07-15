@@ -104,6 +104,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Telemetry.SampleRatio = f
 		}
 	}
+	if v := getenv("MAGUS_DAEMON_ENABLED"); v != "" {
+		cfg.Daemon.Enabled = parseBoolEnv(v, cfg.Daemon.Enabled)
+	}
 	if v := getenv("MAGUS_DAEMON_ADDRESS"); v != "" {
 		cfg.Daemon.Address = v
 	}

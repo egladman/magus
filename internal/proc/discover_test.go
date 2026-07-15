@@ -52,22 +52,22 @@ func TestDiscoverSocket_SkipsNonSocketsAndNonMatches(t *testing.T) {
 	assert.Contains(t, err.Error(), "no running magus proc server")
 }
 
-func TestRemapSkewError(t *testing.T) {
+func TestDecodeWireError(t *testing.T) {
 	// Each server-side error STRING round-trips back to its typed sentinel so
 	// errors.Is keeps working across the wire.
-	for _, sentinel := range []error{ErrProtocolSkew, ErrVersionSkew, ErrCycleDetected} {
-		assert.ErrorIs(t, remapSkewError(sentinel.Error()), sentinel)
+	for _, sentinel := range []error{ErrProtocolMismatch, ErrVersionMismatch, ErrCycleDetected} {
+		assert.ErrorIs(t, decodeWireError(sentinel.Error()), sentinel)
 	}
 
 	// ErrNotAdoptable is carried as a prefix plus context; the sentinel is preserved
 	// and the trailing detail is kept in the message.
-	got := remapSkewError(ErrNotAdoptable.Error() + ": run only")
+	got := decodeWireError(ErrNotAdoptable.Error() + ": run only")
 	assert.ErrorIs(t, got, ErrNotAdoptable)
 	assert.Contains(t, got.Error(), "run only")
 
 	// An unrecognized message becomes a plain error, matching none of the sentinels.
-	plain := remapSkewError("something else entirely")
-	assert.NotErrorIs(t, plain, ErrProtocolSkew)
+	plain := decodeWireError("something else entirely")
+	assert.NotErrorIs(t, plain, ErrProtocolMismatch)
 	assert.Equal(t, "something else entirely", plain.Error())
 	assert.False(t, errors.Is(plain, ErrNotAdoptable))
 }

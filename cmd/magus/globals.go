@@ -37,7 +37,9 @@ type globalFlags struct {
 
 var global globalFlags
 
-var outputFormatHelp = "Output format (" + JoinFormats(CommonFormats, "|") + "|template=<go-template>); default: text"
+// template[=<body>]: a body renders a Go template; bare "-o template" lists the
+// output's fields (the json keys usable in -o json and -o template).
+var outputFormatHelp = "Output format (" + JoinFormats(CommonFormats, "|") + "|template[=<go-template>]); default: text"
 
 func bindDisplayFlags(fs *flag.FlagSet) {
 	fs.StringVar(&global.output, "output", global.output, outputFormatHelp)

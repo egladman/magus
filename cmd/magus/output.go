@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/codec"
+	schemagen "github.com/egladman/magus/schema/gen"
 )
 
 // outputDst returns the writer for structured output; mirrors to --tee file when set.
@@ -103,6 +104,9 @@ func writeFormatted(w io.Writer, opts OutputOptions, v any) error {
 	case outputJSONL:
 		return writeJSONL(w, v)
 	case outputTemplate:
+		if opts.Template == "" { // bare "-o template": document the fields instead of rendering
+			return writeTemplateFields(w, v)
+		}
 		return writeTemplate(w, v, opts.Template)
 	default:
 		return fmt.Errorf("writeFormatted: unsupported format %q", opts.Format)
@@ -120,7 +124,15 @@ func flagWasSet(fs *flag.FlagSet, name string) bool {
 	return found
 }
 
-// writeTemplate executes a Go text/template body against v. The template sees the same shape as -o json.
+// writeTemplate executes a Go text/template body against v. The template sees the
+// SAME shape as -o json: field names are the json-tag keys ({{.path}}), NOT the
+// PascalCase Go struct fields. We guarantee that by first normalizing v through the
+// codec (marshal to JSON, then unmarshal into a plain any), so the template ranges
+// over map[string]any / []any exactly as -o json renders it. This makes -o json a
+// faithful reference for authoring templates (the kubectl -o go-template model), and
+// keeps template field names stable with the json contract rather than with Go
+// identifiers. Numbers arrive as float64 (json's default for any); text/template
+// prints whole values without a fractional part (float64(26) -> "26").
 // Helpers: a curated subset of sprig (strings, lists, dicts, encoding, paths, defaults, semver).
 // Excluded: env/expandenv, now/date/uuidv4, crypto, getHostByName, fail.
 // No trailing newline is appended (templates control whitespace, matching kubectl -o go-template).
@@ -129,10 +141,30 @@ func writeTemplate(w io.Writer, v any, body string) error {
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
-	if err := t.Execute(w, v); err != nil {
+	shaped, err := jsonShape(v)
+	if err != nil {
+		return fmt.Errorf("shape template data: %w", err)
+	}
+	if err := t.Execute(w, shaped); err != nil {
 		return fmt.Errorf("execute template: %w", err)
 	}
 	return nil
+}
+
+// jsonShape round-trips v through the codec so the result is the plain-any mirror of
+// v's JSON form (map[string]any/[]any/float64/string/bool/nil), keyed by json tags.
+// -o template renders against this so its field names match -o json exactly, under
+// whichever codec build (encoding/json or json/v2) is active.
+func jsonShape(v any) (any, error) {
+	b, err := codec.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var shaped any
+	if err := codec.Unmarshal(b, &shaped); err != nil {
+		return nil, err
+	}
+	return shaped, nil
 }
 
 // excludedSprigFuncs lists sprig entries absent from magus templates (non-hermetic or dangerous).
@@ -155,12 +187,101 @@ func templateFuncs() template.FuncMap {
 	for _, name := range excludedSprigFuncs {
 		delete(f, name)
 	}
-	// Preserve magus's original bindings; magus strings.Join wins over sprig's reversed join.
-	f["join"] = strings.Join
+	// Preserve magus's original bindings; magus's list-first join wins over sprig's
+	// reversed (sep-first) join. templateJoin (not strings.Join) so it also handles
+	// the []any that json-normalization produces for list fields - see writeTemplate.
+	f["join"] = templateJoin
 	f["upper"] = strings.ToUpper
 	f["lower"] = strings.ToLower
 	f["trim"] = strings.TrimSpace
 	return f
+}
+
+// templateJoin joins a list's elements with sep, keeping magus's list-first arg order
+// ({{join .list ","}}). Unlike strings.Join it accepts ANY slice/array - []string
+// from sprig helpers, and the []any that -o template's json-normalized data yields
+// for list fields - stringifying each element. Non-slices stringify whole.
+func templateJoin(list any, sep string) string {
+	if list == nil { // an absent/null list field joins to empty, like strings.Join(nil, sep)
+		return ""
+	}
+	rv := reflect.ValueOf(list)
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
+		return fmt.Sprint(list)
+	}
+	parts := make([]string, rv.Len())
+	for i := range parts {
+		parts[i] = fmt.Sprint(rv.Index(i).Interface())
+	}
+	return strings.Join(parts, sep)
+}
+
+// writeTemplateFields prints the fields available to -o template / -o json for v's
+// output type, instead of rendering v. This is what bare "-o template" (no body)
+// produces: the template surface documenting itself. Field names are the json-tag
+// keys (what both -o json and -o template use), sourced from the generated
+// schemagen.OutputTypes descriptor (keyed by v's Go type name), which also carries
+// each field's type and doc. Referenced output types are listed too, so a nested
+// shape (e.g. .projects -> []ProjectEntry) is drillable in the same output.
+func writeTemplateFields(w io.Writer, v any) error {
+	rt := reflect.TypeOf(v)
+	for rt != nil && rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
+	}
+	if rt == nil {
+		return fmt.Errorf("-o template: cannot list fields of a nil value")
+	}
+	root, ok := schemagen.OutputTypes[rt.Name()]
+	if !ok {
+		return fmt.Errorf("-o template: no field list for output type %q", rt.Name())
+	}
+	fmt.Fprintln(w, "# fields for -o json / -o template (bare -o template lists these):")
+	seen := map[string]bool{root.Name: true}
+	queue := []schemagen.OutputType{root}
+	for len(queue) > 0 {
+		ot := queue[0]
+		queue = queue[1:]
+		writeFieldBlock(w, ot)
+		for _, f := range ot.Fields {
+			if ref := baseTypeName(f.Type); ref != "" && !seen[ref] {
+				if refType, ok := schemagen.OutputTypes[ref]; ok {
+					seen[ref] = true
+					queue = append(queue, refType)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// writeFieldBlock prints one output type's fields as `<json-key>  <type>  # <doc>`,
+// json-key column aligned, under a `<TypeName>:` header.
+func writeFieldBlock(w io.Writer, ot schemagen.OutputType) {
+	fmt.Fprintf(w, "\n%s:\n", ot.Name)
+	width := 0
+	for _, f := range ot.Fields {
+		if len(f.JSON) > width {
+			width = len(f.JSON)
+		}
+	}
+	for _, f := range ot.Fields {
+		fmt.Fprintf(w, "  %-*s  %s", width, f.JSON, f.Type)
+		if f.Doc != "" {
+			fmt.Fprintf(w, "  # %s", f.Doc)
+		}
+		fmt.Fprintln(w)
+	}
+}
+
+// baseTypeName strips slice/pointer/map wrappers from a rendered type string down to
+// the named type it references ("[]ProjectEntry" -> "ProjectEntry",
+// "map[string]Target" -> "Target", "*Target" -> "Target"), so referenced output types
+// can be looked up. Returns the string unchanged when there is nothing to strip.
+func baseTypeName(t string) string {
+	if i := strings.LastIndex(t, "]"); i >= 0 { // drop a leading []… or map[…] segment
+		t = t[i+1:]
+	}
+	return strings.TrimPrefix(t, "*")
 }
 
 // Format identifies how a command renders structured output (-o/--output).
@@ -211,10 +332,14 @@ func ResolveOutput(input string, extra ...Format) (OutputOptions, error) {
 		}
 	}
 	if body, ok := strings.CutPrefix(input, "template="); ok {
-		if body == "" {
-			return OutputOptions{}, fmt.Errorf("output template body must be non-empty (e.g. -o template='{{.Path}}')")
-		}
+		// An empty body ("-o template=") means "list the fields", same as bare
+		// "-o template" below - not an error. A non-empty body renders.
 		return OutputOptions{Format: FormatTemplate, Template: body}, nil
+	}
+	if input == "template" {
+		// Bare "-o template" (no body): print the output's templatable fields
+		// instead of rendering - the self-documentation of the template surface.
+		return OutputOptions{Format: FormatTemplate, Template: ""}, nil
 	}
 	for _, v := range CommonFormats {
 		if string(v) == input {

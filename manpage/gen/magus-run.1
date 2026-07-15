@@ -26,6 +26,9 @@ Print what would run without executing
 \fB\-\-graph\fR
 Render the dependency graph for the selected scope instead of executing
 .TP
+\fB\-\-no\-cache\fR
+Force a fresh run even on a cache hit; still refreshes the entry
+.TP
 \fB\-\-upstream\fR
 With \-\-graph: show dependents instead of dependencies
 .RE
@@ -79,6 +82,12 @@ magus run build api/gateway web/studio
 .PP
 .EX
 magus run build --dry-run
+.EE
+.PP
+\fIForce a fresh rebuild past a cache hit\fR
+.PP
+.EX
+magus run build --no-cache
 .EE
 .PP
 \fIFull CI pipeline\fR

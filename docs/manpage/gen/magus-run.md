@@ -35,6 +35,9 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 **--graph**
 : Render the dependency graph for the selected scope instead of executing
 
+**--no-cache**
+: Force a fresh run even on a cache hit; still refreshes the entry
+
 **--upstream**
 : With --graph: show dependents instead of dependencies
 
@@ -88,6 +91,12 @@ magus run build api/gateway web/studio
 
 ```sh
 magus run build --dry-run
+```
+
+*Force a fresh rebuild past a cache hit*
+
+```sh
+magus run build --no-cache
 ```
 
 *Full CI pipeline*

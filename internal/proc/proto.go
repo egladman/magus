@@ -5,14 +5,13 @@ package proc
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/egladman/magus/types"
 )
 
 // ProtocolV2 identifies the JSONL message shape; distinct from the binary Version.
-// Servers reject an unknown non-empty protocol with ErrProtocolSkew.
+// Servers reject an unknown non-empty protocol with ErrProtocolMismatch.
 const ProtocolV2 = "v2"
 
 // Wire-type strings embedded in every JSONL frame's "type" field.
@@ -193,20 +192,3 @@ type ServiceHost interface {
 type ErrorReply struct {
 	Message string `json:"message"`
 }
-
-var (
-	// ErrAlreadyAdopted is returned by New when MAGUS_DAEMON_SOCKET is already set.
-	ErrAlreadyAdopted = errors.New("proc: already running under a parent magus")
-
-	// ErrCycleDetected is set in RunReply.Err when the same (target, project) pair is already in-flight.
-	ErrCycleDetected = errors.New("proc: cycle detected in nested magus invocation")
-
-	// ErrVersionSkew is returned when the child's build version differs from the parent's.
-	ErrVersionSkew = errors.New("proc: version mismatch between parent and child magus")
-
-	// ErrProtocolSkew is returned when a client sends an unrecognised non-empty Protocol value.
-	ErrProtocolSkew = errors.New("proc: protocol version mismatch")
-
-	// ErrNotAdoptable signals that the daemon cannot service this subcommand; client falls back locally.
-	ErrNotAdoptable = errors.New("proc: subcommand not adoptable")
-)
