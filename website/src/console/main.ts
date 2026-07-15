@@ -47,6 +47,7 @@ function stubPage(id: string, title: string): PageModule<null, null> {
 interface Mounted { host: HTMLElement; controller: PageController<any, any> | null; }
 
 export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void {
+  outlet.classList.add("console-outlet"); // so the layout CSS applies without the page remembering
   const ws = workspaceStore();
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted host + controller
 
