@@ -94,11 +94,11 @@ Once the basics click, these cover running magus at scale and in CI.
 
 Generated man pages for every command:
 
-- [`magus`](manpage/gen/magus.md) - the umbrella page: global flags, environment variables, and the full subcommand list.
-- [`magus run`](manpage/gen/magus-run.md) - run a target; the everyday command.
-- [`magus affected`](manpage/gen/magus-affected.md) - run targets only for projects a change touched, with sharding and bisection for CI.
-- [`magus ls`](manpage/gen/magus-ls.md) and [`magus describe`](manpage/gen/magus-describe.md) - inspect projects, targets, and the dependency graph.
-- [`magus watch`](manpage/gen/magus-watch.md) and [`magus x`](manpage/gen/magus-x.md) - re-run on change, and the interactive target picker.
+- [`magus`](manpage/magus.md) - the umbrella page: global flags, environment variables, and the full subcommand list.
+- [`magus run`](manpage/magus-run.md) - run a target; the everyday command.
+- [`magus affected`](manpage/magus-affected.md) - run targets only for projects a change touched, with sharding and bisection for CI.
+- [`magus ls`](manpage/magus-ls.md) and [`magus describe`](manpage/magus-describe.md) - inspect projects, targets, and the dependency graph.
+- [`magus watch`](manpage/magus-watch.md) and [`magus x`](manpage/magus-x.md) - re-run on change, and the interactive target picker.
 
 The magusfile API and diagnostics:
 

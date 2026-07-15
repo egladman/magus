@@ -46,8 +46,11 @@ export fun blogURLPath(base: str) > str {
 }
 
 // cleanURL maps a docs-relative source path to its clean gen-root URL: drop .md, drop
-// a trailing index/README/_index landing, drop a "gen" build segment, add a slash.
-// Blog posts route through blogURLPath for date scoping. "" for the home page.
+// a trailing index/README/_index landing, add a slash. Blog posts route through
+// blogURLPath for date scoping. "" for the home page. The docs tree carries no "gen"
+// path segment - the content walk skips the docs-root gen/ output dir by name, and the
+// generated markdown (buzz/modules, spells, manpage) lands in real content dirs - so
+// this maps source path straight to URL with no build-segment flattening.
 export fun cleanURL(rel: str, blogDir: str) > str {
     if (rel.startsWith(blogDir + "/") and rel != blogDir + "/index.md") {
         return blogDir + "/" + blogURLPath(rel.sub((blogDir + "/").len())) + "/";
@@ -60,12 +63,10 @@ export fun cleanURL(rel: str, blogDir: str) > str {
     while (i < parts.len()) {
         final p = parts[i];
         final isLast = (i == parts.len() - 1);
-        if (p != "gen") {
-            if (isLast and (p == "index" or p == "_index" or p == "README")) {
-                // landing basename -> its directory's URL
-            } else {
-                segs.append(p);
-            }
+        if (isLast and (p == "index" or p == "_index" or p == "README")) {
+            // landing basename -> its directory's URL
+        } else {
+            segs.append(p);
         }
         i = i + 1;
     }
@@ -87,4 +88,11 @@ test "cleanURL strips the _index landing marker like index" {
     assert.equal(cleanDepth("public/_index.md", "blog"), 1, "public landing is one level deep");
     assert.equal(cleanDepth("public/atom/_index.md", "blog"), 2, "public/atom landing is two levels deep");
     assert.equal(cleanDepth("development/_index.md", "blog"), 1, "development landing is one level deep");
+}
+
+// The de-collided manpage Markdown (docs/manpage/*.md) maps straight to /manpage/<cmd>/;
+// there is no "gen" build segment to flatten out of the URL.
+test "cleanURL maps a manpage page to its flat URL" {
+    assert.equal(cleanURL("manpage/magus-graph.md", "blog"), "manpage/magus-graph/", "manpage page URL");
+    assert.equal(cleanURL("manpage/magus.md", "blog"), "manpage/magus/", "manpage umbrella page URL");
 }

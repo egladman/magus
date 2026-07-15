@@ -8,7 +8,7 @@ tags: [affected, vcs, git, changed-files, dependency-graph, ci, bisect, watch]
 
 `magus affected <target>` runs a target for every project a version-control diff
 touched, and nothing else. On a large workspace this is the difference between
-testing five projects and testing five hundred. The [man page](manpage/gen/magus-affected.md)
+testing five projects and testing five hundred. The [man page](manpage/magus-affected.md)
 is the flag reference; this page is the model behind it.
 
 ## Design intent

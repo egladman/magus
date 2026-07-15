@@ -26,7 +26,8 @@ export fun resolvePath(fromDir: str, link: str) > str {
 }
 
 // cleanTarget maps an old flat gen-root path to its clean URL: drop .html, drop a
-// trailing index/README landing, drop the "gen" build segment, add a trailing slash.
+// trailing index/README landing, add a trailing slash. The docs tree carries no "gen"
+// path segment (see cleanURL in render_url.buzz), so no build segment is flattened.
 export fun cleanTarget(oldPath: str) > str {
     final segs = splitPath(oldPath);
     if (segs.len() == 0) { return ""; }
@@ -36,12 +37,10 @@ export fun cleanTarget(oldPath: str) > str {
         var p = segs[i];
         final isLast = (i == segs.len() - 1);
         if (isLast and p.endsWith(".html")) { p = p.sub(0, p.len() - 5); }
-        if (p != "gen") {
-            if (isLast and (p == "index" or p == "README")) {
-                // landing basename -> its directory
-            } else {
-                keep.append(p);
-            }
+        if (isLast and (p == "index" or p == "README")) {
+            // landing basename -> its directory
+        } else {
+            keep.append(p);
         }
         i = i + 1;
     }
@@ -460,7 +459,7 @@ test "resolvePath normalizes .. and . against a base dir" {
 }
 
 test "cleanTarget maps old flat paths to clean URLs" {
-    assert.equal(cleanTarget("manpage/gen/magus-ls.html"), "manpage/magus-ls/", "drops .html and gen");
+    assert.equal(cleanTarget("manpage/magus-ls.html"), "manpage/magus-ls/", "drops .html, de-collided manpage dir");
     assert.equal(cleanTarget("codes/race/index.html"), "codes/race/", "drops index landing");
     assert.equal(cleanTarget("install.html"), "install/", "top-level page");
     assert.equal(cleanTarget("index.html"), "", "home page");

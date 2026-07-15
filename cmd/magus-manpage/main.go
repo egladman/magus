@@ -3,18 +3,20 @@
 // Two modes, selected by -format:
 //
 //	roff (default) — groff_man(7) .1 source for `man`, written to -out
-//	                 (default: manpage/gen).
+//	                 (default: manpage/). A distribution artifact, owned at the
+//	                 repo root and shipped for the `man` command.
 //	md             — Markdown for the docs site, written to -out
-//	                 (default: docs/manpage/gen). The static-site generator
-//	                 (docs/magusfile.buzz) renders these to HTML like any other doc.
+//	                 (default: docs/manpage/). Docs-site content, owned by the docs
+//	                 project (docs/magusfile.buzz), which renders these to HTML like
+//	                 any other doc.
 //
 // Both render from the same internal/manpage registry; they are independent
 // serializers, not a conversion of one format into the other.
 //
 // Usage:
 //
-//	go run ./cmd/magus-manpage [-format roff] [-out manpage/gen] [-date ""] [-version dev]
-//	go run ./cmd/magus-manpage  -format md   [-out docs/manpage/gen]
+//	go run ./cmd/magus-manpage [-format roff] [-out manpage] [-date ""] [-version dev]
+//	go run ./cmd/magus-manpage  -format md   [-out docs/manpage]
 package main
 
 import (
@@ -31,7 +33,7 @@ import (
 
 func main() {
 	format := flag.String("format", "roff", "output format: roff or md")
-	out := flag.String("out", "", "output directory (default: manpage/gen for roff, docs/manpage/gen for md)")
+	out := flag.String("out", "", "output directory (default: manpage for roff, docs/manpage for md)")
 	date := flag.String("date", "", "date for .TH header; empty omits it (roff mode)")
 	// The committed man pages carry no version: baking one turns every release bump
 	// into spurious churn across all pages. The .TH source field stays a neutral
@@ -43,12 +45,12 @@ func main() {
 	switch *format {
 	case "roff":
 		if *out == "" {
-			*out = "manpage/gen"
+			*out = "manpage"
 		}
 		genRoff(*out, *date, *ver)
 	case "md":
 		if *out == "" {
-			*out = "docs/manpage/gen"
+			*out = "docs/manpage"
 		}
 		genMD(*out)
 	default:

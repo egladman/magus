@@ -362,10 +362,10 @@ object Site {
         }
         li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
 
-        // Drop the build-artifact "gen" segment so a manpage trail reads
-        // Documentation / Manpage / <cmd>, not / Gen / <cmd> (matches the flattened URL).
-        var segs: [str] = mut [<str>];
-        foreach (s in segsRaw) { if (s != "gen") { segs.append(s); } }
+        // The docs tree carries no "gen" path segment, so the source segments map
+        // straight to breadcrumb crumbs (a manpage trail reads Documentation / Manpage
+        // / <cmd>, matching its URL).
+        final segs = segsRaw;
         final base = segs[segs.len() - 1];
 
         final landing = (base == "index.md" or base == "README.md");
@@ -2495,9 +2495,9 @@ fun renderFile(rel: str, site: Site) > void {
     final url = cleanURL(rel, site.blog);
     final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), site);
 
-    // Directory-index output: every page is <cleanURL>index.html (extensionless,
-    // with the build-artifact "gen" segment flattened out). url is gen/-root-
-    // relative and ends in a slash, matching what search.js/sitemap/canonical use.
+    // Directory-index output: every page is <cleanURL>index.html (extensionless).
+    // url is gen/-root-relative and ends in a slash, matching what
+    // search.js/sitemap/canonical use.
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);   // drop trailing slash for mkdir
     fs.makeDirectory(dir);
 
@@ -2972,10 +2972,9 @@ fun isDirectory(path: str) > bool {
 // would ingest stray .md (package READMEs, generated index.md) as documentation pages,
 // so the content walks skip them. CRUCIAL: only these EXACT docs-root children are
 // skipped - the check is guarded by rel == "" at the call sites, NOT applied by name at
-// every depth. Real content nests a dir named gen (docs/manpage/gen holds the generated
-// manpage markdown), and skipping that by bare name would drop those pages. Real content
-// subdirs at the root (reference/, spells/, targets/, codes/, ...) are not listed and
-// are walked as before.
+// every depth, so a content subdir that happened to share one of these names would still
+// be walked. Real content subdirs at the root (reference/, spells/, targets/, codes/,
+// manpage/, ...) are not listed and are walked as before.
 fun isGeneratorDir(name: str) > bool {
     return name == "node_modules" or name == "gen" or name == "src" or name == "tour";
 }

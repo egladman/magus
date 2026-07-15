@@ -43,7 +43,23 @@ magus.project({
                 // The viewer/console bundles a JS client generated FROM these .proto sources
                 // (buf.gen.yaml -> src/gen/), so a schema change reruns codegen + rebuild.
                 "../proto/magus/**/*.proto", "../proto/buf.yaml", "../proto/buf.lock",
-                "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**"],
+                "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**",
+                // content-generate derives committed Markdown from the Go source tree (the
+                // Buzz module reference, the built-in spell docs, and the Markdown manpages),
+                // so name those generators' inputs here: a change to a host-module binding, a
+                // built-in spell or its example, or the CLI/manpage registry must mark this
+                // project affected so content-generate re-runs and the drift gate catches an
+                // unregenerated page. Data sources are ../std + ../host (module ref), ../spells
+                // + ../internal/spell (spell docs), and ../internal/manpage + ../internal/config
+                // (manpages); the tools themselves live under ../cmd/magus-{docs,spelldocs,manpage}.
+                "../std/**/*.go", "../host/**/*.go",
+                "../spells/**/*.buzz", "../internal/spell/**/*.go",
+                "../internal/manpage/**/*.go", "../internal/config/**/*.go",
+                "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go", "../cmd/magus-manpage/**/*.go"],
+    // The committed Markdown that content-generate derives from the Go tree
+    // (buzz/modules, spells, manpage) is declared per-target in content-generate's own
+    // magus.outputs, not here, so that generator's cache entry snapshots exactly its
+    // pages and no other target's hit can restore them stale.
     "outputs": ["gen/**", "MAGUS.md", "src/gen/**"],
     "targets": {
         // generate renders + gates on drift, so it must run every time (skip_cache) and
@@ -91,6 +107,21 @@ export fun changelog_generate(args: [str]) > void {
         "-releases", ROOT + "/releases", "-changelog", ROOT + "/CHANGELOG.md"], ".", {});
 }
 
+// content-generate regenerates the committed docs Markdown derived from the Go source
+// tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry),
+// the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), and the
+// Markdown manpages (cmd/magus-manpage -format md, from internal/manpage). The generator
+// tools live at the repo root, so they run from here (the docs cwd) as `go run ../cmd/...`
+// writing into this project's own tree. This owns only the Markdown manpages (docs-site
+// content, docs/manpage/*.md); the roff manpages are a distribution artifact owned by the
+// root magusfile (man-generate). generate depends on this and drift-gates the result.
+export fun content_generate(args: [str]) > void {
+    magus.outputs("buzz/modules/*.md", "spells/*.md", "spells.md", "manpage/*.md");
+    os.exec("go", ["run", "../cmd/magus-docs", "-out", "./buzz/modules"], ".", {});
+    os.exec("go", ["run", "../cmd/magus-spelldocs", "-out", "./spells"], ".", {});
+    os.exec("go", ["run", "../cmd/magus-manpage", "-format", "md", "-out", "./manpage"], ".", {});
+}
+
 // generateJsBundles builds the committed browser bundles that import npm
 // packages - the d3-force graph explorer, the CodeMirror playground editor, and
 // the vendored mermaid/highlight.js libraries. These are pnpm-managed packages
@@ -126,7 +157,12 @@ fun generateJsBundles() > void {
 // committed. The `rw` charm (`generate:rw`) keeps the result instead of gating.
 export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("preflight"));
-    final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"]) == false;
+    // CONTENT are the derived-Markdown trees content-generate owns; they are rendered into
+    // the site, so they must be fresh (and drift-gated) before the render below.
+    final CONTENT = ["buzz/modules", "spells", "spells.md", "manpage"];
+    final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT) == false;
+    // Regenerate the docs Markdown derived from the Go tree BEFORE rendering the site.
+    magus.needs(magus.target.literal("content-generate"));
     magus.needs(magus.target.literal("md-generate"));
     magus.needs(magus.target.literal("changelog-generate"));
     // Regenerate the JS proto client from ../proto BEFORE the bundles that import it.
@@ -143,8 +179,8 @@ export fun generate(args: [str]) > void {
         render.updateUrlLock(site);
         return;
     }
-    if (clean_before and vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md"])) {
-        throw "generate: " + OUT + " or MAGUS.md or CHANGELOG.md drifted; re-run `magus run generate:rw docs` and commit";
+    if (clean_before and vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md"] + CONTENT)) {
+        throw "generate: " + OUT + " or MAGUS.md or CHANGELOG.md or the generated docs Markdown drifted; re-run `magus run generate:rw docs` and commit";
     }
 }
 

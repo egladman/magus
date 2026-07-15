@@ -8,7 +8,7 @@
 //	go run ./cmd/magus-spelldocs -out ./docs/spells
 //
 // The output under docs/spells is committed; re-run this (via `magus run
-// docs_generate`) after changing a spell. Spell examples are marked runnable as
+// content-generate docs`) after changing a spell. Spell examples are marked runnable as
 // dry-run (<!-- run-recorder -->): the playground's recorder (Eval + WithTracer)
 // records the tool invocations a target would trigger instead of executing them,
 // so a reader sees the plan without the toolchain installed.

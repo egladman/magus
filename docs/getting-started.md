@@ -165,7 +165,7 @@ If you ever wonder why a project is in the affected set, ask:
 magus affected ci --explain ./path/to/project
 ```
 
-`magus affected ci` is the command your CI runs on every pull request. It keys off the `ci` anchor, computes the affected set from the VCS diff, and does the minimum work. For CI fan-out across runners, `magus affected --plan` emits a provider-neutral shard plan; see [`magus affected`](manpage/gen/magus-affected.md) for `--plan`, `--stdin`, and bisect.
+`magus affected ci` is the command your CI runs on every pull request. It keys off the `ci` anchor, computes the affected set from the VCS diff, and does the minimum work. For CI fan-out across runners, `magus affected --plan` emits a provider-neutral shard plan; see [`magus affected`](manpage/magus-affected.md) for `--plan`, `--stdin`, and bisect.
 
 ## Recap
 
@@ -191,5 +191,5 @@ The [documentation index](documentation.md) is the map. From here, the core conc
 
 And the reference:
 
-- [`magus init`](manpage/gen/magus-init.md), [`magus run`](manpage/gen/magus-run.md), [`magus ls`](manpage/gen/magus-ls.md), [`magus affected`](manpage/gen/magus-affected.md) - the commands in this guide.
+- [`magus init`](manpage/magus-init.md), [`magus run`](manpage/magus-run.md), [`magus ls`](manpage/magus-ls.md), [`magus affected`](manpage/magus-affected.md) - the commands in this guide.
 - [playground.html](playground.html) - try any example live in the browser.

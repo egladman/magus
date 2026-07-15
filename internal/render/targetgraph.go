@@ -285,7 +285,7 @@ func WriteTargetGraphMermaid(w io.Writer, out types.TargetGraphOutput) error {
 // targetGraphIR maps the target dependency graph onto the shared renderGraph. With
 // more than one project, each is a subgraph and its node IDs are prefixed (so a
 // `build` in two projects stays distinct). Worker targets sharing a trailing
-// `-<segment>` (e.g. `man-generate`, `docs-generate`) are boxed into a collapsing
+// `-<segment>` (e.g. `man-generate`, `content-generate`) are boxed into a collapsing
 // stage subgraph, so an edge lands on the box rather than a worker inside it; the
 // bare composite (`generate`) stays loose. Nodes are classed by role: top-level
 // targets (nothing depends on them) versus plain targets pulled in as dependencies.
@@ -388,7 +388,7 @@ func targetGraphIR(out types.TargetGraphOutput) renderGraph {
 
 // stageGroups buckets a project's *worker* targets into a collapsing stage
 // subgraph named for their shared trailing `-<segment>` (e.g. `man-generate`,
-// `docs-generate` → a `generate` box). A worker joins stage `seg` only when a
+// `content-generate` → a `generate` box). A worker joins stage `seg` only when a
 // composite target named `seg` exists *and directly depends on it* — the box reads
 // as "the steps `seg` runs", so a same-suffix target the composite does not run
 // (e.g. a standalone `pgo-generate`) stays loose rather than landing in the box.
