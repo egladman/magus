@@ -18,7 +18,7 @@ import { parseHash, wantsDemo } from "../../lib/daemon";
 import { decodeFragmentBytes, viewerParams } from "./fragment";
 import { state, waterfallSource } from "./state";
 import {
-  bodyEl, copyToClipboard, el, emptyEl, panelEl, scrollEl,
+  bodyEl, copyToClipboard, el, emptyEl, panelEl, resolveDom, scrollEl,
   setBtnLabel, setRefIdentity, setStatus,
 } from "./dom";
 import { stripAnsi } from "../render/ansi";
@@ -470,8 +470,15 @@ function wireInput(): void {
   }
 }
 
-// Boot last: every shared state field above is now initialized, so loadFromURL()'s setFilter()
-// (for a #q= deep link) will not be clobbered by a later initializer.
-if (bodyEl && scrollEl) {
-  init();
+// activate boots the viewer: resolve the DOM handles (the scaffold must already be present), then
+// wire and load. Exported so the shell's logs PageModule can drive it after injecting the scaffold
+// into a host; the standalone page auto-boots below. init()'s ordering is preserved - every shared
+// state field is initialized before it runs, so loadFromURL()'s #q= setFilter is not clobbered.
+export function activate(): void {
+  resolveDom();
+  if (bodyEl && scrollEl) init();
 }
+
+// Standalone auto-boot: only when the scaffold is already in the document at load. In the shell the
+// scaffold is injected into a host AFTER this module imports, so the shell calls activate() itself.
+if (document.getElementById("log-body")) activate();

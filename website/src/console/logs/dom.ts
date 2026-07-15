@@ -1,22 +1,36 @@
-// dom.ts - the shared DOM handles and the small button/status/clipboard helpers the log
-// viewer's modules reuse. The element handles are resolved once at module load (the same as
-// the original monolith's top-level lookups); bodyEl is the render root (asserted present -
-// boot() gates on it), the rest stay nullable so every handler keeps its DOM guard and no-ops
-// when its target is absent.
+// dom.ts - the shared DOM handles and the small button/status/clipboard helpers the log viewer's
+// modules reuse. The handles are resolved by resolveDom(), called by the boot BEFORE anything uses
+// them - DEFERRED, not resolved at import, so the viewer can boot standalone against logs.html OR be
+// mounted into a shell host whose scaffold is injected first. The exports are `let` bindings, so
+// every importer sees the resolved value through the live ES-module binding with no change of its
+// own. Global getElementById is kept (not scoped to a root) so shared status-bar elements that live
+// OUTSIDE the scaffold (console-conn, console-count) still resolve when mounted.
 
 export const el = (id: string): HTMLElement | null => document.getElementById(id);
 
-// bodyEl is the render root, used unguarded throughout; boot() only calls init() when it
-// (and scrollEl) resolve, so it is asserted non-null here.
-export const bodyEl = document.getElementById("log-body") as HTMLElement;
-export const scrollEl = el("log-scroll");
-export const refEl = el("log-ref");
-export const refLabelEl = el("log-ref-label");
-export const emptyEl = el("log-empty");
-export const panelEl = document.querySelector(".panel") as HTMLElement | null;
-// setStatus targets the status strip if the page has one. The current scaffold has none, so
-// this is a safe no-op (the guard the original relied on); kept so a re-added #log-status lights up.
-export const statusEl = el("log-status");
+// bodyEl is the render root, used unguarded throughout; boot gates on it (and scrollEl) before any
+// render runs, so it is typed non-null and assigned by resolveDom. The rest stay nullable.
+export let bodyEl: HTMLElement;
+export let scrollEl: HTMLElement | null;
+export let refEl: HTMLElement | null;
+export let refLabelEl: HTMLElement | null;
+export let emptyEl: HTMLElement | null;
+export let panelEl: HTMLElement | null;
+// statusEl targets the status strip if the page has one. The current scaffold has none, so this is
+// a safe no-op (the guard the original relied on); kept so a re-added #log-status lights up.
+export let statusEl: HTMLElement | null;
+
+// resolveDom (re)reads the handles from the document. Called once at boot, after the scaffold is in
+// place - always so for the standalone page; the shell injects it before calling. Idempotent.
+export function resolveDom(): void {
+  bodyEl = document.getElementById("log-body") as HTMLElement;
+  scrollEl = el("log-scroll");
+  refEl = el("log-ref");
+  refLabelEl = el("log-ref-label");
+  emptyEl = el("log-empty");
+  panelEl = document.querySelector(".panel") as HTMLElement | null;
+  statusEl = el("log-status");
+}
 
 // setBtnLabel sets a toolbar button's text label without disturbing its icon: the label
 // lives in a .btn-label span next to the SVG, so we can't just set button.textContent.
