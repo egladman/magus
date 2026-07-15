@@ -12,7 +12,7 @@ detaches - `docker run -d` / `--detach` (or a combined short-flag block like
 
 ```text
 [MGS5002] service op "db" detaches with "-d": magus forks a service in the foreground and supervises it, so detaching breaks stdout capture, readiness, and stop. Drop the detach flag, or make this a command op if you really want it detached.
-  see: …/MGS5002.md
+  see: .../MGS5002.md
 ```
 
 ## Why

@@ -180,7 +180,7 @@ import "magus/charm";
 fun lint(target: Target) > Command {
     final args = ["tool", "golangci-lint", "run", "./..."];
     return Command{bin = "go", args = args, charms = {
-        "rw":    after(args, "run", ["--fix"]),  // insert after "run" — index-proof
+        "rw":    after(args, "run", ["--fix"]),  // insert after "run" - index-proof
         "debug": append(["-v"]),                 // append
     }};
 }

@@ -38,7 +38,7 @@ telemetry:
   service_name: "magus" # resource attribute service.name
   sample_ratio: 1.0 # head-based trace sampling, [0,1]
   headers: # static headers on every OTLP request
-    x-api-key: "…"
+    x-api-key: "..."
 ```
 
 Or via the environment:
@@ -46,7 +46,7 @@ Or via the environment:
 | Env var                        | YAML key                 | Default | Purpose                                                        |
 | ------------------------------ | ------------------------ | ------- | -------------------------------------------------------------- |
 | `MAGUS_TELEMETRY_ENABLED`      | `telemetry.enabled`      | `false` | Turn OTLP export on; magus connects to the endpoint when true  |
-| `MAGUS_TELEMETRY_ENDPOINT`     | `telemetry.endpoint`     | —       | OTLP collector address as `host:port` (no scheme); required    |
+| `MAGUS_TELEMETRY_ENDPOINT`     | `telemetry.endpoint`     | -       | OTLP collector address as `host:port` (no scheme); required    |
 | `MAGUS_TELEMETRY_PROTOCOL`     | `telemetry.protocol`     | `grpc`  | OTLP wire protocol: `grpc` or `http`                           |
 | `MAGUS_TELEMETRY_INSECURE`     | `telemetry.insecure`     | `false` | Disable TLS for the OTLP exporter (plaintext local collectors) |
 | `MAGUS_TELEMETRY_SERVICE_NAME` | `telemetry.service_name` | `magus` | Value of the resource attribute `service.name`                 |
@@ -132,9 +132,9 @@ per resolved spell per project.
 
 | Metric                     | Instrument      | Unit     | Attributes | Meaning                                          |
 | -------------------------- | --------------- | -------- | ---------- | ------------------------------------------------ |
-| `magus.pool.wait.duration` | histogram       | `s`      | —          | Time a target waited for a slot                  |
-| `magus.pool.slots.running` | up-down counter | `{slot}` | —          | Concurrency slots currently running (gauge-like) |
-| `magus.pool.slots.queued`  | up-down counter | `{slot}` | —          | Callers currently queued for a slot (gauge-like) |
+| `magus.pool.wait.duration` | histogram       | `s`      | -          | Time a target waited for a slot                  |
+| `magus.pool.slots.running` | up-down counter | `{slot}` | -          | Concurrency slots currently running (gauge-like) |
+| `magus.pool.slots.queued`  | up-down counter | `{slot}` | -          | Callers currently queued for a slot (gauge-like) |
 
 `magus.pool.slots.running` is an up-down counter: it rises as targets acquire
 slots and falls as they release, so its value reads as the live running depth.
@@ -146,12 +146,12 @@ Spans are sampled head-based by `telemetry.sample_ratio`.
 | Span                       | Attributes                      | When                                                        |
 | -------------------------- | ------------------------------- | ----------------------------------------------------------- |
 | `magus.target.run`         | `magus.project`, `magus.target` | One per target execution (miss path)                        |
-| `magus.cache.hash`         | —                               | Hashing a target's inputs (every `Cache.Run`)               |
-| `magus.cache.replay`       | —                               | Restoring outputs from a cache hit                          |
-| `magus.cache.snapshot`     | —                               | Capturing outputs after a build (miss path, writable cache) |
+| `magus.cache.hash`         | -                               | Hashing a target's inputs (every `Cache.Run`)               |
+| `magus.cache.replay`       | -                               | Restoring outputs from a cache hit                          |
+| `magus.cache.snapshot`     | -                               | Capturing outputs after a build (miss path, writable cache) |
 | `magus.cache.remote.get`   | `magus.project`                 | A remote fetch; spans the network round-trip and the import |
 | `magus.cache.remote.put`   | `magus.project`                 | A remote upload                                             |
-| `magus.cache.remote.prune` | —                               | A retention sweep (`magus config cache prune --remote`)     |
+| `magus.cache.remote.prune` | -                               | A retention sweep (`magus config cache prune --remote`)     |
 
 The `magus.cache.hash` / `replay` / `snapshot` spans break a target's latency
 down by phase: hashing vs. building vs. I/O. The remote `get`/`put` spans put a
@@ -165,7 +165,7 @@ unbounded in large monorepos. If your setup has thousands of projects, drop or
 relabel the attribute at the collector:
 
 ```yaml
-# OpenTelemetry Collector — attributes processor
+# OpenTelemetry Collector - attributes processor
 processors:
   attributes/drop_project:
     actions:

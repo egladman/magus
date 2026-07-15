@@ -11,7 +11,7 @@ while running the same target. The build outcome may depend on which project
 finished last.
 
 ```text
-[MGS4001] 2 filesystem race finding(s) (see …/MGS4001.md)
+[MGS4001] 2 filesystem race finding(s) (see .../MGS4001.md)
   path=go.work.sum projects=[api,worker] target=build tier=A overlap=34ms
   path=go.sum projects=[api,worker] target=build tier=A overlap=28ms
 
@@ -72,7 +72,7 @@ parallel. The most common case is a workspace-level sync that must run before
 individual projects build:
 
 ```yaml
-# magusfile.go — run go work sync before any build targets
+# magusfile.go - run go work sync before any build targets
 boosterpack.Bind(pack.Go, spec.Build).After("sync")
 ```
 

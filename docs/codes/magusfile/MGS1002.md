@@ -17,7 +17,7 @@ or acknowledge it.
 but shadowed by spells/hello/spell.buzz: imports resolve root-wins, so the deeper
 spell is dead. Move or rename it, or acknowledge the shadow in magus.yaml
 (spells.allow_shadow) with a reason.
-  see: …/MGS1002.md
+  see: .../MGS1002.md
 ```
 
 ## Why
