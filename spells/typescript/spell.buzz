@@ -68,6 +68,15 @@ fun vitest(target: Target) > Command {
         "gha": append(["--reporter=github-actions"]),
     }};
 }
+// dev-server runs the project's package.json "dev" script via the package
+// manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No
+// readiness probe is declared: the port and startup signal vary by framework,
+// so guessing one would be wrong more often than right (readiness is
+// optional - see services.md). A magusfile that needs to block on readiness
+// for its specific dev server can declare its own service op instead.
+fun devServer(target: Target) > Service {
+    return Service{command = Command{bin = "pnpm", args = ["run", "dev"]}};
+}
 // scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge
 // graph. The indexer is a PATH binary (install it with mise, not as a project dep), so
 // the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination,
@@ -77,7 +86,10 @@ fun scip(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "scip-typescript index --output \"$MAGUS_SYMBOL_INDEX\""]};
 }
 
-export fun mgs_listTargets() > {str: fun(Target) Command} {
+// mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because
+// dev-server mixes in a Service-returning op alongside the Command-returning ones.
+export fun mgs_listTargets() > any {
     return {"eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc,
-            "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest, "scip": scip};
+            "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest,
+            "dev-server": devServer, "scip": scip};
 }

@@ -1,0 +1,11 @@
+// dev-server runs the project's package.json dev script (pnpm run dev) as a
+// supervised background process when reached via magus.needs, or foreground
+// when run directly.
+import "magus";
+import "magus/spell/ts";
+
+magus.project({ "spells": [ts] });
+
+export fun serve(args: [str]) > void {
+    ts["dev-server"]();
+}

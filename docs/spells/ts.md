@@ -29,6 +29,29 @@ Every op is invoked as `ts["<op>"](opts?)`, where the optional options map accep
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
+## dev-server
+
+dev-server runs the project's package.json "dev" script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.
+
+**Command:** `pnpm run dev`
+
+### Example
+
+<!-- run-recorder -->
+```buzz
+// dev-server runs the project's package.json dev script (pnpm run dev) as a
+// supervised background process when reached via magus.needs, or foreground
+// when run directly.
+import "magus";
+import "magus/spell/ts";
+
+magus.project({ "spells": [ts] });
+
+export fun serve(args: [str]) > void {
+    ts["dev-server"]();
+}
+```
+
 ## eslint
 
 eslint has no built-in "github" formatter (unlike ruff's --output-format=github); "unix" is the built-in, no-extra-devDependency formatter closest to a CI-friendly, one-line-per-problem shape for annotation/regex parsing.

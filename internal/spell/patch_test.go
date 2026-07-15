@@ -343,6 +343,9 @@ var goldenBuiltins = map[string]Descriptor{
 			"vitest": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]types.Charm{
 				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
 			}}},
+			"dev-server": {Kind: "service", Command: types.Command{Bin: "pnpm", Args: []string{"run", "dev"}}, Service: &types.Service{
+				Command: types.Command{Bin: "pnpm", Args: []string{"run", "dev"}},
+			}},
 			"scip": {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-typescript index --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},

@@ -27,7 +27,7 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`md`](spells/md.md) | Markdown | 3 | Markdown docs spell: markdownlint and prettier for linting and formatting prose. |
 | [`py`](spells/py.md) | Python | 6 | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops. |
 | [`rs`](spells/rs.md) | Rust | 6 | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops. |
-| [`ts`](spells/ts.md) | TypeScript | 8 | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
+| [`ts`](spells/ts.md) | TypeScript | 9 | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
 <!-- END SPELL LIST -->
 
 ## Spells vs Targets
