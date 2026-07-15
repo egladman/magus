@@ -63,6 +63,18 @@ importers:
         specifier: 1.6.31
         version: 1.6.31
     devDependencies:
+      '@types/d3-drag':
+        specifier: 3.0.7
+        version: 3.0.7
+      '@types/d3-force':
+        specifier: 3.0.10
+        version: 3.0.10
+      '@types/d3-selection':
+        specifier: 3.0.11
+        version: 3.0.11
+      '@types/d3-zoom':
+        specifier: 3.0.8
+        version: 3.0.8
       typescript:
         specifier: 5.8.3
         version: 5.8.3
