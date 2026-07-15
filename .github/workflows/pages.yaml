@@ -1,20 +1,23 @@
 name: Pages
 
-# Publish the committed static site (website/gen) to GitHub Pages.
+# Publish the committed static site to GitHub Pages: the docs site at the root and
+# the standalone console app under /console/.
 #
-# website/gen is committed AND drift-gated by the site project's `generate`
-# target (CI fails if gen/ ever diverges from docs/ + README), so whatever is on
-# main is always the rendered site. This workflow therefore just publishes those
-# bytes — no magus, no TinyGo, no render step. It uses the Pages *artifact* path
-# (not a gh-pages branch), so it points straight at the nested website/gen dir
-# and nothing is duplicated into a second branch.
+# Both trees are committed AND drift-gated by their projects' build targets (the docs
+# site's `generate` and the console's `build` fail CI if gen/ ever diverges from
+# source), so whatever is on main is always the rendered output. This workflow just
+# assembles and publishes those bytes - no magus, no TinyGo, no render step. It uses
+# the Pages *artifact* path (not a gh-pages branch): the docs gen is copied to the
+# artifact root and the console gen into /console/, so the two projects each keep their
+# own committed gen/ and nothing is duplicated into a second branch.
 
 on:
   push:
     branches: [main]
-    # Only redeploy when the published site (or this workflow) actually changes.
+    # Only redeploy when a published tree (or this workflow) actually changes.
     paths:
       - 'website/gen/**'
+      - 'console/gen/**'
       - '.github/workflows/pages.yaml'
   workflow_dispatch:
 
@@ -36,24 +39,36 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # Shallow checkout (depth 1) — we only publish the committed website/gen,
-      # no git history needed.
+      # Shallow checkout (depth 1) - we only publish the committed gen/ trees, no git
+      # history needed.
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
 
-      # enablement: true turns Pages on (with the Actions source) the first time
-      # this runs, so no manual Settings → Pages step is needed. If your org
-      # blocks auto-enablement, enable it once with:
+      # enablement: true turns Pages on (with the Actions source) the first time this
+      # runs, so no manual Settings -> Pages step is needed. If your org blocks
+      # auto-enablement, enable it once with:
       #   gh api -X POST repos/egladman/magus/pages -f build_type=workflow
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         with:
           enablement: true
 
-      # Tar website/gen as-is and hand it to Pages. The site uses only relative
-      # paths, so it serves correctly under the project subpath
-      # (https://egladman.github.io/magus/).
+      # Assemble the artifact: the docs site at the root, then the console app at
+      # /console/. The console project OWNS /console/, so its subtree is cleared and
+      # replaced wholesale - this discards the docs render's /console/ redirect stub
+      # (which exists only to satisfy the docs asset-integrity gate) so the app wins.
+      # Both trees use only relative paths, so each serves correctly under its subpath
+      # of the project site (https://egladman.github.io/magus/ and .../console/).
+      - name: Assemble the site (docs at root, console at /console/)
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          cp -r website/gen/. _site/
+          rm -rf _site/console
+          mkdir -p _site/console
+          cp -r console/gen/. _site/console/
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: website/gen
+          path: _site
 
       - id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
