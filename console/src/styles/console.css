@@ -485,31 +485,32 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
    controls are role=tab / tabindex spans, so Pico's button theming never applies.
 
    The title bar: one compact row (NOT the standalone site-header) holding the app mark, the tab strip
-   that fills the middle, and the top-right actions. Its own bottom border is the line the active tab
-   merges into, so the tabs read as anchored browser/editor tabs, not a floating navbar. */
+   merges into. There is NO brand mark and NO in-bar buttons - the title bar IS the tab strip, so it
+   reads as an app's tab row, not a site nav. The settings gear FLOATS in the corner (see below). */
 #console-titlebar {
   flex: 0 0 auto;
-  display: flex; align-items: stretch; gap: 0.25rem;
-  height: 2.35rem; padding-inline: 0.3rem;
+  display: flex; align-items: stretch;
+  height: 2.2rem;
   background: var(--pico-card-sectioning-background-color);
   border-bottom: 1px solid var(--pico-muted-border-color);
 }
-#console-titlebar .brand { display: flex; align-items: center; padding-inline: 0.35rem; }
-#console-titlebar .brand img { height: 1.25rem; width: auto; display: block; }
-#console-actions { display: flex; align-items: center; gap: 0.15rem; position: relative; }
-/* Icon buttons in the title bar (settings gear, theme): bare, not Pico's solid-primary button. */
-#console-actions button {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 1.9rem; height: 1.9rem; margin: 0; padding: 0;
-  border: 0; border-radius: var(--pico-border-radius); cursor: pointer;
-  background: none; color: var(--pico-muted-color); box-shadow: none;
-}
-#console-actions button:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
-#console-actions button svg { width: 1.05rem; height: 1.05rem; }
 
-/* The tab strip (role=tablist) fills the middle of the title bar. Tabs stretch to its full height and
-   the active one merges into the title bar's bottom border. */
-#console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
+/* Floating settings: a round button pinned to the top-right corner, OVER the content, not inside any
+   bar. The tab strip reserves matching room on its right so a full row of tabs never slides under it. */
+#console-actions { position: fixed; top: 0.3rem; right: 0.45rem; z-index: 60; }
+.console-fab {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem; margin: 0; padding: 0;
+  border: 1px solid var(--pico-muted-border-color); border-radius: 50%; cursor: pointer;
+  background: var(--pico-card-background-color); color: var(--pico-muted-color); box-shadow: var(--pico-card-box-shadow);
+}
+.console-fab:hover { color: var(--pico-contrast); border-color: var(--pico-primary); }
+.console-fab svg { width: 1rem; height: 1rem; }
+/* The settings popover anchors under the floating gear (top-right), not under an in-bar button. */
+#console-actions .settings-panel { position: fixed; top: 2.3rem; right: 0.45rem; left: auto; }
+
+/* The tab strip (role=tablist) fills the title bar; the right padding clears the floating gear. */
+#console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; padding-right: 2.4rem; }
 #console-tabs [role="tablist"] {
   flex: 1 1 auto; display: flex; align-items: stretch; gap: 1px;
   overflow-x: auto; scrollbar-width: none;

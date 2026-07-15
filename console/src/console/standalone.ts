@@ -107,13 +107,14 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
       // scaffold id) no-ops; we drive activate() ourselves once the scaffold is mounted. On reopen the
       // module is cached (no re-eval), so activate() simply re-binds to the fresh scaffold.
       const mod = (await import(artUrl(s.bundle))) as BootModule;
-      // Lift the app's <main> from its built page - the exact scaffold the standalone tool boots
-      // against. The console frame provides the outer chrome (app bar, status bar), so only <main> is
-      // lifted and the page's own shell is dropped.
-      const res = await fetch(artUrl("index.html"));
+      // Fetch the surface's co-located scaffold - a `<main>` fragment (gen/<dir>/scaffold.html) that
+      // this console project owns, no longer a full standalone page (the decoupled console has none).
+      // The console frame provides the outer chrome (title bar, status bar); the fragment is the
+      // surface's own body, appended into the pane host.
+      const res = await fetch(artUrl("scaffold.html"));
       const doc = new DOMParser().parseFromString(await res.text(), "text/html");
       const main = doc.querySelector("main");
-      if (!main) throw new Error(s.id + " scaffold not found in /console/" + s.dir + "/");
+      if (!main) throw new Error(s.id + " scaffold.html missing its <main> (built to gen/" + s.dir + "/)");
       host.append(document.importNode(main, true));
       mod.activate();
       return {

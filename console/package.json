@@ -4,13 +4,10 @@
   "private": true,
   "description": "The magus native console: a standalone, decoupled tabbed + tiling PWA that hosts the log viewer, graph explorer, dashboard, and activity trail as live lenses on the daemon over loopback. Built independently of the docs site (no scribe templating); its output is slipped into the reserved /console/ path. Managed with pnpm (pinned in mise.toml), .npmrc's minimum-release-age is the supply-chain guard.",
   "scripts": {
-    "build": "pnpm run build-console && pnpm run build-log-viewer && pnpm run build-graph && pnpm run build-dashboard && pnpm run build-activity && pnpm run build-css",
-    "build-console": "esbuild src/console/main.ts --bundle --minify --format=esm --outfile=gen/console.js",
-    "build-log-viewer": "esbuild src/console/logs/main.ts --bundle --minify --format=esm --outfile=gen/logs/log-viewer.js",
-    "build-graph": "esbuild src/console/graph/main.ts --bundle --minify --format=esm --outfile=gen/graph/explorer.js",
-    "build-dashboard": "esbuild src/console/dashboard/main.ts --bundle --minify --format=esm --outfile=gen/dashboard/dashboard.js",
-    "build-activity": "esbuild src/console/activity/main.ts --bundle --minify --format=esm --outfile=gen/activity/activity.js",
-    "build-css": "esbuild src/styles/console.css --minify --outfile=gen/console.css",
+    "build": "pnpm run build-js && pnpm run build-css && pnpm run copy-static",
+    "build-js": "esbuild src/console/main.ts --bundle --minify --format=esm --outfile=gen/console.js && esbuild src/console/logs/main.ts --bundle --minify --format=esm --outfile=gen/logs/log-viewer.js && esbuild src/console/graph/main.ts --bundle --minify --format=esm --outfile=gen/graph/explorer.js && esbuild src/console/dashboard/main.ts --bundle --minify --format=esm --outfile=gen/dashboard/dashboard.js && esbuild src/console/activity/main.ts --bundle --minify --format=esm --outfile=gen/activity/activity.js && esbuild src/theme.ts --minify --outfile=gen/theme.js",
+    "build-css": "esbuild src/styles/console.css --minify --outfile=gen/console.css && esbuild src/styles/theme.css --minify --outfile=gen/theme.css && esbuild src/styles/ui-panels.css --minify --outfile=gen/ui-panels.css && esbuild src/styles/site.css --minify --outfile=gen/site.css && esbuild src/console/logs/logs.css --minify --outfile=gen/logs/logs.css && esbuild src/console/graph/graph.css --minify --outfile=gen/graph/graph.css && esbuild src/console/dashboard/dashboard.css --minify --outfile=gen/dashboard/dashboard.css",
+    "copy-static": "mkdir -p gen/assets gen/logs gen/graph gen/dashboard && cp index.html manifest.webmanifest sw.js gen/ && cp src/assets/* gen/assets/ && cp src/console/logs/scaffold.html gen/logs/ && cp src/console/graph/scaffold.html gen/graph/ && cp src/console/dashboard/scaffold.html gen/dashboard/",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "rm -rf .testcache && esbuild $(find src -name '*.test.ts') --bundle --platform=node --format=esm --outdir=.testcache && node --test $(find .testcache -name '*.test.js')"
   },
