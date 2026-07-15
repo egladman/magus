@@ -2619,7 +2619,7 @@ function bootWireEvents() {
       if (document.fullscreenElement) document.exitFullscreen();
       else appEl.requestFullscreen();
     });
-    const fsLabel = fsBtn.querySelector<HTMLElement>(".btn-label");
+    const fsLabel = fsBtn.querySelector<HTMLElement>(".console-render-btn__label");
     document.addEventListener("fullscreenchange", () => {
       const on = document.fullscreenElement === appEl;
       if (fsLabel) fsLabel.textContent = on ? "Exit" : "Fullscreen";

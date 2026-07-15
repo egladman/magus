@@ -28,15 +28,15 @@ export function resolveDom(): void {
   refEl = el("log-ref");
   refLabelEl = el("log-ref-label");
   emptyEl = el("log-empty");
-  panelEl = document.querySelector(".panel") as HTMLElement | null;
+  panelEl = document.querySelector(".console-render-panel") as HTMLElement | null;
   statusEl = el("log-status");
 }
 
 // setBtnLabel sets a toolbar button's text label without disturbing its icon: the label
-// lives in a .btn-label span next to the SVG, so we can't just set button.textContent.
+// lives in a .console-render-btn__label span next to the SVG, so we can't just set button.textContent.
 export function setBtnLabel(btn: HTMLElement | null, text: string): void {
   if (!btn) return;
-  const label = btn.querySelector(".btn-label");
+  const label = btn.querySelector(".console-render-btn__label");
   if (label) label.textContent = text;
   else btn.textContent = text;
 }
@@ -58,11 +58,11 @@ export function setStatus(msg: string, isErr?: boolean): void {
   if (countEl) { countEl.textContent = ""; countEl.hidden = true; }
 }
 
-// flashBtnLabel swaps a toolbar button's label to a transient message (e.g. "Copied") and
-// reverts it after ~1.5s, without disturbing the icon (setBtnLabel touches only .btn-label).
+// flashBtnLabel swaps a toolbar button's label to a transient message (e.g. "Copied") and reverts
+// it after ~1.5s, without disturbing the icon (setBtnLabel touches only .console-render-btn__label).
 export function flashBtnLabel(btn: HTMLElement | null, text: string): void {
   if (!btn) return;
-  const label = btn.querySelector(".btn-label");
+  const label = btn.querySelector(".console-render-btn__label");
   const prev = label ? label.textContent : btn.textContent;
   setBtnLabel(btn, text);
   setTimeout(() => setBtnLabel(btn, prev ?? ""), 1500);

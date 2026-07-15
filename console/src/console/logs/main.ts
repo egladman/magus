@@ -382,11 +382,11 @@ function wireControls(): void {
   const foldBtn = el("fold-all-btn");
   if (foldBtn) {
     foldBtn.addEventListener("click", () => {
-      const secs = [...bodyEl.querySelectorAll(".log-section")];
-      const anyOpen = secs.some((s) => !s.classList.contains("collapsed"));
+      const secs = [...bodyEl.querySelectorAll(".console-render-section")];
+      const anyOpen = secs.some((s) => !s.hasAttribute("data-collapsed"));
       for (const s of secs) {
-        s.classList.toggle("collapsed", anyOpen);
-        const head = s.querySelector(".log-section-head");
+        s.toggleAttribute("data-collapsed", anyOpen);
+        const head = s.querySelector(".console-render-section__head");
         if (head) head.setAttribute("aria-expanded", anyOpen ? "false" : "true");
       }
       setBtnLabel(foldBtn, anyOpen ? "Expand all" : "Collapse all");
@@ -459,11 +459,11 @@ function wireFullscreen(): void {
 function wireInput(): void {
   const panel = panelEl;
   if (panel) {
-    panel.addEventListener("dragover", (ev) => { ev.preventDefault(); panel.classList.add("drag-over"); });
-    panel.addEventListener("dragleave", () => panel.classList.remove("drag-over"));
+    panel.addEventListener("dragover", (ev) => { ev.preventDefault(); panel.setAttribute("data-drag-over", ""); });
+    panel.addEventListener("dragleave", () => panel.removeAttribute("data-drag-over"));
     panel.addEventListener("drop", (ev) => {
       ev.preventDefault();
-      panel.classList.remove("drag-over");
+      panel.removeAttribute("data-drag-over");
       const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
       if (f) f.text().then((text) => loadText(text, f.name));
     });

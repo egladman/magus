@@ -36,12 +36,13 @@ interface Refs {
 // buildScaffold assembles the surface DOM on PatternFly - a PF Toolbar for the chrome, PF Buttons, and
 // a PF EmptyState for the cold state - matching the log viewer's migrated surface, so a run's output
 // and the trail read as one design. The trail entries themselves reuse the shared buildSection render
-// model into .log-body (kept + token-repointed in logs.css); .panel/.log-scroll/.log-body are the
-// escape-hatch frame classes logs.css still provides. The empty state carries the log-empty class
-// alongside the PF class only for logs.css's `.log-empty[hidden] { display: none }` toggle rule (PF's
-// EmptyState is display:flex, which would otherwise beat the hidden attribute).
+// model into .console-render-body (kept + token-repointed in logs.css); .console-render-panel /
+// .console-render-scroll / .console-render-body are the shared render-frame classes logs.css provides.
+// The empty state carries the console-render-empty class alongside the PF class only for logs.css's
+// `.console-render-empty[hidden] { display: none }` toggle rule (PF's EmptyState is display:flex,
+// which would otherwise beat the hidden attribute).
 function buildScaffold(host: HTMLElement): Refs {
-  const panel = h("section", "panel activity-app");
+  const panel = h("section", "console-render-panel activity-app");
 
   // Toolbar: the trail title on the left, the connection note + Refresh button aligned to the right.
   const bar = h("header", "pf-v6-c-toolbar");
@@ -63,18 +64,18 @@ function buildScaffold(host: HTMLElement): Refs {
   refresh.type = "button";
   refresh.title = "Reload the trail";
   const refreshIcon = h("span", "pf-v6-c-button__icon pf-m-start");
-  refreshIcon.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>';
-  refresh.append(refreshIcon, h("span", "pf-v6-c-button__text btn-label", "Refresh"));
+  refreshIcon.innerHTML = '<svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>';
+  refresh.append(refreshIcon, h("span", "pf-v6-c-button__text console-render-btn__label", "Refresh"));
   btnItem.append(refresh);
   actionGroup.append(connItem, btnItem);
   ctrlSection.append(actionGroup);
   ctrlContent.append(ctrlSection);
   bar.append(idContent, ctrlContent);
 
-  const scroll = h("div", "log-scroll");
-  const body = h("div", "log-body");
+  const scroll = h("div", "console-render-scroll");
+  const body = h("div", "console-render-body");
 
-  const empty = h("div", "pf-v6-c-empty-state log-empty");
+  const empty = h("div", "pf-v6-c-empty-state console-render-empty");
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
   const emptyIcon = h("div", "pf-v6-c-empty-state__icon");
   emptyIcon.setAttribute("aria-hidden", "true");
@@ -86,7 +87,7 @@ function buildScaffold(host: HTMLElement): Refs {
   const emptyActions = h("div", "pf-v6-c-empty-state__actions");
   const demoBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small") as HTMLButtonElement;
   demoBtn.type = "button";
-  demoBtn.append(h("span", "pf-v6-c-button__text btn-label", "See the demo"));
+  demoBtn.append(h("span", "pf-v6-c-button__text console-render-btn__label", "See the demo"));
   emptyActions.append(demoBtn);
   emptyBody.append(emptySub, emptyActions);
   emptyContent.append(emptyIcon, emptyTitle, emptyBody);

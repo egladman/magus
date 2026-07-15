@@ -10,22 +10,26 @@
  * The LOG BODY (ANSI-colored captured output, the foldable status-accented sections) and the trace
  * WATERFALL have no PF component - they stay custom rendering, colored from the console's PF-native
  * tokens (--console-* / --console-ansi-* / --pf-t--* directly, theme-aware in light and dark) rather
- * than the old Pico-era palette. Per the class-vs-ID convention, app hooks are IDs + data-*; the
- * bespoke inner classes the render layer builds (.log-section, .log-line, .a-fg-*, .wf-*, ...) are
- * kept as-is.
+ * than the old Pico-era palette. Per the console-<area> naming convention, the shared render model
+ * the log viewer + activity trail both build (foldable sections, status badges, ANSI spans, lines,
+ * the surface frame) is the console-render-* area (.console-render-section, .console-render-line,
+ * .console-render-ansi__fg--*, .console-render-badge, ...); the log-only waterfall stays .wf-*
+ * (a console-log-* rename pending). Transient state rides data-* (data-collapsed, data-status,
+ * data-highlight, data-drag-over), never a modifier class.
  *
- * SHARED WITH ACTIVITY: the activity trail (console/activity) builds its own scaffold in TS reusing
- * this sheet's .panel / .file-bar / .log-actions / .btn-group / .log-scroll / .log-body / .log-empty
- * classes and the buildSection markup (.log-section*, .log-line, .log-badge, .a-*). Those rules are
- * kept here (repointed to tokens) so the trail is unaffected until it migrates in a later step. */
+ * SHARED WITH ACTIVITY: the activity trail (console/activity) reuses this sheet's console-render-*
+ * frame (.console-render-panel / .console-render-scroll / .console-render-body / .console-render-empty)
+ * and the buildSection markup (.console-render-section*, .console-render-line, .console-render-badge,
+ * .console-render-ansi*). The activity chrome is a PF Toolbar now, so the old Pico .file-bar /
+ * .log-actions / .btn-group frame is dead (removed in the activity rename pass). */
 
 :root { --log-pad: clamp(0.75rem, 2vw, 1.1rem); }
 
-/* --- Panel frame (shared: activity builds `.panel .activity-app`) -----------------------------
+/* --- Panel frame (shared: activity builds `.console-render-panel .activity-app`) -----------------------------
    A bordered card that fills its console pane: a toolbar/header on top, a scrolling body beneath.
-   In the console the fill height is driven by console.css (the pane > main > .panel chain); the
+   In the console the fill height is driven by console.css (the pane > main > .console-render-panel chain); the
    height calc below is a standalone fallback. */
-.panel {
+.console-render-panel {
   display: flex; flex-direction: column; position: relative;
   margin-top: 1.25rem;
   height: calc(100svh - 12.5rem); min-height: 420px;
@@ -33,12 +37,12 @@
   border-radius: var(--pf-t--global--border--radius--small); overflow: hidden;
   background: var(--pf-t--global--background--color--primary--default);
 }
-.panel:fullscreen {
+.console-render-panel:fullscreen {
   height: 100%; width: 100%;
   border: 0; border-radius: 0; box-shadow: none;
   background: var(--pf-t--global--background--color--primary--default);
 }
-.panel.drag-over { outline: 2px dashed var(--console-accent); outline-offset: -6px; }
+.console-render-panel[data-drag-over] { outline: 2px dashed var(--console-accent); outline-offset: -6px; }
 
 /* --- File/query bar (PatternFly Toolbar) ------------------------------------------------------
    Two stacked content rows in one PF Toolbar: the ref identity strip (#log-bar-id) over the filter
@@ -74,10 +78,10 @@
 #log-timerange select {
   width: auto; min-height: 1.7rem; padding-block: 0.1rem; font-size: 0.72rem;
 }
-/* Toolbar buttons: compact (pf-m-small) icon + label. .btn-icon (svg) + .btn-label (text) are the
+/* Toolbar buttons: compact (pf-m-small) icon + label. .console-render-btn__icon (svg) + .console-render-btn__label (text) are the
    render/JS hooks setBtnLabel/flashBtnLabel touch and the narrow-screen query drops. */
 #log-actions .pf-v6-c-button { font-size: 0.72rem; }
-.log-app .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+.log-app .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Pressed toolbar toggles (Pause while paused, Fullscreen while on) read as depressed. */
 #log-actions .pf-v6-c-button[aria-pressed="true"]:not(:disabled) {
   background: color-mix(in srgb, var(--console-accent) 14%, transparent);
@@ -168,115 +172,115 @@
 /* Shown in the pretty view when the active filter matches nothing. */
 .filter-empty { padding: 1.5rem var(--log-pad); text-align: center; color: var(--pf-t--global--text--color--subtle); }
 
-/* --- Scrolling body (shared: activity reuses .log-scroll / .log-body) -------------------------- */
-.log-scroll {
+/* --- Scrolling body (shared: activity reuses .console-render-scroll / .console-render-body) -------------------------- */
+.console-render-scroll {
   flex: 1 1 auto; min-height: 0; overflow: auto;
   background: var(--pf-t--global--background--color--primary--default);
 }
-.log-scroll:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
+.console-render-scroll:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 
 /* The rendered log body: a monospace grid of lines. Each line is its own row so line numbers
    and folding can attach per-line without breaking wrapping. */
-.log-body {
+.console-render-body {
   font-family: var(--pf-t--global--font--family--mono);
   /* --log-zoom (set by applyZoom in main.ts) scales the text view; it defaults to 1. */
   font-size: calc(0.8rem * var(--log-zoom, 1)); line-height: 1.6;
   padding: 0.4rem 0;
 }
 /* Waterfall zoom: magnify the SVG itself (a width:100% SVG re-fits under a body zoom). */
-.log-body.wf-mode .wf-svg { zoom: var(--log-zoom, 1); }
-.log-body.empty { display: none; }
+.console-render-body.wf-mode .wf-svg { zoom: var(--log-zoom, 1); }
+.console-render-body.empty { display: none; }
 
 /* --- Foldable sections (shared: buildSection, used by the log viewer + activity trail) ---------
    Read the head foreground from a var with a token fallback: the log viewer sets --log-head-fg on
    .log-app; the activity trail does not, so the fallback carries it (a <button> would otherwise
    invert the color). */
 .log-app { --log-head-fg: var(--pf-t--global--text--color--regular); }
-.log-section { border-bottom: 1px solid var(--pf-t--global--border--color--default); }
-.log-section:last-child { border-bottom: 0; }
-.log-section-head {
+.console-render-section { border-bottom: 1px solid var(--pf-t--global--border--color--default); }
+.console-render-section:last-child { border-bottom: 0; }
+.console-render-section__head {
   display: flex; align-items: center; gap: 0.4rem; width: 100%;
   padding: 0.25rem var(--log-pad); margin: 0; border: 0; border-radius: 0; text-align: left;
   background: var(--pf-t--global--background--color--secondary--default);
   color: var(--log-head-fg, var(--pf-t--global--text--color--regular)); font-family: inherit; font-size: inherit;
   cursor: pointer;
 }
-.log-section-head .sec-title { color: var(--log-head-fg, var(--pf-t--global--text--color--regular)); }
-.log-section-head:hover { background: var(--pf-t--global--background--color--primary--default); }
+.console-render-section__head .console-render-section__title { color: var(--log-head-fg, var(--pf-t--global--text--color--regular)); }
+.console-render-section__head:hover { background: var(--pf-t--global--background--color--primary--default); }
 /* CSS-drawn disclosure caret (points down when expanded); border-triangle keeps the source ASCII. */
-.log-section-head .twist {
+.console-render-section__head .console-render-section__twist {
   flex: 0 0 auto; display: inline-block; width: 0; height: 0;
   border-left: 0.3em solid transparent; border-right: 0.3em solid transparent;
   border-top: 0.36em solid var(--pf-t--global--text--color--subtle);
   transition: transform 0.12s;
 }
-.log-section.collapsed .twist { transform: rotate(-90deg); }
-.log-section-head .sec-title { flex: 1 1 auto; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
-.log-section-head .sec-count { color: var(--pf-t--global--text--color--subtle); font-size: 0.72rem; white-space: nowrap; }
-.log-section-head .sec-actions { flex: 0 0 auto; display: inline-flex; gap: 0.25rem; opacity: 0; transition: opacity 0.1s; }
-.log-section-head:hover .sec-actions, .log-section-head:focus-visible .sec-actions { opacity: 1; }
-.log-section-head .sec-btn {
+.console-render-section[data-collapsed] .console-render-section__twist { transform: rotate(-90deg); }
+.console-render-section__head .console-render-section__title { flex: 1 1 auto; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.console-render-section__head .console-render-section__count { color: var(--pf-t--global--text--color--subtle); font-size: 0.72rem; white-space: nowrap; }
+.console-render-section__head .console-render-section__actions { flex: 0 0 auto; display: inline-flex; gap: 0.25rem; opacity: 0; transition: opacity 0.1s; }
+.console-render-section__head:hover .console-render-section__actions, .console-render-section__head:focus-visible .console-render-section__actions { opacity: 1; }
+.console-render-section__head .console-render-section__action {
   width: auto; margin: 0; padding: 0.05rem 0.4rem;
   font-size: 0.66rem; line-height: 1.3; border-radius: var(--pf-t--global--border--radius--small);
 }
-.log-section.collapsed .log-lines { display: none; }
+.console-render-section[data-collapsed] .console-render-section__lines { display: none; }
 
 /* Outcome accent: a colored left rule per section so pass/fail/warn read at a glance. Cached hits
    are muted. Colored from the console status palette (theme-aware). */
-.log-section.status-fail, .log-section.status-error { box-shadow: inset 3px 0 0 var(--console-status-danger); }
-.log-section.status-pass { box-shadow: inset 3px 0 0 var(--console-status-ok); }
-.log-section.status-warn, .log-section.status-dry { box-shadow: inset 3px 0 0 var(--console-status-warn); }
-.log-section.status-cached { box-shadow: inset 3px 0 0 var(--pf-t--global--border--color--default); }
+.console-render-section[data-status="fail"], .console-render-section[data-status="error"] { box-shadow: inset 3px 0 0 var(--console-status-danger); }
+.console-render-section[data-status="pass"] { box-shadow: inset 3px 0 0 var(--console-status-ok); }
+.console-render-section[data-status="warn"], .console-render-section[data-status="dry"] { box-shadow: inset 3px 0 0 var(--console-status-warn); }
+.console-render-section[data-status="cached"] { box-shadow: inset 3px 0 0 var(--pf-t--global--border--color--default); }
 
 /* Status badge: the "[pass]"/"[fail]" bracket token promoted to a colored chip. */
-.log-badge {
+.console-render-badge {
   display: inline-block; margin-right: 0.55em; padding: 0 0.4em;
   font-size: 0.66rem; font-weight: 700; line-height: 1.5;
   text-transform: uppercase; letter-spacing: 0.04em;
   border-radius: var(--pf-t--global--border--radius--small); color: #fff; vertical-align: baseline;
 }
-.badge-pass { background: var(--console-status-ok); }
-.badge-fail, .badge-error { background: var(--console-status-danger); }
-.badge-warn, .badge-dry { background: var(--console-status-warn); }
-.badge-info, .badge-summary, .badge-cached { background: var(--pf-t--global--text--color--subtle); }
+.console-render-badge--pass { background: var(--console-status-ok); }
+.console-render-badge--fail, .console-render-badge--error { background: var(--console-status-danger); }
+.console-render-badge--warn, .console-render-badge--dry { background: var(--console-status-warn); }
+.console-render-badge--info, .console-render-badge--summary, .console-render-badge--cached { background: var(--pf-t--global--text--color--subtle); }
 
 /* A single output line: a fixed line-number gutter plus the wrapping content. */
-.log-line {
+.console-render-line {
   display: flex; gap: 0.75rem; padding: 0 var(--log-pad);
 }
-.log-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
+.console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
 /* Line-number gutter: ALWAYS shown and never selectable, so copying the body grabs the text
    without the numbers. Shared by body lines and section heads for continuous numbering. */
-.ln {
+.console-render-line__gutter {
   flex: 0 0 auto; min-width: 2.5em; text-align: right;
   color: var(--pf-t--global--text--color--subtle); user-select: none; -webkit-user-select: none;
   cursor: pointer; /* line numbers are clickable deep-link anchors (GitHub-style #L10-L20) */
 }
-.log-line .lc { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+.console-render-line .console-render-line__content { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
 
 /* Line-range highlight: rows named by an #L<n> / #L<a>-L<b> fragment. A translucent accent tint. */
-.line-highlight { background: color-mix(in srgb, var(--console-accent) 16%, transparent); }
-.log-section-head.line-highlight { background: color-mix(in srgb, var(--console-accent) 22%, var(--pf-t--global--background--color--secondary--default)); }
+.console-render-line[data-highlight] { background: color-mix(in srgb, var(--console-accent) 16%, transparent); }
+.console-render-section__head[data-highlight] { background: color-mix(in srgb, var(--console-accent) 22%, var(--pf-t--global--background--color--secondary--default)); }
 
 /* ANSI SGR -> CSS. magus uses dim, bold, and the basic 8 foreground colors. The color slots are
    the console's theme-aware --console-ansi-* tokens (tokens.css), so light/dark need no per-mode
    overrides here. black/white are left to inherit (no slot). */
-.a-bold { font-weight: 600; }
-.a-dim { opacity: 0.6; }
-.a-italic { font-style: italic; }
-.a-underline { text-decoration: underline; }
-.a-fg-red { color: var(--console-ansi-red); }
-.a-fg-green { color: var(--console-ansi-green); }
-.a-fg-yellow { color: var(--console-ansi-yellow); }
-.a-fg-blue { color: var(--console-ansi-blue); }
-.a-fg-magenta { color: var(--console-ansi-magenta); }
-.a-fg-cyan { color: var(--console-ansi-cyan); }
+.console-render-ansi--bold { font-weight: 600; }
+.console-render-ansi--dim { opacity: 0.6; }
+.console-render-ansi--italic { font-style: italic; }
+.console-render-ansi--underline { text-decoration: underline; }
+.console-render-ansi__fg--red { color: var(--console-ansi-red); }
+.console-render-ansi__fg--green { color: var(--console-ansi-green); }
+.console-render-ansi__fg--yellow { color: var(--console-ansi-yellow); }
+.console-render-ansi__fg--blue { color: var(--console-ansi-blue); }
+.console-render-ansi__fg--magenta { color: var(--console-ansi-magenta); }
+.console-render-ansi__fg--cyan { color: var(--console-ansi-cyan); }
 
 /* --- Trace waterfall (Timeline) -------------------------------------------------------------
    The invocation's spans (targets, and their step child-spans) on a shared time axis, drawn as
    inline SVG (offline + CSP-safe, no chart library). Colors reuse the console status palette; step
    bars are muted. */
-.log-body.wf-mode { padding: 0.6rem var(--log-pad); }
+.console-render-body.wf-mode { padding: 0.6rem var(--log-pad); }
 .wf-caption { color: var(--pf-t--global--text--color--subtle); font-size: 0.78rem; margin: 0 0 0.5rem; }
 .wf-svg { display: block; width: 100%; height: auto; cursor: crosshair; }
 .wf-axis-line { stroke: var(--pf-t--global--border--color--default); stroke-width: 1; }
@@ -319,14 +323,14 @@
 [data-empty-cmd] code { font-size: 0.8em; font-family: var(--pf-t--global--font--family--mono); }
 [data-empty-hint] { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
 
-/* Empty state (shared: activity's Pico .log-empty). Fills + centers within the scroll area. */
-.log-empty {
+/* Empty state (shared: activity's Pico .console-render-empty). Fills + centers within the scroll area. */
+.console-render-empty {
   padding: clamp(1.5rem, 5vw, 3rem); color: var(--pf-t--global--text--color--subtle);
   max-width: 44rem; margin: 0 auto; text-align: center;
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; min-height: 100%; box-sizing: border-box;
 }
-.log-empty[hidden] { display: none; }
+.console-render-empty[hidden] { display: none; }
 .log-noscript { padding: 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 
 /* --- Toolbar / actions (shared: activity builds .log-actions / .btn-group / .file-bar button) --
@@ -348,7 +352,7 @@
   font-size: 0.72rem; line-height: 1.3; border-radius: var(--pf-t--global--border--radius--small);
   display: inline-flex; align-items: center; justify-content: center; gap: 0.32rem;
 }
-.file-bar .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+.file-bar .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 .file-bar button:disabled { opacity: 0.42; cursor: not-allowed; }
 
 /* "Loading a log by URL" / "Filter syntax" disclosures: an uppercase, muted, tracked summary label
@@ -378,7 +382,7 @@ main .url-help > summary:not([role]), main .url-help[open] > summary:not([role])
    buttons don't crowd out the filter field. Covers the log viewer (#log-actions, PF buttons) and
    the activity trail (.log-actions, Pico buttons). */
 @media (max-width: 900px) {
-  .log-actions .btn-label, #log-actions .btn-label { display: none; }
+  .log-actions .console-render-btn__label, #log-actions .console-render-btn__label { display: none; }
   .file-bar button { width: 1.7rem; padding: 0; }
   #log-actions .pf-v6-c-button { padding-inline: 0.35rem; }
   #log-actions .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }

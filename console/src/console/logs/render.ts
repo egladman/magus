@@ -71,7 +71,7 @@ export function render(): void {
     }
 
     const secEl = document.createElement("div");
-    secEl.className = "log-section";
+    secEl.className = "console-render-section";
 
     // Accent the section by outcome (a colored left rule) so pass/fail/warn read at a
     // glance, not just from the text. Cached hits are muted (low signal) and fold by default -
@@ -79,39 +79,39 @@ export function render(): void {
     const st = statusToken(sec.title);
     const cached = st === "cached" || /\(cached/i.test(stripAnsi(sec.title));
     const status = cached ? "cached" : st;
-    if (status) secEl.classList.add("status-" + status);
+    if (status) secEl.setAttribute("data-status", status);
 
     const head = document.createElement("button");
     head.type = "button";
-    head.className = "log-section-head";
+    head.className = "console-render-section__head";
 
     // The head IS the header line and doubles as the fold toggle. The line counts as
     // row `++lineNo` so search and line numbers stay in step; not repeated in the body.
     const headNo = ++lineNo;
     const ln = document.createElement("span");
-    ln.className = "ln";
+    ln.className = "console-render-line__gutter";
     ln.textContent = String(headNo);
     const twist = document.createElement("span");
-    twist.className = "twist"; // caret drawn in CSS (.twist); no glyph, so the source stays ASCII
+    twist.className = "console-render-section__twist"; // caret drawn in CSS; no glyph, so the source stays ASCII
     twist.setAttribute("aria-hidden", "true");
     const title = document.createElement("span");
-    title.className = "sec-title lc";
+    title.className = "console-render-section__title console-render-line__content";
     renderContent(title, sec.title);
     const bodyLines = sec.lines.slice(1);
 
     // A cached target contributed nothing new this run, so fold it away by default -
     // the fresh work (and any failure) is what a reader came for.
-    if (cached) secEl.classList.add("collapsed");
+    if (cached) secEl.setAttribute("data-collapsed", "");
     head.setAttribute("aria-expanded", cached ? "false" : "true");
     const count = document.createElement("span");
-    count.className = "sec-count";
+    count.className = "console-render-section__count";
     count.textContent = bodyLines.length > 0 ? bodyLines.length + (bodyLines.length === 1 ? " line" : " lines") : "";
 
     const actions = document.createElement("span");
-    actions.className = "sec-actions";
+    actions.className = "console-render-section__actions";
     const copy = document.createElement("button");
     copy.type = "button";
-    copy.className = "sec-btn outline";
+    copy.className = "console-render-section__action";
     copy.textContent = "copy";
     copy.title = "Copy this section's text";
     copy.addEventListener("click", (ev) => {
@@ -124,7 +124,7 @@ export function render(): void {
     if (state.currentRef) {
       const cmd = document.createElement("button");
       cmd.type = "button";
-      cmd.className = "sec-btn outline";
+      cmd.className = "console-render-section__action";
       cmd.textContent = "cmd";
       cmd.title = "Copy a `magus query` command for these lines";
       const start = headNo;
@@ -144,7 +144,7 @@ export function render(): void {
     head.addEventListener("click", () => toggleSection(secEl, head));
 
     const linesWrap = document.createElement("div");
-    linesWrap.className = "log-lines";
+    linesWrap.className = "console-render-section__lines";
     for (const raw of bodyLines) {
       const n = ++lineNo;
       if (!filtering || showAllBody || matchAllTexts(q, stripAnsi(raw))) {
@@ -182,23 +182,23 @@ function lineRangeFromHash(): { start: number; end: number } | null {
   return null;
 }
 
-// applyLineHighlight (re)paints the .line-highlight rows from the current fragment. Called at
-// the end of every render() so it survives view toggles, folds, and live re-renders.
+// applyLineHighlight (re)paints the highlighted rows (data-highlight) from the current fragment.
+// Called at the end of every render() so it survives view toggles, folds, and live re-renders.
 export function applyLineHighlight(): void {
-  for (const r of bodyEl.querySelectorAll(".line-highlight")) r.classList.remove("line-highlight");
+  for (const r of bodyEl.querySelectorAll("[data-highlight]")) r.removeAttribute("data-highlight");
   const range = lineRangeFromHash();
   if (!range) return;
   let first: HTMLElement | null = null;
-  for (const ln of bodyEl.querySelectorAll(".ln")) {
+  for (const ln of bodyEl.querySelectorAll(".console-render-line__gutter")) {
     const n = parseInt(ln.textContent!, 10);
     if (!(n >= range.start && n <= range.end)) continue;
-    const row = ln.parentElement as HTMLElement; // .log-line, or the .log-section-head button for a head row
-    row.classList.add("line-highlight");
+    const row = ln.parentElement as HTMLElement; // .console-render-line, or the section head button for a head row
+    row.setAttribute("data-highlight", "");
     // Expand a collapsed section so a highlighted body line is actually visible.
-    const sec = row.closest && row.closest(".log-section");
-    if (sec && sec.classList.contains("collapsed")) {
-      sec.classList.remove("collapsed");
-      const head = sec.querySelector(".log-section-head");
+    const sec = row.closest && row.closest(".console-render-section");
+    if (sec && sec.hasAttribute("data-collapsed")) {
+      sec.removeAttribute("data-collapsed");
+      const head = sec.querySelector(".console-render-section__head");
       if (head) head.setAttribute("aria-expanded", "true");
     }
     if (first === null) first = row;

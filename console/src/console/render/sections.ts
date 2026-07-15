@@ -1,6 +1,6 @@
 // sections.ts - the shared DOM renderers for a status-accented, foldable section of text.
-// The log viewer and the activity view both paint the same markup and classes (styled by
-// console-sections.css), so a run's output and the daemon's audit trail read as one design.
+// The log viewer and the activity view both paint the same markup and console-render-* classes
+// (styled in logs.css), so a run's output and the daemon's audit trail read as one design.
 //
 // The log viewer keeps its own scanning loop (render.ts) - it interleaves the #q= filter,
 // global line numbering, and the timeline/raw modes - but builds each line and header line
@@ -22,7 +22,7 @@ export function renderContent(host: HTMLElement, raw: string): void {
     return;
   }
   const badge = document.createElement("span");
-  badge.className = "log-badge badge-" + m[1].toLowerCase();
+  badge.className = "console-render-badge console-render-badge--" + m[1].toLowerCase();
   badge.textContent = m[1].toLowerCase();
   host.appendChild(badge);
   host.appendChild(document.createTextNode(plain.slice(m[0].length)));
@@ -48,24 +48,25 @@ export function fillAnsi(host: HTMLElement, raw: string): void {
 // (the log viewer's GitHub-style #L deep-link); the activity view omits both.
 export function renderLine(raw: string, lineNo: number | null, onClick?: (n: number, ev: MouseEvent) => void): HTMLElement {
   const line = document.createElement("div");
-  line.className = "log-line";
+  line.className = "console-render-line";
   if (lineNo !== null) {
     const ln = document.createElement("span");
-    ln.className = "ln";
+    ln.className = "console-render-line__gutter";
     ln.textContent = String(lineNo);
     if (onClick) ln.addEventListener("click", (ev) => onClick(lineNo, ev));
     line.append(ln);
   }
   const lc = document.createElement("span");
-  lc.className = "lc";
+  lc.className = "console-render-line__content";
   renderContent(lc, raw);
   line.append(lc);
   return line;
 }
 
-// toggleSection folds/unfolds a section and syncs the head's aria-expanded.
+// toggleSection folds/unfolds a section and syncs the head's aria-expanded. Fold state rides a
+// data-collapsed attribute (the console's state-on-data-* convention), not a modifier class.
 export function toggleSection(secEl: HTMLElement, head: HTMLElement): void {
-  const collapsed = secEl.classList.toggle("collapsed");
+  const collapsed = secEl.toggleAttribute("data-collapsed");
   head.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }
 
@@ -91,7 +92,7 @@ export interface BuildSectionOpts {
   extraActions?: HTMLElement[];
 }
 
-// buildSection assembles one ".log-section" element from a Section: a fold-toggle head
+// buildSection assembles one ".console-render-section" element from a Section: a fold-toggle head
 // (twist + badge/ANSI title + line count + actions) over its body lines. It is the whole-
 // section path the activity view uses; the log viewer builds sections inline so it can
 // weave in per-line filtering and numbering, but through the same leaf helpers above.
@@ -100,36 +101,36 @@ export function buildSection(sec: Section, opts: BuildSectionOpts = {}): HTMLEle
   const bodyLines = opts.bodyLines ?? sec.lines.slice(1);
 
   const secEl = document.createElement("div");
-  secEl.className = "log-section";
+  secEl.className = "console-render-section";
 
   const status = opts.status ?? sectionAccent(title);
-  if (status) secEl.classList.add("status-" + status);
+  if (status) secEl.setAttribute("data-status", status);
   const collapsed = opts.collapsed ?? status === "cached";
-  if (collapsed) secEl.classList.add("collapsed");
+  if (collapsed) secEl.setAttribute("data-collapsed", "");
 
   const head = document.createElement("button");
   head.type = "button";
-  head.className = "log-section-head";
+  head.className = "console-render-section__head";
   head.setAttribute("aria-expanded", collapsed ? "false" : "true");
 
   const twist = document.createElement("span");
-  twist.className = "twist"; // caret drawn in CSS; no glyph, so the source stays ASCII
+  twist.className = "console-render-section__twist"; // caret drawn in CSS; no glyph, so the source stays ASCII
   twist.setAttribute("aria-hidden", "true");
 
   const titleEl = document.createElement("span");
-  titleEl.className = "sec-title lc";
+  titleEl.className = "console-render-section__title console-render-line__content";
   renderContent(titleEl, title);
 
   const count = document.createElement("span");
-  count.className = "sec-count";
+  count.className = "console-render-section__count";
   count.textContent = bodyLines.length > 0 ? bodyLines.length + (bodyLines.length === 1 ? " line" : " lines") : "";
 
   const actions = document.createElement("span");
-  actions.className = "sec-actions";
+  actions.className = "console-render-section__actions";
   if (opts.copyText !== undefined) {
     const copy = document.createElement("button");
     copy.type = "button";
-    copy.className = "sec-btn outline";
+    copy.className = "console-render-section__action";
     copy.textContent = "copy";
     copy.title = "Copy this section's text";
     const text = opts.copyText;
@@ -145,7 +146,7 @@ export function buildSection(sec: Section, opts: BuildSectionOpts = {}): HTMLEle
   head.addEventListener("click", () => toggleSection(secEl, head));
 
   const linesWrap = document.createElement("div");
-  linesWrap.className = "log-lines";
+  linesWrap.className = "console-render-section__lines";
   for (const raw of bodyLines) linesWrap.appendChild(renderLine(raw, null));
 
   secEl.append(head, linesWrap);

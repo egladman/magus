@@ -231,7 +231,7 @@ body.console-fill > main {
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
    min-heights + Pico's section margin so short viewports still fit without a page scroll. */
 body.console-fill > main > .graph-app,
-body.console-fill > main > .panel {
+body.console-fill > main > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
@@ -286,7 +286,7 @@ body.console-fill > main > .panel {
   padding-inline: 0.4rem;
 }
 #console-outlet div[data-pane-id] > main > .graph-app,
-#console-outlet div[data-pane-id] > main > .panel {
+#console-outlet div[data-pane-id] > main > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;

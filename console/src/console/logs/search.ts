@@ -77,10 +77,10 @@ export function setActiveMark(i: number): void {
   const mark = searchMarks[activeMark];
   mark.classList.add("active");
   // Expand a collapsed section so the active match is visible.
-  const sec = mark.closest(".log-section");
-  if (sec && sec.classList.contains("collapsed")) {
-    sec.classList.remove("collapsed");
-    const head = sec.querySelector(".log-section-head");
+  const sec = mark.closest(".console-render-section");
+  if (sec && sec.hasAttribute("data-collapsed")) {
+    sec.removeAttribute("data-collapsed");
+    const head = sec.querySelector(".console-render-section__head");
     if (head) head.setAttribute("aria-expanded", "true");
   }
   mark.scrollIntoView({ block: "center", behavior: "smooth" });

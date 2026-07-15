@@ -36,10 +36,10 @@ export function stripAnsi(s: string): string {
 }
 
 const FG: Record<number, string> = {
-  30: "a-fg-black", 31: "a-fg-red", 32: "a-fg-green", 33: "a-fg-yellow",
-  34: "a-fg-blue", 35: "a-fg-magenta", 36: "a-fg-cyan", 37: "a-fg-white",
-  90: "a-fg-black", 91: "a-fg-red", 92: "a-fg-green", 93: "a-fg-yellow",
-  94: "a-fg-blue", 95: "a-fg-magenta", 96: "a-fg-cyan", 97: "a-fg-white",
+  30: "console-render-ansi__fg--black", 31: "console-render-ansi__fg--red", 32: "console-render-ansi__fg--green", 33: "console-render-ansi__fg--yellow",
+  34: "console-render-ansi__fg--blue", 35: "console-render-ansi__fg--magenta", 36: "console-render-ansi__fg--cyan", 37: "console-render-ansi__fg--white",
+  90: "console-render-ansi__fg--black", 91: "console-render-ansi__fg--red", 92: "console-render-ansi__fg--green", 93: "console-render-ansi__fg--yellow",
+  94: "console-render-ansi__fg--blue", 95: "console-render-ansi__fg--magenta", 96: "console-render-ansi__fg--cyan", 97: "console-render-ansi__fg--white",
 };
 
 // parseAnsi splits a line into {text, cls[]} runs by tracking SGR state across the
@@ -83,10 +83,10 @@ function applySGR(state: SgrState, params: string): void {
 
 function classesFor(state: SgrState): string[] {
   const cls: string[] = [];
-  if (state.bold) cls.push("a-bold");
-  if (state.dim) cls.push("a-dim");
-  if (state.italic) cls.push("a-italic");
-  if (state.underline) cls.push("a-underline");
+  if (state.bold) cls.push("console-render-ansi--bold");
+  if (state.dim) cls.push("console-render-ansi--dim");
+  if (state.italic) cls.push("console-render-ansi--italic");
+  if (state.underline) cls.push("console-render-ansi--underline");
   if (state.fg) cls.push(state.fg);
   return cls;
 }

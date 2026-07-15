@@ -149,7 +149,7 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
   font-size: 0.72rem;
   background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
 }
-.stage-tools .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+.stage-tools .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Legend toggle (#legend-toggle, a PF Button): hidden on desktop (the legend is always
    open there). Shown only on mobile via the media query below, where it collapses the
    legend off the canvas. Positioned top-left where the legend would otherwise sit. */
@@ -158,7 +158,7 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
   display: none; font-size: 0.72rem;
   background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
 }
-#legend-toggle .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+#legend-toggle .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Fullscreen: the panel fills the screen (like the playground's .panel:fullscreen);
    the opaque background is required or the element shows through to black. */
 .graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pf-t--global--background--color--primary--default); }
@@ -301,7 +301,7 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
      The toolbar shrinks to icons; the legend hides behind the "Legend" toggle and
      only appears when tapped. */
   .stage-tools { gap: 0.3rem; }
-  .stage-tools .btn-label { display: none; }
+  .stage-tools .console-render-btn__label { display: none; }
   .stage-tools .pf-v6-c-button { padding-inline: 0.4rem; }
   .stage-tools .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }
   #legend-toggle { display: inline-flex; }
