@@ -30,6 +30,55 @@ export type Pane = Leaf | Split;
 export const MIN_RATIO = 0.05;
 export const MAX_RATIO = 0.95;
 
+// A minimal rectangle (a subset of DOMRect) so the geometry helpers below are pure and testable
+// without a real layout - the render layer passes each pane's getBoundingClientRect(), a superset.
+export interface Rect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+// A screen direction for keyboard pane navigation (alt+hjkl / the focus commands).
+export type Direction = "left" | "right" | "up" | "down";
+
+// pickAxis chooses a split direction from the pane's aspect ratio, so a split needs no direction
+// UI: a wider-than-tall pane splits into a "row" (the new pane to the right); a taller pane splits
+// into a "col" (the new pane below). Called on each new leaf, this walks a Fibonacci-spiral tiling.
+// Ported from Tack's pickAxis (its 'v'/'h' become our "row"/"col").
+export function pickAxis(rect: Rect): Split["dir"] {
+  return rect.width >= rect.height ? "row" : "col";
+}
+
+// neighborInDirection finds the id of the candidate pane whose centroid is nearest to `from` in the
+// requested direction - the target of an alt+hjkl focus move. A candidate qualifies only if its
+// centroid sits strictly in that half-plane (a small epsilon avoids picking a pane merely aligned on
+// the axis); among those, the least Manhattan-distant centroid wins. Returns null when nothing lies
+// that way. Ported from Tack's neighborInDirection, re-expressed over our Rect + Direction.
+export function neighborInDirection(
+  from: Rect,
+  candidates: { id: string; rect: Rect }[],
+  dir: Direction,
+): string | null {
+  const cx = from.left + from.width / 2;
+  const cy = from.top + from.height / 2;
+  let best: string | null = null;
+  let bestDist = Infinity;
+  for (const { id, rect } of candidates) {
+    const tx = rect.left + rect.width / 2;
+    const ty = rect.top + rect.height / 2;
+    const inPlane =
+      dir === "left" ? tx < cx - 4
+      : dir === "right" ? tx > cx + 4
+      : dir === "up" ? ty < cy - 4
+      : ty > cy + 4;
+    if (!inPlane) continue;
+    const dist = Math.abs(tx - cx) + Math.abs(ty - cy);
+    if (dist < bestDist) { bestDist = dist; best = id; }
+  }
+  return best;
+}
+
 // leaves collects every leaf in document order - "which surfaces are currently tiled".
 export function leaves(p: Pane): Leaf[] {
   if (p.kind === "leaf") return [p];

@@ -5,7 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  leaves, splitLeaf, closePane, setRatio, MIN_RATIO, MAX_RATIO, type Pane,
+  leaves, splitLeaf, closePane, setRatio, pickAxis, neighborInDirection,
+  MIN_RATIO, MAX_RATIO, type Pane, type Rect,
 } from "./tiling";
 
 const leaf = (id: string, pageId = id): Pane => ({ kind: "leaf", id, pageId });
@@ -78,4 +79,39 @@ test("setRatio sets the matching split and clamps to the drag limits", () => {
 test("setRatio on an unknown split id changes nothing", () => {
   const t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
   assert.deepEqual(setRatio(t, "zzz", 0.9), t);
+});
+
+test("pickAxis splits a wide pane into a row and a tall pane into a col", () => {
+  assert.equal(pickAxis({ left: 0, top: 0, width: 1200, height: 400 }), "row");
+  assert.equal(pickAxis({ left: 0, top: 0, width: 400, height: 900 }), "col");
+  // A square (width === height) prefers a row, matching Tack's >= tie-break.
+  assert.equal(pickAxis({ left: 0, top: 0, width: 500, height: 500 }), "row");
+});
+
+// A 2x2 grid of panes centered so the geometry is unambiguous: from the top-left pane, "right"
+// is top-right, "down" is bottom-left, and there is nothing further "left" or "up".
+const grid: { id: string; rect: Rect }[] = [
+  { id: "tl", rect: { left: 0, top: 0, width: 100, height: 100 } },
+  { id: "tr", rect: { left: 100, top: 0, width: 100, height: 100 } },
+  { id: "bl", rect: { left: 0, top: 100, width: 100, height: 100 } },
+  { id: "br", rect: { left: 100, top: 100, width: 100, height: 100 } },
+];
+const others = (id: string): { id: string; rect: Rect }[] => grid.filter((c) => c.id !== id);
+const tl = grid[0].rect;
+
+test("neighborInDirection picks the nearest centroid in the requested half-plane", () => {
+  assert.equal(neighborInDirection(tl, others("tl"), "right"), "tr");
+  assert.equal(neighborInDirection(tl, others("tl"), "down"), "bl");
+});
+
+test("neighborInDirection returns null when nothing lies that way", () => {
+  assert.equal(neighborInDirection(tl, others("tl"), "left"), null);
+  assert.equal(neighborInDirection(tl, others("tl"), "up"), null);
+});
+
+test("neighborInDirection prefers the closer of two panes in the same direction", () => {
+  const from: Rect = { left: 0, top: 0, width: 100, height: 100 };
+  const near = { id: "near", rect: { left: 100, top: 0, width: 100, height: 100 } };
+  const far = { id: "far", rect: { left: 400, top: 0, width: 100, height: 100 } };
+  assert.equal(neighborInDirection(from, [far, near], "right"), "near");
 });
