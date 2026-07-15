@@ -11,7 +11,7 @@ import (
 func TestOwningProjectPath(t *testing.T) {
 	projects := []types.TargetGraphProject{
 		{Path: "."},
-		{Path: "website"},
+		{Path: "docs"},
 		{Path: "foo"},
 		{Path: "foo/bar"},
 	}
@@ -20,7 +20,7 @@ func TestOwningProjectPath(t *testing.T) {
 		file string
 		want string
 	}{
-		{"website/scribe.buzz", "website"}, // nested project wins over root
+		{"docs/render.buzz", "docs"}, // nested project wins over root
 		{"magusfile.buzz", "."},            // root-level file falls to the root project
 		{"foo/bar/x.buzz", "foo/bar"},      // longest matching project wins
 		{"foo/x.buzz", "foo"},              // not deep enough for foo/bar
@@ -36,6 +36,6 @@ func TestOwningProjectPath(t *testing.T) {
 func TestOwningProjectPathNoRootUnowned(t *testing.T) {
 	// With no root project, a top-level file belongs to nobody rather than being
 	// force-fit into an unrelated nested project.
-	_, ok := owningProjectPath("top.buzz", []types.TargetGraphProject{{Path: "website"}})
+	_, ok := owningProjectPath("top.buzz", []types.TargetGraphProject{{Path: "docs"}})
 	assert.False(t, ok)
 }

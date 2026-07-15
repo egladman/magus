@@ -65,7 +65,7 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 // load-time twin of callBuzzSpellFunc's session setup, so a spell that imports
 // host modules at top level loads as well as it runs. dir is the spell file's own
 // directory, added to the import search path so a spell that imports sibling helper
-// modules (e.g. scribe.buzz's `import "scribe_text"`) resolves during discovery.
+// modules (e.g. render.buzz's `import "render_text"`) resolves during discovery.
 func extractDescriptorWithModules(ctx context.Context, src, dir string) (ispell.Descriptor, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(spellSearchPaths(dir)...))
 	defer sess.Close()
@@ -79,7 +79,7 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (ispell.
 
 // spellSearchPaths returns the import search paths the discovery probe uses for a
 // workspace-local spell: the project-relative layouts rooted at the spell's own
-// directory, so a plain sibling import (e.g. scribe.buzz's `import "scribe_text"`)
+// directory, so a plain sibling import (e.g. render.buzz's `import "render_text"`)
 // resolves no matter the process cwd. This is deliberately narrower than the run-time
 // magusSearchPaths (runtime.go): it omits the cwd, workspace-root, and magusfiles/
 // roots and any system/$BUZZ_PATH fallback. The probe only needs to classify a file

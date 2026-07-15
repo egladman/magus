@@ -1,5 +1,5 @@
-// scribe_feed.buzz - pure XML builders and date normalization for the sitemap and
-// Atom feeds. Flat-imported by scribe.buzz (`import "scribe_feed" as _`).
+// render_feed.buzz - pure XML builders and date normalization for the sitemap and
+// Atom feeds. Flat-imported by render.buzz (`import "render_feed" as _`).
 import "assert";
 
 // escapeXml is escapeAttr's XML form (five entities, & last to avoid double-encoding).

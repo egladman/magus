@@ -32,7 +32,7 @@ func TestCodeownersMatch(t *testing.T) {
 		{"/pkg/*/main.go", "x/pkg/a/main.go", false},
 		// bare "*" matches all depths; anchored "/*" only root-level entries.
 		{"*", "pkg/a", true},
-		{"/*", "website", true},
+		{"/*", "docs", true},
 		{"/*", "pkg/a", false},
 	} {
 		assert.Equalf(t, tc.want, codeownersMatch(tc.pattern, tc.path), "match(%q, %q)", tc.pattern, tc.path)

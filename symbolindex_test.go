@@ -170,9 +170,9 @@ func TestSymbolStatusCache(t *testing.T) {
 func TestSymbolRunError(t *testing.T) {
 	base := errors.New("exit status 127")
 
-	withHint := symbolRunError(types.NewProjectRef("website", "/ws/website"), "typescript", base)
+	withHint := symbolRunError(types.NewProjectRef("docs", "/ws/docs"), "typescript", base)
 	assert.ErrorIs(t, withHint, base, "wraps the cause")
-	assert.Contains(t, withHint.Error(), "website", "names the project")
+	assert.Contains(t, withHint.Error(), "docs", "names the project")
 	assert.Contains(t, withHint.Error(), "scip-typescript", "adds the actionable indexer hint")
 
 	// The workspace-root project reads as its repo name, never the bare ".".

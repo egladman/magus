@@ -1,5 +1,5 @@
 version: v2
-# The website generates its OWN JS/TS client for the magus.viewer.v1 (and status/settings/
+# The docs project generates its OWN JS/TS client for the magus.viewer.v1 (and status/settings/
 # query) contracts, from the shared .proto in ../proto (`buf generate ../proto` from this
 # dir, run by the `generate` target before the esbuild bundles). Output lands in src/gen/
 # (committed, drift-gated), INSIDE this project, so esbuild resolves the @bufbuild/protobuf

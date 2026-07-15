@@ -77,8 +77,8 @@ deliberately instead:
 - `std/` + `host/` - Buzz stdlib modules; `host/gen/` is generated from `std/`
 - `gopherbuzz/` - the embedded Buzz language implementation
 - `spells/` - built-in spell sources (`.buzz`), compiled into the binary
-- `docs/` - markdown sources; `website/scribe.buzz` renders them into the
-  committed static site at `website/gen/`
+- `docs/` - markdown sources; `docs/render.buzz` renders them into the
+  committed static site at `docs/gen/`
 
 ## Rules
 
@@ -86,8 +86,8 @@ deliberately instead:
 - User-facing message strings are plain ASCII (no em-dashes, curly quotes);
   code comments are exempt. Docs frontmatter is plain ASCII too.
 - Never hand-edit generated files (`gen/` dirs, `*.gen.buzz`, `MAGUS.md`,
-  `website/gen/`); change the source of truth and regenerate.
-- Website follows classless Pico: semantic HTML, minimal custom classes,
+  `docs/gen/`); change the source of truth and regenerate.
+- Docs site follows classless Pico: semantic HTML, minimal custom classes,
   no inline styles.
 - Language-level changes in `gopherbuzz/` must match upstream Buzz behavior.
 - Buzz code is tested with in-file `test "..." {}` blocks; run via

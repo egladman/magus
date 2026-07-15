@@ -55,15 +55,15 @@ fallback; never gate behavior on a fast path.
 
 ## Docs site
 
-The docs site under `website/` is generated into the committed `website/gen/`
+The docs site under `docs/` is generated into the committed `docs/gen/`
 tree; regenerate and commit it after any doc change:
 
 ```sh
-magus run generate:rw website   # re-render, keep the output
-# review `git status website/gen`, then commit gen/ alongside your source edit
+magus run generate:rw docs   # re-render, keep the output
+# review `git status docs/gen`, then commit gen/ alongside your source edit
 ```
 
-A plain `magus run generate website` gates on drift and fails if `gen/` was not
+A plain `magus run generate docs` gates on drift and fails if `gen/` was not
 re-rendered, so CI catches a forgotten regen.
 
 Pages use extensionless URLs (`/magus/documentation/`, served from

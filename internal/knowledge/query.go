@@ -241,7 +241,7 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 		best := max(interactive.LeafScore(id, t), interactive.LeafScore(n.Label, t))
 		if best <= 0 {
 			// LeafScore anchors on the leaf and charges 10 per '/', so a non-leaf hit
-			// inside a slash-heavy ID (kind:function website -> function:website/f.buzz:x)
+			// inside a slash-heavy ID (kind:function docs -> function:docs/f.buzz:x)
 			// comes back zero or negative. A substring hit anywhere in the ID or doc still
 			// matches, with the flat doc-hit credit, instead of dropping the node.
 			switch lt := strings.ToLower(t); {

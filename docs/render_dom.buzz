@@ -1,8 +1,8 @@
-// scribe_dom.buzz - a small HTML builder. Attribute values are escaped; element
+// render_dom.buzz - a small HTML builder. Attribute values are escaped; element
 // bodies are inserted raw (they are already-built HTML). Attrs are ordered by the
 // caller, so output matches hand-written markup byte for byte.
 import "assert";
-import "scribe_text" as _;
+import "render_text" as _;
 
 // attr renders one escaped attribute with a leading space: ` name="value"`.
 export fun attr(name: str, value: str) > str {

@@ -404,7 +404,7 @@ Subcommands (the first argument):
 		{"Doc coverage for spells only", "magus graph stats --kind spell"},
 		{"Open knowledge graph in browser", "magus graph open"},
 		{"Open target dependency graph", "magus graph open --targets"},
-		{"Scope target graph to one project", "magus graph open --targets website"},
+		{"Scope target graph to one project", "magus graph open --targets docs"},
 		{"Print the URL instead of opening", "magus graph open --targets --print"},
 	},
 }

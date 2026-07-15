@@ -17,7 +17,7 @@ import (
 
 // TestMigrateRoundtrip verifies that the migration of CHANGELOG.md produces
 // manifests whose body fields are pre-trimmed (no leading/trailing whitespace).
-// This is required so scribe.buzz can use them verbatim as Atom feed summaries.
+// This is required so render.buzz can use them verbatim as Atom feed summaries.
 func TestMigrateRoundtrip(t *testing.T) {
 	changelogPath := filepath.Join("..", "..", "CHANGELOG.md")
 	if _, err := os.Stat(changelogPath); err != nil {
@@ -153,7 +153,7 @@ func TestRunReleaseIndex_NoSignKey(t *testing.T) {
 	t.Setenv("MAGUS_SIGNING_KEY", "")
 
 	servedDir := t.TempDir()
-	// Write a pre-built index.json (the served file scribe would emit).
+	// Write a pre-built index.json (the served file the renderer would emit).
 	idxJSON := `{"schema_version":1,"releases":[{"version":"v0.1.0","date":"2026-07-05","notes":{},"body":"### Added\n\n- x","artifacts":[]}]}` + "\n"
 	idxPath := filepath.Join(servedDir, "index.json")
 	require.NoError(t, os.WriteFile(idxPath, []byte(idxJSON), 0o644))
@@ -174,7 +174,7 @@ func TestRunReleaseIndex_WithEphemeralKey(t *testing.T) {
 	t.Setenv("MAGUS_SIGNING_KEY", hex.EncodeToString(priv))
 
 	servedDir := t.TempDir()
-	// Write a pre-built index.json (the served file scribe would emit).
+	// Write a pre-built index.json (the served file the renderer would emit).
 	idxJSON := `{"schema_version":1,"releases":[{"version":"v0.1.0","date":"2026-07-05","notes":{},"body":"### Added\n\n- x","artifacts":[]}]}` + "\n"
 	idxPath := filepath.Join(servedDir, "index.json")
 	require.NoError(t, os.WriteFile(idxPath, []byte(idxJSON), 0o644))
@@ -199,7 +199,7 @@ func TestRunReleaseIndex_WithEphemeralKey(t *testing.T) {
 }
 
 // TestRunReleaseIndex_MissingFile verifies an error is returned when index.json
-// does not exist (generate website must be run first).
+// does not exist (generate docs must be run first).
 func TestRunReleaseIndex_MissingFile(t *testing.T) {
 	servedDir := t.TempDir()
 	err := runReleaseIndex([]string{"-served", servedDir})

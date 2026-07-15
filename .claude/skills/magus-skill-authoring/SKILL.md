@@ -26,7 +26,7 @@ have taught agents a "safe preview" that silently mutates the tree.
 
 Empty output, zero matches, and exit 1 with no text are findings, not
 inconveniences. Probe every claim adversarially before teaching it: when
-`project:website kind:function render` returned 0, the wrong response was a
+`project:docs kind:function render` returned 0, the wrong response was a
 workaround in the skill; the right response was tracing the scorer, fixing
 the filter, and adding a regression test. Fix the tool before teaching the
 workaround. When the fix is out of reach, teach ONLY verified idioms and file

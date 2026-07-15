@@ -27,15 +27,15 @@ func TestApplyTargetFilter(t *testing.T) {
 	}
 
 	t.Run("multi partial: skip the undefined, keep the defined", func(t *testing.T) {
-		got, err := applyTargetFilter(tgt(".", "gopherbuzz", "website", "proto"), "go-vet", defines, label)
+		got, err := applyTargetFilter(tgt(".", "gopherbuzz", "docs", "proto"), "go-vet", defines, label)
 		require.NoError(t, err)
 		assert.Equal(t, tgt(".", "gopherbuzz"), got, "undefined projects are dropped, not errored")
 	})
 
 	t.Run("single project undefined: error", func(t *testing.T) {
-		_, err := applyTargetFilter(tgt("website"), "go-vet", defines, label)
+		_, err := applyTargetFilter(tgt("docs"), "go-vet", defines, label)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "website", "names the single project")
+		assert.Contains(t, err.Error(), "docs", "names the single project")
 	})
 
 	t.Run("single project defined: runs", func(t *testing.T) {
@@ -45,7 +45,7 @@ func TestApplyTargetFilter(t *testing.T) {
 	})
 
 	t.Run("none serve across many: unknown-target error", func(t *testing.T) {
-		_, err := applyTargetFilter(tgt("website", "proto"), "bogus", func(string, string) bool { return false }, label)
+		_, err := applyTargetFilter(tgt("docs", "proto"), "bogus", func(string, string) bool { return false }, label)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "any of the 2 selected projects")
 	})

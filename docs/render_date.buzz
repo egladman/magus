@@ -1,5 +1,5 @@
-// scribe_date.buzz - pure date formatting for bylines, feeds, and the recent-changes
-// footer. Flat-imported by scribe.buzz (`import "scribe_date" as _`).
+// render_date.buzz - pure date formatting for bylines, feeds, and the recent-changes
+// footer. Flat-imported by render.buzz (`import "render_date" as _`).
 import "time";
 import "assert";
 

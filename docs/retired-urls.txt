@@ -3,3 +3,5 @@
 # redirect (frontmatter aliases:) over retirement when old links should still land
 # somewhere; list a URL here only when it should genuinely 404.
 install/
+development/website/
+development/projects/website/

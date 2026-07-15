@@ -1,8 +1,8 @@
-// scribe_html.buzz - link rewriting and goldmark-output post-processing for the
+// render_html.buzz - link rewriting and goldmark-output post-processing for the
 // directory-index layout. Pure string transforms; unit-tested and golden-gated.
 import "assert";
-import "scribe_text" as _;
-import "scribe_dom" as _;
+import "render_text" as _;
+import "render_dom" as _;
 
 // resolvePath resolves a relative link against a gen-root-relative dir, normalizing
 // ".." and dropping "." / empty segments ("" for the root).
@@ -241,7 +241,7 @@ export fun cleanBody(md: str) > str {
 }
 
 // redirectScript is the exact inline-script body aliasStub emits below.
-// Exposed so scribe.buzz's writeAliases can compute the stub's CSP sha256-
+// Exposed so render.buzz's writeAliases can compute the stub's CSP sha256-
 // hash from the SAME literal text this function returns - hashing a
 // hand-copied duplicate of it would silently drift the moment either side
 // changes the redirect script's wording.
@@ -251,7 +251,7 @@ export fun redirectScript(rel: str) > str {
 
 // aliasStub is the redirect page written at each alias: meta-refresh + canonical +
 // scripted replace + a plain <a>, so it works with or without JavaScript. csp is
-// the Content-Security-Policy meta content the caller computed (scribe.buzz's
+// the Content-Security-Policy meta content the caller computed (render.buzz's
 // cspForRedirectStub, hashing redirectScript(rel) - this page's only script, and
 // its only content of any kind: no stylesheet, no image, so default-src 'none'
 // plus that one script hash is everything it needs).

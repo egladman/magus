@@ -1,6 +1,6 @@
 import "magus";
 // Modules the targets use: fs (writes MAGUS.md, node_modules guard), os (esbuild,
-// TinyGo, npm), vcs (drift gate), http (serve). scribe.buzz owns the rendering
+// TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
 import "fs";
 import "os";
@@ -11,7 +11,7 @@ import "http";
 // (gopherbuzz.build), and folds gopherbuzz into this project's affected set.
 import "project/../gopherbuzz" as gopherbuzz;
 // The static site generator, a sibling module; the targets call its entry points.
-import "scribe";
+import "render";
 
 // magusfile binds this file's own exported targets (generate, serve, ci, ...); ts adds
 // the TypeScript spell so the client bundles under src/ are symbol-capable - its `scip`
@@ -23,20 +23,27 @@ import "magus/spell/ts";
 
 magus.project({
     "spells": [magusfile, ts],
-    // Affected/drift tracks this sources glob, not the import graph, so scribe.buzz
-    // (and every other input) must be named to be watched. Both src/**/*.js AND src/**/*.ts
-    // are named: the client bundles are increasingly TypeScript (esbuild strips the types),
-    // and a .ts edit must mark this project affected just like a .js one. package.json +
-    // pnpm-lock.yaml are named so a bundled-dep version bump (mermaid, hljs, d3,
-    // codemirror) invalidates the cacheable build-* targets and marks this project
-    // affected - the esbuild inputs live in those manifests, not in the src/ entries.
-    // (pnpm is the package manager - NOT npm; there is no package-lock.json.)
-    "sources": ["magusfile.buzz", "*.buzz", "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
-                "tour/*.buzz", "package.json", "pnpm-lock.yaml", "buf.gen.yaml",
+    // Affected/drift tracks this sources glob, not the import graph, so render.buzz
+    // (and every other input) must be named to be watched. The SSG now lives IN docs/,
+    // co-located with the markdown it renders, so the content and the generator share one
+    // tree. **/*.md is the local docs corpus this render reads; source expansion prunes any
+    // dir named gen/ or node_modules/ (and the declared outputs) by name, so the generated
+    // index.md files under gen/ and package READMEs under node_modules/ never leak in as
+    // watched content. Both src/**/*.js AND src/**/*.ts are named: the client bundles are
+    // increasingly TypeScript (esbuild strips the types), and a .ts edit must mark this
+    // project affected just like a .js one. package.json + pnpm-lock.yaml are named so a
+    // bundled-dep version bump (mermaid, hljs, d3, codemirror) invalidates the cacheable
+    // build-* targets and marks this project affected - the esbuild inputs live in those
+    // manifests, not in the src/ entries. sw.js.tmpl (service-worker template) and
+    // tsconfig.json (the ts build) are render/build inputs too. (pnpm is the package
+    // manager - NOT npm; there is no package-lock.json.)
+    "sources": ["magusfile.buzz", "*.buzz", "**/*.md",
+                "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "sw.js.tmpl",
+                "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "buf.gen.yaml",
                 // The viewer/console bundles a JS client generated FROM these .proto sources
-                // (website/buf.gen.yaml -> src/gen/), so a schema change reruns codegen + rebuild.
+                // (buf.gen.yaml -> src/gen/), so a schema change reruns codegen + rebuild.
                 "../proto/magus/**/*.proto", "../proto/buf.yaml", "../proto/buf.lock",
-                "../README.md", "../CONTRIBUTING.md", "../docs/**", "../blog/**", "../assets/**"],
+                "../README.md", "../CONTRIBUTING.md", "../blog/**", "../assets/**"],
     "outputs": ["gen/**", "MAGUS.md", "src/gen/**"],
     "targets": {
         // generate renders + gates on drift, so it must run every time (skip_cache) and
@@ -56,7 +63,7 @@ magus.project({
 });
 
 // Paths this project reads from and writes to, owned here and passed into
-// scribe.site_render so the generator stays config-agnostic.
+// render.site_render so the generator stays config-agnostic.
 final ROOT = "..";          // the magus/ workspace dir, relative to this project
 final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
@@ -66,7 +73,7 @@ export fun preflight(args: [str]) > void {}
 
 // md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 // magusfile, so it stays in lockstep with the targets. generate calls it; run
-// standalone after editing targets: `magus run md-generate website`.
+// standalone after editing targets: `magus run md-generate docs`.
 export fun md_generate(args: [str]) > void {
     final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
@@ -88,14 +95,14 @@ export fun changelog_generate(args: [str]) > void {
 // --frozen-lockfile` restores the pinned deps (honoring .npmrc's minimum-release-age
 // gate), `pnpm run build` runs the esbuild invocations, which live in package.json
 // "scripts" as their single source of truth. pnpm, not npm: the release-age gate is
-// the reason. (The render's own theme/main/css are minified inline in scribe instead:
+// the reason. (The render's own theme/main/css are minified inline in render instead:
 // they have no npm deps and are driven by the render loop, so they aren't a package
 // build.) The install is guarded on node_modules so a warm local tree skips it while
 // a cold CI checkout installs. Running here - inside generate - is what lets both the
 // gen/** drift gate and the merge driver regenerate the bundles.
 // generateProtoClient generates the magus.viewer.v1 (etc.) JS client from the shared .proto
 // definitions in ../proto, using THIS project's buf.gen.yaml, into src/gen/ (committed). The
-// website owns its own JS codegen - the proto project owns the Go codegen - so each consumer
+// the docs project owns its own JS codegen - the proto project owns the Go codegen - so each consumer
 // generates the client it needs from the one source of truth. Bundling from src/gen/ (inside
 // this project) lets @bufbuild/protobuf resolve from this project's node_modules. Deterministic
 // (pinned remote es plugin), so the committed output is drift-gated by generate.
@@ -121,20 +128,20 @@ export fun generate(args: [str]) > void {
     magus.needs(magus.target.literal("changelog-generate"));
     // Regenerate the JS proto client from ../proto BEFORE the bundles that import it.
     generateProtoClient();
-    final site = scribe.site_render(ROOT, DOCS, BLOG, OUT);
+    final site = render.site_render(ROOT, DOCS, BLOG, OUT);
     generateJsBundles();
     // Written here, not inside site_render(): generateJsBundles() (just above)
     // writes gen/assets/mermaid.js and gen/assets/hljs.js, so the manifest can
     // only cover every served asset once both have landed.
-    scribe.writeSiteManifest(site);
+    render.writeSiteManifest(site);
     if (magus.has_charm("rw")) {
         // Record this build's URLs in the append-only ledger the abandoned-link gate
         // checks against - only under rw, so a checking render never mutates.
-        scribe.updateUrlLock(site);
+        render.updateUrlLock(site);
         return;
     }
     if (clean_before and vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md"])) {
-        throw "generate: " + OUT + " or MAGUS.md or CHANGELOG.md drifted; re-run `magus run generate:rw website` and commit";
+        throw "generate: " + OUT + " or MAGUS.md or CHANGELOG.md drifted; re-run `magus run generate:rw docs` and commit";
     }
 }
 
@@ -142,11 +149,11 @@ export fun format(args: [str]) > void { magus.needs(magus.target.literal("genera
 export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); }
 export fun build(args: [str]) > void { magus.needs(magus.target.literal("generate")); }
 
-// buzz-test runs scribe's in-file `test "..." {}` blocks through `magus buzz`, in
-// --embedded mode so scribe's markdown/encoding imports resolve. magus.cmd raises
+// buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in
+// --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises
 // on a non-zero exit, so a failing assertion fails this target.
 export fun buzz_test(args: [str]) > void {
-    magus.cmd(["buzz", "-t", "--embedded", "scribe.buzz"]);
+    magus.cmd(["buzz", "-t", "--embedded", "render.buzz"]);
 }
 
 export fun test(args: [str]) > void {
@@ -175,12 +182,12 @@ export fun build_playground(args: [str]) > void {
     // -scheduler=asyncify pins the wasm default so the status banner matches the build.
     os.exec("tinygo",
         ["build", "-target=wasm", "-no-debug", "-stack-size=1MB", "-scheduler=asyncify",
-         "-o", "website/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
+         "-o", "docs/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
         "..", {});
     os.exec("sh",
-        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" website/gen/playground/wasm_exec.js"],
+        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" docs/gen/playground/wasm_exec.js"],
         "..", {});
-    magus.info("rebuilt website/gen/playground/buzz.wasm + wasm_exec.js - commit the result");
+    magus.info("rebuilt docs/gen/playground/buzz.wasm + wasm_exec.js - commit the result");
 }
 
 // build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11)
@@ -214,7 +221,7 @@ export fun build_hljs(args: [str]) > void {
 // the watched tree, so a render can't retrigger the watch. try/catch keeps a bad
 // render from ending the watch (return false keeps watching).
 export fun serve(args: [str]) > void {
-    scribe.site_render(ROOT, DOCS, BLOG, OUT);
+    render.site_render(ROOT, DOCS, BLOG, OUT);
     // No port -> http.server scans from 8080 for the first free one and returns it,
     // so the printed URL is correct even when 8080 is busy.
     final port = http.server(OUT);
@@ -223,7 +230,7 @@ export fun serve(args: [str]) > void {
     fs.watch([ROOT + "/" + DOCS, ROOT + "/" + BLOG], fun(changed: [str]) > bool {
         magus.info("change detected - re-rendering");
         try {
-            scribe.site_render(ROOT, DOCS, BLOG, OUT);
+            render.site_render(ROOT, DOCS, BLOG, OUT);
         } catch (e) {
             magus.warn("render failed, still watching: " + e);
         }

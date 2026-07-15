@@ -1,4 +1,4 @@
-// The protobuf API contract between magus and the website log viewer
+// The protobuf API contract between magus and the docs log viewer
 // (magus.runlog.v1). This project dogfoods magus's own `buf` spell: buf-generate
 // runs the codegen (picked up by the root `generate` target's `*-generate` glob, so
 // committed gen/ stays fresh and drift-gated), and buf-lint / buf-breaking gate the

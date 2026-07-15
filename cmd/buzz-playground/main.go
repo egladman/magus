@@ -7,7 +7,7 @@
 // JavaScript is a ~10-line bootstrap that instantiates this module; all behavior
 // lives here and in internal/playground.Console (pure Go and host-tested).
 //
-// The page provides the static structure (see magus/website/editor.html); this
+// The page provides the static structure (see docs/playground.html); this
 // program grabs the elements by id, wires handlers, and renders into them.
 //
 // All execution is in-memory: a browser cannot fork processes or touch a

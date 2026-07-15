@@ -266,7 +266,7 @@ func catalogOrder(nodes []types.TargetGraphNode) []types.TargetGraphNode {
 // targetRoleClasses style target nodes by role in the target dependency graph.
 //
 // ANTI-DRIFT: the classDef names below ("anchor", "target") are mirrored verbatim
-// in website/src/console/graph/mermaid.ts (toMermaid / targets flavor). A rename
+// in console/src/console/graph/mermaid.ts (toMermaid / targets flavor). A rename
 // here must be matched there. internal/render/mermaid_drift_test.go asserts this
 // in CI.
 var targetRoleClasses = []renderClass{

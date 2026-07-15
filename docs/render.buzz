@@ -1,4 +1,4 @@
-// scribe.buzz - the static site generator ("scribe") for the magus docs site.
+// render.buzz - the static site generator for the magus docs site.
 //
 // All the rendering machinery lives here as a self-contained library: the page
 // template, shared nav/footer, per-page renderers, the /public/ autoindex tree, the
@@ -23,22 +23,22 @@ import "yaml";
 // Pure text, path, and URL helpers, split into their own unit-tested module. Flat
 // import (`as _`) merges its exported functions into this scope, so callers here
 // name them directly (escapeAttr, relativePath, ...) as before the extraction.
-import "scribe_text" as _;
+import "render_text" as _;
 // Source-path -> clean-URL mapping (the directory-index scheme and blog date
 // scoping), likewise split into its own unit-tested module and flat-imported so
 // cleanURL/cleanDepth/blogURLPath resolve here unqualified.
-import "scribe_url" as _;
+import "render_url" as _;
 // Sitemap/Atom XML serialization and Atom date normalization, split into their own
 // unit-tested module and flat-imported so escapeXml/xmlElement/atomDate resolve here
 // unqualified at their many feed-building call sites.
-import "scribe_feed" as _;
+import "render_feed" as _;
 // Date formatting (bylines, feed dates, recent-changes stamps), split into its own
 // unit-tested module and flat-imported so formatISO/blogDate/... resolve unqualified.
-import "scribe_date" as _;
+import "render_date" as _;
 // Directory-index link rewriting (resolve, old->new URL map, re-relativize), split
 // into its own unit-tested module and flat-imported so rewriteHref/resolvePath/
 // cleanTarget resolve unqualified at their call sites here.
-import "scribe_html" as _;
+import "render_html" as _;
 
 // Path config, set by site_render() from the arguments the magusfile passes in - the
 // generator does not hardcode where the workspace, docs, or output live, so it stays
@@ -284,9 +284,13 @@ object Site {
             var childRel = name;
             if (rel != "") { childRel = rel + "/" + name; }
             if (isDirectory(this.root + "/" + this.docs + "/" + childRel)) {
+                // Skip the SSG's own root children (node_modules/gen/src/tour) - same skip
+                // as walk(), only at the docs root (rel == ""), so metadata collection
+                // matches what actually renders. See isGeneratorDir for why root-only.
+                if (rel == "" and isGeneratorDir(name)) { continue; }
                 this.collectDocPages(childRel);
             } else {
-                if (name.endsWith(".md")) { this.collectDocPage(childRel); }
+                if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name) == false)) { this.collectDocPage(childRel); }
             }
         }
     }
@@ -738,7 +742,7 @@ fun sitePathPrefix() > str {
 // newCleanDirectory gives a docs page's directory after the directory-index move -
 // its clean URL without the trailing slash - for rewriteLinks. It reads site state
 // (the blog dir, via cleanURL), so it stays here; the pure old-directory counterpart
-// (oldFlatDirectory) lives in scribe_html.
+// (oldFlatDirectory) lives in render_html.
 fun newCleanDirectory(rel: str, site: Site) > str {
     final u = cleanURL(rel, site.blog);
     if (u == "") { return ""; }
@@ -1530,7 +1534,7 @@ fun computeCSP(imgSrc: str) > str {
 // (aliasStub) loads no stylesheet, image, or external script; its only
 // content is one inline <script> whose text embeds the redirect target, so
 // it differs per stub and cannot share the single site-wide hash list. script
-// is the exact text redirectScript(rel) (scribe_html.buzz) produces - the
+// is the exact text redirectScript(rel) (render_html.buzz) produces - the
 // same string aliasStub embeds, so the hash always matches what ships.
 fun cspForRedirectStub(script: str) > str {
     return "default-src 'none'; script-src '" + scriptHash(script) + "'"
@@ -1582,7 +1586,7 @@ fun writeManifest(site: Site) > void {
 // writeServiceWorker writes gen/sw.js - a conservative worker that keeps HTML
 // network-first (never stale docs) and static hashed assets cache-first, and
 // precaches the search index + playground WASM so those two heavy features
-// survive an offline reload. The source lives in website/sw.js.tmpl (Buzz
+// survive an offline reload. The source lives in docs/sw.js.tmpl (Buzz
 // interpolates { ... } inside strings, so embedding JS with arrow functions
 // as inline strings would collide). We swap __VERSION__ (keyed off HEAD's
 // short commit hash so a new build purges old caches on activate) and
@@ -2165,8 +2169,11 @@ fun renderPager(rel: str, site: Site) > str {
         // README.md/index.md are the directory's landing page, reached via the
         // breadcrumb and nav — not a prev/next peer — so they stay out of the pager
         // (and their clean URL is the parent dir, which a sibling link can't express).
+        // isGeneratorFile drops the SSG's own MAGUS.md (a docs-root sibling now the
+        // generator lives here) so it is not offered as a prev/next page - the walk
+        // never renders it, so a pager link to it would dangle.
         if (name.endsWith(".md") and name != "README.md" and name != "index.md"
-            and name.startsWith("_") == false) {
+            and name.startsWith("_") == false and isGeneratorFile(name) == false) {
             sibs.append(name);
         }
     }
@@ -2831,7 +2838,7 @@ fun playgroundLink(root: str, src: str) > str {
 
 // TourStep is one tour card: the .buzz example file, its copy, and a cross-link to
 // the concept doc a newcomer should read next (docSlug is the clean-URL directory,
-// e.g. "targets"). It renders its own numbered card - the first of scribe's typed
+// e.g. "targets"). It renders its own numbered card - the first of render's typed
 // value objects, putting presentation on the data it presents instead of a
 // stringly-typed {str: str} map juggled by the caller.
 object TourStep {
@@ -2957,7 +2964,34 @@ fun isDirectory(path: str) > bool {
     return os.execute(["test", "-d", path]) == 0;
 }
 
-// Recursively walk ../docs (the output lives outside it, under gen).
+// isGeneratorDir reports whether a docs-ROOT child directory belongs to the SSG
+// itself rather than the docs content. The generator now lives co-located with the
+// markdown it renders (the SSG moved from website/ into docs/), so the content walk
+// shares a tree with node_modules/ (pnpm deps), gen/ (this render's own output),
+// src/ (the client bundle sources), and tour/ (the .buzz tour scripts). Walking those
+// would ingest stray .md (package READMEs, generated index.md) as documentation pages,
+// so the content walks skip them. CRUCIAL: only these EXACT docs-root children are
+// skipped - the check is guarded by rel == "" at the call sites, NOT applied by name at
+// every depth. Real content nests a dir named gen (docs/manpage/gen holds the generated
+// manpage markdown), and skipping that by bare name would drop those pages. Real content
+// subdirs at the root (reference/, spells/, targets/, codes/, ...) are not listed and
+// are walked as before.
+fun isGeneratorDir(name: str) > bool {
+    return name == "node_modules" or name == "gen" or name == "src" or name == "tour";
+}
+
+// isGeneratorFile reports whether a docs-ROOT .md file is an SSG artifact rather than
+// content. MAGUS.md is this project's generated target catalog (a declared output,
+// refreshed by md-generate), which now sits at the docs root alongside the markdown; the
+// content walk must not render it as a doc page. It is discovered instead through
+// renderDevelopment (the /development/ project catalog). Like isGeneratorDir, this is
+// only consulted at the docs root (rel == "").
+fun isGeneratorFile(name: str) > bool {
+    return name == "MAGUS.md";
+}
+
+// Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
+// root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).
 fun walk(rel: str, site: Site) > void {
     var dir = site.root + "/" + site.docs;
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
@@ -2967,9 +3001,10 @@ fun walk(rel: str, site: Site) > void {
         if (rel != "") { childRel = rel + "/" + name; }
 
         if (isDirectory(site.root + "/" + site.docs + "/" + childRel)) {
+            if (rel == "" and isGeneratorDir(name)) { continue; }
             walk(childRel, site);
         } else {
-            if (name.endsWith(".md")) { renderFile(childRel, site); }
+            if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name) == false)) { renderFile(childRel, site); }
         }
     }
 }
@@ -3070,7 +3105,7 @@ fun renderDevelopment(site: Site) > void {
     var contributingSection = "";
     if (haveContributing) {
         contributingSection = "<h2 id=\"contributing\">Contributing</h2>\n"
-            + "<p>The <a href=\"contributing/\">Contributing guide</a> covers the conventions worth knowing before you open a pull request: run the suite with <code>magus run ci</code>, back any performance change with benchmark evidence, and regenerate the docs site (<code>magus run generate:rw website</code>) so the committed <code>gen/</code> tree never drifts from its source.</p>\n";
+            + "<p>The <a href=\"contributing/\">Contributing guide</a> covers the conventions worth knowing before you open a pull request: run the suite with <code>magus run ci</code>, back any performance change with benchmark evidence, and regenerate the docs site (<code>magus run generate:rw docs</code>) so the committed <code>gen/</code> tree never drifts from its source.</p>\n";
     }
     // Development is the contributor landing page the root README points at as the "full
     // contributor reference", so it carries the orientation a newcomer to the codebase
@@ -3261,7 +3296,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // generate(), which calls this function) still has to run and writes
     // gen/assets/mermaid.js and gen/assets/hljs.js - both served assets - AFTER
     // site_render returns. Computing the manifest here would silently miss them.
-    // See generate()'s call to scribe.writeSiteManifest(site) for the real call
+    // See generate()'s call to render.writeSiteManifest(site) for the real call
     // site, which runs once every write to gen/ - by any step - is done.
 
     // Reproducibility guard: throw on any dangling href/src reference. Runs after
@@ -3495,7 +3530,7 @@ fun abandonedLinkCheck(site: Site) > void {
     }
     if (abandoned.len() > 0) {
         final sorted = abandoned.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-        throw "abandoned links: {sorted.len()} previously-shipped URL(s) no longer resolve. Add a redirect (frontmatter aliases:) or list them in website/retired-urls.txt: " + sorted.join(", ");
+        throw "abandoned links: {sorted.len()} previously-shipped URL(s) no longer resolve. Add a redirect (frontmatter aliases:) or list them in retired-urls.txt: " + sorted.join(", ");
     }
 }
 
@@ -3515,7 +3550,7 @@ export fun updateUrlLock(site: Site) > void {
 }
 
 // Tests for the pure helpers. Run them with the `buzz-test` target
-// (`magus buzz -t --embedded scribe.buzz`); living in this module, they reach its
+// (`magus buzz -t --embedded render.buzz`); living in this module, they reach its
 // internal functions directly. They register but do not run during a normal render.
 // Buzz's == is identity (not structural) for maps, so assert.equal does the
 // value comparison: the whole aliasTarget map at once, not field-by-field.

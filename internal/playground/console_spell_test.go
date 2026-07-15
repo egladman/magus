@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// tourFile reads a website/tour fixture relative to the package dir. The fixtures
+// tourFile reads a docs/tour fixture relative to the package dir. The fixtures
 // are the acceptance inputs, so the console must render the exact bytes the docs ship.
 func tourFile(t *testing.T, name string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "..", "website", "tour", name))
+	b, err := os.ReadFile(filepath.Join("..", "..", "docs", "tour", name))
 	require.NoError(t, err, "read tour fixture %s", name)
 	return string(b)
 }

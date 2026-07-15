@@ -29,9 +29,9 @@ project and a role:
   ignore rules (`git check-ignore -v <path>`) - build residue should be
   ignored, and an unclaimed un-ignored file is at risk of being lost.
 
-WRONG: reading a 3000-line diff of `website/gen/` to understand a change.
-CORRECT: note that `website/gen/**` is a declared output of
-`website:generate`, skip the diff, and read the source change that caused it.
+WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
+CORRECT: note that `docs/gen/**` is a declared output of
+`docs:generate`, skip the diff, and read the source change that caused it.
 
 ## Rules for generated files
 

@@ -293,7 +293,7 @@ curl -s <asset-url> | sha256sum
 ```
 
 and compare against the manifest and the repo's committed copy (the docs site
-under `website/gen/`, the console app under `console/gen/`). The JavaScript is
+under `docs/gen/`, the console app under `console/gen/`). The JavaScript is
 unminified enough to read; start at the console's `graph/explorer.js` -
 `loadGraph` and `readGraphFile` are the functions that
 ingest a graph (the `#data=`/`#src=`/demo fallback chain, and drag-drop/
@@ -306,7 +306,7 @@ A `<meta>`-delivered Content-Security-Policy governs the _page's own_
 requests. It does not govern requests the service worker (`sw.js`) makes on
 the page's behalf while intercepting `fetch` events - that is a documented
 gap in the CSP spec, not a bug in this implementation. The mitigation is that
-the service worker's source, `website/sw.js.tmpl`, is about 60 lines total,
+the service worker's source, `docs/sw.js.tmpl`, is about 60 lines total,
 committed, and its `fetch` handler returns early on any cross-origin request
 before it ever considers serving or caching one:
 
@@ -325,7 +325,7 @@ as a fallback for hosts that cannot set headers.
 ### The opt-out: remove us entirely
 
 If your threat model excludes our hosting altogether: clone the repo, run
-`magus run generate website`, and serve the `gen/` directory on your own
+`magus run generate docs`, and serve the `gen/` directory on your own
 network. Every page here is origin-agnostic and works identically. (magus
 ships no general-purpose static file server for hosting this site; the only
 servers it binds are the ephemeral loopback `--serve` graph server and the

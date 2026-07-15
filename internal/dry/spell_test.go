@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// tourFile reads a website/tour fixture relative to the package dir. The fixtures
+// tourFile reads a docs/tour fixture relative to the package dir. The fixtures
 // are the acceptance inputs: the playground must evaluate the exact bytes the docs
 // ship.
 func tourFile(t *testing.T, name string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "..", "website", "tour", name))
+	b, err := os.ReadFile(filepath.Join("..", "..", "docs", "tour", name))
 	require.NoError(t, err, "read tour fixture %s", name)
 	return string(b)
 }
@@ -85,13 +85,13 @@ func TestLoadSpell_wardMGS5002(t *testing.T) {
 	assert.Contains(t, wardOp.Detail, "detach", "the ward message explains the detach contradiction")
 }
 
-// TestTourFilesLoadClean is the regression guard: every website/tour/*.buzz file
+// TestTourFilesLoadClean is the regression guard: every docs/tour/*.buzz file
 // must evaluate to a graph without a load diagnostic, whether magusfile (targets
 // from exports) or spell (ops from mgs_listTargets). A ward is an op-level
 // diagnostic, not a load one, so even 10-wards loads clean here.
 func TestTourFilesLoadClean(t *testing.T) {
 	ctx := context.Background()
-	dir := filepath.Join("..", "..", "website", "tour")
+	dir := filepath.Join("..", "..", "docs", "tour")
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 

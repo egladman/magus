@@ -15,7 +15,7 @@ Output references fix this. Every target that runs is given a short **reference 
 for its captured output, printed on its own line:
 
 ```
-[pass] website test (1.2s)
+[pass] docs test (1.2s)
 ref1a2b3c
 ```
 
@@ -37,7 +37,7 @@ triple-click selects exactly the ref.
 A failing target adds two hints, the exact commands ready to copy:
 
 ```
-[fail] website test (1.2s): tsc exit 2
+[fail] docs test (1.2s): tsc exit 2
 refcc49db1f
   full output: magus query output refcc49db1f
   open in browser: magus query output refcc49db1f --open

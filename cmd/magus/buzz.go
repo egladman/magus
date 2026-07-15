@@ -69,7 +69,7 @@ func buzzCmd(ctx context.Context, args []string) error {
 
 	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).
 	// --embedded opts into the relaxations the magusfile engine uses, so a magus
-	// module like the docs generator (scribe) can be run or tested here.
+	// module like the docs generator (render) can be run or tested here.
 	var opts []buzz.Option
 	if embedded {
 		opts = append(opts, buzz.WithEmbedded())

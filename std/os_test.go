@@ -385,7 +385,7 @@ func TestRelToCwd(t *testing.T) {
 // magus's exec primitives and Buzz's own stdlib (gopherbuzz io/fs/os), so a
 // magusfile using the language built-ins (io.File, fs.list, os.execute) resolves
 // relative paths against the project dir. Dropping the buzzstd.WithCwd bridge would
-// silently regress that (e.g. `magus run serve website` reading ../README.md).
+// silently regress that (e.g. `magus run serve docs` reading ../README.md).
 func TestWithCwdPropagatesToBuzzStdlib(t *testing.T) {
 	dir := t.TempDir()
 	ctx := WithCwd(context.Background(), dir)

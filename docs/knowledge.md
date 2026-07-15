@@ -154,7 +154,7 @@ knowledge graph) in the same explorer:
 ```sh
 magus graph open --targets                # whole workspace
 magus graph open --targets .              # scope to root project
-magus graph open --targets website        # scope to one project by path
+magus graph open --targets docs        # scope to one project by path
 magus graph open --targets --print        # print the URL instead of opening
 ```
 

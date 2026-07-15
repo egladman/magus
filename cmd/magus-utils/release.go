@@ -248,7 +248,7 @@ func runCut(args []string) error {
 
 // runMigrate reads CHANGELOG.md and writes a releases/*.yaml for every released
 // version. It is a one-shot migration tool: run once, then delete the
-// parseChangelog function from scribe.buzz.
+// parseChangelog function from render.buzz.
 //
 // Usage: magus-utils migrate -changelog ./CHANGELOG.md -out ./releases
 func runMigrate(args []string) error {
@@ -298,12 +298,12 @@ func runMigrate(args []string) error {
 	return nil
 }
 
-// runReleaseIndex reads the scribe-emitted website/gen/public/release/index.json and
-// signs those exact bytes into index.json.sig. Scribe is the single source of truth
-// for the served file; this tool only adds the signature so the sig covers the bytes
-// the client actually downloads. Signing requires MAGUS_SIGNING_KEY to be set.
+// runReleaseIndex reads the render-emitted docs/gen/public/release/index.json and
+// signs those exact bytes into index.json.sig. The renderer is the single source of
+// truth for the served file; this tool only adds the signature so the sig covers the
+// bytes the client actually downloads. Signing requires MAGUS_SIGNING_KEY to be set.
 //
-// Usage: magus-utils release-index -served ./website/gen/public/release [-no-sign]
+// Usage: magus-utils release-index -served ./docs/gen/public/release [-no-sign]
 //
 // The -releases and -out flags are accepted but ignored (kept for backward compat with
 // any existing CI invocations; a future cleanup may remove them).
@@ -332,15 +332,15 @@ func runReleaseIndex(args []string) error {
 		}
 	}
 	if servedDir == "" {
-		return fmt.Errorf("usage: magus-utils release-index -served ./website/gen/public/release [-no-sign]")
+		return fmt.Errorf("usage: magus-utils release-index -served ./docs/gen/public/release [-no-sign]")
 	}
 
 	idxPath := filepath.Join(servedDir, "index.json")
-	// Read the scribe-emitted file. This is the exact JSON the client downloads, so the
+	// Read the render-emitted file. This is the exact JSON the client downloads, so the
 	// signature covers what is actually served - not a re-rendered Go-side copy.
 	data, err := os.ReadFile(idxPath)
 	if err != nil {
-		return fmt.Errorf("read %s: %w (run `magus run generate website` first)", idxPath, err)
+		return fmt.Errorf("read %s: %w (run `magus run generate docs` first)", idxPath, err)
 	}
 	fmt.Printf("signing %s (%d bytes)\n", idxPath, len(data))
 
@@ -447,7 +447,7 @@ type changelogEntry struct {
 
 // parseReleasedVersions reads CHANGELOG.md and returns all released versions
 // (skipping [Unreleased]), preserving the raw body text per section.
-// This mirrors the logic of scribe.buzz's parseChangelog.
+// This mirrors the logic of render.buzz's parseChangelog.
 func parseReleasedVersions(path string) ([]changelogEntry, error) {
 	f, err := os.Open(path)
 	if err != nil {
