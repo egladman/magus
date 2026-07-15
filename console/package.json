@@ -1,0 +1,34 @@
+{
+  "name": "magus-console",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The magus native console: a standalone, decoupled tabbed + tiling PWA that hosts the log viewer, graph explorer, dashboard, and activity trail as live lenses on the daemon over loopback. Built independently of the docs site (no scribe templating); its output is slipped into the reserved /console/ path. Managed with pnpm (pinned in mise.toml), .npmrc's minimum-release-age is the supply-chain guard.",
+  "scripts": {
+    "build": "pnpm run build-console && pnpm run build-log-viewer && pnpm run build-graph && pnpm run build-dashboard && pnpm run build-activity && pnpm run build-css",
+    "build-console": "esbuild src/console/main.ts --bundle --minify --format=esm --outfile=gen/console.js",
+    "build-log-viewer": "esbuild src/console/logs/main.ts --bundle --minify --format=esm --outfile=gen/logs/log-viewer.js",
+    "build-graph": "esbuild src/console/graph/main.ts --bundle --minify --format=esm --outfile=gen/graph/explorer.js",
+    "build-dashboard": "esbuild src/console/dashboard/main.ts --bundle --minify --format=esm --outfile=gen/dashboard/dashboard.js",
+    "build-activity": "esbuild src/console/activity/main.ts --bundle --minify --format=esm --outfile=gen/activity/activity.js",
+    "build-css": "esbuild src/styles/console.css --minify --outfile=gen/console.css",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "rm -rf .testcache && esbuild $(find src -name '*.test.ts') --bundle --platform=node --format=esm --outdir=.testcache && node --test $(find .testcache -name '*.test.js')"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.9.0",
+    "@connectrpc/connect": "^2.1.2",
+    "@connectrpc/connect-web": "^2.1.2",
+    "d3-drag": "3.0.0",
+    "d3-force": "3.0.0",
+    "d3-selection": "3.0.0",
+    "d3-zoom": "3.0.0",
+    "uplot": "1.6.31"
+  },
+  "devDependencies": {
+    "@types/d3-drag": "3.0.7",
+    "@types/d3-force": "3.0.10",
+    "@types/d3-selection": "3.0.11",
+    "@types/d3-zoom": "3.0.8",
+    "typescript": "5.8.3"
+  }
+}

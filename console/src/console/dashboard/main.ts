@@ -33,29 +33,11 @@ import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
-// This app does NOT load the docs main.js bundle, so it wires the shared console chrome
-// itself: the nav dropdown, the docs search (relocated into the drawer), the reference drawer
-// (from src/ui/), and the settings gear (from src/ui/). Each is an exported init function
-// (post-ESM-refactor), so they are CALLED here, not run on import. Order matters: ref-drawer
-// runs after search so it can pull the search bar (.page-tools) into the drawer.
-import { initNav } from "../../site/nav.js";
-import { initSearch } from "../../site/search.js";
-import { initRefDrawer } from "../../ui/ref-drawer.js";
-import { initConsoleSettings } from "../../ui/console-settings.js";
+// The dashboard is only ever mounted as a console surface now (the decoupled console has no standalone
+// docs page), so it wires NO docs-site chrome of its own - the console frame owns the title bar, tab
+// strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
+// initConsoleSettings self-wiring was dropped with the docs-page decoupling.)
 import { getDefaultHost } from "../../lib/settings";
-
-// Wire the shared console chrome ONLY when this bundle boots its own standalone page - NOT when the
-// console mounts the dashboard as a surface, where the console frame owns the chrome and these would
-// inject a duplicate nav/search/drawer into the outlet. The signal is the same as the auto-boot guard
-// below: the scaffold is present at import time on the standalone page (its script runs with
-// dashboard.html fully in the document), whereas the console imports this bundle BEFORE injecting the
-// scaffold, so #dash-connect is absent then.
-if (document.getElementById("dash-connect")) {
-  initNav();
-  initSearch();
-  initRefDrawer();
-  initConsoleSettings();
-}
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
