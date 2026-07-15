@@ -12,6 +12,7 @@
 import { openTab, workspaceStore, type TabState } from "./tabs";
 import { createTabStrip } from "./tabStrip";
 import { homePage, type Launchable } from "./home";
+import { logsPage } from "./logs/surface";
 import type { PageController, PageModule, SearchProvider } from "./page";
 
 const registry = new Map<string, PageModule<any, any>>();
@@ -50,17 +51,21 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted host + controller
 
   // mount activates a surface into its own host once; a second call for the same tab is a no-op
-  // (the surface stays mounted and hidden while another tab is active).
+  // (the surface stays mounted and hidden while another tab is active). mount is only ever called
+  // for a tab we are switching to, so it shows the pane BEFORE activating: a surface that measures
+  // its own DOM at init (the log viewer's segmented switches, and later charts/canvas) needs real
+  // dimensions, and a display:none host reports zero. Inactive tabs are never pre-mounted - they
+  // stay cheap until first selected.
   async function mount(tab: TabState): Promise<void> {
     if (mounts.has(tab.id)) return;
     const m = registry.get(tab.pageId);
     if (!m) return;
     const host = document.createElement("div"); // a pane: #console-outlet > div[data-tab-id], no class
     host.dataset.tabId = tab.id;
-    host.hidden = true;
     outlet.append(host);
     const entry: Mounted = { host, controller: null };
     mounts.set(tab.id, entry);
+    show(tab.id); // visible before activate, so init-time measurement sees real sizes
     entry.controller = await m.activate(host);
   }
 
@@ -78,10 +83,10 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
 
   const strip = createTabStrip(ws, {
     onSelect: (id) => {
-      // Already mounted -> show synchronously (instant switch). Otherwise mount, then show.
+      // Already mounted -> show synchronously (instant switch). Otherwise mount (which shows it).
       if (mounts.has(id)) { show(id); return; }
       const tab = ws.get().tabs.find((t) => t.id === id);
-      if (tab) void mount(tab).then(() => show(id));
+      if (tab) void mount(tab);
     },
     onClose: (id) => unmount(id),
     onNew: () => open("home"),
@@ -95,22 +100,26 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
     if (!m) return;
     const tab: TabState = { id: pageId + "-" + Date.now().toString(36), pageId, title: m.title };
     ws.set(openTab(ws.get(), tab));
-    void mount(tab).then(() => show(tab.id));
+    void mount(tab);
   }
 
   register(homePage(SURFACES, open));
-  register(stubPage("logs", "Log viewer"));
+  register(logsPage());
   register(stubPage("graph", "Graph explorer"));
   register(stubPage("dashboard", "Dashboard"));
   register(stubPage("activity", "Activity"));
 
-  // Restore the persisted workspace - mount every tab, show the active one; land on home if empty.
+  // Restore the persisted workspace: the tab strip already renders every saved tab (it binds to ws);
+  // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount
+  // lazily on first selection. Land on home if the workspace is empty.
   const saved = ws.get();
-  void (async () => {
-    for (const t of saved.tabs) await mount(t);
-    if (saved.tabs.length === 0) open("home");
-    else show(saved.activeId ?? saved.tabs[0]?.id ?? null);
-  })();
+  if (saved.tabs.length === 0) {
+    open("home");
+  } else {
+    const activeId = saved.activeId ?? saved.tabs[0]?.id ?? null;
+    const tab = saved.tabs.find((t) => t.id === activeId) ?? saved.tabs[0];
+    if (tab) void mount(tab);
+  }
 }
 
 // Entry: wire the console page's DOM. Guarded so the module no-ops when the scaffold is absent.
