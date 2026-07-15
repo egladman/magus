@@ -91,10 +91,10 @@ function zoomSeg(key: string, label: string, aria: string): HTMLElement {
 
 function wireZoom(): void {
   // The control lives in the shared status bar's right cluster, by the event count.
-  const right = document.querySelector(".console-statusbar .statusbar-right");
+  const right = document.querySelector("#console-statusbar .console-shell-statusbar__right");
   if (right) {
     const ctl = document.createElement("div");
-    ctl.className = "zoom-ctl status-item";
+    ctl.className = "zoom-ctl console-shell-statusbar__item";
     ctl.setAttribute("role", "group");
     ctl.setAttribute("aria-label", "Zoom");
     ctl.append(zoomSeg("out", "-", "Zoom out"), zoomSeg("reset", "100%", "Reset zoom"), zoomSeg("in", "+", "Zoom in"));

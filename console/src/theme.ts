@@ -92,8 +92,8 @@
     // pre-paint, or on pages without the panel — the guard covers both).
     const btn = document.getElementById("theme-cycle");
     if (btn) {
-      const iconEl = btn.querySelector(".theme-cycle-icon");
-      const labelEl = btn.querySelector(".theme-cycle-label");
+      const iconEl = btn.querySelector(".console-shell-themecycle__icon");
+      const labelEl = btn.querySelector(".console-shell-themecycle__label");
       if (iconEl) iconEl.innerHTML = ICON[t];
       if (labelEl) labelEl.textContent = LABEL[t];
       btn.setAttribute("aria-label", "Color theme: " + LABEL[t] + " (click to cycle)");

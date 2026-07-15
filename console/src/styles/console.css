@@ -16,72 +16,17 @@
      read those at runtime. Nothing consumes a --c-* name any more. */
 }
 
-/* Console-only typeface: the console surfaces use the platform system-ui stack so they read as a
-   native app. tokens.css already points PatternFly's font-family tokens at a system stack, so this
-   just applies the body token to the surface (the surfaces set the mono token directly on their
-   own code/log rows). */
-body:has(.console-bar) {
-  font-family: var(--pf-t--global--font--family--body);
-}
-
-/* Native interaction feel (console surfaces only): a single-accent text selection, no mobile
-   tap-flash, and no rubber-band overscroll - so the apps read like a desktop window rather than a
-   scrolling web page. Scoped to pages carrying the app bar, like the typeface rule above. */
-body:has(.console-bar) {
-  -webkit-tap-highlight-color: transparent;
-  overscroll-behavior: none;
-}
-body:has(.console-bar) ::selection {
-  background: color-mix(in srgb, var(--console-accent) 28%, transparent);
-}
-/* The chrome rails (top app bar, bottom status bar) are not selectable, like native window chrome;
-   only the content between them is. */
-.console-bar,
-.console-statusbar {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-/* App bar: reuse the site header's geometry (.site-header / .nav-right / .nav-toggle /
-   #theme-toggle from site.css) and only INVERT the palette - a sectioning-tinted bar that
-   reads as a distinct control surface while staying theme-aware. */
-.console-bar.site-header {
-  background: var(--pf-t--global--background--color--secondary--default);
-  /* Inverted (inset) shadow: the bar reads as recessed and the page content sits on top of it
-     - the subtle "dashboard vs. doc site" distinction, without a new design language. */
-  box-shadow: inset 0 3px 7px -5px rgba(0, 0, 0, 0.45);
-}
-.console-bar nav { align-items: center; }
-.console-bar .brand-mark { display: block; }
-/* App title in the bar, next to the hat (native title-bar pattern): the current app's name.
-   Resets Pico's large <h1> to a compact inline label so it reads as a title, not a page heading.
-   The page body no longer repeats the name as an <h1> + lede.
-   Vertical alignment: Pico gives each nav <li> vertical padding, which made the title's line box sit
-   off-center from the hat. Zero that padding and flex-center each li (the <ul> already centers them)
-   so the hat glyph and the title text share one center. */
-.console-bar nav > ul { align-items: center; }
-.console-bar nav > ul > li { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
-.console-bar .console-app-title {
-  margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.15;
-  color: var(--pf-t--global--text--color--regular); white-space: nowrap;
-}
-/* The menu button is mobile-only in site.css; on the dashboard it is the primary nav, so
-   show it at every width (JS-gated, like site.css - a dead button with no toggle is worse
-   than the inline links the no-js path falls back to below). */
-.js .console-bar .nav-toggle { display: inline-flex; }
-.console-bar .nav-right { gap: 0.55rem; position: relative; } /* position: anchor the settings panel */
-
-/* --- Console apps only: button contrast (body.console-app; the docs site + playground are
+/* --- Console apps only: button contrast (body[data-console-app]; the docs site + playground are
    left with their lighter treatment). The acute accessibility problem was that a disabled
    button was just a faint, low-opacity ghost of the enabled one, so an unavailable control
    still read as clickable. Make disabled buttons flatly inert instead - muted fill, muted
    text and border, full opacity - so enabled (Pico primary blue) vs disabled (gray) is
-   obvious. `body.console-app` out-specifies the apps' own `.file-bar/.stage-tools
+   obvious. `body[data-console-app]` out-specifies the apps' own `.file-bar/.stage-tools
    button:disabled` opacity rules (which load after console.css), so this wins without
    !important. --- */
-body.console-app button:disabled,
-body.console-app button[disabled],
-body.console-app button[aria-disabled="true"] {
+body[data-console-app] button:disabled,
+body[data-console-app] button[disabled],
+body[data-console-app] button[aria-disabled="true"] {
   opacity: 1;
   background: var(--pf-t--global--background--color--secondary--default);
   border-color: var(--pf-t--global--border--color--default);
@@ -89,104 +34,6 @@ body.console-app button[aria-disabled="true"] {
   box-shadow: none;
   cursor: not-allowed;
 }
-
-/* site.css only collapses .nav-links into the dropdown drawer under 1024px; the dashboard
-   app bar is a drawer at EVERY width (the sibling tool pages live behind the menu, never
-   inline), so re-apply that collapse here with no media query. Mirrors the mobile block in
-   site.css (lines ~201-248) scoped to .console-bar - keep the two in sync. */
-.js .console-bar .nav-links {
-  display: none;
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  z-index: 30;
-  min-width: 11rem;
-  padding: 0.35rem;
-  background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
-}
-.js .console-bar .nav-right.nav-open .nav-links { display: block; }
-.js .console-bar .nav-links li { display: block; margin: 0; } /* stack one per row */
-.js .console-bar .nav-links .nav-menu-label {
-  display: block;
-  margin: 0.15rem;
-  padding: 0.25rem 0.6rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--pf-t--global--text--color--subtle);
-}
-.js .console-bar .nav-links a {
-  display: block;
-  padding: 0.45rem 0.6rem; /* bigger tap rows; overrides the desktop pill padding */
-  margin: 0;
-}
-.js .console-bar .nav-links .nav-menu-hint {
-  display: block;
-  margin: 0.25rem 0.15rem 0.1rem;
-  padding: 0.35rem 0.6rem 0.1rem;
-  border-top: 1px solid var(--pf-t--global--border--color--default);
-  font-size: 0.72rem;
-  color: var(--pf-t--global--text--color--subtle);
-}
-/* No-js fallback: no toggle, so keep the links inline (wrapping) rather than hidden. */
-.no-js .console-bar .nav-links { flex-wrap: wrap; justify-content: flex-end; }
-
-/* App launcher: the dashboard's menu dropdown is a Google-waffle-style grid of app tiles,
-   not a list of text links, so it reads as a native app switcher. Same show/hide plumbing
-   as the drawer above (nav.js toggles .nav-open; the base rules hide .nav-links and reveal
-   on open) - only the inner layout changes to a grid, so these rules carry .app-grid to
-   out-specify the drawer's list styling. Boxy Pico-tinted tiles: icon over label. */
-.js .console-bar .nav-links.app-grid {
-  min-width: 16.5rem;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.3rem;
-  padding: 0.5rem;
-}
-.js .console-bar .nav-right.nav-open .nav-links.app-grid { display: grid; }
-.js .console-bar .app-grid .nav-menu-label,
-.js .console-bar .app-grid .nav-menu-hint { grid-column: 1 / -1; }
-.js .console-bar .app-grid .app-cell { display: block; margin: 0; }
-.js .console-bar .app-grid .app-cell a {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.75rem 0.4rem;
-  border: 1px solid transparent;
-  border-radius: var(--pf-t--global--border--radius--small);
-  text-align: center;
-  text-decoration: none;
-  color: var(--pf-t--global--text--color--regular);
-}
-.js .console-bar .app-grid .app-cell a:hover,
-.js .console-bar .app-grid .app-cell a:focus-visible {
-  background: var(--pf-t--global--background--color--secondary--default);
-  border-color: var(--pf-t--global--border--color--default);
-}
-.js .console-bar .app-grid .app-cell svg { color: var(--console-accent); }
-.js .console-bar .app-grid .app-cell span { font-size: 0.76rem; line-height: 1.15; }
-/* The current app keeps its launcher tile (so nothing shifts) but as a muted, non-interactive
-   "you are here" marker - same layout as the links, no hover, default cursor, gray icon. Reads as
-   disabled/current, mirroring the dashboard connect waffle's current card. */
-.js .console-bar .app-grid .app-cell-current {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.75rem 0.4rem;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--secondary--default);
-  text-align: center;
-  color: var(--pf-t--global--text--color--subtle);
-  cursor: default;
-}
-.js .console-bar .app-grid .app-cell-current svg { color: var(--pf-t--global--text--color--subtle); }
-.js .console-bar .app-grid .app-cell-current span { font-size: 0.76rem; line-height: 1.15; }
 
 /* The bottom status-bar FRAME (fixed rail + per-tab wrapper + clusters + the connection liveness
    dot) moved to overrides.css in the W2 shell rebuild - PatternFly has no status-bar component, so it
@@ -201,7 +48,7 @@ body.console-app button[aria-disabled="true"] {
    list, the graph stage) scroll. This replaces the apps' `height: calc(100svh - 12.5rem)` magic
    numbers, which under- or over-shot the chrome and left a gap or a page scrollbar. The dashboard
    opts out (it is console-app but not console-fill) because its connect screen is meant to scroll. */
-body.console-fill {
+body[data-console-fill] {
   /* The flex column is exactly the viewport minus the fixed status bar, so the card region
      ends at the status bar's top edge - no overlap, no reserved-padding guesswork. */
   height: calc(100svh - var(--console-statusbar-h));
@@ -209,8 +56,8 @@ body.console-fill {
   flex-direction: column;
   overflow: hidden;
 }
-body.console-fill > header { flex: 0 0 auto; } /* the app bar keeps its natural height */
-body.console-fill > main {
+body[data-console-fill] > header { flex: 0 0 auto; } /* the app bar keeps its natural height */
+body[data-console-fill] > main {
   flex: 1 1 auto;
   min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
   overflow: hidden;
@@ -230,8 +77,8 @@ body.console-fill > main {
 /* The app card stretches to fill the main region as a flex child - more robust than a
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
    min-heights + Pico's section margin so short viewports still fit without a page scroll. */
-body.console-fill > main > .graph-app,
-body.console-fill > main > .console-render-panel {
+body[data-console-fill] > main > .graph-app,
+body[data-console-fill] > main > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
@@ -239,7 +86,7 @@ body.console-fill > main > .console-render-panel {
   position: relative; /* positioning context for the graph's absolute cold-state prompt */
 }
 /* The same full-height chain for a surface mounted as a CONSOLE TAB. The rules above key on
-   `body.console-fill > main > .app` (the standalone page's single <main>), but the console mounts a
+   `body[data-console-fill] > main > .app` (the standalone page's single <main>), but the console mounts a
    surface deeper: the tab host holds a TILE (div[data-tile-root]) whose leaves are pane containers
    (div[data-pane-id]), and the surface's own <main> sits inside a pane. A tab may hold one pane or a
    tree of split panes (div[data-split-id] grids). So the flex/height chain must reach a surface
@@ -325,12 +172,12 @@ body.console-fill > main > .console-render-panel {
    matching the log viewer's centered empty state. The prompt's base style is already
    position:absolute; inset:0; flex-centered - it just needs a full-height positioned
    ancestor, which the stage now provides. */
-body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-stage {
+body[data-console-fill] .graph-app:has(.graph-empty-state:not([hidden])) .graph-stage {
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
-body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state {
+body[data-console-fill] .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state {
   position: absolute;
   inset: 0;
   min-height: 0;
