@@ -265,6 +265,19 @@ type stage struct {
 	projects    []*types.Project
 }
 
+// raceForcesNoCache reports whether o requires bypassing the cache so race
+// diagnostics always observe a genuine execution. Race diagnostics (watch:
+// MGS4001/4002/4004 via raceRT.TrackProject; replay: MGS4003 via runReplay)
+// both need one: a cache hit skips the body entirely, so raceRT never wraps
+// it, and replay's "before" snapshot would come from a stale artifact instead
+// of this run. NoCache (not just skip-replay) also keeps a --race run from
+// ever snapshotting: its steps carry no race-specific cache key of their own,
+// so a snapshot here would otherwise sit in the ordinary entry and satisfy a
+// later, non-race run.
+func raceForcesNoCache(o run) bool {
+	return o.Race || o.RaceReplay
+}
+
 // buildStep assembles the cache.Step for running target on p.
 func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step := m.baseStep(p)
@@ -436,6 +449,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			step.Charms = charmKey
 			if st.afterTarget != "" {
 				step.After = []string{cache.DepKey(p.Path, st.afterTarget)}
+			}
+			if raceForcesNoCache(opts) {
+				step.NoCache = true
 			}
 			steps = append(steps, step)
 			byPath[p.Path] = p

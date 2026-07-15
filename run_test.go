@@ -1,12 +1,18 @@
 package magus
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDiagEventFromError(t *testing.T) {
@@ -49,6 +55,52 @@ func TestMakeHandler_PreflightGenerateFireOnVariantSpellings(t *testing.T) {
 	var m *Magus
 	h := m.makeHandler("generate")
 	assert.NotNil(t, h)
+}
+
+func TestRaceForcesNoCache(t *testing.T) {
+	assert.False(t, raceForcesNoCache(run{}), "neither Race nor RaceReplay set")
+	assert.True(t, raceForcesNoCache(run{Race: true}), "Race alone")
+	assert.True(t, raceForcesNoCache(run{RaceReplay: true}), "RaceReplay alone")
+	assert.True(t, raceForcesNoCache(run{Race: true, RaceReplay: true}), "both set")
+}
+
+// TestRun_RaceReexecutesCachedTarget guards the A2 fix end to end: a target
+// that's already a cache hit must still genuinely re-execute under --race
+// (magus.WithRace), not replay - otherwise the race detector observes nothing,
+// per the plan this fixes.
+func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
+	const spellName = "zzz-race-test-spell"
+	var calls atomic.Int32
+	spell := types.NewSpell(spellName,
+		types.WithTargets("build"),
+		types.WithInvoker(func(context.Context, types.InvokeRequest) (any, error) {
+			calls.Add(1)
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "build"}}
+
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	assert.Equal(t, int32(1), calls.Load(), "first run: expected one real execution")
+
+	require.NoError(t, m.Run(ctx, targets), "second run (should hit cache)")
+	assert.Equal(t, int32(1), calls.Load(), "second run: cache hit must not re-execute")
+
+	require.NoError(t, m.Run(ctx, targets, WithRace()), "third run (--race)")
+	assert.Equal(t, int32(2), calls.Load(), "--race run: a cached target must still genuinely re-execute")
 }
 
 func TestDiagCollectorCollects(t *testing.T) {
