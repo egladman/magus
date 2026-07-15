@@ -9,13 +9,18 @@
 // through these reducers.
 
 import { persisted, type Persisted } from "../lib/persist";
+import type { Pane } from "./tiling";
 
 // A tab is one open instance of a surface: `id` is the tab's own identity (so the same
-// surface can be opened twice), `pageId` is which surface (dashboard|graph|logs).
+// surface can be opened twice), `pageId` is the tab's PRIMARY surface (dashboard|graph|logs)
+// - its identity and title. `layout` is the tab's split-pane tree (tiling.ts): absent means the
+// tab is a single un-split surface (the common case); present means the tab has been tiled, and
+// the tree - serialized whole on every change - restores the exact split layout on reload.
 export interface TabState {
   id: string;
   pageId: string;
   title: string;
+  layout?: Pane;
 }
 
 export interface Workspace {
@@ -56,6 +61,15 @@ export function setActive(ws: Workspace, id: string): Workspace {
   if (!ws.tabs.some((t) => t.id === id)) return ws;
   if (ws.activeId === id) return ws;
   return { tabs: ws.tabs, activeId: id };
+}
+
+// setLayout records a tab's split-pane tree (after a split / close-pane / divider drag), so the
+// tiled layout is durable and restores on reload. An unknown tab id is a no-op. The reducer replaces
+// only the matching tab (new array, new tab object), leaving the active tab and every sibling
+// untouched, so it composes with the tab reducers above.
+export function setLayout(ws: Workspace, tabId: string, layout: Pane): Workspace {
+  if (!ws.tabs.some((t) => t.id === tabId)) return ws;
+  return { tabs: ws.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)), activeId: ws.activeId };
 }
 
 // workspaceStore is the durable cell the console binds to: read-modify-write it with the

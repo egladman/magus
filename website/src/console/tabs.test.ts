@@ -4,7 +4,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyWorkspace, openTab, closeTab, setActive, type Workspace } from "./tabs";
+import { emptyWorkspace, openTab, closeTab, setActive, setLayout, type Workspace } from "./tabs";
+import type { Pane } from "./tiling";
 
 const tab = (id: string, pageId = id) => ({ id, pageId, title: id });
 
@@ -70,4 +71,25 @@ test("closeTab of an unknown id is a no-op", () => {
 test("setActive to an unknown id is a no-op", () => {
   const ws = openTab(emptyWorkspace, tab("a"));
   assert.equal(setActive(ws, "zzz"), ws);
+});
+
+test("setLayout records a tab's split tree and leaves its siblings untouched", () => {
+  const ws = openTab(openTab(emptyWorkspace, tab("a")), tab("b"));
+  const split: Pane = {
+    kind: "split", id: "s1", dir: "row", ratio: 0.5,
+    a: { kind: "leaf", id: "a", pageId: "a" },
+    b: { kind: "leaf", id: "p2", pageId: "logs" },
+  };
+  const next = setLayout(ws, "a", split);
+  assert.deepEqual(next.tabs.find((t) => t.id === "a")?.layout, split);
+  assert.equal(next.tabs.find((t) => t.id === "b")?.layout, undefined);
+  assert.equal(next.activeId, ws.activeId);
+});
+
+test("setLayout does not mutate its input and no-ops on an unknown tab", () => {
+  const ws = openTab(emptyWorkspace, tab("a"));
+  const leaf: Pane = { kind: "leaf", id: "a", pageId: "a" };
+  setLayout(ws, "a", leaf);
+  assert.equal(ws.tabs[0].layout, undefined); // input untouched
+  assert.equal(setLayout(ws, "zzz", leaf), ws); // unknown id returns the same reference
 });
