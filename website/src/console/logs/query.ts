@@ -1,6 +1,6 @@
 // query.ts - the pure #q= log query grammar, split out of filter.ts so it carries NO
 // DOM dependency: `import type` is erased at build, so this module can be unit-tested in
-// node (see query.test.ts) and reused by the console shell's SearchProvider without
+// node (see query.test.ts) and reused by the console's SearchProvider without
 // dragging in the render/search/dom modules. filter.ts re-exports parseQuery, so callers
 // are unchanged.
 //

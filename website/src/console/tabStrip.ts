@@ -1,5 +1,5 @@
-// tabStrip.ts - the DOM tab strip for the console shell: it renders a Workspace (tabs.ts) as a row
-// of tabs and drives the pure reducers on interaction. The shell owns mounting the active surface;
+// tabStrip.ts - the DOM tab strip for the console: it renders a Workspace (tabs.ts) as a row
+// of tabs and drives the pure reducers on interaction. The console owns mounting the active surface;
 // this component owns only the strip UI and reports intent through callbacks (select / close / new).
 //
 // The tabs are <span role="tab">, NOT <button>: Pico themes button and [role=button] as a solid
@@ -8,8 +8,8 @@
 // the DOM wiring below is a thin layer over it.
 
 import { closeTab, setActive, type Workspace } from "./tabs";
-import type { Persisted } from "../../lib/persist";
-import { bind, scope } from "../view";
+import type { Persisted } from "../lib/persist";
+import { bind, scope } from "./view";
 
 // A tab as the strip renders it: identity, label, and whether it is the active surface.
 export interface TabView {
@@ -23,8 +23,8 @@ export function tabViews(ws: Workspace): TabView[] {
   return ws.tabs.map((t) => ({ id: t.id, title: t.title, active: t.id === ws.activeId }));
 }
 
-// Callbacks the shell supplies: a tab became active (mount/show it), a tab closed (unmount it), or
-// the new-tab affordance was used (the shell opens a surface picker).
+// Callbacks the console supplies: a tab became active (mount/show it), a tab closed (unmount it), or
+// the new-tab affordance was used (the console opens a surface picker).
 export interface TabStripCallbacks {
   onSelect(id: string): void;
   onClose(id: string): void;
@@ -33,7 +33,7 @@ export interface TabStripCallbacks {
 
 export interface TabStrip {
   readonly el: HTMLElement;
-  refresh(): void; // re-render from the current workspace (e.g. after the shell opens a tab)
+  refresh(): void; // re-render from the current workspace (e.g. after the console opens a tab)
   destroy(): void; // drop the workspace subscription
 }
 
@@ -54,7 +54,7 @@ function closeIcon(): SVGElement {
 
 // createTabStrip builds the strip bound to the persisted workspace: interactions read-modify-write
 // it through the tabs.ts reducers, then re-render. It subscribes to the cell so a change elsewhere
-// (another browser tab, or the shell opening a surface) reflects here too.
+// (another browser tab, or the console opening a surface) reflects here too.
 export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks): TabStrip {
   const strip = document.createElement("div");
   strip.className = "tab-strip";
@@ -103,7 +103,7 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
       strip.append(tab);
     }
 
-    // The new-tab affordance. A span (not [role=button]) to dodge Pico's button theming; the shell
+    // The new-tab affordance. A span (not [role=button]) to dodge Pico's button theming; the console
     // decides which surface to open via onNew.
     const add = document.createElement("span");
     add.className = "tab-new";

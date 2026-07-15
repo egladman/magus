@@ -1,7 +1,7 @@
 // dom.ts - the shared DOM handles and the small button/status/clipboard helpers the log viewer's
 // modules reuse. The handles are resolved by resolveDom(), called by the boot BEFORE anything uses
 // them - DEFERRED, not resolved at import, so the viewer can boot standalone against logs.html OR be
-// mounted into a shell host whose scaffold is injected first. The exports are `let` bindings, so
+// mounted into a console host whose scaffold is injected first. The exports are `let` bindings, so
 // every importer sees the resolved value through the live ES-module binding with no change of its
 // own. Global getElementById is kept (not scoped to a root) so shared status-bar elements that live
 // OUTSIDE the scaffold (console-conn, console-count) still resolve when mounted.
@@ -21,7 +21,7 @@ export let panelEl: HTMLElement | null;
 export let statusEl: HTMLElement | null;
 
 // resolveDom (re)reads the handles from the document. Called once at boot, after the scaffold is in
-// place - always so for the standalone page; the shell injects it before calling. Idempotent.
+// place - always so for the standalone page; the console injects it before calling. Idempotent.
 export function resolveDom(): void {
   bodyEl = document.getElementById("log-body") as HTMLElement;
   scrollEl = el("log-scroll");

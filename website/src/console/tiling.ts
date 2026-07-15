@@ -4,7 +4,7 @@
 // function over that tree (no DOM, no mutation - it returns a new tree), so the layout
 // algebra is unit-testable in isolation. Splits carry their own id so a draggable
 // divider is addressable (setRatio) and the render layer can key on it. The DOM that
-// renders a Pane tree into a CSS grid with draggable dividers lives with the SPA shell
+// renders a Pane tree into a CSS grid with draggable dividers lives with the console app
 // (Phase 6); it reads the tree and calls these ops. New ids are passed IN (not minted
 // here) so the functions stay pure and deterministic under test.
 

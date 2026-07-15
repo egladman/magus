@@ -1,5 +1,5 @@
 // page.ts - the console "surface" contract. A surface is a thing you can open in a
-// tab or a tiling pane (dashboard, graph, logs). The shell drives these interfaces;
+// tab or a tiling pane (dashboard, graph, logs). The console drives these interfaces;
 // each surface implements them. This file is PURE TYPES - no runtime, erased at build
 // - so it is the seam the tab strip (tabs.ts), the tiling layout (tiling.ts), and the
 // shared search box are written against before any surface implements it.
@@ -7,12 +7,12 @@
 // Two generics per surface: S is the surface's own state type, Q its search-query
 // type. dashboard is PageModule<DashboardState, RowFilter>, logs is
 // PageModule<LogState, ParsedQuery>, etc. - so each surface keeps its state and its
-// query grammar strongly typed instead of collapsing to `any` at the shell boundary.
+// query grammar strongly typed instead of collapsing to `any` at the console boundary.
 
 export interface PageModule<S, Q> {
   readonly id: string; // "dashboard" | "graph" | "logs"
   readonly title: string;
-  // Build the surface into `host` and return the controller the shell drives. Async so
+  // Build the surface into `host` and return the controller the console drives. Async so
   // the heavy per-surface bundle (d3-force, protobuf) is a dynamic import() - a tab
   // stays cheap until it is actually opened.
   activate(host: HTMLElement): Promise<PageController<S, Q>>;
@@ -21,14 +21,14 @@ export interface PageModule<S, Q> {
 export interface PageController<S, Q> {
   readonly search: SearchProvider<Q>;
   // Tear down anything with a lifetime (chart instances, SSE streams, observers) when
-  // the tab/pane closes, so the shell can re-compose without leaks.
+  // the tab/pane closes, so the console can re-compose without leaks.
   deactivate(): void;
-  // The surface's current state, for the shell to inspect (title updates, etc.). Typed
-  // per surface via S; the shell treats it opaquely.
+  // The surface's current state, for the console to inspect (title updates, etc.). Typed
+  // per surface via S; the console treats it opaquely.
   readonly state?: S;
 }
 
-// The shell owns the one search input, its debounce, the #q= deep link, and the
+// The console owns the one search input, its debounce, the #q= deep link, and the
 // "N matches" chip. The SURFACE owns the grammar via Q: it parses the raw text into
 // its own query type and applies it to its own view.
 export interface SearchProvider<Q> {

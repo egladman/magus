@@ -4,11 +4,11 @@
 // the reducers never mutate their input, they return a new Workspace. A persisted cell
 // (workspaceStore) keeps the whole thing durable so reopening the console restores the
 // exact set of tabs and the active one - the native "your workspace survived a restart"
-// feel. The DOM tab strip that renders a Workspace lives with the SPA shell (Phase 6),
+// feel. The DOM tab strip that renders a Workspace lives with the console app (Phase 6),
 // which is the only place multiple surfaces share one document; it reads and writes
 // through these reducers.
 
-import { persisted, type Persisted } from "../../lib/persist";
+import { persisted, type Persisted } from "../lib/persist";
 
 // A tab is one open instance of a surface: `id` is the tab's own identity (so the same
 // surface can be opened twice), `pageId` is which surface (dashboard|graph|logs).
@@ -58,7 +58,7 @@ export function setActive(ws: Workspace, id: string): Workspace {
   return { tabs: ws.tabs, activeId: id };
 }
 
-// workspaceStore is the durable cell the shell binds to: read-modify-write it with the
+// workspaceStore is the durable cell the console binds to: read-modify-write it with the
 // reducers and re-render the strip. Because it is persisted, the tab set and active tab
 // come back on the next load.
 export function workspaceStore(): Persisted<Workspace> {

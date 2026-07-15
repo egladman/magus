@@ -31,7 +31,7 @@ type Modifier = (typeof MODIFIER_ORDER)[number];
 
 // --- Registry ---------------------------------------------------------------
 // One process-wide command map. registerCommand is idempotent by id (a re-register replaces),
-// so a surface re-activating in the shell does not accumulate duplicates.
+// so a surface re-activating in the console does not accumulate duplicates.
 const registry = new Map<string, Command>();
 
 export function registerCommand(cmd: Command): void {
@@ -159,7 +159,7 @@ function isTyping(node: EventTarget | null): boolean {
 // installKeybindings wires ONE keydown listener that maps each event to a command via the current
 // keymap and dispatches it. keymap is read through a getter so a live settings edit takes effect
 // without re-installing. Skips while typing in a field. Returns a teardown that removes the
-// listener (the shell calls it on unmount; a standalone page can ignore it).
+// listener (the console calls it on unmount; a standalone page can ignore it).
 export function installKeybindings(keymap: () => Keymap): () => void {
   const mac = isMac();
   const onKeyDown = (e: KeyboardEvent): void => {

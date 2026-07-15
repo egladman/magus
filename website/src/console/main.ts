@@ -1,11 +1,11 @@
-// main.ts - the console shell composition root and SPA-island entry. It owns the ONE chrome (the
+// main.ts - the console composition root and SPA-island entry. It owns the ONE chrome (the
 // app bar via the shared main.js, the tab strip, the content outlet) and mounts one surface per
 // open tab - each kept in the DOM and hidden when inactive, so switching is instant and closing
 // tears down. The active set is the persisted Workspace (tabs.ts), so the console reopens exactly
 // as you left it. Surfaces are PageModules (page.ts); a heavy one activates lazily so a tab stays
 // cheap until opened.
 //
-// This is the first shell slice: the home launcher plus stub surfaces. The real log viewer / graph
+// This is the first console slice: the home launcher plus stub surfaces. The real log viewer / graph
 // / dashboard PageModules replace the stubs slice by slice, as each app is refactored to mount into
 // a host via activate() rather than boot against its own static document.
 
@@ -17,7 +17,7 @@ import type { PageController, PageModule, SearchProvider } from "./page";
 const registry = new Map<string, PageModule<any, any>>();
 function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
 
-// The surfaces the home launcher offers (and the shell can open).
+// The surfaces the home launcher offers (and the console can open).
 const SURFACES: Launchable[] = [
   { pageId: "logs", label: "Log viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph explorer", hint: "Explore the knowledge graph" },
@@ -27,17 +27,17 @@ const SURFACES: Launchable[] = [
 
 const noSearch: SearchProvider<null> = { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) };
 
-// stubPage is a placeholder surface for an app not yet refactored to mount in the shell - it shows
+// stubPage is a placeholder surface for an app not yet refactored to mount in the console - it shows
 // what will live there. The real PageModule replaces it one app at a time.
 function stubPage(id: string, title: string): PageModule<null, null> {
   return {
     id,
     title,
     async activate(host: HTMLElement): Promise<PageController<null, null>> {
-      host.classList.add("shell-stub"); // add, don't clobber the shell-pane class the outlet set
+      host.classList.add("console-stub"); // add, don't clobber the console-pane class the outlet set
       const note = document.createElement("p");
-      note.className = "shell-stub-note";
-      note.textContent = title + " mounts here once it is wired into the shell.";
+      note.className = "console-stub-note";
+      note.textContent = title + " mounts here once it is wired into the console.";
       host.append(note);
       return { search: noSearch, deactivate() { host.replaceChildren(); } };
     },
@@ -46,7 +46,7 @@ function stubPage(id: string, title: string): PageModule<null, null> {
 
 interface Mounted { host: HTMLElement; controller: PageController<any, any> | null; }
 
-export function startShell(stripHost: HTMLElement, outlet: HTMLElement): void {
+export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void {
   const ws = workspaceStore();
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted host + controller
 
@@ -57,7 +57,7 @@ export function startShell(stripHost: HTMLElement, outlet: HTMLElement): void {
     const m = registry.get(tab.pageId);
     if (!m) return;
     const host = document.createElement("div");
-    host.className = "shell-pane";
+    host.className = "console-pane";
     host.dataset.tabId = tab.id;
     host.hidden = true;
     outlet.append(host);
@@ -115,7 +115,7 @@ export function startShell(stripHost: HTMLElement, outlet: HTMLElement): void {
   })();
 }
 
-// Entry: wire the shell page's DOM. Guarded so the module no-ops when the scaffold is absent.
-const stripHost = document.getElementById("shell-tabs");
-const outlet = document.getElementById("shell-outlet");
-if (stripHost && outlet) startShell(stripHost, outlet);
+// Entry: wire the console page's DOM. Guarded so the module no-ops when the scaffold is absent.
+const stripHost = document.getElementById("console-tabs");
+const outlet = document.getElementById("console-outlet");
+if (stripHost && outlet) startConsole(stripHost, outlet);

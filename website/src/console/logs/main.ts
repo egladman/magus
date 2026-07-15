@@ -30,7 +30,7 @@ import { clearMarks, runSearch, stepActiveMark } from "./search";
 import { graphTarget, openInGraph, shareLink } from "./share";
 import { connectLive } from "./live";
 import { startDemo } from "./demo";
-import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../shell/commands";
+import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { persisted } from "../../lib/persist";
 
 // init() is invoked at the BOTTOM of this module (see the final line), after every shared state
@@ -118,7 +118,7 @@ function wireZoom(): void {
 }
 
 // --- Keyboard commands --------------------------------------------------------
-// The log viewer's actions double as named commands so a keybinding (and, later, the shell's
+// The log viewer's actions double as named commands so a keybinding (and, later, the console's
 // menu/palette) can trigger them. Each command DISPATCHES TO the existing control - the button's
 // own click handler stays the single source of truth for the action, so there is no duplicated
 // behavior. The default chords are single keys, matching the viewer's existing "/" idiom (a
@@ -471,7 +471,7 @@ function wireInput(): void {
 }
 
 // activate boots the viewer: resolve the DOM handles (the scaffold must already be present), then
-// wire and load. Exported so the shell's logs PageModule can drive it after injecting the scaffold
+// wire and load. Exported so the console's logs PageModule can drive it after injecting the scaffold
 // into a host; the standalone page auto-boots below. init()'s ordering is preserved - every shared
 // state field is initialized before it runs, so loadFromURL()'s #q= setFilter is not clobbered.
 export function activate(): void {
@@ -479,6 +479,6 @@ export function activate(): void {
   if (bodyEl && scrollEl) init();
 }
 
-// Standalone auto-boot: only when the scaffold is already in the document at load. In the shell the
-// scaffold is injected into a host AFTER this module imports, so the shell calls activate() itself.
+// Standalone auto-boot: only when the scaffold is already in the document at load. In the console the
+// scaffold is injected into a host AFTER this module imports, so the console calls activate() itself.
 if (document.getElementById("log-body")) activate();

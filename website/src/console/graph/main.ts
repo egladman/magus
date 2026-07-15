@@ -30,7 +30,7 @@ import type { GLink, GNode, GraphFlavor } from "./types.js";
 import { LAYERED_MAX, layoutLayered } from "./layout.js";
 import { toMermaid } from "./mermaid.js";
 import { detectFlavor, targetGraphToNodeLink } from "./target-adapter.js";
-import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../shell/commands";
+import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { persisted } from "../../lib/persist";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
