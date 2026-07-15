@@ -156,8 +156,8 @@ function mountTiles(): void {
   //  8. insight section      - the VCS/run-outcome lenses (on-demand poll).
   const pool = poolTile();
   const cacheStats = cacheStatsTile();
-  pool.el.classList.add("tile-half");
-  cacheStats.el.classList.add("tile-half");
+  pool.el.dataset.half = "";
+  cacheStats.el.dataset.half = "";
 
   const attention = attentionTile();
   const activity = activityTile();

@@ -25,7 +25,7 @@ export function cacheRateTile(): Tile {
   card.body.append(plot, legend);
 
   chart = new TimeChart(plot, {
-    series: [{ label: "hit rate", colorVar: "--c-hit", fillVar: "--c-hit", width: 1.75 }],
+    series: [{ label: "hit rate", colorVar: "--console-status-ok", fillVar: "--console-status-ok", width: 1.75 }],
     yFormat: (v) => v + "%",
     ySize: 44,
     yRange: [0, 100],

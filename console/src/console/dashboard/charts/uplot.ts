@@ -17,8 +17,8 @@ export function cssVar(name: string, fallback = "#888"): string {
 // unsubscribe. Each chart tile uses this to recolor itself; nothing global.
 export function onThemeChange(cb: () => void): () => void {
   const sig = () => [
-    cssVar("--pico-color"), cssVar("--pico-muted-color"),
-    cssVar("--c-info"), cssVar("--c-hit"), cssVar("--c-miss"),
+    cssVar("--pf-t--global--text--color--regular"), cssVar("--console-chart-axis"),
+    cssVar("--console-status-running"), cssVar("--console-status-ok"), cssVar("--console-status-warn"),
   ].join("|");
   let last = sig();
   const check = (): void => {
@@ -38,10 +38,10 @@ const CHART_HEIGHT = 132;
 
 function axisBase(): uPlot.Axis {
   return {
-    stroke: cssVar("--pico-muted-color"),
-    grid: { stroke: cssVar("--pico-muted-border-color"), width: 0.5 },
-    ticks: { stroke: cssVar("--pico-muted-border-color"), width: 0.5 },
-    font: "11px " + cssVar("--pico-font-family", "system-ui, sans-serif"),
+    stroke: cssVar("--console-chart-axis"),
+    grid: { stroke: cssVar("--console-chart-grid"), width: 0.5 },
+    ticks: { stroke: cssVar("--console-chart-grid"), width: 0.5 },
+    font: "11px " + cssVar("--pf-t--global--font--family--body", "system-ui, sans-serif"),
   };
 }
 

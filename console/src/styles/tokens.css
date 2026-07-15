@@ -49,8 +49,19 @@
      MUST be defined here even though nothing in CSS consumes them. New names, not the old
      --c-* ones. */
   --console-accent: var(--pf-t--global--color--brand--default);            /* primary/active accent  */
+  --console-accent-hover: var(--pf-t--global--color--brand--hover);        /* link/action hover      */
   --console-status-running: var(--pf-t--global--icon--color--status--info--default);    /* pool busy  (blue)  */
   --console-status-queued: var(--pf-t--global--icon--color--status--danger--default);   /* saturation (red)   */
   --console-status-ok: var(--pf-t--global--icon--color--status--success--default);      /* healthy    (green) */
   --console-status-warn: var(--pf-t--global--icon--color--status--warning--default);    /* caution    (gold)  */
+  /* Errors/failures/p99: PF's danger red. Same hue as --console-status-queued (both danger),
+     but a distinct semantic name so a chart or tile reads "failure" not "saturation". */
+  --console-status-danger: var(--pf-t--global--icon--color--status--danger--default);   /* error      (red)   */
+
+  /* --- 4. Chart chrome slots -----------------------------------------------------------
+     uPlot draws axis/grid lines to a canvas with colors read at runtime via getComputedStyle
+     (charts/uplot.ts). They are not "status" colors, so they get their own slots here rather
+     than borrowing a status token. Theme-aware (PF text/border tokens resolve per theme). */
+  --console-chart-axis: var(--pf-t--global--text--color--subtle);          /* axis tick labels/rule  */
+  --console-chart-grid: var(--pf-t--global--border--color--default);       /* gridlines + ticks      */
 }

@@ -1,59 +1,73 @@
-<main class="dash-main">
+<main class="dash-main" id="dash-main">
     <!-- Live panels (hidden until the first status frame arrives). Every tile inside is
          built in TypeScript (js/dashboard/tiles/*) and mounted here by main.ts - the tile
          owns its own DOM subtree, so adding a metric family is a new tile module, not new
          markup. This container is intentionally empty. -->
-    <div class="dash-panels" id="dash-panels" hidden></div>
+    <div id="dash-panels" hidden></div>
 
     <!-- Connect / overview state: the app's front door, shown until a live status frame
-         arrives. It reads as "the magus apps live here - pick one, or connect a daemon":
-         a short intro, a waffle of app cards (this dashboard marked current, plus the
-         sibling surfaces), and the connect affordances (start command, demo, resume).
-         The launch-graph / launch-logs anchors keep their ids - main.ts repoints them at
-         the live daemon (or the demo) once connected. -->
-    <div class="dash-connect" id="dash-connect">
-      <div class="hub-intro">
-        <svg class="dash-connect-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-        </svg>
-        <p class="dash-connect-title" id="dash-connect-title">No daemon connected</p>
-        <p class="dash-connect-sub" id="dash-connect-sub">The magus apps live here. Open one below, or connect a running daemon to stream this dashboard's pool, cache, and health.</p>
-      </div>
+         arrives. A PatternFly EmptyState: an icon, a title/body, a Gallery of app cards
+         (this dashboard marked current, plus the sibling surfaces), and the connect
+         affordances (start command, demo, resume) in the footer. The launch-graph /
+         launch-logs anchors keep their ids - main.ts repoints them at the live daemon
+         (or the demo) once connected. -->
+    <div class="pf-v6-c-empty-state" id="dash-connect" data-dash-connect>
+      <div class="pf-v6-c-empty-state__content">
+        <div class="pf-v6-c-empty-state__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <h1 class="pf-v6-c-empty-state__title-text" id="dash-connect-title">No daemon connected</h1>
+        <div class="pf-v6-c-empty-state__body">
+          <p id="dash-connect-sub">The magus apps live here. Open one below, or connect a running daemon to stream this dashboard's pool, cache, and health.</p>
 
-      <!-- App waffle: the same visual language as the top-bar launcher, one card per surface. -->
-      <nav class="hub-grid" aria-label="magus apps">
-        <span class="hub-card hub-current" aria-current="page">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="13" x2="9" y2="18"/></svg>
-          <span class="hub-card-title">Dashboard</span>
-          <span class="hub-card-sub">You're here: live pool, cache, and health</span>
-        </span>
-        <a class="hub-card" id="launch-graph" href="../graph/">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><line x1="8" y1="8" x2="11" y2="16"/><line x1="16" y1="7.5" x2="13" y2="16"/><line x1="8" y1="7" x2="16" y2="6.5"/></svg>
-          <span class="hub-card-title">Graph explorer</span>
-          <span class="hub-card-sub">Explore targets, spells, and dependencies</span>
-        </a>
-        <a class="hub-card" id="launch-logs" href="../logs/">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
-          <span class="hub-card-title">Log viewer</span>
-          <span class="hub-card-sub">Read or stream a target's captured output</span>
-        </a>
-      </nav>
+          <!-- App waffle: a PatternFly Gallery of app cards, one per surface. -->
+          <nav class="pf-v6-l-gallery pf-m-gutter" aria-label="magus apps" data-app-waffle>
+            <span class="pf-v6-c-card" data-app data-app-current aria-current="page">
+              <div class="pf-v6-c-card__body">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="13" x2="9" y2="18"/></svg>
+                <span data-app-title>Dashboard</span>
+                <span data-app-sub>You're here: live pool, cache, and health</span>
+              </div>
+            </span>
+            <a class="pf-v6-c-card pf-m-clickable" id="launch-graph" href="../graph/" data-app>
+              <div class="pf-v6-c-card__body">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><line x1="8" y1="8" x2="11" y2="16"/><line x1="16" y1="7.5" x2="13" y2="16"/><line x1="8" y1="7" x2="16" y2="6.5"/></svg>
+                <span data-app-title>Graph explorer</span>
+                <span data-app-sub>Explore targets, spells, and dependencies</span>
+              </div>
+            </a>
+            <a class="pf-v6-c-card pf-m-clickable" id="launch-logs" href="../logs/" data-app>
+              <div class="pf-v6-c-card__body">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>
+                <span data-app-title>Log viewer</span>
+                <span data-app-sub>Read or stream a target's captured output</span>
+              </div>
+            </a>
+          </nav>
+        </div>
 
-      <!-- Connect panel: how to go live. Resume form appears when a host is remembered. -->
-      <div class="hub-connect">
-        <form class="dash-resume" id="dash-resume" hidden>
-          <div class="dash-resume-row">
-            <input type="text" id="dash-resume-host" class="dash-resume-input" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off" aria-label="Daemon host and port">
-            <button type="submit" class="dash-resume-btn">Reconnect</button>
+        <!-- Connect panel: how to go live. Resume form appears when a host is remembered. -->
+        <div class="pf-v6-c-empty-state__footer">
+          <div data-connect-panel>
+            <form id="dash-resume" hidden data-resume>
+              <div data-resume-row>
+                <span class="pf-v6-c-form-control">
+                  <input type="text" id="dash-resume-host" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off" aria-label="Daemon host and port">
+                </span>
+                <button type="submit" class="pf-v6-c-button pf-m-primary"><span class="pf-v6-c-button__text">Reconnect</span></button>
+              </div>
+              <button type="button" class="pf-v6-c-button pf-m-link pf-m-inline" id="dash-resume-forget"><span class="pf-v6-c-button__text">Forget this daemon</span></button>
+            </form>
+            <p data-connect-lead>Start the daemon, then open the live link it prints:</p>
+            <pre data-connect-cmd><code>magus server start</code></pre>
+            <p data-connect-demo>Just looking around? <button type="button" id="dash-demo-btn" class="pf-v6-c-button pf-m-link pf-m-inline"><span class="pf-v6-c-button__text">See a demo with sample data</span></button></p>
+            <!-- Privacy note: the dashboard only ever talks to a loopback daemon in the browser; nothing
+                 is sent anywhere. Stated here because it is not disclosed anywhere else in the UI. -->
+            <p data-connect-note>The dashboard talks to your daemon over loopback (127.0.0.1) in your browser - no data ever leaves your machine.</p>
           </div>
-          <button type="button" class="dash-resume-forget" id="dash-resume-forget">Forget this daemon</button>
-        </form>
-        <p class="hub-connect-lead">Start the daemon, then open the live link it prints:</p>
-        <pre class="dash-connect-cmd"><code>magus server start</code></pre>
-        <p class="dash-connect-demo">Just looking around? <button type="button" id="dash-demo-btn" class="dash-demo-btn">See a demo with sample data</button></p>
-        <!-- Privacy note: the dashboard only ever talks to a loopback daemon in the browser; nothing
-             is sent anywhere. Stated here because it is not disclosed anywhere else in the UI. -->
-        <p class="hub-connect-note">The dashboard talks to your daemon over loopback (127.0.0.1) in your browser - no data ever leaves your machine.</p>
+        </div>
       </div>
     </div>
   </main>

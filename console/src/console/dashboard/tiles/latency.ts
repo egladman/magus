@@ -44,9 +44,9 @@ export function latencyTile(): Tile {
     readouts[k] = ro;
     charts[k] = new TimeChart(plot, {
       series: [
-        { label: "p50", colorVar: "--c-info" },
-        { label: "p95", colorVar: "--c-miss" },
-        { label: "p99", colorVar: "--c-err" },
+        { label: "p50", colorVar: "--console-status-running" },
+        { label: "p95", colorVar: "--console-status-warn" },
+        { label: "p99", colorVar: "--console-status-danger" },
       ],
       yFormat: (v) => fmtDur(v),
       ySize: 54,

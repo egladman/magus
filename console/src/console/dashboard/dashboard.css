@@ -1,38 +1,75 @@
 /* dashboard.css - page-scoped styles for the /dashboard/ control surface: the edge-to-edge
-   dense tiles and the connect/landing screen. The shared console chrome (the app bar, the
-   waffle launcher, the fixed status bar) and the accent palette / layout custom properties it
-   consumes now live in console.css, which every console app loads before this sheet; this is
-   the dashboard-only layer on top. Themed with Pico's variables so light/dark carries over. */
+   dense tiles and the connect/landing screen.
+
+   PatternFly (W3): the tile shells are PatternFly Cards (pf-v6-c-card, built in tiles/card.ts)
+   and the front door is a PatternFly EmptyState + Gallery (scaffold.html). This sheet is the
+   dashboard-only layer on top: the tile INNER markup PatternFly has no component for (the pool
+   slot grid, the utilization/gantt SVGs, the KPI strips, the dense tables and rows, the
+   attention hero), plus the two component-less shell bits (the collapse caret and the note
+   slot). Colors come from the console's PF-native tokens: --console-status-* / --console-* and
+   --pf-t--* directly (theme-aware in light and dark) - never the old --pico-* or --c-* palettes.
+   Per the class-vs-ID convention, app hooks added here are IDs and data-*; the bespoke inner
+   classes each tile already builds (.slot, .row, .stat, .gantt-bar, ...) are kept as-is. */
 
 /* Full-bleed: drop the doc container, let the app own the whole viewport. */
 body.dash-native { margin: 0; }
-/* Reserve --console-statusbar-h of bottom padding so the fixed status bar (below) never
-   overlaps the last tile at any scroll position. */
-.dash-native main.dash-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
+/* Reserve --console-statusbar-h of bottom padding so the fixed status bar never overlaps the
+   last tile at any scroll position. */
+.dash-native main.dash-main,
+.dash-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
 
-/* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact
-   tile opts into a single column with .tile-half so it pairs with a neighbor instead of
-   eating a whole row (the pool's airplane-seat grid otherwise leaves the right half
-   empty). `dense` backfills a leftover column with the next half tile; `align-items:
-   start` stops a short tile from stretching to its taller neighbor. One column on narrow
-   viewports, where a half tile goes full again. */
-.dash-panels {
+/* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact tile opts
+   into a single column with [data-half] so it pairs with a neighbor instead of eating a whole
+   row. `dense` backfills a leftover column with the next half tile; `align-items: start` stops a
+   short tile from stretching to its taller neighbor. One column on narrow viewports. */
+#dash-panels {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-flow: row dense;
   align-items: start;
   gap: var(--console-gap);
 }
-.dash-panels > * { grid-column: 1 / -1; }
-.dash-panels > .tile-half { grid-column: span 1; }
+#dash-panels > * { grid-column: 1 / -1; }
+#dash-panels > [data-half] { grid-column: span 1; }
 @media (max-width: 760px) {
   /* minmax(0, 1fr), NOT 1fr: a plain 1fr column is min-content-sized, so a tile with wide
-     unshrinkable content (a chart/gantt/table) blows the single column past the viewport and the
-     whole board scrolls sideways. minmax(0,...) lets the column shrink to the viewport; each such
-     tile then scrolls/wraps inside its own box. */
-  .dash-panels { grid-template-columns: minmax(0, 1fr); }
-  .dash-panels > .tile-half { grid-column: 1 / -1; }
+     unshrinkable content (a chart/gantt/table) blows the single column past the viewport. */
+  #dash-panels { grid-template-columns: minmax(0, 1fr); }
+  #dash-panels > [data-half] { grid-column: 1 / -1; }
 }
+
+/* --- Tile shell adjustments over PatternFly Card --------------------------------------------
+   The card frame (border, radius, background, body padding) is PatternFly's. Here: the collapse
+   caret (PF's expandable-card toggle needs a pficon webfont the console does not ship, so the
+   fold is a bare caret button + a data-collapsed attribute instead), and the header note slot. */
+
+/* Collapse caret: a bare <button> so Pico (loaded until W4) does not skin it as a filled button.
+   It sits in the PF card__header-toggle; the caret glyph is a unicode triangle (no icon font). */
+button[data-collapse] {
+  width: 1.35rem; height: 1.35rem; margin: 0; padding: 0; border: 0; background: none;
+  color: var(--pf-t--global--text--color--subtle); cursor: pointer; line-height: 1; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--pf-t--global--border--radius--small);
+  transition: color 0.12s ease, background 0.12s ease;
+}
+button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default); }
+[data-caret]::before { content: "\25BE"; font-size: 1.1rem; line-height: 1; }
+/* Collapsed: the caret points right and the card body folds away (the header stays). */
+[data-card][data-collapsed] [data-caret] { transform: rotate(-90deg); }
+[data-card][data-collapsed] > .pf-v6-c-card__body { display: none; }
+
+/* Header note (in PF card__actions): small muted text, or a count chip / rich legend a tile swaps in. */
+.tile-note { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
+.tile-count {
+  font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.4rem;
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* The live gantt is the one dashed-border tile (marks it as a live, moving readout). */
+[data-card="gantt"] { --pf-v6-c-card--BorderStyle: dashed; }
 
 /* Stat strip: dense KPI tiles, auto-fitting the full width. */
 .stat-strip {
@@ -42,92 +79,54 @@ body.dash-native { margin: 0; }
 .stat {
   position: relative; display: flex; flex-direction: column; gap: 0.15rem;
   padding: 0.55rem 0.7rem 0.6rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
   overflow: hidden;
 }
 /* Colored left rule per metric. */
-.stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--pico-muted-border-color); }
+.stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--pf-t--global--border--color--default); }
 .stat[data-accent="hit"]::before,
-.stat[data-accent="rate"]::before { background: var(--c-hit); }
-.stat[data-accent="miss"]::before { background: var(--c-miss); }
-.stat[data-accent="err"]::before { background: var(--c-err); }
-.stat[data-accent="size"]::before { background: var(--c-info); }
-.stat[data-accent="info"]::before { background: var(--c-info); }
-.stat-k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
-.stat-v { font-size: 1.5rem; font-weight: 700; font-family: var(--pico-font-family-monospace); line-height: 1.1; }
-.stat[data-accent="hit"] .stat-v { color: var(--c-hit); }
-.stat[data-accent="miss"] .stat-v { color: var(--c-miss); }
-.stat[data-accent="err"] .stat-v { color: var(--c-err); }
+.stat[data-accent="rate"]::before { background: var(--console-status-ok); }
+.stat[data-accent="miss"]::before { background: var(--console-status-warn); }
+.stat[data-accent="err"]::before { background: var(--console-status-danger); }
+.stat[data-accent="size"]::before { background: var(--console-status-running); }
+.stat[data-accent="info"]::before { background: var(--console-status-running); }
+.stat-k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
+.stat-v { font-size: 1.5rem; font-weight: 700; font-family: var(--pf-t--global--font--family--mono); line-height: 1.1; }
+.stat[data-accent="hit"] .stat-v { color: var(--console-status-ok); }
+.stat[data-accent="miss"] .stat-v { color: var(--console-status-warn); }
+.stat[data-accent="err"] .stat-v { color: var(--console-status-danger); }
 
-/* Pool occupancy grid: airplane-seating cubes. Running = filled accent, free = outlined, queued
-   = dashed. Wraps to fill the tile at any capacity. */
+/* Pool occupancy grid: airplane-seating cubes. Running = filled (info blue), free = outlined,
+   queued = dashed (saturation red). Wraps to fill the tile at any capacity. */
 .slot-grid { display: flex; flex-wrap: wrap; gap: 4px; margin: 0.1rem 0 0.55rem; }
 .slot {
-  width: 15px; height: 15px; border-radius: 3px;
-  border: 1px solid var(--pico-muted-border-color); background: transparent;
+  width: 15px; height: 15px; border-radius: 2px;
+  border: 1px solid var(--pf-t--global--border--color--default); background: transparent;
 }
-.slot.running { background: var(--c-info); border-color: var(--c-info); }
-.slot.queued { border-style: dashed; border-color: var(--c-miss); }
-.pool-legend { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pico-muted-color); }
+.slot.running { background: var(--console-status-running); border-color: var(--console-status-running); }
+.slot.queued { border-style: dashed; border-color: var(--console-status-queued); }
+.pool-legend { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
 .pool-legend .lg::before {
   content: ""; display: inline-block; width: 0.7em; height: 0.7em; border-radius: 2px;
-  margin-right: 0.3em; vertical-align: middle; border: 1px solid var(--pico-muted-border-color);
+  margin-right: 0.3em; vertical-align: middle; border: 1px solid var(--pf-t--global--border--color--default);
 }
-.pool-legend .lg-running::before { background: var(--c-info); border-color: var(--c-info); }
-.pool-legend .lg-queued::before { border-style: dashed; border-color: var(--c-miss); background: transparent; }
-
-/* The card triad: .tile, .stat, .hub-card, and the connect command box all read as the
-   same boxed surface (1px muted border, Pico radius, card background). Factored into one
-   rule so the shell is defined once; each keeps only its own padding/layout below, and
-   .dash-connect-cmd overrides the fill with the sectioning tint. */
-.tile, .stat, .hub-card, .dash-connect-cmd {
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  background: var(--pico-card-background-color);
-}
-
-/* Tiles. */
-.tile { padding: 0.6rem 0.75rem; }
-.tile-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
-.tile-h { font-size: 0.9rem; margin: 0; }
-/* Collapse caret: a triangle disclosure button that folds the tile body away. Sized as a
-   real control (a proper hit target + a legible glyph) so it reads as a chevron, not a
-   bullet; it brightens and tints its box on hover. */
-.tile-collapse {
-  width: 1.35rem; height: 1.35rem; margin: 0; padding: 0; border: 0; background: none;
-  /* Pico sets --pico-color to the filled-button text (white) on a bare <button>, so the hover
-     rule below (color:var(--pico-color)) turned the chevron white and invisible. Reset the variable
-     to the real text color so hover firms up instead of vanishing. See pico-bare-button-hover-white. */
-  --pico-color: var(--pico-contrast);
-  color: var(--pico-muted-color); cursor: pointer; line-height: 1; flex: 0 0 auto;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: var(--pico-border-radius); transition: color 0.12s ease, background 0.12s ease;
-}
-.tile-collapse:hover { color: var(--pico-color); background: var(--pico-card-sectioning-background-color); }
-.tile-collapse::before { content: "\25BE"; transition: transform 0.15s ease; font-size: 1.1rem; line-height: 1; }
-.tile.collapsed .tile-collapse::before { transform: rotate(-90deg); }
-.tile.collapsed { padding-bottom: 0.55rem; }
-.tile.collapsed .tile-head { margin-bottom: 0; }
-.tile.collapsed > :not(.tile-head) { display: none; }
-.tile-note { font-size: 0.7rem; color: var(--pico-muted-color); margin-left: auto; }
-.tile-count {
-  font-size: 0.7rem; font-weight: 600; padding: 0.05rem 0.4rem; border-radius: 999px;
-  background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color);
-  color: var(--pico-muted-color);
-}
+.pool-legend .lg-running::before { background: var(--console-status-running); border-color: var(--console-status-running); }
+.pool-legend .lg-queued::before { border-style: dashed; border-color: var(--console-status-queued); background: transparent; }
 
 /* Legend swatches, shared by the charts and the utilization grid. */
 .lg::before { content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px; margin-right: 0.3em; vertical-align: middle; }
-.lg-hit { color: var(--c-hit); } .lg-hit::before { background: var(--c-hit); }
-.lg-miss { color: var(--c-miss); } .lg-miss::before { background: var(--c-miss); }
-.lg-p50 { color: var(--c-info); } .lg-p50::before { background: var(--c-info); }
-.lg-p95 { color: var(--c-miss); } .lg-p95::before { background: var(--c-miss); }
-.lg-p99 { color: var(--c-err); } .lg-p99::before { background: var(--c-err); }
-.lg-queued { color: var(--c-miss); } .lg-queued::before { background: var(--c-miss); }
+.lg-hit { color: var(--console-status-ok); } .lg-hit::before { background: var(--console-status-ok); }
+.lg-miss { color: var(--console-status-warn); } .lg-miss::before { background: var(--console-status-warn); }
+.lg-p50 { color: var(--console-status-running); } .lg-p50::before { background: var(--console-status-running); }
+.lg-p95 { color: var(--console-status-warn); } .lg-p95::before { background: var(--console-status-warn); }
+.lg-p99 { color: var(--console-status-danger); } .lg-p99::before { background: var(--console-status-danger); }
+.lg-queued { color: var(--console-status-queued); } .lg-queued::before { background: var(--console-status-queued); }
 .tile-note .lg { margin-left: 0.6rem; }
 
-/* uPlot charts. A single fixed height; width is driven by the container (setSize
-   on load / resize / theme rebuild). uPlot draws on a transparent canvas so the
-   tile background carries the theme. */
+/* uPlot charts. A single fixed height; width is driven by the container. uPlot draws on a
+   transparent canvas so the tile background carries the theme. */
 .chart-plot { width: 100%; }
 .chart-plot .uplot, .chart-plot .u-wrap { width: 100% !important; }
 .chart-legend { display: flex; gap: 1rem; font-size: 0.7rem; margin-top: 0.3rem; }
@@ -135,19 +134,18 @@ body.dash-native { margin: 0; }
 /* Latency: a responsive grid of small per-family charts, each with an exact readout. */
 .chart-grid { display: grid; gap: var(--console-gap); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .chart { margin: 0; }
-.chart figcaption { font-size: 0.72rem; font-weight: 600; color: var(--pico-muted-color); margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.chart-readout { font-family: var(--pico-font-family-monospace); font-size: 0.72rem; color: var(--pico-color); margin-top: 0.25rem; overflow-wrap: anywhere; }
+.chart figcaption { font-size: 0.72rem; font-weight: 600; color: var(--pf-t--global--text--color--subtle); margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.chart-readout { font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem; color: var(--pf-t--global--text--color--regular); margin-top: 0.25rem; overflow-wrap: anywhere; }
 
-/* Pool utilization grid: GitHub-contribution-style squares. The SVG scales to the
-   tile width via its viewBox; each square's fill/opacity is set inline by the
-   client from the utilization ramp. */
+/* Pool utilization grid: GitHub-contribution-style squares. The SVG scales to the tile width
+   via its viewBox; each square's fill/opacity is set inline by the client from the ramp. */
 .util-grid { margin: 0.1rem 0 0.55rem; }
 .util-svg { display: block; width: 100%; height: auto; max-height: 128px; }
-.util-sq { stroke: var(--pico-muted-border-color); stroke-width: 0.5; }
-.util-legend { display: flex; align-items: center; gap: 1.2rem; font-size: 0.7rem; color: var(--pico-muted-color); }
+.util-sq { stroke: var(--pf-t--global--border--color--default); stroke-width: 0.5; }
+.util-legend { display: flex; align-items: center; gap: 1.2rem; font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
 .util-legend-scale { display: inline-flex; align-items: center; gap: 0.35rem; }
 .util-ramp { display: inline-flex; gap: 2px; }
-.util-ramp i { width: 0.7em; height: 0.7em; border-radius: 2px; background: var(--c-info); border: 1px solid var(--pico-muted-border-color); }
+.util-ramp i { width: 0.7em; height: 0.7em; border-radius: 2px; background: var(--console-status-running); border: 1px solid var(--pf-t--global--border--color--default); }
 /* Ramp opacities by position (no inline styles): idle -> full. */
 .util-ramp i:nth-child(1) { opacity: 0.06; }
 .util-ramp i:nth-child(2) { opacity: 0.3; }
@@ -155,32 +153,31 @@ body.dash-native { margin: 0; }
 .util-ramp i:nth-child(4) { opacity: 0.8; }
 .util-ramp i:nth-child(5) { opacity: 1; }
 
-/* Live execution timeline (gantt). One SVG scales to the tile via its viewBox; bar
-   geometry rides presentation attributes (x/width/y), fills come from the .gantt-bar
-   state classes so light/dark and the fixed accent palette carry over. Tall runs scroll
-   inside the tile rather than squishing. */
+/* Live execution timeline (gantt). One SVG scales to the tile via its viewBox; bar geometry
+   rides presentation attributes, fills come from the .gantt-bar state classes so light/dark
+   and the console status palette carry over. Tall runs scroll inside the tile. */
 .gantt-scroll { max-height: 340px; overflow-y: auto; margin: 0.1rem 0 0.4rem; }
 .gantt-svg { display: block; width: 100%; height: auto; }
-.gantt-axis-line { stroke: var(--pico-muted-border-color); stroke-width: 1; }
-.gantt-grid { stroke: var(--pico-muted-border-color); stroke-width: 0.5; stroke-dasharray: 2 3; opacity: 0.6; }
-.gantt-axis-label { fill: var(--pico-muted-color); font-size: 8px; font-family: var(--pico-font-family-monospace); }
-.gantt-run-label { fill: var(--pico-muted-color); font-size: 9px; font-weight: 600; font-family: var(--pico-font-family-monospace); }
-.gantt-target-label { fill: var(--pico-color); font-size: 10px; font-family: var(--pico-font-family-monospace); }
-.gantt-bar { stroke: var(--pico-muted-border-color); stroke-width: 0.5; }
-.gantt-bar.running { fill: var(--c-info); }
-.gantt-bar.queued  { fill: var(--c-miss); fill-opacity: 0.55; }
-.gantt-bar.passed  { fill: var(--c-hit); }
-.gantt-bar.failed  { fill: var(--c-err); }
-.gantt-bar.cached  { fill: var(--c-info); fill-opacity: 0.35; }
-.gantt-bar.unspecified { fill: var(--pico-muted-color); }
+.gantt-axis-line { stroke: var(--pf-t--global--border--color--default); stroke-width: 1; }
+.gantt-grid { stroke: var(--pf-t--global--border--color--default); stroke-width: 0.5; stroke-dasharray: 2 3; opacity: 0.6; }
+.gantt-axis-label { fill: var(--pf-t--global--text--color--subtle); font-size: 8px; font-family: var(--pf-t--global--font--family--mono); }
+.gantt-run-label { fill: var(--pf-t--global--text--color--subtle); font-size: 9px; font-weight: 600; font-family: var(--pf-t--global--font--family--mono); }
+.gantt-target-label { fill: var(--pf-t--global--text--color--regular); font-size: 10px; font-family: var(--pf-t--global--font--family--mono); }
+.gantt-bar { stroke: var(--pf-t--global--border--color--default); stroke-width: 0.5; }
+.gantt-bar.running { fill: var(--console-status-running); }
+.gantt-bar.queued  { fill: var(--console-status-queued); fill-opacity: 0.55; }
+.gantt-bar.passed  { fill: var(--console-status-ok); }
+.gantt-bar.failed  { fill: var(--console-status-danger); }
+.gantt-bar.cached  { fill: var(--console-status-running); fill-opacity: 0.35; }
+.gantt-bar.unspecified { fill: var(--pf-t--global--text--color--subtle); }
 .gantt-link { cursor: pointer; }
-.gantt-link:hover .gantt-bar { stroke: var(--c-info); stroke-width: 1.5; }
-.gantt-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.7rem; color: var(--pico-muted-color); }
-.gantt-legend .lg-running { color: var(--c-info); } .gantt-legend .lg-running::before { background: var(--c-info); }
-.gantt-legend .lg-queued { color: var(--c-miss); } .gantt-legend .lg-queued::before { background: var(--c-miss); opacity: 0.55; }
-.gantt-legend .lg-passed { color: var(--c-hit); } .gantt-legend .lg-passed::before { background: var(--c-hit); }
-.gantt-legend .lg-failed { color: var(--c-err); } .gantt-legend .lg-failed::before { background: var(--c-err); }
-.gantt-legend .lg-cached { color: var(--c-info); } .gantt-legend .lg-cached::before { background: var(--c-info); opacity: 0.35; }
+.gantt-link:hover .gantt-bar { stroke: var(--console-status-running); stroke-width: 1.5; }
+.gantt-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
+.gantt-legend .lg-running { color: var(--console-status-running); } .gantt-legend .lg-running::before { background: var(--console-status-running); }
+.gantt-legend .lg-queued { color: var(--console-status-queued); } .gantt-legend .lg-queued::before { background: var(--console-status-queued); opacity: 0.55; }
+.gantt-legend .lg-passed { color: var(--console-status-ok); } .gantt-legend .lg-passed::before { background: var(--console-status-ok); }
+.gantt-legend .lg-failed { color: var(--console-status-danger); } .gantt-legend .lg-failed::before { background: var(--console-status-danger); }
+.gantt-legend .lg-cached { color: var(--console-status-running); } .gantt-legend .lg-cached::before { background: var(--console-status-running); opacity: 0.35; }
 
 /* Two-up columns. */
 .dash-cols { display: grid; gap: var(--console-gap); grid-template-columns: 1fr 1fr; }
@@ -190,244 +187,204 @@ body.dash-native { margin: 0; }
 .row {
   display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem;
   padding: 0.4rem 0.55rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
 }
-.row-cmd { font-family: var(--pico-font-family-monospace); font-size: 0.8rem; color: var(--pico-color); overflow-wrap: anywhere; }
-.row-meta { font-size: 0.7rem; color: var(--pico-muted-color); white-space: nowrap; }
+.row-cmd { font-family: var(--pf-t--global--font--family--mono); font-size: 0.8rem; color: var(--pf-t--global--text--color--regular); overflow-wrap: anywhere; }
+.row-meta { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap; }
 /* A clickable running call: deep-links to its live log. */
 a.row { text-decoration: none; color: inherit; cursor: pointer; }
-a.row:hover { border-color: var(--c-info); background: var(--pico-card-background-color); }
-a.row .row-cmd::after { content: " \2197"; color: var(--c-info); font-size: 0.85em; }
+a.row:hover { border-color: var(--console-status-running); background: var(--pf-t--global--background--color--primary--default); }
+a.row .row-cmd::after { content: " \2197"; color: var(--console-status-running); font-size: 0.85em; }
 .row-ws-cache { display: flex; gap: 0.5rem; font-size: 0.68rem; }
-.row-ws-cache .h { color: var(--c-hit); } .row-ws-cache .m { color: var(--c-miss); } .row-ws-cache .e { color: var(--c-err); }
+.row-ws-cache .h { color: var(--console-status-ok); } .row-ws-cache .m { color: var(--console-status-warn); } .row-ws-cache .e { color: var(--console-status-danger); }
+
 /* Configuration card: key/value rows; default charms are square tag pills colored by effect. */
 .config-body { display: flex; flex-direction: column; gap: 0.5rem; }
 .config-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
-.config-k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color); }
-.config-v { font-size: 0.85rem; color: var(--pico-color); font-family: var(--pico-font-family-monospace); }
+.config-k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle); }
+.config-v { font-size: 0.85rem; color: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
 .config-charms { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
 .charm-pill {
-  font-family: var(--pico-font-family-monospace); font-size: 0.72rem;
-  padding: 0.05rem 0.4rem; border: 1px solid currentColor; border-radius: var(--pico-border-radius);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem;
+  padding: 0.05rem 0.4rem; border: 1px solid currentColor; border-radius: var(--pf-t--global--border--radius--small);
 }
 /* Colored by charm EFFECT: rw mutates (loud/red), cd delivers (info/blue), gha shapes output
    (benign/green), custom is neutral. */
-.charm-pill[data-effect="loud"]    { color: var(--c-err); }
-.charm-pill[data-effect="deliver"] { color: var(--c-info); }
-.charm-pill[data-effect="benign"]  { color: var(--c-ok); }
-.charm-pill[data-effect="neutral"] { color: var(--pico-muted-color); }
+.charm-pill[data-effect="loud"]    { color: var(--console-status-danger); }
+.charm-pill[data-effect="deliver"] { color: var(--console-status-running); }
+.charm-pill[data-effect="benign"]  { color: var(--console-status-ok); }
+.charm-pill[data-effect="neutral"] { color: var(--pf-t--global--text--color--subtle); }
 
 /* Shared-service run state, colored by state (normal case, not all-caps). */
 .svc-meta { display: inline-flex; align-items: baseline; gap: 0.35rem; }
 .svc-state { font-weight: 600; }
-.svc-state[data-state="running"] { color: var(--c-ok); }
-.svc-state[data-state="starting"] { color: var(--c-warn); }
-.svc-state[data-state="failed"] { color: var(--c-err); }
-.svc-state[data-state="idle"] { color: var(--pico-muted-color); }
-.row-empty { font-size: 0.8rem; color: var(--pico-muted-color); margin: 0.2rem 0 0; }
+.svc-state[data-state="running"] { color: var(--console-status-ok); }
+.svc-state[data-state="starting"] { color: var(--console-status-warn); }
+.svc-state[data-state="failed"] { color: var(--console-status-danger); }
+.svc-state[data-state="idle"] { color: var(--pf-t--global--text--color--subtle); }
+.row-empty { font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); margin: 0.2rem 0 0; }
 
-.dash-versions { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pico-muted-color); padding: 0.2rem 0.1rem; }
+.dash-versions { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); padding: 0.2rem 0.1rem; }
 
-/* Connect / overview state: the app front door. A centered column - an intro, the app
-   waffle, then the connect panel. */
-.dash-connect { text-align: center; padding: clamp(1.5rem, 6vh, 3.5rem) 1rem; max-width: 62rem; margin: 0 auto; }
-.hub-intro { margin-bottom: 1.75rem; }
-.dash-connect-icon { width: 3rem; height: 3rem; color: var(--pico-muted-color); opacity: 0.8; }
-.dash-connect-title { font-size: 1.15rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }
-.dash-connect-sub { color: var(--pico-muted-color); max-width: 52ch; margin: 0 auto; }
-
-/* App waffle: a responsive grid of app cards (the .hub-card shell comes from the card
-   triad above), each an icon, a title, and a one-line blurb - the same visual language as
-   the top-bar launcher, sized up as a landing hub. */
-.hub-grid {
-  display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  margin: 0 auto 2rem; text-align: left;
-}
-.hub-card {
-  display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem;
-  text-decoration: none; color: var(--pico-color);
-}
-.hub-card svg { color: var(--pico-primary); margin-bottom: 0.15rem; }
-.hub-card-title { font-weight: 600; }
-.hub-card-sub { font-size: 0.78rem; color: var(--pico-muted-color); line-height: 1.3; }
-a.hub-card:hover, a.hub-card:focus-visible {
-  border-color: var(--c-info); background: var(--pico-card-sectioning-background-color);
-}
-/* The current app (this dashboard): non-actionable, dashed and quieted so it reads as
-   "you are here" rather than a link. */
-.hub-current { border-style: dashed; cursor: default; }
-.hub-current svg { color: var(--pico-muted-color); }
-
-/* Connect panel: how to go live. */
-.hub-connect { max-width: 32rem; margin: 0 auto; }
-.hub-connect-lead { font-size: 0.85rem; color: var(--pico-muted-color); margin: 0 0 0.5rem; }
-.dash-connect-cmd {
-  display: inline-block; margin: 0 auto 0.75rem; padding: 0.5rem 0.9rem;
-  background: var(--pico-card-sectioning-background-color);
-}
-.dash-connect-cmd code { font-size: 0.85rem; }
-
-/* "See a demo" affordance: a quiet inline link-button that enters the daemon-free
-   showcase (#demo). */
-.dash-connect-demo { margin: 0 auto; font-size: 0.85rem; color: var(--pico-muted-color); }
-/* Privacy note under the connect panel: the local-only reassurance, quieter than the lead. */
-.hub-connect-note {
-  margin: 1rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--pico-muted-border-color);
-  font-size: 0.78rem; color: var(--pico-muted-color);
-}
-.dash-demo-btn {
-  margin: 0; padding: 0; width: auto; border: 0; background: none;
-  color: var(--pico-primary); font-size: inherit; text-decoration: underline; cursor: pointer;
-}
-.dash-demo-btn:hover, .dash-demo-btn:focus-visible { color: var(--pico-primary-hover); }
-
-/* Resume form: reconnect to a remembered daemon host. The input leans on Pico's field
-   styling (border, radius, background); only the flex sizing and mono font are ours. */
-.dash-resume { max-width: 30rem; margin: 0 auto 1.25rem; }
-.dash-resume-row { display: flex; gap: 0.4rem; }
-.dash-resume-input {
-  flex: 1; margin: 0; font-family: var(--pico-font-family-monospace); font-size: 0.85rem;
-  padding: 0.4rem 0.6rem;
-}
-.dash-resume-btn { margin: 0; width: auto; white-space: nowrap; padding: 0.4rem 0.9rem; }
-.dash-resume-forget {
-  margin: 0.4rem 0 0; padding: 0; width: auto; border: 0; background: none;
-  color: var(--pico-muted-color); font-size: 0.72rem; text-decoration: underline; cursor: pointer;
-}
-.dash-noscript { padding: 1.5rem; }
-
-/* Attention hero: the board headline, first in the panels grid and never collapsed. A
-   verdict + detail on the left, three loud counts on the right; the left accent rule and
-   the verdict/count colors are driven by data-state (clear / warn / attention). */
+/* Attention hero: the board headline, first in the panels grid and never collapsed. A verdict +
+   detail on the left, three loud counts on the right; the left accent rule and the verdict/count
+   colors are driven by data-state (clear / warn / attention). Not a PF Card - always-visible. */
 .dash-hero {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem;
   padding: 0.85rem 1.1rem;
-  border: 1px solid var(--pico-muted-border-color);
-  border-left: 4px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  background: var(--pico-card-background-color);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-left: 4px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
 }
-.dash-hero[data-state="clear"]     { border-left-color: var(--c-ok); }
-.dash-hero[data-state="warn"]      { border-left-color: var(--c-warn); }
-.dash-hero[data-state="attention"] { border-left-color: var(--c-err); }
+.dash-hero[data-state="clear"]     { border-left-color: var(--console-status-ok); }
+.dash-hero[data-state="warn"]      { border-left-color: var(--console-status-warn); }
+.dash-hero[data-state="attention"] { border-left-color: var(--console-status-danger); }
 .hero-verdict { margin: 0; font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
-.dash-hero[data-state="clear"] .hero-verdict     { color: var(--c-ok); }
-.dash-hero[data-state="warn"] .hero-verdict      { color: var(--c-warn); }
-.dash-hero[data-state="attention"] .hero-verdict { color: var(--c-err); }
-.hero-detail { margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--pico-muted-color); }
+.dash-hero[data-state="clear"] .hero-verdict     { color: var(--console-status-ok); }
+.dash-hero[data-state="warn"] .hero-verdict      { color: var(--console-status-warn); }
+.dash-hero[data-state="attention"] .hero-verdict { color: var(--console-status-danger); }
+.hero-detail { margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); }
 .hero-metrics { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .hero-metric {
   display: flex; flex-direction: column; align-items: center; min-width: 4.6rem;
   padding: 0.35rem 0.7rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
 }
 .hero-metric-link { display: flex; flex-direction: column; align-items: center; color: inherit; text-decoration: none; }
-.hero-n { font-size: 1.6rem; font-weight: 700; font-family: var(--pico-font-family-monospace); line-height: 1; }
-.hero-l { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); margin-top: 0.2rem; }
+.hero-n { font-size: 1.6rem; font-weight: 700; font-family: var(--pf-t--global--font--family--mono); line-height: 1; }
+.hero-l { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); margin-top: 0.2rem; }
 /* Counts stay quiet at zero and only light up when there is something to report. */
-.hero-metric .hero-n { color: var(--pico-muted-color); }
-.hero-fail[data-n="some"] .hero-n  { color: var(--c-err); }
-.hero-run[data-n="some"] .hero-n   { color: var(--c-info); }
-.hero-queue[data-n="some"] .hero-n { color: var(--c-miss); }
-.hero-fail[data-n="some"] { border-color: var(--c-err); }
+.hero-metric .hero-n { color: var(--pf-t--global--text--color--subtle); }
+.hero-fail[data-n="some"] .hero-n  { color: var(--console-status-danger); }
+.hero-run[data-n="some"] .hero-n   { color: var(--console-status-running); }
+.hero-queue[data-n="some"] .hero-n { color: var(--console-status-queued); }
+.hero-fail[data-n="some"] { border-color: var(--console-status-danger); }
 /* A live-mode failing count deep-links to the failing run's log. */
 .hero-fail[data-linked] { cursor: pointer; }
-.hero-fail[data-linked]:hover { border-color: var(--c-err); background: var(--pico-card-background-color); }
+.hero-fail[data-linked]:hover { border-color: var(--console-status-danger); background: var(--pf-t--global--background--color--primary--default); }
 .hero-fail[data-linked] .hero-l::after { content: " \2197"; }
 
-/* Live activity / log preview: running rows, an "open in log viewer" deep-link, and a
-   streaming output tail (fed only when a raw-output buffer is present, i.e. the demo). */
+/* Live activity / log preview: running rows, an "open in log viewer" deep-link, and a streaming
+   output tail (fed only when a raw-output buffer is present, i.e. the demo). */
 .activity-note { display: inline-flex; align-items: center; gap: 0.6rem; }
-.activity-open { font-size: 0.72rem; color: var(--c-info); text-decoration: none; white-space: nowrap; }
+.activity-open { font-size: 0.72rem; color: var(--console-status-running); text-decoration: none; white-space: nowrap; }
 .activity-open::after { content: " \2197"; }
 .activity-open:hover { text-decoration: underline; }
-.activity-caption { margin: 0 0 0.5rem; font-size: 0.72rem; color: var(--pico-muted-color); }
+.activity-caption { margin: 0 0 0.5rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .activity-log {
   margin: 0.5rem 0 0; padding: 0.5rem 0.7rem; max-height: 200px; overflow-y: auto;
-  font-family: var(--pico-font-family-monospace); font-size: 0.72rem; line-height: 1.5;
-  color: var(--pico-color); background: var(--pico-card-sectioning-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem; line-height: 1.5;
+  color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
 
 @media (max-width: 720px) {
   .dash-cols { grid-template-columns: 1fr; }
-  .dash-brand-page { display: none; }
 }
 
-/* Glossary deep-link: a heading term links to its definition and opens in a new
-   tab. Reuses the site's external-link arrow convention (a trailing up-right arrow),
-   kept subtle so a linked heading still reads as a heading. */
+/* Glossary deep-link: a heading term links to its definition inline in the reference panel
+   (ref-drawer.ts intercepts .gloss-link). The dotted underline marks it as looked-up-able. */
 .gloss-link {
   color: inherit; text-decoration: none;
-  border-bottom: 1px dotted var(--pico-muted-border-color);
+  border-bottom: 1px dotted var(--pf-t--global--border--color--default);
 }
-/* No external-link arrow: the term opens INLINE in the reference panel (ref-drawer.ts), not a new
-   tab, so the dotted underline alone marks it as looked-up-able; it firms to the info blue on hover. */
-.gloss-link:hover { color: var(--c-info); border-bottom-color: var(--c-info); }
+.gloss-link:hover { color: var(--console-status-running); border-bottom-color: var(--console-status-running); }
 
-/* Dense data tables (per-target, MCP tools). Header cells are sort buttons; the
-   active column shows an ascending/descending caret. The table scrolls inside its
-   own container so a wide table never scrolls the page body horizontally. */
+/* Dense data tables (per-target, MCP tools). Header cells are sort buttons; the active column
+   shows an ascending/descending caret. The table scrolls inside its own container so a wide
+   table never scrolls the page body horizontally. */
 .table-wrap { overflow-x: auto; }
-.dash-table { width: 100%; font-size: 0.78rem; margin: 0; }
-/* Padding and the row border come from Pico's classless table styling; we only add the
-   dense-table nowrap (so a wide table scrolls its own container instead of wrapping). */
-.dash-table th, .dash-table td { white-space: nowrap; }
-.dash-table th.num, .dash-table td.num { text-align: right; font-family: var(--pico-font-family-monospace); }
-.dash-table td.num { color: var(--pico-color); }
-.dash-table thead th { position: sticky; top: 0; background: var(--pico-card-background-color); }
+.dash-table { width: 100%; font-size: 0.78rem; margin: 0; border-collapse: collapse; }
+.dash-table th, .dash-table td { white-space: nowrap; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); text-align: left; }
+.dash-table th.num, .dash-table td.num { text-align: right; font-family: var(--pf-t--global--font--family--mono); }
+.dash-table td.num { color: var(--pf-t--global--text--color--regular); }
+.dash-table thead th { position: sticky; top: 0; background: var(--pf-t--global--background--color--primary--default); }
 .th-sort {
   margin: 0; padding: 0; width: auto; border: 0; background: none; cursor: pointer;
-  font: inherit; font-weight: 600; color: var(--pico-muted-color); text-transform: uppercase;
+  font: inherit; font-weight: 600; color: var(--pf-t--global--text--color--subtle); text-transform: uppercase;
   letter-spacing: 0.03em; font-size: 0.66rem;
 }
-.th-sort:hover { color: var(--c-info); }
+.th-sort:hover { color: var(--console-status-running); }
 .dash-table th[data-sort="desc"] .th-sort::after { content: " \25BE"; }
 .dash-table th[data-sort="asc"] .th-sort::after { content: " \25B4"; }
-.dash-table tbody tr:hover { background: var(--pico-card-sectioning-background-color); }
+.dash-table tbody tr:hover { background: var(--pf-t--global--background--color--secondary--default); }
 
 /* Metric grid (Buzz, Sandbox): dense captioned groups of label + monospace value. */
 .metric-groups { display: flex; flex-direction: column; gap: 0.6rem; }
-.metric-caption { margin: 0 0 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
+.metric-caption { margin: 0 0 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
 .metric-grid { display: grid; gap: 0.4rem; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 .metric {
   display: flex; flex-direction: column; gap: 0.1rem; padding: 0.35rem 0.5rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
 }
-.metric-k { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color); }
-.metric-v { font-size: 0.95rem; font-weight: 600; font-family: var(--pico-font-family-monospace); color: var(--pico-color); }
+.metric-k { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle); }
+.metric-v { font-size: 0.95rem; font-weight: 600; font-family: var(--pf-t--global--font--family--mono); color: var(--pf-t--global--text--color--regular); }
 
-.tile[data-card="gantt"] { border-style: dashed; }
-
-/* Insight section band: a labeled divider above the five insight lens tiles, with a
-   manual refresh button (the lenses are an on-demand poll, not the live stream). */
+/* Insight section band: a labeled divider above the five insight lens tiles, with a manual
+   refresh button (the lenses are an on-demand poll, not the live stream). */
 .insight-band { margin-top: 0.4rem; }
 .insight-band-head { display: flex; align-items: center; gap: 0.6rem; }
 .insight-band-title { font-size: 1.05rem; margin: 0; }
-.insight-band-sub { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--pico-muted-color); }
+.insight-band-sub { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
 .insight-refresh {
   margin: 0 0 0 auto; padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  /* Reads blue like the other actions, not white: on a bare <button> Pico resolves --pico-color to
-     white, so the old color:var(--pico-color) rendered white-on-light (invisible). Use the info blue
-     directly and firm the border on hover. See pico-bare-button-hover-white. */
-  background: var(--pico-card-sectioning-background-color); color: var(--c-info); cursor: pointer;
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default); color: var(--console-status-running); cursor: pointer;
 }
-.insight-refresh:hover { color: var(--c-info); border-color: var(--c-info); background: color-mix(in srgb, var(--c-info) 8%, var(--pico-card-sectioning-background-color)); }
+.insight-refresh:hover { color: var(--console-status-running); border-color: var(--console-status-running); background: color-mix(in srgb, var(--console-status-running) 8%, var(--pf-t--global--background--color--secondary--default)); }
 
-/* uPlot base styles (vendored from uplot/dist/uPlot.min.css, MIT). Inlined here
-   rather than imported in the TS entry: the dashboard's CSS is minified as a
-   single standalone file by scribe (esbuild dashboard.css), and a JS-side CSS
-   import would emit a second, colliding gen/dashboard/dashboard.css. Kept as one
-   file, it also stays inside the site's CSP (style-src 'self') with no injected
-   stylesheet. The cursor dashes use the muted border color so they read on both
-   themes. */
+/* --- Connect / front door (PatternFly EmptyState + Gallery) ---------------------------------
+   The EmptyState centers a narrow column by default; the app waffle needs more room, so widen
+   the content box (id-scoped geometry) and left-align the gallery text. */
+#dash-connect .pf-v6-c-empty-state__content { max-width: 62rem; }
+#dash-connect .pf-v6-c-empty-state__icon svg { width: 3rem; height: 3rem; }
+#dash-connect .pf-v6-c-empty-state__body { text-align: center; }
+
+/* App waffle: the PF Gallery of app cards, each an icon + title + one-line blurb. */
+[data-app-waffle] { margin: 1.5rem auto; text-align: left; }
+[data-app] .pf-v6-c-card__body { display: flex; flex-direction: column; gap: 0.25rem; }
+[data-app] svg { color: var(--console-accent); margin-bottom: 0.15rem; }
+[data-app-title] { font-weight: 600; }
+[data-app-sub] { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); line-height: 1.3; }
+a[data-app] { text-decoration: none; color: var(--pf-t--global--text--color--regular); }
+a[data-app]:hover, a[data-app]:focus-visible { --pf-v6-c-card--BorderColor: var(--console-accent); }
+/* The current app (this dashboard): non-actionable, dashed and quieted - "you are here". */
+[data-app-current] { --pf-v6-c-card--BorderStyle: dashed; cursor: default; }
+[data-app-current] svg { color: var(--pf-t--global--text--color--subtle); }
+
+/* Connect panel: how to go live, stacked and centered in the EmptyState footer. */
+[data-connect-panel] { max-width: 32rem; margin: 0 auto; text-align: center; }
+[data-connect-lead] { font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); margin: 0 0 0.5rem; }
+[data-connect-cmd] {
+  display: inline-block; margin: 0 auto 0.75rem; padding: 0.5rem 0.9rem;
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+[data-connect-cmd] code { font-size: 0.85rem; font-family: var(--pf-t--global--font--family--mono); }
+[data-connect-demo] { margin: 0 auto; font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
+/* Privacy note under the connect panel: the local-only reassurance, quieter than the lead. */
+[data-connect-note] {
+  margin: 1rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--pf-t--global--border--color--default);
+  font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle);
+}
+/* Resume form: reconnect to a remembered daemon host. Input is a PF FormControl; buttons are PF. */
+[data-resume] { max-width: 30rem; margin: 0 auto 1.25rem; }
+[data-resume-row] { display: flex; gap: 0.4rem; align-items: stretch; }
+[data-resume-row] .pf-v6-c-form-control { flex: 1; }
+[data-resume-row] input { font-family: var(--pf-t--global--font--family--mono); }
+
+/* uPlot base styles (vendored from uplot/dist/uPlot.min.css, MIT). Inlined here rather than
+   imported in the TS entry: the dashboard's CSS is minified as a single standalone file by
+   esbuild, and a JS-side CSS import would emit a second, colliding stylesheet. The cursor
+   dashes read the chart-grid token so they carry on both themes. */
 .uplot, .uplot *, .uplot *::before, .uplot *::after { box-sizing: border-box; }
-.uplot { font-family: var(--pico-font-family, system-ui, sans-serif); line-height: 1.5; width: min-content; }
+.uplot { font-family: var(--pf-t--global--font--family--body, system-ui, sans-serif); line-height: 1.5; width: min-content; }
 .u-title { text-align: center; font-size: 18px; font-weight: bold; }
 .u-wrap { position: relative; user-select: none; }
 .u-over, .u-under { position: absolute; }
@@ -448,7 +405,7 @@ a.hub-card:hover, a.hub-card:focus-visible {
 .u-legend .u-off > * { opacity: 0.3; }
 .u-select { background: rgba(0,0,0,0.07); position: absolute; pointer-events: none; }
 .u-cursor-x, .u-cursor-y { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
-.u-hz .u-cursor-x, .u-vt .u-cursor-y { height: 100%; border-right: 1px dashed var(--pico-muted-border-color); }
-.u-hz .u-cursor-y, .u-vt .u-cursor-x { width: 100%; border-bottom: 1px dashed var(--pico-muted-border-color); }
+.u-hz .u-cursor-x, .u-vt .u-cursor-y { height: 100%; border-right: 1px dashed var(--console-chart-grid); }
+.u-hz .u-cursor-y, .u-vt .u-cursor-x { width: 100%; border-bottom: 1px dashed var(--console-chart-grid); }
 .u-cursor-pt { position: absolute; top: 0; left: 0; border-radius: 50%; border: 0 solid; pointer-events: none; will-change: transform; background-clip: padding-box !important; }
 .u-axis.u-off, .u-select.u-off, .u-cursor-x.u-off, .u-cursor-y.u-off, .u-cursor-pt.u-off { display: none; }

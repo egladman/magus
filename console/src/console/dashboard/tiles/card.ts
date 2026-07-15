@@ -43,9 +43,16 @@ export interface CardOptions {
   onReveal?: () => void;
 }
 
-// Card builds the standard collapsible tile shell and exposes its body for the
-// tile to populate. It restores its collapsed state from localStorage and persists
-// toggles. The header title is a glossary deep-link when a term is given.
+// Card builds the standard collapsible tile shell as a PatternFly Card and exposes its
+// body for the tile to populate. It restores its collapsed state from localStorage and
+// persists toggles. The header title is a glossary deep-link when a term is given.
+//
+// PatternFly (W3): the shell is a pf-v6-c-card with the standard __header / __header-main /
+// __title / __title-text / __body parts. The collapse affordance is NOT PatternFly's own
+// expandable-card toggle (that renders a pficon glyph via a webfont the console does not
+// ship); instead the fold rides a data-collapsed attribute on the card and a bare caret
+// button, both styled ID/data-scoped in dashboard.css - the same "component-less bit"
+// escape the shell's status bar uses. The note sits in __actions (PF floats it right).
 export class Card {
   readonly el: HTMLElement;
   readonly body: HTMLElement;
@@ -53,20 +60,33 @@ export class Card {
 
   constructor(id: string, title: string, opts: CardOptions = {}) {
     const section = document.createElement("section");
-    section.className = "tile";
+    section.className = "pf-v6-c-card";
     section.dataset.card = id;
 
     const head = document.createElement("div");
-    head.className = "tile-head";
+    head.className = "pf-v6-c-card__header";
 
+    // Collapse toggle: a bare caret button (data-collapse). Bare so Pico (still loaded until
+    // W4) does not skin it as a filled button; dashboard.css resets it and draws the caret.
+    const toggle = document.createElement("div");
+    toggle.className = "pf-v6-c-card__header-toggle";
     const collapse = document.createElement("button");
     collapse.type = "button";
-    collapse.className = "tile-collapse";
-    collapse.dataset.card = id;
+    collapse.dataset.collapse = "";
     collapse.setAttribute("aria-label", "Collapse card");
+    const caret = document.createElement("span");
+    caret.className = "pf-v6-c-card__header-toggle-icon";
+    caret.dataset.caret = "";
+    caret.setAttribute("aria-hidden", "true");
+    collapse.append(caret);
+    toggle.append(collapse);
 
+    const headerMain = document.createElement("div");
+    headerMain.className = "pf-v6-c-card__header-main";
+    const titleWrap = document.createElement("div");
+    titleWrap.className = "pf-v6-c-card__title";
     const h = document.createElement("h2");
-    h.className = "tile-h";
+    h.className = "pf-v6-c-card__title-text";
     if (opts.term) {
       // The TITLE itself is the reference link: clicking it opens the term inline in the reference
       // panel (ref-drawer.js intercepts .gloss-link). No separate labeled link beside it - that just
@@ -75,15 +95,20 @@ export class Card {
     } else {
       h.textContent = title;
     }
+    titleWrap.append(h);
+    headerMain.append(titleWrap);
 
+    const actions = document.createElement("div");
+    actions.className = "pf-v6-c-card__actions";
     this.noteEl = document.createElement("span");
     this.noteEl.className = "tile-note";
     if (opts.note) this.noteEl.textContent = opts.note;
+    actions.append(this.noteEl);
 
-    head.append(collapse, h, this.noteEl);
+    head.append(toggle, headerMain, actions);
 
     this.body = document.createElement("div");
-    this.body.className = "tile-body";
+    this.body.className = "pf-v6-c-card__body";
 
     section.append(head, this.body);
     this.el = section;
@@ -101,14 +126,17 @@ export class Card {
       }
     }
 
-    if (loadCollapsed().has(id)) section.classList.add("collapsed");
+    const collapsedNow = loadCollapsed().has(id);
+    if (collapsedNow) section.dataset.collapsed = "";
+    collapse.setAttribute("aria-expanded", collapsedNow ? "false" : "true");
     collapse.addEventListener("click", () => {
-      section.classList.toggle("collapsed");
+      const collapsed = section.hasAttribute("data-collapsed");
       const set = loadCollapsed();
-      const collapsed = section.classList.contains("collapsed");
-      if (collapsed) set.add(id); else set.delete(id);
+      if (collapsed) { section.removeAttribute("data-collapsed"); set.delete(id); }
+      else { section.dataset.collapsed = ""; set.add(id); }
+      collapse.setAttribute("aria-expanded", collapsed ? "true" : "false");
       saveCollapsed(set);
-      if (!collapsed) opts.onReveal?.();
+      if (collapsed) opts.onReveal?.();
     });
   }
 

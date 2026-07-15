@@ -34,3 +34,7 @@
 @import "@patternfly/patternfly/components/ModalBox/modal-box.css";
 @import "@patternfly/patternfly/components/Backdrop/backdrop.css";
 @import "@patternfly/patternfly/layouts/Bullseye/bullseye.css";
+/* W3 dashboard - the dashboard surface's added components:
+ *   EmptyState - the connect/front-door screen (#dash-connect) when no daemon is streaming.
+ * Card + Gallery (already above) cover the dashboard tiles and the app-waffle launcher. */
+@import "@patternfly/patternfly/components/EmptyState/empty-state.css";
