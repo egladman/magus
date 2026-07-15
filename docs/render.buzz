@@ -3495,8 +3495,8 @@ fun pageKey(resolved: str) > str {
 // URL_LOCK is the committed, append-only ledger of every URL the site has ever
 // shipped (one per line, sorted). RETIRED_URLS lists URLs intentionally removed,
 // exempting them from the abandoned-link gate.
-final URL_LOCK = "urls.lock";
-final RETIRED_URLS = "retired-urls.txt";
+final URL_LOCK = "active.urls.lock";
+final RETIRED_URLS = "retired.urls.lock";
 
 // readURLSet reads a newline-delimited URL file into a set, skipping blanks and
 // "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
@@ -3517,7 +3517,7 @@ fun readURLSet(path: str) > {str: bool} {
 // (recorded in URL_LOCK) must still resolve, so a renamed or deleted page can't
 // silently start 404-ing on inbound links and bookmarks. To retire a URL on
 // purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old
-// URL resolving) or list it in retired-urls.txt. Runs every render; the lock only
+// URL resolving) or list it in retired.urls.lock. Runs every render; the lock only
 // grows (updateUrlLock, under the rw charm).
 fun abandonedLinkCheck(site: Site) > void {
     final locked = readURLSet(URL_LOCK);
@@ -3530,7 +3530,7 @@ fun abandonedLinkCheck(site: Site) > void {
     }
     if (abandoned.len() > 0) {
         final sorted = abandoned.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-        throw "abandoned links: {sorted.len()} previously-shipped URL(s) no longer resolve. Add a redirect (frontmatter aliases:) or list them in retired-urls.txt: " + sorted.join(", ");
+        throw "abandoned links: {sorted.len()} previously-shipped URL(s) no longer resolve. Add a redirect (frontmatter aliases:) or list them in retired.urls.lock: " + sorted.join(", ");
     }
 }
 
