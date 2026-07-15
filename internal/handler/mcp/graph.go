@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )
 
@@ -204,7 +205,10 @@ func (t *explainTool) Invoke(ctx context.Context, req types.InvokeRequest) (type
 	if !ok {
 		return types.InvokeResponse{}, errors.New("mcp: no node matches " + node)
 	}
-	return types.InvokeResponse{Data: out}, nil
+	// Return the compact, natural-language rendering (not the verbose JSON struct):
+	// for a result an agent reads and reasons about, aligned text with full IDs is
+	// more token-efficient and less error-prone than repeated-key JSON.
+	return types.InvokeResponse{Text: render.ExplainText(out)}, nil
 }
 
 type pathTool struct{ graph graphResolver }
@@ -225,7 +229,7 @@ func (t *pathTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.I
 	if !ok {
 		return types.InvokeResponse{}, errors.New("mcp: could not resolve " + from + " or " + to + " to a node")
 	}
-	return types.InvokeResponse{Data: out}, nil
+	return types.InvokeResponse{Text: render.PathText(out)}, nil
 }
 
 type statsTool struct{ graph graphResolver }

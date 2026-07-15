@@ -69,6 +69,14 @@ target ...:a,b` before a run. Disjoint edits never trip it.
 
 ### Changed
 
+- `magus explain` and `magus path` now render as compact natural-language text by
+  default, for both the CLI and the MCP tools: an edge's direction is folded into a
+  verb (`used by`, `depends on`, `part of`, `required by`), edges are grouped by that
+  verb with a count before any multi-item list, and full node IDs are listed - so one
+  rendering serves humans, agents that read, and the docs. This replaces the
+  `<--uses-- op:go:go-build [op]` adjacency notation, which made the reader invert the
+  arrow, and the verbose JSON the MCP tools returned (roughly 4x the size). `-o json`
+  remains the structured form for agents that parse.
 - Breaking: `-o template=<go-template>` now renders against the JSON-normalized
   value, so template field names are the json-tag keys (`{{range .projects}}{{.path}}{{end}}`),
   identical to what `-o json` emits, instead of the PascalCase Go struct fields

@@ -8,13 +8,13 @@ exec magus query build
 stdout 'target:\.:build'
 stdout 'neighborhood:'
 
-# explain shows one node's edges, provenance, and blast radius. "build" resolves
-# by name; build needs lint (depends_on) and the charm rw references it.
+# explain shows one node's relationships in natural language, plus blast radius.
+# "build" resolves by name; build needs lint (rendered "depends on") and the charm
+# rw references it (rendered "referenced by").
 exec magus explain build
-stdout 'node: target:\.:build'
-stdout 'kind:  target'
-stdout 'out edges'
-stdout 'depends_on'
+stdout 'target:\.:build   target'
+stdout 'depends on'
+stdout 'target:\.:lint'
 
 exec magus explain build -o json
 stdout '"blast_radius"'
@@ -25,10 +25,10 @@ stdout '"relation": "references"'
 ! exec magus explain zzz-nonesuch
 stderr 'no node matches'
 
-# path connects two resolved nodes
+# path connects two resolved nodes as a chain of natural-language steps
 exec magus path lint build
-stdout 'from:'
-stdout 'to:'
+stdout 'target:\.:build'
+stdout '->'
 
 -- magus.yaml --
 concurrency: 4

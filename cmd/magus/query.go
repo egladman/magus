@@ -6,15 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
-	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
@@ -295,32 +294,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 
-	n := out.Node
-	fmt.Printf("node: %s\n", n.ID)
-	fmt.Printf("  kind:  %s\n", n.Kind)
-	fmt.Printf("  label: %s\n", n.Label)
-	if n.Doc != "" {
-		fmt.Printf("  doc:   %s\n", n.Doc)
-	}
-	if n.Source != "" {
-		fmt.Printf("  source: %s\n", n.Source)
-	}
-	for _, k := range sortedKeys(n.Attrs) {
-		fmt.Printf("  %s: %s\n", k, n.Attrs[k])
-	}
-	fmt.Printf("  reached by: %d node(s)\n", out.BlastRadius)
-	if len(out.Out) > 0 {
-		fmt.Printf("\nout edges (%d):\n", len(out.Out))
-		for _, e := range out.Out {
-			fmt.Printf("  --%s--> %s  [%s]%s\n", e.Relation, e.Other, e.OtherKind, provSuffix(e.Provenance))
-		}
-	}
-	if len(out.In) > 0 {
-		fmt.Printf("\nin edges (%d):\n", len(out.In))
-		for _, e := range out.In {
-			fmt.Printf("  <--%s-- %s  [%s]%s\n", e.Relation, e.Other, e.OtherKind, provSuffix(e.Provenance))
-		}
-	}
+	fmt.Print(render.ExplainText(out))
 	return nil
 }
 
@@ -370,20 +344,7 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 		return emitFormatted(opts, out)
 	}
 
-	fmt.Printf("from: %s\n", out.From)
-	fmt.Printf("to:   %s\n", out.To)
-	if !out.Found {
-		fmt.Println("\nno path connects these nodes")
-		return nil
-	}
-	fmt.Printf("\n%s\n", out.From)
-	for _, s := range out.Steps {
-		if s.Forward {
-			fmt.Printf("  --%s--> %s\n", s.Relation, s.To)
-		} else {
-			fmt.Printf("  <--%s-- %s\n", s.Relation, s.To)
-		}
-	}
+	fmt.Print(render.PathText(out))
 	return nil
 }
 
@@ -396,18 +357,4 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
-}
-
-func sortedKeys(m map[string]string) []string {
-	if len(m) == 0 {
-		return nil
-	}
-	return slices.Sorted(maps.Keys(m))
-}
-
-func provSuffix(p string) string {
-	if p == "" {
-		return ""
-	}
-	return "  (" + p + ")"
 }
