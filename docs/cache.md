@@ -132,14 +132,39 @@ invalidation is additive. Reverting a change restores the earlier key and replay
 its still-present entry. Disk is reclaimed separately by eviction and pruning (see
 [On disk](#on-disk-just-files)).
 
-For targets that must never cache - a long-running `fs.watch` loop, a service op -
-the step is marked no-cache: magus skips the replay path so they always run, and
-skips the snapshot so a re-run re-executes instead of replaying a stale success.
+### Opting out and busting
 
-For a one-shot forced rebuild of an otherwise-cacheable target, use
-`magus run <target> --no-cache`: it skips the replay path for that run only, but
-still snapshots on success, so the entry is refreshed rather than left stale -
-unlike `skip_cache`, which never snapshots at all.
+Four controls, at four different scopes:
+
+| Control                         | Scope                       | Semantics                                                                                     |
+| -------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `skip_cache` target policy        | one target, every run         | Always runs; never replays **or** snapshots (a long-running `fs.watch` loop, a service op).      |
+| `magus run <target> --no-cache`  | one target, one invocation    | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`. |
+| `magus.bust_cache(path?)`        | runtime, one magusfile call   | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
+| `magus clean --cache`           | CLI, whole cache               | Wipes the on-disk store from outside any run.                                                  |
+| `cache.immutable` (`MAGUS_CACHE_IMMUTABLE`) | whole cache, whole run | Read-only mode: replays hits, but a miss runs the target and does **not** write a new manifest.  |
+
+`skip_cache` and `--no-cache` both force a genuine re-execution; the difference
+is entirely about what happens to the cache entry afterward (never snapshot vs.
+snapshot-and-refresh). `bust_cache` and `clean --cache` both delete entries, at
+different granularities and from different sides of a run. `cache.immutable` is
+the odd one out: it does not force anything to re-run, it just stops the cache
+from ever writing - the common case is a read-only CI runner or a shared cache
+mirror that must not accumulate local entries.
+
+### Granularity: every target on a project shares one broad baseline
+
+A project's `Step.Sources` is not built per-target from scratch: `baseStep`
+seeds it with **every bound spell's `needs` globs, unioned, plus the
+magusfile itself**, and only then does the target-specific step add that
+target's own extra sources on top. So a project binding both `go` and
+`docker` has every one of its targets - `build`, `test`, `lint`, even a custom
+one - keying on the union of both spells' `needs`, not just the ones relevant
+to that particular target: a `Dockerfile` edit invalidates `magus run build`
+even though `build` only cares about `.go` files. This is deliberately coarse
+(it is a safety margin against under-declared inputs, not a bug), but it means
+`magus run ci` and `magus run build` on the same project invalidate together
+far more often than their names alone would suggest.
 
 ## Replay: a hit restores outputs, not execution
 
