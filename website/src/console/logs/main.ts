@@ -479,6 +479,13 @@ export function activate(): void {
   if (bodyEl && scrollEl) init();
 }
 
+// deactivate aborts a live stream if one is running, so closing the logs tab or pane leaves no SSE
+// connection open. Static logs (the common case) never open a stream, so this is a no-op then. The
+// console's logs PageModule calls it on deactivate; the standalone page does not.
+export function deactivate(): void {
+  if (state.liveAbort) { state.liveAbort.abort(); state.liveAbort = null; }
+}
+
 // Standalone auto-boot: only when the scaffold is already in the document at load. In the console the
 // scaffold is injected into a host AFTER this module imports, so the console calls activate() itself.
 if (document.getElementById("log-body")) activate();

@@ -157,6 +157,13 @@ let liveWorkspaceName: string | null = null; // workspace name from /api/v1/stat
 let liveConnected = false; // true while the SSE stream is open; drives the badge style
 let liveFlavor: string | null = null; // null (knowledge) or "targets"
 
+// Teardown handles for deactivate() (the console unmounting a graph tab/pane): the stage ResizeObserver
+// and one AbortController whose signal wires every window/document lifecycle listener, so a single
+// abort() removes them all. Without teardown the force simulation, its rAF, the observer, and these
+// listeners would keep running in the background after the graph closes.
+let stageResizeObserver: ResizeObserver | null = null;
+let lifecycleAbort: AbortController | null = null;
+
 // The graph stays gently "alive": the simulation never fully cools, so nodes
 // keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
 // and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
@@ -2645,8 +2652,14 @@ function bootWireEvents() {
       draw();
     });
   };
-  new ResizeObserver(onStageResize).observe(canvas);
-  window.addEventListener("hashchange", () => { suppressHash = true; applyDeepLinks(); suppressHash = false; });
+  // Capture the observer + route every lifecycle listener through one AbortController's signal, so
+  // deactivate() can disconnect the observer and remove all three listeners at once (a reopened graph
+  // re-runs this block with fresh handles).
+  stageResizeObserver = new ResizeObserver(onStageResize);
+  stageResizeObserver.observe(canvas);
+  lifecycleAbort = new AbortController();
+  const lifecycleSignal = lifecycleAbort.signal;
+  window.addEventListener("hashchange", () => { suppressHash = true; applyDeepLinks(); suppressHash = false; }, { signal: lifecycleSignal });
 
   // Keep the gentle wobble from being a background CPU drain: stop the sim while
   // the tab is hidden, resume when it returns. Also honor a live change to the
@@ -2655,10 +2668,10 @@ function bootWireEvents() {
     if (!sim) return;
     if (document.hidden) sim.stop();
     else if (layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
-  });
+  }, { signal: lifecycleSignal });
   reducedMotion.addEventListener("change", () => {
     if (sim && layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
-  });
+  }, { signal: lifecycleSignal });
 
   // Wire the layout toggle button.
   const layoutToggleBtn = el("layout-toggle-btn");
@@ -2781,6 +2794,19 @@ async function bootLive() {
     liveHost = null; liveToken = null;
     return false; // fall through to normal load
   }
+}
+
+// deactivate tears down everything with a lifetime when the console unmounts a graph tab or pane: it
+// stops the force simulation (its rAF wobble is the main background CPU drain), aborts a live SSE stream
+// and cancels its reconnect timer, disconnects the stage ResizeObserver, and removes the window/document
+// lifecycle listeners (via the one AbortController). Idempotent. The standalone page never calls it (the
+// graph lives for the page's lifetime); the console's graph PageModule calls it on deactivate.
+export function deactivate(): void {
+  if (sim) sim.stop();
+  if (liveSseAbort) { liveSseAbort.abort(); liveSseAbort = null; }
+  if (liveReconnectTimer) { clearTimeout(liveReconnectTimer); liveReconnectTimer = null; }
+  if (stageResizeObserver) { stageResizeObserver.disconnect(); stageResizeObserver = null; }
+  if (lifecycleAbort) { lifecycleAbort.abort(); lifecycleAbort = null; }
 }
 
 // Standalone auto-boot: only when the scaffold is already in the document at load. In the console the

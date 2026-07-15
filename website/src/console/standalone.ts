@@ -30,10 +30,13 @@ const noSearch: SearchProvider<null> = { placeholder: "", parse: () => null, app
 
 // The shape the factory calls on a dynamically imported app bundle. A streaming surface (the
 // dashboard) also exports setVisible so it can suppress its shared-status-bar writes while its tab is
-// hidden; a static surface (logs/graph) exports only activate.
+// hidden. A surface that opens something with a lifetime (a live SSE stream, the graph's force
+// simulation) exports deactivate() to tear it down when its tab/pane closes; a purely static surface
+// omits it.
 interface BootModule {
   activate(): void;
   setVisible?(visible: boolean): void;
+  deactivate?(): void;
 }
 
 // A surface that has NO standalone page to lift - its bundle builds its own DOM into the host. Used
@@ -118,9 +121,11 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
         // A surface that writes the shared status bar (the dashboard) exports setVisible so it can go
         // quiet while backgrounded; static surfaces (logs/graph) do not, and this stays undefined.
         setVisible: mod.setVisible,
-        // Clearing the host detaches the surface DOM. Any live stream the app opened keeps running
-        // until the page unloads - the apps do not yet expose a teardown handle (a known follow-up).
-        deactivate() { host.replaceChildren(); },
+        // Tear down the surface's own lifetimes first (a live SSE stream, the graph's force simulation)
+        // via its exported deactivate(), THEN detach its DOM - so closing a tab/pane leaves nothing
+        // streaming or ticking in the background. A static surface exports no deactivate; the DOM detach
+        // still happens.
+        deactivate() { mod.deactivate?.(); host.replaceChildren(); },
       };
     },
   };
