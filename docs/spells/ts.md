@@ -286,13 +286,15 @@ scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge 
 
 <!-- run-recorder -->
 ```buzz
-// tsc type-checks the project through the package manager (pnpm exec tsc).
+// tsc is static analysis, so it composes into the canonical `lint` target
+// (alongside eslint) rather than a bespoke `typecheck` target. `magus run lint`
+// forks `pnpm exec tsc`.
 import "magus";
 import "magus/spell/ts";
 
 magus.project({ "spells": [ts] });
 
-export fun typecheck(args: [str]) > void {
+export fun lint(args: [str]) > void {
     ts["tsc"]();
 }
 ```
