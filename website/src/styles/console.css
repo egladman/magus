@@ -288,6 +288,34 @@ body.console-fill > main > .panel {
   margin: 0;
   position: relative; /* positioning context for the graph's absolute cold-state prompt */
 }
+/* The same full-height chain for a surface mounted as a CONSOLE TAB. The rules above key on
+   `body.console-fill > main > .app` (the standalone page's single <main>), but the console mounts a
+   surface one level deeper - the outlet main holds a per-tab pane, and the surface's own <main> sits
+   inside that (#console-outlet > div[data-tab-id] > main > .app). So those direct-child rules do not
+   reach a mounted surface, and a canvas-height surface (the graph) or a cold empty state collapses to
+   nothing. Re-establish the flex chain for the nested mount. The pane rule is guarded :not([hidden])
+   so an inactive pane keeps its display:none (a bare display:flex here would outweigh [hidden]). */
+#console-outlet > div[data-tab-id]:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+#console-outlet > div[data-tab-id] > main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  margin-inline: 0;
+}
+#console-outlet > div[data-tab-id] > main > .graph-app,
+#console-outlet > div[data-tab-id] > main > .panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  position: relative;
+}
 /* Graph cold state: the prompt normally collapses the card (and its stage) to a natural
    ~520px height, which in the full-height layout would leave a void (and a background seam)
    below it. Instead let the stage fill the card and the prompt fill + center within it,

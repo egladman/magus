@@ -68,20 +68,36 @@ const GRAPH_KEYMAP: Keymap = {
   "graph.layout": "l", // toggle force / layered layout
 };
 const keymapCell = persisted<Keymap>("keymap", {});
-// These handles are the DOM contract with graph.html; the page always provides them, so
-// they are asserted non-null (the monolith read them unguarded). statusEl stays nullable
-// because setStatus explicitly guards on it.
-const canvas = el("graph-canvas") as HTMLCanvasElement;
-const legendEl = el("graph-legend") as HTMLElement;
-const searchEl = el("node-search") as HTMLInputElement;
-const listEl = el("node-list") as HTMLElement;
-const cardEl = el("explain-card") as HTMLElement;
-const statusEl = el("graph-status");
-const countEl = el("graph-count") as HTMLElement;
-const fileInput = el("graph-file") as HTMLInputElement;
+// These handles are the DOM contract with graph.html; the page always provides them, so they are
+// asserted non-null (the monolith read them unguarded). statusEl stays nullable because setStatus
+// explicitly guards on it. They are resolved by resolveDom() at the top of activate(), NOT at import:
+// the console imports this bundle BEFORE injecting the scaffold, so import-time getElementById would
+// be null and canvas.getContext would throw. The standalone page also boots through activate(), so
+// both paths bind here. Every consumer runs inside a function called after activate(), so the
+// definite-assignment (!) handles are safe.
+let canvas!: HTMLCanvasElement;
+let legendEl!: HTMLElement;
+let searchEl!: HTMLInputElement;
+let listEl!: HTMLElement;
+let cardEl!: HTMLElement;
+let statusEl: HTMLElement | null = null;
+let countEl!: HTMLElement;
+let fileInput!: HTMLInputElement;
 
 const root = document.documentElement;
-const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+let ctx!: CanvasRenderingContext2D;
+
+function resolveDom(): void {
+  canvas = el("graph-canvas") as HTMLCanvasElement;
+  legendEl = el("graph-legend") as HTMLElement;
+  searchEl = el("node-search") as HTMLInputElement;
+  listEl = el("node-list") as HTMLElement;
+  cardEl = el("explain-card") as HTMLElement;
+  statusEl = el("graph-status");
+  countEl = el("graph-count") as HTMLElement;
+  fileInput = el("graph-file") as HTMLInputElement;
+  ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+}
 
 // Graph is the loaded node-link graph plus the relation index the query grammar reads.
 // The index signature keeps the monolith's incidental scratch fields legal.
@@ -238,7 +254,10 @@ async function loadGraph() {
   if (wantsDemo(params) || params.view || params.q || params.node) {
     try {
       setStatus("Loading the magus demo graph...");
-      const r = await fetch("./graph.json");
+      // Resolve graph.json relative to THIS bundle (gen/console/graph/), not the document: standalone
+      // the two share a directory, but the console mounts this surface into a page at a different path,
+      // where a document-relative "./graph.json" would miss. import.meta.url makes both paths work.
+      const r = await fetch(new URL("./graph.json", import.meta.url));
       if (!r.ok) throw new Error("HTTP " + r.status);
       return { data: await r.json(), source: "demo" };
     } catch (e: any) {
@@ -2276,7 +2295,14 @@ function finishInteractiveSetup() {
   syncConditionalViews();
 }
 
-async function boot() {
+// activate boots the graph explorer against the scaffold already in the document. el() resolves DOM
+// handles at call time via getElementById, so it needs no separate resolve step - just the scaffold
+// present. Exported so the console's graph PageModule can drive it after injecting the scaffold into
+// a host; the standalone page auto-boots below. Chrome (nav/search/drawer/settings) comes from the
+// shared main.js on the standalone page, which the console does not load, so there is no self-wired
+// chrome to guard (unlike the dashboard).
+export async function activate() {
+  resolveDom();
   readTheme();
 
   // Register file-open listeners before any early return so the installed PWA
@@ -2757,4 +2783,6 @@ async function bootLive() {
   }
 }
 
-boot();
+// Standalone auto-boot: only when the scaffold is already in the document at load. In the console the
+// scaffold is injected into a host AFTER this module imports, so the console calls activate() itself.
+if (document.getElementById("graph-canvas")) activate();

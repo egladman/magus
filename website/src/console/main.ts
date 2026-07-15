@@ -106,7 +106,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
   register(homePage(SURFACES, open));
   register(standaloneSurface({ id: "logs", title: "Log viewer", dir: "logs", bundle: "log-viewer.js", css: "logs.css" }));
   register(standaloneSurface({ id: "dashboard", title: "Dashboard", dir: "dashboard", bundle: "dashboard.js", css: "dashboard.css" }));
-  register(stubPage("graph", "Graph explorer"));
+  register(standaloneSurface({ id: "graph", title: "Graph explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
   register(stubPage("activity", "Activity"));
 
   // Restore the persisted workspace: the tab strip already renders every saved tab (it binds to ws);
