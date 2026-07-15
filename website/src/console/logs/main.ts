@@ -18,7 +18,7 @@ import { parseHash, wantsDemo } from "../../lib/daemon";
 import { decodeFragmentBytes, viewerParams } from "./fragment";
 import { state, waterfallSource } from "./state";
 import {
-  bodyEl, copyToClipboard, el, emptyEl, isTyping, panelEl, scrollEl,
+  bodyEl, copyToClipboard, el, emptyEl, panelEl, scrollEl,
   setBtnLabel, setRefIdentity, setStatus,
 } from "./dom";
 import { stripAnsi } from "../render/ansi";
@@ -30,6 +30,8 @@ import { clearMarks, runSearch, stepActiveMark } from "./search";
 import { graphTarget, openInGraph, shareLink } from "./share";
 import { connectLive } from "./live";
 import { startDemo } from "./demo";
+import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../shell/commands";
+import { persisted } from "../../lib/persist";
 
 // init() is invoked at the BOTTOM of this module (see the final line), after every shared state
 // field has initialized. The order matters: loadFromURL()'s setFilter() applies the #q= deep link,
@@ -37,8 +39,39 @@ import { startDemo } from "./demo";
 // clobbers it back to empty.
 function init(): void {
   wireControls();
+  wireCommands();
   wireInput();
   loadFromURL();
+}
+
+// --- Keyboard commands --------------------------------------------------------
+// The log viewer's actions double as named commands so a keybinding (and, later, the shell's
+// menu/palette) can trigger them. Each command DISPATCHES TO the existing control - the button's
+// own click handler stays the single source of truth for the action, so there is no duplicated
+// behavior. The default chords are single keys, matching the viewer's existing "/" idiom (a
+// keyboard-driven reader, like less/gh) and deliberately avoiding browser-owned combos
+// (mod+r reload, mod+t/mod+shift+t tab). A user override lives in the shared persisted keymap.
+const LOGS_KEYMAP: Keymap = {
+  "logs.filter": "/",   // focus the filter box
+  "logs.raw": "r",      // toggle raw / pretty
+  "logs.timeline": "t", // toggle timeline / log
+  "logs.fold": "f",     // collapse / expand all
+};
+const keymapCell = persisted<Keymap>("keymap", {});
+
+// clickControl triggers a toolbar button's own handler; a disabled control is a no-op, exactly as
+// clicking it in the UI would be (so a keybinding never does what the button cannot).
+function clickControl(id: string): void {
+  const btn = el(id) as HTMLButtonElement | null;
+  if (btn && !btn.disabled) btn.click();
+}
+
+function wireCommands(): void {
+  registerCommand({ id: "logs.filter", label: "Focus filter", group: "Log viewer", run: () => { const f = el("log-filter") || el("log-search"); if (f) f.focus(); } });
+  registerCommand({ id: "logs.raw", label: "Toggle raw / pretty", group: "Log viewer", run: () => clickControl("view-toggle") });
+  registerCommand({ id: "logs.timeline", label: "Toggle timeline / log", group: "Log viewer", run: () => clickControl("timeline-btn") });
+  registerCommand({ id: "logs.fold", label: "Collapse / expand all", group: "Log viewer", run: () => clickControl("fold-all-btn") });
+  installKeybindings(() => mergeKeymap(LOGS_KEYMAP, keymapCell.get()));
 }
 
 async function loadFromURL(): Promise<void> {
@@ -258,12 +291,6 @@ function wireControls(): void {
       if ((ev as KeyboardEvent).key === "Enter") { ev.preventDefault(); stepActiveMark((ev as KeyboardEvent).shiftKey ? -1 : 1); }
     });
   }
-  // "/" focuses the filter, like less/vim; ignored while typing in a field.
-  document.addEventListener("keydown", (ev) => {
-    const focusEl = el("log-filter") || searchEl;
-    if (ev.key === "/" && focusEl && !isTyping(ev.target)) { ev.preventDefault(); focusEl.focus(); }
-  });
-
   // Filter box: debounced live-filter that narrows both views and syncs the #q= fragment.
   const filterEl = el("log-filter");
   if (filterEl) {
