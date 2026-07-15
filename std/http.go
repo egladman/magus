@@ -9,6 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -82,16 +84,18 @@ var HTTP = Module{
 		},
 		{
 			Name: "server",
-			Doc: "Start a static file server for dir in the background and return the bound port. " +
-				"With no port (or 0) it scans upward from 8080 and binds the first available port. " +
-				"Serves localhost only and runs until the process exits, so pair it with a blocking " +
-				"call like fs.watch.",
+			Doc: "Start a static file server in the background from an options map and return the bound port. " +
+				"opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. " +
+				"{\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to " +
+				"the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix " +
+				"is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds " +
+				"that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are " +
+				"rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.",
 			Args: []Arg{
-				{Name: "dir", Type: TypeString},
-				{Name: "port", Type: TypeInt, Optional: true, Default: int(0)},
+				{Name: "opts", Type: TypeAnyMap},
 			},
 			Returns: []Ret{{Type: TypeInt}},
-			Impl:    HTTPServer,
+			Impl:    HTTPServe,
 		},
 	},
 }
@@ -121,29 +125,185 @@ func HTTPRequest(ctx context.Context, method, url, body string, headers map[stri
 	return doRequest(ctx, method, url, body, headers, opts)
 }
 
-// HTTPServer starts a static file server rooted at dir, serving on localhost in a
-// background goroutine, and returns the bound TCP port. A port of 0 (the default
-// when the caller omits it) scans upward from httpServerBasePort and binds the
-// first available port. The server runs until the process exits, so callers pair
-// it with a blocking call such as fs.watch to keep serving.
-func HTTPServer(ctx context.Context, dir string, port int) (int, error) {
+// HTTPServe starts a static file server on localhost in a background goroutine
+// from a validated options bag and returns the bound TCP port. opts is a
+// curl-style map that carries either a single "dir" to serve one directory or a
+// "mounts" prefix->dir map to serve several roots by URL prefix (longest prefix
+// wins), plus an optional "port". The options object is the boundary: an unknown
+// key, a missing or ambiguous dir/mounts choice, or a mistyped value fails loudly
+// here rather than silently defaulting. The server runs until the process exits,
+// so callers pair it with a blocking call such as fs.watch to keep serving.
+func HTTPServe(ctx context.Context, opts map[string]any) (int, error) {
+	dir, mounts, port, err := parseServerOpts(opts)
+	if err != nil {
+		return 0, err
+	}
+
+	var handler http.Handler
+	if mounts != nil {
+		handler = mountsHandler(ctx, mounts)
+	} else {
+		// Resolve dir against the run's working directory (the project dir), the same
+		// way fs/io/os do, since the magusfile runner sets a context cwd instead of
+		// chdir-ing the process.
+		handler = http.FileServer(http.Dir(resolvePath(ctx, dir)))
+	}
+
 	ln, err := httpListen(port)
 	if err != nil {
 		return 0, err
 	}
-	// Resolve dir against the run's working directory (the project dir), the same
-	// way fs/io/os do, since the magusfile runner sets a context cwd instead of
-	// chdir-ing the process.
 	srv := &http.Server{
-		Handler:           http.FileServer(http.Dir(resolvePath(ctx, dir))),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() { _ = srv.Serve(ln) }()
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
-		return 0, fmt.Errorf("http server: unexpected listener address type %T", ln.Addr())
+		return 0, fmt.Errorf("http.server: unexpected listener address type %T", ln.Addr())
 	}
 	return tcpAddr.Port, nil
+}
+
+// serverKnownOpts is the exact set of keys http.server accepts. It is both the
+// allow-list the validator checks against and the "(known: ...)" hint a typo
+// error prints, so the two never drift.
+var serverKnownOpts = []string{"dir", "mounts", "port"}
+
+// parseServerOpts validates the http.server options bag and returns the chosen
+// single-dir root (dir), the prefix->dir mount table (mounts), and the port.
+// Exactly one of dir/mounts is non-empty on success. It rejects unknown keys, a
+// missing or doubled dir/mounts choice, and mistyped values so a typo fails loudly
+// instead of falling through to a default.
+func parseServerOpts(opts map[string]any) (dir string, mounts map[string]string, port int, err error) {
+	var unknown []string
+	for k := range opts {
+		switch k {
+		case "dir", "mounts", "port":
+		default:
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) > 0 {
+		return "", nil, 0, unknownOptsError(unknown)
+	}
+
+	_, hasDir := opts["dir"]
+	_, hasMounts := opts["mounts"]
+	switch {
+	case hasDir && hasMounts:
+		return "", nil, 0, fmt.Errorf(`http.server: give either "dir" or "mounts", not both`)
+	case !hasDir && !hasMounts:
+		return "", nil, 0, fmt.Errorf(`http.server: one of "dir" or "mounts" is required`)
+	}
+
+	if hasDir {
+		s, ok := opts["dir"].(string)
+		if !ok {
+			return "", nil, 0, fmt.Errorf(`http.server: "dir" must be a string, got %T`, opts["dir"])
+		}
+		if s == "" {
+			return "", nil, 0, fmt.Errorf(`http.server: "dir" must not be empty`)
+		}
+		dir = s
+	}
+
+	if hasMounts {
+		raw, ok := opts["mounts"].(map[string]any)
+		if !ok {
+			return "", nil, 0, fmt.Errorf(`http.server: "mounts" must be a map of string to string, got %T`, opts["mounts"])
+		}
+		if len(raw) == 0 {
+			return "", nil, 0, fmt.Errorf(`http.server: "mounts" must not be empty`)
+		}
+		mounts = make(map[string]string, len(raw))
+		for prefix, v := range raw {
+			s, ok := v.(string)
+			if !ok {
+				return "", nil, 0, fmt.Errorf(`http.server: mount %q must map to a string dir, got %T`, prefix, v)
+			}
+			mounts[prefix] = s
+		}
+	}
+
+	if v, ok := opts["port"]; ok {
+		switch n := v.(type) {
+		case int:
+			port = n
+		case int64:
+			port = int(n)
+		default:
+			return "", nil, 0, fmt.Errorf(`http.server: "port" must be an int, got %T`, v)
+		}
+	}
+
+	return dir, mounts, port, nil
+}
+
+// unknownOptsError builds the typo error listing the offending keys (sorted for a
+// deterministic message) alongside the known set.
+func unknownOptsError(unknown []string) error {
+	sort.Strings(unknown)
+	quoted := make([]string, len(unknown))
+	for i, k := range unknown {
+		quoted[i] = strconv.Quote(k)
+	}
+	label := "option"
+	if len(unknown) > 1 {
+		label = "options"
+	}
+	return fmt.Errorf("http.server: unknown %s %s (known: %s)",
+		label, strings.Join(quoted, ", "), strings.Join(serverKnownOpts, ", "))
+}
+
+// mountsHandler builds the multi-root handler for a prefix->dir map. A request
+// routes to the mount with the LONGEST matching prefix, so "/console/" wins over
+// "/" for a /console/... path (mirroring a deploy where the console app shadows a
+// docs redirect stub at /console/), and the matched prefix is stripped before the
+// file lookup. Each dir is resolved against the run's working directory the same
+// way the single-dir path resolves its dir.
+func mountsHandler(ctx context.Context, mounts map[string]string) http.Handler {
+	// A fixed routing table sorted by DESCENDING prefix length: the first prefix
+	// that matches a request path is then the longest one, so a more specific mount
+	// (/console/) shadows a broader one (/).
+	type mount struct {
+		prefix  string
+		handler http.Handler
+	}
+	routes := make([]mount, 0, len(mounts))
+	for prefix, dir := range mounts {
+		fs := http.FileServer(http.Dir(resolvePath(ctx, dir)))
+		// Strip the prefix without its trailing slash so "/console/" strips to "/"
+		// (StripPrefix leaves an empty path otherwise) and "/" strips to nothing.
+		routes = append(routes, mount{
+			prefix:  prefix,
+			handler: http.StripPrefix(strings.TrimSuffix(prefix, "/"), fs),
+		})
+	}
+	sort.Slice(routes, func(i, j int) bool { return len(routes[i].prefix) > len(routes[j].prefix) })
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, rt := range routes {
+			if pathHasPrefix(r.URL.Path, rt.prefix) {
+				rt.handler.ServeHTTP(w, r)
+				return
+			}
+		}
+		http.NotFound(w, r)
+	})
+}
+
+// pathHasPrefix reports whether a request path falls under a mount prefix, treating
+// the prefix as a URL subtree: "/" matches everything, and "/console/" matches the
+// bare "/console" as well as anything under "/console/". Comparing against the
+// trailing-slash-trimmed prefix keeps "/console" from spuriously matching a sibling
+// like "/console-x".
+func pathHasPrefix(path, prefix string) bool {
+	if prefix == "" || prefix == "/" {
+		return true
+	}
+	bare := strings.TrimSuffix(prefix, "/")
+	return path == bare || strings.HasPrefix(path, bare+"/")
 }
 
 // httpServerBasePort is where http.server starts scanning when the caller does

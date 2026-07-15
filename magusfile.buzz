@@ -3,6 +3,7 @@ import "magus";
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
 import "fs";
+import "http";
 import "vcs";
 import "archive";
 import "crypto";
@@ -40,6 +41,8 @@ magus.project({
     "spells": [magusfile, go, buzz, md],
     "targets": {
         "watch": {"skip_cache": true},
+        // serve blocks (a long-running dev-loop server), so it must never cache.
+        "serve": {"skip_cache": true},
         "generate": {"skip_cache": true, "exclusive": true},
         "ci-shard": {"skip_cache": true},
         "postflight": {"skip_cache": true},
@@ -473,4 +476,91 @@ export fun ci_shard(args: [str]) > void {
         if (fs.exists(sp)) { existingSummary = fs.readFile(sp); }
         fs.writeFile(sp, existingSummary + md);
     }
+}
+
+// rebuild_console rebuilds console/gen with the console project's own esbuild build
+// (pnpm run build), installing its deps first on a cold tree. Run from the console/
+// dir so pnpm resolves that project's package.json.
+fun rebuild_console() > void {
+    if (!fs.isDir(fs.join("console", "node_modules"))) {
+        os.exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
+    }
+    os.exec("pnpm", ["run", "build"], "console", {});
+}
+
+// rerender_docs re-renders docs/gen via the docs project's fast `render` target.
+// It shells out to magus rather than calling render.site_render in-process because
+// docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with
+// plain names that resolve relative to the CWD - only inside the docs project dir,
+// never the workspace root - so a sub-invocation (which sets CWD=docs) is the only
+// way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set
+// for magus child processes) and fall back to `magus` on PATH.
+fun rerender_docs() > void {
+    var bin = os.env("MAGUS");
+    if (bin == null or ("" + bin) == "") { bin = "magus"; }
+    os.exec("" + bin, ["run", "render", "docs"], ".", {});
+}
+
+// serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the
+// two committed gen/ trees with the GitHub Pages pathing - "/" serves docs/gen and
+// "/console/" serves console/gen, where the console SPA SHADOWS the docs render's
+// /console/ redirect stub (longest-prefix routing in http.server's mounts mode),
+// exactly like the deploy that assembles docs/gen at the root and console/gen under
+// /console/. It spans both projects, so it lives at the workspace root rather than in
+// either one. On a source change it HOT-REBUILDS the affected project's gen/: a docs
+// or blog edit re-renders docs/gen (the fast docs `render` target, not the heavy
+// drift-gated generate), a console-source edit rebuilds console/gen (pnpm run build).
+// A static file server reads current bytes off disk, so each rebuild is picked up on
+// the next request with no server restart. http.server runs in the background and
+// fs.watch blocks, so the loop stays up until Ctrl-C.
+//
+// This rebuilds docs/console CONTENT, never magus itself - it does NOT trip the
+// self-rebuild anti-pattern CLAUDE.md warns against.
+export fun serve(args: [str]) > void {
+    final DOCS_GEN = "docs/gen";
+    final CONSOLE_GEN = "console/gen";
+    if (!fs.isDir(DOCS_GEN)) { throw "serve: " + DOCS_GEN + " not found - run `magus run build docs` first"; }
+    if (!fs.isDir(CONSOLE_GEN)) { throw "serve: " + CONSOLE_GEN + " not found - run `magus run build console` first"; }
+
+    // No port -> http.server scans from 8080 for the first free one and returns it, so
+    // the printed URL is correct even when 8080 is busy. "/console/" is longer than
+    // "/", so a /console/ request routes (longest-prefix) to the console tree.
+    final port = http.server({"mounts": {"/": DOCS_GEN, "/console/": CONSOLE_GEN}});
+    magus.info("serving the deploy at http://localhost:{port}/");
+    magus.info("  /          -> " + DOCS_GEN + "  (docs)");
+    magus.info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");
+    magus.info("watching docs/ + blog/ (re-render docs) and console/ sources (rebuild console); Ctrl-C to stop");
+
+    // Watch SOURCES only, never the gen/ output trees: fs.watch's built-in ignore
+    // prunes any dir named gen/ or node_modules/, so watching docs/, blog/, and
+    // console/ never observes a rebuild's own writes and so cannot self-retrigger a
+    // rebuild loop. Each try/catch keeps a failed rebuild from ending the watch.
+    fs.watch(["docs", "blog", "console"], fun(changed: [str]) > bool {
+        var docsHit = false;
+        var consoleHit = false;
+        foreach (p in changed) {
+            if (p.startsWith("console/")) {
+                consoleHit = true;
+            } else {
+                docsHit = true; // docs/* or blog/* re-renders the docs site
+            }
+        }
+        if (docsHit) {
+            magus.info("docs/blog change - re-rendering " + DOCS_GEN);
+            try {
+                rerender_docs();
+            } catch (e) {
+                magus.warn("docs render failed, still watching: " + e);
+            }
+        }
+        if (consoleHit) {
+            magus.info("console change - rebuilding " + CONSOLE_GEN);
+            try {
+                rebuild_console();
+            } catch (e) {
+                magus.warn("console build failed, still watching: " + e);
+            }
+        }
+        return false;
+    });
 }

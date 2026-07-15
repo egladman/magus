@@ -13,7 +13,7 @@ import "project/../gopherbuzz" as gopherbuzz;
 // The static site generator, a sibling module; the targets call its entry points.
 import "render";
 
-// magusfile binds this file's own exported targets (generate, serve, ci, ...); ts adds
+// magusfile binds this file's own exported targets (generate, render, ci, ...); ts adds
 // the TypeScript spell so the client bundles under src/ are symbol-capable - its `scip`
 // op indexes them (via tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns
 // the dependency graph; informational) and does not run in this project's ci, which uses
@@ -49,7 +49,10 @@ magus.project({
         // generate renders + gates on drift, so it must run every time (skip_cache) and
         // alone (exclusive), so a peer mutating gen/ can't trip its git-status check.
         "generate": {"skip_cache": true, "exclusive": true},
-        "serve": {"skip_cache": true},
+        // render is the FAST re-render path (site_render only, no MAGUS.md/changelog/
+        // JS-bundle rebuild, no drift gate) the workspace-root `serve` dev loop calls on
+        // a docs change. skip_cache so every invocation actually re-renders gen/.
+        "render": {"skip_cache": true},
         // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
         // wasm binary; skip_cache so a hit never replays a stale one. Run by hand.
         "build-playground": {"skip_cache": true},
@@ -216,24 +219,12 @@ export fun build_hljs(args: [str]) > void {
     magus.info("rebuilt gen/assets/hljs.js - commit the result");
 }
 
-// serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change -
-// handy for local docs work. fs.watch blocks until Ctrl-C; the output lives outside
-// the watched tree, so a render can't retrigger the watch. try/catch keeps a bad
-// render from ending the watch (return false keeps watching).
-export fun serve(args: [str]) > void {
+// render is the fast, single-purpose site render: it runs render.site_render into
+// gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild,
+// no drift gate). The workspace-root `serve` dev loop os.exec's `magus run render
+// docs` on every docs/blog change - running it as its own sub-invocation is what
+// lets render.buzz's flat imports (render_text, render_html, ...) resolve, since
+// they are looked up relative to this project's dir, not the workspace root.
+export fun render(args: [str]) > void {
     render.site_render(ROOT, DOCS, BLOG, OUT);
-    // No port -> http.server scans from 8080 for the first free one and returns it,
-    // so the printed URL is correct even when 8080 is busy.
-    final port = http.server(OUT);
-    magus.info("serving " + OUT + " at http://localhost:{port}");
-    magus.info("watching " + ROOT + "/" + DOCS + " + " + ROOT + "/" + BLOG + " - re-rendering " + OUT + " on change (Ctrl-C to stop)");
-    fs.watch([ROOT + "/" + DOCS, ROOT + "/" + BLOG], fun(changed: [str]) > bool {
-        magus.info("change detected - re-rendering");
-        try {
-            render.site_render(ROOT, DOCS, BLOG, OUT);
-        } catch (e) {
-            magus.warn("render failed, still watching: " + e);
-        }
-        return false;
-    });
 }
