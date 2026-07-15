@@ -12,6 +12,8 @@ The `ts` spell wires a TypeScript project's tooling into a magusfile, forking ea
 
 **Version probe:** `node --version`
 
+**Provides:** `dist/**`
+
 **Opaque:** yes (its outputs are not enumerable, so magus treats the whole workspace as the cache input).
 
 ## Passing arguments to ops
@@ -167,6 +169,50 @@ magus.project({ "spells": [ts] });
 
 export fun typecheck(args: [str]) > void {
     ts["tsc"]();
+}
+```
+
+## tsc-build
+
+tsc-build uses TypeScript's project-references incremental build mode (works even without declared references, via its own .tsbuildinfo cache), emitting per tsconfig outDir - see mgs_listProvidedGlobs.
+
+**Command:** `pnpm exec tsc --build`
+
+### Example
+
+<!-- run-recorder -->
+```buzz
+// tsc-build compiles the project via TypeScript's project-references
+// incremental build mode (pnpm exec tsc --build).
+import "magus";
+import "magus/spell/ts";
+
+magus.project({ "spells": [ts] });
+
+export fun build(args: [str]) > void {
+    ts["tsc-build"]();
+}
+```
+
+## tsc-clean
+
+tsc-clean mirrors tsc-build's project-references mode: --clean removes the declared outputs and the incremental .tsbuildinfo cache.
+
+**Command:** `pnpm exec tsc --build --clean`
+
+### Example
+
+<!-- run-recorder -->
+```buzz
+// tsc-clean removes tsc-build's declared outputs and its incremental
+// .tsbuildinfo cache (pnpm exec tsc --build --clean).
+import "magus";
+import "magus/spell/ts";
+
+magus.project({ "spells": [ts] });
+
+export fun clean(args: [str]) > void {
+    ts["tsc-clean"]();
 }
 ```
 

@@ -324,6 +324,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Name:       "ts",
 		Needs:      []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
 		Claims:     []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
+		Provides:   []string{"dist/**"},
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
 		Language:   "typescript",
@@ -336,7 +337,9 @@ var goldenBuiltins = map[string]Descriptor{
 			"prettier": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 			}}},
-			"tsc": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}}},
+			"tsc":       {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}}},
+			"tsc-build": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build"}}},
+			"tsc-clean": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build", "--clean"}}},
 			"vitest": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]types.Charm{
 				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
 			}}},

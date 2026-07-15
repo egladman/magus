@@ -26,6 +26,10 @@ export fun mgs_listClaimedGlobs() > [str] {
 
 export fun mgs_isOpaque() > bool { return true; }
 
+// Generated output tsc --build writes. Adjust to match your tsconfig's outDir;
+// "dist/**" is the TS convention.
+export fun mgs_listProvidedGlobs() > [str] { return ["dist/**"]; }
+
 export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
@@ -52,6 +56,13 @@ fun prettier(target: Target) > Command {
     }};
 }
 fun tsc(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc"]}; }
+// tsc-build uses TypeScript's project-references incremental build mode (works
+// even without declared references, via its own .tsbuildinfo cache), emitting per
+// tsconfig outDir - see mgs_listProvidedGlobs.
+fun tscBuild(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc", "--build"]}; }
+// tsc-clean mirrors tsc-build's project-references mode: --clean removes the
+// declared outputs and the incremental .tsbuildinfo cache.
+fun tscClean(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc", "--build", "--clean"]}; }
 fun vitest(target: Target) > Command {
     return Command{bin = "pnpm", args = ["exec", "vitest", "run"], charms = {
         "gha": append(["--reporter=github-actions"]),
@@ -67,5 +78,6 @@ fun scip(target: Target) > Command {
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc, "vitest": vitest, "scip": scip};
+    return {"eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc,
+            "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest, "scip": scip};
 }
