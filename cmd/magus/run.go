@@ -55,6 +55,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		graphDepth        *int
 		step              *bool
 		live              *bool
+		noCache           *bool
 
 		noDefaultCharms *bool
 	)
@@ -74,6 +75,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1)")
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
 		live = fs.Bool("live", false, "Print a local log-viewer link and stream this run's output to it live over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
+		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -217,6 +219,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	if *step {
 		runOpts = append(runOpts, magus.WithStep())
+	}
+	if *noCache {
+		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	if rw != nil {
 		runOpts = append(runOpts, magus.WithReport(rw))

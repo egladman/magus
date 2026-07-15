@@ -83,6 +83,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		raceFlag        *string
 		noDefaultCharms *bool
 		live            *bool
+		noCache         *bool
 	)
 	_, err := cmdParse("affected "+target, flagArgs, func(fs *flag.FlagSet) {
 		// affected-only: VCS diff base ref; `magus run` has no diff. See run_affected_parity_test.go.
@@ -101,6 +102,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		raceFlag = fs.String("race", "", raceFormatHelp)
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
 		live = fs.Bool("live", false, "Print a local log-viewer link and stream this run's output to it live over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
+		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus affected %s [flags] [-- <extra args>]\n", target)
 			fmt.Fprintln(os.Stderr, "")
@@ -259,6 +261,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	if *step {
 		runOpts = append(runOpts, magus.WithStep())
+	}
+	if *noCache {
+		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	if rw != nil {
 		runOpts = append(runOpts, magus.WithReport(rw))

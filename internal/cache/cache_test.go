@@ -115,6 +115,44 @@ func TestNoCacheAlwaysRuns(t *testing.T) {
 	assert.Equal(t, 2, calls, "NoCache must run every time")
 }
 
+// TestSkipReplayForcesRerunButStillSnapshots verifies the magus run --no-cache
+// contract: a Step with SkipReplay=true never replays a hit (fn runs every
+// time), but - unlike NoCache - it still snapshots on success, so a later
+// ordinary run (SkipReplay=false) hits the refreshed entry instead of missing
+// or replaying something stale.
+func TestSkipReplayForcesRerunButStillSnapshots(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	step.SkipReplay = true
+
+	calls := 0
+	fn := func(_ context.Context) error {
+		calls++
+		return os.WriteFile(out, []byte("built"), 0o644)
+	}
+
+	r1, err := c.Run(context.Background(), step, fn)
+	require.NoError(t, err, "first Run")
+	require.False(t, r1.Hit, "first Run want miss")
+	require.NotEmpty(t, r1.Hash, "SkipReplay must still snapshot: expected a hash")
+
+	r2, err := c.Run(context.Background(), step, fn)
+	require.NoError(t, err, "second Run (still --no-cache)")
+	require.False(t, r2.Hit, "second Run want miss (SkipReplay must never replay)")
+	assert.Equal(t, 2, calls, "SkipReplay must run every time")
+
+	// Drop SkipReplay: an ordinary run must now hit the entry SkipReplay refreshed.
+	step.SkipReplay = false
+	r3, err := c.Run(context.Background(), step, fn)
+	require.NoError(t, err, "third Run (ordinary)")
+	assert.True(t, r3.Hit, "ordinary run must hit the entry a --no-cache run refreshed")
+	assert.Equal(t, 2, calls, "hit must not call fn again")
+}
+
 // TestModeAutoWritesOnMiss verifies that the default ModeAuto writes
 // a manifest on miss so the next run can hit.
 func TestModeAutoWritesOnMiss(t *testing.T) {

@@ -83,6 +83,7 @@ type Step struct {
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	NoCache         bool     // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay      bool     // when true, never replay a hit (always run fn), but still snapshot on success - a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
 	Exclusive       bool     // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
 	Slots           int      // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	Label           string   // display-only project name for logs (root reads as e.g. "magus", not "."); never hashed
@@ -271,6 +272,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			slog.Any("charms", s.Charms),
 			slog.Int("env_allow", len(s.EnvAllow)),
 			slog.Bool("no_cache", s.NoCache),
+			slog.Bool("skip_replay", s.SkipReplay),
 		)
 	}
 
@@ -293,8 +295,11 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 
 	// NoCache targets (e.g. a long-running fs.watch loop) never consult the cache:
 	// skip the replay path so they always run, and the snapshot below is skipped
-	// too, so a re-run re-executes instead of replaying a stale success.
-	if !s.NoCache {
+	// too, so a re-run re-executes instead of replaying a stale success. SkipReplay
+	// (magus run --no-cache) skips only this read path - the snapshot below still
+	// runs on success, so the forced rebuild refreshes the entry instead of leaving
+	// it stale for the next ordinary run.
+	if !s.NoCache && !s.SkipReplay {
 		manifest, mErr := c.readManifest(s.ProjectPath, hash)
 		fromRemote := false
 		if mErr != nil && c.remote != nil {

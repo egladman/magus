@@ -103,6 +103,45 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 	assert.Equal(t, int32(2), calls.Load(), "--race run: a cached target must still genuinely re-execute")
 }
 
+// TestRun_NoCacheReexecutesAndRefreshesEntry guards the A7 fix: magus run
+// --no-cache (WithNoCache) forces a cached target to re-execute, and - unlike
+// --race - the rebuild refreshes the entry, so a subsequent ordinary run hits
+// the refreshed result instead of missing or replaying something stale.
+func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
+	const spellName = "zzz-no-cache-test-spell"
+	var calls atomic.Int32
+	spell := types.NewSpell(spellName,
+		types.WithTargets("build"),
+		types.WithInvoker(func(context.Context, types.InvokeRequest) (any, error) {
+			calls.Add(1)
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "build"}}
+
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	assert.Equal(t, int32(1), calls.Load(), "first run: expected one real execution")
+
+	require.NoError(t, m.Run(ctx, targets, WithNoCache()), "second run (--no-cache)")
+	assert.Equal(t, int32(2), calls.Load(), "--no-cache run: a cached target must still genuinely re-execute")
+
+	require.NoError(t, m.Run(ctx, targets), "third run (ordinary)")
+	assert.Equal(t, int32(2), calls.Load(), "ordinary run must hit the entry --no-cache refreshed, not re-execute")
+}
+
 func TestDiagCollectorCollects(t *testing.T) {
 	d := &diagCollector{} // nil report writer: RecordDiagnostic must still collect
 	d.RecordDiagnostic(types.DiagnosticEvent{Unit: "a:build", Code: types.ExecDenied})

@@ -116,6 +116,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		fs.Bool("graph", false, "Render the dependency graph for the selected scope instead of executing")
 		fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
 		fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
+		fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry")
 	},
 	Targets: CommonTargets,
 	Examples: []Example{
@@ -123,6 +124,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{"Test one project", "magus run test api/gateway"},
 		{"Build two specific projects", "magus run build api/gateway web/studio"},
 		{"Dry-run: show what would run", "magus run build --dry-run"},
+		{"Force a fresh rebuild past a cache hit", "magus run build --no-cache"},
 		{"Full CI pipeline", "magus run ci"},
 		{"Show dependency graph for build target", "magus run build --graph"},
 		{"Graph in Mermaid format", "magus run build --graph -o mermaid"},

@@ -51,6 +51,7 @@ type run struct {
 	Step              bool     // forces Concurrency=1; StepGate comes from ctx
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
 	Normalizer        types.TargetNameNormalizer
+	NoCache           bool // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
 }
 
 // WithDryRun prints what would run without invoking any handler.
@@ -94,6 +95,12 @@ func WithRace() RunOption { return func(o *run) { o.Race = true } }
 
 // WithRaceReplay enables determinism replay (MGS4003). Compose with WithRace for MGS4001/4002/4004.
 func WithRaceReplay() RunOption { return func(o *run) { o.RaceReplay = true } }
+
+// WithNoCache forces every selected target to run fresh even on a cache hit.
+// Unlike a skip_cache target policy (which never snapshots), a --no-cache run
+// still refreshes the cache entry on success, so a subsequent ordinary run
+// replays the rebuilt result instead of the stale one.
+func WithNoCache() RunOption { return func(o *run) { o.NoCache = true } }
 
 func applyRunOpts(opts []RunOption) run {
 	var o run
@@ -446,6 +453,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			step.Charms = charmKey
 			if raceForcesNoCache(opts) {
 				step.NoCache = true
+			}
+			if opts.NoCache {
+				step.SkipReplay = true
 			}
 			steps = append(steps, step)
 			byPath[p.Path] = p

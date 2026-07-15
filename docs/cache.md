@@ -136,6 +136,11 @@ For targets that must never cache - a long-running `fs.watch` loop, a service op
 the step is marked no-cache: magus skips the replay path so they always run, and
 skips the snapshot so a re-run re-executes instead of replaying a stale success.
 
+For a one-shot forced rebuild of an otherwise-cacheable target, use
+`magus run <target> --no-cache`: it skips the replay path for that run only, but
+still snapshots on success, so the entry is refreshed rather than left stale -
+unlike `skip_cache`, which never snapshots at all.
+
 ## Replay: a hit restores outputs, not execution
 
 On a run, magus computes the key, then looks for a manifest stored under it:
