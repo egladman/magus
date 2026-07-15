@@ -31,7 +31,7 @@ magus.project({
     // codemirror) invalidates the cacheable build-* targets and marks this project
     // affected - the esbuild inputs live in those manifests, not in the src/ entries.
     // (pnpm is the package manager - NOT npm; there is no package-lock.json.)
-    "sources": ["magusfile.buzz", "*.buzz", "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "graph.html", "logs.html",
+    "sources": ["magusfile.buzz", "*.buzz", "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "buf.gen.yaml",
                 // The viewer/console bundles a JS client generated FROM these .proto sources
                 // (website/buf.gen.yaml -> src/gen/), so a schema change reruns codegen + rebuild.
@@ -46,7 +46,7 @@ magus.project({
         // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
         // wasm binary; skip_cache so a hit never replays a stale one. Run by hand.
         "build-playground": {"skip_cache": true},
-        // build-mermaid / build-hljs / build-editor / build-graph-explorer bundle a
+        // build-mermaid / build-hljs / build-editor bundle a
         // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // committed gen/ artifact. esbuild + pinned npm deps are deterministic, so these
         // stay cacheable (no skip_cache): a cache hit replays identical bytes, and a

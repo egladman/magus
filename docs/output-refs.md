@@ -88,7 +88,7 @@ magus query output ref1a2b3c -o json
 
 ## The log viewer
 
-`magus query output ref1a2b3c --open` opens the [log viewer](https://eli.gladman.cc/magus/console/logs/) -
+`magus query output ref1a2b3c --open` opens the [log viewer](https://eli.gladman.cc/magus/console/) -
 a standalone browser page that renders the captured output with collapsible sections,
 status badges, in-page search, ANSI color, and copy. A "Copy command" button hands back
 a `magus query output` one-liner (per section too), so you can pass an exact slice to an agent,

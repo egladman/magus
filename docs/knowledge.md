@@ -46,10 +46,10 @@ magus graph open            # explore it visually in your browser (data stays lo
 ```
 
 Prefer a picture? `magus graph open` launches the interactive [Graph
-Explorer](console/graph.html) seeded with your own workspace - a force-directed, searchable
+Explorer](console/) seeded with your own workspace - a force-directed, searchable
 view of the same graph. Your data never leaves your machine: it rides in the URL
 fragment (or a local loopback server with `--serve`), never reaching the site. This
-site's own graph is the [live demo](console/graph.html).
+site's own graph is the [live demo](console/).
 
 The committed `MAGUS.md` routing table is the entry point: it lists every node
 kind with its count, the query that lists it, and the highest-degree anchor
@@ -133,7 +133,7 @@ or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
 ## Graph Explorer
 
 `magus graph open` opens the graph in an interactive, force-directed
-[Graph Explorer](console/graph.html) in your browser - **privately**. Your graph never
+[Graph Explorer](console/) in your browser - **privately**. Your graph never
 leaves your machine: by default it rides in the link's URL `#fragment` (which
 browsers never send to a server), and `--serve` instead hands it to the page from
 an ephemeral `127.0.0.1` loopback server that serves once and stops. The hosted
@@ -170,7 +170,7 @@ depth), click a legend color to isolate a kind, and use the **hubs**/**orphans**
 lenses (the visual twin of `magus graph stats`). The page is fully client-side and
 data-agnostic - it also loads any `graph.json` from `magus graph export -o json`
 via the Open-file button or drag-and-drop. This site's own graph is the
-[live demo](console/graph.html).
+[live demo](console/).
 
 ## Schema
 

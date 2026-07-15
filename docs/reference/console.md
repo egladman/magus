@@ -1,15 +1,15 @@
 ---
-title: Console
+title: Console API
 description: Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.
 tags: [console, graph, privacy]
-aliases: [browser-bridge]
+aliases: [console, browser-bridge]
 ---
 
-# Console
+# Console API
 
 The console is three frozen, read-only GET routes that the magus daemon
-exposes over loopback so the hosted [Graph Explorer](https://eli.gladman.cc/magus/console/graph/)
-can display your current workspace.
+exposes over loopback so the hosted [console](https://eli.gladman.cc/magus/console/)
+(its Graph Explorer surface) can display your current workspace.
 
 **Nothing in the browser can make the daemon do anything.** The console has no
 write surface, no POST routes, and no way to trigger a build, run a target, or
@@ -232,7 +232,7 @@ that's the HTTP standard, not our promise.
 
 1. Open DevTools (`F12`) -> **Network** tab. Tick **Preserve log**.
 2. Load your graph: run `magus graph open` in your workspace, or drag a
-   `graph.json` onto the [Graph Explorer](https://eli.gladman.cc/magus/console/graph/).
+   `graph.json` onto the [console's Graph Explorer](https://eli.gladman.cc/magus/console/).
 3. Read the request list. Every row is a `GET` for a static file from this
    site's own origin (or, in live mode, your own loopback address). Click any
    row - the **Payload** tab is absent (no request carries a body). Compare
@@ -292,9 +292,10 @@ any asset:
 curl -s <asset-url> | sha256sum
 ```
 
-and compare against the manifest and the repo's committed copy under
-`website/gen/`. The JavaScript is unminified enough to read; start at
-`graph/explorer.js` - `loadGraph` and `readGraphFile` are the functions that
+and compare against the manifest and the repo's committed copy (the docs site
+under `website/gen/`, the console app under `console/gen/`). The JavaScript is
+unminified enough to read; start at the console's `graph/explorer.js` -
+`loadGraph` and `readGraphFile` are the functions that
 ingest a graph (the `#data=`/`#src=`/demo fallback chain, and drag-drop/
 file-input/`launchQueue` respectively), and there is no function that sends
 it out.

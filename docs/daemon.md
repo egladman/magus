@@ -89,7 +89,7 @@ failure - so the two listeners can diverge, which is why `magus status` reports 
 separately.
 
 This page zooms in on the two transports; the HTTP server also carries the agent-facing
-[MCP tools](mcp.md) and the read-only [console routes](console.md) the browser apps use,
+[MCP tools](mcp.md) and the read-only [console routes](reference/console.md) the browser apps use,
 all reading the same warm [knowledge graph](knowledge.md). The full-system view - clients,
 guards, shared state, and the progressive web app - is the architecture diagram in the
 [README](https://github.com/egladman/magus#architecture).

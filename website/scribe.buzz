@@ -484,46 +484,6 @@ object Site {
 `, {"root": root, "picks": picks});
     }
 
-    // consoleRefLinks builds the "Documentation" reference-drawer section for a console app
-    // (dashboard/logs/graph): a short list of the dedicated docs most relevant to that surface,
-    // resolved LIVE from the docs corpus so each link's title and description come from the page's
-    // own frontmatter and never drift. The per-app set is seeded (not tag-ranked) because the docs'
-    // frontmatter tags are too sparse in the console/apps domain to order these reliably - but the
-    // links themselves are looked up from the corpus, not hand-written URLs, so a renamed or
-    // re-described page updates here for free. Returns "" when none of the seeds are in the corpus.
-    // ref-drawer.js relocates this .ref-section into the shared drawer like the apps' own sections.
-    fun consoleRefLinks(app: str, root: str) > str {
-        var seed: [str] = mut [];
-        if (app == "graph") {
-            seed = ["knowledge.md", "agents.md", "console.md", "output-refs.md", "glossary.md", "conventions.md"];
-        } else if (app == "logs") {
-            seed = ["output-refs.md", "console.md", "knowledge.md", "glossary.md", "conventions.md"];
-        } else {
-            // The dashboard is the hub, so it links every console-app doc plus the shared references.
-            seed = ["console.md", "knowledge.md", "agents.md", "output-refs.md", "mcp.md", "glossary.md", "conventions.md"];
-        }
-        var links: [{str: any}] = mut [<{str: any}>];
-        foreach (name in seed) {
-            final srcRel = this.docs + "/" + name;
-            foreach (p in this.docPages) {
-                if (p.srcRel == srcRel) {
-                    links.append(mut {"url": p.url, "title": p.title, "desc": p.desc, "hasDesc": p.desc != ""});
-                    break;
-                }
-            }
-        }
-        if (links.len() == 0) { return ""; }
-        return template.render(`  <details class="ref-section" open>
-    <summary>Documentation</summary>
-    <div class="disclosure-body">
-      <ul class="ref-doclinks">
-{{#links}}        <li><a href="{{root}}{{url}}">{{title}}</a>{{#hasDesc}}<span class="ref-doclink-desc">{{desc}}</span>{{/hasDesc}}</li>
-{{/links}}      </ul>
-    </div>
-  </details>
-`, {"root": root, "links": links});
-    }
-
     // loadMeta populates the commit-metadata fields once, shelling out to git. Pinned
     // to the default branch so deployed links stay stable across feature-branch renders.
     fun loadMeta() > void {
@@ -1378,12 +1338,11 @@ fun writeOffline(site: Site) > void {
     <article>
       <h1>You are offline.</h1>
       <p>This page requires a network connection and is not available offline.</p>
-      <p>These work fully offline (they are cached on your device):</p>
+      <p>This works fully offline (it is cached on your device):</p>
       <ul>
-        <li><a href="{{basePath}}console/graph/">Graph explorer</a> - explore and query your dependency graph</li>
         <li><a href="{{basePath}}playground/">Playground</a> - run Buzz code in the browser</li>
-        <li><a href="{{basePath}}console/logs/">Log viewer</a> - read a target's captured output</li>
       </ul>
+      <p>The <a href="{{basePath}}console/">console</a> is a separate installable app with its own offline cache.</p>
     </article>
   </main>
 {{{footer}}}  <script type="module" src="{{basePath}}main.js"></script>
@@ -1545,7 +1504,7 @@ final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.
 //     CORS-enabled address (e.g. a raw GitHub link): a third-party #src= now
 //     fails at the browser CSP layer rather than being fetched. Both loaders
 //     already handle a fetch failure gracefully (a status message, not a
-//     crash) - see docs/console.md's "Verify it yourself" section.
+//     crash) - see docs/reference/console.md's "Verify our claims" section.
 //   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, or
 //     <iframe> anywhere on the site.
 //   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
@@ -1611,15 +1570,11 @@ fun writeManifest(site: Site) > void {
         + "    \{ \"src\": \"" + basePath + "assets/icon-512-maskable.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"maskable\" \}\n"
         + "  ],\n"
         + "  \"shortcuts\": [\n"
-        + "    \{ \"name\": \"Graph\", \"url\": \"" + basePath + "console/graph/\" \},\n"
-        + "    \{ \"name\": \"Dashboard\", \"url\": \"" + basePath + "console/dashboard/\" \},\n"
+        + "    \{ \"name\": \"Console\", \"url\": \"" + basePath + "console/\" \},\n"
         + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
         + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
         + "  ],\n"
-        + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \},\n"
-        + "  \"file_handlers\": [\n"
-        + "    \{ \"action\": \"" + basePath + "console/graph/\", \"accept\": \{ \"application/json\": [\".json\"] \} \}\n"
-        + "  ]\n"
+        + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
         + "\}\n";
     fs.writeFile(site.outDir + "/manifest.webmanifest", body);
 }
@@ -2028,14 +1983,13 @@ fun renderSiteNav(root: str, active: str, withRef: bool) > str {
     links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
     links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
     links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
-    links.append({"href": root + "console/dashboard/", "label": "Console", "current": active == "dashboard"});
-    // The console (its dashboard) is the single public entry point to magus's browser apps:
-    // the dashboard's connect screen carries the launchers (plus a demo), so Graph and Logs
-    // are reached from there - and via `magus graph open` - rather than getting their own
-    // top-nav items. The nav item lands on console/dashboard/ directly; /console/ itself is
-    // the console API docs page (docs/console.md), left in place. Playground stays a distinct
-    // link above because it is a standalone in-browser Buzz runner (no daemon) that the tour
-    // deep-links into, not a daemon app.
+    links.append({"href": root + "console/", "label": "Console", "current": active == "console"});
+    // The console SPA (a separate top-level project, copied to /console/ at deploy) is the single
+    // public entry point to magus's browser apps: it hosts the dashboard, graph explorer, log viewer,
+    // and activity trail as tabs, so none of them get their own top-nav item. The docs site no longer
+    // renders anything at /console/ - the app owns it. The loopback-API reference doc lives under
+    // /reference/console/. Playground stays a distinct link above because it is a standalone in-browser
+    // Buzz runner (no daemon) that the tour deep-links into, not a daemon app.
     return template.render(tmpl, {"root": root, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
 }
 
@@ -2106,98 +2060,27 @@ fun renderSiteFooter(root: str, site: Site) > str {
     // Two clusters spread across the footer's width: this site's own surfaces on
     // the left, the project/external links on the right. Dots separate items within
     // a cluster; the clusters divide the row without adding a second line on desktop.
-    // The middle cluster's app entry is the Dashboard (the single entry point to the
-    // browser apps, matching the header) - Graph and Logs are reached from there.
+    // The middle cluster's app entry is the Console (the single entry point to the browser
+    // apps, matching the header) - the dashboard, graph, logs, and activity are its tabs.
     // Backtick raw string holds the Mustache verbatim (a double-quoted "{{x}}" would
     // collide with Buzz's own {expr} interpolation).
     final tmpl = `  <footer class="site-footer container">
     <small class="footer-group"><a href="{{root}}search/">Search</a> &middot; <a href="{{root}}public/">Files</a></small>
-    <small class="footer-group"><a href="{{root}}console/dashboard/">Dashboard</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
+    <small class="footer-group"><a href="{{root}}console/">Console</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
     return template.render(tmpl, {"root": root, "gh": GH, "branch": site.metaBranch});
 }
 
-// renderConsoleShell renders the shared "console app" top bar: the hat home link, the
-// Google-waffle app launcher (icon tiles for the sibling surfaces), and the settings gear
-// (renderSettingsPanel(true): the theme select plus the console-only refresh/host prefs).
-// It is the app-facing counterpart to renderSiteNav - the daemon apps (/dashboard/,
-// /logs/, /graph/) wear this instead of the docs nav, so they read as one native app
-// switcher. `app` is the current surface's key ("dashboard" | "logs" | "graph"); the
-// launcher omits that surface (you are on it) and always trails Playground + Documentation.
-// The markup and classes mirror dashboard.html's inline app bar and are styled by
-// console.css; nav.js (bundled into every app) drives the dropdown. root is the relative
-// prefix back to gen/'s root, matching renderSiteNav. A backtick raw string holds the
-// Mustache verbatim; {{{icon}}} injects each tile's inner SVG unescaped.
-fun renderConsoleShell(app: str, root: str, refExtra: str) > str {
-    final tmpl = `  <header class="site-header console-bar">
-    <nav class="container-fluid">
-      <ul><li><a href="{{root}}index.html" class="contrast" title="Return to the magus site" aria-label="magus home"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="41" height="30" alt=""></picture></a></li><li><h1 class="console-app-title">{{title}}</h1></li><li><span id="console-demo" class="status-tag console-demo-tag" hidden aria-live="polite">Demo data</span></li></ul>
-      <div class="nav-right">
-        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
-        <span class="nav-divider" aria-hidden="true"></span>
-        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="console-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
-        <ul class="nav-links app-grid" id="console-nav-links">
-          <li class="nav-menu-label" aria-hidden="true">Console</li>
-{{#cells}}          <li class="app-cell">{{#current}}<span class="app-cell-current" aria-current="page"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></span>{{/current}}{{^current}}<a href="{{href}}" id="{{id}}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{{icon}}}</svg><span>{{label}}</span></a>{{/current}}</li>
-{{/cells}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
-        </ul>
-{{{settings}}}
-      </div>
-    </nav>
-  </header>
-{{{refExtra}}}  <div class="ref-backdrop" id="ref-backdrop"></div>
-  <aside class="ref-drawer" id="ref-drawer" data-relocate-search="true" aria-hidden="true" aria-label="Reference">
-    <div class="ref-drawer-head">
-      <div class="ref-drawer-head-l">
-        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
-        <h2 class="ref-drawer-title">Reference</h2>
-      </div>
-      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
-    </div>
-  </aside>
-  <footer class="console-statusbar" aria-label="Status">
-    <div class="statusbar-cluster" id="console-statusbar-left">
-      <span id="console-conn" class="status-item conn" aria-live="polite">not connected</span>
-    </div>
-    <div class="statusbar-cluster statusbar-right">
-      <span id="console-count" class="status-item status-observing" hidden aria-live="polite"></span>
-      <span id="console-observing" class="status-item status-observing" hidden></span>
-      <span id="offline-badge" class="status-item status-tag status-offline" hidden aria-live="polite">offline</span>
-    </div>
-  </footer>
-`;
-    // Inner SVG paths per app tile (the <svg> wrapper is in the template). Backtick raw
-    // strings so the double-quoted attributes need no escaping.
-    final iconDashboard = `<rect x="3" y="4" width="18" height="14" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="13" x2="9" y2="18"/>`;
-    final iconLogs = `<rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>`;
-    final iconGraph = `<circle cx="6" cy="7" r="2.3"/><circle cx="18" cy="6" r="2.3"/><circle cx="12" cy="18" r="2.3"/><line x1="8" y1="8" x2="11" y2="16"/><line x1="16" y1="7.5" x2="13" y2="16"/><line x1="8" y1="7" x2="16" y2="6.5"/>`;
-    // Documentation is a globe (it links OUT to the web docs), distinct from the Reference
-    // trigger's book (the in-app reference drawer) so the two are not confused.
-    final iconDocs = `<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>`;
-
-    // Every app is ALWAYS listed, in a fixed order, so the launcher tiles never shift position
-    // between surfaces. The current app stays in place but renders as a non-interactive, muted
-    // "you are here" marker (current == true -> a <span>, not a link) instead of being dropped -
-    // the menu always reads as fully populated and nothing jumps. Each link carries a stable id
-    // (menu-<app>) so a page's script can repoint it at runtime; the dashboard's main.ts rewrites
-    // menu-logs/menu-graph to the live daemon (or the demo). The current cell is a span with no
-    // id/href, so those scripts (guarded by getElementById null checks) simply skip it.
-    final cells = mut [<{str: any}>];
-    cells.append({"href": root + "console/dashboard/", "icon": iconDashboard, "label": "Dashboard", "id": "menu-dashboard", "current": app == "dashboard"});
-    cells.append({"href": root + "console/logs/", "icon": iconLogs, "label": "Log viewer", "id": "menu-logs", "current": app == "logs"});
-    cells.append({"href": root + "console/graph/", "icon": iconGraph, "label": "Graph explorer", "id": "menu-graph", "current": app == "graph"});
-    // Playground is NOT a console app - it is part of the documentation site (standalone WASM, no
-    // daemon), so the console launcher lists only the daemon apps plus a link out to the docs.
-    cells.append({"href": root + "documentation/", "icon": iconDocs, "label": "Documentation", "id": "menu-docs", "current": false});
-    // The app's own name sits in the bar next to the hat (native title-bar pattern), so the
-    // page body no longer repeats it as an <h1> + lede.
-    var title = "Console";
-    if (app == "logs") { title = "Log Viewer"; }
-    if (app == "graph") { title = "Graph Explorer"; }
-    if (app == "dashboard") { title = "Dashboard"; }
-    return template.render(tmpl, {"root": root, "cells": cells, "title": title, "refExtra": refExtra, "settings": renderSettingsPanel(true)});
+// lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
+// "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
+// renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
+fun lookupTitle(url: str, site: Site) > str {
+    foreach (p in site.docPages) {
+        if (p.url == url) { return p.title; }
+    }
+    return "";
 }
 
 // renderAnnouncementBar renders a dismissible top strip announcing the newest shipped
@@ -2246,100 +2129,6 @@ fun renderPlayground(site: Site) > void {
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/" + outDir);
     fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
-}
-
-// renderGraph writes gen/graph/index.html from the hand-authored graph.html, injecting
-// the shared nav/footer - the graph-explorer analog of renderPlayground. The d3-force
-// bundle (gen/graph/explorer.js) is committed and rebuilt out of band by
-// build-graph-explorer, never by this render; graph.json is the committed demo graph
-// (the magus repo's own knowledge graph). Both sit alongside index.html and are left
-// untouched here (and by pruneStaleOutputs' alwaysKeep set), exactly like the
-// playground's WASM/editor bundle.
-fun renderGraph(site: Site) > void {
-    final f = io.File.open("graph.html", io.FileMode.read);
-    var html = f.readAll();
-    f.close();
-    final outDir = "console/graph";
-    final root = climbFromDir(outDir);
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("graph", root, site.consoleRefLinks("graph", root)));
-    // The default (non-home) CSP meta - site.csp, not site.cspHome. The graph
-    // page holds the reader's own dependency graph, so it gets the tighter
-    // img-src (no external hosts), same as playground; see renderPlayground's
-    // comment above.
-    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/" + outDir);
-    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
-}
-
-// renderLogs writes gen/logs/index.html from the hand-authored logs.html - the log
-// viewer, a standalone tool page like the graph explorer and playground. It injects
-// the shared nav/footer and the default CSP (the page holds the reader's own captured
-// output, so it gets the tighter img-src, and it has no inline scripts). The page's
-// stylesheet (gen/logs/logs.css) and viewer module (gen/logs/log-viewer.js) are built
-// alongside the other assets in site_render and preserved by pruneStaleOutputs.
-fun renderLogs(site: Site) > void {
-    final f = io.File.open("logs.html", io.FileMode.read);
-    var html = f.readAll();
-    f.close();
-    final outDir = "console/logs";
-    final root = climbFromDir(outDir);
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("logs", root, site.consoleRefLinks("logs", root)));
-    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/" + outDir);
-    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
-}
-
-// renderDashboard writes gen/dashboard/index.html from the hand-authored dashboard.html -
-// magus's control surface. Like the log viewer and graph explorer it wears the shared console
-// shell (renderConsoleShell: app bar + waffle launcher + reference drawer) rather than the
-// docs site nav/footer, so the three read as one native app; it is deliberately absent from the
-// public nav/footer (reachable by direct URL or as an installed PWA shortcut). renderDashboard
-// injects that shell and the default CSP (no inline scripts; the default connect-src already
-// allows loopback for the daemon-bridge status stream). Its stylesheet (gen/dashboard/dashboard.css)
-// and module (gen/dashboard/dashboard.js) are built in site_render and preserved by pruneStaleOutputs.
-fun renderDashboard(site: Site) > void {
-    final f = io.File.open("dashboard.html", io.FileMode.read);
-    var html = f.readAll();
-    f.close();
-    // The dashboard wears the SAME shared console shell as the log viewer and graph explorer
-    // (app bar + waffle launcher + reference drawer), injected at its <!-- console-shell -->
-    // placeholder - one source of truth for all three surfaces. Its own bottom status bar and
-    // the connect/panels body stay in dashboard.html.
-    final outDir = "console/dashboard";
-    final root = climbFromDir(outDir);
-    html = html.replace("<!-- console-shell -->", renderConsoleShell("dashboard", root, site.consoleRefLinks("dashboard", root)));
-    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/" + outDir);
-    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
-}
-
-// renderConsole writes gen/console/index.html from the hand-authored console.html - the native console
-// SPA that hosts the log viewer, graph explorer, dashboard, and activity trail as tabs and tiling
-// panes. UNLIKE the standalone console pages it wears NO renderConsoleShell: console.js builds its own
-// title bar, tab strip, and per-tab status bar. This render only fills the top-right settings panel
-// (the same renderSettingsPanel every surface wears) and the default CSP; console.js and every surface
-// bundle are external modules, so the page has no inline scripts. The console.js bundle and the surface
-// bundles are built by generateJsBundles and preserved by pruneStaleOutputs; console.html hard-codes
-// its ../ asset paths (it renders one level under gen/), so no root prefix is injected here.
-fun renderConsole(site: Site) > void {
-    final f = io.File.open("console.html", io.FileMode.read);
-    var html = f.readAll();
-    f.close();
-    final outDir = "console";
-    html = html.replace("<!-- settings -->", renderSettingsPanel(true));
-    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/" + outDir);
-    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
-}
-
-// lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
-// "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
-// renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
-fun lookupTitle(url: str, site: Site) > str {
-    foreach (p in site.docPages) {
-        if (p.url == url) { return p.title; }
-    }
-    return "";
 }
 
 
@@ -3392,23 +3181,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // docs corpus can load only this and drop console.css. Gen-root, precached like the others.
     os.execute(["sh", "-c", "esbuild src/styles/ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
     os.execute(["sh", "-c", "esbuild src/styles/theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
-    // graph.css / logs.css / dashboard.css: each console app's page-scoped stylesheet (rules
-    // load only on that one page, not site-wide). Built HERE only - the pnpm build-<app> scripts
-    // used to re-minify these three into the same paths (a second, identical build), which is now
-    // dropped; pnpm bundles just the JS modules. `serve` re-renders CSS via this path, no pnpm run.
-    fs.makeDirectory(site.outDir + "/console/graph");
-    os.execute(["sh", "-c", "esbuild src/console/graph/graph.css --minify --outfile=" + site.outDir + "/console/graph/graph.css"]);
-    // logs.css: the /logs/ Log Viewer's page-scoped stylesheet (no imports; single-file
-    // minify). Its module src/console/logs/log-viewer.js now imports the @bufbuild/protobuf client, so it
-    // is bundled by `pnpm run build-log-viewer` (generateJsBundles) like the graph explorer,
-    // not here.
-    fs.makeDirectory(site.outDir + "/console/logs");
-    os.execute(["sh", "-c", "esbuild src/console/logs/logs.css --minify --outfile=" + site.outDir + "/console/logs/logs.css"]);
-    // dashboard.css: the /dashboard/ control surface's page-scoped stylesheet (no imports;
-    // single-file minify). Its module src/console/dashboard/main.ts imports the @bufbuild/protobuf status
-    // client, so it is bundled by `pnpm run build-dashboard` (generateJsBundles), not here.
-    fs.makeDirectory(site.outDir + "/console/dashboard");
-    os.execute(["sh", "-c", "esbuild src/console/dashboard/dashboard.css --minify --outfile=" + site.outDir + "/console/dashboard/dashboard.css"]);
+    // The console surfaces (graph/logs/dashboard/activity) and their page-scoped CSS moved to the
+    // standalone top-level console/ project (its own build, deployed to /console/). The docs site no
+    // longer renders or bundles any of them.
     os.execute(["sh", "-c", "esbuild src/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild src/site/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
@@ -3420,16 +3195,12 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // gets wiped on every generate (see the comment above fs.makeDirectory(site.outDir)),
     // so there is no external source copy to merge in; pruneStaleOutputs() also knows
     // to leave these three paths alone (see its alwaysKeep set).
-    // Gather every docs page's relatedness metadata BEFORE any page renders, so both the console
-    // apps' "Documentation" reference sections (consoleRefLinks) and each docs page's "Related"
-    // cards (renderRelated) can resolve titles/URLs against the full corpus. collectDocPages only
-    // reads frontmatter, so it is free of the render state below.
+    // Gather every docs page's relatedness metadata BEFORE any page renders, so each docs page's
+    // "Related" cards (renderRelated) can resolve titles/URLs against the full corpus. collectDocPages
+    // only reads frontmatter, so it is free of the render state below.
     site.collectDocPages("");
 
     renderPlayground(site);
-    renderGraph(site);
-    renderLogs(site);
-    renderDashboard(site);
 
     // Load release manifests from releases/*.yaml BEFORE the walk so renderPage()
     // knows whether the releases Atom feed will be written and can gate its
@@ -3450,13 +3221,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // Emit a redirect stub per declared frontmatter alias (after the walk, so every
     // real page URL is known for the collision guard). Aliases stay out of the
     // search index/sitemap/feeds — only the real page they point to appears there.
+    // The console API-reference page (docs/reference/console.md) aliases the old /console/ URL, so a
+    // redirect stub lands at gen/console/index.html here - that keeps the docs site's internal links
+    // to /console/ resolving for the asset-integrity gate. The console SPA is a SEPARATE project,
+    // copied over gen/console/ at deploy (see .github/workflows/pages.yaml), so the app wins there.
     site.writeAliases();
-
-    // renderConsole runs LATE - after the docs walk and the alias stubs - so the console SPA is the
-    // LAST writer of gen/console/index.html and definitively owns /console/. A pre-`/console/`-move
-    // artifact (an old docs landing at that path) or a future alias could otherwise re-emit that file
-    // after an earlier renderConsole and clobber the SPA; writing it here means the app wins regardless.
-    renderConsole(site);
 
     writeSEOFiles(site);
     renderBlogAtom(site);
@@ -3630,11 +3399,9 @@ fun pruneStaleOutputs(site: Site) > void {
         "search/index.html": true,
         "playground/index.html": true, "playground/buzz.wasm": true,
         "playground/wasm_exec.js": true, "playground/editor.js": true,
-        "console/graph/index.html": true, "console/graph/explorer.js": true, "console/graph/graph.json": true,
-        "console/graph/graph.css": true,
-        "console/logs/index.html": true, "console/logs/log-viewer.js": true, "console/logs/logs.css": true,
-        "console/dashboard/index.html": true, "console/dashboard/dashboard.js": true, "console/dashboard/dashboard.css": true,
-        "console/index.html": true, "console/console.js": true, "console/activity/activity.js": true,
+        // /console/ is owned by the standalone console/ project (copied in at deploy). The docs render
+        // only emits a redirect stub there via the reference/console alias, which writeAliases already
+        // registers in writtenPaths, so it needs no alwaysKeep entry.
     };
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);
@@ -3655,7 +3422,7 @@ fun pruneStaleOutputs(site: Site) > void {
 // writeSiteManifest emits gen/site-manifest.sha256: one "<sha256>  <path>\n"
 // line (standard sha256sum(1) format, so `sha256sum -c` or a spot-check
 // `curl -s <asset-url> | sha256sum` verifies it directly - see
-// docs/console.md's "Verify it yourself" section) per file actually
+// docs/reference/console.md's "Verify our claims" section) per file actually
 // shipped under gen/, repo-relative, sorted. Reuses fileSha256 - the same
 // per-file digest writeServiceWorker already computes for its cache-version
 // stamp, just surfaced for every asset instead of folded into one internal
