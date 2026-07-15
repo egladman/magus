@@ -9,6 +9,7 @@
 
 import { closeTab, setActive, type Workspace } from "./tabs";
 import type { Persisted } from "../../lib/persist";
+import { bind, scope } from "../view";
 
 // A tab as the strip renders it: identity, label, and whether it is the active surface.
 export interface TabView {
@@ -33,6 +34,7 @@ export interface TabStripCallbacks {
 export interface TabStrip {
   readonly el: HTMLElement;
   refresh(): void; // re-render from the current workspace (e.g. after the shell opens a tab)
+  destroy(): void; // drop the workspace subscription
 }
 
 // closeIcon returns a small X, matching the console's inline-SVG icon convention (avoids a
@@ -114,8 +116,10 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
     strip.append(add);
   }
 
-  // Re-render when the workspace changes elsewhere (cross-tab, or the shell opening a surface).
-  ws.subscribe(render);
-  render();
-  return { el: strip, refresh: render };
+  // bind(ws, render) renders once now AND on every workspace change - the persisted cell already IS
+  // a Signal (get/set/subscribe), so the view layer drives it directly. scope collects the
+  // subscription so destroy() drops it cleanly (the reference use of the console/view primitives).
+  const sc = scope();
+  sc.add(bind(ws, render));
+  return { el: strip, refresh: render, destroy: () => sc.dispose() };
 }

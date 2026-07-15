@@ -126,11 +126,6 @@ export class Card {
 }
 
 // A tiny DOM helper: create an element with a class and optional text.
-export function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K, className?: string, text?: string,
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text != null) e.textContent = text;
-  return e;
-}
+// h now lives in the shared console view layer; re-exported here so the tiles that import it from
+// ./card keep working unchanged.
+export { h } from "../../view";
