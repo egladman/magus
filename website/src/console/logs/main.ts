@@ -66,6 +66,38 @@ function clickControl(id: string): void {
   if (btn && !btn.disabled) btn.click();
 }
 
+// makeSegToggle turns a plain toggle button into a two-state segmented control: one fixed-width
+// pill with a solid thumb that slides to sit over the active side, so it reads as a single switch
+// and flipping never resizes the toolbar (the relabeling button did). The button stays a single
+// toggle - a click flips state, and its aria-pressed (true => second option) slides the thumb via
+// CSS - so every existing handler, disabled-state, and the keybinding keep working unchanged. The
+// two segments are forced to equal width so the 50%-wide thumb lands under either label, whatever
+// their lengths ("Log" vs "Timeline").
+function makeSegToggle(id: string, first: string, second: string): void {
+  const btn = el(id);
+  if (!btn) return;
+  btn.classList.add("seg-toggle");
+  btn.classList.remove("outline");
+  // An inner track span carries all the visuals - the button itself is left bare (Pico's button
+  // states can't bleed a color through an opaque span). thumb is first so the labels are its
+  // nth-child(2)/nth-child(3) siblings.
+  const track = document.createElement("span");
+  track.className = "seg-track";
+  const thumb = document.createElement("span");
+  thumb.className = "seg-thumb";
+  thumb.setAttribute("aria-hidden", "true");
+  const a = document.createElement("span");
+  a.className = "seg-opt";
+  a.textContent = first;
+  const b = document.createElement("span");
+  b.className = "seg-opt";
+  b.textContent = second;
+  track.append(thumb, a, b);
+  btn.replaceChildren(track);
+  const w = Math.ceil(Math.max(a.getBoundingClientRect().width, b.getBoundingClientRect().width));
+  a.style.width = b.style.width = w + "px";
+}
+
 function wireCommands(): void {
   registerCommand({ id: "logs.filter", label: "Focus filter", group: "Log viewer", run: () => { const f = el("log-filter") || el("log-search"); if (f) f.focus(); } });
   registerCommand({ id: "logs.raw", label: "Toggle raw / pretty", group: "Log viewer", run: () => clickControl("view-toggle") });
@@ -228,13 +260,18 @@ function wireControls(): void {
     graphBtn.addEventListener("click", openInGraph);
   }
 
+  // The two mode switches become segmented sliders (both states shown, fixed width) instead of
+  // relabeling buttons that resized the toolbar on every flip. They stay toggle buttons - a click
+  // flips them and aria-pressed drives the thumb - so the handlers and keybindings are unchanged.
+  makeSegToggle("view-toggle", "Pretty", "Raw");   // aria-pressed=true => Raw
+  makeSegToggle("timeline-btn", "Log", "Timeline"); // aria-pressed=true => Timeline
+
   // Pretty <-> raw toggle. Raw shows the exact captured text (flat, no folds/badges);
   // pretty is the stylized structural view. Re-renders and clears any active search.
   const viewBtn = el("view-toggle");
   if (viewBtn) {
     viewBtn.addEventListener("click", () => {
       state.pretty = !state.pretty;
-      setBtnLabel(viewBtn, state.pretty ? "Raw" : "Pretty");
       viewBtn.setAttribute("aria-pressed", state.pretty ? "false" : "true");
       const searchEl = el("log-search");
       if (searchEl) (searchEl as HTMLInputElement).value = "";

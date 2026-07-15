@@ -96,6 +96,44 @@ main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
   display: inline-flex; align-items: center; justify-content: center; gap: 0.32rem;
 }
 .file-bar .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+/* Segmented two-state switch (Pretty|Raw, Log|Timeline): a recessed track with a raised thumb
+   that slides over the active side - the standard depth for this control (inset track, lifted
+   thumb), even though the rest of the console is flat. Built by makeSegToggle() in main.ts, which
+   equalizes the two segment widths so the 50%-wide thumb aligns under either label.
+
+   The <button> is ONLY the interactive/disabled shell - trying to skin the button itself is a
+   losing fight with Pico's button states (they set background-color directly to a translucent
+   primary, which no variable override beats). So the button is stripped bare and an inner
+   .seg-track span - which Pico never themes - carries every visual, opaque so no button state can
+   bleed through. aria-pressed on the button (true => second option) slides the thumb. */
+.file-bar button.seg-toggle {
+  padding: 0; border: 0; min-height: 0; background: transparent; box-shadow: none; overflow: visible;
+}
+.file-bar .seg-toggle .seg-track {
+  position: relative; display: inline-flex; align-items: stretch; padding: 2px; gap: 0;
+  border-radius: var(--pico-border-radius); overflow: hidden;
+  background: var(--pico-card-sectioning-background-color);   /* recessed track: distinct from the white panel */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.09);            /* depressed - the track reads sunken */
+}
+/* Both labels use the SAME muted color + normal weight as every other toolbar control - the
+   raised thumb is what marks the active side, not any change to the text (no bold, no darkening). */
+.file-bar .seg-toggle .seg-opt {
+  position: relative; z-index: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 1.5rem; padding: 0 0.5rem;
+  color: var(--pico-muted-color); font-weight: 400; white-space: nowrap;
+}
+.file-bar .seg-toggle .seg-thumb {
+  position: absolute; z-index: 0; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px);
+  border-radius: calc(var(--pico-border-radius) - 1px);
+  background: var(--pico-card-background-color);              /* raised thumb, lifted off the track */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition: transform 0.16s ease;
+}
+.file-bar .seg-toggle[aria-pressed="true"] .seg-thumb { transform: translateX(100%); }
+.file-bar .seg-toggle:disabled { opacity: 0.5; }
+.file-bar .seg-toggle:focus-visible { outline: none; }
+.file-bar .seg-toggle:focus-visible .seg-track { outline: 2px solid var(--pico-primary); outline-offset: 1px; }
 /* Disabled controls gray out in place rather than disappearing, so the toolbar never
    reflows as buttons become (in)applicable (e.g. Raw is disabled in waterfall mode, not
    hidden). */

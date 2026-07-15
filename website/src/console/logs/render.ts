@@ -6,7 +6,7 @@
 // the GitHub-style #L line-range highlight, and the Timeline toolbar control's enable/label sync.
 
 import { state } from "./state";
-import { bodyEl, copyToClipboard, el, setBtnLabel } from "./dom";
+import { bodyEl, copyToClipboard, el } from "./dom";
 import { statusToken, stripAnsi } from "../render/ansi";
 import { renderContent, renderLine as renderSectionLine, toggleSection } from "../render/sections";
 import { matchAllTexts, matchGroup, sectionMeta } from "./filter";
@@ -244,10 +244,8 @@ export function updateTimelineControl(): void {
   // Fall back to the log view when the loaded log has no timing (a text/pasted log). During
   // the #demo reveal the first frame may briefly precede any target span, so keep the mode on.
   if (!ok && state.timeline && !state.demoActive) state.timeline = false;
-  if (tlBtn) {
-    setBtnLabel(tlBtn, state.timeline ? "Log" : "Timeline");
-    tlBtn.setAttribute("aria-pressed", state.timeline ? "true" : "false");
-  }
+  // aria-pressed drives the segmented slider's active side (true => Timeline); no text relabel.
+  if (tlBtn) tlBtn.setAttribute("aria-pressed", state.timeline ? "true" : "false");
   // The pretty/raw toggle is meaningless in the waterfall; hide it while timeline is on.
   const viewBtn = el("view-toggle");
   if (viewBtn) (viewBtn as HTMLButtonElement).disabled = state.timeline;
