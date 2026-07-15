@@ -80,20 +80,22 @@ cannot pull in the whole graph.
 Recipes for the graph as a lens on the workspace. Rebuild first with `magus graph
 build` if you want it fresh; combine field filters freely.
 
-**What commands does the workspace actually run?** magus owns the task layer, so it
-knows the concrete tool invocations behind every target - not just the source.
+**What programs does the workspace actually run?** magus owns the task layer, so it
+knows the concrete tool behind every operation - not just the source.
 
 ```sh
-magus query "kind:command"                # every concrete command a target runs
-magus query "kind:tool"                   # every tool the workspace runs (go, esbuild, buf, ...)
-magus explain "tool:go"                   # everywhere go is used - its commands AND spells
-magus query "kind:command language:go"    # commands the go toolchain runs
+magus query "kind:tool"                    # the workspace's toolchain (go, buf, docker, ...)
+magus explain "tool:go"                    # every op and spell that runs go
+magus explain "op:go:go-test"              # an op's base argv (the `argv` attr) and its tool
+magus path "target:.:test" "tool:go"       # a target reaches its tool via target->op->tool
 ```
 
-Command nodes are extracted from each target's evaluated dispatch plan, so they carry
-the real argv (on the `argv` attr). A `tool:<tool>` node (its own kind - the program,
-not an invocation) is `use`d by every command that runs it and by the spell that
-contributes them, so `explain tool:go` shows everywhere the workspace runs go.
+Each spell op carries the base argv it runs on an `argv` attr (rendered with empty
+charms) and `use`s the `tool:<program>` node for its argv[0] - the program, its own kind
+because it is an entity, not an operation. The op's spell `use`s the tool too, so
+`explain tool:go` lists every op and spell that runs go; a target reaches the tool
+through its existing `target --uses--> op` edge. (There is no per-target command node:
+its argv was always identical to the op's, so the op carries the model.)
 
 **Where does a function or symbol live (as `path:line`), and where is it used?**
 

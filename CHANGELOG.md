@@ -8,11 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- Knowledge graph gains build and runtime dimensions: a `command` node per concrete
-  argv a target runs (grouped by a `tool` node - the program that both commands and
-  spells `use`), test `coverage` with a `test_refs` count folded onto file and symbol
-  nodes from the coverage profile magus already produces, and `magus refs` now returns
-  the definition's `file:line`. Query recipes: [docs/knowledge.md](docs/knowledge.md).
+- Knowledge graph gains build and runtime dimensions: each spell op now carries the
+  base argv it runs (an `argv` attr) and `use`s a `tool` node for the program it runs,
+  so `explain tool:go` lists every op that runs go and `kind:tool` is the workspace's
+  toolchain inventory - a target reaches its tool via its existing `target --uses--> op`
+  edge. Plus test `coverage` with a `test_refs` count folded onto file and symbol nodes
+  from the coverage profile magus already produces, and `magus refs` now returns the
+  definition's `file:line`. Query recipes: [docs/knowledge.md](docs/knowledge.md).
 - `daemon.enabled` (flag `--daemon-enabled`, env `MAGUS_DAEMON_ENABLED`, default true):
   set false to run each invocation self-contained in its own per-process pool instead
   of discovering and adopting the shared `magus server start` daemon - handy for a

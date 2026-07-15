@@ -7,10 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestCommandID pins the command node ID format: "command:<project>:<target>:<spell>",
-// mirroring targetID/opID. The rendered argv is never part of the ID (it rides an attr),
-// so identity stays stable across argv edits.
-func TestCommandID(t *testing.T) {
-	assert.Equal(t, "command:pkg/a:build:go", commandID("pkg/a", "build", "go"))
-	assert.Equal(t, types.KindCommand+":.:lint:md", commandID(".", "lint", "md"))
+// TestToolID pins the tool node ID format: "tool:<program>", the workspace-scoped node
+// an op (and its spell) uses for the program it runs.
+func TestToolID(t *testing.T) {
+	assert.Equal(t, "tool:go", toolID("go"))
+	assert.Equal(t, types.KindTool+":sh", toolID("sh"))
 }

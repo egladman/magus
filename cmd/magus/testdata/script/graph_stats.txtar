@@ -15,10 +15,13 @@ stdout '"node_count"'
 exec magus graph stats --kind spell -o json
 stdout '"kind": "spell"'
 
-# acme's lint target uses acme, so the acme spell is NOT an orphan; but built-in
-# spells this workspace never uses are (a real "registered but unused" signal).
+# A spell the workspace DECLARES but no target runs is a genuine orphan (dead weight):
+# acme's lint target uses acme (not flagged), while the declared "chore" spell has an op
+# no target invokes (flagged). A built-in spell the workspace never declares is merely
+# available, not an orphan - the "declared" qualifier keeps that noise out.
 exec magus graph stats -o json
-stdout '"reason": "no target uses it"'
+stdout '"reason": "declared but no target uses it"'
+stdout '"label": "chore"'
 
 # the removed lens points at the new home
 ! exec magus insight structure
@@ -29,7 +32,8 @@ concurrency: 4
 -- magusfile.buzz --
 import "magus";
 import "spells/acme" as acme;
-magus.project({ "spells": [acme] });
+import "spells/chore" as chore;
+magus.project({ "spells": [acme, chore] });
 export fun lint(args: [str]) > void { acme.lint(); }
 -- spells/acme/spell.buzz --
 import "magus/target";
@@ -38,3 +42,10 @@ fun lint(target: Target) > Command {
     return Command{bin = "acme", args = ["lint", "."]};
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
+-- spells/chore/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "chore"; }
+fun sweep(target: Target) > Command {
+    return Command{bin = "chore", args = ["sweep"]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"sweep": sweep}; }

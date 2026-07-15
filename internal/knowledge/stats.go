@@ -72,13 +72,29 @@ func (g *Graph) orphanNodes(kind string) []types.KnowledgeOrphan {
 				orphans = append(orphans, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "no doc links to it and it documents nothing"})
 			}
 		case types.KindSpell:
-			if !g.spellUsed(id) {
-				orphans = append(orphans, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "no target uses it"})
+			// Only a spell the workspace DECLARES and that PROVIDES ops is an orphan
+			// candidate: an undeclared builtin is merely available (unused here is normal),
+			// and a spell with no ops (a structural dispatch spell like the magusfile spell)
+			// provides nothing to use. A declared op-provider nothing runs is genuinely dead.
+			if n.Attrs[AttrDeclared] == "true" && g.spellProvidesOps(id) && !g.spellUsed(id) {
+				orphans = append(orphans, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "declared but no target uses it"})
 			}
 		}
 	}
 	slices.SortFunc(orphans, func(a, b types.KnowledgeOrphan) int { return cmp.Compare(a.ID, b.ID) })
 	return orphans
+}
+
+// spellProvidesOps reports whether the spell contributes any op node. A spell with none
+// (a structural dispatch spell like the magusfile spell, which turns magusfile functions
+// into targets) provides nothing a target could invoke, so it is never an orphan.
+func (g *Graph) spellProvidesOps(spellID string) bool {
+	for _, e := range g.out[spellID] {
+		if e.Relation == types.RelationContains {
+			return true
+		}
+	}
+	return false
 }
 
 // spellUsed reports whether any target uses one of the spell's ops

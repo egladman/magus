@@ -55,33 +55,39 @@ func TestResolveByKind(t *testing.T) {
 	assert.Equal(t, []string{"spell:go"}, ids)
 }
 
-// TestQueryAndExplainCommand: kind:command resolves the command node, and explaining it
-// shows the incoming target->command contains edge (the target that owns the command).
-func TestQueryAndExplainCommand(t *testing.T) {
+// TestQueryAndExplainTool: kind:tool resolves the tool node, and explaining it shows the
+// incoming op->tool and spell->tool uses edges (everything that runs the program).
+func TestQueryAndExplainTool(t *testing.T) {
 	in := sampleInputs()
-	in.Commands = []types.KnowledgeCommand{
-		{Project: "pkg/a", Target: "build", Spell: "go", Command: []string{"go", "build", "./..."}},
+	in.Spells.Spells[0].OpCommands = map[string][]string{
+		"go-build": {"go", "build", "./..."},
 	}
 	g := mergeAll(AssembleShards(in))
 
-	// kind:command resolves ONLY the concrete command now; the tool is its own kind.
-	ids := matchIDs(g.Resolve("kind:command", 0))
-	assert.ElementsMatch(t, []string{"command:pkg/a:build:go"}, ids)
-	// The tool is a separate kind:tool node, used by the command and its spell.
+	// The op carries the argv; the tool is its own kind.
 	assert.ElementsMatch(t, []string{"tool:go"}, matchIDs(g.Resolve("kind:tool", 0)))
-
-	out, ok := g.Explain("command:pkg/a:build:go")
+	op, ok := g.Explain("op:go:go-build")
 	require.True(t, ok)
-	assert.Equal(t, types.KindCommand, out.Node.Kind)
-	assert.Equal(t, "go build ./...", out.Node.Attrs[AttrArgv])
+	assert.Equal(t, "go build ./...", op.Node.Attrs[AttrArgv], "the op carries the base argv")
 
-	contained := false
+	out, ok := g.Explain("tool:go")
+	require.True(t, ok)
+	assert.Equal(t, types.KindTool, out.Node.Kind)
+
+	var fromOp, fromSpell bool
 	for _, e := range out.In {
-		if e.Relation == types.RelationContains && e.Other == "target:pkg/a:build" {
-			contained = true
+		if e.Relation != types.RelationUses {
+			continue
+		}
+		switch e.Other {
+		case "op:go:go-build":
+			fromOp = true
+		case "spell:go":
+			fromSpell = true
 		}
 	}
-	assert.True(t, contained, "explain shows the target->command contains edge")
+	assert.True(t, fromOp, "explain tool shows the op->tool uses edge")
+	assert.True(t, fromSpell, "explain tool shows the spell->tool uses edge")
 }
 
 func TestResolveByTerm(t *testing.T) {

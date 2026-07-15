@@ -11,10 +11,12 @@ package types
 // External consumers - agent skills, MCP tools, other tools reading the node-link
 // JSON - check it; a bump is a changelog event. Increment when the node/edge shape
 // or ID scheme changes in a way that would break a consumer that parsed the old form.
-// v2 adds the "command" kind: one node per concrete command a target would run.
-// v3 adds the "tool" kind: the program (argv[0]) a command runs; commands and spells
-// `use` a tool, so it is distinct from a command (an invocation), not a coarse command.
-const KnowledgeSchemaVersion = 3
+// v2 added a "command" kind; v3 a "tool" kind coupled to it. v4 retires "command"
+// (its rendered argv was always identical to the op's static base command, so it was
+// a redundant copy of the op) and moves the model onto the op: an op carries an `argv`
+// attr and `uses` the tool (argv[0]) it runs, so `explain tool:go` reaches every op
+// that runs go and a target reaches its tool via target->op->tool. v2/v3 were unreleased.
+const KnowledgeSchemaVersion = 4
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".
@@ -28,23 +30,26 @@ const KnowledgeGraphDefinition = "The knowledge graph is a deterministic, " +
 // Knowledge node kinds. The universe is the magus domain, not general source code.
 // Values are stable wire strings and the <kind> segment of a node ID.
 const (
-	KindProject    = "project"
-	KindTarget     = "target"
-	KindSpell      = "spell"
-	KindOp         = "op"
-	KindCommand    = "command" // one concrete command a target's spell would run
-	KindTool       = "tool"    // the program a command runs (argv[0]); commands and spells `use` it
-	KindCharm      = "charm"
-	KindModule     = "module"
-	KindMethod     = "method"
+	KindProject = "project"
+	KindTarget  = "target"
+	KindSpell   = "spell"
+	KindOp      = "op"
+	KindTool    = "tool" // the program an op runs (argv[0]); ops and spells `use` it
+	KindCharm   = "charm"
+	KindModule  = "module"
+	// method, function, and symbol are all "a callable definition", kept distinct by
+	// PROVENANCE (which layer produced them), not by an accident of naming: a method is
+	// bound to a host module, a function is authored in Buzz, a symbol comes from SCIP.
+	// They never overlap (SCIP does not index .buzz), so a definition lands in exactly one.
+	KindMethod     = "method" // a callable bound to a host module (fs.stat) - magus's built-in API surface
 	KindDiagnostic = "diagnostic"
 	KindDoc        = "doc"       // markdown doc page (phase 4)
 	KindFile       = "file"      // a .buzz source file (phase 4)
-	KindFunction   = "function"  // a function in a .buzz file (phase 4)
+	KindFunction   = "function"  // a callable defined in a .buzz source file (Buzz-authored)
 	KindImport     = "import"    // an unresolvable buzz import literal (phase 4)
 	KindRationale  = "rationale" // a NOTE/WHY/HACK/TODO comment (phase 4)
 	KindOwner      = "owner"     // a CODEOWNERS owner (@user, @org/team, email)
-	KindSymbol     = "symbol"    // a code symbol ingested from a SCIP index
+	KindSymbol     = "symbol"    // a definition ingested from a SCIP index (compiled-language source, e.g. Go)
 )
 
 // Knowledge edge relations. Values are stable wire strings.
@@ -98,21 +103,6 @@ type KnowledgeOutputRef struct {
 	Target  string
 	Ref     string
 	OK      bool
-}
-
-// KnowledgeCommand is one concrete command a target's spell would run, distilled from
-// the fully-evaluated dispatch plan (see DescribeTarget's EvaluatedSpellEntry.Command).
-// Like KnowledgeTiming it is an assembly input, not a wire type: Project and Target name
-// the owning target node, Spell names the spell that contributes the command, and Command
-// is the rendered argv (element 0 is the tool). Deterministic (static argv, no charms), so
-// the command node rides its project's shard, not the isolated @runtime one. Command is
-// EMPTY for a function-op (its argv is not statically knowable); the extractor skips those,
-// so a function-op target mints no command node.
-type KnowledgeCommand struct {
-	Project string
-	Target  string
-	Spell   string
-	Command []string
 }
 
 // KnowledgeVCS is one file's git history metadata (an assembly input, not a wire type),

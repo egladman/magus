@@ -23,18 +23,10 @@ func spellID(name string) string { return types.KindSpell + ":" + name }
 
 func opID(spell, op string) string { return types.KindOp + ":" + spell + ":" + op }
 
-// commandID keys a command node by its owning target and the spell that contributes
-// it: one node per (project, target, spell). The rendered argv is a node attr, never
-// part of the ID, so a target's command node keeps a stable identity across argv edits
-// (a changed flag re-attributes the same node rather than orphaning the old one).
-func commandID(projectPath, target, spell string) string {
-	return types.KindCommand + ":" + projectPath + ":" + target + ":" + spell
-}
-
-// toolID keys the workspace-scoped node for a tool - the program a command runs
-// (argv[0] basename) - shared by every command and spell that runs it, so `explain
-// tool:go` lists everywhere go is used. A tool is an ENTITY (the program), distinct
-// from a command (an invocation of it), hence its own kind rather than a command node.
+// toolID keys the workspace-scoped node for a tool - the program an op runs (argv[0]
+// basename) - shared by every op and spell that runs it, so `explain tool:go` lists
+// every op that runs go. A tool is an ENTITY (the program), distinct from an op (the
+// operation that runs it), hence its own kind.
 func toolID(tool string) string { return types.KindTool + ":" + tool }
 
 func moduleID(name string) string { return types.KindModule + ":" + name }
@@ -119,12 +111,16 @@ const (
 	AttrTitle = "title"
 	// AttrTags is a doc page's frontmatter tags, comma-joined.
 	AttrTags = "tags"
-	// AttrArgv is a command node's rendered argv, space-joined - the concrete command
-	// line a target's spell would run. It rides an attr, never the node ID, so a changed
-	// flag re-attributes the same node instead of orphaning it.
+	// AttrArgv is an op node's base argv, space-joined - the command line the op runs
+	// with an empty charm set. It rides an attr, so a target reaches "what it runs" via
+	// target->op without a second describe. Absent for a function-op (no static argv).
 	AttrArgv = "argv"
-	// AttrTool is a command node's tool - argv element 0, the executable the command runs.
+	// AttrTool is an op node's tool - argv element 0, the executable the op runs.
 	AttrTool = "tool"
+	// AttrDeclared marks a spell node a workspace project declares in its `spells:` list
+	// (value "true"), distinct from a compiled-in builtin that is merely available. The
+	// orphan lens flags only declared-but-unused spells as dead.
+	AttrDeclared = "declared"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are

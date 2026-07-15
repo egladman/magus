@@ -25,6 +25,12 @@ type SpellEntry struct {
 	// exists. Populated only for workspace-local Buzz spells (built-in docs are
 	// not serialized in bytecode).
 	TargetDocs map[string]string `json:"target_docs,omitempty" yaml:"target_docs,omitempty"`
+	// OpCommands maps an op (target) name to the base argv it runs, rendered with
+	// an empty charm set (element 0 is the tool). Present only for ops that declare
+	// a static command; a function-op (whose argv is computed by executing its Buzz
+	// body) has no entry. It lets the knowledge graph link an op to the tool it runs
+	// without re-rendering, so `explain tool:go` reaches every op that runs go.
+	OpCommands map[string][]string `json:"op_commands,omitempty" yaml:"op_commands,omitempty"`
 }
 
 // SpellsOutput is the top-level result for "describe spells".

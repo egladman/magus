@@ -314,61 +314,61 @@ func TestRuntimeOutputRefMergesOntoTarget(t *testing.T) {
 	assert.Equal(t, "buzz", build.Attrs[AttrEngine], "static engine attr survives the ref merge")
 }
 
-// TestAssembleCommands: an evaluated command with argv mints one command node (argv,
-// tool, and the spell's language on attrs) plus its target->command contains edge, a
-// command->spell uses edge, a command->tool uses edge, and the spell->tool edge; a
-// function-op entry with an empty Command is skipped; and two commands sharing a tool
-// link to a SINGLE tool node.
-func TestAssembleCommands(t *testing.T) {
+// TestAssembleOpTools: an op with a static base command carries argv + tool attrs and a
+// uses edge to the tool it runs (argv[0] basename); its spell uses that tool too, deduped
+// to a single edge; a function-op (no OpCommands entry) carries no argv and links to no
+// tool; and two ops sharing a tool link to a SINGLE tool node. Model B: what a target runs
+// is reached via target->op->tool, not a per-target command node.
+func TestAssembleOpTools(t *testing.T) {
 	in := sampleInputs()
 	in.Spells.Spells[0].Language = "go" // the "go" spell declares a language
-	in.Commands = []types.KnowledgeCommand{
-		{Project: "pkg/a", Target: "build", Spell: "go", Command: []string{"/usr/bin/go", "build", "./..."}},
-		{Project: "pkg/a", Target: "gen", Spell: "go", Command: []string{"go", "generate", "./..."}}, // same tool -> shared base
-		{Project: "pkg/a", Target: "gen", Spell: "buzzfn", Command: nil},                             // function-op -> skipped
+	in.Spells.Spells[0].Targets = []string{"go-build", "go-test", "noop"}
+	in.Spells.Spells[0].OpCommands = map[string][]string{
+		"go-build": {"/usr/bin/go", "build", "./..."},
+		"go-test":  {"go", "test", "./..."}, // same tool -> shared tool node
+		// "noop" has no entry: a function-op, no static argv, no tool edge.
 	}
 	out := mergeAll(AssembleShards(in)).Output()
 
-	cmdID := "command:pkg/a:build:go"
-	n, ok := nodeByID(out, cmdID)
-	require.True(t, ok, "the argv-bearing command mints a node")
-	assert.Equal(t, types.KindCommand, n.Kind)
-	assert.Equal(t, "/usr/bin/go", n.Label, "label is argv[0]")
-	assert.Equal(t, "/usr/bin/go build ./...", n.Attrs[AttrArgv], "full argv on the attr, never the ID")
-	assert.Equal(t, "/usr/bin/go", n.Attrs[AttrTool])
-	assert.Equal(t, "go", n.Attrs["language"], "command inherits its spell's language")
-	assert.Equal(t, "pkg/a", n.Source)
+	opID := "op:go:go-build"
+	n, ok := nodeByID(out, opID)
+	require.True(t, ok, "the op node exists")
+	assert.Equal(t, types.KindOp, n.Kind)
+	assert.Equal(t, "/usr/bin/go build ./...", n.Attrs[AttrArgv], "the op carries its base argv")
+	assert.Equal(t, "go", n.Attrs[AttrTool], "the op's tool is argv[0]'s basename")
 
-	assert.True(t, hasEdge(out, "target:pkg/a:build", cmdID, types.RelationContains), "target contains command")
-	assert.True(t, hasEdge(out, cmdID, "spell:go", types.RelationUses), "command uses its spell")
-
-	// The function-op entry mints nothing.
-	_, ok = nodeByID(out, "command:pkg/a:gen:buzzfn")
-	assert.False(t, ok, "function-op (empty Command) mints no command node")
-
-	// Two concrete command nodes, plus exactly one tool node for the shared tool.
+	// Exactly one tool node for the shared tool, workspace-scoped.
 	tID := "tool:go"
 	toolNode, ok := nodeByID(out, tID)
 	require.True(t, ok, "the tool node exists")
-	assert.Equal(t, types.KindTool, toolNode.Kind, "the tool grouping is its own kind, not a command")
+	assert.Equal(t, types.KindTool, toolNode.Kind, "a program is its own kind")
 	assert.Equal(t, "go", toolNode.Label, "tool label is the basename (filepath.Base)")
 	assert.Empty(t, toolNode.Source, "the tool node is workspace-scoped, not project-owned")
-	assert.True(t, hasEdge(out, cmdID, tID, types.RelationUses), "build command uses the tool")
-	assert.True(t, hasEdge(out, "command:pkg/a:gen:go", tID, types.RelationUses), "gen command uses the SAME tool")
-	// The spell contributing the commands also uses the tool - the spell<->tool link.
+
+	assert.True(t, hasEdge(out, opID, tID, types.RelationUses), "go-build op uses the go tool")
+	assert.True(t, hasEdge(out, "op:go:go-test", tID, types.RelationUses), "go-test op uses the SAME tool")
+	// The spell that owns the ops uses the tool too - the spell<->tool link, deduped.
 	assert.True(t, hasEdge(out, "spell:go", tID, types.RelationUses), "the go spell uses the go tool")
 
-	var concrete, tools int
+	// The function-op carries no argv and links to no tool.
+	noop, ok := nodeByID(out, "op:go:noop")
+	require.True(t, ok, "the function-op still mints an op node")
+	assert.Empty(t, noop.Attrs[AttrArgv], "a function-op has no static argv")
+	assert.False(t, hasEdge(out, "op:go:noop", tID, types.RelationUses), "a function-op links to no tool")
+
+	var tools, spellToolEdges int
 	for _, node := range out.Nodes {
-		switch {
-		case node.ID == tID:
+		if node.ID == tID {
 			tools++
-		case node.Kind == types.KindCommand:
-			concrete++
 		}
 	}
-	assert.Equal(t, 2, concrete, "two concrete command nodes")
+	for _, e := range out.Links {
+		if e.Source == "spell:go" && e.Target == tID && e.Relation == types.RelationUses {
+			spellToolEdges++
+		}
+	}
 	assert.Equal(t, 1, tools, "exactly one tool node for the shared tool")
+	assert.Equal(t, 1, spellToolEdges, "the spell->tool edge is deduped to one despite two ops")
 }
 
 func TestIsRuntimeShard(t *testing.T) {

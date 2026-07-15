@@ -143,6 +143,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 	cacheDir := resolveCacheDir(root, cfg)
 	spells := ws.DescribeSpells()
 	graph := ws.DescribeGraph()
+	projects := ws.DescribeProjects()
 	in := knowledge.Inputs{
 		Graph:       graph,
 		Spells:      spells,
@@ -154,11 +155,11 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		OutputRefs:  loadKnowledgeOutputRefs(cacheDir),
 		Symbols: loadKnowledgeSymbols(symbolIngestInputs{
 			cfg: cfg, root: root, cacheDir: cacheDir,
-			projects: ws.DescribeProjects(), spells: spells, log: log,
+			projects: projects, spells: spells, log: log,
 		}),
-		VCS:      loadKnowledgeVCS(ctx, cfg, root, cacheDir, log),
-		Commands: loadKnowledgeCommands(ws, graph, log),
-		Coverage: loadKnowledgeCoverage(root),
+		VCS:            loadKnowledgeVCS(ctx, cfg, root, cacheDir, log),
+		DeclaredSpells: declaredSpellSet(projects),
+		Coverage:       loadKnowledgeCoverage(root),
 	}
 	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
@@ -229,6 +230,23 @@ func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 	return knowledge.ParseCoverage(profile, module)
 }
 
+// declaredSpellSet is the union of every project's declared `spells:` list - the spells
+// this workspace opts into, as opposed to the compiled-in builtins that are merely
+// available. It tags spell nodes so the orphan lens flags only a declared-but-unused
+// spell (genuinely dead) and never a builtin no project here declares. Nil when empty.
+func declaredSpellSet(projects types.ProjectsOutput) map[string]bool {
+	set := map[string]bool{}
+	for _, p := range projects.Projects {
+		for _, name := range p.Spells {
+			set[name] = true
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	return set
+}
+
 // loadKnowledgeOutputRefs reads the local output store (best-effort) for each target's
 // most recent captured-output reference, so the @runtime shard can fold last_output_ref
 // and last_run_ok onto the target node. The forecast timing history is cache-safety-locked
@@ -249,46 +267,6 @@ func loadKnowledgeOutputRefs(cacheDir string) []types.KnowledgeOutputRef {
 			Ref:     d.Ref,
 			OK:      !d.Failed,
 		})
-	}
-	return out
-}
-
-// loadKnowledgeCommands distills the concrete command each target's spell would run from
-// the fully-evaluated dispatch plan (DescribeTarget), so the graph can mint one command
-// node per target:spell. It evaluates every target in the static graph with EMPTY charms -
-// the plan is the default command line, not a charm preview. A target that fails to
-// evaluate is skipped, never fatal: command nodes are enrichment, so one broken target must
-// not sink the whole build. Function-op spells render no static argv (empty Command); they
-// mint no node, and their count is logged. Simple and linear - it runs on warm-graph rebuild.
-func loadKnowledgeCommands(ws types.Describer, graph types.TargetGraphOutput, log *slog.Logger) []types.KnowledgeCommand {
-	var out []types.KnowledgeCommand
-	skipped := 0
-	for _, p := range graph.Projects {
-		for _, n := range p.Nodes {
-			eval, err := ws.DescribeTarget(types.Target{Path: p.Path, Name: n.Name})
-			if err != nil {
-				log.Debug("knowledge: skipping target that failed to evaluate for command nodes",
-					slog.String("project", p.Path), slog.String("target", n.Name), slog.String("error", err.Error()))
-				continue
-			}
-			for _, e := range eval.Targets {
-				for _, se := range e.Spells {
-					if len(se.Command) == 0 {
-						skipped++ // function-op (or no-op): no static argv, so no command node
-						continue
-					}
-					out = append(out, types.KnowledgeCommand{
-						Project: e.Project,
-						Target:  e.Target,
-						Spell:   se.Name,
-						Command: se.Command,
-					})
-				}
-			}
-		}
-	}
-	if skipped > 0 {
-		log.Debug("knowledge: function-op spells contribute no command node", slog.Int("count", skipped))
 	}
 	return out
 }

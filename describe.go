@@ -24,12 +24,22 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 	entries := make([]types.SpellEntry, 0, len(all))
 	for _, p := range all {
 		var docs map[string]string
+		var opCommands map[string][]string
 		for _, t := range p.Targets() {
 			if d := p.TargetDoc(t); d != "" {
 				if docs == nil {
 					docs = map[string]string{}
 				}
 				docs[t] = d
+			}
+			// Render the op's base command (empty charms). ok is false for a function-op
+			// (no static renderer), which simply contributes no entry - exactly the ops
+			// whose argv is not statically knowable.
+			if cmd, args, ok, err := p.RenderCommand(t, nil); ok && err == nil && cmd != "" {
+				if opCommands == nil {
+					opCommands = map[string][]string{}
+				}
+				opCommands[t] = append([]string{cmd}, args...)
 			}
 		}
 		entries = append(entries, types.SpellEntry{
@@ -41,6 +51,7 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 			Opaque:     p.Opaque(),
 			Language:   p.Language(),
 			TargetDocs: docs,
+			OpCommands: opCommands,
 		})
 	}
 	slices.SortFunc(entries, func(a, b types.SpellEntry) int {
