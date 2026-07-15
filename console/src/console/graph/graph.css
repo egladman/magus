@@ -1,21 +1,33 @@
-/* graph.css - styles for the /graph/ Graph Explorer page (linked from graph.html;
-   esbuild-minified into gen/graph/graph.css, like site.css). Kept out of the inline
-   <style> and off the JS: colors are data-driven via kind CLASSES, not element
-   style attributes. */
+/* graph.css - page-scoped styles for the console Graph Explorer surface.
+ *
+ * PatternFly (W3): the CHROME migrated to PatternFly - the stage toolbar (Fit / Open file /
+ * Copy as Mermaid / Fullscreen / Legend) is PF Buttons, and the cold "nothing loaded" screen is a
+ * PF EmptyState (mirroring logs/dashboard). The d3 force-graph STAGE itself (the canvas nodes/edges,
+ * the force sim, drag/zoom, the mermaid path) is custom rendering PatternFly has no component for -
+ * it is KEPT, with its color reads repointed from the old Pico/--c palette to the console's
+ * PF-native tokens (--console-* / --pf-t--* directly, theme-aware in light and dark). The node-kind
+ * fills come from the --console-node-<kind> categorical palette (tokens.css), aliased below to the
+ * --gk-<kind> names main.ts reads at paint time.
+ *
+ * The sidebar query prompt (term-prompt idiom), the node cloud, the reference disclosures, the color-
+ * group/preset controls, the legend, and the explain card have no clean PF component (they are dense
+ * bespoke chrome or JS-built innerHTML), so - per the class-vs-ID convention - they stay ID/data- and
+ * bespoke-class scoped, repointed to tokens. pico.min.css is still loaded until W4, so the anti-Pico-
+ * button-inversion mechanism (--node-fg + color resets) is KEPT for the bare custom <button>s. */
 
 :root {
   --pad: clamp(0.75rem, 2vw, 1.25rem);
 }
 
-/* --node-fg carries the PAGE text color (correct per theme). The custom
-   text-buttons read it because Pico pins --pico-color to a fixed inverse INSIDE a
-   <button> (invisible in one theme), and its button color rule out-specifies a
-   plain class; a var inherited from this non-button element dodges both, and the
-   id/container-scoped rule below outranks Pico. */
+/* --node-fg carries the PAGE text color (correct per theme). The custom text-buttons read it because
+   Pico (still loaded until W4) pins --pico-color to a fixed inverse INSIDE a <button> (invisible in
+   one theme), and its button color rule out-specifies a plain class; a var inherited from this non-
+   button element dodges both, and the id/container-scoped rule below outranks Pico. Sourced from the
+   PF text token so it stays correct once Pico is gone. */
 main.container-fluid {
-  max-width: var(--content-wide);
+  max-width: var(--content-wide, 78rem);
   margin-inline: auto;
-  --node-fg: var(--pico-color);
+  --node-fg: var(--pf-t--global--text--color--regular);
 }
 #node-list .node-pill,
 #list-toggle,
@@ -25,46 +37,33 @@ main.container-fluid {
   color: var(--node-fg);
 }
 .lede {
-  color: var(--pico-muted-color);
+  color: var(--pf-t--global--text--color--subtle);
   margin: 0 0 0.5rem;
 }
 
-/* Node-kind palette. Categorical hues chosen to stay distinct on both Pico themes.
-   The canvas reads each --gk-<kind> at paint time (like js/mermaid.js reads Pico's
-   own variables), so a theme toggle re-tints the graph; the sidebar/legend dots use
-   the .k-<kind> classes below, so no element carries an inline style. */
-/* `symbol` is the SCIP code-symbol kind from `magus refs` (knowledge.go:42).
-   Color: orange-600 (light) / orange-400 (dark). Chosen distinct from import
-   (amber-600/amber-400) and charm (pink); orange sits between them on the
-   spectrum and is visually unambiguous against all other palette entries. */
+/* Node-kind palette. The canvas reads each --gk-<kind> at paint time (readTheme via
+   getComputedStyle), and the sidebar/legend dots read them through the .k-<kind>
+   classes below, so no element carries an inline style. The actual colors live ONCE
+   in tokens.css as the --console-node-<kind> set, mapped onto PatternFly's theme-aware
+   "nonstatus" data-viz families; the alias block below keeps main.ts's --gk-<kind>
+   contract intact while sourcing those PF tokens - so a theme toggle re-tints the
+   graph with no per-theme CSS here (the old two-theme --gk blocks are gone). */
 :root {
-  --gk-project: #0a7ea4; --gk-spell: #8b5cf6; --gk-op: #a855f7; --gk-charm: #ec4899;
-  --gk-target: #2563eb; --gk-module: #059669; --gk-method: #10b981; --gk-import: #d97706;
-  --gk-function: #6366f1; --gk-file: #0d9488; --gk-doc: #0891b2; --gk-rationale: #ca8a04;
-  --gk-diagnostic: #dc2626; --gk-symbol: #ea580c;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
-    --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
-    --gk-function: #818cf8; --gk-file: #2dd4bf; --gk-doc: #22d3ee; --gk-rationale: #facc15;
-    --gk-diagnostic: #f87171; --gk-symbol: #fb923c;
-  }
-}
-[data-theme="dark"] {
-  --gk-project: #38bdf8; --gk-spell: #a78bfa; --gk-op: #c084fc; --gk-charm: #f472b6;
-  --gk-target: #60a5fa; --gk-module: #34d399; --gk-method: #6ee7b7; --gk-import: #fbbf24;
-  --gk-function: #818cf8; --gk-file: #2dd4bf; --gk-doc: #22d3ee; --gk-rationale: #facc15;
-  --gk-diagnostic: #f87171; --gk-symbol: #fb923c;
+  --gk-project: var(--console-node-project); --gk-spell: var(--console-node-spell);
+  --gk-op: var(--console-node-op); --gk-charm: var(--console-node-charm);
+  --gk-target: var(--console-node-target); --gk-module: var(--console-node-module);
+  --gk-method: var(--console-node-method); --gk-import: var(--console-node-import);
+  --gk-function: var(--console-node-function); --gk-file: var(--console-node-file);
+  --gk-doc: var(--console-node-doc); --gk-rationale: var(--console-node-rationale);
+  --gk-diagnostic: var(--console-node-diagnostic); --gk-symbol: var(--console-node-symbol);
 }
 
 .pg-title { margin-bottom: 0.6rem; }
-.pg-note { margin: 0 0 var(--pad); font-size: 0.85rem; color: var(--pico-muted-color); }
+.pg-note { margin: 0 0 var(--pad); font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
 .pg-note code { font-size: 0.85em; }
 
 /* One app panel: a sidebar (search + node list), the canvas stage, and an explain
-   card that appears on selection. Pico's stock palette; regions set apart by
-   borders, not custom color. */
+   card that appears on selection. Regions are set apart by borders, not custom color. */
 .graph-app {
   display: grid;
   grid-template-columns: 18rem 1fr;
@@ -73,11 +72,10 @@ main.container-fluid {
   /* Same height as the log viewer's .panel (logs.css) so the two app panes match. */
   height: calc(100svh - 12.5rem);
   min-height: 420px;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
   overflow: hidden;
-  background: var(--pico-card-background-color);
-  box-shadow: var(--pico-card-box-shadow);
+  background: var(--pf-t--global--background--color--primary--default);
 }
 /* When an explain card is present the app becomes three columns (.has-card is
    toggled by the explorer on selection). */
@@ -85,17 +83,17 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
 
 .graph-sidebar {
   display: flex; flex-direction: column; min-height: 0;
-  border-right: 1px solid var(--pico-muted-border-color);
-  background: var(--pico-card-sectioning-background-color);
+  border-right: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
 }
 /* A quiet filter, not a headline search: the site search field's look (left
    magnifier, angular radius) but small and muted - the canvas is the main event. */
-.sidebar-search { padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pico-muted-border-color); }
+.sidebar-search { padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
 #node-search {
   margin: 0; width: 100%; height: auto;
   font-size: 0.78rem; line-height: 1.4;
   padding: 0.25rem 0.5rem 0.25rem 1.7rem;
-  border-radius: var(--pico-border-radius);
+  border-radius: var(--pf-t--global--border--radius--small);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238891a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: 0.5rem center; background-size: 0.85rem 0.85rem;
 }
@@ -106,17 +104,17 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
   display: flex; align-items: center; justify-content: flex-start; gap: 0.35rem;
   padding: 0.4rem 0.6rem; font-size: 0.72rem; line-height: 1.3;
   background: transparent;
-  border: 0; border-bottom: 1px solid var(--pico-muted-border-color); border-radius: 0;
+  border: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
 }
-.sidebar-count:hover { background: color-mix(in srgb, var(--pico-primary) 8%, transparent); }
+.sidebar-count:hover { background: color-mix(in srgb, var(--console-accent) 8%, transparent); }
 /* Links inside the app must not fall to Pico's low-contrast :visited color in dark
    mode (the explain-card source/reference links especially). */
-.graph-app a:visited, #explain-card a:visited { color: var(--pico-primary); }
+.graph-app a:visited, #explain-card a:visited { color: var(--console-accent); }
 /* The disclosure triangle hugs the count text (not flung to the far edge), is tinted,
    and sized up so it clearly reads as an expand/collapse control (it was tiny before).
    A rotating triangle is the conventional disclosure affordance, distinct on purpose
    from the "run this" chevrons on the Ask chips. */
-.list-chev { flex: 0 0 auto; color: var(--pico-primary); font-size: 1.15em; line-height: 1; transition: transform 0.12s ease; }
+.list-chev { flex: 0 0 auto; color: var(--console-accent); font-size: 1.15em; line-height: 1; transition: transform 0.12s ease; }
 .list-chev::before { content: "\25B8"; }
 #list-toggle[aria-expanded="true"] .list-chev { transform: rotate(90deg); }
 
@@ -132,102 +130,110 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
   flex: 1 1 auto; min-width: 0; /* grow to fill each row edge-to-edge (justified) */
   display: inline-flex; align-items: center; gap: 0.35rem; max-width: 100%;
   margin: 0; padding: 0.2rem 0.5rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: transparent; cursor: pointer;
   font-size: 0.72rem; line-height: 1.2;
 }
-.node-pill:hover { border-color: var(--pico-primary); background: var(--pico-card-background-color); }
-.node-pill[aria-current="true"] { border-color: var(--pico-primary); box-shadow: inset 0 0 0 1px var(--pico-primary); }
-.row-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--pico-font-family-monospace); }
+.node-pill:hover { border-color: var(--console-accent); background: var(--pf-t--global--background--color--primary--default); }
+.node-pill[aria-current="true"] { border-color: var(--console-accent); box-shadow: inset 0 0 0 1px var(--console-accent); }
+.row-label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--pf-t--global--font--family--mono); }
 /* The "+N more" hint is a real box (not display:contents), spanning the row. */
-#node-list li.list-more { display: block; flex-basis: 100%; width: 100%; padding: 0.35rem 0.2rem 0; font-size: 0.68rem; color: var(--pico-muted-color); }
+#node-list li.list-more { display: block; flex-basis: 100%; width: 100%; padding: 0.35rem 0.2rem 0; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); }
 
 .graph-stage { position: relative; min-width: 0; overflow: hidden; }
 #graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
-/* Built-in action buttons floating at the stage's top-right (the playground
-   file-bar look): compact outline buttons, icon + label. */
+/* Built-in action buttons floating at the stage's top-right: PF secondary Buttons, but
+   given a translucent surface fill so they sit legibly over the canvas. The overlay
+   positioning + fill are component-less stage geometry, so they stay ID/container-scoped
+   (the buttons themselves are PF). Scoped under .stage-tools so the fill out-specifies PF. */
 .stage-tools { position: absolute; top: 0.6rem; right: 0.6rem; z-index: 3; display: flex; gap: 0.4rem; }
-.stage-tools button {
-  width: auto; margin: 0; padding: 0.25rem 0.6rem;
-  font-size: 0.72rem; line-height: 1.3;
-  display: inline-flex; align-items: center; gap: 0.35rem;
-  background: color-mix(in srgb, var(--pico-card-background-color) 90%, transparent);
+.stage-tools .pf-v6-c-button {
+  font-size: 0.72rem;
+  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
 }
 .stage-tools .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
-/* Legend toggle: hidden on desktop (the legend is always open there). Shown only on
-   mobile via the media query below, where it collapses the legend off the canvas.
-   Positioned top-left where the legend would otherwise sit. */
-.legend-toggle {
+/* Legend toggle (#legend-toggle, a PF Button): hidden on desktop (the legend is always
+   open there). Shown only on mobile via the media query below, where it collapses the
+   legend off the canvas. Positioned top-left where the legend would otherwise sit. */
+#legend-toggle {
   position: absolute; top: 0.6rem; left: 0.6rem; z-index: 3;
-  width: auto; margin: 0; padding: 0.25rem 0.6rem;
-  font-size: 0.72rem; line-height: 1.3;
-  display: none; align-items: center; gap: 0.35rem;
-  background: color-mix(in srgb, var(--pico-card-background-color) 90%, transparent);
+  display: none; font-size: 0.72rem;
+  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
 }
-.legend-toggle .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+#legend-toggle .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Fullscreen: the panel fills the screen (like the playground's .panel:fullscreen);
    the opaque background is required or the element shows through to black. */
-.graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pico-background-color); }
+.graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pf-t--global--background--color--primary--default); }
 #graph-legend {
   position: absolute; top: 0.6rem; left: 0.6rem; margin: 0; padding: 0.5rem 0.65rem;
   list-style: none; display: flex; flex-direction: column; gap: 0.15rem;
   font-size: 0.72rem; line-height: 1.5;
-  background: color-mix(in srgb, var(--pico-card-background-color) 88%, transparent);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 88%, transparent);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   max-height: calc(100% - 1.2rem); overflow-y: auto;
 }
 #graph-legend li { list-style: none; }
 .legend-row {
   width: 100%; margin: 0; padding: 0.08rem 0.25rem;
   display: flex; align-items: center; gap: 0.4rem;
-  background: transparent; border: 0; border-radius: var(--pico-border-radius);
+  background: transparent; border: 0; border-radius: var(--pf-t--global--border--radius--small);
   cursor: pointer; font-size: inherit; line-height: 1.5; text-align: left;
 }
-.legend-row:hover { background: color-mix(in srgb, var(--pico-primary) 14%, transparent); }
+.legend-row:hover { background: color-mix(in srgb, var(--console-accent) 14%, transparent); }
 /* Status/hint line: a quiet in-flow line BENEATH the graph app (it used to float
    over the canvas, obscuring the graph). Empty by default -> hidden, so it never
    sits as a persistent nag; it speaks up for loading, a view result, or an error. */
 #graph-status {
   margin: 0.5rem 0 var(--pad); padding: 0.4rem 0.7rem;
-  font-size: 0.78rem; line-height: 1.45; color: var(--pico-muted-color);
-  background: var(--syntax-panel-bg);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  font-size: 0.78rem; line-height: 1.45; color: var(--pf-t--global--text--color--subtle);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
 }
 #graph-status:empty { display: none; }
-#graph-status.err { color: var(--pico-del-color); border-color: var(--pico-del-color); }
+#graph-status.err { color: var(--console-status-danger); border-color: var(--console-status-danger); }
 
-/* Empty state: a centered prompt shown over the (empty) canvas when nothing is loaded
-   (see graph.html). Mirrors the log viewer's empty state - an icon, a title, and two
-   "ways" cards (run a command to open your own graph, or a button to try the demo). No
-   blur/veil: there is no graph behind it on a cold open, since the demo is not fetched
-   until asked. Dismissed by JS once a graph arrives. */
-.graph-empty-state {
+/* Cold empty state (PatternFly EmptyState, #graph-empty-state): shown over the (empty) canvas
+   when nothing is loaded. Mirrors the log viewer's #log-empty - an icon, a title/body, and two
+   "ways" (run a command to open your own graph, or a button to try the demo). No blur/veil: there
+   is no graph behind it on a cold open, since the demo is not fetched until asked. Toggled `hidden`
+   by JS once a graph arrives; the explicit rule wins over PF's display:flex. */
+#graph-empty-state {
   position: absolute; inset: 0; z-index: 4;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: clamp(1.5rem, 5vw, 3rem); text-align: center; color: var(--pico-muted-color);
-  background: var(--pico-background-color);
+  background: var(--pf-t--global--background--color--primary--default);
 }
-.graph-empty-state[hidden] { display: none; }
-/* Inner empty-state pieces (icon/title/sub/ways/way/hint) are shared - see .console-empty-*
-   in console.css. Only the container above and this demo button are graph-specific. */
-.graph-empty-demo { width: auto; margin: 0; align-self: flex-start; padding: 0.3rem 0.8rem; font-size: 0.85rem; }
+#graph-empty-state[hidden] { display: none; }
+/* The two "ways" cards (data-* hooks, no bespoke classes) - the same treatment as logs #log-empty. */
+[data-empty-ways] {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem;
+  margin-top: 1.4rem; text-align: left; width: 100%; max-width: 40rem;
+}
+[data-empty-way] {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+[data-empty-way-label] { color: var(--pf-t--global--text--color--regular); font-weight: 600; font-size: 0.85rem; }
+[data-empty-cmd] { margin: 0; }
+[data-empty-cmd] code { font-size: 0.8em; font-family: var(--pf-t--global--font--family--mono); }
+[data-empty-hint] { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
 
 /* Cold state (nothing loaded): collapse the app to just the empty-state prompt at its NATURAL
    height, instead of a full-viewport-tall empty panel. :has() detects the visible empty state
    (no JS); when a graph loads the empty state hides, the selector stops matching, and the grid
    + full height return. The sidebar/canvas are empty here, so we hide them and let the prompt
    size the panel. */
-.graph-app:has(.graph-empty-state:not([hidden])) { display: block; height: auto; min-height: 0; }
-.graph-app:has(.graph-empty-state:not([hidden])) .graph-sidebar { display: none; }
-.graph-app:has(.graph-empty-state:not([hidden])) .graph-stage { height: auto; min-height: 0; overflow: visible; }
-.graph-app:has(.graph-empty-state:not([hidden])) .graph-stage > :not(.graph-empty-state),
+.graph-app:has(#graph-empty-state:not([hidden])) { display: block; height: auto; min-height: 0; }
+.graph-app:has(#graph-empty-state:not([hidden])) .graph-sidebar { display: none; }
+.graph-app:has(#graph-empty-state:not([hidden])) .graph-stage { height: auto; min-height: 0; overflow: visible; }
+.graph-app:has(#graph-empty-state:not([hidden])) .graph-stage > :not(#graph-empty-state),
 /* #id-level rules beat these elements' own #id display, which a plain class selector can't. */
-.graph-app:has(.graph-empty-state:not([hidden])) #graph-canvas,
-.graph-app:has(.graph-empty-state:not([hidden])) #graph-legend,
-.graph-app:has(.graph-empty-state:not([hidden])) #legend-toggle { display: none; }
-/* Give the cold-state prompt a tall-enough area and keep it vertically centered (it is
-   already flex-centered), so it sits in the middle of the emptiness rather than at the top. */
-.graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state { position: static; min-height: min(60svh, 520px); }
+.graph-app:has(#graph-empty-state:not([hidden])) #graph-canvas,
+.graph-app:has(#graph-empty-state:not([hidden])) #graph-legend,
+.graph-app:has(#graph-empty-state:not([hidden])) #legend-toggle { display: none; }
+/* Give the cold-state prompt a tall-enough area and keep it vertically centered (PF EmptyState
+   is already flex-centered), so it sits in the middle of the emptiness rather than at the top. */
+.graph-app:has(#graph-empty-state:not([hidden])) #graph-empty-state { position: static; min-height: min(60svh, 520px); }
 
 /* Kind dots: shape here, color from a .k-<kind> class (data-driven, no inline
    style). The same classes color the legend swatches and the explain-card head. */
@@ -250,38 +256,38 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
 /* Explain card: a third column on wide screens; plain HTML dl content. */
 #explain-card {
   min-height: 0; overflow-y: auto; padding: 0.8rem;
-  border-left: 1px solid var(--pico-muted-border-color);
+  border-left: 1px solid var(--pf-t--global--border--color--default);
   font-size: 0.82rem;
 }
 #explain-card[hidden] { display: none; }
 /* Overline label so the card reads as a distinct "Node details" panel. */
-.card-section { margin: 0 0 0.4rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
+.card-section { margin: 0 0 0.4rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
 .card-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
-.card-head h2 { margin: 0; font-size: 1rem; font-family: var(--pico-font-family-monospace); overflow-wrap: anywhere; }
-.kind-tag { margin-left: auto; font-size: 0.68rem; color: var(--pico-muted-color); text-transform: uppercase; letter-spacing: 0.04em; }
+.card-head h2 { margin: 0; font-size: 1rem; font-family: var(--pf-t--global--font--family--mono); overflow-wrap: anywhere; }
+.kind-tag { margin-left: auto; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); text-transform: uppercase; letter-spacing: 0.04em; }
 #explain-card dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.7rem; }
-#explain-card dt { color: var(--pico-muted-color); font-size: 0.72rem; padding-top: 0.15rem; }
+#explain-card dt { color: var(--pf-t--global--text--color--subtle); font-size: 0.72rem; padding-top: 0.15rem; }
 #explain-card dd { margin: 0; overflow-wrap: anywhere; }
 #explain-card code { font-size: 0.78em; }
 .rel-group { margin-bottom: 0.4rem; }
-.rel-name { display: block; font-size: 0.72rem; color: var(--pico-muted-color); margin-bottom: 0.15rem; }
+.rel-name { display: block; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); margin-bottom: 0.15rem; }
 .rel-count { opacity: 0.7; }
 .node-ref { font-family: inherit; }
 .node-ref {
   display: inline-block; margin: 0 0.15rem 0.15rem 0; padding: 0.05rem 0.4rem; width: auto;
-  font-size: 0.74rem; font-family: var(--pico-font-family-monospace);
-  background: var(--pico-card-sectioning-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
+  font-size: 0.74rem; font-family: var(--pf-t--global--font--family--mono);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small); cursor: pointer;
 }
-.node-ref:hover { border-color: var(--pico-primary); }
-.muted { color: var(--pico-muted-color); }
+.node-ref:hover { border-color: var(--console-accent); }
+.muted { color: var(--pf-t--global--text--color--subtle); }
 /* Copy as Mermaid in the card: a quiet link-styled action, not a chunky button, so
    it matches the card's density (the canvas toolbar keeps the prominent button). */
 .card-actions { margin-top: 0.7rem; }
 .card-mermaid-link {
   width: auto; margin: 0; padding: 0; background: transparent; border: 0;
   display: inline-flex; align-items: center; gap: 0.3rem;
-  font-size: 0.76rem; line-height: 1.4; color: var(--pico-primary); cursor: pointer;
+  font-size: 0.76rem; line-height: 1.4; color: var(--console-accent); cursor: pointer;
 }
 .card-mermaid-link:hover { text-decoration: underline; }
 .card-mermaid-link .copy-glyph { font-size: 0.95em; }
@@ -291,52 +297,52 @@ body.has-card .graph-app { grid-template-columns: 18rem 1fr 21rem; }
 @media (max-width: 900px) {
   .graph-app, body.has-card .graph-app { grid-template-columns: 1fr; grid-auto-rows: min-content; height: auto; }
   .graph-stage { height: 60svh; min-height: 320px; }
-  .graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pico-muted-border-color); }
-  #explain-card { border-left: 0; border-top: 1px solid var(--pico-muted-border-color); max-height: 50svh; }
+  .graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
+  #explain-card { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); max-height: 50svh; }
   /* Mobile canvas chrome: collapse both floating overlays so the graph is the focus.
      The toolbar shrinks to icons; the legend hides behind the "Legend" toggle and
      only appears when tapped. */
   .stage-tools { gap: 0.3rem; }
   .stage-tools .btn-label { display: none; }
-  .stage-tools button { padding: 0.3rem 0.4rem; }
-  .legend-toggle { display: inline-flex; }
+  .stage-tools .pf-v6-c-button { padding-inline: 0.4rem; }
+  .stage-tools .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }
+  #legend-toggle { display: inline-flex; }
   #graph-legend { display: none; top: 2.7rem; max-height: calc(100% - 3.4rem); }
   #graph-legend.legend-open { display: flex; }
 }
 
-/* Reference disclosures (Query syntax, Loading a graph by URL): the same
-   "what's changed"-footer treatment as the docs pages - an uppercase, muted,
-   tracked summary label over a bordered, tinted panel (--syntax-panel-bg) that
-   expands beneath it. The body is wrapped so only the content gets panel chrome. */
+/* Reference disclosures (Views, Search syntax, Layout and colors, Loading a graph by URL):
+   an uppercase, muted, tracked summary label over a bordered, tinted panel (the PF secondary
+   background) that expands beneath it. The body is wrapped so only the content gets panel chrome. */
 .query-help, .url-help, .display-help { margin: 0.3rem 0 var(--pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
 .query-help > summary:not([role]), .url-help > summary:not([role]), .display-help > summary:not([role]), .views-panel > summary:not([role]) {
   width: fit-content; cursor: pointer;
-  color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
+  color: var(--pf-t--global--text--color--subtle); font-size: 0.8rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.05em;
 }
 main .query-help > summary:not([role]), main .query-help[open] > summary:not([role]),
 main .url-help > summary:not([role]), main .url-help[open] > summary:not([role]),
 main .display-help > summary:not([role]), main .display-help[open] > summary:not([role]),
-main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([role]) { color: var(--pico-muted-color); }
+main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([role]) { color: var(--pf-t--global--text--color--subtle); }
 .query-help[open] > summary, .url-help[open] > summary, .display-help[open] > summary, .views-panel[open] > summary { margin-bottom: 0.5rem; }
 .disclosure-body {
   padding: 0.7rem 0.85rem;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  background: var(--syntax-panel-bg);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
 }
-.query-help p, .url-help p, .display-help p { color: var(--pico-muted-color); margin: 0 0 0.5rem; max-width: 72ch; }
+.query-help p, .url-help p, .display-help p { color: var(--pf-t--global--text--color--subtle); margin: 0 0 0.5rem; max-width: 72ch; }
 .query-help p:last-child, .url-help :last-child { margin-bottom: 0; }
 .query-help dl { margin: 0 0 0.5rem; display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 0.8rem; align-items: baseline; }
 .url-help dl { margin: 0 0 0.6rem; display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.9rem; }
 .query-help dt, .url-help dt { margin: 0; white-space: nowrap; }
-.query-help dd, .url-help dd { margin: 0; color: var(--pico-muted-color); }
+.query-help dd, .url-help dd { margin: 0; color: var(--pf-t--global--text--color--subtle); }
 .query-help code, .url-help code { font-size: 0.85em; }
 /* The search-syntax examples are natural-language calls to action, not code chips: plain clickable
    text (primary color, underline on hover), no box or monospace. The syntax lives in each definition. */
 .q-example {
   width: auto; margin: 0; padding: 0; font: inherit; text-align: left;
-  background: none; border: 0; color: var(--pico-primary); cursor: pointer;
+  background: none; border: 0; color: var(--console-accent); cursor: pointer;
 }
 .q-example:hover, .q-example:focus-visible { text-decoration: underline; }
 
@@ -348,20 +354,20 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
    controls now live in the narrow reference drawer where a button + long hint on one row wrapped
    into a malformed jumble. */
 .layout-mode-row { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.2rem; }
-.layout-toggle { width: auto; align-self: flex-start; margin: 0; padding: 0.25rem 0.7rem; font-size: 0.8rem; }
-.layout-hint { font-size: 0.75rem; color: var(--pico-muted-color); line-height: 1.45; }
+#layout-toggle-btn { align-self: flex-start; }
+.layout-hint { font-size: 0.75rem; color: var(--pf-t--global--text--color--subtle); line-height: 1.45; }
 
 /* Live layout-force sliders (the "alive" wobble is tunable). Stacked one per row so each label and
    its slider fit the narrow drawer instead of wrapping mid-control. */
 .force-controls { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.2rem; }
-.force-controls label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; color: var(--pico-muted-color); margin: 0; }
+.force-controls label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); margin: 0; }
 .force-controls input[type="range"] { width: 8rem; flex: 0 0 auto; margin: 0; }
 
 /* Color groups: paint query matches a chosen color on top of the kind palette.
    The swatch color is genuinely dynamic (a user pick), so it rides an inline style
    here - unlike the fixed kind palette, which uses .k-<kind> classes. */
 /* A small bold sub-heading inside the Display panel (Layout forces / Color groups). */
-.control-label { margin: 0.1rem 0 0.3rem; font-size: 0.72rem; font-weight: 600; color: var(--pico-color); }
+.control-label { margin: 0.1rem 0 0.3rem; font-size: 0.72rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 .control-label:not(:first-child) { margin-top: 0.7rem; }
 .group-add-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.4rem; }
 .group-add-row input[type="text"] { width: auto; flex: 1 1 8rem; min-width: 6rem; margin: 0; height: 1.7rem; font-size: 0.78rem; padding: 0.15rem 0.4rem; }
@@ -372,19 +378,19 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
   font-size: 0.75rem; line-height: 1;
 }
 #group-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.group-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.12rem 0.15rem 0.12rem 0.4rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); font-size: 0.72rem; font-family: var(--pico-font-family-monospace); }
+.group-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.12rem 0.15rem 0.12rem 0.4rem; border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small); font-size: 0.72rem; font-family: var(--pf-t--global--font--family--mono); }
 .group-swatch { width: 0.7em; height: 0.7em; border-radius: 50%; flex: 0 0 auto; }
-.group-x { width: auto; margin: 0; padding: 0 0.25rem; background: transparent; border: 0; color: var(--pico-muted-color); cursor: pointer; font-size: 0.95rem; line-height: 1; }
-.group-x:hover { color: var(--pico-del-color); }
+.group-x { width: auto; margin: 0; padding: 0 0.25rem; background: transparent; border: 0; color: var(--pf-t--global--text--color--subtle); cursor: pointer; font-size: 0.95rem; line-height: 1; }
+.group-x:hover { color: var(--console-status-danger); }
 
 /* ---- Chrome-button text-color reset --------------------------------------- */
-/* Pico gives every <button> white text by locally shadowing --pico-color with
-   --pico-primary-inverse and painting color:var(--pico-color). Any chrome button
+/* Pico gives every <button> white text by locally shadowing --pf-t--global--text--color--regular with
+   --pf-t--global--text--color--on-brand--default and painting color:var(--pf-t--global--text--color--regular). Any chrome button
    that swaps in a surface background (card/sectioning) must restore readable text
    or it renders white-on-white in light mode. This is the recurring trap: a new
    button class sets `background` and forgets `color`. Reset it once here for the
    surface-styled graph buttons; their active/primary states re-override color
-   afterward and win on specificity. Use `inherit` (not var(--pico-color)) because
+   afterward and win on specificity. Use `inherit` (not var(--pf-t--global--text--color--regular)) because
    Pico shadows that variable ON the button element itself, so var() would still
    resolve to the white inverse - inherit pulls the real text color from the
    ancestor and stays correct in both light and dark mode. */
@@ -403,148 +409,148 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
 .views-panel { margin: 0.3rem 0 var(--pad); }
 /* Lead-in that frames the chips as suggestions ("questions you might ask"), not a
    toolbar of commands - so a first-time visitor reads them as starting points. */
-.views-hint { margin: 0 0 0.55rem; color: var(--pico-muted-color); font-size: 0.8rem; line-height: 1.45; }
+.views-hint { margin: 0 0 0.55rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.8rem; line-height: 1.45; }
 .views-body { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .views-panel .view-btn {
   width: auto; margin: 0; padding: 0.33rem 0.75rem 0.33rem 0.6rem;
   font-size: 0.78rem; line-height: 1.3;
   display: inline-flex; align-items: center; gap: 0.3rem;
-  background: var(--pico-card-background-color);
-  /* --pico-muted-border-color, not --pico-border-color: Pico shadows the latter to
+  background: var(--pf-t--global--background--color--primary--default);
+  /* --pf-t--global--border--color--default, not --pico-border-color: Pico shadows the latter to
      the primary border ON the button element, which would paint every pill blue. */
-  border: 1px solid var(--pico-muted-border-color);
+  border: 1px solid var(--pf-t--global--border--color--default);
   /* Match the site's one corner radius rather than a full pill: the chips read as
      part of the same UI as the disclosures/cards, and the leading chevron already
      carries the "clickable suggestion" signal. */
-  border-radius: var(--pico-border-radius);
+  border-radius: var(--pf-t--global--border--radius--small);
   cursor: pointer;
   transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 /* Leading chevron marks each chip as "click to run this view". */
 .views-panel .view-btn::before {
-  content: "\203A"; color: var(--pico-primary); font-weight: 700; opacity: 0.85;
+  content: "\203A"; color: var(--console-accent); font-weight: 700; opacity: 0.85;
 }
 .views-panel .view-btn:hover {
-  border-color: var(--pico-primary);
-  background: color-mix(in srgb, var(--pico-primary) 8%, var(--pico-card-background-color));
+  border-color: var(--console-accent);
+  background: color-mix(in srgb, var(--console-accent) 8%, var(--pf-t--global--background--color--primary--default));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
 }
 .views-panel .view-btn.view-active {
-  background: var(--pico-primary); color: var(--pico-primary-inverse);
-  border-color: var(--pico-primary);
+  background: var(--console-accent); color: var(--pf-t--global--text--color--on-brand--default);
+  border-color: var(--console-accent);
 }
-.views-panel .view-btn.view-active::before { color: var(--pico-primary-inverse); opacity: 1; }
+.views-panel .view-btn.view-active::before { color: var(--pf-t--global--text--color--on-brand--default); opacity: 1; }
 /* Disabled = Phase 9 "affected" button. Not greyed - just visually demoted, and
    inert on hover. */
 .views-panel .view-btn[disabled], .views-panel .view-btn.view-disabled {
   opacity: 0.45; cursor: not-allowed;
 }
 .views-panel .view-btn[disabled]:hover, .views-panel .view-btn.view-disabled:hover {
-  border-color: var(--pico-muted-border-color); background: var(--pico-card-background-color); box-shadow: none;
+  border-color: var(--pf-t--global--border--color--default); background: var(--pf-t--global--background--color--primary--default); box-shadow: none;
 }
 .views-panel .view-btn.view-conditional { display: none; } /* hidden until DurationMs data present */
 /* Clear sits apart from the question chips: a quiet text button pushed to the end. */
 .view-clear {
   width: auto; margin: 0 0 0 auto; padding: 0.33rem 0.6rem;
   font-size: 0.76rem; line-height: 1.3;
-  background: transparent; border: 0; cursor: pointer; color: var(--pico-muted-color);
+  background: transparent; border: 0; cursor: pointer; color: var(--pf-t--global--text--color--subtle);
 }
-.view-clear:hover { color: var(--pico-del-color); text-decoration: underline; }
+.view-clear:hover { color: var(--console-status-danger); text-decoration: underline; }
 
 /* Phase 5: term-prompt view command bar. Shares .term-prompt CSS from playground;
    the outer element here is a div, not an input wrapper. */
 .view-cmd-bar {
   margin: 0.5rem 0 0; padding: 0.4rem 0.7rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--syntax-panel-bg, var(--pico-card-sectioning-background-color));
-  font-family: var(--pico-font-family-monospace); font-size: 0.78rem;
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
   display: flex; align-items: baseline; gap: 0.5rem;
 }
-.view-cmd-bar .ps1 { color: var(--pico-muted-color); font-weight: 500; white-space: nowrap; }
-.view-cmd-bar .ps1 .chevron { color: var(--pico-primary); }
-.view-cmd-args { color: var(--pico-color); flex: 1; }
+.view-cmd-bar .ps1 { color: var(--pf-t--global--text--color--subtle); font-weight: 500; white-space: nowrap; }
+.view-cmd-bar .ps1 .chevron { color: var(--console-accent); }
+.view-cmd-args { color: var(--pf-t--global--text--color--regular); flex: 1; }
 .cmd-copy {
   width: auto; margin: 0; padding: 0 0.35rem; background: transparent; border: 0;
-  color: var(--pico-muted-color); cursor: pointer; font-size: 1rem; line-height: 1;
+  color: var(--pf-t--global--text--color--subtle); cursor: pointer; font-size: 1rem; line-height: 1;
   flex: 0 0 auto;
 }
-.cmd-copy:hover { color: var(--pico-primary); }
+.cmd-copy:hover { color: var(--console-accent); }
 
 /* Phase 5: search prompt styled as magus query term-prompt. */
 /* Overrides the plain .sidebar-search/node-search rules above with the terminal idiom. */
 .search-prompt {
-  font-family: var(--pico-font-family-monospace); font-size: 0.78rem;
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
   display: flex; align-items: baseline; gap: 0.4rem;
-  padding: 0.35rem 0.45rem; border-bottom: 1px solid var(--pico-muted-border-color);
+  padding: 0.35rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.search-prompt .ps1 { color: var(--pico-muted-color); font-weight: 500; white-space: nowrap; }
-.search-prompt .ps1 .chevron { color: var(--pico-primary); }
+.search-prompt .ps1 { color: var(--pf-t--global--text--color--subtle); font-weight: 500; white-space: nowrap; }
+.search-prompt .ps1 .chevron { color: var(--console-accent); }
 .search-prompt #node-search {
   /* Reset the magnifier-icon background from the plain search style. */
   background-image: none; padding: 0; border: 0; margin: 0;
   flex: 1; background: transparent; font-family: inherit; font-size: inherit;
-  color: var(--pico-color); height: auto; width: auto; line-height: 1.3;
+  color: var(--pf-t--global--text--color--regular); height: auto; width: auto; line-height: 1.3;
   border-radius: 0;
 }
-.search-prompt #node-search::placeholder { color: var(--pico-muted-color); }
+.search-prompt #node-search::placeholder { color: var(--pf-t--global--text--color--subtle); }
 .search-prompt #node-search:focus { box-shadow: none; outline: none; }
 .search-copy {
   width: auto; margin: 0; padding: 0 0.3rem; background: transparent; border: 0;
-  color: var(--pico-muted-color); cursor: pointer; font-size: 1rem; line-height: 1;
+  color: var(--pf-t--global--text--color--subtle); cursor: pointer; font-size: 1rem; line-height: 1;
   flex: 0 0 auto;
 }
-.search-copy:hover { color: var(--pico-primary); }
+.search-copy:hover { color: var(--console-accent); }
 
 /* Phase 5: projection unfold button. Shown when default projection is active. */
 .projection-unfold {
   width: 100%; margin: 0; padding: 0.28rem 0.6rem;
   font-size: 0.72rem; line-height: 1.3; text-align: center;
-  background: var(--pico-card-background-color);
-  border: 0; border-bottom: 1px solid var(--pico-muted-border-color); border-radius: 0;
-  cursor: pointer; color: var(--pico-primary);
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
+  cursor: pointer; color: var(--console-accent);
 }
 .projection-unfold:hover { text-decoration: underline; }
 
 /* Phase 5: empty-state suggestion chips. */
 .suggestions {
   display: flex; flex-direction: column; gap: 0.25rem;
-  padding: 0.35rem 0.45rem; border-bottom: 1px solid var(--pico-muted-border-color);
+  padding: 0.35rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .suggestion-chip {
   width: 100%; margin: 0; padding: 0.22rem 0.5rem; text-align: left;
   font-size: 0.7rem; line-height: 1.35; white-space: normal;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  cursor: pointer; color: var(--pico-muted-color);
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  cursor: pointer; color: var(--pf-t--global--text--color--subtle);
 }
 /* Plain muted text at rest, firming to the primary blue on hover (the Claude-Desktop idiom Eli
-   prefers). NOT color:var(--pico-color) - on a bare <button> Pico resolves that to white, so the
+   prefers). NOT color:var(--pf-t--global--text--color--regular) - on a bare <button> Pico resolves that to white, so the
    label vanished on hover; the primary is a real color. See pico-bare-button-hover-white. */
-.suggestion-chip:hover { border-color: var(--pico-primary); color: var(--pico-primary); }
+.suggestion-chip:hover { border-color: var(--console-accent); color: var(--console-accent); }
 
 /* Phase 5: color preset buttons. */
 .preset-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; }
 .preset-btn {
   width: auto; margin: 0; padding: 0.18rem 0.6rem;
   font-size: 0.72rem; line-height: 1.3;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   cursor: pointer;
 }
-.preset-btn:hover { border-color: var(--pico-primary); }
-.preset-btn.preset-active { background: var(--pico-primary); color: var(--pico-primary-inverse); border-color: var(--pico-primary); }
-.control-hint { margin: -0.15rem 0 0.3rem; font-size: 0.72rem; color: var(--pico-muted-color); }
+.preset-btn:hover { border-color: var(--console-accent); }
+.preset-btn.preset-active { background: var(--console-accent); color: var(--pf-t--global--text--color--on-brand--default); border-color: var(--console-accent); }
+.control-hint { margin: -0.15rem 0 0.3rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 
 /* Phase 5: views-table in help panel. */
 .views-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 0.7rem; }
-.views-table th, .views-table td { padding: 0.25rem 0.5rem; text-align: left; border-bottom: 1px solid var(--pico-muted-border-color); }
-.views-table th { color: var(--pico-muted-color); font-weight: 600; font-size: 0.72rem; }
+.views-table th, .views-table td { padding: 0.25rem 0.5rem; text-align: left; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
+.views-table th { color: var(--pf-t--global--text--color--subtle); font-weight: 600; font-size: 0.72rem; }
 .views-table .view-btn {
   width: auto; margin: 0; padding: 0.1rem 0.4rem; font-size: 0.72rem; line-height: 1.2;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); cursor: pointer;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small); cursor: pointer;
 }
-.views-table .view-btn:hover { border-color: var(--pico-primary); }
+.views-table .view-btn:hover { border-color: var(--console-accent); }
 
 
 /* Phase 9: live mode badge and status strip */
@@ -552,33 +558,36 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.1rem 0.5rem;
-  border-radius: var(--pico-border-radius);
-  background: var(--pico-primary-background, #0172ad);
-  color: var(--pico-primary-inverse, #fff);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--console-accent, #0172ad);
+  color: var(--pf-t--global--text--color--on-brand--default, #fff);
   line-height: 1.5;
   align-self: center;
 }
 .live-badge-disconnected {
-  background: var(--pico-muted-border-color, #888);
+  background: var(--pf-t--global--border--color--default, #888);
 }
 .snapshot-badge {
-  background: var(--pico-muted-border-color, #888);
-  color: var(--pico-color, #373c44);
+  background: var(--pf-t--global--border--color--default, #888);
+  color: var(--pf-t--global--text--color--regular, #373c44);
 }
 .live-status-strip {
   font-size: 0.7rem;
-  color: var(--pico-muted-color);
+  color: var(--pf-t--global--text--color--subtle);
   margin: 0.15rem 0;
 }
 .live-disconnect-banner {
-  background: var(--pico-del-color, #c0392b);
+  background: var(--console-status-danger, #c0392b);
   color: #fff;
   padding: 0.25rem 0.75rem;
   font-size: 0.8rem;
-  border-radius: var(--pico-border-radius);
+  border-radius: var(--pf-t--global--border--radius--small);
   margin-bottom: 0.25rem;
 }
 .live-remember-row {
   font-size: 0.8rem;
   margin-top: 0.5rem;
 }
+
+/* No-JS fallback message. */
+.graph-noscript { color: var(--pf-t--global--text--color--subtle); }

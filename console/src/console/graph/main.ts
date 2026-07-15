@@ -14,8 +14,8 @@
 //
 // Rendering is canvas + d3-force (bundled locally by esbuild into
 // gen/graph/explorer.js - no CDN, so it works offline once the PWA has cached
-// it). Colors come from Pico CSS variables read off the live page, re-read on a
-// theme toggle, exactly like js/mermaid.js. The canvas is progressive
+// it). Colors come from the console's PatternFly-native CSS tokens read off the
+// live page (readTheme), re-read on a theme toggle. The canvas is progressive
 // enhancement over a semantic node list; the explain card is plain HTML.
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY } from "d3-force";
 import { zoom as d3zoom, zoomIdentity } from "d3-zoom";
@@ -43,8 +43,9 @@ declare global {
 }
 
 // The node kinds the graph can emit. Each gets a stable legend color via a CSS
-// custom property (--gk-<kind>) defined for both themes in graph.css, so the
-// palette is themeable and read at render time. KINDS also fixes legend order
+// custom property (--gk-<kind>) aliased in graph.css to the theme-aware
+// --console-node-<kind> palette (tokens.css), so the palette re-tints per theme
+// and is read at render time. KINDS also fixes legend order
 // (roughly: structure -> code -> docs -> diagnostics). `symbol` is the SCIP
 // code-symbol kind introduced by `magus refs`; it lives in lazy @symbols shards
 // and may appear in graphs exported with those shards loaded.
@@ -171,8 +172,13 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const idleAlpha = () => (reducedMotion.matches ? 0 : 0.006);
 
 // ---- theme / palette -------------------------------------------------------
-// One computed-style read per repaint; pico() pulls a custom property with a
-// fallback (mirrors js/mermaid.js). Colors are cached per repaint in `theme`.
+// One computed-style read per repaint; v() pulls a custom property with a
+// fallback. Colors come from the console's PatternFly-native tokens (--console-*
+// / --pf-t--* in tokens.css + patternfly.css), theme-aware, so a theme toggle
+// re-tints the canvas with no per-theme code here; getComputedStyle resolves the
+// var() chains to concrete colors (the same read the uPlot charts use). The
+// per-kind fills read through --gk-<kind>, aliased in graph.css to the
+// --console-node-<kind> palette.
 let theme: any = null;
 function readTheme() {
   const cs = getComputedStyle(root);
@@ -180,12 +186,12 @@ function readTheme() {
   const kindColor: Record<string, string> = {};
   for (const k of KINDS) kindColor[k] = v("--gk-" + k, "#888");
   theme = {
-    bg: v("--pico-background-color", "#fff"),
-    text: v("--pico-color", "#373c44"),
-    muted: v("--pico-muted-color", "#646b79"),
-    border: v("--pico-muted-border-color", "#dce3eb"),
-    accent: v("--pico-primary", "#0172ad"),
-    font: v("--pico-font-family", "system-ui, sans-serif"),
+    bg: v("--pf-t--global--background--color--primary--default", "#fff"),
+    text: v("--pf-t--global--text--color--regular", "#151515"),
+    muted: v("--pf-t--global--text--color--subtle", "#646b79"),
+    border: v("--pf-t--global--border--color--default", "#dce3eb"),
+    accent: v("--console-accent", "#0066cc"),
+    font: v("--pf-t--global--font--family--body", "system-ui, sans-serif"),
     kindColor,
   };
 }
@@ -2627,7 +2633,7 @@ function bootWireEvents() {
     fsBtn.hidden = true;
   }
 
-  // Re-read Pico variables and repaint on a theme toggle (mirrors mermaid.js).
+  // Re-read the console tokens and repaint on a theme toggle.
   let t = 0;
   const rerender = () => { clearTimeout(t); t = setTimeout(() => { readTheme(); renderLegend(); renderList(); draw(); }, 0); };
   new MutationObserver(rerender).observe(root, { attributes: true, attributeFilter: ["data-theme"] });

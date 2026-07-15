@@ -79,4 +79,57 @@
   --console-ansi-blue: var(--pf-t--global--color--nonstatus--blue--300);   /* blue -> true blue    */
   --console-ansi-magenta: var(--pf-t--global--color--nonstatus--purple--300); /* magenta -> purple */
   --console-ansi-cyan: var(--pf-t--global--color--nonstatus--teal--300);   /* cyan -> teal         */
+
+  /* --- 6. Graph node-kind palette (categorical) ----------------------------------------
+     The graph explorer (console/graph) colors every node by its kind. There are 14 kinds
+     but PatternFly ships only 9 "nonstatus" (data-viz) color FAMILIES - blue, teal, purple,
+     green, orange, orangered, red, yellow, gray - so five kinds share a family at a lighter
+     sibling shade. The mapping keeps the old palette's hue intent (project/file teal,
+     target/function blue, spell/op purple, module/method green, diagnostic/charm red,
+     import orange, symbol orangered, rationale yellow, doc neutral gray) and pairs the
+     shared families with SEMANTICALLY ADJACENT kinds so a mild shade confusion (the two
+     land on the same hue) never crosses a meaningful boundary. --300 is the vivid shade
+     (saturated in light, bright in dark); --200 is the lighter sibling. All nonstatus tokens
+     are theme-aware, so the graph re-tints on a theme toggle with NO per-theme CSS here.
+     graph/main.ts reads these at paint time as --gk-<kind> (aliased in graph.css); the
+     legend/pill swatches read them through the .k-<kind> classes. THIS is the graph's
+     silent-regression surface - keep the pairings distinct if you re-map. */
+  --console-node-project: var(--pf-t--global--color--nonstatus--teal--300);       /* teal (was cyan/teal) */
+  --console-node-file: var(--pf-t--global--color--nonstatus--teal--200);          /* teal, lighter        */
+  --console-node-target: var(--pf-t--global--color--nonstatus--blue--300);        /* blue                 */
+  --console-node-function: var(--pf-t--global--color--nonstatus--blue--200);      /* blue, lighter (indigo) */
+  --console-node-spell: var(--pf-t--global--color--nonstatus--purple--300);       /* purple (violet)      */
+  --console-node-op: var(--pf-t--global--color--nonstatus--purple--200);          /* purple, lighter      */
+  --console-node-module: var(--pf-t--global--color--nonstatus--green--300);       /* green (emerald)      */
+  --console-node-method: var(--pf-t--global--color--nonstatus--green--200);       /* green, lighter       */
+  --console-node-diagnostic: var(--pf-t--global--color--nonstatus--red--300);     /* red                  */
+  --console-node-charm: var(--pf-t--global--color--nonstatus--red--200);          /* red, lighter (~pink) */
+  --console-node-import: var(--pf-t--global--color--nonstatus--orange--300);      /* orange (amber)       */
+  --console-node-symbol: var(--pf-t--global--color--nonstatus--orangered--300);   /* red-orange           */
+  --console-node-rationale: var(--pf-t--global--color--nonstatus--yellow--300);   /* yellow (gold)        */
+  --console-node-doc: var(--pf-t--global--color--nonstatus--gray--300);           /* neutral (was cyan)   */
+}
+
+/* Dark-theme node palette. PatternFly's PLAIN --...--color--nonstatus--* tokens are NOT theme-aware
+   (they hold light data-viz values in both themes); the dark values live under the separate
+   --...--global--dark--color--nonstatus--* tokens, which a consumer must opt into. So - unlike the
+   semantic status/icon tokens the charts use, which PF remaps under .pf-v6-theme-dark automatically -
+   the categorical node palette needs this one explicit dark override (theme.ts toggles the
+   .pf-v6-theme-dark class on <html> for both an explicit dark choice and OS-dark). Same 14 kinds,
+   same family/shade pairing, sourced from the dark ramp so the fills read on the dark canvas. */
+:root.pf-v6-theme-dark {
+  --console-node-project: var(--pf-t--global--dark--color--nonstatus--teal--300);
+  --console-node-file: var(--pf-t--global--dark--color--nonstatus--teal--200);
+  --console-node-target: var(--pf-t--global--dark--color--nonstatus--blue--300);
+  --console-node-function: var(--pf-t--global--dark--color--nonstatus--blue--200);
+  --console-node-spell: var(--pf-t--global--dark--color--nonstatus--purple--300);
+  --console-node-op: var(--pf-t--global--dark--color--nonstatus--purple--200);
+  --console-node-module: var(--pf-t--global--dark--color--nonstatus--green--300);
+  --console-node-method: var(--pf-t--global--dark--color--nonstatus--green--200);
+  --console-node-diagnostic: var(--pf-t--global--dark--color--nonstatus--red--300);
+  --console-node-charm: var(--pf-t--global--dark--color--nonstatus--red--200);
+  --console-node-import: var(--pf-t--global--dark--color--nonstatus--orange--300);
+  --console-node-symbol: var(--pf-t--global--dark--color--nonstatus--orangered--300);
+  --console-node-rationale: var(--pf-t--global--dark--color--nonstatus--yellow--300);
+  --console-node-doc: var(--pf-t--global--dark--color--nonstatus--gray--300);
 }

@@ -74,7 +74,9 @@
       <div class="disclosure-body">
         <p class="control-label">Layout</p>
         <div class="layout-mode-row">
-          <button id="layout-toggle-btn" type="button" class="outline layout-toggle" title="Switch to layered DAG layout">Layered</button>
+          <!-- Text-only PF button; main.ts drives its label via textContent (Layered/Force), so it
+               carries raw text rather than a __text span (textContent would strip the span). -->
+          <button id="layout-toggle-btn" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small" title="Switch to layered DAG layout">Layered</button>
           <span class="layout-hint">Force: physics simulation. Layered: deterministic DAG (Sugiyama-style, left-to-right). Target graphs default to layered; knowledge graphs default to force. Capped at 500 visible nodes.</span>
         </div>
         <p class="control-label">Layout forces</p>
@@ -127,15 +129,15 @@
         <div class="stage-tools">
           <span id="live-badge" class="live-badge" hidden aria-live="polite"></span>
           <span id="snapshot-badge" class="live-badge snapshot-badge" hidden aria-live="polite"></span>
-          <button id="fit-btn" class="outline" type="button" title="Zoom to fit the whole graph (or the current matches)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg><span class="btn-label">Fit</span></button>
-          <button id="open-file-btn" class="outline" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span class="btn-label">Open file</span></button>
-          <button id="copy-mermaid-btn" class="outline" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first.">&#10697;<span class="btn-label">Copy as Mermaid</span></button>
-          <button id="fullscreen-btn" class="outline" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg><span class="btn-label">Fullscreen</span></button>
+          <button id="fit-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Zoom to fit the whole graph (or the current matches)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span><span class="pf-v6-c-button__text btn-label">Fit</span></button>
+          <button id="open-file-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="pf-v6-c-button__text btn-label">Open file</span></button>
+          <button id="copy-mermaid-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first."><span class="pf-v6-c-button__icon pf-m-start" aria-hidden="true">&#10697;</span><span class="pf-v6-c-button__text btn-label">Copy as Mermaid</span></button>
+          <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><span class="pf-v6-c-button__icon pf-m-start"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg></span><span class="pf-v6-c-button__text btn-label">Fullscreen</span></button>
         </div>
         <!-- Legend toggle: only shown on mobile (CSS), where the legend is collapsed
              by default so it doesn't cover the graph. Desktop keeps the legend open. -->
-        <button id="legend-toggle" class="outline legend-toggle" type="button" aria-expanded="false" aria-controls="graph-legend">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><line x1="11" y1="6" x2="20" y2="6"/><line x1="11" y1="18" x2="20" y2="18"/></svg><span class="btn-label">Legend</span></button>
+        <button id="legend-toggle" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-expanded="false" aria-controls="graph-legend">
+          <span class="pf-v6-c-button__icon pf-m-start"><svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><line x1="11" y1="6" x2="20" y2="6"/><line x1="11" y1="18" x2="20" y2="18"/></svg></span><span class="pf-v6-c-button__text btn-label">Legend</span></button>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
         <ul id="graph-legend" aria-label="Node kinds"></ul>
         <p id="live-status-strip" class="live-status-strip" hidden aria-live="polite"></p>
@@ -144,23 +146,29 @@
              with the command to open your own graph plus a button to try the demo. We do NOT
              auto-fetch the demo graph.json on a cold open; it loads only when asked, so a
              first visit costs no graph download. Dismissed when any graph arrives. -->
-        <div id="graph-empty-state" class="graph-empty-state" hidden>
-          <svg class="console-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/>
-            <line x1="6.6" y1="7.8" x2="10.4" y2="16.2"/><line x1="17.4" y1="7.8" x2="13.6" y2="16.2"/><line x1="7.4" y1="6" x2="16.6" y2="6"/>
-          </svg>
-          <p class="console-empty-title">Nothing loaded yet</p>
-          <p class="console-empty-sub">Explore a magus workspace's dependency graph here. It renders in your browser - nothing is ever uploaded.</p>
-          <div class="console-empty-ways">
-            <div class="console-empty-way">
-              <span class="console-empty-way-label">Open your workspace</span>
-              <pre class="console-empty-cmd"><code>magus graph open</code></pre>
-              <span class="console-empty-hint">Renders your repo's graph right here.</span>
+        <div class="pf-v6-c-empty-state" id="graph-empty-state" hidden>
+          <div class="pf-v6-c-empty-state__content">
+            <div class="pf-v6-c-empty-state__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/>
+                <line x1="6.6" y1="7.8" x2="10.4" y2="16.2"/><line x1="17.4" y1="7.8" x2="13.6" y2="16.2"/><line x1="7.4" y1="6" x2="16.6" y2="6"/>
+              </svg>
             </div>
-            <div class="console-empty-way">
-              <span class="console-empty-way-label">Try the demo</span>
-              <button id="demo-explore-btn" type="button" class="graph-empty-demo">Explore the magus graph</button>
-              <span class="console-empty-hint">Loads the magus project's own graph.</span>
+            <h1 class="pf-v6-c-empty-state__title-text">Nothing loaded yet</h1>
+            <div class="pf-v6-c-empty-state__body">
+              <p>Explore a magus workspace's dependency graph here. It renders in your browser - nothing is ever uploaded.</p>
+              <div class="pf-v6-c-empty-state__actions" data-empty-ways>
+                <div data-empty-way>
+                  <span data-empty-way-label>Open your workspace</span>
+                  <pre data-empty-cmd><code>magus graph open</code></pre>
+                  <span data-empty-hint>Renders your repo's graph right here.</span>
+                </div>
+                <div data-empty-way>
+                  <span data-empty-way-label>Try the demo</span>
+                  <button id="demo-explore-btn" type="button" class="pf-v6-c-button pf-m-secondary"><span class="pf-v6-c-button__text">Explore the magus graph</span></button>
+                  <span data-empty-hint>Loads the magus project's own graph.</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -214,7 +222,7 @@
     </details>
 
     <noscript>
-      <p style="color:var(--pico-muted-color);">The graph explorer needs JavaScript to lay out and render the graph. You can still <a href="./graph.json">download the raw graph JSON</a>, or read the <a href="../../documentation/">documentation</a>.</p>
+      <p class="graph-noscript">The graph explorer needs JavaScript to lay out and render the graph. You can still <a href="./graph.json">download the raw graph JSON</a>, or read the <a href="../../documentation/">documentation</a>.</p>
     </noscript>
 
   </main>
