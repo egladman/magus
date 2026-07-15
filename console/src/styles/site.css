@@ -1,0 +1,2195 @@
+/* site.css - shared layout for the magus docs site (homepage + docs pages).
+   Layout only: a sticky top bar and a table-of-contents sidebar, neither of
+   which Pico ships as a component. Every color here is a Pico CSS variable, so
+   light/dark stay 100% stock Pico - there are no theme overrides in this file.
+   (The playground page carries its own component styles.) */
+
+/* Pico v2 scales the root font-size UP at each breakpoint - 100% (16px) at the
+   base, climbing to 125% (20px) >=1280px and 131.25% >=1536px - which makes the
+   whole UI read noticeably larger than a typical 16px site (e.g. github.com).
+   Pin it to 100% so 1rem == 16px at every width; spacing is rem-based, so the
+   entire layout tightens proportionally to match. */
+
+:root {
+  --pico-font-size: 100%;
+  /* Shared width for the app-like tool pages (search, playground editor) so they
+     occupy the same screen real estate instead of one being 78rem and the other
+     full-bleed. Wider than the prose container, but still capped. */
+  --content-wide: 78rem;
+  /* On a non-overlay-scrollbar system, a page tall enough to scroll reserves a
+     vertical scrollbar gutter that document.documentElement.clientWidth (normal
+     in-flow sizing) accounts for, but the viewport used to size a
+     position:fixed full-bleed element (.toc's mobile sheet, .toc-backdrop) does
+     not - the classic "100vw/fixed overlay is wider than the visible page"
+     mismatch. Reserving the gutter unconditionally keeps both measurements
+     consistent, so those overlays stop overshooting into horizontal scroll. */
+  scrollbar-gutter: stable;
+}
+
+/* Second, independent layer against the same class of bug: the mobile TOC
+   sheet (.toc, below) sits off-screen via transform when closed, but a
+   transform doesn't remove an element from layout - its box still
+   participates in scrollWidth even while invisible, which can nudge the page
+   into a phantom few pixels of horizontal scroll no vertical-scrollbar gutter
+   fix touches. overflow-x: clip (not hidden/auto/scroll) forbids all
+   horizontal scroll - including programmatic - without establishing a new
+   scroll container, so position: sticky (the header, the desktop TOC sidebar)
+   keeps working unaffected; verified against both before shipping this. CSS
+   only, no JS. */
+html {
+  overflow-x: clip;
+}
+
+/* Skip-to-content link: the first focusable element on the page, hidden off the
+   top edge until it takes focus, then it slides into view. Lets keyboard and
+   screen-reader users jump past the header/nav/search straight to the article. */
+.skip-link {
+  position: fixed;
+  left: 0.5rem;
+  top: -4rem;
+  z-index: 30;
+  padding: 0.5rem 0.9rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-primary);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+.skip-link:focus {
+  top: 0.5rem;
+}
+/* The main landmark is a skip-link target (tabindex="-1"); suppress the focus
+   outline it would otherwise show when focused programmatically. */
+#main-content:focus {
+  outline: none;
+}
+
+/* Visually hidden but available to assistive tech - used by the search result
+   count live region. The clip-rect pattern keeps it in the accessibility tree
+   (unlike display:none) while removing it from the visual layout. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Distinguishable, sticky top bar. The header spans the full width with a
+   card-shade background and a bottom border so it reads as a distinct bar; the
+   nav inside is a normal Pico .container, so it lines up with page content. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-block: 0.45rem; /* trimmed a few px site-wide so the bar reads leaner (and the dashboard more native); overrides Pico's tall <header> padding */
+  background: var(--pico-card-background-color);
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* subtle lift so it reads as a bar */
+}
+/* Installed-PWA title bar (Window Controls Overlay). When the app is installed and the OS
+   grants WCO (manifest display_override), the browser removes its own title bar and overlays the
+   window buttons on the page; the header then IS the title bar. env(titlebar-area-*) is the safe
+   band excluding those buttons, so the header sits inside it (never underlapping the controls) and
+   -webkit-app-region:drag lets it move the window. Interactive children opt back out so they stay
+   clickable. Placed in site.css (loaded on every page, unlike console.css) so a docs-page install
+   is handled too. Fully inert in a normal browser tab, so it cannot affect ordinary browsing. */
+@media (display-mode: window-controls-overlay) {
+  .site-header {
+    margin-left: env(titlebar-area-x, 0);
+    width: env(titlebar-area-width, 100%);
+    min-height: env(titlebar-area-height, 2.5rem);
+    -webkit-app-region: drag;
+  }
+  .site-header a,
+  .site-header button,
+  .site-header input,
+  .site-header select,
+  .site-header summary {
+    -webkit-app-region: no-drag;
+  }
+}
+
+/* Trim Pico's generous nav spacing so the bar stays compact. */
+.site-header nav {
+  --pico-nav-element-spacing-vertical: 0.4rem;
+}
+/* The settings gear (the rightmost nav control, holding the theme select) is sized as a
+   square icon button by .ref-trigger/#settings-btn in console.css, which every page now
+   loads; the .nav-right flex gap gives it breathing room from the section links. */
+/* Section links share ONE "background-fill" language for both hover and the current
+   page - no underlines on either - so the two states read as the same thing at
+   different strengths (neutral tint on hover, persistent primary tint for the page
+   you're on). The padding + radius live on every link, not just the active one, so
+   the fill is a consistent pill and hovering never shifts the layout; the negative
+   vertical margin keeps the padded links from growing the nav row. */
+.site-header .nav-links a {
+  text-decoration: none;
+  border-radius: var(--pico-border-radius);
+  padding: 0.2rem 0.5rem;
+  margin: -0.2rem 0;
+  transition: background 0.12s ease;
+}
+.site-header .nav-links a:hover,
+.site-header .nav-links a:focus-visible {
+  background: var(--pico-card-sectioning-background-color);
+}
+.site-header .nav-links a[aria-current]:not([aria-current="false"]) {
+  /* Softer than the raw focus tint: keep the primary hue but dial the fill back so
+     the "you are here" pill reads as a quiet marker, not a loud highlight. */
+  background: color-mix(in srgb, var(--pico-primary-focus) 65%, transparent);
+  color: var(--pico-primary);
+}
+
+/* Right cluster of the top bar: the section links (collapsible on mobile) plus the
+   always-visible theme toggle. */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  position: relative; /* anchors the mobile dropdown */
+}
+/* Section links: a horizontal row on desktop. The menu button is a Pico .outline
+   <button> - it inherits the same border+icon color as the theme toggle with zero
+   overrides (no <details> accordion styling to reset), and is hidden until mobile. */
+.nav-links {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nav-links li { list-style: none; }
+/* The "MENU" caption and the "Tap outside or press Esc to close" hint both belong
+   to the mobile nav dropdown only. Hidden everywhere by default; the mobile popup
+   (below) reveals them. Without this default hide the hint leaked into the desktop
+   nav row (a flex child with no display of its own), reading as stray bar text. */
+.nav-menu-label,
+.nav-menu-hint { display: none; }
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0; /* its type="button" attribute otherwise picks up Pico's form-button
+                bottom margin, which was pushing this button up within the centered
+                row; the settings gear zeroes the same margin in console.css */
+  padding: 0.4rem; /* square, matching the TOC + settings gear */
+}
+/* Icon swap: hamburger by default, X once the dropdown is open. The .nav-open class
+   lives on .nav-right (the button's parent), so it drives both glyphs from one hook. */
+.nav-toggle .icon-close { display: none; }
+.nav-right.nav-open .nav-toggle .icon-menu { display: none; }
+.nav-right.nav-open .nav-toggle .icon-close { display: inline; }
+
+/* Utility chrome (the menu button + reference trigger) reads as quiet, secondary controls
+   rather than primary-blue outlines, so the eye is free to land on content and on
+   the warm "run/try" CTAs. Resting state is muted gray; hover/focus firm up to the
+   full text color so they never feel disabled. The settings gear (#settings-btn) gets
+   the same treatment from console.css, which every page loads. */
+.nav-toggle,
+.ref-trigger {
+  border-color: var(--pico-muted-border-color);
+  color: var(--pico-muted-color);
+}
+.nav-toggle:hover,
+.nav-toggle:focus-visible,
+.ref-trigger:hover,
+.ref-trigger:focus-visible {
+  border-color: var(--pico-color);
+  color: var(--pico-color);
+}
+
+@media (max-width: 1024px) {
+  /* Mobile: show the menu button and collapse the links into a dropdown. Matches the
+     site's other narrow/wide layout breakpoint (.with-toc, .search-layout at 1024px)
+     so the nav collapses before the row starts feeling cramped, not just before it
+     literally overflows. Only .js gets the collapse - the button needs nav.js to
+     toggle it - so no-JS keeps the links in the bar (wrapping) rather than trapping
+     them behind a dead button. */
+  .js .nav-toggle { display: inline-flex; }
+  .js .nav-links {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 30;
+    min-width: 11rem;
+    padding: 0.35rem;
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--pico-border-radius);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  }
+  .js .nav-right.nav-open .nav-links { display: block; }
+  .js .nav-links li { display: block; margin: 0; } /* stack one per row */
+  /* Popup heading, matching .toc-title: uppercase, muted, tracked. text-transform
+     renders the plain "Menu" markup as "MENU" - same treatment the TOC sheet uses. */
+  .js .nav-links .nav-menu-label {
+    display: block;
+    margin: 0.15rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--pico-muted-color);
+  }
+  .js .nav-links a {
+    display: block;
+    padding: 0.45rem 0.6rem;   /* bigger tap rows; overrides the desktop pill padding */
+    margin: 0;                 /* override the desktop negative margin so rows stack flush */
+  }
+  /* Closing hint at the foot of the dropdown: quieter than the links (smaller,
+     muted, non-tappable), with a hairline separating it from the last item so it
+     reads as a footnote about how to dismiss, not another menu row. */
+  .js .nav-links .nav-menu-hint {
+    display: block;
+    margin: 0.25rem 0.15rem 0.1rem;
+    padding: 0.35rem 0.6rem 0.1rem;
+    border-top: 1px solid var(--pico-muted-border-color);
+    font-size: 0.72rem;
+    color: var(--pico-muted-color);
+  }
+  /* The hover and current-page fills come from the shared base rules above; in the
+     dropdown they fill the whole row (block + row padding), so a hovered item and the
+     current page read identically - a full-row tint, primary for the current page. */
+  /* No-JS fallback: the links stay visible and wrap to the right instead of hiding. */
+  .no-js .nav-links { flex-wrap: wrap; justify-content: flex-end; }
+}
+
+/* Small hat mark beside the "magus" wordmark in the nav. */
+.brand-mark {
+  height: 1.5em;
+  width: auto;
+  vertical-align: -0.35em;
+}
+
+/* Centered hero image on the home page (the README gopher). */
+.hero {
+  text-align: center;
+  margin: 0.5rem 0 1.75rem;
+}
+.hero img {
+  height: clamp(180px, 28vw, 300px);
+  width: auto;
+}
+
+/* Docs/home layout: a table-of-contents sidebar beside the article. One column
+   by default (mobile); two columns once there's room for the sidebar. */
+.with-toc {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr); /* minmax(0,..) so wide tables/code can't blow out the column */
+  gap: var(--pico-spacing);
+}
+@media (min-width: 1024px) {
+  .with-toc {
+    grid-template-columns: 16rem minmax(0, 1fr);
+    gap: calc(var(--pico-spacing) * 2);
+  }
+}
+
+/* The table of contents itself. The <nav> is sticky within the sidebar column
+   and scrolls independently when the list is long. Pico lays nav/ul out as a
+   horizontal flex row; reset to a vertical block list for a sidebar. */
+.toc nav {
+  display: block;
+  position: sticky;
+  top: 4.5rem; /* clear the sticky header */
+  max-height: calc(100vh - 5.5rem);
+  overflow-y: auto;
+  font-size: 0.875rem;
+}
+.toc nav ul {
+  display: block;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.toc nav li {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+.toc nav ul ul {
+  padding-left: 0.85rem; /* indent h3 under its h2 */
+}
+.toc nav a {
+  display: block;
+  /* Pull left by the same amount as the horizontal padding so the text stays
+     flush with the list while the hover highlight gets breathing room. */
+  margin: 0 -0.4rem;
+  padding: 0.2rem 0.4rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+  line-height: 1.4;
+  border-radius: var(--pico-border-radius);
+  /* Keep each entry to one line; truncate anything too wide with an ellipsis.
+     The full text is carried in each link's title attribute, so hovering shows
+     it as a tooltip and screen readers read the untruncated text. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toc nav a:hover,
+.toc nav a:focus-visible {
+  color: var(--pico-primary);
+  background: var(--pico-card-sectioning-background-color);
+}
+/* Active section (set by toc.js scroll-spy). Mirrors the top-nav "you are here"
+   indicator: primary color + a flush-left accent so the eye can track position.
+   Needed explicitly because .toc nav a above pins color/decoration, overriding
+   Pico's stock aria-current styling. */
+.toc nav a[aria-current]:not([aria-current="false"]) {
+  color: var(--pico-primary);
+  font-weight: 600;
+}
+
+/* Small "On this page" label above the TOC list. */
+.toc-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pico-muted-color);
+}
+/* "Tap outside or press Esc to close" hint at the foot of the TOC. Only the mobile
+   bottom sheet (below) reveals it; hidden on the desktop sidebar, where there is
+   nothing to dismiss. Mirrors the nav dropdown's .nav-menu-hint default hide. */
+.toc-hint { display: none; }
+
+/* Toolbar above the content holding the doc controls: the TOC toggle and the
+   search button, sitting side by side (added by toc.js / search.js). */
+.page-tools {
+  display: flex;
+  /* stretch, not center: the TOC toggle (icon + padding) and the search field have
+     slightly different intrinsic heights, so centering left the search bar looking
+     a hair shorter. Stretching makes both match the taller one exactly. */
+  align-items: stretch;
+  gap: 0.4rem;
+  position: relative; /* anchors the search results dropdown */
+  margin: 0 0 1rem;
+}
+/* Let the search input fill the stretched row height (it sits inside .search-wrap,
+   so the wrapper must be a flex box for the input to stretch to it). */
+.page-tools .search-wrap {
+  display: flex;
+}
+
+/* Square outline icon button in the toolbar: the TOC toggle (a list icon to
+   reveal the sidebar, an X to hide it). Collapsing the TOC reflows the article to
+   the full container width (.toc-collapsed). */
+.toc-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0;
+  padding: 0.4rem;
+}
+/* The toggle is always a solid violet control (distinct from the blue links and rose
+   code); activating it (TOC shown, aria-expanded=true) or hovering just deepens the
+   shade rather than inverting to an outline, so the on state reads as the same button
+   pressed, not a different-looking element. accent-violet-hover is the palette's
+   emphasis shade - darker in light, appropriately brighter in dark. */
+/* !important overrides Pico's .outline, which forces a transparent background with
+   !important; without it the filled state can't take. */
+.toc-toggle[aria-expanded="false"] {
+  background-color: var(--accent-violet) !important;
+  border-color: var(--accent-violet);
+  color: var(--accent-violet-inverse, #fff);
+}
+.toc-toggle[aria-expanded="true"],
+.toc-toggle[aria-expanded="false"]:hover {
+  background-color: var(--accent-violet-hover, var(--accent-violet)) !important;
+  border-color: var(--accent-violet-hover, var(--accent-violet));
+  color: var(--accent-violet-inverse, #fff);
+}
+
+/* Secondary tool row below the search bar: reading-time chip on the left,
+   the page-tools sentence ("See the Markdown source or suggest an edit...")
+   on the right, at every screen width. Empty on pages without a reading time
+   (the chip is skipped) - the sentence still hugs the right edge via
+   margin-left:auto. Just layout - Pico styles the <em> and <small> inside. */
+.page-tools-secondary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0.25rem 0 1rem;
+}
+.page-tools-edit { margin-left: auto; }
+.page-tools-edit a { margin: 0 0.3rem; }
+
+/* Wrapper that hosts the input and the right-side keybinding hint together.
+   Takes the flex sizing so the input itself can be width:100% inside it. */
+.search-wrap {
+  position: relative;
+  flex: 0 1 26rem;
+  min-width: 0;
+}
+
+/* The search field's shared look - one aesthetic for both the header dropdown and
+   the /search/ page input: type=text (buttons' tight corners, not Pico's pill), a
+   left magnifier background image, compact type, angular radius. Both selectors are
+   scoped one level deep to outrank Pico's input rules without !important. */
+.page-tools .search-input,
+.search-page-inputwrap .search-input {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  height: auto;
+  border-radius: var(--pico-border-radius);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238891a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 0.6rem center;
+  background-size: 1rem 1rem;
+}
+/* Header: extra right padding reserves space for the keybinding hint. */
+.page-tools .search-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.32rem 5rem 0.32rem 1.9rem;
+}
+/* Page: same field, a touch taller for a prominent bar; no kbd hint, so no right gap. */
+.search-page-inputwrap .search-input {
+  width: 100%;
+  padding: 0.5rem 0.9rem 0.5rem 2.1rem;
+}
+
+/* Right-aligned keybinding hint overlaid inside the input. Hidden on focus or
+   when the field has content so it never overlaps typed text. */
+.search-hint {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  pointer-events: none;
+  color: var(--pico-muted-color);
+  opacity: 1;
+  transition: opacity 0.1s;
+}
+/* Subtle outlined key caps, not Pico's default dark filled <kbd>. Muted text on
+   a transparent field with a hairline border reads as a quiet hint rather than a
+   bold badge. font-family:inherit renders the platform symbols (/, Cmd) in the
+   UI font so they display cleanly on every OS. */
+.search-hint kbd {
+  font-family: inherit;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0.15rem 0.3rem;
+  color: var(--pico-muted-color);
+  background: transparent;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: none;
+}
+.search-wrap:has(.search-input:focus) .search-hint,
+.search-wrap:has(.search-input:not(:placeholder-shown)) .search-hint {
+  opacity: 0;
+}
+
+/* Results dropdown anchored under the toolbar - the one piece that overlays
+   content, kept minimal and dismissed on Escape / click-away. */
+.search-results {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  z-index: 20;
+  /* Cap to the toolbar width (its positioned parent), not 100vw: 100vw includes the
+     vertical scrollbar, so on always-visible-scrollbar systems the open dropdown is
+     a few px wider than the content and forces a horizontal scroll. */
+  width: min(30rem, 100%);
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+.search-results[hidden] {
+  display: none;
+}
+.search-results li {
+  margin: 0;
+  padding: 0;
+}
+.search-results a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--pico-border-radius);
+  text-decoration: none;
+}
+/* Mouse hover is a quiet background shade. */
+.search-results a:hover,
+.search-results a:focus-visible {
+  background: var(--pico-card-sectioning-background-color);
+}
+/* Keyboard-navigated selection fills with the primary color and flips its text
+   to the primary-inverse tone, mirroring how Pico marks a selected dropdown
+   option. That reads as unambiguously "selected" and stays visually distinct
+   from the subtle hover shade, using only stock Pico variables. */
+.search-results a[aria-selected="true"] {
+  background: var(--pico-primary);
+}
+.search-results a[aria-selected="true"] .search-title,
+.search-results a[aria-selected="true"] .search-url {
+  color: var(--pico-primary-inverse);
+}
+.search-title {
+  color: var(--pico-color);
+  font-weight: 600;
+}
+.search-url {
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+.search-empty {
+  padding: 0.4rem 0.5rem;
+  color: var(--pico-muted-color);
+}
+
+/* Collapsed: drop the sidebar entirely and give its grid column back to the
+   article so the whole page content goes wider. */
+.with-toc.toc-collapsed .toc {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .with-toc.toc-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 1023px) {
+  /* Toolbar stays a single row: the TOC toggle keeps its inline slot next to
+     the search input rather than stacking above (visually tighter, and the row
+     is cheap - the toggle is a small icon button). Search grows to fill the
+     remainder. "Suggest an edit" already lives on the secondary row below. */
+  .search-wrap { flex: 1 1 auto; }
+
+  /* No-JS / default: the TOC stacks statically above the article (nothing to
+     toggle, so it must stay visible). */
+  .toc nav { position: static; max-height: none; }
+
+  /* With JS, the TOC becomes a top-sheet tray toggled by toc.js: a fixed panel
+     off the top edge that drops down into view over a dimming backdrop. It comes
+     from the top because the toggle button sits high on the page (in the tool row
+     just under the header), so the tray opens right where the reader's thumb
+     already is. Gated under .js so no-JS users keep the static stacked list above
+     and are never stranded with an off-canvas panel they can't open. */
+  .js .toc {
+    display: block; /* override the desktop .toc-collapsed { display:none } here */
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: calc(1rem + env(safe-area-inset-top)) var(--pico-spacing) 1rem;
+    background: var(--pico-card-background-color);
+    border-bottom: 1px solid var(--pico-muted-border-color);
+    border-bottom-left-radius: var(--pico-border-radius);
+    border-bottom-right-radius: var(--pico-border-radius);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+    transform: translateY(-100%);
+    transition: transform 0.25s ease;
+  }
+  .js .toc nav { position: static; max-height: none; } /* not sticky inside the sheet */
+  /* The links carry a negative horizontal margin for a full-bleed hover in the desktop
+     sidebar; inside the narrow fixed sheet that pushes them past the panel edge and
+     triggers a horizontal scrollbar, so pin them flush here. */
+  .js .toc nav a { margin-left: 0; margin-right: 0; }
+  .js .toc.toc-sheet-open { transform: translateY(0); }
+
+  /* Closing hint at the foot of the sheet: quieter than the links (smaller, muted,
+     non-tappable), with a hairline separating it from the list so it reads as a
+     footnote about dismissal, not another TOC row. Matches the nav dropdown's
+     .nav-menu-hint. Only shown inside the JS bottom sheet, never the no-JS list. */
+  .js .toc .toc-hint {
+    display: block;
+    margin: 0.5rem 0 0;
+    padding: 0.5rem 0 0;
+    border-top: 1px solid var(--pico-muted-border-color);
+    font-size: 0.72rem;
+    color: var(--pico-muted-color);
+  }
+
+  /* Dimming layer behind an open sheet; toc.js inserts/removes it and closes the
+     sheet on a tap. */
+  .toc-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Center mermaid diagrams within their container (mermaid-init.js wraps each in
+   <div class="mermaid">); let the inline max-width scale the SVG cleanly. */
+.mermaid {
+  display: flex;
+  justify-content: center;
+}
+.mermaid > svg {
+  height: auto;
+}
+
+/* Offset in-page anchor jumps so a targeted heading clears the sticky header
+   instead of hiding behind it. */
+article :is(h2, h3, h4, h5, h6) {
+  scroll-margin-top: 4.5rem;
+}
+
+/* Line-wrapping policy (Pico sets none; browser default is plain `wrap`).
+   `balance` evens out line lengths on SHORT blocks - headings, card titles, and
+   blockquotes - where a lone trailing word looks worst. `pretty` reflows only the
+   last line of longer body prose to avoid orphans/short widows, which pays off most
+   on long-form blog paragraphs but is harmless on terse docs. Both fall back to
+   normal wrapping on browsers that lack them. One global policy, no per-section
+   split - the classless-Pico way. */
+h1, h2, h3, h4, h5, h6,
+.related-card-title,
+blockquote {
+  text-wrap: balance;
+}
+article p,
+article li {
+  text-wrap: pretty;
+}
+
+/* Page-level provenance sits below the article container and above the site
+   footer; it belongs to the page, not the site, so it gets the border that
+   separates it from content. */
+.page-provenance {
+  margin-top: 2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  color: var(--pico-muted-color);
+}
+
+/* "Recent changes" disclosure in the provenance footer. Closed, it is a quiet summary
+   line; open, only the revealed list becomes a bordered panel matching the Search
+   Syntax block (shared --syntax-panel-bg, angular border). The summary label stays a
+   plain heading above the panel - never inside it - so it looks identical open or
+   closed and does not read as part of the boxed history. */
+.recent-changes {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  border-bottom: none; /* drop Pico's accordion rule; this is a self-contained panel */
+}
+/* One consistent label aesthetic in both states: the uppercase, tracked
+   "reference label" look. Opening only adds the panel chrome (border, background,
+   a gap below the summary) - the summary itself is the same element rendered the
+   same way, so it reads as a panel expanding beneath a fixed label, not a swap. */
+/* :not([role]) matches - and outranks - Pico's own `details summary:not([role])`
+   color rule, so the summary keeps the muted color instead of Pico's darker
+   accordion-summary color. Size + tracking match .related-heading so this heading
+   and "RELATED" read as the same style. */
+.recent-changes > summary:not([role]) {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--pico-muted-color);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.recent-changes[open] > summary {
+  margin-bottom: 0.5rem;
+}
+/* Hold the label muted in every state. Opening, focusing, or hovering must not
+   recolor it (Pico's accordion focus/open summary rules would otherwise tint it);
+   the .page-provenance prefix lifts specificity above those Pico rules. */
+.page-provenance .recent-changes > summary:not([role]),
+.page-provenance .recent-changes > summary:not([role]):hover,
+.page-provenance .recent-changes > summary:not([role]):focus,
+.page-provenance .recent-changes > summary:not([role]):focus-visible,
+.page-provenance .recent-changes[open] > summary:not([role]) {
+  color: var(--pico-muted-color);
+}
+.recent-changes[open] > ul {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--syntax-panel-bg);
+}
+.recent-changes ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.recent-changes li {
+  padding: 0.25rem 0;
+  list-style: none;
+  color: var(--pico-muted-color);
+}
+.recent-changes li + li {
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.recent-changes > p {
+  margin: 0.6rem 0 0;
+}
+
+/* Frontmatter tags: outlined, non-interactive chips at the top of the provenance
+   footer. Built from Pico's muted border + muted text tokens so they read as quiet
+   metadata (not clickable buttons) and track the active theme. There are no tag-
+   archive pages yet, so tags are labels, not links - no hover/pointer affordance. */
+.post-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.6rem;
+}
+.post-tags .tag {
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-muted-color);
+  white-space: nowrap;
+}
+/* The "Generated" status chip leads the tag row on mechanically generated pages
+   (module/spell/man-page references). Filled - not outlined - so it reads as a
+   status distinct from the topical tags beside it, and slightly stronger text so
+   it draws the eye first. cursor:help pairs with the tooltip. Still Pico tokens,
+   still angular, so it stays in the design language. */
+.post-tags .tag.generated {
+  background: var(--pico-muted-border-color);
+  color: var(--pico-color);
+  cursor: help;
+}
+/* Topical tags are links to the search page (tag:<name>). Inherit the chip look
+   from .post-tags .tag; drop the underline and fill on hover/focus so they read as
+   interactive without a permanent button look. */
+.post-tags a.tag {
+  text-decoration: none;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.post-tags a.tag:hover,
+.post-tags a.tag:focus-visible {
+  background: var(--pico-muted-border-color);
+  border-color: var(--pico-muted-border-color);
+  color: var(--pico-color);
+}
+
+/* Dedicated /search/ page: a prominent input over a full-width, static results
+   list (the header dropdown's .search-results is absolute; this is in-flow). Reuses
+   .search-title/.search-url for each hit. All Pico tokens, angular, light + dark. */
+.search-page-inputwrap {
+  position: relative; /* anchors the facet-suggestion dropdown */
+  margin: 0.5rem 0 0;
+}
+.search-page-status {
+  margin: 0 0 0.5rem;
+  color: var(--pico-muted-color);
+  font-size: 0.85rem;
+}
+
+/* The search page is a listing surface, not prose, so it widens past the reading-width
+   container to give the two columns room. Higher specificity than Pico's .container
+   breakpoints, so no !important needed. */
+.site-search main.container {
+  max-width: var(--content-wide);
+}
+/* Two-column layout: results in the main column, the syntax reference (and future facet
+   filters) in a left rail. Single column below the site's sidebar breakpoint - and since
+   .search-main precedes .search-side in the DOM, results stack ABOVE the reference there
+   rather than being pushed down by it. */
+.search-layout {
+  margin-top: 0.75rem;
+}
+@media (min-width: 1024px) {
+  .search-layout {
+    display: grid;
+    grid-template-columns: 17rem minmax(0, 1fr);
+    gap: 2.25rem;
+    align-items: start;
+  }
+  .search-side { grid-column: 1; grid-row: 1; }  /* rail on the left despite DOM order */
+  .search-main { grid-column: 2; grid-row: 1; }
+  /* The reference tracks the viewport as results scroll (mirrors the TOC sidebar). */
+  .search-side .search-syntax {
+    position: sticky;
+    top: 4.5rem;
+    margin: 0;
+  }
+}
+/* In the narrow rail the definition list stacks (example above its description) instead
+   of the wide page's two-column grid. */
+.search-side .search-syntax dl {
+  display: block;
+}
+.search-side .search-syntax dt {
+  margin-top: 0.55rem;
+}
+.search-side .search-syntax dt:first-of-type {
+  margin-top: 0;
+}
+.search-side .search-syntax dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+}
+/* Keep result prose readable even in the wider main column: cap the text-heavy lines to
+   a comfortable measure rather than letting them run the full width. */
+.result-desc,
+.result-snippet {
+  max-width: 60rem;
+}
+
+/* Facet autocomplete: tag suggestions under the input while the caret is in a tag:
+   token. Same floating-dropdown treatment as the header search results. */
+.search-facets {
+  position: absolute;
+  top: calc(100% - 0.25rem);
+  left: 0;
+  z-index: 20;
+  width: min(24rem, 100%);
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+.search-facets[hidden] { display: none; }
+.search-facets li {
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--pico-border-radius);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.search-facets li:hover { background: var(--pico-card-sectioning-background-color); }
+.search-facets li[aria-selected="true"] { background: var(--pico-primary); color: var(--pico-primary-inverse); }
+.search-facets li[aria-selected="true"] .facet-key { color: var(--pico-primary-inverse); }
+.facet-key { color: var(--pico-muted-color); }
+
+/* Parsed-query chips: the live "here is how your query parsed" echo under the input.
+   Field facets read as bordered pills, operators as small muted connectives, so valid
+   logic visibly chunks together (the Datadog cue). All Pico tokens, angular. */
+.search-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+}
+.search-chips[hidden] { display: none; }
+.qchip {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-muted-color);
+  white-space: nowrap;
+}
+.qchip-field {
+  color: var(--pico-color);
+  background: var(--pico-card-sectioning-background-color);
+}
+.qchip-field b { font-weight: 600; }
+.qchip-phrase { font-style: italic; }
+.qop {
+  font-weight: 600;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--pico-muted-color);
+}
+.qbracket {
+  font-weight: 600;
+  color: var(--pico-muted-color);
+}
+.search-page-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.search-page-results li {
+  margin: 0;
+  padding: 0.5rem 0.5rem 0.55rem;
+  list-style: none;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.search-page-results li:last-child {
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+/* Each hit is a dense stack: title + type badge, url, description, a marked body
+   snippet, then clickable tag chips (a sibling of the main link, since anchors
+   cannot nest). The main link fills the row for a generous click target. */
+.result-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.15rem 0.25rem;
+  margin: -0.15rem -0.25rem 0;
+  border-radius: var(--pico-border-radius);
+  text-decoration: none;
+}
+.result-main:hover,
+.result-main:focus-visible {
+  background: var(--pico-card-sectioning-background-color);
+}
+.result-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.result-type {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.68rem;
+  color: var(--pico-muted-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.05rem 0.4rem;
+  white-space: nowrap;
+}
+/* --pico-contrast, not --pico-color: Pico remaps --pico-color to the link color
+   inside <a>, so the description (which lives in the result link) would otherwise
+   render blue. --pico-contrast is the untouched body-text token. */
+.result-desc {
+  color: var(--pico-contrast);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+/* Body excerpt clamped to two lines so long pages stay one compact row. */
+.result-snippet {
+  color: var(--pico-muted-color);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.35rem 0 0;
+}
+.result-tags a {
+  font-size: 0.68rem;
+  line-height: 1;
+  color: var(--pico-muted-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.2rem 0.4rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.result-tags a:hover,
+.result-tags a:focus-visible {
+  background: var(--pico-muted-border-color);
+  color: var(--pico-color);
+}
+
+/* Search Syntax reference on the dedicated /search/ page: always open and forefront
+   (a bordered reference panel, not a disclosure) - the query language is first-class
+   here. The header dropdown carries only the compact .search-synhint instead.
+   Examples are clickable links (search.js runs them in place); Pico styles
+   <dl>/<code> natively. */
+.search-syntax {
+  margin: 0.75rem 0 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--syntax-panel-bg);
+  font-size: 0.85rem;
+}
+/* "Search Syntax" label follows the site's small-section-heading convention (same as
+   .toc-title's "On this page"): uppercase, muted, tracked - not an ad-hoc bold line. */
+.search-syntax-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pico-muted-color);
+}
+.search-syntax-lead {
+  margin: 0 0 0.6rem;
+  color: var(--pico-muted-color);
+}
+.search-syntax dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0;
+  align-items: baseline;
+}
+.search-syntax dt,
+.search-syntax dd {
+  margin: 0;
+}
+.search-syntax dd {
+  color: var(--pico-muted-color);
+}
+/* Examples read as ordinary inline code (the site's neutral --pico-code-color, not a
+   link blue that clashes with every other <code> on the site); the clickable-to-run
+   affordance surfaces on hover/focus as a primary-colored underline. */
+.syntax-example {
+  text-decoration: none;
+}
+.syntax-example code {
+  color: var(--pico-code-color);
+}
+.syntax-example:hover code,
+.syntax-example:focus-visible code {
+  color: var(--pico-primary);
+  text-decoration: underline;
+}
+
+/* Guided Tour: a numbered card grid of curated, runnable examples. Cards are Pico-style
+   surfaces; the step number reads as a filled badge so the 1..N path is obvious. Each
+   card pins its "Open in Playground" link to the bottom so the cards line up. */
+.tour-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--pico-spacing);
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+}
+.tour-card {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 1rem 1.1rem 1.1rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+}
+.tour-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.tour-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.tour-num {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-primary);
+  color: var(--pico-primary-inverse);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tour-desc {
+  margin: 0.6rem 0 0.75rem;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.tour-teaser {
+  margin: 0 0 0.9rem;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+.tour-teaser code {
+  white-space: pre;
+}
+.tour-foot {
+  margin-top: auto; /* pin the footer to the card bottom so cards of differing height align */
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.tour-foot .open-in-playground {
+  align-self: flex-start; /* shrink to its content in the flex-column footer */
+}
+/* Inline concept cross-link tucked at the end of the description, so the warm
+   "Open in Playground" call to action below stands on its own. Quiet by default
+   (muted, underlined so it still reads as a link), firming up on hover; nowrap so
+   the trailing arrow never wraps to a line by itself. */
+.tour-learn {
+  white-space: nowrap;
+  color: var(--pico-muted-color);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.tour-learn:hover,
+.tour-learn:focus-visible {
+  color: var(--pico-color);
+}
+/* Same-site "go to this concept" arrow (rarr), shared by .tour-learn and the
+   search "see all results" link. Inline text, not flex, so the glyph's own
+   metrics sit a hair below the surrounding baseline; nudge it back up. */
+.xref-arrow {
+  display: inline-block;
+  font-size: 0.95em;
+  vertical-align: -0.02em;
+}
+
+/* Persistent header-dropdown footer: a compact syntax hint plus the explicit door to
+   the full /search/ page for the current query. This is what makes "dropdown = quick
+   preview, page = everything" read as deliberate rather than confusing. Separated
+   from the result options by a top rule; not a listbox option, so arrows skip it. */
+.search-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  /* Pinned to the bottom of the scrolling dropdown so the door to the full page and
+     the syntax hint stay visible no matter how many results scroll above them. */
+  position: sticky;
+  bottom: -0.35rem;
+  margin: 0.25rem -0.35rem -0.35rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--pico-card-background-color);
+  border-top: 1px solid var(--pico-muted-border-color);
+  font-size: 0.75rem;
+}
+.search-seeall {
+  color: var(--pico-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.search-seeall:hover,
+.search-seeall:focus-visible {
+  text-decoration: underline;
+}
+.search-synhint {
+  color: var(--pico-muted-color);
+}
+.search-synhint code {
+  font-size: 0.72rem;
+  padding: 0.05rem 0.3rem;
+}
+
+/* Site footer carries only attribution links; no border of its own - it flows
+   naturally below the provenance line with a small gap. */
+.site-footer {
+  margin-top: 1.25rem;
+  padding-bottom: 1.5rem;
+  /* Center the link clusters and let them wrap as even, centered rows. The old
+     space-between spread pushed the clusters to the edges, so once a third cluster was
+     added it wrapped raggedly on narrow screens (two clusters stretched across one row,
+     the third stranded below). Centering wraps gracefully; on phones the clusters stack,
+     each a tidy centered line, so the dotted items within a cluster never column-wrap. */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem 1.5rem;
+  text-align: center;
+}
+.footer-group {
+  margin: 0;
+}
+@media (max-width: 40rem) {
+  .site-footer { flex-direction: column; gap: 0.35rem; }
+}
+.site-footer a {
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+.site-footer a:hover {
+  color: var(--pico-color);
+  text-decoration: underline;
+}
+
+/* Copy-to-clipboard button on code blocks (added by copy.js, which wraps each
+   <pre> in a positioned .code-block). The button sits in the top-right corner,
+   fades in on hover/focus, and turns the Pico primary color once it has copied. */
+.code-block {
+  position: relative;
+}
+.code-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0;
+  padding: 0.3rem;
+  color: var(--pico-muted-color);
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+/* Size the icon here (the idle and the shared check icon carry no width/height). */
+.code-copy svg {
+  width: 16px;
+  height: 16px;
+}
+.code-block:hover .code-copy,
+.code-copy:focus-visible {
+  opacity: 1;
+}
+.code-copy:hover {
+  color: var(--pico-primary);
+}
+.code-copy.copied {
+  color: var(--pico-primary);
+  opacity: 1;
+}
+/* Touch devices have no hover; keep the button visible but subtle there. */
+@media (hover: none) {
+  .code-copy {
+    opacity: 0.6;
+  }
+}
+
+/* Shareable link icon beside each section heading (added by anchors.js). It
+   fades in when its heading is hovered, sizes itself to the heading via em
+   units, copies the section URL on click, and turns the Pico primary color
+   once copied. */
+.heading-anchor {
+  margin-left: 0.4rem;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.heading-anchor svg {
+  width: 0.7em;
+  height: 0.7em;
+  vertical-align: middle;
+}
+article :is(h2, h3, h4, h5, h6):hover .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 1;
+}
+.heading-anchor:hover {
+  color: var(--pico-primary);
+}
+.heading-anchor.copied {
+  color: var(--pico-primary);
+  opacity: 1;
+}
+/* Touch devices have no hover; keep the icon visible but subtle there. */
+@media (hover: none) {
+  .heading-anchor {
+    opacity: 0.6;
+  }
+}
+
+/* Inline code that is itself a link - e.g. a type name linking to its source
+   definition, or a module name in a reference table - should read unmistakably
+   as a link. Pico colors links with the primary color but inline <code> sets its
+   own muted color, which hides the link affordance; restore the link color so a
+   linked code span looks clickable (the underline already comes from the <a>). */
+a code {
+  color: var(--pico-primary);
+}
+
+/* Breadcrumb trail above the article (e.g. Home / Documentation / Modules / fs).
+   A muted inline list with "/" separators inserted via ::before; the current page
+   is the last crumb, unlinked and in the body color. */
+.breadcrumb {
+  margin-bottom: 1.25rem;
+  font-size: 0.8125rem;
+}
+.breadcrumb ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.breadcrumb li {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  color: var(--pico-muted-color);
+}
+.breadcrumb li:not(:first-child)::before {
+  content: "/";
+  margin: 0 0.5rem;
+  color: var(--pico-muted-border-color);
+}
+.breadcrumb a {
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+.breadcrumb a:hover,
+.breadcrumb a:focus-visible {
+  color: var(--pico-primary);
+  text-decoration: underline;
+}
+.breadcrumb [aria-current="page"] {
+  color: var(--pico-color);
+}
+
+/* Previous/next pager at the foot of the article, stepping through sibling pages
+   (e.g. module to module). Two bordered cards split the row; a lone card keeps to
+   its own side. The card label is muted, the page title takes the primary color. */
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pico-spacing);
+  margin-top: 2.5rem;
+}
+.page-nav a {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.page-nav a:hover {
+  border-color: var(--pico-primary);
+}
+.page-nav-next {
+  text-align: right;
+}
+/* When only one of prev/next exists, keep it on its side at half width rather
+   than stretching across the whole row. */
+.page-nav a:only-child {
+  flex: 0 1 50%;
+}
+.page-nav-next:only-child {
+  margin-left: auto;
+}
+.page-nav-dir {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pico-muted-color);
+}
+.page-nav-title {
+  color: var(--pico-primary);
+  font-weight: 600;
+}
+
+/* Reverse-chronological listing on /blog/. Each entry stacks title + date + one-
+   line description; hover raises the title (no background flash) to keep the list
+   dense. Layout comes from the ul; no per-post card so 10 posts stay browsable. */
+.blog-index {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+.blog-index li {
+  /* Pico sets list-style-type: square on li itself, which out-specifies the
+     ul's list-style:none - clear it here so entries don't sprout a marker. */
+  list-style: none;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.blog-index li:last-child {
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.blog-index-title {
+  font-weight: 600;
+}
+.blog-index-date {
+  color: var(--pico-muted-color);
+  margin-left: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.blog-index-desc {
+  margin: 0.25rem 0 0;
+  color: var(--pico-muted-color);
+}
+
+/* Post byline under the <h1>: date, author, and permalink on one muted line,
+   set just below the title so it reads as the post's metadata. */
+.blog-post-meta {
+  margin: -0.25rem 0 1.5rem;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+}
+
+/* Nested /public/ autoindex tree - Pico-themed Apache mod_autoindex look. Fixed-
+   width font + a leading <hr> above/below the entries so it reads like a real FTP
+   mirror listing while still respecting light/dark via Pico variables. */
+.autoindex {
+  font-family: var(--pico-font-family-monospace);
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  overflow-x: auto; /* fixed-width columns scroll on narrow screens, not overflow */
+}
+.autoindex .autoindex-head {
+  font-weight: 600;
+  color: var(--pico-muted-color);
+}
+.autoindex a {
+  color: var(--pico-primary);
+  text-decoration: none;
+}
+.autoindex a:hover { text-decoration: underline; }
+
+/* Reading-time chip on the secondary tool row (left side, in line with
+   "Suggest an edit" on the right). Italic + muted so it reads as an incidental
+   hint, not a control. Deterministic (a word count of the source markdown). */
+.reading-time {
+  color: var(--pico-muted-color);
+  font-style: italic;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+/* Floating back-to-top button (JS-injected by back-to-top.js). Hidden until
+   scroll passes ~400px; smooth-scrolls (respects prefers-reduced-motion). Sits
+   in the bottom-right safe area so it stays clear of the mobile TOC sheet. */
+.back-to-top {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 40;
+  width: 2.5rem;
+  height: 2.5rem;
+  /* Square (rounded) corners, matching the TOC / theme / nav toggle buttons -
+     was a full circle (border-radius: 50%). */
+  border-radius: var(--pico-border-radius);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--pico-card-background-color);
+  color: var(--pico-primary);
+  border: 1px solid var(--pico-muted-border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: translateY(0.5rem);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+/* Semi-opaque at rest so it sits lightly over the content it floats above; it
+   comes to full opacity on hover/focus when the reader reaches for it. */
+.back-to-top.visible {
+  opacity: 0.65;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.back-to-top.visible:hover,
+.back-to-top.visible:focus-visible {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .back-to-top { transition: none; }
+}
+
+/* "Related" card grid near the foot of a docs page (built by relatedFor() in the
+   magusfile - siblings, section hubs, and the docs hub, ranked by relevance). A
+   responsive grid of link cards that wrap to fit the column. */
+.related {
+  /* margin-top only: the shorthand `margin: 2.5rem 0 0` would zero the left/right
+     margins that .container relies on for centering, kicking the section flush-left. */
+  margin-top: 2.5rem;
+}
+.related-heading {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pico-muted-color);
+}
+.related-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem;
+}
+.related-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.related-card:hover,
+.related-card:focus-visible {
+  border-color: var(--pico-primary);
+  transform: translateY(-2px);
+}
+.related-card-title {
+  font-weight: 600;
+  color: var(--pico-primary);
+}
+.related-card-desc {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  /* Clamp to two lines so cards keep a roughly uniform height. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .related-card { transition: none; }
+  .related-card:hover,
+  .related-card:focus-visible { transform: none; }
+}
+
+/* Footnotes (goldmark extension.Footnote). A `text[^id]` reference renders as a
+   bracketed superscript link into a muted endnotes list at the foot of the article;
+   each note has a back-link up to its reference. */
+.footnote-ref {
+  font-weight: 600;
+  text-decoration: none;
+}
+.footnote-ref::before { content: "["; }
+.footnote-ref::after { content: "]"; }
+.footnotes {
+  margin-top: 2.5rem;
+  font-size: 0.9rem;
+  color: var(--pico-muted-color);
+}
+.footnotes ol { padding-left: 1.25rem; }
+.footnotes li { margin: 0.35rem 0; }
+/* Briefly tint the note you jumped to so the eye lands on it. */
+.footnotes li:target { background: var(--pico-card-sectioning-background-color); }
+.footnote-backref {
+  margin-left: 0.35rem;
+  text-decoration: none;
+}
+
+/* Release-announcement strip (announcementBar() in the magusfile; dismissed per
+   version by announcement.js). A slim primary-tinted bar above the header. */
+/* Hidden by default whenever JS is available: announcement.js adds .is-shown ONLY when
+   this release has not been dismissed. theme.js stamps .js on <html> before first paint,
+   so a returning dismisser never sees the bar flash in and back out (the old code shipped
+   it visible and hid it after reading localStorage). No-JS visitors keep the bar - the
+   .js gate simply does not match, so the base rule below renders it. */
+.js #announcement-bar { display: none; }
+.js #announcement-bar.is-shown { display: block; }
+#announcement-bar {
+  /* Muted warm tint: the site's established warm accent (reserved for CTAs) mixed
+     down into the page background, so the strip reads as a gentle notice and adds
+     warmth against the otherwise blue/violet palette. color-mix keeps it low-chroma
+     and theme-adaptive (both inputs are theme vars), in light and dark alike. */
+  background: color-mix(in srgb, var(--accent-warm) 15%, var(--pico-background-color));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-warm) 35%, var(--pico-muted-border-color));
+  font-size: 0.9rem;
+}
+#announcement-bar .container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 1rem;
+}
+#announcement-bar a { font-weight: 600; }
+.announcement-close {
+  /* margin:0 with left:auto pushes the button right AND zeroes Pico's default button
+     margin-bottom - as a flex item that bottom margin inflates the button's margin box
+     and shoves the glyph to the top of the bar. inline-flex then centers the x in it. */
+  margin: 0 0 0 auto;
+  flex: none;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  padding: 0 0.3rem;
+  color: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.announcement-close:hover { opacity: 1; }
+
+/* "New version available" toast (service-worker-register.js): a small card in the
+   bottom-left (clear of the bottom-right back-to-top button) offering a refresh. */
+.sw-toast {
+  position: fixed;
+  left: max(1rem, env(safe-area-inset-left));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 60;
+  max-width: 22rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+.sw-toast button {
+  flex: none;
+  width: auto;
+  margin: 0;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* Print stylesheet - text-only "save as PDF" output. Hides every JS/nav
+   affordance (header, page-tools, TOC toggle, back-to-top, footer chrome) and
+   collapses the layout to a single readable column. In-content links get their
+   URL spelled out in parentheses so a printed page still self-documents. */
+@media print {
+  /* Hide chrome: nav, breadcrumb, page-tools, TOC (sidebar & sheet), backdrop,
+     provenance, footer, back-to-top, search results dropdown, skip-link, and any
+     announcement bar (WS Q). */
+  .site-header,
+  .breadcrumb,
+  .page-tools,
+  .toc,
+  .toc-backdrop,
+  .page-nav,
+  .page-provenance,
+  .site-footer,
+  .back-to-top,
+  .related,
+  .search-results,
+  .skip-link,
+  .sw-toast,
+  #announcement-bar {
+    display: none !important;
+  }
+
+  /* One column, full width; drop container padding so the print margin is the
+     page margin. */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  main.container,
+  .container {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .with-toc {
+    display: block !important;
+    grid-template-columns: none !important;
+  }
+  article {
+    color: #000 !important;
+  }
+
+  /* In-content link URLs alongside the link text (skip anchor-only fragments).
+     Keeps a printed page self-documenting. */
+  article a[href]:not([href^="#"])::after {
+    content: " (" attr(href) ")";
+    color: #555;
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+
+  /* Keep code blocks readable: allow long lines to wrap instead of clipping. */
+  pre,
+  code {
+    white-space: pre-wrap !important;
+    word-break: break-word;
+  }
+  pre {
+    border: 1px solid #ddd;
+    page-break-inside: avoid;
+  }
+  h1, h2, h3, h4 { page-break-after: avoid; }
+  img { max-width: 100% !important; height: auto !important; }
+}
+
+/* Runnable code examples: an action bar coupled to the BOTTOM of an opt-in Buzz
+   block (a .code-block wrapper flagged .runnable), holding a Run button and an
+   Open-in-Playground link, plus an output panel that attaches below the block on
+   first run. The bar lives inside .code-block so it reads as part of the block,
+   not a floating row; squaring the code's bottom corners fuses the two. */
+.code-block.runnable > pre {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.runnable-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--pico-card-sectioning-background-color);
+  border-top: 1px solid var(--pico-muted-border-color);
+  border-bottom-left-radius: var(--pico-border-radius);
+  border-bottom-right-radius: var(--pico-border-radius);
+}
+.run-example {
+  padding: 0.2rem 0.65rem;
+  font-size: 0.85rem;
+  border-radius: var(--pico-border-radius);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  /* The primary action in the whole panel: a warm filled button so "run this"
+     pops against the blue links and the muted chrome. One accent, one job. */
+  background-color: var(--accent-warm);
+  border-color: var(--accent-warm);
+  color: var(--accent-warm-inverse);
+}
+.run-example:hover,
+.run-example:focus-visible {
+  background-color: var(--accent-warm-hover);
+  border-color: var(--accent-warm-hover);
+}
+.run-example[disabled] { opacity: 0.6; }
+/* Open in Playground - the shared orange call to action, used both on the tour
+   cards (standalone) and beside the Run button on runnable code blocks. Outline
+   orange by default so where it sits next to the filled Run button it reads as the
+   secondary action; it fills in on hover/focus. One component, one look, either place.
+   Pins :visited to the same warm color: it's a styled control, not prose, so it must
+   not pick up the article's blue/purple visited-link convention (theme.css) once clicked. */
+.open-in-playground,
+.open-in-playground:visited {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.5;
+  border: 1px solid var(--accent-warm);
+  border-radius: var(--pico-border-radius);
+  background-color: transparent;
+  color: var(--accent-warm);
+  text-decoration: none;
+}
+.open-in-playground:hover,
+.open-in-playground:focus-visible,
+.open-in-playground:visited:hover,
+.open-in-playground:visited:focus-visible {
+  background-color: var(--accent-warm);
+  border-color: var(--accent-warm);
+  color: var(--accent-warm-inverse);
+  text-decoration: none;
+}
+/* The label arrow is a separate glyph (rarr for same-site concept links, the
+   north-east arrow for this opens-elsewhere control - see .xref-arrow below);
+   sized down a touch and pinned to a 1 line-height so its glyph metrics don't
+   sit low against the label baseline inside the flex row. */
+.open-in-playground .oip-arrow {
+  font-size: 0.95em;
+  line-height: 1;
+}
+.runnable-bar .open-in-playground {
+  margin-left: auto; /* push to the right edge of the bar, opposite Run */
+}
+.runnable-output {
+  margin: 0.4rem 0 1rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--pico-card-sectioning-background-color);
+  border-left: 3px solid var(--accent-violet, var(--pico-primary));
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+.runnable-output.failed {
+  border-left-color: var(--pico-del-color, #b3261e);
+}
+
+/* Charm JSON-Patch disclosure (spell docs). The default Pico <details> reads as
+   plain text, so this makes the summary an obvious clickable header - a caret that
+   rotates on open, a card-like background/border set off from the description
+   above - and fuses the revealed code block to the bottom of the header bar so the
+   open state reads as one panel. Scoped to .charm-patch so other <details> are
+   untouched. */
+.charm-patch {
+  margin: 0.6rem 0 1.25rem;
+}
+.charm-patch > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0; /* Pico gives summary a bottom margin; drop it so the panel fuses */
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  cursor: pointer;
+  user-select: none;
+  list-style: none; /* Firefox: drop the default disclosure triangle */
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.charm-patch > summary::-webkit-details-marker { display: none; } /* Safari/Chrome */
+.charm-patch > summary::after { content: none; } /* kill Pico's own chevron */
+/* Custom caret on the left; points right when closed, down when open. */
+.charm-patch > summary::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+.charm-patch[open] > summary::before { transform: rotate(90deg); }
+.charm-patch > summary:hover {
+  color: var(--pico-primary);
+  border-color: var(--pico-primary);
+}
+/* When open, square the summary's bottom and the code block's top so they fuse.
+   The margin-bottom override is required: Pico's `details[open] > summary` re-adds
+   a bottom margin (higher specificity than the base rule above), which this
+   more-specific selector cancels so the code block sits flush. */
+.charm-patch[open] > summary {
+  margin-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.charm-patch[open] .code-block {
+  margin-top: 0;
+}
+.charm-patch[open] .code-block > pre {
+  margin-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* /public/ file tree: render like an ordinary page - the shared nav bar,
+   breadcrumb, article card, and footer all stay, so a visitor is never stranded
+   on a bare listing. Only the doc-only chrome that has nothing to act on here is
+   dropped: the (empty) page-tools row, its secondary "Suggest an edit" row, and
+   the per-page provenance strip. The monospace listing then sits flush inside the
+   article card instead of carrying its own nested card border. */
+.site-public .page-tools,
+.site-public .page-tools-secondary,
+.site-public .page-provenance {
+  display: none;
+}
+.site-public .autoindex {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* --- No-JS graceful degradation (foundation from WS D: theme.js flips
+       <html class="no-js"> to "js" before paint). Anything the JS bundle
+       injects (TOC toggle, search box, code-copy, anchors, back-to-top,
+       Run buttons) simply doesn't appear when JS is off. The settings gear is
+       static in the template but a dead control without JS (console-settings.js
+       opens its panel, and the theme select inside needs theme.js), so hide it
+       explicitly; the OS still drives dark mode via prefers-color-scheme. */
+.no-js #settings-btn {
+  display: none;
+}
+/* The /search/ page input is static HTML (unlike the JS-injected header search),
+   so without JS it looks usable but does nothing. Hide it so only the <noscript>
+   notice below it shows, instead of a dead-looking search box. */
+.no-js .search-page-inputwrap {
+  display: none;
+}
+/* The announcement bar's close button is static; without JS it can't dismiss
+   anything. Hide the dead control (the bar itself stays readable). Mirrors the
+   settings-gear treatment above. */
+.no-js .announcement-close {
+  display: none;
+}
+
+/* NoScript notices sit inline where their JS-only feature would live.
+   Muted card look so they read as guidance, not errors. */
+.noscript-notice {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  background: var(--pico-card-sectioning-background-color);
+  border-left: 3px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+}
+.noscript-inline {
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+  font-style: italic;
+}
+
+/* Mermaid source: with JS off, we show the raw DSL plus a caption identifying
+   it. With JS on, mermaid-init.js replaces the <pre> with the rendered SVG, so
+   the caption should disappear. .js gates the caption off (mermaid-init.js
+   runs regardless of whether it fully renders the SVG; even if the CDN fails,
+   users have JS on and expect the diagram surface). */
+.js .mermaid-src-caption { display: none; }
+.mermaid-src-caption { display: block; margin-top: 0.25rem; }
+
+/* Admonitions / callouts. Author with GitHub-alert syntax:
+     > [!NOTE]
+     > Body prose here.
+   The render pass rewrites the blockquote to a bordered card with a colored
+   left accent per type. Fully static, no JS. */
+.admonition {
+  margin: 1rem 0;
+  padding: 0.6rem 1rem 0.75rem 1.1rem;
+  background: var(--pico-card-sectioning-background-color);
+  border-left: 4px solid var(--pico-muted-color);
+  border-radius: var(--pico-border-radius);
+}
+.admonition-title {
+  margin: 0 0 0.3rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--pico-muted-color);
+}
+.admonition p:last-child { margin-bottom: 0; }
+.admonition-note      { border-left-color: #3178c6; }
+.admonition-note      .admonition-title { color: #3178c6; }
+.admonition-tip       { border-left-color: #2e8b57; }
+.admonition-tip       .admonition-title { color: #2e8b57; }
+.admonition-important { border-left-color: #8a2be2; }
+.admonition-important .admonition-title { color: #8a2be2; }
+.admonition-warning   { border-left-color: #d99a1f; }
+.admonition-warning   .admonition-title { color: #d99a1f; }
+.admonition-caution   { border-left-color: #d13438; }
+.admonition-caution   .admonition-title { color: #d13438; }
+
+/* Code-block titles: authoring marker
+     <!-- code-title: magusfile.buzz -->
+     ```buzz
+     ...
+     ```
+   Wraps the <pre> in a <figure class="code-block-titled"> with a small caption
+   bar on top - looks like an editor tab or filename header. Layered cleanly on
+   top of the existing .code-block copy button (which stays inside the pre). */
+.code-block-titled {
+  margin: 1rem 0;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  overflow: hidden;
+}
+.code-block-titled figcaption {
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  color: var(--pico-muted-color);
+  background: var(--pico-card-sectioning-background-color);
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.code-block-titled pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Wide data tables (e.g. the config reference) get wrapped by wrapTables() in a
+   <figure class="table-scroll">. goldmark emits a bare <table> that Pico renders at
+   full width with no overflow of its own, so on a narrow viewport a four-column table
+   pushes past the column. The figure scrolls horizontally instead; the table keeps its
+   natural width so nothing wraps or clips. */
+.table-scroll {
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+.table-scroll table {
+  margin: 0;
+}
+
+/* Keyboard-shortcut help overlay - a native <dialog> so the browser handles
+   focus trap + backdrop + Esc-to-close. Pico gives <dialog> a card look; we
+   just scope the inner width. */
+.shortcut-help[open] {
+  max-width: 22rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0;
+}
+.shortcut-help header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.shortcut-help header h2 { margin: 0; font-size: 1rem; }
+.shortcut-close {
+  background: transparent;
+  border: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.1rem 0.4rem;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+}
+.shortcut-close:hover { color: var(--pico-primary); }
+.shortcut-help dl {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 1rem;
+  row-gap: 0.4rem;
+  align-items: center;
+}
+.shortcut-help dt { margin: 0; }
+.shortcut-help dd { margin: 0; color: var(--pico-muted-color); }
+.shortcut-help kbd {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-sectioning-background-color);
+}
+.shortcut-help::backdrop { background: rgba(0, 0, 0, 0.35); }
+
+/* Broader reduced-motion pass: kill every animation/transition sitewide when
+   the OS asks for reduced motion. Specific rules that already respect it
+   (back-to-top, TOC sheet) stay intact; this covers everything else. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Global :focus-visible so tabbing has a visible ring on every interactive
+   element, not just the ones already styled. Uses Pico's primary as accent. */
+:focus-visible {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+}
+/* Focus ring: this global outline is the single source of truth. Pico also draws
+   its own box-shadow focus ring on form fields (via --pico-form-element-focus-
+   color); on the search field the two stack into a doubled blue outline. Neutralize
+   Pico's ring on the search input so a focused field shows one clean outline,
+   consistent with every other interactive element. */
+.page-tools .search-input:focus,
+.page-tools .search-input:focus-visible,
+.search-page-inputwrap .search-input:focus,
+.search-page-inputwrap .search-input:focus-visible {
+  --pico-form-element-focus-color: transparent;
+  --pico-form-element-focus-border-color: var(--pico-form-element-border-color);
+  box-shadow: none;
+}
+
+
+/* Code-block language badge: reads the class hljs / highlight gave the block
+   and drops it in the top-right of any titled code block. Non-titled blocks
+   would fight with the copy button, so scope to .code-block-titled only. */
+.code-block-titled { position: relative; }
+.code-block-titled figcaption::after {
+  content: attr(data-lang);
+  float: right;
+  color: var(--pico-muted-color);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* MPA view transitions: cross-fade between doc pages in browsers that support
+   the Navigation API. ~150ms keeps it snappy without feeling jarring. Pure
+   progressive enhancement - browsers without support (Firefox) behave as
+   before; no JS involved. */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+  animation-timing-function: ease;
+}
+
+/* Standalone PWA chrome polish. Applied only when the app is installed and
+   running outside the browser frame. None of these rules affect the normal
+   browser experience. */
+@media (display-mode: standalone) {
+  /* Pull content away from device notches / rounded corners / home indicator. */
+  .site-header {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
+  }
+  .site-footer {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Disable pull-to-refresh and bounce scroll - standard PWA behaviour. */
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  /* Remove the tap flash on interactive elements; the site uses focus/hover
+     states for feedback instead. Applied globally so no element is missed. */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent accidental text selection on navigation and action surfaces.
+     NEVER applied to content text (article, p, li, etc.). touch-action:
+     manipulation disables double-tap-to-zoom on these controls so tap
+     targets feel instant. */
+  .site-header .nav-links a,
+  .site-header .nav-toggle,
+  .site-footer a,
+  button,
+  [role="button"],
+  #graph-legend .legend-row {
+    user-select: none;
+    touch-action: manipulation;
+  }
+}
+
+/* Phase 10: offline badge (js/offline-badge.js). Shared here (not graph.css,
+   which only the graph page loads) because both the graph and playground pages
+   show it, and playground.html never links graph.css. Self-contained styling
+   (not reusing graph.css's .live-badge) for the same cross-file reason - a
+   muted, non-alarming chip, distinct from the live/snapshot badges' filled
+   look since "offline" here is a normal, expected state, not a warning. */
+.offline-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-muted-color);
+  line-height: 1.5;
+  align-self: center;
+  white-space: nowrap;
+}
+
+
+/* Transparency line on the tool pages (playground, graph, logs): an explicit,
+   muted pointer to the privacy statement so the "nothing leaves your machine"
+   claim is verifiable, not just asserted. */
+.verify-note {
+  margin-top: 1.5rem;
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}

@@ -1,0 +1,15 @@
+{
+  "name": "magus console",
+  "short_name": "console",
+  "description": "The magus native console: log viewer, graph explorer, dashboard, and activity trail as live lenses on the daemon.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#13171f",
+  "theme_color": "#13171f",
+  "icons": [
+    { "src": "./assets/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "./assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

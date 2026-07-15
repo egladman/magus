@@ -243,6 +243,9 @@ body.console-app button[aria-disabled="true"] {
 }
 .statusbar-cluster { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 .statusbar-right { margin-left: auto; } /* push the demo / offline flags to the far end */
+/* Per-tab status: the console swaps ONE tab's status bar into #console-statusbar at a time (main.ts).
+   This wrapper carries the active tab's left/right clusters and fills the fixed bar. */
+#console-statusbar .console-tab-status { flex: 1 1 auto; display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 
 /* --- Native full-height layout (console-fill: the graph explorer + log viewer, whose single
    card should own the whole screen). The body is a viewport-tall flex column - top bar, then the
@@ -265,8 +268,17 @@ body.console-fill > main {
   min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
   overflow: hidden;
   padding-block: 0.6rem;    /* tight vertical gutter so the card reads as full-bleed */
+  padding-inline: 0.6rem;   /* slim the side gutter (Pico's .container-fluid is ~1rem) to match the block gutter */
   display: flex;
   flex-direction: column;   /* the single app card stretches as a flex child (below) */
+  /* Full-bleed: the tool pages (logs/graph) cap main.container-fluid to --content-wide and
+     center it (the docs page idiom, in their own page CSS). In the fill layout that leaves
+     wasted side gutters on a wide window - the single panel should occupy the whole width,
+     like the dashboard board. Override the cap here (this selector outweighs the page rule);
+     Pico's .container-fluid keeps its small horizontal padding so the card is not flush to
+     the edge. Prose disclosure blocks keep their own readable measure via .url-help. */
+  max-width: none;
+  margin-inline: 0;
 }
 /* The app card stretches to fill the main region as a flex child - more robust than a
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
@@ -278,6 +290,91 @@ body.console-fill > main > .panel {
   height: auto;
   margin: 0;
   position: relative; /* positioning context for the graph's absolute cold-state prompt */
+}
+/* The same full-height chain for a surface mounted as a CONSOLE TAB. The rules above key on
+   `body.console-fill > main > .app` (the standalone page's single <main>), but the console mounts a
+   surface deeper: the tab host holds a TILE (div[data-tile-root]) whose leaves are pane containers
+   (div[data-pane-id]), and the surface's own <main> sits inside a pane. A tab may hold one pane or a
+   tree of split panes (div[data-split-id] grids). So the flex/height chain must reach a surface
+   through the tile and its panes, or a canvas-height surface (the graph) or a cold empty state
+   collapses to nothing. The tab-host rule is guarded :not([hidden]) so an inactive tab keeps its
+   display:none (a bare display:flex would outweigh [hidden]). */
+#console-outlet > div[data-tab-id]:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden; /* the panes scroll internally, not the tab host */
+}
+/* The tile fills the tab host; a split grid or a lone pane fills the tile / its parent grid cell. */
+#console-outlet div[data-tile-root] {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#console-outlet div[data-tile-root] > div[data-pane-id],
+#console-outlet div[data-tile-root] > div[data-split-id] { flex: 1 1 auto; }
+/* A split is a CSS grid; tileView sets the row/column template inline (from the split's ratio). */
+#console-outlet div[data-split-id] { display: grid; gap: 0; min-width: 0; min-height: 0; }
+/* A pane holds one surface (or the in-pane launcher). It fills its slot, scrolls internally, and is a
+   positioning + flex context so the surface's <main> and any absolute cold-state prompt lay out. */
+#console-outlet div[data-pane-id] {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+#console-outlet div[data-pane-id] > main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  margin-inline: 0;
+  /* A slim side gutter so a surface (esp. the log viewer) stretches nearly edge-to-edge instead of
+     keeping Pico's ~1rem .container-fluid inset - the console owns the whole width. */
+  padding-inline: 0.4rem;
+}
+#console-outlet div[data-pane-id] > main > .graph-app,
+#console-outlet div[data-pane-id] > main > .panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  position: relative;
+}
+
+/* Tiling: the divider between two panes, the focused-pane ring, and the in-pane launcher. Class-free:
+   the divider is a real grid track [data-divider] (so it IS the gap, and is a draggable hit box); the
+   split container sets no gap. data-dir carries the split axis for the resize cursor at idle. */
+#console-outlet [data-divider] {
+  align-self: stretch;
+  justify-self: stretch;
+  background: var(--pico-muted-border-color);
+  cursor: col-resize; /* row split -> vertical divider */
+  touch-action: none; /* the pointer drag owns the gesture, no scroll/zoom interference */
+}
+#console-outlet [data-divider][data-dir="col"] { cursor: row-resize; } /* col split -> horizontal divider */
+#console-outlet [data-divider]:hover,
+#console-outlet [data-divider]:active { background: var(--pico-primary); }
+/* The focused pane wears a subtle inset ring (only while tiled - tileView sets data-focus on more
+   than one pane). A thin overlay outline, offset inward so it reads as a highlight, not a border. */
+#console-outlet [data-pane-id][data-focus] {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: -2px;
+  z-index: 1;
+}
+/* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in. Center the
+   prompt + its card grid; the li[data-open] cards reuse the shared launcher-card styling below. */
+#console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
+#console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pico-muted-color); text-align: center; }
+#console-outlet [data-pane-launcher] + ul {
+  list-style: none; margin: 0; padding: 0 1rem;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: 0.5rem;
+  width: 100%; max-width: 26rem;
 }
 /* Graph cold state: the prompt normally collapses the card (and its stage) to a natural
    ~520px height, which in the full-height layout would leave a void (and a background seam)
@@ -380,3 +477,159 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 .console-empty-cmd code { font-size: 0.8em; }
 .console-empty-hint { font-size: 0.78rem; color: var(--pico-muted-color); }
 @media (max-width: 640px) { .console-empty-ways { grid-template-columns: 1fr; } }
+
+/* ---- Console app: the tabbed frame that hosts surfaces --------------------------------------
+   Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-titlebar,
+   #console-tabs, #console-outlet); the repeated bits are styled by ARIA role / [aria-*] / [data-*] /
+   element selectors under them. Styled against --pico-* tokens (not Pico component classes). All tab
+   controls are role=tab / tabindex spans, so Pico's button theming never applies.
+
+   The title bar: one compact row (NOT the standalone site-header) holding the app mark, the tab strip
+   that fills the middle, and the top-right actions. Its own bottom border is the line the active tab
+   merges into, so the tabs read as anchored browser/editor tabs, not a floating navbar. */
+#console-titlebar {
+  flex: 0 0 auto;
+  display: flex; align-items: stretch; gap: 0.25rem;
+  height: 2.35rem; padding-inline: 0.3rem;
+  background: var(--pico-card-sectioning-background-color);
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+#console-titlebar .brand { display: flex; align-items: center; padding-inline: 0.35rem; }
+#console-titlebar .brand img { height: 1.25rem; width: auto; display: block; }
+#console-actions { display: flex; align-items: center; gap: 0.15rem; position: relative; }
+/* Icon buttons in the title bar (settings gear, theme): bare, not Pico's solid-primary button. */
+#console-actions button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.9rem; height: 1.9rem; margin: 0; padding: 0;
+  border: 0; border-radius: var(--pico-border-radius); cursor: pointer;
+  background: none; color: var(--pico-muted-color); box-shadow: none;
+}
+#console-actions button:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
+#console-actions button svg { width: 1.05rem; height: 1.05rem; }
+
+/* The tab strip (role=tablist) fills the middle of the title bar. Tabs stretch to its full height and
+   the active one merges into the title bar's bottom border. */
+#console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
+#console-tabs [role="tablist"] {
+  flex: 1 1 auto; display: flex; align-items: stretch; gap: 1px;
+  overflow-x: auto; scrollbar-width: none;
+}
+#console-tabs [role="tablist"]::-webkit-scrollbar { display: none; }
+#console-tabs [role="tab"] {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0 0.55rem; max-width: 15rem; white-space: nowrap;
+  font-size: 0.8rem; color: var(--pico-muted-color);
+  border: 1px solid transparent; border-bottom: 0; cursor: pointer; user-select: none;
+}
+#console-tabs [role="tab"]:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
+/* The active tab (aria-selected) is the raised panel surface; the -1px margin sinks it over the
+   strip's bottom border so it reads as continuous with its pane. */
+#console-tabs [role="tab"][aria-selected="true"] {
+  color: var(--pico-contrast); background: var(--pico-card-background-color);
+  border-color: var(--pico-muted-border-color); margin-bottom: -1px;
+}
+#console-tabs [role="tab"] > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+#console-tabs [data-close] {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1rem; height: 1rem; border-radius: var(--pico-border-radius);
+  color: var(--pico-muted-color); opacity: 0; transition: opacity 0.1s, color 0.1s;
+}
+#console-tabs [role="tab"]:hover [data-close], #console-tabs [role="tab"][aria-selected="true"] [data-close] { opacity: 0.65; }
+#console-tabs [data-close]:hover { opacity: 1; color: var(--pico-del-color); }
+#console-tabs [data-close] svg { width: 0.85rem; height: 0.85rem; }
+#console-tabs [data-new] {
+  display: inline-flex; align-items: center; padding: 0 0.55rem;
+  font-size: 1rem; color: var(--pico-muted-color); cursor: pointer; user-select: none;
+}
+#console-tabs [data-new]:hover { color: var(--pico-contrast); }
+#console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--pico-primary); outline-offset: -2px; }
+
+/* The outlet holds one mounted surface per open tab (a div[data-tab-id]); only the active shows. */
+#console-outlet { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+#console-outlet > div { position: absolute; inset: 0; overflow: auto; }
+#console-outlet > div[hidden] { display: none; }
+
+/* Home surface (data-surface=home): a launcher grid of surface cards (li[data-open]). */
+#console-outlet [data-surface="home"] { max-width: 44rem; padding: 2.5rem 1.25rem; }
+#console-outlet [data-surface="home"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
+#console-outlet [data-surface="home"] > p { margin: 0 0 1.5rem; color: var(--pico-muted-color); }
+#console-outlet [data-surface="home"] ul {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem;
+}
+#console-outlet [data-open] {
+  display: flex; flex-direction: column; gap: 0.25rem; padding: 0.9rem 1rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color); cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+}
+#console-outlet [data-open]:hover { border-color: var(--pico-primary); background: var(--pico-card-sectioning-background-color); }
+#console-outlet [data-open] small { color: var(--pico-muted-color); }
+
+/* Command palette (mod+k): a centered modal over a dimmed backdrop listing every command with its
+   chord. Class-free - the overlay carries an id, its parts [data-*]/role/element selectors. */
+#command-palette {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh;
+  background: color-mix(in srgb, var(--pico-background-color) 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+#command-palette[hidden] { display: none; }
+#command-palette [data-palette-box] {
+  width: min(38rem, 92vw); max-height: 60vh; display: flex; flex-direction: column;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); overflow: hidden;
+}
+#command-palette input {
+  margin: 0; padding: 0.7rem 0.9rem; border: 0; border-bottom: 1px solid var(--pico-muted-border-color);
+  border-radius: 0; background: none; font-size: 0.95rem;
+}
+#command-palette input:focus { box-shadow: none; }
+#command-palette ul[role="listbox"] { list-style: none; margin: 0; padding: 0.25rem; overflow-y: auto; }
+#command-palette li[role="option"] {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.4rem 0.6rem; border-radius: var(--pico-border-radius); cursor: pointer; color: var(--pico-color);
+}
+#command-palette li[data-selected] { background: var(--pico-primary); color: var(--pico-primary-inverse); }
+#command-palette li kbd {
+  font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  color: var(--pico-muted-color);
+}
+#command-palette li[data-selected] kbd { background: transparent; color: var(--pico-primary-inverse); border-color: currentColor; }
+
+/* Keybindings editor surface (data-surface=keybindings): a scrollable table of the console's commands,
+   each with its chord and the Record / Clear / Reset controls. Class-free - styled by data-* under the
+   surface id. */
+#console-outlet [data-surface="keybindings"] { max-width: 52rem; padding: 2rem 1.25rem; }
+#console-outlet [data-surface="keybindings"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
+#console-outlet [data-surface="keybindings"] > p { margin: 0 0 1.25rem; color: var(--pico-muted-color); }
+#console-outlet [data-surface="keybindings"] h2 {
+  margin: 1.2rem 0 0.3rem; font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color);
+}
+#console-outlet [data-krow] {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.4rem 0.1rem; border-bottom: 1px solid var(--pico-muted-border-color);
+}
+#console-outlet [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
+#console-outlet [data-chord] kbd {
+  font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); color: var(--pico-color);
+}
+#console-outlet [data-chord][data-capturing] { color: var(--pico-primary); font-size: 0.78rem; font-weight: 600; }
+#console-outlet [data-chord][data-disabled] { color: var(--pico-muted-color); font-style: italic; font-size: 0.78rem; }
+#console-outlet [data-conflict] { color: var(--c-err); font-size: 0.72rem; white-space: nowrap; }
+#console-outlet [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
+#console-outlet [data-kactions] button {
+  margin: 0; padding: 0.15rem 0.55rem; font-size: 0.72rem;
+  /* --pico-contrast, NOT --pico-color: on a bare <button> --pico-color resolves to the button's
+     primary-INVERSE (dark on a dark theme -> invisible). See the pico-bare-button-hover-white trap. */
+  background: none; color: var(--pico-contrast);
+  border: 1px solid var(--pico-muted-border-color); box-shadow: none;
+}
+#console-outlet [data-kactions] button:hover:not(:disabled) { border-color: var(--pico-primary); color: var(--pico-primary); }
+#console-outlet [data-kactions] button:disabled { color: var(--pico-muted-color); border-color: var(--pico-muted-border-color); background: none; cursor: not-allowed; }

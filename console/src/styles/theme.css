@@ -1,0 +1,355 @@
+/* theme.css - the magus docs color system, layered over stock Pico v2.
+   ----------------------------------------------------------------------------
+   Design notes (color theory):
+   - One muted teal hue (~188deg) carries the brand, pulled straight from the
+     gopher mascot, and anchors links, focus rings, and the "type" syntax token
+     so the accent reads as one deliberate color rather than scattered hues.
+   - Neutrals are not pure gray: they carry a faint cool cast (a touch of the
+     teal's complement) so the page feels calm and the warm code tokens (amber,
+     green) sit against it without muddiness.
+   - Every foreground/background pair here clears WCAG AA (>=4.5:1 for body and
+     code text). Values were contrast-checked, not eyeballed.
+   - Dark mode deliberately avoids the two things that make dark themes hurt:
+     pure-black backgrounds (#000, which blooms against light text) and pure
+     white text (#fff, which halates). The page is a soft slate (#15181e) and
+     text is an off-white (#cfd6dd); accents are lightened and DESATURATED so
+     they don't vibrate on the dark field.
+   Pico resolves color at use-time, so overriding its variables here restyles
+   every classless component (and mermaid, which reads these live) for free.
+   Load order is Pico -> theme.css -> site.css; selectors mirror Pico's own so
+   the later source position wins without an !important anywhere. */
+
+/* ---- Light (default, and explicit [data-theme=light]) -------------------- */
+:root:not([data-theme="dark"]) {
+  --pico-background-color: #f6f8f8;
+  --pico-color: #2b3038;
+  --pico-h1-color: #1a1f26;
+  --pico-h2-color: #1e242b;
+  --pico-h3-color: #242a31;
+  --pico-h4-color: #2b3038;
+  --pico-h5-color: #2b3038;
+  --pico-h6-color: #5a656d;
+  --pico-muted-color: #5a656d;
+  --pico-muted-border-color: #dbe1e1;
+  --pico-border-color: #d3dada;
+
+  /* Links stay the conventional blue; visited links go purple (see --visited-link
+     and the article a:visited rule). Keeping that convention is an accessibility
+     choice - readers and assistive tech rely on it. */
+  --pico-primary: #1f6bb0;
+  --pico-primary-background: #1f6bb0;
+  --pico-primary-hover: #175789;
+  --pico-primary-hover-background: #175789;
+  --pico-primary-focus: rgba(31, 107, 176, 0.25);
+  --pico-primary-inverse: #ffffff;
+  --pico-primary-underline: rgba(31, 107, 176, 0.4);
+  --visited-link: #6a5eb0;
+
+  --pico-card-background-color: #ffffff;
+  --pico-card-border-color: #e4e9e9;
+  --pico-card-sectioning-background-color: #f1f4f4;
+
+  /* Search Syntax panel background. White in light so the inline-code examples stand
+     out exactly like inline code elsewhere on the site (the light sectioning grey is
+     too close to the code background); dark keeps the sectioning shade, which already
+     contrasts with the darker code background. */
+  --syntax-panel-bg: var(--pico-card-background-color);
+
+  --pico-code-background-color: #eef1f1;
+  --pico-code-color: #3a4149;
+  --pico-code-kbd-background-color: #e7ebeb;
+  --pico-code-kbd-color: #2b3038;
+
+  --pico-mark-background-color: #fbf0c0;
+  --pico-mark-color: #3a3320;
+  --pico-text-selection-color: rgba(31, 107, 176, 0.18);
+
+  --pico-form-element-background-color: #ffffff;
+  --pico-form-element-border-color: #cdd5d5;
+  --pico-form-element-color: #2b3038;
+  --pico-form-element-focus-border-color: #1f6bb0;
+  --pico-form-element-active-border-color: #1f6bb0;
+
+  /* Secondary accent: a muted coral/rose. Carries inline code and blockquotes. */
+  --accent-rose: #a04f66;
+  --pico-secondary: #a04f66;
+  --pico-secondary-background: #a04f66;
+  --pico-secondary-hover: #8a4256;
+  --pico-secondary-inverse: #ffffff;
+  --pico-blockquote-border-color: #a04f66;
+
+  /* Tertiary accent: violet, reserved for the TOC toggle so that control has an
+     identity of its own; distinct from the blue links and the teal-green mascot. */
+  --accent-violet: #7a5cc0;
+  --accent-violet-hover: #6a4bb0;
+  --accent-violet-inverse: #ffffff;
+
+  /* Warm accent: reserved for primary "run/try this" calls to action (the Run
+     button, Open in Playground) so the one thing we want clicked pops against the
+     blue links and quiet gray chrome. Warm orange, one job. */
+  --accent-warm: #ea580c;
+  --accent-warm-hover: #c2410c;
+  --accent-warm-inverse: #ffffff;
+
+  /* Syntax tokens (muted, all >=4.5:1 on the code surface). */
+  --syn-comment: #636d76;
+  --syn-keyword: #715bb0;
+  --syn-string: #3d7a50;
+  --syn-number: #8d5e26;
+  --syn-function: #2f6aad;
+  --syn-type: #0d7680;
+  --syn-operator: #5a656d;
+  --syn-removed: #b0332c; /* red for a removed (-) diff line */
+}
+
+/* ---- Dark (auto via OS preference, unless the user forced light) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --pico-background-color: #15181e;
+    --pico-color: #cfd6dd;
+    --pico-h1-color: #e6ebf0;
+    --pico-h2-color: #dfe5eb;
+    --pico-h3-color: #d7dee5;
+    --pico-h4-color: #cfd6dd;
+    --pico-h5-color: #cfd6dd;
+    --pico-h6-color: #98a2ad;
+    --pico-muted-color: #98a2ad;
+    --pico-muted-border-color: #2a313b;
+    --pico-border-color: #2c333d;
+
+    --pico-primary: #5cabe0;
+    --pico-primary-background: #5cabe0;
+    --pico-primary-hover: #78bce8;
+    --pico-primary-hover-background: #78bce8;
+    --pico-primary-focus: rgba(92, 171, 224, 0.28);
+    --pico-primary-inverse: #0c1220;
+    --pico-primary-underline: rgba(92, 171, 224, 0.4);
+    --visited-link: #b0a6ec;
+
+    --pico-card-background-color: #1c2029;
+    --pico-card-border-color: #262c35;
+    --pico-card-sectioning-background-color: #21262f;
+    --syntax-panel-bg: var(--pico-card-sectioning-background-color);
+
+    --pico-code-background-color: #1a1e26;
+    --pico-code-color: #c3cad2;
+    --pico-code-kbd-background-color: #21262f;
+    --pico-code-kbd-color: #cfd6dd;
+
+    --pico-mark-background-color: #4a4526;
+    --pico-mark-color: #e8e2c8;
+    --pico-text-selection-color: rgba(92, 171, 224, 0.24);
+
+    --pico-form-element-background-color: #1a1e26;
+    --pico-form-element-border-color: #2f3742;
+    --pico-form-element-color: #cfd6dd;
+    --pico-form-element-focus-border-color: #5cabe0;
+    --pico-form-element-active-border-color: #5cabe0;
+
+    --accent-rose: #df97a7;
+    --pico-secondary: #df97a7;
+    --pico-secondary-background: #c76d80;
+    --pico-secondary-hover: #d98a99;
+    --pico-secondary-inverse: #1a0e12;
+    --pico-blockquote-border-color: #df97a7;
+
+    --accent-violet: #a78bda;
+    --accent-violet-hover: #b8a6e6;
+    --accent-violet-inverse: #0b0e12;
+
+    --accent-warm: #fb923c;
+    --accent-warm-hover: #fdba74;
+    --accent-warm-inverse: #0b0e12;
+
+    --syn-comment: #838e98;
+    --syn-keyword: #b79ae6;
+    --syn-string: #8fc79b;
+    --syn-number: #dbab77;
+    --syn-function: #7fb2e6;
+    --syn-type: #64c1cd;
+    --syn-operator: #9aa4af;
+    --syn-removed: #f0a3a0; /* lighter red so a removed line stays legible on the dark surface */
+  }
+}
+
+/* ---- Dark (explicit [data-theme=dark], regardless of OS) ------------------ */
+[data-theme="dark"] {
+  --pico-background-color: #15181e;
+  --pico-color: #cfd6dd;
+  --pico-h1-color: #e6ebf0;
+  --pico-h2-color: #dfe5eb;
+  --pico-h3-color: #d7dee5;
+  --pico-h4-color: #cfd6dd;
+  --pico-h5-color: #cfd6dd;
+  --pico-h6-color: #98a2ad;
+  --pico-muted-color: #98a2ad;
+  --pico-muted-border-color: #2a313b;
+  --pico-border-color: #2c333d;
+
+  --pico-primary: #5cabe0;
+  --pico-primary-background: #5cabe0;
+  --pico-primary-hover: #78bce8;
+  --pico-primary-hover-background: #78bce8;
+  --pico-primary-focus: rgba(92, 171, 224, 0.28);
+  --pico-primary-inverse: #0c1220;
+  --pico-primary-underline: rgba(92, 171, 224, 0.4);
+  --visited-link: #b0a6ec;
+
+  --pico-card-background-color: #1c2029;
+  --pico-card-border-color: #262c35;
+  --pico-card-sectioning-background-color: #21262f;
+  --syntax-panel-bg: var(--pico-card-sectioning-background-color);
+
+  --pico-code-background-color: #1a1e26;
+  --pico-code-color: #c3cad2;
+  --pico-code-kbd-background-color: #21262f;
+  --pico-code-kbd-color: #cfd6dd;
+
+  --pico-mark-background-color: #4a4526;
+  --pico-mark-color: #e8e2c8;
+  --pico-text-selection-color: rgba(92, 171, 224, 0.24);
+
+  --pico-form-element-background-color: #1a1e26;
+  --pico-form-element-border-color: #2f3742;
+  --pico-form-element-color: #cfd6dd;
+  --pico-form-element-focus-border-color: #5cabe0;
+  --pico-form-element-active-border-color: #5cabe0;
+
+  --accent-rose: #df97a7;
+  --pico-secondary: #df97a7;
+  --pico-secondary-background: #c76d80;
+  --pico-secondary-hover: #d98a99;
+  --pico-secondary-inverse: #1a0e12;
+  --pico-blockquote-border-color: #df97a7;
+
+  --accent-violet: #a78bda;
+  --accent-violet-hover: #b8a6e6;
+  --accent-violet-inverse: #0b0e12;
+
+  --accent-warm: #fb923c;
+  --accent-warm-hover: #fdba74;
+  --accent-warm-inverse: #0b0e12;
+
+  --syn-comment: #838e98;
+  --syn-keyword: #b79ae6;
+  --syn-string: #8fc79b;
+  --syn-number: #dbab77;
+  --syn-function: #7fb2e6;
+  --syn-type: #64c1cd;
+  --syn-operator: #9aa4af;
+}
+
+/* ---- Rose accent in prose ------------------------------------------------
+   The pops of color: inline code and blockquotes take the rose secondary so the
+   body isn't monochrome. Inline code only (:not(pre) > code) - fenced code
+   blocks keep the full syntax palette and their neutral base text. */
+:not(pre) > code {
+  color: var(--accent-rose);
+}
+blockquote {
+  background: color-mix(in srgb, var(--accent-rose) 7%, transparent);
+}
+
+/* ---- Visited links -------------------------------------------------------
+   Content links follow the web convention: blue when unvisited (the primary),
+   purple once visited. Scoped to the article so nav, breadcrumb, TOC and footer
+   chrome stay on the primary blue rather than turning purple. Hovering a visited
+   link restores the primary hover color so it still reads as actionable. */
+article a:visited {
+  color: var(--visited-link);
+}
+article a:visited:hover {
+  color: var(--pico-primary-hover);
+}
+
+/* ---- Syntax highlighting (highlight.js token classes) --------------------
+   Only the JS is pulled from the CDN; the palette is ours, driven by the
+   --syn-* variables above so it tracks light/dark with everything else. The
+   base .hljs is transparent, inheriting Pico's code surface and text color. */
+.hljs {
+  color: var(--pico-code-color);
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-name,
+.hljs-tag {
+  color: var(--syn-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-char.escape_,
+.hljs-meta .hljs-string {
+  color: var(--syn-string);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--syn-number);
+}
+
+/* Diff blocks (```diff): GitHub-style full-line bands rather than the generic token
+   colors, so an added line reads green and a removed line red at a glance. highlight.js
+   wraps each whole line in .hljs-addition / .hljs-deletion; display:block makes the tint
+   fill the line, and the translucent backgrounds sit legibly on both the light and dark
+   code surface. --syn-string is already the green; --syn-removed adds the red. */
+.hljs-addition,
+.hljs-deletion {
+  display: block;
+}
+.hljs-addition {
+  background: rgba(63, 185, 80, 0.16);
+  color: var(--syn-string);
+}
+.hljs-deletion {
+  background: rgba(248, 81, 73, 0.16);
+  color: var(--syn-removed);
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-doctag {
+  color: var(--syn-function);
+}
+.hljs-type,
+.hljs-built_in,
+.hljs-title.class_,
+.hljs-class .hljs-title,
+.hljs-params {
+  color: var(--syn-type);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-variable.constant_ {
+  color: var(--syn-function);
+}
+.hljs-variable,
+.hljs-template-variable {
+  color: var(--pico-code-color);
+}
+.hljs-operator,
+.hljs-punctuation {
+  color: var(--syn-operator);
+}
+.hljs-meta {
+  color: var(--syn-comment);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
+.hljs-link {
+  text-decoration: underline;
+}

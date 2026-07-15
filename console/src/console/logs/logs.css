@@ -1,0 +1,417 @@
+/* logs.css - page-scoped styles for the /logs/ Log Viewer. Loads only on this
+   page (like graph.css), not site-wide. Follows the playground's panel idiom:
+   a bordered card with a file-bar header and a scrolling body, themed entirely
+   with Pico's own variables so light/dark mode carries over. */
+
+:root { --log-pad: clamp(0.75rem, 2vw, 1.1rem); }
+
+/* Cap the viewer to the same width as the other tool pages and center it. */
+main.container-fluid { max-width: var(--content-wide); margin-inline: auto; }
+.lede { color: var(--pico-muted-color); margin-top: -0.4rem; }
+.pg-title { margin-bottom: 0.5rem; }
+.pg-note { margin: -0.15rem 0 var(--log-pad); font-size: 0.85rem; color: var(--pico-muted-color); }
+.pg-note code { font-size: 0.85em; }
+
+/* The panel: file-bar on top, a scrolling log body beneath, filling the viewport
+   below the nav + title. Mirrors playground.html's .panel. */
+.panel {
+  display: flex; flex-direction: column; position: relative;
+  /* Breathing room below the page header (title + lede) before the panel, matching the
+     other pages' header-to-content spacing; the height calc accounts for that margin. */
+  margin-top: 1.25rem;
+  height: calc(100svh - 12.5rem); min-height: 420px;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius); overflow: hidden;
+  background: var(--pico-card-background-color);
+  box-shadow: var(--pico-card-box-shadow);
+}
+.panel:fullscreen {
+  height: 100%; width: 100%;
+  border: 0; border-radius: 0; box-shadow: none;
+  background: var(--pico-background-color);
+}
+.panel.drag-over { outline: 2px dashed var(--pico-primary); outline-offset: -6px; }
+
+/* File bar: a two-row header. Top strip = the ref identity (left) + the live status pill
+   (right); toolbar row below = the search field (left) + the action buttons (right). Keeps
+   the status out of the middle and mirrors the search-left / actions-right toolbar pattern. */
+.file-bar {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: 0.45rem;
+  padding: 0.55rem var(--log-pad); margin: 0;
+  background: var(--pico-card-sectioning-background-color);
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  font-size: 0.8rem;
+}
+.file-bar-id { display: flex; align-items: center; gap: 0.6rem; min-height: 1.25rem; }
+.log-toolbar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+/* Source + status as outlined pills (the dashboard's label idiom, e.g. its "healthy" pill),
+   so the identity strip reads as distinct little labels instead of hyphen-delimited text - the
+   pill borders do the separating. Not uppercased: a ref id is long and reads best in its own
+   case. */
+.file-bar .name {
+  font-family: var(--pico-font-family-monospace);
+  color: var(--pico-color); font-weight: 600;
+  padding: 0.06rem 0.5rem; border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+}
+/* "Reference ID:" prefix before the ref value: muted label text, not the mono/bold of the
+   ref itself, so the id reads as the emphasized part. Hidden when there is no ref. */
+.file-bar-id .id-label { color: var(--pico-muted-color); font-weight: 400; }
+.file-bar-id .id-label[hidden] { display: none; }
+/* The run's live/done state now drives the shared console status bar (console.css); the log viewer
+   no longer has its own in-panel footer. */
+
+.log-actions {
+  margin-left: auto; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;
+}
+/* Each use-case cluster is a flex item, so the toolbar wraps cluster-by-cluster (never
+   splitting a group). A hairline + a little breathing room separates adjacent clusters. */
+.log-actions .btn-group { display: inline-flex; align-items: center; gap: 0.3rem; width: auto; }
+/* Keep buttons at content width - Pico stretches flex children in some contexts. */
+.log-actions .btn-group > button { flex: 0 0 auto; }
+.log-actions .btn-group + .btn-group {
+  margin-left: 0.15rem; padding-left: 0.45rem; border-left: 1px solid var(--pico-muted-border-color);
+}
+/* Time-range cluster: the wall-clock preset picker (invocation-agnostic), plus the brushed
+   focus-window readout and its reset. */
+.time-range-select {
+  width: auto; margin: 0; padding: 0.1rem 1.4rem 0.1rem 0.5rem; min-height: 1.7rem;
+  font-size: 0.72rem; border-radius: var(--pico-border-radius); background-position: right 0.4rem center;
+}
+.time-range-select:disabled { opacity: 0.42; cursor: not-allowed; }
+.focus-window { font-size: 0.68rem; color: var(--pico-muted-color); white-space: nowrap; }
+.focus-reset { font-size: 0.68rem; }
+/* Brush selection rectangle drawn over the waterfall while dragging a focus window. */
+.wf-brush { fill: var(--pico-primary); fill-opacity: 0.14; stroke: var(--pico-primary); stroke-opacity: 0.5; }
+.wf-svg { cursor: crosshair; }
+/* Toolbar buttons: an icon + a text label, subtly rounded to match Pico (like the filter
+   field, badges, and section chips). On narrow screens the labels drop so the toolbar
+   becomes icon-only (see the 900px query below). */
+.file-bar button {
+  width: auto; margin: 0; padding: 0.2rem 0.6rem;
+  /* Match the filter input's height so the toolbar reads as one row of equal-height controls. */
+  min-height: 1.7rem;
+  font-size: 0.72rem; line-height: 1.3; border-radius: var(--pico-border-radius);
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.32rem;
+}
+.file-bar .btn-icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+/* Segmented two-state switch (Pretty|Raw, Log|Timeline): a recessed track with a raised thumb
+   that slides over the active side - the standard depth for this control (inset track, lifted
+   thumb), even though the rest of the console is flat. Built by makeSegToggle() in main.ts, which
+   equalizes the two segment widths so the 50%-wide thumb aligns under either label.
+
+   The <button> is ONLY the interactive/disabled shell - trying to skin the button itself is a
+   losing fight with Pico's button states (they set background-color directly to a translucent
+   primary, which no variable override beats). So the button is stripped bare and an inner
+   .seg-track span - which Pico never themes - carries every visual, opaque so no button state can
+   bleed through. aria-pressed on the button (true => second option) slides the thumb. */
+.file-bar button.seg-toggle {
+  padding: 0; border: 0; min-height: 0; background: transparent; box-shadow: none; overflow: visible;
+}
+.file-bar .seg-toggle .seg-track {
+  position: relative; display: inline-flex; align-items: stretch; padding: 2px; gap: 0;
+  border-radius: var(--pico-border-radius); overflow: hidden;
+  background: var(--pico-card-sectioning-background-color);   /* recessed track: distinct from the white panel */
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.09);            /* depressed - the track reads sunken */
+}
+/* Both labels use the SAME muted color + normal weight as every other toolbar control - the
+   raised thumb is what marks the active side, not any change to the text (no bold, no darkening). */
+.file-bar .seg-toggle .seg-opt {
+  position: relative; z-index: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 1.5rem; padding: 0 0.5rem;
+  color: var(--pico-muted-color); font-weight: 400; white-space: nowrap;
+}
+.file-bar .seg-toggle .seg-thumb {
+  position: absolute; z-index: 0; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px);
+  border-radius: calc(var(--pico-border-radius) - 1px);
+  background: var(--pico-card-background-color);              /* raised thumb, lifted off the track */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition: transform 0.16s ease;
+}
+.file-bar .seg-toggle[aria-pressed="true"] .seg-thumb { transform: translateX(100%); }
+.file-bar .seg-toggle:disabled { opacity: 0.5; }
+.file-bar .seg-toggle:focus-visible { outline: none; }
+.file-bar .seg-toggle:focus-visible .seg-track { outline: 2px solid var(--pico-primary); outline-offset: 1px; }
+
+/* Zoom control in the status bar's right cluster (by the event count): a compact -/readout/+ that
+   scales the viewer body. Built from spans (role=button), NOT <button>, so Pico's button theming
+   never applies - the same trap the segmented switch hit. Text matches the muted status-bar color. */
+/* margin:0 is load-bearing: a bare <div> gets Pico's default block bottom-margin (1rem), which on
+   a flex item inflates the whole status bar's height. */
+.zoom-ctl { display: inline-flex; align-items: center; gap: 0.1rem; margin: 0; }
+.zoom-ctl .zoom-btn, .zoom-ctl .zoom-readout {
+  cursor: pointer; color: var(--pico-muted-color); user-select: none;
+  border-radius: var(--pico-border-radius); transition: color 0.12s, background 0.12s;
+}
+.zoom-ctl .zoom-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.15rem; height: 1.15rem; font-size: 0.95rem; line-height: 1;
+}
+.zoom-ctl .zoom-readout { min-width: 2.7rem; text-align: center; font-variant-numeric: tabular-nums; padding: 0 0.15rem; }
+.zoom-ctl .zoom-btn:hover, .zoom-ctl .zoom-readout:hover {
+  color: var(--pico-contrast); background: var(--pico-card-sectioning-background-color);
+}
+.zoom-ctl :focus-visible { outline: 2px solid var(--pico-primary); outline-offset: 1px; }
+/* Disabled controls gray out in place rather than disappearing, so the toolbar never
+   reflows as buttons become (in)applicable (e.g. Raw is disabled in waterfall mode, not
+   hidden). */
+.file-bar button:disabled { opacity: 0.42; cursor: not-allowed; }
+/* Pressed toggles (Timeline in waterfall mode, Raw in raw mode) read as depressed: a primary
+   tint plus an inset shadow, so the active mode is visible at a glance. */
+.file-bar button[aria-pressed="true"]:not(:disabled) {
+  background: var(--pico-primary-focus);
+  border-color: var(--pico-primary);
+  color: var(--pico-primary);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+/* Search box in the file bar. Squared off (no Pico pill/rounded corners) to match
+   the site's angular search field and the rest of this UI. */
+/* width:fit-content keeps the search wrapper hugging its skinny input (a bare flex item
+   otherwise stretched to fill the toolbar row, pushing the buttons onto a second line). */
+.log-search { display: flex; align-items: center; gap: 0.3rem; flex: 0 0 auto; width: fit-content; max-width: 100%; }
+.log-app .file-bar .log-search input {
+  /* flex:0 0 auto so the field keeps its skinny clamp width instead of stretching to
+     fill the toolbar (Pico gives form inputs flex-grow); the buttons then sit on the same
+     row, pushed right by .log-actions' auto margin. */
+  flex: 0 0 auto;
+  /* Roomier, roughly matching the graph page's sidebar search width for cross-page consistency. */
+  width: clamp(11rem, 24vw, 16rem); margin: 0; padding: 0.2rem 0.5rem;
+  font-size: 0.74rem; height: auto; border-radius: 0;
+}
+/* Squared + no inherited pill cap (site.css rounds the docs search count); this one is
+   plain inline text showing the match position. */
+.search-count { font-size: 0.7rem; color: var(--pico-muted-color); min-width: 3.2em; text-align: right; border-radius: 0; }
+
+/* Filter box: the single query bar (it narrows both views and syncs #q=), Pico-rounded, plus
+   a small "?" help chip whose title tooltip documents the grammar. */
+.log-filter { display: flex; align-items: center; gap: 0.3rem; flex: 0 0 auto; width: fit-content; max-width: 100%; }
+.log-app .file-bar .log-filter input {
+  flex: 0 0 auto;
+  width: clamp(11rem, 24vw, 16rem); margin: 0; padding: 0.2rem 0.5rem;
+  font-size: 0.74rem; min-height: 1.7rem; height: auto; border-radius: var(--pico-border-radius);
+}
+/* The "?" help chip is a passive indicator, NOT a role=button (that made Pico paint it a
+   solid blue oval); a plain bordered circle whose title tooltip carries the grammar. */
+/* The "?" help glyph beside the filter is the shared .help-glyph (console.css) so it is an
+   identical circle across the console apps. */
+.log-filter-help:hover, .log-filter-help:focus-visible { color: var(--pico-color); border-color: var(--pico-primary); }
+
+/* The parsed-filter chip row sits under the toolbar, inset to the panel padding, with a
+   hairline separating it from the header. */
+.log-filter-chips { margin: 0; padding: 0.4rem 0.6rem; border-top: 1px solid var(--pico-muted-border-color); }
+
+/* Shown in the pretty view when the active filter matches nothing. */
+.filter-empty { padding: 1.5rem var(--log-pad); text-align: center; color: var(--pico-muted-color); }
+
+/* The scrolling region that holds the rendered log (or the empty state). */
+.log-scroll {
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+  background: var(--pico-background-color);
+}
+.log-scroll:focus-visible { outline: 2px solid var(--pico-primary); outline-offset: -2px; }
+
+/* The rendered log body: a monospace grid of lines. Each line is its own row so
+   line numbers and folding can attach per-line without breaking wrapping. */
+.log-body {
+  font-family: var(--pico-font-family-monospace);
+  /* --log-zoom (set by applyZoom in main.ts) scales the text view; it defaults to 1. */
+  font-size: calc(0.8rem * var(--log-zoom, 1)); line-height: 1.6;
+  padding: 0.4rem 0;
+}
+/* Waterfall zoom: magnify the SVG itself (a width:100% SVG re-fits under a body zoom, so it needs
+   its own). CSS `zoom` grows its layout box past the panel, so .log-scroll gains scrollbars. */
+.log-body.wf-mode .wf-svg { zoom: var(--log-zoom, 1); }
+.log-body.empty { display: none; }
+
+/* A section: a collapsible group with a clickable header row.
+   Pico v2 redefines --pico-color to the button's INVERSE inside any <button>, so a
+   section head (which IS a button) styled color: var(--pico-color) renders white-on-
+   white in light mode. Read the real page color from a NON-button ancestor (.log-app)
+   into --log-head-fg and apply that to the head and its text. */
+.log-app { --log-head-fg: var(--pico-color); }
+.log-section { border-bottom: 1px solid var(--pico-muted-border-color); }
+.log-section:last-child { border-bottom: 0; }
+.log-section-head {
+  display: flex; align-items: center; gap: 0.4rem; width: 100%;
+  padding: 0.25rem var(--log-pad); margin: 0; border: 0; border-radius: 0; text-align: left;
+  background: var(--pico-card-sectioning-background-color);
+  color: var(--log-head-fg); font-family: inherit; font-size: inherit;
+  cursor: pointer;
+}
+.log-section-head .sec-title { color: var(--log-head-fg); }
+.log-section-head:hover { background: var(--pico-card-background-color); }
+/* CSS-drawn disclosure caret (points down when expanded). Border-triangle rather than a
+   Unicode glyph so the source stays plain ASCII; the collapsed rotate makes it point right. */
+.log-section-head .twist {
+  flex: 0 0 auto; display: inline-block; width: 0; height: 0;
+  border-left: 0.3em solid transparent; border-right: 0.3em solid transparent;
+  border-top: 0.36em solid var(--pico-muted-color);
+  transition: transform 0.12s;
+}
+.log-section.collapsed .twist { transform: rotate(-90deg); }
+.log-section-head .sec-title { flex: 1 1 auto; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.log-section-head .sec-count { color: var(--pico-muted-color); font-size: 0.72rem; white-space: nowrap; }
+.log-section-head .sec-actions { flex: 0 0 auto; display: inline-flex; gap: 0.25rem; opacity: 0; transition: opacity 0.1s; }
+.log-section-head:hover .sec-actions, .log-section-head:focus-visible .sec-actions { opacity: 1; }
+.log-section-head .sec-btn {
+  width: auto; margin: 0; padding: 0.05rem 0.4rem;
+  font-size: 0.66rem; line-height: 1.3; border-radius: var(--pico-border-radius);
+}
+.log-section.collapsed .log-lines { display: none; }
+
+/* Outcome accent: a colored left rule per section so pass/fail/warn read at a glance
+   without parsing the text. Cached hits are muted. Squared to match the UI. */
+.log-section.status-fail, .log-section.status-error { box-shadow: inset 3px 0 0 var(--pico-del-color); }
+.log-section.status-pass { box-shadow: inset 3px 0 0 var(--pico-ins-color); }
+.log-section.status-warn, .log-section.status-dry { box-shadow: inset 3px 0 0 #b7791f; }
+.log-section.status-cached { box-shadow: inset 3px 0 0 var(--pico-muted-border-color); }
+
+/* Status badge: the "[pass]"/"[fail]" bracket token promoted to a colored chip
+   (Pico-rounded, uppercase) - the embellishment over raw brackets. */
+.log-badge {
+  display: inline-block; margin-right: 0.55em; padding: 0 0.4em;
+  font-size: 0.66rem; font-weight: 700; line-height: 1.5;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border-radius: var(--pico-border-radius); color: #fff; vertical-align: baseline;
+}
+.badge-pass { background: var(--pico-ins-color); }
+.badge-fail, .badge-error { background: var(--pico-del-color); }
+.badge-warn, .badge-dry { background: #b7791f; }
+.badge-info, .badge-summary, .badge-cached { background: var(--pico-muted-color); }
+
+/* A single output line: a fixed line-number gutter plus the wrapping content. */
+.log-line {
+  display: flex; gap: 0.75rem; padding: 0 var(--log-pad);
+}
+.log-line:hover { background: var(--pico-card-sectioning-background-color); }
+/* Line-number gutter: ALWAYS shown and never selectable, so copying the log body
+   grabs the text without the numbers (the standard HTML pattern - no toggle needed).
+   Shared by body lines and section heads so numbering is continuous across folds. */
+.ln {
+  flex: 0 0 auto; min-width: 2.5em; text-align: right;
+  color: var(--pico-muted-color); user-select: none; -webkit-user-select: none;
+}
+.log-line .lc { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+/* Line numbers are clickable deep-link anchors (GitHub-style #L10-L20); hint it. */
+.ln { cursor: pointer; }
+
+/* Line-range highlight: rows named by an #L<n> / #L<a>-L<b> fragment. A translucent primary
+   tint so it reads over the log body in both light and dark without hiding the text. */
+.line-highlight { background: color-mix(in srgb, var(--pico-primary) 16%, transparent); }
+.log-section-head.line-highlight { background: color-mix(in srgb, var(--pico-primary) 22%, var(--pico-card-sectioning-background-color)); }
+
+/* ANSI SGR -> CSS. magus uses dim, bold, and the basic 8 foreground colors.
+   Colors follow the page theme by using Pico's semantic variables where they
+   map cleanly, and readable fallbacks otherwise. */
+.a-bold { font-weight: 600; }
+.a-dim { opacity: 0.6; }
+.a-italic { font-style: italic; }
+.a-underline { text-decoration: underline; }
+.a-fg-red { color: var(--pico-del-color); }
+.a-fg-green { color: var(--pico-ins-color); }
+.a-fg-yellow { color: #b7791f; }
+.a-fg-blue { color: #2563eb; }
+.a-fg-magenta { color: #a21caf; }
+.a-fg-cyan { color: #0e7490; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .a-fg-yellow { color: #d69e2e; }
+  :root:not([data-theme="light"]) .a-fg-blue { color: #60a5fa; }
+  :root:not([data-theme="light"]) .a-fg-magenta { color: #e879f9; }
+  :root:not([data-theme="light"]) .a-fg-cyan { color: #22d3ee; }
+}
+[data-theme="dark"] .a-fg-yellow { color: #d69e2e; }
+[data-theme="dark"] .a-fg-blue { color: #60a5fa; }
+[data-theme="dark"] .a-fg-magenta { color: #e879f9; }
+[data-theme="dark"] .a-fg-cyan { color: #22d3ee; }
+
+/* Search highlight. The active match is emphasized over the rest. */
+.log-body mark { background: color-mix(in srgb, var(--pico-primary) 32%, transparent); color: inherit; border-radius: 2px; }
+.log-body mark.active { background: var(--pico-primary); color: var(--pico-primary-inverse); }
+
+/* Trace waterfall: the invocation's spans (targets, and their step child-spans) on a shared
+   time axis, drawn as inline SVG so it stays offline + CSP-safe with no chart library. Colors
+   reuse the same status palette as the section accents/badges above; step bars are muted. */
+.log-body.wf-mode { padding: 0.6rem var(--log-pad); }
+.wf-caption { color: var(--pico-muted-color); font-size: 0.78rem; margin: 0 0 0.5rem; }
+.wf-svg { display: block; width: 100%; height: auto; }
+.wf-axis-line { stroke: var(--pico-muted-border-color); stroke-width: 1; }
+.wf-grid { stroke: var(--pico-muted-border-color); stroke-width: 1; opacity: 0.35; }
+.wf-axis-label, .wf-dur { fill: var(--pico-muted-color); font-size: 9px; font-family: var(--pico-font-family-monospace); }
+.wf-label { font-size: 10px; font-family: var(--pico-font-family-monospace); }
+.wf-target-label { fill: var(--log-head-fg); font-weight: 600; }
+/* Invocation group header in a multi-invocation waterfall: the command, bolded. */
+.wf-group-head { font-size: 11px; font-weight: 700; fill: var(--pico-color); font-family: var(--pico-font-family-monospace); }
+.wf-step-label { fill: var(--pico-muted-color); }
+.wf-bar { fill: var(--pico-primary); }
+.wf-bar.wf-step { fill: var(--pico-muted-color); opacity: 0.7; }
+.wf-bar.status-pass { fill: var(--pico-ins-color); }
+.wf-bar.status-fail { fill: var(--pico-del-color); }
+.wf-bar.status-cached { fill: var(--pico-muted-border-color); }
+/* Filter dim: spans the filter excludes fade back so the matching ones stand out, while the
+   row layout and time axis stay put (a focused view, the graph explorer's dimming idiom). */
+.wf-dim { opacity: 0.18; }
+/* Step bars carry their own opacity (.wf-bar.wf-step), which out-specifies .wf-dim; this
+   more specific selector re-asserts the dim so excluded step bars actually fade. */
+.wf-bar.wf-step.wf-dim { opacity: 0.12; }
+.wf-empty { padding: 2rem; text-align: center; color: var(--pico-muted-color); }
+
+/* Empty state: a centered prompt with an icon and the two ways to get a log here
+   (a finished run, or a live one). No paste box - the viewer opens links, it isn't an editor. */
+.log-empty {
+  padding: clamp(1.5rem, 5vw, 3rem); color: var(--pico-muted-color);
+  max-width: 44rem; margin: 0 auto; text-align: center;
+  display: flex; flex-direction: column; align-items: center;
+  /* Fill the (tall) scroll area and center the prompt within it, rather than letting it
+     sit at the top of the emptiness. */
+  justify-content: center; min-height: 100%; box-sizing: border-box;
+}
+.log-empty[hidden] { display: none; }
+/* Inner empty-state pieces (icon/title/sub/ways/way/hint) are shared - see .console-empty-*
+   in console.css. The log viewer's "way" cards use the syntax-panel tint, not the card bg. */
+.log-empty .console-empty-way { background: var(--syntax-panel-bg); }
+.log-noscript { padding: 1.5rem; color: var(--pico-muted-color); }
+
+/* "Loading a log by URL" disclosure: the SAME treatment as the graph page's
+   reference disclosures (keep the two tool pages consistent) - an uppercase, muted,
+   tracked summary label over a bordered, tinted panel (--syntax-panel-bg). */
+.url-help { margin: 0.3rem 0 var(--log-pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
+.url-help > summary:not([role]) {
+  width: fit-content; cursor: pointer;
+  color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+main .url-help > summary:not([role]), main .url-help[open] > summary:not([role]) { color: var(--pico-muted-color); }
+.url-help[open] > summary { margin-bottom: 0.5rem; }
+.url-help .disclosure-body {
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--syntax-panel-bg);
+}
+.url-help p { color: var(--pico-muted-color); margin: 0 0 0.5rem; max-width: 72ch; }
+.url-help :last-child { margin-bottom: 0; }
+.url-help dl { margin: 0 0 0.6rem; display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.9rem; }
+.url-help dt { margin: 0; white-space: nowrap; }
+.url-help dd { margin: 0; color: var(--pico-muted-color); }
+.url-help code { font-size: 0.85em; }
+
+.site-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--pico-muted-border-color); }
+
+/* Below the tool-page breakpoint the toolbar drops its labels and becomes icon-only,
+   so the buttons don't wrap or crowd out the search field (mirrors the graph page). */
+@media (max-width: 900px) {
+  /* Collapsed toolbar: labels drop, leaving square icon buttons (width == the shared control
+     height) - the same square icon-button aesthetic as the site nav's toggles. */
+  .log-actions .btn-label { display: none; }
+  .file-bar button { width: 1.7rem; padding: 0; }
+}
+/* On small screens the action cluster wraps under the search field; give it room, let the
+   search grow to fill its row, and stack the two empty-state cards. */
+@media (max-width: 640px) {
+  .log-actions { width: 100%; margin-left: 0; }
+  .log-search { flex: 1 1 auto; }
+  .log-app .file-bar .log-search input { flex: 1 1 auto; width: auto; }
+}
