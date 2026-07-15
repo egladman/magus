@@ -72,10 +72,12 @@ func TestParseBuzzProjectOpts_UnknownTopLevelKeyErrors(t *testing.T) {
 	assert.ErrorContains(t, err, `did you mean "depends_on"`)
 }
 
+// The old camelCase spelling (pre-A6) is now itself an unknown-key error, with
+// a did-you-mean pointing at the canonical snake_case name.
 func TestParseBuzzProjectOpts_UnknownTargetPolicyKeyErrors(t *testing.T) {
 	pol := vm.NewMap()
-	pol.MapSet("skip_cache", vm.BoolValue(true))
+	pol.MapSet("skipCache", vm.BoolValue(true))
 	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
-	assert.ErrorContains(t, err, `unknown option "skip_cache"`)
-	assert.ErrorContains(t, err, `did you mean "skipCache"`)
+	assert.ErrorContains(t, err, `unknown option "skipCache"`)
+	assert.ErrorContains(t, err, `did you mean "skip_cache"`)
 }

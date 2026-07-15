@@ -39,17 +39,17 @@ magus.project({
                 "../README.md", "../CONTRIBUTING.md", "../docs/**", "../blog/**", "../assets/**"],
     "outputs": ["gen/**", "MAGUS.md", "src/gen/**"],
     "targets": {
-        // generate renders + gates on drift, so it must run every time (skipCache) and
+        // generate renders + gates on drift, so it must run every time (skip_cache) and
         // alone (exclusive), so a peer mutating gen/ can't trip its git-status check.
-        "generate": {"skipCache": true, "exclusive": true},
-        "serve": {"skipCache": true},
+        "generate": {"skip_cache": true, "exclusive": true},
+        "serve": {"skip_cache": true},
         // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
-        // wasm binary; skipCache so a hit never replays a stale one. Run by hand.
-        "build-playground": {"skipCache": true},
+        // wasm binary; skip_cache so a hit never replays a stale one. Run by hand.
+        "build-playground": {"skip_cache": true},
         // build-mermaid / build-hljs / build-editor / build-graph-explorer bundle a
         // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // committed gen/ artifact. esbuild + pinned npm deps are deterministic, so these
-        // stay cacheable (no skipCache): a cache hit replays identical bytes, and a
+        // stay cacheable (no skip_cache): a cache hit replays identical bytes, and a
         // version bump invalidates it via package.json/pnpm-lock.yaml in sources.
         // Run by hand when a version is bumped; commit the new artifact.
     },

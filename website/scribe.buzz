@@ -3074,7 +3074,7 @@ fun renderTourPage(site: Site) > void {
         desc = "A target starts with one slot; reserve more so a parallel tool cannot starve the rest.",
         docLabel = "Operations", docSlug = "operations" });
     steps.append(TourStep{ file = "06-cache.buzz", title = "Cache: replay, and catch drift",
-        desc = "Targets replay from cache and run once per plan; skipCache opts a check out.",
+        desc = "Targets replay from cache and run once per plan; skip_cache opts a check out.",
         docLabel = "Caching", docSlug = "remote-cache" });
     steps.append(TourStep{ file = "07-globs.buzz", title = "Globs: gather a target family",
         desc = "Name targets by a shared suffix and gather them with one glob; regex for the rest.",

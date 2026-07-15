@@ -39,7 +39,7 @@ type Project struct {
 	Sources          []string `json:"sources"`
 	Spells           []string `json:"spells"`
 	Exclusive        bool     `json:"exclusive"`
-	NoCache          []string `json:"noCache"`          // target names opted out of caching (skipCache)
+	NoCache          []string `json:"noCache"`          // target names opted out of caching (skip_cache)
 	ExclusiveTargets []string `json:"exclusiveTargets"` // target names that run alone (exclusive=true)
 	Slots            []string `json:"slots"`            // "name=N" for targets that hold N concurrency slots
 }

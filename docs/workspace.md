@@ -88,7 +88,7 @@ export fun ci(args: [str]) > void {
 | `targets`      | a per-target policy table (see below)                                                       |
 
 Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
-other than `skipCache`/`exclusive`/`slots`) are a magusfile load error, not a
+other than `skip_cache`/`exclusive`/`slots`) are a magusfile load error, not a
 silently dropped option - the error names the offending key and suggests the
 nearest known one.
 
@@ -96,7 +96,7 @@ The `targets` sub-map keys a target name to a policy table:
 
 | Policy      | Effect                                                                       |
 | ----------- | ---------------------------------------------------------------------------- |
-| `skipCache` | opts the target out of the cache; magus always runs it and never replays it  |
+| `skip_cache` | opts the target out of the cache; magus always runs it and never replays it  |
 | `exclusive` | runs the target alone - no peer target runs concurrently while it does       |
 | `slots`     | the target holds N concurrency slots while it runs, throttling parallel work |
 
@@ -108,7 +108,7 @@ magus.project({
     "watch_ignore": { "glob": ["**/*.snap"] },
     "targets": {
         "test": { "slots": 4 },
-        "build": { "skipCache": true },
+        "build": { "skip_cache": true },
     },
 });
 ```

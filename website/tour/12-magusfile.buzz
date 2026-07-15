@@ -70,7 +70,7 @@ export fun preflight(args: [str]) > void {}
 // Codegen is one `*-generate` target per generator. Each is ordinary cached
 // codegen: magus keys it on its inputs and its gen/** outputs, so it reruns only
 // when those inputs change. (Contrast with a drift-gate target that verifies
-// committed output is current on every run; that one would set skipCache because
+// committed output is current on every run; that one would set skip_cache because
 // its point is the check, not a cacheable artifact.)
 export fun proto_generate(args: [str]) > void { buf["buf-generate"](); }
 export fun mock_generate(args: [str])  > void { go["go-generate"](); }

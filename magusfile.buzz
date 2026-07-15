@@ -43,18 +43,18 @@ magus.project({
         "dist/*",
     ],
     "targets": {
-        "watch": {"skipCache": true},
-        "generate": {"skipCache": true, "exclusive": true},
-        "ci-shard": {"skipCache": true},
-        "postflight": {"skipCache": true},
-        "image-build": {"skipCache": true},
+        "watch": {"skip_cache": true},
+        "generate": {"skip_cache": true, "exclusive": true},
+        "ci-shard": {"skip_cache": true},
+        "postflight": {"skip_cache": true},
+        "image-build": {"skip_cache": true},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
         // per invocation.
-        "release-build": {"skipCache": true},
-        "release-sign": {"skipCache": true},
+        "release-build": {"skip_cache": true},
+        "release-sign": {"skip_cache": true},
         // coverage rewrites assets/coverage.svg; a cache hit would skip the write.
-        "coverage": {"skipCache": true},
+        "coverage": {"skip_cache": true},
     },
 });
 

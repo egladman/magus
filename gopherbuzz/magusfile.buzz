@@ -27,9 +27,9 @@ magus.project({
     "outputs": ["MAGUS.md"],
     "targets": {
         // Profiles the live VM; a cache hit would replay a stale profile.
-        "pgo-generate": {"skipCache": true},
+        "pgo-generate": {"skip_cache": true},
         // Drift-gates MAGUS.md via git status: run alone, every time.
-        "generate": {"skipCache": true, "exclusive": true},
+        "generate": {"skip_cache": true, "exclusive": true},
     },
 });
 

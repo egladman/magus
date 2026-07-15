@@ -8,7 +8,7 @@ export object Target {
     name: str = "",
     charms: [str] = [],
     files: [str] = [],
-    skipCache: bool = false,
+    skip_cache: bool = false,
     exclusive: bool = false,
     slots: int = 0,
 }

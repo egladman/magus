@@ -25,7 +25,7 @@ var knownProjectOptionKeys = []string{
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
 // magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skipCache", "exclusive", "slots"}
+var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots"}
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently
@@ -188,7 +188,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			opts = append(opts, workspace.WithWatchIgnore(patterns...))
 		}
 	}
-	// targets maps a target name to a per-target policy table: skipCache=true opts
+	// targets maps a target name to a per-target policy table: skip_cache=true opts
 	// the target out of the cache; exclusive=true runs it alone against the batch;
 	// slots=N holds N concurrency slots while the target runs.
 	if tv, ok := v.MapGet("targets"); ok && tv.IsMap() {
@@ -202,9 +202,8 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				return nil, err
 			}
 			// name is normalized by workspace.WithTarget, so a policy declared
-			// under any spelling (skipCache/skip_cache aside) matches a target
-			// invoked under any other.
-			if sv, ok := pv.MapGet("skipCache"); ok && sv.Bool() {
+			// under any spelling matches a target invoked under any other.
+			if sv, ok := pv.MapGet("skip_cache"); ok && sv.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache()))
 			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {

@@ -6,7 +6,7 @@
 //
 // Some targets should NOT be cached. A drift gate - "is the committed generated
 // code still current?" - has to run its check every time, so it opts out with
-// skipCache: the point is the check, not a cacheable artifact. `graph` shows the
+// skip_cache: the point is the check, not a cacheable artifact. `graph` shows the
 // no-cache set; `outputs` declares what this project produces.
 
 import "magus";
@@ -17,7 +17,7 @@ magus.project({
     "outputs": ["bin/**", "gen/**"],
     "targets": {
         // Always re-run: the value is the check on every run, not a stored output.
-        "generate": {"skipCache": true},
+        "generate": {"skip_cache": true},
     },
 });
 

@@ -25,7 +25,7 @@ func TestInspect_TargetPolicyNamingUnknownTarget(t *testing.T) {
 
 magus.project({
     "targets": {
-        "bogus-target": {"skipCache": true}
+        "bogus-target": {"skip_cache": true}
     }
 })
 `
@@ -45,7 +45,7 @@ func TestInspect_TargetPolicyNamingKnownTargetOK(t *testing.T) {
 
 magus.project({
     "targets": {
-        "build": {"skipCache": true}
+        "build": {"skip_cache": true}
     }
 })
 `

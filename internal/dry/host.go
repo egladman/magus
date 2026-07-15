@@ -270,7 +270,7 @@ var (
 	dryKnownProjectOptionKeys = []string{
 		"depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
 	}
-	dryKnownTargetPolicyKeys = []string{"skipCache", "exclusive", "slots"}
+	dryKnownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots"}
 )
 
 // rejectUnknownKeys errors on the first key in m absent from known. context
@@ -382,9 +382,9 @@ func (r *Tracer) traceProject(path string, opts vm.Value) error {
 				}
 				name := types.DefaultTargetNameNormalizer.NormalizeTargetName(rawName)
 				// Per-target policy mirrors the real binding (project_ns.go):
-				// skipCache opts the target out of the cache; exclusive runs it
+				// skip_cache opts the target out of the cache; exclusive runs it
 				// alone against the batch.
-				if sv, ok := pv.MapGet("skipCache"); ok && sv.Bool() {
+				if sv, ok := pv.MapGet("skip_cache"); ok && sv.Bool() {
 					p.NoCache = append(p.NoCache, name)
 				}
 				if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {

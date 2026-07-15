@@ -108,11 +108,11 @@ type Target struct {
 	// Per-target execution policy. SkipCache, Exclusive, and Slots are author-facing,
 	// serialized into the Buzz object Target. FailOnDrift and RetryOnVolatile are CI-only
 	// hooks set via the Go registration API, excluded from the Buzz object (buzz:"-").
-	SkipCache       bool `json:"skipCache,omitempty"`                // opt out of the cache: always run, never replay/snapshot
-	Exclusive       bool `json:"exclusive,omitempty"`                // run alone: no other target runs concurrently
-	Slots           int  `json:"slots,omitempty"`                    // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
-	FailOnDrift     bool `json:"failOnDrift,omitempty" buzz:"-"`     // fail the run if the working tree is dirty after this target (drift gate)
-	RetryOnVolatile bool `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
+	SkipCache       bool `json:"skip_cache,omitempty" buzz:"skip_cache"` // opt out of the cache: always run, never replay/snapshot
+	Exclusive       bool `json:"exclusive,omitempty"`                    // run alone: no other target runs concurrently
+	Slots           int  `json:"slots,omitempty"`                        // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
+	FailOnDrift     bool `json:"failOnDrift,omitempty" buzz:"-"`         // fail the run if the working tree is dirty after this target (drift gate)
+	RetryOnVolatile bool `json:"retryOnVolatile,omitempty" buzz:"-"`     // route through volatility detection + auto-retry
 }
 
 // String returns the canonical "path:target" form.
