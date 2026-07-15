@@ -86,6 +86,10 @@ Once the basics click, these cover running magus at scale and in CI.
 - [MCP](mcp.md) - drive magus from agents over the Model Context Protocol.
 - [Telemetry](telemetry.md) - OpenTelemetry traces and metrics.
 
+## Coming from other tools
+
+- [Coming from Nx](from-nx.md) - a terminology map and porting sketch for teams migrating a workspace from Nx.
+
 ## Reference
 
 Generated man pages for every command:
