@@ -13,7 +13,7 @@ import { homePage, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import { registerCommand, dispatchCommand, listCommands, installKeybindings, mergeKeymap, isMac, type Keymap } from "./commands";
 import { createPalette } from "./palette";
-import { keybindingsPage } from "./keybindings";
+import { createKeybindingsOverlay } from "./keybindings";
 import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane } from "./tiling";
 import { initConsoleSettings } from "../ui/console-settings";
@@ -222,7 +222,17 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   });
   document.body.append(palette.el);
   registerCommand({ id: "console.palette.open", label: "Command palette", group: "General", run: () => palette.open() });
-  registerCommand({ id: "console.settings.keybindings", label: "Edit keybindings", group: "General", run: () => open("keybindings") });
+
+  // The keybinding editor is an integrated modal overlay (a sibling of the palette), not a tab. It
+  // edits the console's own commands (those with a CONSOLE_KEYMAP default) against the shared keymap
+  // cell. Built here AFTER the palette command is registered so it appears among the editable rows.
+  const keybindings = createKeybindingsOverlay({
+    commands: listCommands().filter((c) => Object.prototype.hasOwnProperty.call(CONSOLE_KEYMAP, c.id)),
+    defaults: CONSOLE_KEYMAP,
+    keymap: keymapCell,
+  });
+  document.body.append(keybindings.el);
+  registerCommand({ id: "console.settings.keybindings", label: "Edit keybindings", group: "General", run: () => keybindings.open() });
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
@@ -254,13 +264,6 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   register(standaloneSurface({ id: "dashboard", title: "Dashboard", dir: "dashboard", bundle: "dashboard.js", css: "dashboard.css" }));
   register(standaloneSurface({ id: "graph", title: "Graph explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
   register(moduleSurface({ id: "activity", title: "Activity", bundle: "activity/activity.js", css: "logs/logs.css" }));
-  // The keybinding editor edits the console's own commands (those with a CONSOLE_KEYMAP default) against
-  // the shared keymap cell. Built into the console bundle (no heavy deps); opened via the palette.
-  register(keybindingsPage({
-    commands: listCommands().filter((c) => Object.prototype.hasOwnProperty.call(CONSOLE_KEYMAP, c.id)),
-    defaults: CONSOLE_KEYMAP,
-    keymap: keymapCell,
-  }));
 
   // Restore the persisted workspace: the tab strip already renders every saved tab (it binds to ws);
   // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount

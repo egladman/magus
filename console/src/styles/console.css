@@ -607,36 +607,61 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 }
 #command-palette li[data-selected] kbd { background: transparent; color: var(--pico-primary-inverse); border-color: currentColor; }
 
-/* Keybindings editor surface (data-surface=keybindings): a scrollable table of the console's commands,
-   each with its chord and the Record / Clear / Reset controls. Class-free - styled by data-* under the
-   surface id. */
-#console-outlet [data-surface="keybindings"] { max-width: 52rem; padding: 2rem 1.25rem; }
-#console-outlet [data-surface="keybindings"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
-#console-outlet [data-surface="keybindings"] > p { margin: 0 0 1.25rem; color: var(--pico-muted-color); }
-#console-outlet [data-surface="keybindings"] h2 {
-  margin: 1.2rem 0 0.3rem; font-size: 0.72rem; font-weight: 600;
+/* Keybindings editor overlay (#keybindings-overlay): a modal in the command-palette family - a centered
+   box over a dimmed backdrop - summoned to rebind the console's commands, not a parked page/tab. A
+   scrollable table of the console's commands, each with its chord and the Record / Clear / Reset
+   controls. Class-free - styled by role/[data-*] under the id, like #command-palette. */
+#keybindings-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh;
+  background: color-mix(in srgb, var(--pico-background-color) 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+#keybindings-overlay[hidden] { display: none; }
+#keybindings-overlay [data-kb-box] {
+  width: min(46rem, 94vw); max-height: 76vh; display: flex; flex-direction: column;
+  padding: 1rem 1.25rem 1.2rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); overflow: hidden;
+}
+#keybindings-overlay [data-kb-box]:focus { outline: none; } /* the box is focused only to own keydowns */
+#keybindings-overlay [data-kb-head] { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+#keybindings-overlay [data-kb-head] h2 { margin: 0; font-size: 1.15rem; }
+#keybindings-overlay [data-kb-close] {
+  margin: 0; padding: 0; width: 1.6rem; height: 1.6rem; line-height: 1; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; background: none; color: var(--pico-muted-color);
+  border: 1px solid transparent; border-radius: var(--pico-border-radius); box-shadow: none; cursor: pointer;
+}
+#keybindings-overlay [data-kb-close]:hover { color: var(--pico-contrast); border-color: var(--pico-muted-border-color); }
+#keybindings-overlay > [data-kb-box] > p { margin: 0.3rem 0 0.7rem; color: var(--pico-muted-color); font-size: 0.85rem; }
+#keybindings-overlay [data-rows] { overflow-y: auto; min-height: 0; } /* the table scrolls, the box stays put */
+#keybindings-overlay h3 {
+  margin: 0.9rem 0 0.3rem; font-size: 0.72rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color);
 }
-#console-outlet [data-krow] {
+#keybindings-overlay h3:first-child { margin-top: 0.1rem; }
+#keybindings-overlay [data-krow] {
   display: flex; align-items: center; gap: 0.75rem;
   padding: 0.4rem 0.1rem; border-bottom: 1px solid var(--pico-muted-border-color);
 }
-#console-outlet [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
-#console-outlet [data-chord] kbd {
+#keybindings-overlay [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
+#keybindings-overlay [data-chord] kbd {
   font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
   background: var(--pico-card-sectioning-background-color);
   border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); color: var(--pico-color);
 }
-#console-outlet [data-chord][data-capturing] { color: var(--pico-primary); font-size: 0.78rem; font-weight: 600; }
-#console-outlet [data-chord][data-disabled] { color: var(--pico-muted-color); font-style: italic; font-size: 0.78rem; }
-#console-outlet [data-conflict] { color: var(--c-err); font-size: 0.72rem; white-space: nowrap; }
-#console-outlet [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
-#console-outlet [data-kactions] button {
+#keybindings-overlay [data-chord][data-capturing] { color: var(--pico-primary); font-size: 0.78rem; font-weight: 600; }
+#keybindings-overlay [data-chord][data-disabled] { color: var(--pico-muted-color); font-style: italic; font-size: 0.78rem; }
+#keybindings-overlay [data-conflict] { color: var(--c-err); font-size: 0.72rem; white-space: nowrap; }
+#keybindings-overlay [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
+#keybindings-overlay [data-kactions] button {
   margin: 0; padding: 0.15rem 0.55rem; font-size: 0.72rem;
   /* --pico-contrast, NOT --pico-color: on a bare <button> --pico-color resolves to the button's
      primary-INVERSE (dark on a dark theme -> invisible). See the pico-bare-button-hover-white trap. */
   background: none; color: var(--pico-contrast);
   border: 1px solid var(--pico-muted-border-color); box-shadow: none;
 }
-#console-outlet [data-kactions] button:hover:not(:disabled) { border-color: var(--pico-primary); color: var(--pico-primary); }
-#console-outlet [data-kactions] button:disabled { color: var(--pico-muted-color); border-color: var(--pico-muted-border-color); background: none; cursor: not-allowed; }
+#keybindings-overlay [data-kactions] button:hover:not(:disabled) { border-color: var(--pico-primary); color: var(--pico-primary); }
+#keybindings-overlay [data-kactions] button:disabled { color: var(--pico-muted-color); border-color: var(--pico-muted-border-color); background: none; cursor: not-allowed; }
