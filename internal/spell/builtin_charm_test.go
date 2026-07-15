@@ -49,6 +49,8 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		// ts
 		{"ts", "prettier", "rw", []types.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 		{"ts", "vitest", "gha", []types.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
+		{"ts", "eslint", "rw", []types.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
+		{"ts", "eslint", "gha", []types.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
 		// md
 		{"md", "prettier", "rw", []types.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 		// buf
@@ -63,5 +65,20 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		t.Run(c.spell+"/"+c.op+"/"+c.charm, func(t *testing.T) {
 			assert.Equal(t, c.want, charm(t, c.spell, c.op, c.charm))
 		})
+	}
+}
+
+// TestTSRequiredGlobsSupersetOfClaimed guards D1/D2: mgs_listRequiredGlobs must
+// cover every module-variant extension and lockfile format mgs_listClaimedGlobs
+// claims, so editing a .mts/.cts/.mjs/.cjs file or bumping a yarn/bun lockfile
+// marks the project affected instead of silently missing it.
+func TestTSRequiredGlobsSupersetOfClaimed(t *testing.T) {
+	ts, ok := Builtins()["ts"]
+	require.True(t, ok, "ts spell missing")
+
+	for _, want := range []string{
+		"**/*.mts", "**/*.cts", "**/*.mjs", "**/*.cjs", "yarn.lock", "bun.lockb",
+	} {
+		assert.Containsf(t, ts.Needs, want, "ts required globs missing %q", want)
 	}
 }

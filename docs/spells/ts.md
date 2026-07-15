@@ -29,7 +29,47 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## eslint
 
+eslint has no built-in "github" formatter (unlike ruff's --output-format=github); "unix" is the built-in, no-extra-devDependency formatter closest to a CI-friendly, one-line-per-problem shape for annotation/regex parsing.
+
 **Command:** `pnpm exec eslint .`
+
+### gha
+
+Inserts `--format=unix`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/2",
+    "value": "--format=unix"
+  }
+]
+```
+
+</details>
+
+### rw
+
+Inserts `--fix`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/2",
+    "value": "--fix"
+  }
+]
+```
+
+</details>
 
 ### Example
 

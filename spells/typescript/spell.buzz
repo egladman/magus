@@ -10,8 +10,10 @@ import "magus/charm";
 export fun mgs_getName() > str { return "ts"; }
 
 export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json", "package.json",
-            ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json"];
+    return ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx",
+            "**/*.mjs", "**/*.cjs", "**/*.json", "package.json",
+            ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json",
+            "yarn.lock", "bun.lockb"];
 }
 
 export fun mgs_listClaimedGlobs() > [str] {
@@ -29,7 +31,16 @@ export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 // lets `magus query language:typescript` reach this adapter alongside the code it builds.
 export fun mgs_getLanguage() > str { return "typescript"; }
 
-fun eslint(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "eslint", "."]}; }
+// eslint has no built-in "github" formatter (unlike ruff's --output-format=github);
+// "unix" is the built-in, no-extra-devDependency formatter closest to a CI-friendly,
+// one-line-per-problem shape for annotation/regex parsing.
+fun eslint(target: Target) > Command {
+    final args = ["exec", "eslint", "."];
+    return Command{bin = "pnpm", args = args, charms = {
+        "rw": after(args, "eslint", ["--fix"]),
+        "gha": after(args, "eslint", ["--format=unix"]),
+    }};
+}
 // preflight is a no-op marker op (no command).
 fun preflight(target: Target) > Command { return Command{}; }
 fun prettier(target: Target) > Command {

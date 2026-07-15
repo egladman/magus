@@ -322,13 +322,16 @@ var goldenBuiltins = map[string]Descriptor{
 	},
 	"typescript": {
 		Name:       "ts",
-		Needs:      []string{"**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json"},
+		Needs:      []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
 		Claims:     []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
 		Language:   "typescript",
 		Ops: map[string]types.SpellOp{
-			"eslint":    {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}}},
+			"eslint": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}, Charms: map[string]types.Charm{
+				"rw":  {Ops: []types.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
+				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
+			}}},
 			"preflight": {},
 			"prettier": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
