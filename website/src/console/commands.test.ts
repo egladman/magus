@@ -29,6 +29,16 @@ test("chordFromEvent folds the accelerator per platform", () => {
   assert.equal(chordFromEvent(evt({ altKey: true, key: "ArrowLeft" }), false), "alt+ArrowLeft");
 });
 
+test("chordFromEvent recovers the physical letter for an alt-chord from e.code", () => {
+  // macOS Alt+h composes a dead key in e.key; the code fallback still yields "alt+h".
+  assert.equal(chordFromEvent(evt({ altKey: true, key: "˙", code: "KeyH" }), true), "alt+h");
+  assert.equal(chordFromEvent(evt({ altKey: true, key: "¬", code: "KeyL" }), true), "alt+l");
+  // A digit alt-chord recovers too; shift still layers.
+  assert.equal(chordFromEvent(evt({ altKey: true, shiftKey: true, code: "Digit2", key: "@" }), false), "alt+shift+2");
+  // Without alt, e.code is ignored - the typed key wins (so shifted symbols keep working).
+  assert.equal(chordFromEvent(evt({ metaKey: true, key: "K", code: "KeyK" }), true), "mod+k");
+});
+
 test("a bare modifier press yields no chord", () => {
   assert.equal(chordFromEvent(evt({ shiftKey: true, key: "Shift" }), false), "");
   assert.equal(chordFromEvent(evt({ metaKey: true, key: "Meta" }), true), "");

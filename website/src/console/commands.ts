@@ -90,6 +90,7 @@ export interface KeyChord {
   altKey: boolean;
   shiftKey: boolean;
   key: string;
+  code?: string; // the physical key (KeyH, Digit2), layout-independent; used for alt-chords
 }
 
 // chordFromEvent builds the canonical chord for a key event, folding the platform accelerator
@@ -101,7 +102,15 @@ export function chordFromEvent(e: KeyChord, mac: boolean): Chord {
   if (mac ? e.metaKey : e.ctrlKey) mods.push("mod");
   if (e.altKey) mods.push("alt");
   if (e.shiftKey) mods.push("shift");
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  let key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  // Alt+<letter> composes a special glyph in e.key on many layouts (macOS Alt+h yields a dead
+  // key, Alt+l a not-sign), so a written "alt+h" would never match the event's key. When Alt is
+  // held, recover the physical letter/digit from the layout-independent e.code so alt-chords -
+  // the pane-focus bindings (alt+hjkl) - bind reliably across platforms and layouts.
+  if (e.altKey && e.code) {
+    const m = /^Key([A-Z])$/.exec(e.code) ?? /^Digit([0-9])$/.exec(e.code);
+    if (m) key = m[1].toLowerCase();
+  }
   return [...MODIFIER_ORDER.filter((m) => mods.includes(m)), key].join("+");
 }
 
