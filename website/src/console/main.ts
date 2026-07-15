@@ -7,12 +7,26 @@
 // (page.ts); a heavy one activates lazily (its bundle a dynamic import) so a tab stays cheap until
 // opened. All four core lenses are real surfaces: home launcher + logs/graph/dashboard/activity.
 
-import { openTab, workspaceStore, type TabState } from "./tabs";
+import { openTab, closeTab, setActive, workspaceStore, type TabState } from "./tabs";
 import { createTabStrip } from "./tabStrip";
 import { homePage, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
+import { registerCommand, installKeybindings, mergeKeymap, type Keymap } from "./commands";
 import { initConsoleSettings } from "../ui/console-settings";
+import { persisted } from "../lib/persist";
 import type { PageController, PageModule } from "./page";
+
+// The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
+// "keymap" overrides (the same cell the surfaces read). mod = Cmd on macOS, Ctrl elsewhere. Cmd+Opt
+// arrows match a browser/editor's next/prev-tab feel; new/close are the conventional mod+t / mod+w
+// (they land on the console's own tabs when it runs as an installed PWA window).
+const CONSOLE_KEYMAP: Keymap = {
+  "console.tab.new": "mod+t",
+  "console.tab.close": "mod+w",
+  "console.tab.next": "mod+alt+ArrowRight",
+  "console.tab.prev": "mod+alt+ArrowLeft",
+};
+const keymapCell = persisted<Keymap>("keymap", {});
 
 const registry = new Map<string, PageModule<any, any>>();
 function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
@@ -107,14 +121,39 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     mounts.delete(id);
   }
 
+  // reveal shows a tab's pane, mounting it lazily if it is a restored tab not yet mounted.
+  function reveal(id: string): void {
+    if (mounts.has(id)) { show(id); return; }
+    const tab = ws.get().tabs.find((t) => t.id === id);
+    if (tab) void mount(tab);
+  }
+
+  // The console owns the workspace mutations (the strip only reports intent, so keybindings drive the
+  // same ops). activateTab records the active tab (the strip re-renders via its ws binding) then
+  // reveals it; closeTabById removes a tab and reveals whatever the reducer chose next.
+  function activateTab(id: string): void {
+    ws.set(setActive(ws.get(), id));
+    reveal(id);
+  }
+  function closeTabById(id: string): void {
+    const next = closeTab(ws.get(), id);
+    ws.set(next);
+    unmount(id);
+    if (next.activeId) reveal(next.activeId);
+    else show(null);
+  }
+  // cycleTab moves to the next (+1) or previous (-1) tab, wrapping around the strip.
+  function cycleTab(dir: 1 | -1): void {
+    const cur = ws.get();
+    if (cur.tabs.length < 2) return;
+    const i = cur.tabs.findIndex((t) => t.id === cur.activeId);
+    if (i < 0) return;
+    activateTab(cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length].id);
+  }
+
   const strip = createTabStrip(ws, {
-    onSelect: (id) => {
-      // Already mounted -> show synchronously (instant switch). Otherwise mount (which shows it).
-      if (mounts.has(id)) { show(id); return; }
-      const tab = ws.get().tabs.find((t) => t.id === id);
-      if (tab) void mount(tab);
-    },
-    onClose: (id) => unmount(id),
+    onSelect: (id) => activateTab(id),
+    onClose: (id) => closeTabById(id),
     onNew: () => open("home"),
   });
   stripHost.append(strip.el);
@@ -122,6 +161,14 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   // Wire the title-bar settings gear (theme is wired separately by theme.js). No-ops if the page
   // did not supply the #settings-btn / #settings-panel markup.
   initConsoleSettings();
+
+  // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
+  // The listener skips while typing in a field (see commands.ts), so it never eats filter input.
+  registerCommand({ id: "console.tab.new", label: "New tab", group: "Tabs", run: () => open("home") });
+  registerCommand({ id: "console.tab.close", label: "Close tab", group: "Tabs", run: () => { const a = ws.get().activeId; if (a) closeTabById(a); } });
+  registerCommand({ id: "console.tab.next", label: "Next tab", group: "Tabs", run: () => cycleTab(1) });
+  registerCommand({ id: "console.tab.prev", label: "Previous tab", group: "Tabs", run: () => cycleTab(-1) });
+  installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
   // open adds a fresh tab for a surface and mounts it. Every open is a new instance (its own id),
   // so the same surface can sit in two tabs.

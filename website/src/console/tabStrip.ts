@@ -7,7 +7,7 @@
 // unthemed and we style it ourselves. tabViews is pure so the Workspace->view mapping is unit-tested;
 // the DOM wiring below is a thin layer over it.
 
-import { closeTab, setActive, type Workspace } from "./tabs";
+import { type Workspace } from "./tabs";
 import type { Persisted } from "../lib/persist";
 import { bind, scope } from "./view";
 
@@ -59,18 +59,11 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
   const strip = document.createElement("div");
   strip.setAttribute("role", "tablist"); // styled via #console-tabs [role=tablist] - no class
 
-  const select = (id: string): void => {
-    ws.set(setActive(ws.get(), id));
-    cb.onSelect(id);
-    render();
-  };
-  const close = (id: string): void => {
-    const next = closeTab(ws.get(), id);
-    ws.set(next);
-    cb.onClose(id);
-    if (next.activeId) cb.onSelect(next.activeId);
-    render();
-  };
+  // The strip only REPORTS intent - the console owns the workspace mutations (activate/close) so the
+  // keybindings can drive the same operations. The strip re-renders automatically because it is bound
+  // to the persisted workspace (bind(ws, render) below), so a console-side ws.set reflects here.
+  const select = (id: string): void => cb.onSelect(id);
+  const close = (id: string): void => cb.onClose(id);
 
   function render(): void {
     strip.replaceChildren();
