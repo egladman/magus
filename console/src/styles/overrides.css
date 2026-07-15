@@ -1,0 +1,99 @@
+/* overrides.css - the ONE small, audited escape hatch for the console shell (W2).
+ *
+ * The class-vs-ID convention (PATTERNFLY.md) is: pf-v6-* is the only class vocabulary and app
+ * hooks are IDs + data-*. A few shell bits have no PatternFly component to stand in for them - a
+ * bottom STATUS BAR (PF has none), a floating settings GEAR position, the connection LIVENESS DOT,
+ * and viewport-capping the two modal overlays. They live here, ID-scoped, instead of scattered
+ * back into console.css. Keep this file tiny; growth is a smell (reach for a pf-v6-u-* utility or a
+ * real component first).
+ *
+ * Loaded AFTER patternfly.css/tokens.css so these ID rules win. Colors come from the console's
+ * PF-native tokens (--console-* in tokens.css, --pf-t-* directly) - never the --pico or --c palettes. */
+
+/* --- Status bar ---------------------------------------------------------------------------------
+ * A slim fixed bottom rail (IDE-style liveness strip). PF has no status-bar component, so the frame
+ * is here. The console swaps ONE tab's status bar into #console-statusbar at a time (main.ts), and
+ * that wrapper (a bare <div>) fills the rail. */
+#console-statusbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; align-items: center; gap: 0.9rem;
+  min-height: var(--console-statusbar-h);
+  padding: 0.1rem var(--console-pad);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+  font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
+  overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
+  -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
+}
+#console-statusbar > div { flex: 1 1 auto; display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
+#console-statusbar [data-cluster] { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
+/* .statusbar-right: kept as a hook - the log viewer (still on Pico until W3) injects its zoom
+ * control here via querySelector(".console-statusbar .statusbar-right"). Folds into the PF rail
+ * when logs migrates. */
+#console-statusbar .statusbar-right { margin-left: auto; }
+#console-statusbar .status-item { white-space: nowrap; line-height: 1.35; } /* logs' injected zoom-ctl reuses .status-item */
+#console-statusbar [data-item] { white-space: nowrap; line-height: 1.35; }
+
+/* Connection liveness item: a leading dot whose color IS the link/health state, read from the
+ * console status tokens (theme-aware). The dot follows the text color (currentColor), so each state
+ * only sets `color`. Surfaces drive [data-state] / [data-health] on #console-conn (their contract). */
+#console-conn { white-space: nowrap; line-height: 1.35; color: var(--pf-t--global--text--color--subtle); }
+#console-conn::before {
+  content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
+  border-radius: 50%; background: currentColor; vertical-align: middle;
+}
+#console-conn[data-state="connected"] { color: var(--console-status-ok); }
+#console-conn[data-state="connecting"],
+#console-conn[data-state="reconnecting"] { color: var(--console-status-warn); }
+#console-conn[data-state="disconnected"] { color: var(--console-status-queued); }
+/* When connected, the dot takes the daemon's HEALTH color so one indicator carries live + well. */
+#console-conn[data-state="connected"][data-health="warn"] { color: var(--console-status-warn); }
+#console-conn[data-state="connected"][data-health="fail"] { color: var(--console-status-queued); }
+
+/* --- Floating settings gear ---------------------------------------------------------------------
+ * The gear (a PF control Button, #settings-btn) floats top-right OVER the content, and its popover
+ * (a PF Menu, #settings-panel) anchors under it. Only the POSITION is here; the button/menu chrome
+ * is PatternFly. #console-tabs reserves matching right room (console.css) so tabs never slide under. */
+#console-actions { position: fixed; top: 0.3rem; right: 0.45rem; z-index: 60; }
+#settings-panel { position: fixed; top: 2.5rem; right: 0.45rem; left: auto; min-width: 15rem; z-index: 60; }
+/* theme.js paints the theme-cycle button's icon span with a bare <svg viewBox> (no width/height),
+ * so size it to the button text; the gear's own svg carries explicit dimensions. */
+#theme-cycle .theme-cycle-icon { display: inline-flex; }
+#theme-cycle .theme-cycle-icon svg { width: 1em; height: 1em; }
+
+/* --- Overlays (command palette + keybindings) ---------------------------------------------------
+ * Both are PF ModalBox in a Backdrop+Bullseye. Cap the box to the viewport so a long command list /
+ * keybinding table scrolls inside its body rather than the page. */
+#command-palette[hidden], #keybindings-overlay[hidden] { display: none; }
+#command-palette .pf-v6-c-modal-box,
+#keybindings-overlay .pf-v6-c-modal-box { max-height: 80vh; }
+#command-palette .pf-v6-c-modal-box__body,
+#keybindings-overlay .pf-v6-c-modal-box__body { overflow: auto; min-height: 0; }
+/* kbd chord chips in both overlays and the palette rows: a compact keycap. Self-contained so the
+ * shell does not lean on Pico's kbd styling (dropped at the W4 cutover). */
+#command-palette kbd, #keybindings-overlay kbd {
+  font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  color: var(--pf-t--global--text--color--regular);
+}
+
+/* Keybindings editor rows: the table inside the PF ModalBox is a keybinding-editor grid PatternFly
+   has no component for (like the status bar), so it stays ID-scoped here. The Record/Clear/Reset
+   controls are PF buttons; only the row/heading/chord-state layout lives below. */
+#keybindings-overlay .pf-v6-c-modal-box:focus { outline: none; } /* the box is focused only to own keydowns */
+#keybindings-overlay h3 {
+  margin: 0.9rem 0 0.3rem; font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle);
+}
+#keybindings-overlay h3:first-child { margin-top: 0; }
+#keybindings-overlay [data-krow] {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.4rem 0.1rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+#keybindings-overlay [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
+#keybindings-overlay [data-chord][data-capturing] { color: var(--console-accent); font-weight: 600; }
+#keybindings-overlay [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
+#keybindings-overlay [data-conflict] { color: var(--console-status-queued); font-size: 0.72rem; white-space: nowrap; }
+#keybindings-overlay [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }

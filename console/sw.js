@@ -16,6 +16,7 @@ const PRECACHE = [
   // and bump BUILD_ID so clients refetch the new shell.
   BASE + "patternfly.css",
   BASE + "tokens.css",
+  BASE + "overrides.css",
   BASE + "theme.css",
   BASE + "site.css",
   BASE + "ui-panels.css",

@@ -67,9 +67,10 @@
   }
 
   // PatternFly v6 dark mode is a class on <html> (pf-v6-theme-dark), NOT Pico's data-theme, so we
-  // toggle it alongside. "auto" follows the OS via prefers-color-scheme (see the matchMedia listener
-  // below, which re-applies on OS change while in auto). W0: minimal sync; the full theme.ts rework is
-  // W1, but this is enough for the PF title bar and card to render correctly in both light and dark.
+  // toggle it alongside (data-theme is kept for the surfaces still on Pico until the W4 cutover drops
+  // it). "auto" follows the OS via prefers-color-scheme (see the matchMedia listener below, which
+  // re-applies on OS change while in auto); the early set() runs from <head> before paint, so a fresh
+  // load in OS-dark applies the class with no flash. Verified light + dark + the auto/light/dark cycle.
   const darkMql = typeof window !== "undefined" && window.matchMedia
     ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   function applyPfTheme(t: Theme): void {

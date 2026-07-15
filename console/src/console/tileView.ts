@@ -228,20 +228,25 @@ export function createTileView(deps: TileDeps): TileView {
 
   // renderLauncher paints the in-pane surface picker into an empty pane. Surfaces already open in
   // this tab are omitted (single-instance). Choosing one fills the leaf and mounts it via render().
+  // PatternFly (W2): the picker is a PF Gallery of clickable Cards, matching the home launcher; the
+  // [data-pane-launcher] prompt + [data-open] card hooks (and the choose() behavior) are unchanged.
   function renderLauncher(leafId: string): void {
     const p = panes.get(leafId);
     if (!p || p.host.querySelector("[data-pane-launcher]")) return; // already showing
     const wrap = h("div");
     wrap.dataset.paneLauncher = "";
     wrap.append(h("p", undefined, "Open a surface in this pane"));
-    const list = h("ul");
+    const list = h("div", "pf-v6-l-gallery pf-m-gutter");
     for (const s of deps.surfaces) {
       if (treeHasSurface(s.pageId)) continue;
-      const item = h("li");
+      const item = h("div", "pf-v6-c-card pf-m-clickable pf-m-compact");
       item.dataset.open = s.pageId;
+      // tabindex (not role=button): avoid Pico's [role=button] bleed (white-on-white) until W4.
       item.tabIndex = 0;
       item.setAttribute("aria-label", "Open " + s.label);
-      item.append(h("strong", undefined, s.label), h("small", undefined, s.hint));
+      const titleEl = h("div", "pf-v6-c-card__title");
+      titleEl.append(h("span", "pf-v6-c-card__title-text", s.label));
+      item.append(titleEl, h("div", "pf-v6-c-card__body", s.hint));
       const choose = (): void => { tree = setLeafPage(tree, leafId, s.pageId); commit(); render(); };
       item.addEventListener("click", choose);
       item.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); choose(); } });

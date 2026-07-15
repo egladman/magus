@@ -23,6 +23,10 @@
        chrome during the migration). W1 removes the Pico sheets; here they coexist. -->
   <link rel="stylesheet" href="./patternfly.css">
   <link rel="stylesheet" href="./tokens.css">
+  <!-- The one small, ID-scoped escape hatch for the shell bits PatternFly has no component for
+       (the status-bar frame, the floating gear position, the connection dot). Loaded LAST so its
+       ID rules win. See src/styles/overrides.css. -->
+  <link rel="stylesheet" href="./overrides.css">
   <script src="./theme.js"></script>
 </head>
 <!-- The console is a self-contained app, not a page in a site: NO site nav, NO brand mark. The title
@@ -35,18 +39,38 @@
   <main id="console-outlet" class="container-fluid"></main>
   <footer id="console-statusbar" class="console-statusbar"></footer>
 
-  <!-- Floating settings: a single round gear pinned to the corner, with its popover. console.js's
-       initConsoleSettings() wires it; theme.js wires the theme cycle inside. -->
+  <!-- Floating settings: a PatternFly control Button (the gear) pinned to the corner (position in
+       overrides.css), and a PatternFly Menu as its popover. console.js's initConsoleSettings() wires
+       #settings-btn/#settings-panel (open/close + aria-expanded); theme.js wires #theme-cycle inside.
+       The controls keep their ids (#settings-poll/#settings-host/#theme-cycle) and the theme button
+       keeps its .theme-cycle-icon/.theme-cycle-label spans (theme.js paints them). -->
   <div id="console-actions">
-    <button id="settings-btn" class="console-fab" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <button id="settings-btn" class="pf-v6-c-button pf-m-control" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings">
+      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     </button>
-    <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
-      <h2 class="settings-title">Settings</h2>
-      <p class="settings-note">Saved locally.</p>
-      <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
-      <label class="settings-row"><span>Daemon host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
-      <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+    <div class="pf-v6-c-menu" id="settings-panel" hidden aria-label="Settings">
+      <div class="pf-v6-c-menu__content">
+        <form class="pf-v6-c-form pf-m-horizontal">
+          <div class="pf-v6-c-form__group">
+            <div class="pf-v6-c-form__group-label"><label class="pf-v6-c-form__label" for="settings-poll"><span class="pf-v6-c-form__label-text">Refresh rate</span></label></div>
+            <div class="pf-v6-c-form__group-control">
+              <span class="pf-v6-c-form-control"><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></span>
+            </div>
+          </div>
+          <div class="pf-v6-c-form__group">
+            <div class="pf-v6-c-form__group-label"><label class="pf-v6-c-form__label" for="settings-host"><span class="pf-v6-c-form__label-text">Daemon host</span></label></div>
+            <div class="pf-v6-c-form__group-control">
+              <span class="pf-v6-c-form-control"><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></span>
+            </div>
+          </div>
+          <div class="pf-v6-c-form__group">
+            <div class="pf-v6-c-form__group-label"><span class="pf-v6-c-form__label"><span class="pf-v6-c-form__label-text">Theme</span></span></div>
+            <div class="pf-v6-c-form__group-control">
+              <button type="button" id="theme-cycle" class="pf-v6-c-button pf-m-secondary" aria-label="Color theme"><span class="pf-v6-c-button__icon theme-cycle-icon" aria-hidden="true"></span><span class="pf-v6-c-button__text theme-cycle-label">Auto</span></button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 

@@ -63,30 +63,38 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   let unbind: (() => void) | null = null; // active capture listener teardown
   let unsub: (() => void) | null = null; // keymap subscription, live only while open
 
-  const overlay = h("div");
+  // PatternFly (W2): a ModalBox centered in a Backdrop+Bullseye, matching the command palette. The
+  // overlay id, role=dialog/aria-modal, the [data-kbBox]/[data-kbClose]/[data-rows] hooks, and the
+  // capture/keydown behavior are all preserved; only the shell chrome is PatternFly. The row grid has
+  // no PF component, so it stays ID-scoped in overrides.css (like the status bar).
+  const overlay = h("div", "pf-v6-c-backdrop");
   overlay.id = "keybindings-overlay";
   overlay.hidden = true;
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "Keybindings");
 
-  const box = h("div");
+  const bullseye = h("div", "pf-v6-l-bullseye");
+  const box = h("div", "pf-v6-c-modal-box pf-m-md");
   box.dataset.kbBox = "";
   box.tabIndex = -1; // focusable so the open editor owns keydowns (Esc closes, chords do not leak out)
-  const head = h("div");
+  const head = h("div", "pf-v6-c-modal-box__header");
   head.dataset.kbHead = "";
-  const title = h("h2", undefined, "Keybindings");
-  const closeBtn = h("button", undefined, "×"); // multiplication sign - a crisp close glyph
+  const titleWrap = h("div", "pf-v6-c-modal-box__title");
+  titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Keybindings"));
+  head.append(titleWrap);
+  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
   closeBtn.type = "button";
   closeBtn.dataset.kbClose = "";
   closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
   closeBtn.addEventListener("click", () => close());
-  head.append(title, closeBtn);
-  const sub = h("p", undefined, "Rebind a command: Record, then press the keys. Clear disables it; Reset restores the default. Changes take effect immediately.");
-  const table = h("div");
+  const sub = h("p", "pf-v6-c-modal-box__description", "Rebind a command: Record, then press the keys. Clear disables it; Reset restores the default. Changes take effect immediately.");
+  const table = h("div", "pf-v6-c-modal-box__body");
   table.dataset.rows = "";
-  box.append(head, sub, table);
-  overlay.append(box);
+  box.append(head, closeBtn, sub, table);
+  bullseye.append(box);
+  overlay.append(bullseye);
 
   // setChord writes one command's override into the shared keymap cell (immediate effect). A null
   // value RESETS (drops the override, back to the default); "" DISABLES; a chord CUSTOMIZES.
@@ -162,13 +170,13 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
 
       const actions = h("div");
       actions.dataset.kactions = "";
-      const record = h("button", undefined, capturing === r.id ? "Cancel" : "Record");
+      const record = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", capturing === r.id ? "Cancel" : "Record");
       record.type = "button";
       record.addEventListener("click", () => { if (capturing === r.id) { stopCapture(); render(); } else beginCapture(r.id); });
-      const clear = h("button", undefined, "Clear");
+      const clear = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Clear");
       clear.type = "button";
       clear.addEventListener("click", () => { setChord(r.id, ""); });
-      const reset = h("button", undefined, "Reset");
+      const reset = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Reset");
       reset.type = "button";
       reset.disabled = r.source === "default";
       reset.addEventListener("click", () => { setChord(r.id, null); });
@@ -202,8 +210,9 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
     if (ev.key === "Escape" && capturing === null) { ev.preventDefault(); close(); }
     ev.stopPropagation();
   });
-  // A click on the backdrop (outside the box) dismisses; a click inside stays.
-  overlay.addEventListener("pointerdown", (ev) => { if (ev.target === overlay) close(); });
+  // A click on the backdrop (outside the box) dismisses; a click inside stays. The Bullseye layout
+  // fills the backdrop, so test containment against the box rather than an exact overlay-target match.
+  overlay.addEventListener("pointerdown", (ev) => { if (!box.contains(ev.target as Node)) close(); });
 
   return { el: overlay, open, close, isOpen: () => !overlay.hidden };
 }

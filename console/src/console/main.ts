@@ -55,6 +55,26 @@ const SURFACES: Launchable[] = [
 
 interface Mounted { host: HTMLElement; status: HTMLElement; tile: TileView; }
 
+// pfLabel builds a PatternFly Label chip carrying the given id, color modifier, and text. The id
+// sits on the OUTER .pf-v6-c-label span so a surface toggling `.hidden` hides the whole chip; the
+// text lives in the nested __content/__text (a surface never rewrites these chips' text, only shows/
+// hides them). Compact + outline reads as a quiet status pill, not a loud filled badge.
+function pfLabel(id: string, colorMod: string, text: string): HTMLElement {
+  const label = document.createElement("span");
+  label.id = id;
+  label.className = "pf-v6-c-label pf-m-compact pf-m-outline " + colorMod;
+  label.hidden = true;
+  label.setAttribute("aria-live", "polite");
+  const content = document.createElement("span");
+  content.className = "pf-v6-c-label__content";
+  const txt = document.createElement("span");
+  txt.className = "pf-v6-c-label__text";
+  txt.textContent = text;
+  content.append(txt);
+  label.append(content);
+  return label;
+}
+
 // makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
 // (#console-conn, #console-demo, #console-observing, #console-count, #offline-badge) and the
 // .statusbar-right slot the log viewer injects its zoom control into. It is a real element (not an
@@ -63,26 +83,28 @@ interface Mounted { host: HTMLElement; status: HTMLElement; tile: TileView; }
 // status - the bottom bar is per-tab. (A surface streaming while its tab is hidden would still write
 // through getElementById to the active bar; no surface does that today except a live dashboard/log,
 // a known edge.)
+//
+// PatternFly (W2 shell rebuild): the discrete chips (#console-demo, #offline-badge) are PF Labels;
+// the text items (#console-conn with its liveness dot, #console-count, #console-observing) are plain
+// spans the surfaces write via textContent + [data-state]/[data-health], styled ID-scoped in
+// overrides.css (PF has no status-bar component). The wrapper + clusters are class-free (data hooks);
+// only .statusbar-right stays a class because the un-migrated log viewer queries it (a W3 carryover).
 function makeStatusBar(): HTMLElement {
   const bar = document.createElement("div");
-  bar.className = "console-tab-status";
   const left = document.createElement("div");
-  left.className = "statusbar-cluster";
+  left.dataset.cluster = "";
   const conn = document.createElement("span");
-  conn.id = "console-conn"; conn.className = "status-item conn"; conn.setAttribute("aria-live", "polite");
+  conn.id = "console-conn"; conn.setAttribute("aria-live", "polite");
   conn.textContent = "not connected";
-  const demo = document.createElement("span");
-  demo.id = "console-demo"; demo.className = "status-tag console-demo-tag"; demo.hidden = true;
-  demo.setAttribute("aria-live", "polite"); demo.textContent = "Demo data";
-  left.append(conn, demo);
+  left.append(conn, pfLabel("console-demo", "pf-m-blue", "Demo data"));
   const right = document.createElement("div");
-  right.className = "statusbar-cluster statusbar-right";
-  for (const [id, cls] of [["console-count", "status-item status-observing"], ["console-observing", "status-item status-observing"], ["offline-badge", "status-item status-tag status-offline"]] as const) {
+  right.dataset.cluster = ""; right.className = "statusbar-right";
+  for (const id of ["console-count", "console-observing"] as const) {
     const s = document.createElement("span");
-    s.id = id; s.className = cls; s.hidden = true; s.setAttribute("aria-live", "polite");
-    if (id === "offline-badge") s.textContent = "offline";
+    s.id = id; s.dataset.item = ""; s.hidden = true; s.setAttribute("aria-live", "polite");
     right.append(s);
   }
+  right.append(pfLabel("offline-badge", "pf-m-orange", "offline"));
   bar.append(left, right);
   return bar;
 }

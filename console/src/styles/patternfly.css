@@ -21,3 +21,16 @@
 @import "@patternfly/patternfly/components/Tabs/tabs.css";
 @import "@patternfly/patternfly/components/Card/card.css";
 @import "@patternfly/patternfly/layouts/Gallery/gallery.css";
+/* W2 shell rebuild - the components the migrated chrome mounts:
+ *   Label       - the status-bar chips (#console-demo, #offline-badge)
+ *   Menu        - the floating settings popover (#settings-panel) surface
+ *   Form/FormControl - the settings-panel controls (poll/host inputs, theme button)
+ *   ModalBox + Backdrop + Bullseye - the command palette and keybindings overlays
+ * Card + Gallery (already above) also cover the home launcher and the in-pane launcher. */
+@import "@patternfly/patternfly/components/Label/label.css";
+@import "@patternfly/patternfly/components/Menu/menu.css";
+@import "@patternfly/patternfly/components/Form/form.css";
+@import "@patternfly/patternfly/components/FormControl/form-control.css";
+@import "@patternfly/patternfly/components/ModalBox/modal-box.css";
+@import "@patternfly/patternfly/components/Backdrop/backdrop.css";
+@import "@patternfly/patternfly/layouts/Bullseye/bullseye.css";

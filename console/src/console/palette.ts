@@ -34,58 +34,81 @@ export interface PaletteDeps {
 }
 
 export function createPalette(deps: PaletteDeps): Palette {
-  const overlay = h("div");
+  // PatternFly (W2): a ModalBox centered in a Backdrop+Bullseye. The search sits in the modal header
+  // (a PF form-control), the command list in the body as a PF Menu. The overlay id, role=dialog/
+  // aria-modal, the [data-palette-box] hook, and role=listbox/option are preserved; the local
+  // keyboard handling below is unchanged, so this stays a thin view over matchCommands (untouched).
+  const overlay = h("div", "pf-v6-c-backdrop");
   overlay.id = "command-palette";
   overlay.hidden = true;
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "Command palette");
 
-  const box = h("div");
+  const bullseye = h("div", "pf-v6-l-bullseye");
+  const box = h("div", "pf-v6-c-modal-box pf-m-sm");
   box.dataset.paletteBox = "";
+  const header = h("div", "pf-v6-c-modal-box__header");
+  const field = h("span", "pf-v6-c-form-control");
   const input = h("input");
   input.type = "text";
   input.placeholder = "Run a command";
   input.setAttribute("aria-label", "Search commands");
-  const list = h("ul");
+  field.append(input);
+  header.append(field);
+  const body = h("div", "pf-v6-c-modal-box__body");
+  const menu = h("div", "pf-v6-c-menu");
+  const menuContent = h("div", "pf-v6-c-menu__content");
+  const list = h("ul", "pf-v6-c-menu__list");
   list.setAttribute("role", "listbox");
-  box.append(input, list);
-  overlay.append(box);
+  menuContent.append(list);
+  menu.append(menuContent);
+  body.append(menu);
+  box.append(header, body);
+  bullseye.append(box);
+  overlay.append(bullseye);
 
   let filtered: Command[] = [];
   let selected = 0;
 
-  // renderList repaints the filtered commands, each row showing the command label and its chord (or
-  // nothing when unbound). The selected row carries data-selected for the highlight + aria-selected.
+  // renderList repaints the filtered commands as PF menu items, each showing the label and its chord
+  // (or nothing when unbound). The selected row carries pf-m-focus (PF's highlight) + aria-selected.
   function renderList(): void {
     filtered = matchCommands(deps.commands(), input.value);
     if (selected >= filtered.length) selected = Math.max(0, filtered.length - 1);
     const km = deps.keymap();
     list.replaceChildren();
     filtered.forEach((c, i) => {
-      const li = h("li");
-      li.dataset.cmd = c.id;
-      li.setAttribute("role", "option");
-      li.setAttribute("aria-selected", i === selected ? "true" : "false");
-      if (i === selected) li.dataset.selected = "";
-      const label = h("span", undefined, c.label);
+      const li = h("li", "pf-v6-c-menu__list-item");
+      li.setAttribute("role", "presentation");
+      if (i === selected) li.classList.add("pf-m-focus");
+      const btn = h("button", "pf-v6-c-menu__item");
+      btn.type = "button";
+      btn.dataset.cmd = c.id;
+      btn.setAttribute("role", "option");
+      btn.setAttribute("aria-selected", i === selected ? "true" : "false");
+      const main = h("span", "pf-v6-c-menu__item-main");
+      main.append(h("span", "pf-v6-c-menu__item-text", c.label));
       const chord = formatChord(km[c.id] ?? "", deps.mac);
       const kbd = h("kbd", undefined, chord);
       if (chord === "") kbd.hidden = true;
-      li.append(label, kbd);
-      li.addEventListener("click", () => run(c.id));
+      main.append(kbd);
+      btn.append(main);
+      li.append(btn);
+      btn.addEventListener("click", () => run(c.id));
       li.addEventListener("pointermove", () => { if (selected !== i) { selected = i; markSelection(); } });
       list.append(li);
     });
   }
 
   // markSelection moves the highlight without rebuilding the list (cheaper on arrow-key navigation)
-  // and keeps the selected row scrolled into view.
+  // and keeps the selected row scrolled into view. Toggles pf-m-focus on the list item (PF's
+  // highlight) and aria-selected on its option button.
   function markSelection(): void {
     [...list.children].forEach((li, i) => {
       const on = i === selected;
-      (li as HTMLElement).toggleAttribute("data-selected", on);
-      li.setAttribute("aria-selected", on ? "true" : "false");
+      (li as HTMLElement).classList.toggle("pf-m-focus", on);
+      li.querySelector('[role="option"]')?.setAttribute("aria-selected", on ? "true" : "false");
       if (on) (li as HTMLElement).scrollIntoView({ block: "nearest" });
     });
   }
@@ -123,8 +146,9 @@ export function createPalette(deps: PaletteDeps): Palette {
     else if (ev.key === "Escape") { ev.preventDefault(); close(); }
     ev.stopPropagation();
   });
-  // A click on the backdrop (outside the box) dismisses; a click inside stays.
-  overlay.addEventListener("pointerdown", (ev) => { if (ev.target === overlay) close(); });
+  // A click on the backdrop (outside the box) dismisses; a click inside stays. The Bullseye layout
+  // fills the backdrop, so test containment against the box rather than an exact overlay-target match.
+  overlay.addEventListener("pointerdown", (ev) => { if (!box.contains(ev.target as Node)) close(); });
 
   return { el: overlay, open, close, isOpen: () => !overlay.hidden };
 }

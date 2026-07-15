@@ -84,23 +84,6 @@ body:has(.console-bar) ::selection {
   margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.15;
   color: var(--pico-color); white-space: nowrap;
 }
-/* Shared demo-mode indicator: one affordance across all three console apps, sitting in the app
-   bar beside the title so "this surface is showing synthesized data, not a live daemon" reads the
-   same everywhere (each app's script unhides #console-demo when it enters #demo). A quiet info
-   .status-tag with a leading dot - square + normal case like every other chip, not a rounded pill. */
-.console-demo-tag {
-  border-color: var(--c-info); color: var(--c-info); font-size: 0.68rem; white-space: nowrap;
-}
-.console-demo-tag::before {
-  content: ""; width: 0.4em; height: 0.4em; border-radius: 50%; background: currentColor;
-}
-/* On a narrow bar the title already crowds the launcher; keep the chip but drop its label to just
-   the dot so it never wraps or pushes the controls off-screen. The doubled class out-specifies the
-   later .status-tag font-size so this actually wins at this width. */
-@media (max-width: 520px) {
-  .status-tag.console-demo-tag { font-size: 0; padding: 0.3rem; gap: 0; }
-  .console-demo-tag::before { width: 0.5rem; height: 0.5rem; }
-}
 /* The menu button is mobile-only in site.css; on the dashboard it is the primary nav, so
    show it at every width (JS-gated, like site.css - a dead button with no toggle is worse
    than the inline links the no-js path falls back to below). */
@@ -224,28 +207,11 @@ body.console-app button[aria-disabled="true"] {
 .js .console-bar .app-grid .app-cell-current svg { color: var(--pico-muted-color); }
 .js .console-bar .app-grid .app-cell-current span { font-size: 0.76rem; line-height: 1.15; }
 
-/* Bottom status bar: a slim, fixed strip pinned to the bottom of the viewport, the way a
-   native app / IDE surface carries its liveness (VS Code-style). It holds the daemon status
-   that used to crowd the top app bar - the browser<->daemon connection with its liveness dot,
-   the daemon's health rollup, and a quiet mode note on the left; the demo-data and offline
-   flags on the right when they apply. Sectioning-tinted with a subtle top border so it reads
-   as a distinct rail; main reserves --console-statusbar-h of bottom padding (above) so it never
-   covers the last tile. */
-.console-statusbar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  display: flex; align-items: center; gap: 0.9rem;
-  min-height: var(--console-statusbar-h);
-  padding: 0.15rem var(--console-pad);
-  background: var(--pico-card-sectioning-background-color);
-  border-top: 1px solid var(--pico-muted-border-color);
-  font-size: 0.7rem; color: var(--pico-muted-color);
-  overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
-}
-.statusbar-cluster { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
-.statusbar-right { margin-left: auto; } /* push the demo / offline flags to the far end */
-/* Per-tab status: the console swaps ONE tab's status bar into #console-statusbar at a time (main.ts).
-   This wrapper carries the active tab's left/right clusters and fills the fixed bar. */
-#console-statusbar .console-tab-status { flex: 1 1 auto; display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
+/* The bottom status-bar FRAME (fixed rail + per-tab wrapper + clusters + the connection liveness
+   dot) moved to overrides.css in the W2 shell rebuild - PatternFly has no status-bar component, so it
+   is the audited escape hatch. The discrete chips (#console-demo, #offline-badge) are PF Labels now
+   (main.ts makeStatusBar). --console-statusbar-h / --console-pad (defined at the top of this file)
+   are still consumed by both overrides.css and the console-fill layout below. */
 
 /* --- Native full-height layout (console-fill: the graph explorer + log viewer, whose single
    card should own the whole screen). The body is a viewport-tall flex column - top bar, then the
@@ -353,29 +319,25 @@ body.console-fill > main > .panel {
 #console-outlet [data-divider] {
   align-self: stretch;
   justify-self: stretch;
-  background: var(--pico-muted-border-color);
+  background: var(--pf-t--global--border--color--default);
   cursor: col-resize; /* row split -> vertical divider */
   touch-action: none; /* the pointer drag owns the gesture, no scroll/zoom interference */
 }
 #console-outlet [data-divider][data-dir="col"] { cursor: row-resize; } /* col split -> horizontal divider */
 #console-outlet [data-divider]:hover,
-#console-outlet [data-divider]:active { background: var(--pico-primary); }
+#console-outlet [data-divider]:active { background: var(--console-accent); }
 /* The focused pane wears a subtle inset ring (only while tiled - tileView sets data-focus on more
    than one pane). A thin overlay outline, offset inward so it reads as a highlight, not a border. */
 #console-outlet [data-pane-id][data-focus] {
-  outline: 2px solid var(--pico-primary);
+  outline: 2px solid var(--console-accent);
   outline-offset: -2px;
   z-index: 1;
 }
-/* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in. Center the
-   prompt + its card grid; the li[data-open] cards reuse the shared launcher-card styling below. */
+/* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in (a PF Gallery
+   of Cards, built in tileView). Center the prompt + its card grid within the pane. */
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
-#console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pico-muted-color); text-align: center; }
-#console-outlet [data-pane-launcher] + ul {
-  list-style: none; margin: 0; padding: 0 1rem;
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: 0.5rem;
-  width: 100%; max-width: 26rem;
-}
+#console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pf-t--global--text--color--subtle); text-align: center; }
+#console-outlet [data-pane-launcher] + .pf-v6-l-gallery { width: 100%; max-width: 26rem; padding: 0 1rem; }
 /* Graph cold state: the prompt normally collapses the card (and its stage) to a natural
    ~520px height, which in the full-height layout would leave a void (and a background seam)
    below it. Instead let the stage fill the card and the prompt fill + center within it,
@@ -393,55 +355,11 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
   min-height: 0;
 }
 
-/* Status items: normal-case status tokens (never all-caps - too loud, eats the bar). The
-   connection line is plain text carrying its own leading liveness dot; the discrete rollups
-   (health, mode, demo, offline) wear .status-tag. */
-.status-item {
-  white-space: nowrap; line-height: 1.35;
-}
-/* .status-tag - the console status chip. Reads like the site's blog/doc tags (.post-tags .tag):
-   a small, square-cornered outline in normal case, NOT a rounded pill and NOT all-caps, so it
-   matches the rest of the UI and stays compact. Border tracks currentColor so a colored chip
-   (health ok/warn/fail, the info demo, the warm offline) outlines in its own hue; the connection
-   state is deliberately NOT a chip - it keeps the leading dot instead. */
-.status-tag {
-  display: inline-flex; align-items: center; gap: 0.3em;
-  padding: 0.05rem 0.4rem; border-radius: var(--pico-border-radius); border: 1px solid currentColor;
-  font-size: 0.7rem;
-}
-.status-item[data-health="ok"]   { color: var(--c-ok); }
-.status-item[data-health="warn"] { color: var(--c-warn); }
-.status-item[data-health="fail"] { color: var(--c-err); }
-
-/* Connection item: a leading liveness dot, colored by the browser<->daemon link state. */
-.status-item.conn::before {
-  content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
-  border-radius: 50%; background: var(--pico-muted-color); vertical-align: middle;
-}
-.status-item.conn[data-state="connected"] { color: var(--c-ok); }
-.status-item.conn[data-state="connected"]::before { background: var(--c-ok); }
-.status-item.conn[data-state="connecting"],
-.status-item.conn[data-state="reconnecting"] { color: var(--c-warn); }
-.status-item.conn[data-state="connecting"]::before,
-.status-item.conn[data-state="reconnecting"]::before { background: var(--c-warn); }
-.status-item.conn[data-state="disconnected"] { color: var(--c-err); }
-.status-item.conn[data-state="disconnected"]::before { background: var(--c-err); }
-/* When connected, the dot takes the daemon's HEALTH color so the one indicator carries both "live"
-   and "well": ok stays green (the connected default above), degraded goes amber, down goes red. */
-.status-item.conn[data-state="connected"][data-health="warn"] { color: var(--c-warn); }
-.status-item.conn[data-state="connected"][data-health="warn"]::before { background: var(--c-warn); }
-.status-item.conn[data-state="connected"][data-health="fail"] { color: var(--c-err); }
-.status-item.conn[data-state="connected"][data-health="fail"]::before { background: var(--c-err); }
-
-/* Demo-data and offline flags: the two conditional right-side indicators. "not live data" and
-   "no network" register at a glance without shouting. Hidden by default; the app toggles them. */
-.status-demo { color: var(--c-info); }
-.status-offline { color: var(--c-warn); }
-
-/* Observing-since: a quiet, borderless note (not a chip) of when the daemon began collecting. */
-.status-observing { color: var(--pico-muted-color); }
-/* Mobile: drop the least-important items (mode + observing-since) before the bar can crowd. */
-@media (max-width: 480px) { .status-mode, .status-observing { display: none; } }
+/* The status ITEMS (the connection dot + its state colors, and the demo/offline flags) were rebuilt
+   in the W2 shell pass: the chips are PatternFly Labels and the connection dot is ID-scoped in
+   overrides.css against the theme-aware --console-status-* tokens. The old .status-item/.status-tag/
+   .conn class rules were removed here. (.status-item survives in overrides.css only as the hook the
+   un-migrated log viewer injects its zoom control under; it folds in when logs migrates in W3.) */
 
 /* Help glyph: the small circular "?" beside a query/filter prompt. One shared shape so every
    console app's help affordance is an identical circle (the graph query prompt, the log filter).
@@ -495,23 +413,13 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
      chrome, not a page section, so zero both. Without this the border-box height collapses the
      content area to a ~2px sliver and the tabs render as a clipped, unreadable strip. */
   margin: 0; padding: 0;
-  background: var(--pico-card-sectioning-background-color);
-  border-bottom: 1px solid var(--pico-muted-border-color);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 
-/* Floating settings: a round button pinned to the top-right corner, OVER the content, not inside any
-   bar. The tab strip reserves matching room on its right so a full row of tabs never slides under it. */
-#console-actions { position: fixed; top: 0.3rem; right: 0.45rem; z-index: 60; }
-.console-fab {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 1.75rem; height: 1.75rem; margin: 0; padding: 0;
-  border: 1px solid var(--pico-muted-border-color); border-radius: 50%; cursor: pointer;
-  background: var(--pico-card-background-color); color: var(--pico-muted-color); box-shadow: var(--pico-card-box-shadow);
-}
-.console-fab:hover { color: var(--pico-contrast); border-color: var(--pico-primary); }
-.console-fab svg { width: 1rem; height: 1rem; }
-/* The settings popover anchors under the floating gear (top-right), not under an in-bar button. */
-#console-actions .settings-panel { position: fixed; top: 2.3rem; right: 0.45rem; left: auto; }
+/* The floating settings gear (a PF control Button, #settings-btn) + its popover (a PF Menu,
+   #settings-panel) are positioned in overrides.css; their chrome is PatternFly (index.html). The old
+   .console-fab / .settings-panel-anchor rules were removed in the W2 shell rebuild. */
 
 /* The tab strip fills the title bar; the right padding clears the floating gear. */
 #console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; padding-right: 2.4rem; }
@@ -521,119 +429,20 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
    own classes. Those id+attr selectors out-specify PF's single-class rules, so they had to go for
    the spike; this is exactly the W2 shell rebuild, previewed. The PF strip carries its own ARIA
    (role=tablist/tab, aria-selected). See tabStrip.ts and PATTERNFLY.md. */
-#console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--pico-primary); outline-offset: -2px; }
+#console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 
 /* The outlet holds one mounted surface per open tab (a div[data-tab-id]); only the active shows. */
 #console-outlet { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #console-outlet > div { position: absolute; inset: 0; overflow: auto; }
 #console-outlet > div[hidden] { display: none; }
 
-/* Home surface (data-surface=home): a launcher grid of surface cards (li[data-open]). */
+/* Home surface (data-surface=home): the heading + lede layout. The launcher itself is a PatternFly
+   Gallery of clickable Cards (home.ts) - no custom card/grid CSS. */
 #console-outlet [data-surface="home"] { max-width: 44rem; padding: 2.5rem 1.25rem; }
 #console-outlet [data-surface="home"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
-#console-outlet [data-surface="home"] > p { margin: 0 0 1.5rem; color: var(--pico-muted-color); }
-#console-outlet [data-surface="home"] ul {
-  list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem;
-}
-#console-outlet [data-open] {
-  display: flex; flex-direction: column; gap: 0.25rem; padding: 0.9rem 1rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--pico-card-background-color); cursor: pointer;
-  transition: border-color 0.1s, background 0.1s;
-}
-#console-outlet [data-open]:hover { border-color: var(--pico-primary); background: var(--pico-card-sectioning-background-color); }
-#console-outlet [data-open] small { color: var(--pico-muted-color); }
+#console-outlet [data-surface="home"] > p { margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 
-/* Command palette (mod+k): a centered modal over a dimmed backdrop listing every command with its
-   chord. Class-free - the overlay carries an id, its parts [data-*]/role/element selectors. */
-#command-palette {
-  position: fixed; inset: 0; z-index: 100;
-  display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh;
-  background: color-mix(in srgb, var(--pico-background-color) 55%, transparent);
-  backdrop-filter: blur(2px);
-}
-#command-palette[hidden] { display: none; }
-#command-palette [data-palette-box] {
-  width: min(38rem, 92vw); max-height: 60vh; display: flex; flex-direction: column;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); overflow: hidden;
-}
-#command-palette input {
-  margin: 0; padding: 0.7rem 0.9rem; border: 0; border-bottom: 1px solid var(--pico-muted-border-color);
-  border-radius: 0; background: none; font-size: 0.95rem;
-}
-#command-palette input:focus { box-shadow: none; }
-#command-palette ul[role="listbox"] { list-style: none; margin: 0; padding: 0.25rem; overflow-y: auto; }
-#command-palette li[role="option"] {
-  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  padding: 0.4rem 0.6rem; border-radius: var(--pico-border-radius); cursor: pointer; color: var(--pico-color);
-}
-#command-palette li[data-selected] { background: var(--pico-primary); color: var(--pico-primary-inverse); }
-#command-palette li kbd {
-  font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
-  background: var(--pico-card-sectioning-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  color: var(--pico-muted-color);
-}
-#command-palette li[data-selected] kbd { background: transparent; color: var(--pico-primary-inverse); border-color: currentColor; }
-
-/* Keybindings editor overlay (#keybindings-overlay): a modal in the command-palette family - a centered
-   box over a dimmed backdrop - summoned to rebind the console's commands, not a parked page/tab. A
-   scrollable table of the console's commands, each with its chord and the Record / Clear / Reset
-   controls. Class-free - styled by role/[data-*] under the id, like #command-palette. */
-#keybindings-overlay {
-  position: fixed; inset: 0; z-index: 100;
-  display: flex; align-items: flex-start; justify-content: center; padding-top: 10vh;
-  background: color-mix(in srgb, var(--pico-background-color) 55%, transparent);
-  backdrop-filter: blur(2px);
-}
-#keybindings-overlay[hidden] { display: none; }
-#keybindings-overlay [data-kb-box] {
-  width: min(46rem, 94vw); max-height: 76vh; display: flex; flex-direction: column;
-  padding: 1rem 1.25rem 1.2rem;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); overflow: hidden;
-}
-#keybindings-overlay [data-kb-box]:focus { outline: none; } /* the box is focused only to own keydowns */
-#keybindings-overlay [data-kb-head] { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-#keybindings-overlay [data-kb-head] h2 { margin: 0; font-size: 1.15rem; }
-#keybindings-overlay [data-kb-close] {
-  margin: 0; padding: 0; width: 1.6rem; height: 1.6rem; line-height: 1; flex: 0 0 auto;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 1.3rem; background: none; color: var(--pico-muted-color);
-  border: 1px solid transparent; border-radius: var(--pico-border-radius); box-shadow: none; cursor: pointer;
-}
-#keybindings-overlay [data-kb-close]:hover { color: var(--pico-contrast); border-color: var(--pico-muted-border-color); }
-#keybindings-overlay > [data-kb-box] > p { margin: 0.3rem 0 0.7rem; color: var(--pico-muted-color); font-size: 0.85rem; }
-#keybindings-overlay [data-rows] { overflow-y: auto; min-height: 0; } /* the table scrolls, the box stays put */
-#keybindings-overlay h3 {
-  margin: 0.9rem 0 0.3rem; font-size: 0.72rem; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color);
-}
-#keybindings-overlay h3:first-child { margin-top: 0.1rem; }
-#keybindings-overlay [data-krow] {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.4rem 0.1rem; border-bottom: 1px solid var(--pico-muted-border-color);
-}
-#keybindings-overlay [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
-#keybindings-overlay [data-chord] kbd {
-  font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
-  background: var(--pico-card-sectioning-background-color);
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); color: var(--pico-color);
-}
-#keybindings-overlay [data-chord][data-capturing] { color: var(--pico-primary); font-size: 0.78rem; font-weight: 600; }
-#keybindings-overlay [data-chord][data-disabled] { color: var(--pico-muted-color); font-style: italic; font-size: 0.78rem; }
-#keybindings-overlay [data-conflict] { color: var(--c-err); font-size: 0.72rem; white-space: nowrap; }
-#keybindings-overlay [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
-#keybindings-overlay [data-kactions] button {
-  margin: 0; padding: 0.15rem 0.55rem; font-size: 0.72rem;
-  /* --pico-contrast, NOT --pico-color: on a bare <button> --pico-color resolves to the button's
-     primary-INVERSE (dark on a dark theme -> invisible). See the pico-bare-button-hover-white trap. */
-  background: none; color: var(--pico-contrast);
-  border: 1px solid var(--pico-muted-border-color); box-shadow: none;
-}
-#keybindings-overlay [data-kactions] button:hover:not(:disabled) { border-color: var(--pico-primary); color: var(--pico-primary); }
-#keybindings-overlay [data-kactions] button:disabled { color: var(--pico-muted-color); border-color: var(--pico-muted-border-color); background: none; cursor: not-allowed; }
+/* The command palette (#command-palette) and keybindings editor (#keybindings-overlay) were rebuilt
+   as PatternFly ModalBox/Backdrop overlays in the W2 shell pass (palette.ts / keybindings.ts). Their
+   frames are PatternFly; the keybindings row grid (which has no PF component) lives ID-scoped in
+   overrides.css alongside the kbd keycap styling. The old Pico overlay rules were removed here. */
