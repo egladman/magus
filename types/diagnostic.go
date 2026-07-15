@@ -47,6 +47,8 @@ const (
 	NoCITarget                DiagnosticCode = "MGS1001"
 	SpellShadowed             DiagnosticCode = "MGS1002"
 	BespokePhaseFragmentName  DiagnosticCode = "MGS1003"
+	UnreachedFootprintDecl    DiagnosticCode = "MGS1004"
+	RedundantFootprintGlob    DiagnosticCode = "MGS1005"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -79,6 +81,7 @@ const (
 // are not reflectable.
 var allDiagnosticCodes = []DiagnosticCode{
 	NoCITarget, SpellShadowed, BespokePhaseFragmentName,
+	UnreachedFootprintDecl, RedundantFootprintGlob,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	NetEgress, SandboxPolicyMismatch,

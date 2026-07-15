@@ -1,6 +1,9 @@
 package types
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"slices"
+)
 
 // ProjectLabel is the human-facing display name for a project, used in logs and
 // generated docs so a project at the workspace root never renders as the ambiguous
@@ -71,7 +74,39 @@ type Project struct {
 	Exclusive      bool
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
-	ResolvedSpells []*Spell          // set at the end of magus.Open; immutable thereafter
+	// TargetSources and TargetOutputs are per-target cache-footprint globs (project-root
+	// relative, like Sources/Outputs) declared in a target body via magus.inputs(...) /
+	// magus.outputs(...), keyed by normalized target name (DefaultTargetNameNormalizer,
+	// matching the TargetPolicies key space buildStep looks up). They ADD to that
+	// target's cache key (sources) and snapshot/replay set (outputs) - unioned onto the
+	// project-wide Sources/Outputs, never replacing them. Populated statically at load
+	// from describe.Extract.
+	TargetSources  map[string][]string
+	TargetOutputs  map[string][]string
+	ResolvedSpells []*Spell // set at the end of magus.Open; immutable thereafter
+}
+
+// AllOutputs is the project's full set of declared output globs: the project-wide
+// Outputs plus every per-target magus.outputs glob (TargetOutputs), deduplicated and
+// project-root relative. It is the "what files does this project generate" view -
+// consumed by `magus clean --outputs`, output-ownership lookup, and the merge driver -
+// as opposed to the per-target cache view (buildStep's step.Outputs), which stays scoped
+// to the one target being run. Per-target contributions are sorted so the result is
+// deterministic despite TargetOutputs being a map.
+func (p *Project) AllOutputs() []string {
+	if len(p.TargetOutputs) == 0 {
+		return p.Outputs
+	}
+	var extra []string
+	for _, globs := range p.TargetOutputs {
+		for _, g := range globs {
+			if !slices.Contains(p.Outputs, g) && !slices.Contains(extra, g) {
+				extra = append(extra, g)
+			}
+		}
+	}
+	slices.Sort(extra)
+	return append(slices.Clone(p.Outputs), extra...)
 }
 
 // AttachSpell associates spell with p without applying registration overrides.

@@ -229,6 +229,42 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 	})
 }
 
+func TestCheckUnreachedFootprintDecls(t *testing.T) {
+	run := func(magusfile string) Check {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		r := &runner{root: root}
+		return r.checkUnreachedFootprintDecls([]*types.Project{{Path: ".", Dir: root}})
+	}
+
+	t.Run("reachable declaration is clean", func(t *testing.T) {
+		got := run("export fun build(_a: [str]) > void { magus.inputs(\"src/**\"); }\n")
+		assert.Equal(t, StatusOK, got.Status, got.Message)
+	})
+	t.Run("orphan in uncalled helper is flagged", func(t *testing.T) {
+		got := run("export fun build(_a: [str]) > void {}\nfun dead() > void { magus.outputs(\"dist/**\"); }\n")
+		require.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Contains(t, got.Details[0], "magus.outputs")
+	})
+}
+
+func TestCheckRedundantFootprintGlobs(t *testing.T) {
+	r := &runner{root: t.TempDir()}
+	t.Run("no redundancy is clean", func(t *testing.T) {
+		p := &types.Project{Path: ".", Sources: []string{"**/*.go"},
+			TargetSources: map[string][]string{"build": {"src/**"}}}
+		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
+		assert.Equal(t, StatusOK, got.Status, got.Message)
+	})
+	t.Run("per-target glob duplicating project sources is flagged", func(t *testing.T) {
+		p := &types.Project{Path: ".", Sources: []string{"src/**"},
+			TargetSources: map[string][]string{"build": {"src/**"}}}
+		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
+		require.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Contains(t, got.Details[0], "build")
+	})
+}
+
 func TestCheckMagusfileSyntax(t *testing.T) {
 	// run writes files into a fresh project dir and returns the check result.
 	run := func(files map[string]string) Check {

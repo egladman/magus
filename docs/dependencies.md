@@ -75,11 +75,14 @@ consequences worth stating plainly:
   itself. The child's own target (if selected directly, elsewhere) has its
   own cache entry; the *call from inside this parent* does not.
 - **The key is protected by project-wide source globs, so this is
-  safe-but-coarse** (see [cache.md](cache.md#granularity-every-target-on-a-project-shares-one-broad-baseline)).
+  safe-but-coarse** (see [cache.md](cache.md#granularity-project-wide-vs-per-target)).
   `baseStep` seeds every target's sources with the union of every bound
   spell's `needs` plus the magusfile, so an under-declared `needs` glob is
   the one way a stale hit can slip through - the coarse baseline is the
-  safety margin against exactly that.
+  safety margin against exactly that. To attach an input to one target rather
+  than widen the whole project, declare it in the body with
+  [`magus.inputs`](cache.md#per-target-inputs-and-outputs) - the same literal-first
+  static discipline this page's `needs` references follow.
 
 ## Both-arms rule: the static graph and a dry run can disagree
 

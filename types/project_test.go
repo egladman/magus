@@ -6,6 +6,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestProjectAllOutputs(t *testing.T) {
+	// No per-target outputs: AllOutputs is exactly the project-wide set.
+	p := &Project{Outputs: []string{"dist/**"}}
+	assert.Equal(t, []string{"dist/**"}, p.AllOutputs())
+
+	// Per-target outputs union in, deduped against project-wide, sorted for determinism.
+	p = &Project{
+		Outputs: []string{"dist/**"},
+		TargetOutputs: map[string][]string{
+			"docs":     {"docs/*.md", "dist/**"}, // dist/** duplicates project-wide -> dropped
+			"generate": {"MAGUS.md"},
+		},
+	}
+	assert.Equal(t, []string{"dist/**", "MAGUS.md", "docs/*.md"}, p.AllOutputs())
+}
+
 func TestProjectLabel(t *testing.T) {
 	t.Parallel()
 	// Non-root paths pass through unchanged.

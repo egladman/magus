@@ -53,6 +53,13 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// from magus.target.literal/glob/regex; the matched targets are awaited via
 	// the Buzz VM pool (cross-project queries dispatch through CrossDispatch).
 	magus.MapSet("needs", directVal(obs, "magus.needs", buildBuzzNeeds(targets)))
+	// magus.inputs(...) / magus.outputs(...): declare a target's cache footprint next
+	// to its body - inputs narrow the cache key, outputs the snapshot/replay set. They
+	// are read statically at load (a cache hit skips the body, so the run cannot be the
+	// source of truth); a non-literal argument is rejected there. At runtime they are
+	// no-ops so a body that reaches them on a miss just proceeds.
+	magus.MapSet("inputs", directVal(obs, "magus.inputs", buzzIONoop))
+	magus.MapSet("outputs", directVal(obs, "magus.outputs", buzzIONoop))
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
 	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,

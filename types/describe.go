@@ -120,6 +120,19 @@ type TargetGraphNode struct {
 	// target names), each carries the other project's path, so the graph can draw a
 	// target -> target edge across project boundaries instead of a coarse project -> project one.
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
+	// Inputs and Outputs are the per-target cache-footprint globs the body declares
+	// via magus.inputs(...) / magus.outputs(...), captured statically as string
+	// literals. They ADD to the target's cache key (inputs) and its snapshot/replay
+	// set (outputs) - unioned onto the project-wide and spell-contributed globs, never
+	// replacing them, so the footprint can only grow. Extracted here so the same static
+	// read feeds both the cache path and describe.
+	Inputs  []string `json:"inputs,omitempty"  yaml:"inputs,omitempty"`
+	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	// DynamicIO is set when a magus.inputs/outputs call carries a non-literal
+	// argument. A computed glob is invisible to this static read, so the load path
+	// rejects it loudly rather than silently caching an under-declared footprint.
+	// Not serialized: it is a load-time validation signal, not part of the graph.
+	DynamicIO bool `json:"-" yaml:"-"`
 }
 
 // CrossTargetRef names one target in another project: a target-level cross-project

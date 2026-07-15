@@ -3,6 +3,7 @@ package magus
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -217,15 +218,24 @@ func gitRoot(dir string) string {
 	}
 }
 
-// applyCrossProjectDependencies unions each project's target-level cross-project
-// dependencies (project imports, recovered statically) into its DependsOn, so
-// the affected set and scheduling treat them exactly like a project-level depends_on
-// — letting a magusfile declare a cross-project dependency once, at the target,
-// rather than also in magus.project. It mutates the workspace's projects in
-// place. ctx is honored between projects so a cancelled construction stops promptly;
-// a project whose source can't be read or whose dep path won't resolve contributes
-// nothing (best-effort, matching the static extractor's never-error contract).
-func (m *Magus) applyCrossProjectDependencies(ctx context.Context) error {
+// applyTargetDepsAndFootprint folds the two things magus recovers statically from a
+// target body into the workspace's projects: cross-project dependencies and the
+// per-target cache footprint (magus.inputs / magus.outputs).
+//
+// Cross-project deps (project imports) union into DependsOn, so the affected set and
+// scheduling treat them exactly like a project-level depends_on: a magusfile declares a
+// cross-project dependency once, at the target, rather than also in magus.project.
+// Per-target inputs/outputs populate TargetSources/TargetOutputs (stored
+// project-root relative), adding to that target's cache key and snapshot set - unioned
+// onto the project-wide globs, never replacing them.
+//
+// It mutates projects in place. ctx is honored between projects. A project whose source
+// can't be read or whose dep path won't resolve contributes nothing (best-effort,
+// matching the static extractor's never-error contract). One deliberate exception:
+// a magus.inputs/outputs call with a non-literal argument is a hard load error, because
+// a computed footprint is invisible to this static read and silently under-declaring it
+// risks a stale cache hit.
+func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -244,6 +254,24 @@ func (m *Magus) applyCrossProjectDependencies(ctx context.Context) error {
 					if r, err := file.Resolve(ref.Project, p.Path); err == nil {
 						extra = append(extra, r)
 					}
+				}
+				if n.DynamicIO {
+					return fmt.Errorf("%s: target %q: magus.inputs/outputs requires string-literal globs; a computed argument is invisible to the cache and would risk a stale hit", types.ProjectLabel(p.Path, p.Dir), n.Name)
+				}
+				// Stored project-relative, matching the p.Sources/p.Outputs convention;
+				// buildStep joins to the project path for the cache key, and the race
+				// diagnostics glob them against p.Dir directly.
+				for _, g := range n.Inputs {
+					if p.TargetSources == nil {
+						p.TargetSources = map[string][]string{}
+					}
+					p.TargetSources[n.Name] = appendUniq(p.TargetSources[n.Name], g)
+				}
+				for _, g := range n.Outputs {
+					if p.TargetOutputs == nil {
+						p.TargetOutputs = map[string][]string{}
+					}
+					p.TargetOutputs[n.Name] = appendUniq(p.TargetOutputs[n.Name], g)
 				}
 			}
 		}

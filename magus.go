@@ -184,9 +184,9 @@ func (m *Magus) load(ctx context.Context) error {
 			return err
 		}
 	}
-	// Fold target-level cross-project deps (project imports) into DependsOn so
-	// they count toward the affected set, just like a project-level depends_on.
-	if err := m.applyCrossProjectDependencies(ctx); err != nil {
+	// Fold target-level static facts (cross-project deps, and per-target
+	// magus.inputs/outputs cache footprint) into the project model.
+	if err := m.applyTargetDepsAndFootprint(ctx); err != nil {
 		return err
 	}
 	m.autobindMagusfileSpell()

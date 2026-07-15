@@ -165,6 +165,12 @@ func buzzLogFn(level slog.Level) func(context.Context, []vm.Value) (vm.Value, er
 	}
 }
 
+// buzzIONoop backs magus.inputs / magus.outputs at runtime. The declarations are
+// read statically at load (describe.Extract), which is authoritative because a cache
+// hit skips the body; the runtime call is a pure no-op so a body reaching it on a
+// miss just proceeds.
+func buzzIONoop(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
+
 // MagusModuleKeys returns the member names of the magus.* module and its
 // magus.target sub-module as the real Buzz bindings register them. It exists so the
 // wasm playground (internal/playground), which keeps a SEPARATE recording

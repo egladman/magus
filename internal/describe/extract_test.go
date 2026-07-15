@@ -73,6 +73,72 @@ export fun plain(args: [str]) > void { go["x"](); }
 	assert.Empty(t, plain.Charms)
 }
 
+// TestInputsOutputs pins the per-target cache-footprint extraction: magus.inputs /
+// magus.outputs string-literal globs are collected per target, a mention in a comment
+// is ignored, and a target that declares neither carries empty sets.
+func TestInputsOutputs(t *testing.T) {
+	g := Extract(`export fun build(args: [str]) > void {
+    magus.inputs("src/**", "tsconfig.json");
+    magus.outputs("dist/**");
+    // magus.inputs("ignored") in a comment must not count
+}
+export fun test(args: [str]) > void {
+    magus.inputs("src/**");
+}
+export fun plain(args: [str]) > void { }
+`)
+	build, _ := nodeByName(g, "build")
+	assert.Equal(t, []string{"src/**", "tsconfig.json"}, build.Inputs)
+	assert.Equal(t, []string{"dist/**"}, build.Outputs)
+	assert.False(t, build.DynamicIO)
+	testNode, _ := nodeByName(g, "test")
+	assert.Equal(t, []string{"src/**"}, testNode.Inputs)
+	assert.Empty(t, testNode.Outputs)
+	plain, _ := nodeByName(g, "plain")
+	assert.Empty(t, plain.Inputs)
+	assert.Empty(t, plain.Outputs)
+}
+
+// TestInputsOutputsDynamic pins the loud-rejection signal: a magus.inputs/outputs
+// argument that is not a string literal sets DynamicIO (the load path turns that into
+// an error), while any literal args in the same call are still collected.
+func TestInputsOutputsDynamic(t *testing.T) {
+	g := Extract(`export fun build(args: [str]) > void {
+    final extra = "gen/**";
+    magus.inputs("src/**", extra);
+}
+`)
+	build, _ := nodeByName(g, "build")
+	assert.True(t, build.DynamicIO, "a computed magus.inputs argument must flag DynamicIO")
+	assert.Equal(t, []string{"src/**"}, build.Inputs, "literal args are still collected")
+}
+
+// TestUnreachedIO pins orphan detection: a magus.inputs/outputs reached from a target
+// body (directly or via a bare-call helper) is NOT flagged, while one in an
+// unreferenced helper or used as a value IS - it would never enter a cache key.
+func TestUnreachedIO(t *testing.T) {
+	orphans := UnreachedIO(`export fun build(args: [str]) > void {
+    magus.inputs("src/**");
+    helper();
+}
+fun helper() > void { magus.outputs("dist/**"); }
+fun orphan() > void { magus.inputs("gen/**"); }
+export fun test(args: [str]) > void {
+    final f = magus.inputs;
+    f("late/**");
+}
+`)
+	// build's direct inputs and helper's outputs (bare-called) are reached -> not orphans.
+	// orphan()'s inputs (never called) and test's `magus.inputs` value reference are.
+	require.Len(t, orphans, 2)
+	kinds := map[string]string{} // fn -> kind
+	for _, o := range orphans {
+		kinds[o.Fn] = o.Kind
+	}
+	assert.Equal(t, "inputs", kinds["orphan"], "magus.inputs in an uncalled helper is orphaned")
+	assert.Equal(t, "inputs", kinds["test"], "magus.inputs used as a value is orphaned")
+}
+
 // TestSpellOps pins the per-target spell extraction: bracket (`go["go-test"]`) and
 // dotted (`md.prettier(`) op calls are captured and grouped by spell, in call
 // order, but only for handles a spell import brought into scope — a host call

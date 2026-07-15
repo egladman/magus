@@ -42,10 +42,21 @@ import (
 // CrossDependencies hold cross-project edges (from project imports). Charms are the
 // has_charm names the body reads, sorted.
 func Extract(source string) []types.TargetGraphNode {
+	nodes, _, _ := extractNodes(source)
+	return nodes
+}
+
+// extractNodes is the shared core: it returns the target nodes, the set of
+// magus.inputs/outputs member-access positions the per-target walk *attributed* to some
+// target (reached by the body/helper walk), and the parsed program. UnreachedIO diffs
+// every io member access in the program against the attributed set to find the ones the
+// static read can't see. Extract discards the latter two. prog is nil on a parse failure.
+func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *ast.Program) {
 	prog, err := buzz.ParseEmbedded(source)
 	if err != nil || prog == nil {
-		return nil
+		return nil, nil, nil
 	}
+	attributedIO := map[ast.Pos]bool{}
 	// Node and dependency names both go through the run path's kebab-case
 	// normalizer, so a node and an edge that name the same target reconcile.
 	norm := types.DefaultTargetNameNormalizer.NormalizeTargetName
@@ -118,6 +129,29 @@ func Extract(source string) []types.TargetGraphNode {
 					if name, ok := charmCall(e); ok {
 						node.Charms = appendUniq(node.Charms, name)
 					}
+					// Per-target cache footprint: magus.inputs(...) / magus.outputs(...).
+					// Every argument must be a string literal; a non-literal one is not
+					// collected, so len(globs) < len(args) means the call had a computed
+					// argument - flag DynamicIO so the load path can reject it (a computed
+					// glob is invisible to this static read).
+					if kind, globs, ok := ioCall(e); ok {
+						// Record the callee (magus.inputs) position so UnreachedIO knows this
+						// call was reached; keyed on the MemberExpr, matching its full-program scan.
+						attributedIO[ast.NodePos(e.Callee)] = true
+						if len(globs) < len(e.Args) {
+							node.DynamicIO = true
+						}
+						switch kind {
+						case "inputs":
+							for _, g := range globs {
+								node.Inputs = appendUniq(node.Inputs, g)
+							}
+						case "outputs":
+							for _, g := range globs {
+								node.Outputs = appendUniq(node.Outputs, g)
+							}
+						}
+					}
 					// Dotted spell op: handle.op(...), where handle is an imported spell.
 					if me, ok := e.Callee.(*ast.MemberExpr); ok {
 						if id, ok := me.Object.(*ast.IdentExpr); ok && spellHandles[id.Name] {
@@ -160,7 +194,50 @@ func Extract(source string) []types.TargetGraphNode {
 		node.Spells = groupSpellOps(spellHits)
 		nodes = append(nodes, node)
 	}
-	return nodes
+	return nodes, attributedIO, prog
+}
+
+// IORef is one magus.inputs/outputs member access UnreachedIO found that the static
+// extractor could not attribute to a target: Kind is "inputs" or "outputs", Fn the
+// enclosing function's raw name, Line its 1-based source line.
+type IORef struct {
+	Kind string
+	Fn   string
+	Line int
+}
+
+// UnreachedIO returns every magus.inputs/outputs member access in source that the
+// per-target walk did not reach - a call in an unreferenced or indirectly-dispatched
+// helper, or the identifier used as a value. Such a declaration never enters any cache
+// key, so surfacing it turns a silent footprint omission into a diagnostic (the loud
+// counterpart to the DynamicIO hard error, which only catches a non-literal argument in
+// a *reached* call). Best-effort: a source that fails to parse yields nil.
+func UnreachedIO(source string) []IORef {
+	_, attributed, prog := extractNodes(source)
+	if prog == nil {
+		return nil
+	}
+	var orphans []IORef
+	for _, stmt := range prog.Stmts {
+		fn, ok := stmt.(*ast.FunDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			me, ok := n.(*ast.MemberExpr)
+			if !ok || (me.Name != "inputs" && me.Name != "outputs") {
+				return true
+			}
+			if id, ok := me.Object.(*ast.IdentExpr); !ok || id.Name != "magus" {
+				return true
+			}
+			if pos := ast.NodePos(me); !attributed[pos] {
+				orphans = append(orphans, IORef{Kind: me.Name, Fn: fn.Name, Line: pos.Line})
+			}
+			return true
+		})
+	}
+	return orphans
 }
 
 // spellHit is one spell op call found in a target body, tagged with its source
@@ -199,6 +276,33 @@ func targetHandleCall(e *ast.CallExpr) (mode, arg string, ok bool) {
 		return "", "", false
 	}
 	return me.Name, lit.Val, true
+}
+
+// ioCall recognizes a magus.inputs(...) / magus.outputs(...) call and returns its
+// kind ("inputs"/"outputs") and the string-literal glob arguments. ok is false for any
+// other call. Only string literals are collected; the caller detects a non-literal
+// (dynamic) argument as len(globs) < len(e.Args) and rejects it at load. A call with no
+// arguments is recognized (ok=true) but contributes no globs - harmless.
+func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
+	me, ok := e.Callee.(*ast.MemberExpr)
+	if !ok {
+		return "", nil, false
+	}
+	switch me.Name {
+	case "inputs", "outputs":
+	default:
+		return "", nil, false
+	}
+	id, ok := me.Object.(*ast.IdentExpr)
+	if !ok || id.Name != "magus" {
+		return "", nil, false
+	}
+	for _, a := range e.Args {
+		if lit, ok := a.(*ast.StringLit); ok {
+			globs = append(globs, lit.Val)
+		}
+	}
+	return me.Name, globs, true
 }
 
 // charmCall recognizes a magus.has_charm("name") call and returns the charm name.

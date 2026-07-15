@@ -290,6 +290,22 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	for _, s := range p.ResolvedSpells {
 		step.Sources = append(step.Sources, s.TargetSources()[target]...)
 	}
+	// Per-target footprint declared in the body via magus.inputs/outputs (stored
+	// project-root relative, joined here like baseStep joins p.Sources/p.Outputs). These
+	// ADD to this target's cache key and snapshot set - unioned onto the project-wide
+	// globs baseStep seeded, never replacing them. Deduped against what baseStep already
+	// added so a glob declared both project-wide and per-target isn't hashed twice
+	// (keeping this path's set identical to effectiveOutputs').
+	for _, g := range p.TargetSources[target] {
+		if jg := joinGlob(p.Path, g); !slices.Contains(step.Sources, jg) {
+			step.Sources = append(step.Sources, jg)
+		}
+	}
+	for _, g := range p.TargetOutputs[target] {
+		if jg := joinGlob(p.Path, g); !slices.Contains(step.Outputs, jg) {
+			step.Outputs = append(step.Outputs, jg)
+		}
+	}
 	step.DependsOn = p.DependsOn
 	pol := p.TargetPolicies[target]
 	// A service op is a long-running process: it must never be cached, or a re-run
@@ -299,6 +315,31 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step.Exclusive = pol.Exclusive
 	step.Slots = pol.Slots
 	return step
+}
+
+// effectiveOutputs is a target's full output-glob set: the project-wide Outputs
+// unioned with the per-target globs it declared via magus.outputs. It keeps the race
+// detector and race-replay diagnostics consistent with the cache, which sees the same
+// deduped union via buildStep's step.Outputs. Globs are project-relative (as p.Outputs
+// and the per-target values are stored pre-join); callers join to p.Dir themselves.
+//
+// There is no effectiveSources twin: the sources union has a single consumer (buildStep,
+// which folds it inline into the cache key), whereas outputs need the union in three
+// places (the race detector plus the pre/post race-replay snapshots), so only outputs
+// earn a named helper.
+func effectiveOutputs(p *types.Project, target string) []string {
+	extra := p.TargetOutputs[target]
+	if len(extra) == 0 {
+		return p.Outputs
+	}
+	out := make([]string, 0, len(p.Outputs)+len(extra))
+	out = append(out, p.Outputs...)
+	for _, g := range extra {
+		if !slices.Contains(out, g) {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // servesTarget reports whether target is backed by a service op in any of the
@@ -622,7 +663,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 		var err error
 		if raceRT != nil {
-			outDirs := diff.GlobBaseDirs(p.Dir, p.Outputs)
+			outDirs := diff.GlobBaseDirs(p.Dir, effectiveOutputs(p, s.Target))
 			err = raceRT.TrackProject(s.ProjectPath, s.Target, outDirs, func() error {
 				return handler(spanCtx, p)
 			})
@@ -701,7 +742,7 @@ func runReplay(ctx context.Context, projects []*types.Project, target string,
 ) {
 	var replayable []*types.Project
 	for _, p := range projects {
-		if len(p.Outputs) > 0 {
+		if len(effectiveOutputs(p, target)) > 0 {
 			replayable = append(replayable, p)
 		}
 	}
@@ -711,7 +752,7 @@ func runReplay(ctx context.Context, projects []*types.Project, target string,
 
 	snapsA := make(map[string]diff.ContentSnap, len(replayable))
 	for _, p := range replayable {
-		snapsA[p.Path] = diff.HashContent(diff.GlobBaseDirs(p.Dir, p.Outputs))
+		snapsA[p.Path] = diff.HashContent(diff.GlobBaseDirs(p.Dir, effectiveOutputs(p, target)))
 	}
 
 	for _, p := range replayable {
@@ -721,7 +762,7 @@ func runReplay(ctx context.Context, projects []*types.Project, target string,
 	}
 
 	for _, p := range replayable {
-		postSnap := diff.HashContent(diff.GlobBaseDirs(p.Dir, p.Outputs))
+		postSnap := diff.HashContent(diff.GlobBaseDirs(p.Dir, effectiveOutputs(p, target)))
 		changed := diff.DiffContent(snapsA[p.Path], postSnap)
 		if len(changed) == 0 {
 			continue

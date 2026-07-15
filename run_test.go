@@ -184,6 +184,57 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 	assert.Equal(t, int32(2), calls.Load(), "ordinary run must hit the entry --no-cache refreshed, not re-execute")
 }
 
+// TestInputsOutputsColocation guards F1 end to end: magus.inputs/outputs declared
+// in a target body populate that target's per-target cache footprint (step.Sources /
+// step.Outputs), joined to the project path, without leaking to a sibling target.
+func TestInputsOutputsColocation(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun build(args: [str]) > void {
+    magus.inputs("src/**", "tsconfig.json");
+    magus.outputs("dist/**");
+}
+export fun test(args: [str]) > void {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	buildStep := m.buildStep(p, "build")
+	assert.Subset(t, buildStep.Sources, []string{"src/**", "tsconfig.json"},
+		"build's declared inputs must be in its cache-key sources")
+	assert.Contains(t, buildStep.Outputs, "dist/**",
+		"build's declared output must be in its snapshot/replay set")
+
+	testStep := m.buildStep(p, "test")
+	assert.NotContains(t, testStep.Sources, "src/**",
+		"a sibling target must not inherit build's per-target inputs")
+	assert.NotContains(t, testStep.Outputs, "dist/**",
+		"a sibling target must not inherit build's per-target outputs")
+}
+
+// TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a
+// magus.inputs/outputs call with a non-literal (computed) argument is a hard load
+// error, because a computed footprint is invisible to the static cache read.
+func TestInputsDynamicArgIsLoadError(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun build(args: [str]) > void {
+    final extra = "gen/**";
+    magus.inputs(extra);
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	_, err := Open(context.Background(), root)
+	require.Error(t, err, "Open must reject a computed magus.inputs argument")
+	assert.Contains(t, err.Error(), "string-literal", "error should explain the literal requirement")
+	assert.Contains(t, err.Error(), "build", "error should name the offending target")
+}
+
 func TestDiagCollectorCollects(t *testing.T) {
 	d := &diagCollector{} // nil report writer: RecordDiagnostic must still collect
 	d.RecordDiagnostic(types.DiagnosticEvent{Unit: "a:build", Code: types.ExecDenied})

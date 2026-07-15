@@ -181,7 +181,7 @@ func workspaceOutputGlobs(m *magus.Magus) []string {
 	seen := make(map[string]struct{})
 	var globs []string
 	for _, p := range m.All() {
-		for _, g := range p.Outputs {
+		for _, g := range p.AllOutputs() {
 			var wsGlob string
 			if p.Path == "." {
 				wsGlob = g

@@ -213,7 +213,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
 	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
 	// satisfy the surface parity guard, not because the dry run acts on them.
-	for _, name := range []string{"hint", "fatal", "pry", "bustCache"} {
+	for _, name := range []string{"hint", "fatal", "pry", "bustCache", "inputs", "outputs"} {
 		m.MapSet(name, fn("magus."+name, retNull))
 	}
 

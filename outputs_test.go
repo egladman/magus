@@ -64,6 +64,34 @@ func TestCleanOutputsRemovesMatchedFiles(t *testing.T) {
 	}
 }
 
+// TestCleanOutputsCoversPerTargetOutputs verifies that a per-target
+// magus.outputs declaration is cleaned by `magus clean --outputs`, not just
+// project-wide outputs - AllOutputs unions the per-target globs back in.
+func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun generate(args: [str]) > void {
+    magus.outputs("gen/**");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	genFile := filepath.Join(root, "gen", "types.pb.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(genFile), 0o755))
+	require.NoError(t, os.WriteFile(genFile, []byte("generated"), 0o644))
+
+	removed, err := m.CleanOutputs(context.Background(), m.All(), false)
+	require.NoError(t, err, "CleanOutputs")
+	require.NotEmpty(t, removed, "a per-target magus.outputs file must be cleaned")
+	// Assert on existence, not the exact path: t.TempDir resolves through /private
+	// on macOS, so p.Dir and the test-built path differ by that prefix.
+	_, statErr := os.Stat(genFile)
+	assert.True(t, os.IsNotExist(statErr), "per-target output should be deleted")
+}
+
 // TestCleanOutputsDryRunDoesNotDelete verifies that --dry-run lists matched
 // files without deleting them.
 func TestCleanOutputsDryRunDoesNotDelete(t *testing.T) {

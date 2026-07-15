@@ -25,7 +25,7 @@ func (m *Magus) CleanOutputs(ctx context.Context, projects []*types.Project, dry
 			return removed, ctx.Err()
 		}
 		fsys := os.DirFS(p.Dir)
-		for _, glob := range p.Outputs {
+		for _, glob := range p.AllOutputs() {
 			if ctx.Err() != nil {
 				return removed, ctx.Err()
 			}
@@ -75,7 +75,7 @@ func (m *Magus) CleanCache(ctx context.Context, projects ...*types.Project) erro
 // when no project claims the path.
 func (m *Magus) FindOutputOwner(absPath string) *types.Project {
 	for _, p := range m.ws.All() {
-		for _, glob := range p.Outputs {
+		for _, glob := range p.AllOutputs() {
 			rel, err := filepath.Rel(p.Dir, absPath)
 			if err != nil {
 				continue
