@@ -77,7 +77,7 @@ func TestTSRequiredGlobsSupersetOfClaimed(t *testing.T) {
 	require.True(t, ok, "ts spell missing")
 
 	for _, want := range []string{
-		"**/*.mts", "**/*.cts", "**/*.mjs", "**/*.cjs", "yarn.lock", "bun.lockb",
+		"**/*.mts", "**/*.cts", "**/*.mjs", "**/*.cjs", "yarn.lock", "bun.lockb", "tsconfig*.json",
 	} {
 		assert.Containsf(t, ts.Needs, want, "ts required globs missing %q", want)
 	}

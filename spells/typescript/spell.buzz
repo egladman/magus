@@ -10,8 +10,10 @@ import "magus/charm";
 export fun mgs_getName() > str { return "ts"; }
 
 export fun mgs_listRequiredGlobs(root: str) > [str] {
+    // tsconfig*.json is listed explicitly even though the broader **/*.json below
+    // already matches it - self-documenting rather than riding along by accident.
     return ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx",
-            "**/*.mjs", "**/*.cjs", "**/*.json", "package.json",
+            "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json",
             ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json",
             "yarn.lock", "bun.lockb"];
 }
