@@ -1,19 +1,45 @@
 // utilization.ts - pool utilization history as a GitHub-contribution-style SVG grid:
-// one square per Sample, colored by utilization (busy = info color; a queued sample
-// switches to the miss color to flag saturation; an unlimited pool is colored by load
+// one square per Sample, colored by utilization (busy = running color; a queued sample
+// switches to the queued color to flag saturation; an unlimited pool is colored by load
 // relative to the observed peak). Seeded from the metrics Backfill, then kept live by
 // one synthesized sample per status frame (both arrive in state.samples).
+//
+// PatternFly (W0 spike): this is the reference tile. Its shell is a PatternFly Card
+// (.pf-v6-c-card + __header/__title-text/__body/__footer) built inline here rather than the
+// shared collapsible Card class - only pf-v6-* classes plus the app hook (data-card) and the
+// tile's own grid/legend markup (styled by dashboard.css, unchanged). Its colors come from the
+// console's NEW semantic tokens (--console-status-*, defined in tokens.css onto PF status
+// tokens), not the old --c-* palette; those tokens are theme-aware so the grid colors correctly
+// in light and dark. The dashboard's default-collapse affordance is not wired for the spike
+// (that is a W3 detail); everything else - live updates, tooltips, theme re-render - is intact.
 
 import type { DashboardState, SampleView } from "../state";
 import { clock } from "../state";
 import { cssVar, onThemeChange } from "../charts/uplot";
-import { Card, h, type Tile } from "./card";
+import { h, type Tile } from "./card";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 const GRID_ROWS = 7;
 
 export function utilizationTile(): Tile {
-  const card = new Card("util", "Pool utilization", { term: "Concurrency", label: "utilization", note: "no samples yet" });
+  // PatternFly Card shell. data-card is the app hook; every class is a pf-v6-* one.
+  const card = h("div", "pf-v6-c-card");
+  card.dataset.card = "util";
+
+  const header = h("div", "pf-v6-c-card__header");
+  const headerMain = h("div", "pf-v6-c-card__header-main");
+  const titleWrap = h("div", "pf-v6-c-card__title");
+  const title = h("h2", "pf-v6-c-card__title-text", "Pool utilization");
+  titleWrap.append(title);
+  headerMain.append(titleWrap);
+  header.append(headerMain);
+
+  const body = h("div", "pf-v6-c-card__body");
+  const footer = h("div", "pf-v6-c-card__footer");
+  const note = document.createElement("span");
+  note.textContent = "no samples yet";
+  footer.append(note);
+
   const grid = h("div", "util-grid");
   grid.setAttribute("aria-label", "Pool utilization history");
   const legend = h("div", "util-legend");
@@ -26,18 +52,20 @@ export function utilizationTile(): Tile {
   for (let i = 0; i < 5; i++) ramp.append(h("i"));
   scale.append(ramp, document.createTextNode(" full"));
   legend.append(scale, h("span", "lg lg-queued", "queued"));
-  card.body.append(grid, legend);
+  body.append(grid, legend);
+
+  card.append(header, body, footer);
 
   let samples: SampleView[] = [];
   let peakRunning = 1;
 
   // utilColor maps a sample to a fill + opacity ramp (a hand-rolled linear scale, no
-  // d3-scale dep). A queued sample (queued > 0) switches to the miss color.
+  // d3-scale dep). A queued sample (queued > 0) switches to the queued color.
   function utilColor(s: SampleView): { fill: string; opacity: number } {
     let u: number;
     if (s.capacity > 0) u = Math.min(1, s.running / s.capacity);
     else u = s.running > 0 ? Math.min(1, s.running / Math.max(peakRunning, 1)) : 0;
-    const base = s.queued > 0 ? cssVar("--c-miss") : cssVar("--c-info");
+    const base = s.queued > 0 ? cssVar("--console-status-queued") : cssVar("--console-status-running");
     const opacity = s.running <= 0 && s.queued <= 0 ? 0.06 : 0.15 + 0.85 * u;
     return { fill: base, opacity };
   }
@@ -78,13 +106,13 @@ export function utilizationTile(): Tile {
     }
     svg.appendChild(frag);
     grid.replaceChildren(svg);
-    card.setNote(n ? `${n} samples, newest ${clock(samples[n - 1].at)}` : "no samples yet");
+    note.textContent = n ? `${n} samples, newest ${clock(samples[n - 1].at)}` : "no samples yet";
   }
 
   const offTheme = onThemeChange(render);
 
   return {
-    el: card.el,
+    el: card,
     update(s: DashboardState) { samples = s.samples; render(); },
     destroy() { offTheme(); },
   };

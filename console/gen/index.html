@@ -17,6 +17,12 @@
   <link rel="stylesheet" href="./site.css">
   <link rel="stylesheet" href="./ui-panels.css">
   <link rel="stylesheet" href="./console.css">
+  <!-- PatternFly (W0 spike): the PF Core base + component sheets, then the console's fresh
+       PF-native token layer. Loaded LAST so pf-v6-* component classes and the token overrides
+       win over the legacy Pico-era sheets above (which still define --pico-* for un-migrated
+       chrome during the migration). W1 removes the Pico sheets; here they coexist. -->
+  <link rel="stylesheet" href="./patternfly.css">
+  <link rel="stylesheet" href="./tokens.css">
   <script src="./theme.js"></script>
 </head>
 <!-- The console is a self-contained app, not a page in a site: NO site nav, NO brand mark. The title

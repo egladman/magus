@@ -11,6 +11,11 @@ const PRECACHE = [
   BASE + "index.html",
   BASE + "console.js",
   BASE + "console.css",
+  // PatternFly (W0 spike): the PF Core bundle + the console's token layer. Additive for now; W4 will
+  // drop the Pico-era sheets below (pico.min.css, site.css, ui-panels.css, theme.css) from this list
+  // and bump BUILD_ID so clients refetch the new shell.
+  BASE + "patternfly.css",
+  BASE + "tokens.css",
   BASE + "theme.css",
   BASE + "site.css",
   BASE + "ui-panels.css",

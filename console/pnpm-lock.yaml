@@ -33,6 +33,9 @@ importers:
         specifier: 1.6.31
         version: 1.6.31
     devDependencies:
+      '@patternfly/patternfly':
+        specifier: 6.5.2
+        version: 6.5.2
       '@types/d3-drag':
         specifier: 3.0.7
         version: 3.0.7
@@ -64,6 +67,9 @@ packages:
     resolution: {integrity: sha512-MXkBijtcX09R10Eb6sFeIetc6w6746eio6xtfuyVOH7oQAacT1X0GzMIQFux6Qy8cq3W/T5qX5Bei8YbFtmRGA==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.7.0
+
+  '@patternfly/patternfly@6.5.2':
+    resolution: {integrity: sha512-yZ71+1gt1VGzUN5amjDNd9NvttTnSOm9M0JeBL0YX1KaWXW1bmDPzTWEM+vQXuC4LVK0msHmR5hKB7KVpamAkA==}
 
   '@types/d3-color@3.1.3':
     resolution: {integrity: sha512-iO90scth9WAbmgv7ogoq57O9YpKmFBbmoEoCHDB2xMBY0+/KVrqAaCDyCE16dUspeOvIxFFRI+0sEtqDqy2b4A==}
@@ -149,6 +155,8 @@ snapshots:
   '@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.9.0)':
     dependencies:
       '@bufbuild/protobuf': 2.9.0
+
+  '@patternfly/patternfly@6.5.2': {}
 
   '@types/d3-color@3.1.3': {}
 

@@ -1,0 +1,56 @@
+/* tokens.css - the console's FRESH, PatternFly-native token layer (W0 spike).
+ *
+ * This is the ONE file that adapts PatternFly's design tokens to the console. It is NOT a
+ * port of the old --c-* / --pico-* palette; every slot below is chosen anew from the
+ * --pf-t-* palette so a PatternFly token rev (or a pf-v6 -> pf-v7 bump) is a contained
+ * edit here. Loaded AFTER patternfly.css so these :root overrides win.
+ *
+ * Three jobs:
+ *   1. Square the corners once, globally (the console's "square not rounded" house style).
+ *   2. Neutralize the RedHat webfonts to a system stack (no font fetch, no 404s).
+ *   3. Define the console's semantic color slots, mapped onto PatternFly status tokens.
+ */
+
+:root {
+  /* --- 1. Squarish corners -------------------------------------------------------------
+     PatternFly builds every component's radius from a small set of global primitives
+     (--...--radius--100..500) plus semantic aliases (small/medium/large/pill/...). Override
+     the primitives to a near-zero 2px and the whole component set (cards, buttons, inputs,
+     tabs, chips) squares up together - no per-component CSS. We also pin the semantic and
+     role aliases directly so nothing slips through a reference chain we did not trace. */
+  --pf-t--global--border--radius--100: 2px;
+  --pf-t--global--border--radius--200: 2px;
+  --pf-t--global--border--radius--300: 2px;
+  --pf-t--global--border--radius--400: 2px;
+  --pf-t--global--border--radius--500: 2px; /* was 999px (pill) - kill the cylinder */
+  --pf-t--global--border--radius--tiny: 2px;
+  --pf-t--global--border--radius--small: 2px;
+  --pf-t--global--border--radius--medium: 2px;
+  --pf-t--global--border--radius--large: 2px;
+  --pf-t--global--border--radius--pill: 2px;
+  --pf-t--global--border--radius--action--default: 2px;
+  --pf-t--global--border--radius--action--plain--default: 2px;
+  --pf-t--global--border--radius--control--default: 2px;
+  --pf-t--global--border--radius--control--form-element: 2px;
+
+  /* --- 2. System font stack ------------------------------------------------------------
+     Point PatternFly's font-family tokens at a system stack so its @font-face RedHat
+     declarations (still present in the base) are never referenced and never fetched. This
+     keeps the 10MB of vendored webfonts out of the build for the spike; a deliberate font
+     decision (ship a subset, or keep system) is a W1 call. */
+  --pf-t--global--font--family--body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --pf-t--global--font--family--heading: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --pf-t--global--font--family--mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* --- 3. Console semantic color slots -------------------------------------------------
+     The console's own vocabulary, mapped onto PatternFly's theme-aware status tokens (they
+     already resolve to the right value in light and dark, so the charts get correct colors
+     in both themes for free). Charts read these at runtime via getComputedStyle, so they
+     MUST be defined here even though nothing in CSS consumes them. New names, not the old
+     --c-* ones. */
+  --console-accent: var(--pf-t--global--color--brand--default);            /* primary/active accent  */
+  --console-status-running: var(--pf-t--global--icon--color--status--info--default);    /* pool busy  (blue)  */
+  --console-status-queued: var(--pf-t--global--icon--color--status--danger--default);   /* saturation (red)   */
+  --console-status-ok: var(--pf-t--global--icon--color--status--success--default);      /* healthy    (green) */
+  --console-status-warn: var(--pf-t--global--icon--color--status--warning--default);    /* caution    (gold)  */
+}

@@ -513,42 +513,14 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 /* The settings popover anchors under the floating gear (top-right), not under an in-bar button. */
 #console-actions .settings-panel { position: fixed; top: 2.3rem; right: 0.45rem; left: auto; }
 
-/* The tab strip (role=tablist) fills the title bar; the right padding clears the floating gear. */
+/* The tab strip fills the title bar; the right padding clears the floating gear. */
 #console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; padding-right: 2.4rem; }
-#console-tabs [role="tablist"] {
-  flex: 1 1 auto; display: flex; align-items: stretch; gap: 1px;
-  overflow-x: auto; scrollbar-width: none;
-}
-#console-tabs [role="tablist"]::-webkit-scrollbar { display: none; }
-#console-tabs [role="tab"] {
-  display: inline-flex; align-items: center; gap: 0.4rem;
-  padding: 0 0.7rem; max-width: 15rem; white-space: nowrap;
-  /* Resting tabs are dimmed but must stay readable: a blend toward the body color rather than the
-     faint --pico-muted-color, which read as barely-there against the sectioning-tinted bar. */
-  font-size: 0.83rem; color: color-mix(in srgb, var(--pico-color) 62%, transparent);
-  border: 1px solid transparent; border-bottom: 0; cursor: pointer; user-select: none;
-}
-#console-tabs [role="tab"]:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
-/* The active tab (aria-selected) is the raised panel surface; the -1px margin sinks it over the
-   strip's bottom border so it reads as continuous with its pane. */
-#console-tabs [role="tab"][aria-selected="true"] {
-  color: var(--pico-contrast); background: var(--pico-card-background-color);
-  border-color: var(--pico-muted-border-color); margin-bottom: -1px;
-}
-#console-tabs [role="tab"] > span:first-child { overflow: hidden; text-overflow: ellipsis; }
-#console-tabs [data-close] {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 1rem; height: 1rem; border-radius: var(--pico-border-radius);
-  color: var(--pico-muted-color); opacity: 0; transition: opacity 0.1s, color 0.1s;
-}
-#console-tabs [role="tab"]:hover [data-close], #console-tabs [role="tab"][aria-selected="true"] [data-close] { opacity: 0.65; }
-#console-tabs [data-close]:hover { opacity: 1; color: var(--pico-del-color); }
-#console-tabs [data-close] svg { width: 0.85rem; height: 0.85rem; }
-#console-tabs [data-new] {
-  display: inline-flex; align-items: center; padding: 0 0.55rem;
-  font-size: 1rem; color: var(--pico-muted-color); cursor: pointer; user-select: none;
-}
-#console-tabs [data-new]:hover { color: var(--pico-contrast); }
+
+/* W0 SPIKE: the old hand-rolled tab visuals ([role=tablist]/[role=tab]/[data-close]/[data-new],
+   ~30 lines) were removed here so the rebuilt PatternFly Tabs (.pf-v6-c-tabs*) render from PF's
+   own classes. Those id+attr selectors out-specify PF's single-class rules, so they had to go for
+   the spike; this is exactly the W2 shell rebuild, previewed. The PF strip carries its own ARIA
+   (role=tablist/tab, aria-selected). See tabStrip.ts and PATTERNFLY.md. */
 #console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--pico-primary); outline-offset: -2px; }
 
 /* The outlet holds one mounted surface per open tab (a div[data-tab-id]); only the active shows. */

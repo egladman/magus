@@ -66,6 +66,17 @@
     }
   }
 
+  // PatternFly v6 dark mode is a class on <html> (pf-v6-theme-dark), NOT Pico's data-theme, so we
+  // toggle it alongside. "auto" follows the OS via prefers-color-scheme (see the matchMedia listener
+  // below, which re-applies on OS change while in auto). W0: minimal sync; the full theme.ts rework is
+  // W1, but this is enough for the PF title bar and card to render correctly in both light and dark.
+  const darkMql = typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function applyPfTheme(t: Theme): void {
+    const dark = t === "dark" || (t === "auto" && !!darkMql && darkMql.matches);
+    root.classList.toggle("pf-v6-theme-dark", dark);
+  }
+
   function set(t: Theme): void {
     if (t === "auto") {
       root.removeAttribute("data-theme");
@@ -74,6 +85,7 @@
       root.setAttribute("data-theme", t);
       try { localStorage.setItem("theme", t); } catch (e) { /* ignore */ }
     }
+    applyPfTheme(t);
     updateThemeColorMeta(t);
     // Reflect the current mode on the gear's cycle button (it may not exist yet at
     // pre-paint, or on pages without the panel — the guard covers both).
@@ -88,6 +100,13 @@
   }
 
   set(get()); // pre-paint, prevents a flash of the wrong theme
+
+  // While in auto, follow live OS theme flips so the PatternFly dark class tracks prefers-color-scheme.
+  if (darkMql) {
+    const onOsChange = (): void => { if (get() === "auto") applyPfTheme("auto"); };
+    if (darkMql.addEventListener) darkMql.addEventListener("change", onOsChange);
+    else if (darkMql.addListener) darkMql.addListener(onOsChange); // older Safari
+  }
 
   document.addEventListener("DOMContentLoaded", function () {
     const btn = document.getElementById("theme-cycle");

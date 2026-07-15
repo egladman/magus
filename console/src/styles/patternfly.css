@@ -1,0 +1,23 @@
+/* patternfly.css - the PatternFly Core CSS entry for the console (W0 spike).
+ *
+ * esbuild bundles this with --bundle so each @import is inlined and minified into one
+ * gen/patternfly.css. We import PER-COMPONENT sheets (not the 1.8MB patternfly.min.css
+ * monolith) to keep the precache lean: the base token/reset layer plus only the
+ * components the console actually mounts. Add a component's sheet here when a surface
+ * starts using it; that is the whole opt-in surface for PatternFly.
+ *
+ * NOTE (measured in W0): patternfly-base.css is the unavoidable fixed cost - it defines
+ * the full --pf-t-* token palette (light + dark) and is ~321KB minified on its own.
+ * Per-component sheets are small on top of it. See PATTERNFLY.md for the size delta and
+ * the PurgeCSS follow-up flagged for the bulk migration.
+ *
+ * Font/image url() assets in the base (RedHat webfonts, icons) are marked --external in
+ * the build so esbuild leaves the urls untouched instead of trying to inline 10MB of
+ * fonts. tokens.css overrides the font-family tokens to a system stack, so the declared
+ * @font-face rules are never referenced and the browser never fetches them (no 404s). */
+
+@import "@patternfly/patternfly/patternfly-base.css";
+@import "@patternfly/patternfly/components/Button/button.css";
+@import "@patternfly/patternfly/components/Tabs/tabs.css";
+@import "@patternfly/patternfly/components/Card/card.css";
+@import "@patternfly/patternfly/layouts/Gallery/gallery.css";

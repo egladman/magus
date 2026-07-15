@@ -2,10 +2,12 @@
 // of tabs and drives the pure reducers on interaction. The console owns mounting the active surface;
 // this component owns only the strip UI and reports intent through callbacks (select / close / new).
 //
-// The tabs are <span role="tab">, NOT <button>: Pico themes button and [role=button] as a solid
-// primary control (the recurring blue-bleed trap), but leaves [role=tab] alone, so the strip stays
-// unthemed and we style it ourselves. tabViews is pure so the Workspace->view mapping is unit-tested;
-// the DOM wiring below is a thin layer over it.
+// PatternFly (W0 spike): the strip is built from PatternFly's Tabs component classes
+// (.pf-v6-c-tabs pf-m-box, __list, __item, __link, __item-action, __add) rather than hand-styled
+// spans - no custom presentational classes, only pf-v6-* + the app hooks (data-tab-id) and ARIA
+// (role=tab/tablist, aria-selected). The console mounts strip.el into #console-tabs and only uses the
+// callbacks below, so the tiling/reconcile logic is untouched: only the emitted classes changed.
+// tabViews stays pure so the Workspace->view mapping is unit-tested; the DOM wiring is a thin layer.
 
 import { type Workspace } from "./tabs";
 import type { Persisted } from "../lib/persist";
@@ -56,8 +58,10 @@ function closeIcon(): SVGElement {
 // it through the tabs.ts reducers, then re-render. It subscribes to the cell so a change elsewhere
 // (another browser tab, or the console opening a surface) reflects here too.
 export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks): TabStrip {
+  // PatternFly Tabs root: pf-m-box gives the boxed/raised active-tab look the console wants (an app
+  // tab row, not an underline nav). The <ul> is the role=tablist; the strip itself is the PF chrome.
   const strip = document.createElement("div");
-  strip.setAttribute("role", "tablist"); // styled via #console-tabs [role=tablist] - no class
+  strip.className = "pf-v6-c-tabs pf-m-box";
 
   // The strip only REPORTS intent - the console owns the workspace mutations (activate/close) so the
   // keybindings can drive the same operations. The strip re-renders automatically because it is bound
@@ -67,44 +71,66 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
 
   function render(): void {
     strip.replaceChildren();
+
+    const list = document.createElement("ul");
+    list.className = "pf-v6-c-tabs__list";
+    list.setAttribute("role", "tablist");
+
     for (const v of tabViews(ws.get())) {
-      // No classes: role=tab + aria-selected drive the styling (#console-tabs [role=tab]
-      // [aria-selected=true]); data-tab-id identifies it; the close is a [data-close] span.
-      const tab = document.createElement("span");
-      tab.dataset.tabId = v.id;
-      tab.setAttribute("role", "tab");
-      tab.setAttribute("tabindex", v.active ? "0" : "-1");
-      tab.setAttribute("aria-selected", v.active ? "true" : "false");
+      // pf-m-action marks an item that carries a trailing action button (the close); pf-m-current is
+      // the active tab. data-tab-id is the app hook; role=tab + aria-selected carry the ARIA.
+      const item = document.createElement("li");
+      item.className = "pf-v6-c-tabs__item pf-m-action" + (v.active ? " pf-m-current" : "");
 
+      const link = document.createElement("button");
+      link.type = "button";
+      link.className = "pf-v6-c-tabs__link";
+      link.dataset.tabId = v.id;
+      link.setAttribute("role", "tab");
+      link.setAttribute("tabindex", v.active ? "0" : "-1");
+      link.setAttribute("aria-selected", v.active ? "true" : "false");
       const label = document.createElement("span");
+      label.className = "pf-v6-c-tabs__item-text";
       label.textContent = v.title;
-
-      const x = document.createElement("span");
-      x.dataset.close = "";
-      x.setAttribute("aria-label", "Close " + v.title);
-      x.title = "Close";
-      x.append(closeIcon());
-      x.addEventListener("click", (ev) => { ev.stopPropagation(); close(v.id); });
-
-      tab.append(label, x);
-      tab.addEventListener("click", () => select(v.id));
+      link.append(label);
+      link.addEventListener("click", () => select(v.id));
       // Roving keyboard: Enter/Space activate, so a keyboard user can drive the strip.
-      tab.addEventListener("keydown", (ev) => {
+      link.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(v.id); }
       });
-      strip.append(tab);
-    }
 
-    // The new-tab affordance. A span (not [role=button]) to dodge Pico's button theming; the console
-    // decides which surface to open via onNew.
+      // The close: PF renders it as a plain button inside __item-action; the icon sits in __item-action-icon.
+      const action = document.createElement("span");
+      action.className = "pf-v6-c-tabs__item-action";
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "pf-v6-c-button pf-m-plain";
+      x.setAttribute("aria-label", "Close " + v.title);
+      x.title = "Close";
+      const xicon = document.createElement("span");
+      xicon.className = "pf-v6-c-tabs__item-action-icon";
+      xicon.append(closeIcon());
+      x.append(xicon);
+      x.addEventListener("click", (ev) => { ev.stopPropagation(); close(v.id); });
+      action.append(x);
+
+      item.append(link, action);
+      list.append(item);
+    }
+    strip.append(list);
+
+    // The new-tab affordance: PF's __add slot holding a plain button. The console decides which
+    // surface to open via onNew.
     const add = document.createElement("span");
-    add.dataset.new = "";
-    add.setAttribute("tabindex", "0");
-    add.setAttribute("aria-label", "New tab");
-    add.title = "New tab";
-    add.textContent = "+";
-    add.addEventListener("click", () => cb.onNew());
-    add.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); cb.onNew(); } });
+    add.className = "pf-v6-c-tabs__add";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "pf-v6-c-button pf-m-plain";
+    addBtn.setAttribute("aria-label", "New tab");
+    addBtn.title = "New tab";
+    addBtn.textContent = "+";
+    addBtn.addEventListener("click", () => cb.onNew());
+    add.append(addBtn);
     strip.append(add);
   }
 
