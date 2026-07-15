@@ -28,8 +28,13 @@ export interface StandaloneSurface {
 // wrapped surface opts out of the shared box for now (wiring the two is a later refinement).
 const noSearch: SearchProvider<null> = { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) };
 
-// The shape the factory calls on a dynamically imported app bundle.
-interface BootModule { activate(): void; }
+// The shape the factory calls on a dynamically imported app bundle. A streaming surface (the
+// dashboard) also exports setVisible so it can suppress its shared-status-bar writes while its tab is
+// hidden; a static surface (logs/graph) exports only activate.
+interface BootModule {
+  activate(): void;
+  setVisible?(visible: boolean): void;
+}
 
 // A surface that has NO standalone page to lift - its bundle builds its own DOM into the host. Used
 // for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/console/.
@@ -110,6 +115,9 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
       mod.activate();
       return {
         search: noSearch,
+        // A surface that writes the shared status bar (the dashboard) exports setVisible so it can go
+        // quiet while backgrounded; static surfaces (logs/graph) do not, and this stays undefined.
+        setVisible: mod.setVisible,
         // Clearing the host detaches the surface DOM. Any live stream the app opened keeps running
         // until the page unloads - the apps do not yet expose a teardown handle (a known follow-up).
         deactivate() { host.replaceChildren(); },

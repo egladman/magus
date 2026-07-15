@@ -1,18 +1,17 @@
-// main.ts - the console composition root and SPA-island entry. It owns the ONE chrome (the
-// app bar via the shared main.js, the tab strip, the content outlet) and mounts one surface per
-// open tab - each kept in the DOM and hidden when inactive, so switching is instant and closing
-// tears down. The active set is the persisted Workspace (tabs.ts), so the console reopens exactly
-// as you left it. Surfaces are PageModules (page.ts); a heavy one activates lazily so a tab stays
-// cheap until opened.
-//
-// This is the first console slice: the home launcher plus stub surfaces. The real log viewer / graph
-// / dashboard PageModules replace the stubs slice by slice, as each app is refactored to mount into
-// a host via activate() rather than boot against its own static document.
+// main.ts - the console composition root and SPA-island entry. The page supplies three slots - the
+// tab strip host (#console-tabs), the content outlet (#console-outlet), and the status-bar footer
+// (#console-statusbar) - and this wires them: it mounts one surface per open tab (each kept in the
+// DOM and hidden when inactive, so switching is instant and closing tears down), and swaps the active
+// tab's status bar into the footer so the bottom bar is PER-TAB. The active set is the persisted
+// Workspace (tabs.ts), so the console reopens exactly as you left it. Surfaces are PageModules
+// (page.ts); a heavy one activates lazily (its bundle a dynamic import) so a tab stays cheap until
+// opened. All four core lenses are real surfaces: home launcher + logs/graph/dashboard/activity.
 
 import { openTab, workspaceStore, type TabState } from "./tabs";
 import { createTabStrip } from "./tabStrip";
 import { homePage, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
+import { initConsoleSettings } from "../ui/console-settings";
 import type { PageController, PageModule } from "./page";
 
 const registry = new Map<string, PageModule<any, any>>();
@@ -27,9 +26,41 @@ const SURFACES: Launchable[] = [
 ];
 
 
-interface Mounted { host: HTMLElement; controller: PageController<any, any> | null; }
+interface Mounted { host: HTMLElement; status: HTMLElement; controller: PageController<any, any> | null; }
 
-export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void {
+// makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
+// (#console-conn, #console-demo, #console-observing, #console-count, #offline-badge) and the
+// .statusbar-right slot the log viewer injects its zoom control into. It is a real element (not an
+// innerHTML snapshot) so the surface's live handles + listeners survive tab switches. Only the ACTIVE
+// tab's status bar is attached to the footer, so getElementById resolves to the active surface's
+// status - the bottom bar is per-tab. (A surface streaming while its tab is hidden would still write
+// through getElementById to the active bar; no surface does that today except a live dashboard/log,
+// a known edge.)
+function makeStatusBar(): HTMLElement {
+  const bar = document.createElement("div");
+  bar.className = "console-tab-status";
+  const left = document.createElement("div");
+  left.className = "statusbar-cluster";
+  const conn = document.createElement("span");
+  conn.id = "console-conn"; conn.className = "status-item conn"; conn.setAttribute("aria-live", "polite");
+  conn.textContent = "not connected";
+  const demo = document.createElement("span");
+  demo.id = "console-demo"; demo.className = "status-tag console-demo-tag"; demo.hidden = true;
+  demo.setAttribute("aria-live", "polite"); demo.textContent = "Demo data";
+  left.append(conn, demo);
+  const right = document.createElement("div");
+  right.className = "statusbar-cluster statusbar-right";
+  for (const [id, cls] of [["console-count", "status-item status-observing"], ["console-observing", "status-item status-observing"], ["offline-badge", "status-item status-tag status-offline"]] as const) {
+    const s = document.createElement("span");
+    s.id = id; s.className = cls; s.hidden = true; s.setAttribute("aria-live", "polite");
+    if (id === "offline-badge") s.textContent = "offline";
+    right.append(s);
+  }
+  bar.append(left, right);
+  return bar;
+}
+
+export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, statusHost: HTMLElement): void {
   const ws = workspaceStore();
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted host + controller
 
@@ -46,14 +77,25 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
     const host = document.createElement("div"); // a pane: #console-outlet > div[data-tab-id], no class
     host.dataset.tabId = tab.id;
     outlet.append(host);
-    const entry: Mounted = { host, controller: null };
+    const entry: Mounted = { host, status: makeStatusBar(), controller: null };
     mounts.set(tab.id, entry);
-    show(tab.id); // visible before activate, so init-time measurement sees real sizes
+    show(tab.id); // visible + status attached before activate, so init-time measurement (and the log
+    // viewer's zoom-control injection into .statusbar-right) sees the real, attached DOM.
     entry.controller = await m.activate(host);
   }
 
+  // show reveals one tab's pane and swaps its status bar into the footer (detaching the others), so
+  // the bottom bar always reflects the active tab. It also tells each surface whether it is visible,
+  // so a background streamer suppresses its shared-status writes instead of leaking into the active
+  // tab's bar.
   function show(id: string | null): void {
-    for (const [tid, mt] of mounts) mt.host.hidden = tid !== id;
+    for (const [tid, mt] of mounts) {
+      mt.host.hidden = tid !== id;
+      mt.controller?.setVisible?.(tid === id);
+    }
+    const active = id ? mounts.get(id) : null;
+    if (active) statusHost.replaceChildren(active.status);
+    else statusHost.replaceChildren();
   }
 
   function unmount(id: string): void {
@@ -61,6 +103,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
     if (!mt) return;
     mt.controller?.deactivate();
     mt.host.remove();
+    mt.status.remove();
     mounts.delete(id);
   }
 
@@ -75,6 +118,10 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
     onNew: () => open("home"),
   });
   stripHost.append(strip.el);
+
+  // Wire the title-bar settings gear (theme is wired separately by theme.js). No-ops if the page
+  // did not supply the #settings-btn / #settings-panel markup.
+  initConsoleSettings();
 
   // open adds a fresh tab for a surface and mounts it. Every open is a new instance (its own id),
   // so the same surface can sit in two tabs.
@@ -105,7 +152,9 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
   }
 }
 
-// Entry: wire the console page's DOM. Guarded so the module no-ops when the scaffold is absent.
+// Entry: wire the console page's DOM. Guarded so the module no-ops when the scaffold is absent. The
+// footer (#console-statusbar) is an empty slot the console fills with the active tab's status bar.
 const stripHost = document.getElementById("console-tabs");
 const outlet = document.getElementById("console-outlet");
-if (stripHost && outlet) startConsole(stripHost, outlet);
+const statusHost = document.getElementById("console-statusbar");
+if (stripHost && outlet && statusHost) startConsole(stripHost, outlet, statusHost);

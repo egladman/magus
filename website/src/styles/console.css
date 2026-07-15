@@ -243,6 +243,9 @@ body.console-app button[aria-disabled="true"] {
 }
 .statusbar-cluster { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 .statusbar-right { margin-left: auto; } /* push the demo / offline flags to the far end */
+/* Per-tab status: the console swaps ONE tab's status bar into #console-statusbar at a time (main.ts).
+   This wrapper carries the active tab's left/right clusters and fills the fixed bar. */
+#console-statusbar .console-tab-status { flex: 1 1 auto; display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 
 /* --- Native full-height layout (console-fill: the graph explorer + log viewer, whose single
    card should own the whole screen). The body is a viewport-tall flex column - top bar, then the
@@ -307,6 +310,9 @@ body.console-fill > main > .panel {
   flex-direction: column;
   max-width: none;
   margin-inline: 0;
+  /* A slim side gutter so a surface (esp. the log viewer) stretches nearly edge-to-edge instead of
+     keeping Pico's ~1rem .container-fluid inset - the console owns the whole width. */
+  padding-inline: 0.4rem;
 }
 #console-outlet > div[data-tab-id] > main > .graph-app,
 #console-outlet > div[data-tab-id] > main > .panel {
@@ -419,18 +425,39 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 @media (max-width: 640px) { .console-empty-ways { grid-template-columns: 1fr; } }
 
 /* ---- Console app: the tabbed frame that hosts surfaces --------------------------------------
-   Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-tabs,
-   #console-outlet); the repeated bits are styled by ARIA role / [aria-*] / [data-*] / element
-   selectors under them. Styled against --pico-* tokens (not Pico component classes). All controls
-   are role=tab / tabindex spans, so Pico's button theming never applies.
+   Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-titlebar,
+   #console-tabs, #console-outlet); the repeated bits are styled by ARIA role / [aria-*] / [data-*] /
+   element selectors under them. Styled against --pico-* tokens (not Pico component classes). All tab
+   controls are role=tab / tabindex spans, so Pico's button theming never applies.
 
-   The tab strip (role=tablist) inside #console-tabs: browser/editor-style square tabs; the active
-   tab reads as the raised panel surface, continuous with its pane below. */
-#console-tabs [role="tablist"] {
-  display: flex; align-items: stretch; gap: 1px;
-  padding: 0 0.35rem; min-height: 2rem;
+   The title bar: one compact row (NOT the standalone site-header) holding the app mark, the tab strip
+   that fills the middle, and the top-right actions. Its own bottom border is the line the active tab
+   merges into, so the tabs read as anchored browser/editor tabs, not a floating navbar. */
+#console-titlebar {
+  flex: 0 0 auto;
+  display: flex; align-items: stretch; gap: 0.25rem;
+  height: 2.35rem; padding-inline: 0.3rem;
   background: var(--pico-card-sectioning-background-color);
   border-bottom: 1px solid var(--pico-muted-border-color);
+}
+#console-titlebar .brand { display: flex; align-items: center; padding-inline: 0.35rem; }
+#console-titlebar .brand img { height: 1.25rem; width: auto; display: block; }
+#console-actions { display: flex; align-items: center; gap: 0.15rem; position: relative; }
+/* Icon buttons in the title bar (settings gear, theme): bare, not Pico's solid-primary button. */
+#console-actions button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.9rem; height: 1.9rem; margin: 0; padding: 0;
+  border: 0; border-radius: var(--pico-border-radius); cursor: pointer;
+  background: none; color: var(--pico-muted-color); box-shadow: none;
+}
+#console-actions button:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
+#console-actions button svg { width: 1.05rem; height: 1.05rem; }
+
+/* The tab strip (role=tablist) fills the middle of the title bar. Tabs stretch to its full height and
+   the active one merges into the title bar's bottom border. */
+#console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
+#console-tabs [role="tablist"] {
+  flex: 1 1 auto; display: flex; align-items: stretch; gap: 1px;
   overflow-x: auto; scrollbar-width: none;
 }
 #console-tabs [role="tablist"]::-webkit-scrollbar { display: none; }

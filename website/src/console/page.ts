@@ -23,6 +23,11 @@ export interface PageController<S, Q> {
   // Tear down anything with a lifetime (chart instances, SSE streams, observers) when
   // the tab/pane closes, so the console can re-compose without leaks.
   deactivate(): void;
+  // Called when this surface's tab becomes active (true) or is hidden by another tab (false). A
+  // surface that writes the SHARED bottom status bar (via #console-conn etc.) must suppress those
+  // writes while hidden, or a background stream (e.g. the dashboard's) leaks into the active tab's
+  // per-tab status bar. Optional: static surfaces need not implement it.
+  setVisible?(visible: boolean): void;
   // The surface's current state, for the console to inspect (title updates, etc.). Typed
   // per surface via S; the console treats it opaquely.
   readonly state?: S;
