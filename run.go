@@ -256,13 +256,11 @@ func (m *Magus) targetProjects(targets []types.Target) []*types.Project {
 // this seam and cannot implement it; see that package's doc.)
 type TargetHandler func(context.Context, *types.Project) error
 
-// stage is one target to run across a project set. afterTarget orders this stage
-// after the named target for the same project (CI step ordering).
+// stage is one target to run across a project set.
 type stage struct {
-	target      string
-	afterTarget string
-	handler     TargetHandler
-	projects    []*types.Project
+	target   string
+	handler  TargetHandler
+	projects []*types.Project
 }
 
 // raceForcesNoCache reports whether o requires bypassing the cache so race
@@ -377,8 +375,7 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 	return m.executeStages(ctx, []stage{{target: target, handler: handler, projects: projects}}, scopeLabel, opts)
 }
 
-// executeStages schedules every (project,target) pair via dependency-ordered RunAll;
-// afterTarget edges keep each project's CI steps sequential.
+// executeStages schedules every (project,target) pair via dependency-ordered RunAll.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) error {
 	if opts.DryRun {
 		// Deep dry run: evaluate each target body under a tracing context, so
@@ -447,9 +444,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			step := m.buildStep(p, st.target)
 			step.ToolVersions = toolVer[p.Path]
 			step.Charms = charmKey
-			if st.afterTarget != "" {
-				step.After = []string{cache.DepKey(p.Path, st.afterTarget)}
-			}
 			if raceForcesNoCache(opts) {
 				step.NoCache = true
 			}

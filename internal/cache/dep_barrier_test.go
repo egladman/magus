@@ -106,44 +106,6 @@ func TestRunAllUpstreamKeyPropagatesToDependent(t *testing.T) {
 	assert.NotEqual(t, b1, b3, "B key unchanged after upstream A changed: upstream-key propagation is missing")
 }
 
-// TestRunAllAfterCrossTargetOrdering verifies the After edge: P:test must wait
-// for P:build even though both share a ProjectPath. This also exercises the
-// (project,target) keying — the two steps are distinct nodes, not collapsed.
-func TestRunAllAfterCrossTargetOrdering(t *testing.T) {
-	root, c := openCache(t)
-	rec := newOrderRecorder()
-
-	steps := []Step{
-		{ProjectPath: "P", WorkspaceRoot: root, Target: "test", After: []string{DepKey("P", "build")}},
-		{ProjectPath: "P", WorkspaceRoot: root, Target: "build"},
-	}
-	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, s Step) error {
-		id := s.ProjectPath + ":" + s.Target
-		if s.Target == "test" {
-			assert.True(t, rec.doneBefore("P:build"), "P:test started before P:build finished")
-		}
-		rec.start(id)
-		rec.finish(id)
-		return nil
-	}, WithConcurrency(8))
-	require.NoError(t, err, "RunAll")
-	assert.Len(t, rec.started, 2, "expected both P:build and P:test to run")
-}
-
-// TestRunAllAfterCycleRejected verifies a cross-target cycle (P:test after
-// P:build, P:build after P:test) is detected before any goroutine launches.
-func TestRunAllAfterCycleRejected(t *testing.T) {
-	root, c := openCache(t)
-	steps := []Step{
-		{ProjectPath: "P", WorkspaceRoot: root, Target: "test", After: []string{DepKey("P", "build")}},
-		{ProjectPath: "P", WorkspaceRoot: root, Target: "build", After: []string{DepKey("P", "test")}},
-	}
-	_, err := c.RunAll(context.Background(), steps, func(_ context.Context, _ Step) error {
-		return nil
-	}, WithConcurrency(8))
-	assert.Error(t, err, "expected cycle error")
-}
-
 // TestRunAllDependencyOrdering verifies that an A→B→C chain (C depends on B,
 // B depends on A) executes strictly in topological order even with ample
 // concurrency: each project's fn must observe its upstream as finished.

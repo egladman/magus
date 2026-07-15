@@ -77,7 +77,6 @@ type Step struct {
 	Outputs         []string // globs snapshotted into cache and replayed on hit
 	Deps            []string // upstream project hashes folded into the key
 	DependsOn       []string // upstream project paths for scheduling (not hashed)
-	After           []string // explicit ordering edges (not hashed); build with DepKey
 	WorkspaceRoot   string
 	Target          string   // mixed into key to distinguish targets on the same sources
 	Charms          []string // active charm names (sorted), mixed into key so charm-variant runs differ
@@ -637,7 +636,6 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			}
 
 			// Fold upstream keys into Deps for transitive cache-key propagation.
-			// After edges are ordering-only and excluded from the key.
 			if len(s.DependsOn) > 0 {
 				keysMu.Lock()
 				depKeys := make([]string, 0, len(s.DependsOn))

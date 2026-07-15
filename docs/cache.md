@@ -125,8 +125,7 @@ hashed line above yields a new key, and thus a new (empty) slot:
 - renaming the project or target.
 
 What does **not** invalidate: a file's mtime alone (content is what's hashed), a
-`claims`-only file, an `After` ordering edge (ordering is not hashed), or anything
-outside the declared `needs`.
+`claims`-only file, or anything outside the declared `needs`.
 
 Old keys are never mutated - a miss writes a _new_ entry beside the old one - so
 invalidation is additive. Reverting a change restores the earlier key and replays
