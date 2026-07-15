@@ -4,7 +4,7 @@ description: A workspace is the discovered root; a project is a directory whose 
 tags: [workspace, projects, discovery, magusfile, depends-on, monorepo]
 ---
 
-# Anatomy of a magus Workspace
+# Workspace and projects
 
 A **workspace** is the whole tree magus operates on: a single root directory, its `magus.yaml`, and the set of projects discovered beneath it. A **project** is one directory inside that tree whose presence of a magusfile registers it, together with the targets it declares. Every target you run (see [targets.md](targets.md)) is addressed by a project `Path` plus an operation `Name`; the workspace is the space those paths live in.
 

@@ -14,7 +14,7 @@ tags:
   ]
 ---
 
-# The magus cache model
+# Cache model
 
 magus's build cache is **content-addressed**: a target's outputs are keyed by the
 SHA-256 of its inputs, so an unchanged target replays its previous outputs instead

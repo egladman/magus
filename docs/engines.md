@@ -4,7 +4,7 @@ description: Understand the small engine.Engine seam that lets magus run magusfi
 tags: [engines, buzz, vm, interpreter, runtime, magusfile, plugin, session]
 ---
 
-# Engines: how magus runs a magusfile
+# Engines
 
 A **magusfile** is written in [Buzz](https://buzz-lang.dev/) and runs on the
 embedded Buzz VM through a small internal seam. A `magusfile.buzz` exposes the

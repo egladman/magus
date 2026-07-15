@@ -4,7 +4,7 @@ description: A Target is the addressable unit of work in magus, keyed by project
 tags: [targets, build, projects, cli, grammar, spells, charms, magusfile]
 ---
 
-# Anatomy of a magus Target
+# Targets
 
 A **Target** is the addressable unit of work in magus: _what project_ (Path) and _what operation_ (Name). Everything else (shards, spell filters, charms) is configuration layered on top, not part of the Target's identity.
 

@@ -4,7 +4,7 @@ description: Defines an Operation, its place in the Spell to Target to Process h
 tags: [operations, ops, hierarchy, spells, targets, ci, work-model, execution]
 ---
 
-# Operations and the magus work hierarchy
+# Operations
 
 This document defines an **Operation**, magus's smallest named unit of
 tool work, and fixes its place in the hierarchy between [Spells](spells.md),
