@@ -285,6 +285,7 @@ on.
 ## See also
 
 - [spells.md](spells.md): where `needs`/`provides`/`claims` are declared, and what a bound spell contributes.
+- [dependencies.md](dependencies.md): how `depends_on`'s `dep:` propagation and a `magus.needs` call each interact with this cache key.
 - [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
 - [charms.md](charms.md): the execution modifiers that key into the cache as `charm:` lines.

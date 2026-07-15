@@ -62,6 +62,7 @@ Start here to understand the model magus is built on.
 
 - [Workspace and projects](workspace.md) - how magus discovers projects, the magusfile layout, `depends_on`, and monorepo patterns.
 - [Targets](targets.md) - the named operations you run (`build`, `test`, `lint`), declared as exported functions in a magusfile.
+- [Dependencies](dependencies.md) - `magus.needs` versus `depends_on`, the cross-project fold between them, and how they interact with the cache and the affected set.
 - [Spells](spells.md) - language/toolchain adapters that provide tool-native operations (`go-build`, `go-test`, ...) for your targets to compose. See [Spells vs Targets](spells.md#spells-vs-targets) for where the line falls.
 - [Charms](charms.md) - execution modifiers attached with `:` (for example `lint:rw` to let a read-only target write).
 - [Operations and the work hierarchy](operations.md) - how a run is scheduled and parallelized across projects.

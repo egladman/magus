@@ -188,6 +188,7 @@ Together, discovery gives magus the set of projects, `depends_on` gives it the e
 ## See also
 
 - [targets.md](targets.md): the addressable unit of work, project-path resolution, and the CLI grammar.
+- [dependencies.md](dependencies.md): `depends_on` versus `magus.needs`, the fold between them, and how they feed the cache and the affected set.
 - [operations.md](operations.md): the Spell to Operation to Target hierarchy and where affected computation sits.
 - [spells.md](spells.md): the tool libraries a project binds and composes into targets.
 - [cache.md](cache.md): the content-addressed cache key, including the `dep:` lines that propagate cross-project changes.

@@ -276,6 +276,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 
 ## See also
 
+- [dependencies.md](dependencies.md): `magus.needs` versus `depends_on`, and how a cross-project `needs` folds into the affected set and the cache key.
 - [operations.md](operations.md): the formal Operation definition and the work hierarchy (Spell → Operation → Target).
 - [spells.md](spells.md): the operations a target composes, and [Spells vs Targets](spells.md#spells-vs-targets).
 - [charms.md](charms.md): the execution modifiers attached after `:`.
