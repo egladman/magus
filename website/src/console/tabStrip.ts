@@ -57,8 +57,7 @@ function closeIcon(): SVGElement {
 // (another browser tab, or the console opening a surface) reflects here too.
 export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks): TabStrip {
   const strip = document.createElement("div");
-  strip.className = "tab-strip";
-  strip.setAttribute("role", "tablist");
+  strip.setAttribute("role", "tablist"); // styled via #console-tabs [role=tablist] - no class
 
   const select = (id: string): void => {
     ws.set(setActive(ws.get(), id));
@@ -76,19 +75,19 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
   function render(): void {
     strip.replaceChildren();
     for (const v of tabViews(ws.get())) {
+      // No classes: role=tab + aria-selected drive the styling (#console-tabs [role=tab]
+      // [aria-selected=true]); data-tab-id identifies it; the close is a [data-close] span.
       const tab = document.createElement("span");
-      tab.className = "tab" + (v.active ? " active" : "");
       tab.dataset.tabId = v.id;
       tab.setAttribute("role", "tab");
       tab.setAttribute("tabindex", v.active ? "0" : "-1");
       tab.setAttribute("aria-selected", v.active ? "true" : "false");
 
       const label = document.createElement("span");
-      label.className = "tab-label";
       label.textContent = v.title;
 
       const x = document.createElement("span");
-      x.className = "tab-close";
+      x.dataset.close = "";
       x.setAttribute("aria-label", "Close " + v.title);
       x.title = "Close";
       x.append(closeIcon());
@@ -106,7 +105,7 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
     // The new-tab affordance. A span (not [role=button]) to dodge Pico's button theming; the console
     // decides which surface to open via onNew.
     const add = document.createElement("span");
-    add.className = "tab-new";
+    add.dataset.new = "";
     add.setAttribute("tabindex", "0");
     add.setAttribute("aria-label", "New tab");
     add.title = "New tab";

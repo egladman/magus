@@ -34,9 +34,8 @@ function stubPage(id: string, title: string): PageModule<null, null> {
     id,
     title,
     async activate(host: HTMLElement): Promise<PageController<null, null>> {
-      host.classList.add("console-stub"); // add, don't clobber the console-pane class the outlet set
+      host.dataset.surface = "stub"; // styled via #console-outlet [data-surface=stub]; no class
       const note = document.createElement("p");
-      note.className = "console-stub-note";
       note.textContent = title + " mounts here once it is wired into the console.";
       host.append(note);
       return { search: noSearch, deactivate() { host.replaceChildren(); } };
@@ -47,7 +46,6 @@ function stubPage(id: string, title: string): PageModule<null, null> {
 interface Mounted { host: HTMLElement; controller: PageController<any, any> | null; }
 
 export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void {
-  outlet.classList.add("console-outlet"); // so the layout CSS applies without the page remembering
   const ws = workspaceStore();
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted host + controller
 
@@ -57,8 +55,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
     if (mounts.has(tab.id)) return;
     const m = registry.get(tab.pageId);
     if (!m) return;
-    const host = document.createElement("div");
-    host.className = "console-pane";
+    const host = document.createElement("div"); // a pane: #console-outlet > div[data-tab-id], no class
     host.dataset.tabId = tab.id;
     host.hidden = true;
     outlet.append(host);

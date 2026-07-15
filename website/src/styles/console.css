@@ -391,67 +391,71 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 @media (max-width: 640px) { .console-empty-ways { grid-template-columns: 1fr; } }
 
 /* ---- Console app: the tabbed frame that hosts surfaces --------------------------------------
-   The tab strip (tabStrip.ts) + the content outlet (main.ts). Browser/editor-style square tabs
-   over the open surfaces; the active tab reads as the raised panel surface, continuous with its
-   pane below. Styled against --pico-* tokens (not Pico component classes), per the view-layer
-   spec. All controls are role=tab / tabindex spans, so Pico's button theming never applies. */
-.tab-strip {
+   Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-tabs,
+   #console-outlet); the repeated bits are styled by ARIA role / [aria-*] / [data-*] / element
+   selectors under them. Styled against --pico-* tokens (not Pico component classes). All controls
+   are role=tab / tabindex spans, so Pico's button theming never applies.
+
+   The tab strip (role=tablist) inside #console-tabs: browser/editor-style square tabs; the active
+   tab reads as the raised panel surface, continuous with its pane below. */
+#console-tabs [role="tablist"] {
   display: flex; align-items: stretch; gap: 1px;
   padding: 0 0.35rem; min-height: 2rem;
   background: var(--pico-card-sectioning-background-color);
   border-bottom: 1px solid var(--pico-muted-border-color);
   overflow-x: auto; scrollbar-width: none;
 }
-.tab-strip::-webkit-scrollbar { display: none; }
-.tab {
+#console-tabs [role="tablist"]::-webkit-scrollbar { display: none; }
+#console-tabs [role="tab"] {
   display: inline-flex; align-items: center; gap: 0.4rem;
   padding: 0 0.55rem; max-width: 15rem; white-space: nowrap;
   font-size: 0.8rem; color: var(--pico-muted-color);
   border: 1px solid transparent; border-bottom: 0; cursor: pointer; user-select: none;
 }
-.tab:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
-/* The active tab is the raised panel surface; -1px margin sinks it over the strip's bottom border
-   so it reads as continuous with its pane. */
-.tab.active {
+#console-tabs [role="tab"]:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
+/* The active tab (aria-selected) is the raised panel surface; the -1px margin sinks it over the
+   strip's bottom border so it reads as continuous with its pane. */
+#console-tabs [role="tab"][aria-selected="true"] {
   color: var(--pico-contrast); background: var(--pico-card-background-color);
   border-color: var(--pico-muted-border-color); margin-bottom: -1px;
 }
-.tab-label { overflow: hidden; text-overflow: ellipsis; }
-.tab-close {
+#console-tabs [role="tab"] > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+#console-tabs [data-close] {
   display: inline-flex; align-items: center; justify-content: center;
   width: 1rem; height: 1rem; border-radius: var(--pico-border-radius);
   color: var(--pico-muted-color); opacity: 0; transition: opacity 0.1s, color 0.1s;
 }
-.tab:hover .tab-close, .tab.active .tab-close { opacity: 0.65; }
-.tab-close:hover { opacity: 1; color: var(--pico-del-color); }
-.tab-close svg { width: 0.85rem; height: 0.85rem; }
-.tab-new {
+#console-tabs [role="tab"]:hover [data-close], #console-tabs [role="tab"][aria-selected="true"] [data-close] { opacity: 0.65; }
+#console-tabs [data-close]:hover { opacity: 1; color: var(--pico-del-color); }
+#console-tabs [data-close] svg { width: 0.85rem; height: 0.85rem; }
+#console-tabs [data-new] {
   display: inline-flex; align-items: center; padding: 0 0.55rem;
   font-size: 1rem; color: var(--pico-muted-color); cursor: pointer; user-select: none;
 }
-.tab-new:hover { color: var(--pico-contrast); }
-.tab-strip :focus-visible, .console-home-card:focus-visible { outline: 2px solid var(--pico-primary); outline-offset: -2px; }
+#console-tabs [data-new]:hover { color: var(--pico-contrast); }
+#console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--pico-primary); outline-offset: -2px; }
 
-/* The outlet holds one mounted surface per open tab; only the active is shown (main.ts toggles
-   [hidden]). Panes fill it and scroll independently. */
-.console-outlet { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-.console-pane { position: absolute; inset: 0; overflow: auto; }
-.console-pane[hidden] { display: none; }
+/* The outlet holds one mounted surface per open tab (a div[data-tab-id]); only the active shows. */
+#console-outlet { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+#console-outlet > div { position: absolute; inset: 0; overflow: auto; }
+#console-outlet > div[hidden] { display: none; }
 
-/* Home: the launcher surface - open a lens as a tab. */
-.console-home { max-width: 44rem; margin: 0 auto; padding: 2.5rem 1.25rem; }
-.console-home-title { margin: 0 0 0.2rem; font-size: 1.4rem; }
-.console-home-sub { margin: 0 0 1.5rem; color: var(--pico-muted-color); }
-.console-home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem; }
-.console-home-card {
+/* Home surface (data-surface=home): a launcher grid of surface cards (li[data-open]). */
+#console-outlet [data-surface="home"] { max-width: 44rem; padding: 2.5rem 1.25rem; }
+#console-outlet [data-surface="home"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
+#console-outlet [data-surface="home"] > p { margin: 0 0 1.5rem; color: var(--pico-muted-color); }
+#console-outlet [data-surface="home"] ul {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.75rem;
+}
+#console-outlet [data-open] {
   display: flex; flex-direction: column; gap: 0.25rem; padding: 0.9rem 1rem;
   border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
   background: var(--pico-card-background-color); cursor: pointer;
   transition: border-color 0.1s, background 0.1s;
 }
-.console-home-card:hover { border-color: var(--pico-primary); background: var(--pico-card-sectioning-background-color); }
-.console-home-card-label { font-weight: 500; }
-.console-home-card-hint { font-size: 0.8rem; color: var(--pico-muted-color); }
+#console-outlet [data-open]:hover { border-color: var(--pico-primary); background: var(--pico-card-sectioning-background-color); }
+#console-outlet [data-open] small { color: var(--pico-muted-color); }
 
-/* Stub surface - temporary, until each app mounts. */
-.console-stub { padding: 2rem 1.25rem; color: var(--pico-muted-color); }
+/* Stub surface (data-surface=stub) - temporary, until each app mounts. */
+#console-outlet [data-surface="stub"] { padding: 2rem 1.25rem; color: var(--pico-muted-color); }

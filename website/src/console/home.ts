@@ -25,36 +25,32 @@ export function homePage(surfaces: Launchable[], open: (pageId: string) => void)
     id: "home",
     title: "Home",
     async activate(host: HTMLElement): Promise<PageController<null, null>> {
-      host.classList.add("console-home"); // add, don't clobber the console-pane class the outlet set
+      // Class-free + semantic: data-surface tags the pane, the layout is styled via
+      // #console-outlet [data-surface=home] and its child elements (h1, p, ul, li[data-open]).
+      host.dataset.surface = "home";
       const title = document.createElement("h1");
-      title.className = "console-home-title";
       title.textContent = "magus console";
       const sub = document.createElement("p");
-      sub.className = "console-home-sub";
       sub.textContent = "Open a surface as a tab. Each is a live lens on the daemon.";
 
-      const grid = document.createElement("div");
-      grid.className = "console-home-grid";
+      const list = document.createElement("ul");
       for (const s of surfaces) {
-        const card = document.createElement("span");
-        card.className = "console-home-card";
-        card.dataset.pageId = s.pageId;
+        const card = document.createElement("li");
+        card.dataset.open = s.pageId;
         // tabindex (not role=button) keeps it keyboard-reachable without Pico theming the card blue.
         card.setAttribute("tabindex", "0");
         card.setAttribute("aria-label", "Open " + s.label);
-        const label = document.createElement("span");
-        label.className = "console-home-card-label";
+        const label = document.createElement("strong");
         label.textContent = s.label;
-        const hint = document.createElement("span");
-        hint.className = "console-home-card-hint";
+        const hint = document.createElement("small");
         hint.textContent = s.hint;
         card.append(label, hint);
         card.addEventListener("click", () => open(s.pageId));
         card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(s.pageId); } });
-        grid.append(card);
+        list.append(card);
       }
 
-      host.append(title, sub, grid);
+      host.append(title, sub, list);
       return { search: noSearch, deactivate() { host.replaceChildren(); } };
     },
   };
