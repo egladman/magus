@@ -71,7 +71,11 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 		fmt.Fprintf(&b, "%s: %s\n", k, n.Attrs[k])
 	}
 	if out.BlastRadius > 0 {
-		fmt.Fprintf(&b, "%d nodes reach this\n", out.BlastRadius)
+		reach := "nodes reach"
+		if out.BlastRadius == 1 {
+			reach = "node reaches"
+		}
+		fmt.Fprintf(&b, "%d %s this\n", out.BlastRadius, reach)
 	}
 
 	groups := relationGroups(out)

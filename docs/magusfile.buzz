@@ -55,7 +55,9 @@ magus.project({
                 "../std/**/*.go", "../host/**/*.go",
                 "../spells/**/*.buzz", "../internal/spell/**/*.go",
                 "../internal/manpage/**/*.go", "../internal/config/**/*.go",
-                "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go", "../cmd/magus-manpage/**/*.go"],
+                "../internal/render/**/*.go", "../internal/knowledge/**/*.go",
+                "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
+                "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go"],
     // The committed Markdown that content-generate derives from the Go tree
     // (buzz/modules, spells, manpage) is declared per-target in content-generate's own
     // magus.outputs, not here, so that generator's cache entry snapshots exactly its
@@ -109,17 +111,20 @@ export fun changelog_generate(args: [str]) > void {
 
 // content-generate regenerates the committed docs Markdown derived from the Go source
 // tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry),
-// the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), and the
-// Markdown manpages (cmd/magus-manpage -format md, from internal/manpage). The generator
-// tools live at the repo root, so they run from here (the docs cwd) as `go run ../cmd/...`
-// writing into this project's own tree. This owns only the Markdown manpages (docs-site
-// content, docs/manpage/*.md); the roff manpages are a distribution artifact owned by the
-// root magusfile (man-generate). generate depends on this and drift-gates the result.
+// the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the
+// Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked
+// examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The
+// generator tools live at the repo root, so they run from here (the docs cwd) as
+// `go run ../cmd/...` writing into this project's own tree. This owns only the Markdown
+// manpages (docs-site content, docs/manpage/*.md); the roff manpages are a distribution
+// artifact owned by the root magusfile (man-generate). generate depends on this and
+// drift-gates the result.
 export fun content_generate(args: [str]) > void {
-    magus.outputs("buzz/modules/*.md", "spells/*.md", "spells.md", "manpage/*.md");
+    magus.outputs("buzz/modules/*.md", "spells/*.md", "spells.md", "manpage/*.md", "knowledge.md");
     os.exec("go", ["run", "../cmd/magus-docs", "-out", "./buzz/modules"], ".", {});
     os.exec("go", ["run", "../cmd/magus-spelldocs", "-out", "./spells"], ".", {});
     os.exec("go", ["run", "../cmd/magus-manpage", "-format", "md", "-out", "./manpage"], ".", {});
+    os.exec("go", ["run", "../cmd/magus-examples", "-docs", "./knowledge.md"], ".", {});
 }
 
 // generateJsBundles builds the committed browser bundles that import npm
