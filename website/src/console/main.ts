@@ -12,8 +12,8 @@
 import { openTab, workspaceStore, type TabState } from "./tabs";
 import { createTabStrip } from "./tabStrip";
 import { homePage, type Launchable } from "./home";
-import { standaloneSurface } from "./standalone";
-import type { PageController, PageModule, SearchProvider } from "./page";
+import { standaloneSurface, moduleSurface } from "./standalone";
+import type { PageController, PageModule } from "./page";
 
 const registry = new Map<string, PageModule<any, any>>();
 function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
@@ -26,23 +26,6 @@ const SURFACES: Launchable[] = [
   { pageId: "activity", label: "Activity", hint: "The daemon's audit trail" },
 ];
 
-const noSearch: SearchProvider<null> = { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) };
-
-// stubPage is a placeholder surface for an app not yet refactored to mount in the console - it shows
-// what will live there. The real PageModule replaces it one app at a time.
-function stubPage(id: string, title: string): PageModule<null, null> {
-  return {
-    id,
-    title,
-    async activate(host: HTMLElement): Promise<PageController<null, null>> {
-      host.dataset.surface = "stub"; // styled via #console-outlet [data-surface=stub]; no class
-      const note = document.createElement("p");
-      note.textContent = title + " mounts here once it is wired into the console.";
-      host.append(note);
-      return { search: noSearch, deactivate() { host.replaceChildren(); } };
-    },
-  };
-}
 
 interface Mounted { host: HTMLElement; controller: PageController<any, any> | null; }
 
@@ -107,7 +90,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
   register(standaloneSurface({ id: "logs", title: "Log viewer", dir: "logs", bundle: "log-viewer.js", css: "logs.css" }));
   register(standaloneSurface({ id: "dashboard", title: "Dashboard", dir: "dashboard", bundle: "dashboard.js", css: "dashboard.css" }));
   register(standaloneSurface({ id: "graph", title: "Graph explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
-  register(stubPage("activity", "Activity"));
+  register(moduleSurface({ id: "activity", title: "Activity", bundle: "activity/activity.js", css: "logs/logs.css" }));
 
   // Restore the persisted workspace: the tab strip already renders every saved tab (it binds to ws);
   // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount

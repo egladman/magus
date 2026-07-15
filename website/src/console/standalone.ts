@@ -31,6 +31,49 @@ const noSearch: SearchProvider<null> = { placeholder: "", parse: () => null, app
 // The shape the factory calls on a dynamically imported app bundle.
 interface BootModule { activate(): void; }
 
+// A surface that has NO standalone page to lift - its bundle builds its own DOM into the host. Used
+// for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/console/.
+export interface ModuleSurface {
+  id: string; // registry id / pageId, e.g. "activity"
+  title: string; // tab title, e.g. "Activity"
+  bundle: string; // bundle path under gen/console/ whose activate(host) builds the DOM, e.g. "activity/activity.js"
+  css: string; // page-scoped stylesheet path under gen/console/, e.g. "logs/logs.css" (the trail reuses it)
+}
+
+// The shape moduleSurface calls on a host-building bundle: activate(host) builds into host and returns
+// an optional teardown run on close.
+interface HostModule { activate(host: HTMLElement): (() => void) | void; }
+
+// moduleSurface wraps a page-less surface: the console dynamically imports its bundle by URL (kept
+// lazy, like the others) and calls its exported activate(host). Symmetric with standaloneSurface but
+// without the fetch-and-lift, since there is no built page - the bundle owns its scaffold.
+export function moduleSurface(s: ModuleSurface): PageModule<null, null> {
+  const url = (p: string): string => new URL("./" + p, import.meta.url).href;
+  const cssId = "surface-css-" + s.id;
+  return {
+    id: s.id,
+    title: s.title,
+    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+      if (!document.getElementById(cssId)) {
+        const link = document.createElement("link");
+        link.id = cssId;
+        link.rel = "stylesheet";
+        link.href = url(s.css);
+        document.head.append(link);
+      }
+      const mod = (await import(url(s.bundle))) as HostModule;
+      const teardown = mod.activate(host);
+      return {
+        search: noSearch,
+        deactivate() {
+          if (typeof teardown === "function") teardown();
+          host.replaceChildren();
+        },
+      };
+    },
+  };
+}
+
 export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> {
   // artUrl resolves an artifact under gen/console/<dir>/ relative to THIS module's URL at runtime, so
   // the same code works wherever the console is served (a dev port, or the site's /magus/ base path).

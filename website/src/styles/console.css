@@ -484,6 +484,3 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 }
 #console-outlet [data-open]:hover { border-color: var(--pico-primary); background: var(--pico-card-sectioning-background-color); }
 #console-outlet [data-open] small { color: var(--pico-muted-color); }
-
-/* Stub surface (data-surface=stub) - temporary, until each app mounts. */
-#console-outlet [data-surface="stub"] { padding: 2rem 1.25rem; color: var(--pico-muted-color); }
