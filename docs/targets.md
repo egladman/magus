@@ -97,7 +97,7 @@ A target name is one of the seven canonical operations. The type is `project.Tar
 | `clean`     | remove local build artefacts                     |
 | `generate`  | run code generators                              |
 
-There is also `ci`: a composite pipeline (preflight → generate → format → lint → build → test) handled specially by `Magus.RunCI`. It is not in the `project.Targets` list and is not a valid name for `ParseTarget`.
+There is also `ci`: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus.needs`. `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
 
 Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - and security scanning (`govulncheck`) belong under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `security` target. A slow security scan can instead be gated in `ci`. Reserve custom target names for genuinely distinct work with no canonical home (a `deploy` or `release`), not for fragmenting a canonical phase.
 
@@ -183,7 +183,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 | **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                            |
 | **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.              |
 | **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).            |
-| **`ci`**   | The composite CI pipeline. Not a target name; handled by `Magus.RunCI`.                                             |
+| **`ci`**   | An ordinary target you compose with `magus.needs`; `Magus.RunCI` only strips `rw`, anchors `affected`, and must-not-no-op. |
 
 ## See also
 

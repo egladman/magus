@@ -99,8 +99,11 @@ knowledge graph. See [daemon.md](daemon.md).
 
 ### CI
 
-The composite pipeline (lint, build, test, coverage); run with
-`magus affected ci`, handled internally by `Magus.RunCI`.
+An ordinary magusfile-defined target you compose yourself with `magus.needs` -
+magus does not hardcode its stages. `Magus.RunCI` treats it specially only in
+that it strips the `rw` charm, it is the anchor `magus affected ci` keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See [targets.md](targets.md#the-target-name).
 
 ### Output reference
 
