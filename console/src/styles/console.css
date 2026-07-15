@@ -490,7 +490,11 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 #console-titlebar {
   flex: 0 0 auto;
   display: flex; align-items: stretch;
-  height: 2.2rem;
+  height: 2.35rem;
+  /* Pico gives a semantic <header> generous block padding and a bottom margin; the title bar is
+     chrome, not a page section, so zero both. Without this the border-box height collapses the
+     content area to a ~2px sliver and the tabs render as a clipped, unreadable strip. */
+  margin: 0; padding: 0;
   background: var(--pico-card-sectioning-background-color);
   border-bottom: 1px solid var(--pico-muted-border-color);
 }
@@ -518,8 +522,10 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 #console-tabs [role="tablist"]::-webkit-scrollbar { display: none; }
 #console-tabs [role="tab"] {
   display: inline-flex; align-items: center; gap: 0.4rem;
-  padding: 0 0.55rem; max-width: 15rem; white-space: nowrap;
-  font-size: 0.8rem; color: var(--pico-muted-color);
+  padding: 0 0.7rem; max-width: 15rem; white-space: nowrap;
+  /* Resting tabs are dimmed but must stay readable: a blend toward the body color rather than the
+     faint --pico-muted-color, which read as barely-there against the sectioning-tinted bar. */
+  font-size: 0.83rem; color: color-mix(in srgb, var(--pico-color) 62%, transparent);
   border: 1px solid transparent; border-bottom: 0; cursor: pointer; user-select: none;
 }
 #console-tabs [role="tab"]:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
