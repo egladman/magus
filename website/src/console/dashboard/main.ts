@@ -44,10 +44,18 @@ import { initRefDrawer } from "../../ui/ref-drawer.js";
 import { initConsoleSettings } from "../../ui/console-settings.js";
 import { getDefaultHost } from "../../lib/settings";
 
-initNav();
-initSearch();
-initRefDrawer();
-initConsoleSettings();
+// Wire the shared console chrome ONLY when this bundle boots its own standalone page - NOT when the
+// console mounts the dashboard as a surface, where the console frame owns the chrome and these would
+// inject a duplicate nav/search/drawer into the outlet. The signal is the same as the auto-boot guard
+// below: the scaffold is present at import time on the standalone page (its script runs with
+// dashboard.html fully in the document), whereas the console imports this bundle BEFORE injecting the
+// scaffold, so #dash-connect is absent then.
+if (document.getElementById("dash-connect")) {
+  initNav();
+  initSearch();
+  initRefDrawer();
+  initConsoleSettings();
+}
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
@@ -317,7 +325,11 @@ function registerServiceWorker(): void {
 }
 
 // ---- boot ------------------------------------------------------------------
-function boot(): void {
+// activate boots the dashboard against the scaffold already in the document. Every DOM handle is
+// resolved at call time (el()/opt() are getElementById), so it needs no separate resolve step - it
+// just needs the scaffold present. Exported so the console's dashboard PageModule can drive it after
+// injecting the scaffold into a host; the standalone page auto-boots below.
+export function activate(): void {
   document.documentElement.classList.remove("no-js");
   registerServiceWorker();
   mountTiles();
@@ -375,4 +387,6 @@ function boot(): void {
   setConn({ state: "none" });
 }
 
-boot();
+// Standalone auto-boot: only when the scaffold is already in the document at load. In the console the
+// scaffold is injected into a host AFTER this module imports, so the console calls activate() itself.
+if (document.getElementById("dash-connect")) activate();

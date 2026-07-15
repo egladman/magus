@@ -12,7 +12,7 @@
 import { openTab, workspaceStore, type TabState } from "./tabs";
 import { createTabStrip } from "./tabStrip";
 import { homePage, type Launchable } from "./home";
-import { logsPage } from "./logs/surface";
+import { standaloneSurface } from "./standalone";
 import type { PageController, PageModule, SearchProvider } from "./page";
 
 const registry = new Map<string, PageModule<any, any>>();
@@ -104,9 +104,9 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement): void 
   }
 
   register(homePage(SURFACES, open));
-  register(logsPage());
+  register(standaloneSurface({ id: "logs", title: "Log viewer", dir: "logs", bundle: "log-viewer.js", css: "logs.css" }));
+  register(standaloneSurface({ id: "dashboard", title: "Dashboard", dir: "dashboard", bundle: "dashboard.js", css: "dashboard.css" }));
   register(stubPage("graph", "Graph explorer"));
-  register(stubPage("dashboard", "Dashboard"));
   register(stubPage("activity", "Activity"));
 
   // Restore the persisted workspace: the tab strip already renders every saved tab (it binds to ws);
