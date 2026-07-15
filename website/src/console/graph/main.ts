@@ -30,6 +30,8 @@ import type { GLink, GNode, GraphFlavor } from "./types.js";
 import { LAYERED_MAX, layoutLayered } from "./layout.js";
 import { toMermaid } from "./mermaid.js";
 import { detectFlavor, targetGraphToNodeLink } from "./target-adapter.js";
+import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../shell/commands";
+import { persisted } from "../../lib/persist";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
 // the SSE handler writes for the view code to read, and the PWA File Handling API entry point.
@@ -57,6 +59,15 @@ const RELATIONS = ["depends_on", "contains", "imports", "calls", "uses", "refere
 
 // ---- element handles (the DOM contract with graph.html) --------------------
 const el = (id: string): HTMLElement | null => document.getElementById(id);
+
+// Default keybindings for the graph explorer; single keys that dodge browser combos and match the
+// log viewer's idiom. User overrides ride the shared "keymap" cell (one keymap across the console).
+const GRAPH_KEYMAP: Keymap = {
+  "graph.search": "/", // focus the node search
+  "graph.fit": "f",    // zoom to fit
+  "graph.layout": "l", // toggle force / layered layout
+};
+const keymapCell = persisted<Keymap>("keymap", {});
 // These handles are the DOM contract with graph.html; the page always provides them, so
 // they are asserted non-null (the monolith read them unguarded). statusEl stays nullable
 // because setStatus explicitly guards on it.
@@ -2522,6 +2533,15 @@ function bootWireEvents() {
     if (e.key === "[") changeFocusDepth(-1);
     else if (e.key === "]") changeFocusDepth(1);
   });
+
+  // Command surface + keybindings, the same shape as the log viewer: each action is a named command
+  // (dispatching to the existing control) bound to a single key that dodges browser combos and is
+  // guarded against typing. The user's overrides ride the shared persisted keymap.
+  const clickGraph = (id: string): void => { const b = el(id) as HTMLButtonElement | null; if (b && !b.disabled) b.click(); };
+  registerCommand({ id: "graph.search", label: "Focus search", group: "Graph", run: () => searchEl.focus() });
+  registerCommand({ id: "graph.fit", label: "Zoom to fit", group: "Graph", run: () => clickGraph("fit-btn") });
+  registerCommand({ id: "graph.layout", label: "Toggle layout", group: "Graph", run: () => clickGraph("layout-toggle-btn") });
+  installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
 
   // Query-syntax reference: each example runs itself in the filter (teach-by-doing).
   // Scope to [data-q] so the lens/add-group buttons (which share .q-example for its
