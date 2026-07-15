@@ -30,18 +30,14 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
     magus.cache.remote(github);
 }
 
+// Outputs are declared per-target with magus.outputs (in each *-generate body
+// below) rather than project-wide: each generated tree belongs to exactly one
+// generator, so snapshotting host/gen under go-build (which never writes it) is
+// both wasteful and a hazard - a go-build cache hit would restore a stale MAGUS.md.
+// `magus clean --outputs` still sees them all (Project.AllOutputs unions the
+// per-target sets). See docs/cache.md#per-target-inputs-and-outputs.
 magus.project({
     "spells": [magusfile, go, buzz, md],
-    "outputs": [
-        "host/gen/*.go",
-        "docs/buzz/modules/*.md",
-        "docs/spells/*.md",
-        "docs/spells.md",
-        "docs/manpage/gen/*.md",
-        "manpage/gen/*.1",
-        "MAGUS.md",
-        "dist/*",
-    ],
     "targets": {
         "watch": {"skip_cache": true},
         "generate": {"skip_cache": true, "exclusive": true},
@@ -158,12 +154,14 @@ export fun image_scan(args: [str]) > void {
 
 // Renders the man pages (roff) into manpage/gen.
 export fun man_generate(args: [str]) > void {
+    magus.outputs("manpage/gen/*.1");
     fs.makeDirectory(fs.join("manpage", "gen"));
     os.exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", fs.join("manpage", "gen")]);
 }
 
 // Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
 export fun bindings_generate(args: [str]) > void {
+    magus.outputs("host/gen/*.go");
     os.exec("go", ["generate", "./std/..."]);
 }
 
@@ -179,6 +177,7 @@ export fun config_generate(args: [str]) > void {
 
 // Regenerates the committed docs Markdown (module reference + man pages).
 export fun docs_generate(args: [str]) > void {
+    magus.outputs("docs/buzz/modules/*.md", "docs/spells/*.md", "docs/spells.md", "docs/manpage/gen/*.md");
     os.exec("go", ["run", "./cmd/magus-docs", "-out", "./docs/buzz/modules"]);
     os.exec("go", ["run", "./cmd/magus-spelldocs", "-out", "./docs/spells"]);
     os.exec("go", ["run", "./cmd/magus-manpage", "-format", "md", "-out", "./docs/manpage/gen"]);
@@ -186,6 +185,7 @@ export fun docs_generate(args: [str]) > void {
 
 // Renders MAGUS.md via `magus describe graph`.
 export fun md_generate(args: [str]) > void {
+    magus.outputs("MAGUS.md");
     final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
@@ -287,6 +287,9 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
 // trips the soft undeclared-charm typo-guard warning — expected here, same as that
 // example.
 export fun release_build(goos: str, goarch: str) > void {
+    // dist/* is skip_cache (never snapshotted), but declaring it keeps
+    // `magus clean --outputs` aware of the release artifacts via AllOutputs.
+    magus.outputs("dist/*");
     final p = release_target_platform(goos, goarch);
     if (magus.has_charm("static")) {
         build_release_variant(p[0], p[1], false, "-static");
