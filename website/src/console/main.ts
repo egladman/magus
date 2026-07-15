@@ -11,7 +11,8 @@ import { openTab, closeTab, setActive, setLayout, workspaceStore, type TabState 
 import { createTabStrip } from "./tabStrip";
 import { homePage, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
-import { registerCommand, installKeybindings, mergeKeymap, type Keymap } from "./commands";
+import { registerCommand, dispatchCommand, listCommands, installKeybindings, mergeKeymap, isMac, type Keymap } from "./commands";
+import { createPalette } from "./palette";
 import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane } from "./tiling";
 import { initConsoleSettings } from "../ui/console-settings";
@@ -34,6 +35,8 @@ const CONSOLE_KEYMAP: Keymap = {
   "console.pane.focusDown": "alt+j",
   "console.pane.focusUp": "alt+k",
   "console.pane.focusRight": "alt+l",
+  // The command palette: one searchable list of every command (and its chord).
+  "console.palette.open": "mod+k",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 
@@ -207,6 +210,18 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   registerCommand({ id: "console.pane.focusDown", label: "Focus pane down", group: "Panes", run: () => activeTile()?.focus("down") });
   registerCommand({ id: "console.pane.focusUp", label: "Focus pane up", group: "Panes", run: () => activeTile()?.focus("up") });
   registerCommand({ id: "console.pane.focusRight", label: "Focus pane right", group: "Panes", run: () => activeTile()?.focus("right") });
+
+  // The command palette: a searchable overlay over every registered command. Register it AFTER the
+  // other commands so it lists them; it reads the live command list + merged keymap on each open.
+  const palette = createPalette({
+    commands: listCommands,
+    keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
+    mac: isMac(),
+    onRun: (id) => dispatchCommand(id),
+  });
+  document.body.append(palette.el);
+  registerCommand({ id: "console.palette.open", label: "Command palette", group: "General", run: () => palette.open() });
+
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
   // open launches a surface as a tab. A surface (logs/graph/dashboard/activity) is single-instance -

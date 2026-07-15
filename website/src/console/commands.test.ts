@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  chordFromEvent, conflicts, dispatchCommand, listCommands, mergeKeymap, normalizeChord,
+  chordFromEvent, conflicts, dispatchCommand, formatChord, listCommands, mergeKeymap, normalizeChord,
   registerCommand, resolveCommand, unregisterCommand, type KeyChord,
 } from "./commands";
 
@@ -37,6 +37,14 @@ test("chordFromEvent recovers the physical letter for an alt-chord from e.code",
   assert.equal(chordFromEvent(evt({ altKey: true, shiftKey: true, code: "Digit2", key: "@" }), false), "alt+shift+2");
   // Without alt, e.code is ignored - the typed key wins (so shifted symbols keep working).
   assert.equal(chordFromEvent(evt({ metaKey: true, key: "K", code: "KeyK" }), true), "mod+k");
+});
+
+test("formatChord renders a stored chord for display, per platform", () => {
+  assert.equal(formatChord("mod+shift+k", true), "Cmd+Shift+K");
+  assert.equal(formatChord("mod+shift+k", false), "Ctrl+Shift+K");
+  assert.equal(formatChord("alt+h", true), "Option+H");
+  assert.equal(formatChord("mod+alt+ArrowRight", true), "Cmd+Option+Right");
+  assert.equal(formatChord("", true), ""); // deliberately unbound
 });
 
 test("a bare modifier press yields no chord", () => {

@@ -565,3 +565,37 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 }
 #console-outlet [data-open]:hover { border-color: var(--pico-primary); background: var(--pico-card-sectioning-background-color); }
 #console-outlet [data-open] small { color: var(--pico-muted-color); }
+
+/* Command palette (mod+k): a centered modal over a dimmed backdrop listing every command with its
+   chord. Class-free - the overlay carries an id, its parts [data-*]/role/element selectors. */
+#command-palette {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh;
+  background: color-mix(in srgb, var(--pico-background-color) 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+#command-palette[hidden] { display: none; }
+#command-palette [data-palette-box] {
+  width: min(38rem, 92vw); max-height: 60vh; display: flex; flex-direction: column;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); overflow: hidden;
+}
+#command-palette input {
+  margin: 0; padding: 0.7rem 0.9rem; border: 0; border-bottom: 1px solid var(--pico-muted-border-color);
+  border-radius: 0; background: none; font-size: 0.95rem;
+}
+#command-palette input:focus { box-shadow: none; }
+#command-palette ul[role="listbox"] { list-style: none; margin: 0; padding: 0.25rem; overflow-y: auto; }
+#command-palette li[role="option"] {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.4rem 0.6rem; border-radius: var(--pico-border-radius); cursor: pointer; color: var(--pico-color);
+}
+#command-palette li[data-selected] { background: var(--pico-primary); color: var(--pico-primary-inverse); }
+#command-palette li kbd {
+  font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
+  color: var(--pico-muted-color);
+}
+#command-palette li[data-selected] kbd { background: transparent; color: var(--pico-primary-inverse); border-color: currentColor; }

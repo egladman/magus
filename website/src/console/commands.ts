@@ -149,11 +149,32 @@ export function conflicts(keymap: Keymap, chord: Chord, exceptId?: string): stri
   return out;
 }
 
+// The human labels for the non-modifier keys formatChord prettifies (an arrow, a space, escape).
+// Everything else formats from its stored token (a single letter uppercased, a named key verbatim).
+const KEY_LABELS: Record<string, string> = {
+  ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down", " ": "Space", Escape: "Esc",
+};
+
+// formatChord renders a stored chord ("mod+shift+k") for display ("Cmd+Shift+K" on macOS,
+// "Ctrl+Shift+K" elsewhere) - what the command palette and a keybinding editor show beside a command.
+// Pure and platform-parameterized (mac passed in) so it is testable without a navigator. An empty
+// chord (deliberately unbound) renders as "".
+export function formatChord(chord: Chord, mac: boolean): string {
+  if (chord === "") return "";
+  return chord.split("+").map((t) => {
+    if (t === "mod") return mac ? "Cmd" : "Ctrl";
+    if (t === "alt") return mac ? "Option" : "Alt";
+    if (t === "shift") return "Shift";
+    if (KEY_LABELS[t]) return KEY_LABELS[t];
+    return t.length === 1 ? t.toUpperCase() : t;
+  }).join("+");
+}
+
 // --- Installation (the only DOM-touching part) ------------------------------
 
-// isMac reads the platform once so chordFromEvent folds the right accelerator. Guarded for a
-// non-browser context (tests import this module without a navigator).
-function isMac(): boolean {
+// isMac reads the platform so chordFromEvent folds the right accelerator and formatChord labels it.
+// Guarded for a non-browser context (tests import this module without a navigator).
+export function isMac(): boolean {
   if (typeof navigator === "undefined") return false;
   return /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent || "");
 }
