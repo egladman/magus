@@ -503,6 +503,58 @@ func nameConvention(name string) string {
 	return "camelCase"
 }
 
+// bespokePhaseFragmentNames are normalized target names that name a subset of an
+// existing canonical phase (see targets.md#the-target-name) rather than a phase of
+// their own: static analysis or formatting a lesser model might carve out as its
+// own target. typecheck and type-check are both listed because they normalize to
+// different kebab forms (no word boundary vs. an explicit hyphen).
+var bespokePhaseFragmentNames = map[string]bool{
+	"typecheck": true, "type-check": true, "vet": true,
+	"audit": true, "security": true, "style": true, "prettify": true,
+}
+
+// checkBespokePhaseFragmentTargets is MGS1003: a target whose normalized name
+// names a static-analysis or formatting subset rather than a phase of its own
+// should be composed into lint (or format) instead, so `magus affected ci`
+// covers it without a bespoke target the pipeline can silently forget to run.
+// A warning, not a load error: the escape hatch of keeping the name stays.
+func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Check {
+	const name = "bespoke phase-fragment target names"
+	seen := map[string]string{} // normalized name -> "name (file)" example
+	for _, p := range projects {
+		for _, f := range magusfileSourcesInDir(p.Dir) {
+			for _, raw := range declaredTargetNames(f) {
+				norm := types.DefaultTargetNameNormalizer.NormalizeTargetName(raw)
+				if !bespokePhaseFragmentNames[norm] {
+					continue
+				}
+				if _, ok := seen[norm]; ok {
+					continue
+				}
+				rel, _ := filepath.Rel(r.root, f)
+				seen[norm] = fmt.Sprintf("%q in %s", raw, filepath.ToSlash(rel))
+			}
+		}
+	}
+	if len(seen) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "no bespoke phase-fragment target names"}
+	}
+	details := make([]string, 0, len(seen))
+	for norm, ex := range seen {
+		details = append(details, fmt.Sprintf("%s: %s", norm, ex))
+	}
+	slices.Sort(details)
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf(
+			"%d target name(s) name static analysis or formatting rather than a phase of their own; "+
+				"compose the op into lint (or format) so `magus affected ci` covers it (docs/targets.md#the-target-name, see %s)",
+			len(seen), types.BespokePhaseFragmentName.URL()),
+		Details: details,
+	}
+}
+
 // magusfileSourcesInDir returns every Buzz magusfile source for a project
 // directory: the top-level magusfile.buzz plus magusfiles/*.buzz.
 func magusfileSourcesInDir(dir string) []string {

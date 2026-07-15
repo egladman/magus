@@ -160,6 +160,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkSymlinks(),
 		r.checkEnvVars(),
 		r.checkTargetNameConventions(projects),
+		r.checkBespokePhaseFragmentTargets(projects),
 		r.checkCharmTargetCollision(projects),
 		r.checkHasCharmTypos(projects),
 		r.checkStaleShadowAcks(),

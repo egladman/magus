@@ -192,6 +192,43 @@ func TestCheckTargetNameConventions(t *testing.T) {
 	})
 }
 
+func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
+	// run writes files into a fresh project dir and returns the check result.
+	run := func(files map[string]string) Check {
+		root := t.TempDir()
+		for name, body := range files {
+			path := filepath.Join(root, name)
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+			require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+		}
+		r := &runner{root: root}
+		return r.checkBespokePhaseFragmentTargets([]*types.Project{{Path: ".", Dir: root}})
+	}
+
+	t.Run("canonical names only", func(t *testing.T) {
+		got := run(map[string]string{"magusfile.buzz": "export fun build(_a: [str]) > void {}\nexport fun lint(_a: [str]) > void {}\n"})
+		assert.Equal(t, StatusOK, got.Status, got.Message)
+	})
+	t.Run("typecheck flagged", func(t *testing.T) {
+		got := run(map[string]string{"magusfile.buzz": "export fun typecheck(_a: [str]) > void {}\n"})
+		require.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Contains(t, got.Details[0], "typecheck")
+	})
+	t.Run("camelCase typeCheck normalizes to type-check and is flagged", func(t *testing.T) {
+		got := run(map[string]string{"magusfile.buzz": "export fun typeCheck(_a: [str]) > void {}\n"})
+		require.Equal(t, StatusFail, got.Status, got.Message)
+	})
+	t.Run("vet audit security style prettify all flagged", func(t *testing.T) {
+		got := run(map[string]string{"magusfile.buzz": "export fun vet(_a: [str]) > void {}\n" +
+			"export fun audit(_a: [str]) > void {}\n" +
+			"export fun security(_a: [str]) > void {}\n" +
+			"export fun style(_a: [str]) > void {}\n" +
+			"export fun prettify(_a: [str]) > void {}\n"})
+		require.Equal(t, StatusFail, got.Status, got.Message)
+		assert.Len(t, got.Details, 5)
+	})
+}
+
 func TestCheckMagusfileSyntax(t *testing.T) {
 	// run writes files into a fresh project dir and returns the check result.
 	run := func(files map[string]string) Check {

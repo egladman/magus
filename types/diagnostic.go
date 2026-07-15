@@ -46,6 +46,7 @@ func (c DiagnosticCode) URL() string {
 const (
 	NoCITarget                DiagnosticCode = "MGS1001"
 	SpellShadowed             DiagnosticCode = "MGS1002"
+	BespokePhaseFragmentName  DiagnosticCode = "MGS1003"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -77,7 +78,7 @@ const (
 // (the knowledge graph turns each into a diagnostic node) since Go const blocks
 // are not reflectable.
 var allDiagnosticCodes = []DiagnosticCode{
-	NoCITarget, SpellShadowed,
+	NoCITarget, SpellShadowed, BespokePhaseFragmentName,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	NetEgress, SandboxPolicyMismatch,
