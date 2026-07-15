@@ -2313,6 +2313,25 @@ fun renderDashboard(site: Site) > void {
     fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
 }
 
+// renderConsole writes gen/console/index.html from the hand-authored console.html - the native console
+// SPA that hosts the log viewer, graph explorer, dashboard, and activity trail as tabs and tiling
+// panes. UNLIKE the standalone console pages it wears NO renderConsoleShell: console.js builds its own
+// title bar, tab strip, and per-tab status bar. This render only fills the top-right settings panel
+// (the same renderSettingsPanel every surface wears) and the default CSP; console.js and every surface
+// bundle are external modules, so the page has no inline scripts. The console.js bundle and the surface
+// bundles are built by generateJsBundles and preserved by pruneStaleOutputs; console.html hard-codes
+// its ../ asset paths (it renders one level under gen/), so no root prefix is injected here.
+fun renderConsole(site: Site) > void {
+    final f = io.File.open("console.html", io.FileMode.read);
+    var html = f.readAll();
+    f.close();
+    final outDir = "console";
+    html = html.replace("<!-- settings -->", renderSettingsPanel(true));
+    html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
+    fs.makeDirectory(site.outDir + "/" + outDir);
+    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
+}
+
 // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
 // "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
 // renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
@@ -3432,6 +3451,13 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // real page URL is known for the collision guard). Aliases stay out of the
     // search index/sitemap/feeds — only the real page they point to appears there.
     site.writeAliases();
+
+    // renderConsole runs LATE - after the docs walk and the alias stubs - so the console SPA is the
+    // LAST writer of gen/console/index.html and definitively owns /console/. A pre-`/console/`-move
+    // artifact (an old docs landing at that path) or a future alias could otherwise re-emit that file
+    // after an earlier renderConsole and clobber the SPA; writing it here means the app wins regardless.
+    renderConsole(site);
+
     writeSEOFiles(site);
     renderBlogAtom(site);
     renderReleasesAtom(site);
@@ -3608,6 +3634,7 @@ fun pruneStaleOutputs(site: Site) > void {
         "console/graph/graph.css": true,
         "console/logs/index.html": true, "console/logs/log-viewer.js": true, "console/logs/logs.css": true,
         "console/dashboard/index.html": true, "console/dashboard/dashboard.js": true, "console/dashboard/dashboard.css": true,
+        "console/index.html": true, "console/console.js": true, "console/activity/activity.js": true,
     };
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);
