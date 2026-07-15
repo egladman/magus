@@ -12,7 +12,9 @@ package types
 // JSON - check it; a bump is a changelog event. Increment when the node/edge shape
 // or ID scheme changes in a way that would break a consumer that parsed the old form.
 // v2 adds the "command" kind: one node per concrete command a target would run.
-const KnowledgeSchemaVersion = 2
+// v3 adds the "tool" kind: the program (argv[0]) a command runs; commands and spells
+// `use` a tool, so it is distinct from a command (an invocation), not a coarse command.
+const KnowledgeSchemaVersion = 3
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".
@@ -31,6 +33,7 @@ const (
 	KindSpell      = "spell"
 	KindOp         = "op"
 	KindCommand    = "command" // one concrete command a target's spell would run
+	KindTool       = "tool"    // the program a command runs (argv[0]); commands and spells `use` it
 	KindCharm      = "charm"
 	KindModule     = "module"
 	KindMethod     = "method"

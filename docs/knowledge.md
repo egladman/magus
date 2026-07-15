@@ -85,13 +85,15 @@ knows the concrete tool invocations behind every target - not just the source.
 
 ```sh
 magus query "kind:command"                # every concrete command a target runs
-magus explain "command:tool:go"           # everywhere the workspace shells out to go
+magus query "kind:tool"                   # every tool the workspace runs (go, esbuild, buf, ...)
+magus explain "tool:go"                   # everywhere go is used - its commands AND spells
 magus query "kind:command language:go"    # commands the go toolchain runs
 ```
 
-Command nodes are extracted from each target's evaluated dispatch plan, so they
-carry the real argv (on the `argv` attr); the `command:tool:<tool>` grouping node
-links every command that runs the same base tool.
+Command nodes are extracted from each target's evaluated dispatch plan, so they carry
+the real argv (on the `argv` attr). A `tool:<tool>` node (its own kind - the program,
+not an invocation) is `use`d by every command that runs it and by the spell that
+contributes them, so `explain tool:go` shows everywhere the workspace runs go.
 
 **Where does a function or symbol live (as `path:line`), and where is it used?**
 

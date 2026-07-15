@@ -316,8 +316,9 @@ func TestRuntimeOutputRefMergesOntoTarget(t *testing.T) {
 
 // TestAssembleCommands: an evaluated command with argv mints one command node (argv,
 // tool, and the spell's language on attrs) plus its target->command contains edge, a
-// command->spell uses edge, and a command->base uses edge; a function-op entry with an
-// empty Command is skipped; and two commands sharing a tool link to a SINGLE base node.
+// command->spell uses edge, a command->tool uses edge, and the spell->tool edge; a
+// function-op entry with an empty Command is skipped; and two commands sharing a tool
+// link to a SINGLE tool node.
 func TestAssembleCommands(t *testing.T) {
 	in := sampleInputs()
 	in.Spells.Spells[0].Language = "go" // the "go" spell declares a language
@@ -345,26 +346,29 @@ func TestAssembleCommands(t *testing.T) {
 	_, ok = nodeByID(out, "command:pkg/a:gen:buzzfn")
 	assert.False(t, ok, "function-op (empty Command) mints no command node")
 
-	// Two concrete command nodes, plus exactly one base node for the shared tool.
-	baseID := "command:tool:go"
-	base, ok := nodeByID(out, baseID)
-	require.True(t, ok, "the tool grouping node exists")
-	assert.Equal(t, "go", base.Label, "base label is the tool basename (filepath.Base)")
-	assert.Empty(t, base.Source, "the base node is workspace-scoped, not project-owned")
-	assert.True(t, hasEdge(out, cmdID, baseID, types.RelationUses), "build command uses the base")
-	assert.True(t, hasEdge(out, "command:pkg/a:gen:go", baseID, types.RelationUses), "gen command uses the SAME base")
+	// Two concrete command nodes, plus exactly one tool node for the shared tool.
+	tID := "tool:go"
+	toolNode, ok := nodeByID(out, tID)
+	require.True(t, ok, "the tool node exists")
+	assert.Equal(t, types.KindTool, toolNode.Kind, "the tool grouping is its own kind, not a command")
+	assert.Equal(t, "go", toolNode.Label, "tool label is the basename (filepath.Base)")
+	assert.Empty(t, toolNode.Source, "the tool node is workspace-scoped, not project-owned")
+	assert.True(t, hasEdge(out, cmdID, tID, types.RelationUses), "build command uses the tool")
+	assert.True(t, hasEdge(out, "command:pkg/a:gen:go", tID, types.RelationUses), "gen command uses the SAME tool")
+	// The spell contributing the commands also uses the tool - the spell<->tool link.
+	assert.True(t, hasEdge(out, "spell:go", tID, types.RelationUses), "the go spell uses the go tool")
 
-	var concrete, base_ int
+	var concrete, tools int
 	for _, node := range out.Nodes {
 		switch {
-		case node.ID == baseID:
-			base_++
+		case node.ID == tID:
+			tools++
 		case node.Kind == types.KindCommand:
 			concrete++
 		}
 	}
 	assert.Equal(t, 2, concrete, "two concrete command nodes")
-	assert.Equal(t, 1, base_, "exactly one base node for the shared tool")
+	assert.Equal(t, 1, tools, "exactly one tool node for the shared tool")
 }
 
 func TestIsRuntimeShard(t *testing.T) {

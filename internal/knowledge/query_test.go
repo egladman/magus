@@ -64,9 +64,11 @@ func TestQueryAndExplainCommand(t *testing.T) {
 	}
 	g := mergeAll(AssembleShards(in))
 
-	// Both the concrete command and its workspace-scoped tool base node are kind:command.
+	// kind:command resolves ONLY the concrete command now; the tool is its own kind.
 	ids := matchIDs(g.Resolve("kind:command", 0))
-	assert.ElementsMatch(t, []string{"command:pkg/a:build:go", "command:tool:go"}, ids)
+	assert.ElementsMatch(t, []string{"command:pkg/a:build:go"}, ids)
+	// The tool is a separate kind:tool node, used by the command and its spell.
+	assert.ElementsMatch(t, []string{"tool:go"}, matchIDs(g.Resolve("kind:tool", 0)))
 
 	out, ok := g.Explain("command:pkg/a:build:go")
 	require.True(t, ok)

@@ -395,21 +395,29 @@ func assembleCommands(s *Shard, projectPath string, commands []types.KnowledgeCo
 		// Link the command to the spell that contributes it (an explicit edge, not just
 		// the ID's spell segment).
 		s.Edges = append(s.Edges, extractedEdge(id, spellID(c.Spell), types.RelationUses, projectPath))
-		// Group by tool: one base node per distinct argv[0] basename across the workspace,
-		// with each concrete command using it. Deduped within the shard; merge folds the
-		// per-shard copies into a single workspace node.
-		baseTool := filepath.Base(tool)
-		baseID := baseCommandID(baseTool)
-		if !seen[baseID] {
-			seen[baseID] = true
+		// The tool the command runs: one node per distinct argv[0] basename across the
+		// workspace, its own `tool` kind (a program is an entity, not a command). Deduped
+		// within the shard; merge folds per-shard copies into one workspace node.
+		toolName := filepath.Base(tool)
+		tID := toolID(toolName)
+		if !seen[tID] {
+			seen[tID] = true
 			s.Nodes = append(s.Nodes, types.KnowledgeNode{
-				ID:    baseID,
-				Kind:  types.KindCommand,
-				Label: sanitize(baseTool, maxLabelLen),
-				Attrs: map[string]string{AttrTool: sanitize(baseTool, maxLabelLen)},
+				ID:    tID,
+				Kind:  types.KindTool,
+				Label: sanitize(toolName, maxLabelLen),
+				Attrs: map[string]string{AttrTool: sanitize(toolName, maxLabelLen)},
 			})
 		}
-		s.Edges = append(s.Edges, extractedEdge(id, baseID, types.RelationUses, projectPath))
+		s.Edges = append(s.Edges, extractedEdge(id, tID, types.RelationUses, projectPath))
+		// The spell that contributes this command runs the tool too - conveys the
+		// spell<->tool relationship directly (e.g. spell:go uses tool:go), so `explain
+		// tool:go` shows both its commands and its spells. Deduped per (spell, tool).
+		spellToolKey := "spelltool:" + c.Spell + ":" + toolName
+		if !seen[spellToolKey] {
+			seen[spellToolKey] = true
+			s.Edges = append(s.Edges, extractedEdge(spellID(c.Spell), tID, types.RelationUses, projectPath))
+		}
 	}
 }
 

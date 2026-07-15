@@ -31,10 +31,11 @@ func commandID(projectPath, target, spell string) string {
 	return types.KindCommand + ":" + projectPath + ":" + target + ":" + spell
 }
 
-// baseCommandID keys the workspace-scoped grouping node for a tool (argv[0] basename),
-// shared by every concrete command that runs it, so `explain command:tool:go` lists all
-// go commands. The "tool:" infix keeps it clear of a concrete command's project segment.
-func baseCommandID(tool string) string { return types.KindCommand + ":tool:" + tool }
+// toolID keys the workspace-scoped node for a tool - the program a command runs
+// (argv[0] basename) - shared by every command and spell that runs it, so `explain
+// tool:go` lists everywhere go is used. A tool is an ENTITY (the program), distinct
+// from a command (an invocation of it), hence its own kind rather than a command node.
+func toolID(tool string) string { return types.KindTool + ":" + tool }
 
 func moduleID(name string) string { return types.KindModule + ":" + name }
 

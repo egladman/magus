@@ -263,7 +263,7 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 func kindRank(kind string) int {
 	switch kind {
 	case types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
-		types.KindCommand, types.KindCharm, types.KindModule, types.KindMethod,
+		types.KindCommand, types.KindTool, types.KindCharm, types.KindModule, types.KindMethod,
 		types.KindDiagnostic:
 		return 100
 	default:
