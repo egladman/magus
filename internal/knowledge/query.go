@@ -3,6 +3,7 @@ package knowledge
 import (
 	"cmp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/interactive"
@@ -262,7 +263,8 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 func kindRank(kind string) int {
 	switch kind {
 	case types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
-		types.KindCharm, types.KindModule, types.KindMethod, types.KindDiagnostic:
+		types.KindCommand, types.KindCharm, types.KindModule, types.KindMethod,
+		types.KindDiagnostic:
 		return 100
 	default:
 		return 0
@@ -476,11 +478,20 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 		Symbol:        id,
 		Label:         n.Label,
 	}
+	// The definition's line lives on the symbol node's Source ("path:line"); the
+	// defines edge provenance carries only the path. Surface the line on the def site
+	// so an agent can jump straight to the definition and edit it without reading the
+	// whole file - the same file:line refs already gives for references.
+	defFile, defLine := splitPathLine(n.Source)
 	for _, e := range g.in[id] {
 		file := strings.TrimPrefix(e.Source, types.KindFile+":")
 		switch e.Relation {
 		case types.RelationDefines:
-			out.Defs = append(out.Defs, types.KnowledgeRefSite{File: file})
+			site := types.KnowledgeRefSite{File: file}
+			if defLine > 0 && file == defFile {
+				site.Lines = []int{defLine}
+			}
+			out.Defs = append(out.Defs, site)
 		case types.RelationReferences:
 			// Only a SCIP-ingested reference edge carries the count/lines provenance;
 			// skip any other references edge into this node rather than emit a phantom
@@ -497,6 +508,22 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	slices.SortFunc(out.Refs, func(a, b types.KnowledgeRefSite) int { return cmp.Compare(a.File, b.File) })
 	out.FileCount = len(out.Refs)
 	return out, true
+}
+
+// splitPathLine splits a "path:line" provenance string (as carried on a symbol node's
+// Source) into the path and its 1-based line. Returns (s, 0) when there is no trailing
+// ":line" to parse - keying on the LAST colon so a leading scheme or drive letter in
+// the path does not confuse it.
+func splitPathLine(s string) (string, int) {
+	i := strings.LastIndex(s, ":")
+	if i < 0 {
+		return s, 0
+	}
+	n, err := strconv.Atoi(s[i+1:])
+	if err != nil {
+		return s, 0
+	}
+	return s[:i], n
 }
 
 // --- resolution & traversal helpers ---

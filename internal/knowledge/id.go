@@ -23,6 +23,19 @@ func spellID(name string) string { return types.KindSpell + ":" + name }
 
 func opID(spell, op string) string { return types.KindOp + ":" + spell + ":" + op }
 
+// commandID keys a command node by its owning target and the spell that contributes
+// it: one node per (project, target, spell). The rendered argv is a node attr, never
+// part of the ID, so a target's command node keeps a stable identity across argv edits
+// (a changed flag re-attributes the same node rather than orphaning the old one).
+func commandID(projectPath, target, spell string) string {
+	return types.KindCommand + ":" + projectPath + ":" + target + ":" + spell
+}
+
+// baseCommandID keys the workspace-scoped grouping node for a tool (argv[0] basename),
+// shared by every concrete command that runs it, so `explain command:tool:go` lists all
+// go commands. The "tool:" infix keeps it clear of a concrete command's project segment.
+func baseCommandID(tool string) string { return types.KindCommand + ":tool:" + tool }
+
 func moduleID(name string) string { return types.KindModule + ":" + name }
 
 func methodID(module, method string) string {
@@ -105,6 +118,12 @@ const (
 	AttrTitle = "title"
 	// AttrTags is a doc page's frontmatter tags, comma-joined.
 	AttrTags = "tags"
+	// AttrArgv is a command node's rendered argv, space-joined - the concrete command
+	// line a target's spell would run. It rides an attr, never the node ID, so a changed
+	// flag re-attributes the same node instead of orphaning it.
+	AttrArgv = "argv"
+	// AttrTool is a command node's tool - argv element 0, the executable the command runs.
+	AttrTool = "tool"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are

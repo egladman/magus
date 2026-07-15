@@ -55,6 +55,33 @@ func TestResolveByKind(t *testing.T) {
 	assert.Equal(t, []string{"spell:go"}, ids)
 }
 
+// TestQueryAndExplainCommand: kind:command resolves the command node, and explaining it
+// shows the incoming target->command contains edge (the target that owns the command).
+func TestQueryAndExplainCommand(t *testing.T) {
+	in := sampleInputs()
+	in.Commands = []types.KnowledgeCommand{
+		{Project: "pkg/a", Target: "build", Spell: "go", Command: []string{"go", "build", "./..."}},
+	}
+	g := mergeAll(AssembleShards(in))
+
+	// Both the concrete command and its workspace-scoped tool base node are kind:command.
+	ids := matchIDs(g.Resolve("kind:command", 0))
+	assert.ElementsMatch(t, []string{"command:pkg/a:build:go", "command:tool:go"}, ids)
+
+	out, ok := g.Explain("command:pkg/a:build:go")
+	require.True(t, ok)
+	assert.Equal(t, types.KindCommand, out.Node.Kind)
+	assert.Equal(t, "go build ./...", out.Node.Attrs[AttrArgv])
+
+	contained := false
+	for _, e := range out.In {
+		if e.Relation == types.RelationContains && e.Other == "target:pkg/a:build" {
+			contained = true
+		}
+	}
+	assert.True(t, contained, "explain shows the target->command contains edge")
+}
+
 func TestResolveByTerm(t *testing.T) {
 	ids := matchIDs(sampleGraph().Resolve("build", 0))
 	assert.Contains(t, ids, "target:pkg/a:build")

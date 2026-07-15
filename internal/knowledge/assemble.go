@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"maps"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -56,6 +57,12 @@ type Inputs struct {
 	// the workspace is a git repo). It folds onto existing file nodes in the @vcs shard
 	// as attrs - deterministic per commit, so remote-shareable.
 	VCS []types.KnowledgeVCS
+	// Commands carries the concrete argv each target's spell would run, distilled from
+	// the fully-evaluated dispatch plan (DescribeTarget). Each becomes a command node on
+	// the owning project's shard with a target->command contains edge; function-op entries
+	// (empty Command) are skipped. Deterministic (static argv, no charms), so it rides the
+	// project shard rather than the isolated @runtime one.
+	Commands []types.KnowledgeCommand
 }
 
 // Shard is a named, independently-fingerprinted slice of the graph: one per
@@ -73,8 +80,21 @@ type Shard struct {
 func AssembleShards(in Inputs) []Shard {
 	shards := make([]Shard, 0, len(in.Graph.Projects)+3)
 	shards = append(shards, assembleRegistry(in))
+	// Group evaluated commands by owning project so each project's shard mints its own
+	// command nodes (they live with the target, remote-shareable like the rest of the
+	// deterministic project shard). spellLang lets a command inherit its spell's language.
+	commandsByProject := map[string][]types.KnowledgeCommand{}
+	for _, c := range in.Commands {
+		commandsByProject[c.Project] = append(commandsByProject[c.Project], c)
+	}
+	spellLang := map[string]string{}
+	for _, sp := range in.Spells.Spells {
+		if sp.Language != "" {
+			spellLang[sp.Name] = sp.Language
+		}
+	}
 	for _, p := range in.Graph.Projects {
-		shards = append(shards, assembleProject(p))
+		shards = append(shards, assembleProject(p, commandsByProject[p.Path], spellLang))
 	}
 	// The path-bearing nodes CODEOWNERS is matched against: every project, plus buzz
 	// files once that shard is built below. Projects are known up front from the graph.
@@ -241,8 +261,10 @@ func assembleRegistry(in Inputs) Shard {
 
 // assembleProject builds one project's shard: the project node, its targets and
 // contains edges, target->target dependencies (intra- and cross-project),
-// target->op uses edges, charm->target references, and project->project deps.
-func assembleProject(p types.TargetGraphProject) Shard {
+// target->op uses edges, charm->target references, project->project deps, and one
+// command node (with a target->command contains edge) per concrete command the
+// project's targets would run.
+func assembleProject(p types.TargetGraphProject, commands []types.KnowledgeCommand, spellLang map[string]string) Shard {
 	s := Shard{Name: p.Path}
 	pID := projectID(p.Path)
 	// target_count is always present, so projAttrs is never empty and needs no
@@ -311,7 +333,72 @@ func assembleProject(p types.TargetGraphProject) Shard {
 			s.Edges = append(s.Edges, extractedEdge(cID, tID, types.RelationReferences, p.Path))
 		}
 	}
+	assembleCommands(&s, p.Path, commands, spellLang)
 	return s
+}
+
+// assembleCommands mints one command node per concrete command a target's spell would
+// run, with a target->command contains edge, mirroring the op/target minting above.
+// Function-op entries (empty Command) contribute no static argv and are skipped, so they
+// mint no node; the caller logs the skipped count. Nodes dedup by ID (one per project:
+// target:spell), so a re-listed command coalesces rather than duplicating. Each command
+// also carries its spell's language attr (when the spell declares one) and links to two
+// grouping nodes via uses edges: its spell (command->spell) and a workspace-scoped base
+// node per tool (command->command:tool:<tool>), so `explain command:tool:go` lists every
+// go command. The base node is emitted here too, minimal-node style: whichever project
+// shard first mentions a tool carries the node, and the merge dedups to exactly one.
+func assembleCommands(s *Shard, projectPath string, commands []types.KnowledgeCommand, spellLang map[string]string) {
+	seen := map[string]bool{}
+	for _, c := range commands {
+		if len(c.Command) == 0 {
+			continue // function-op: no static argv, so no command node
+		}
+		id := commandID(projectPath, c.Target, c.Spell)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		tool := c.Command[0]
+		label := tool
+		if label == "" {
+			label = c.Target + ":" + c.Spell
+		}
+		attrs := map[string]string{
+			AttrArgv: sanitize(strings.Join(c.Command, " "), maxLabelLen),
+			AttrTool: sanitize(tool, maxLabelLen),
+		}
+		if lang := spellLang[c.Spell]; lang != "" {
+			// Same "language" attr key the spell and file/symbol nodes carry, so
+			// `language:go` reaches the commands go runs alongside its spell and files.
+			attrs["language"] = lang
+		}
+		s.Nodes = append(s.Nodes, types.KnowledgeNode{
+			ID:     id,
+			Kind:   types.KindCommand,
+			Label:  sanitize(label, maxLabelLen),
+			Source: projectPath,
+			Attrs:  attrs,
+		})
+		s.Edges = append(s.Edges, extractedEdge(targetID(projectPath, c.Target), id, types.RelationContains, projectPath))
+		// Link the command to the spell that contributes it (an explicit edge, not just
+		// the ID's spell segment).
+		s.Edges = append(s.Edges, extractedEdge(id, spellID(c.Spell), types.RelationUses, projectPath))
+		// Group by tool: one base node per distinct argv[0] basename across the workspace,
+		// with each concrete command using it. Deduped within the shard; merge folds the
+		// per-shard copies into a single workspace node.
+		baseTool := filepath.Base(tool)
+		baseID := baseCommandID(baseTool)
+		if !seen[baseID] {
+			seen[baseID] = true
+			s.Nodes = append(s.Nodes, types.KnowledgeNode{
+				ID:    baseID,
+				Kind:  types.KindCommand,
+				Label: sanitize(baseTool, maxLabelLen),
+				Attrs: map[string]string{AttrTool: sanitize(baseTool, maxLabelLen)},
+			})
+		}
+		s.Edges = append(s.Edges, extractedEdge(id, baseID, types.RelationUses, projectPath))
+	}
 }
 
 // extractedEdge builds a directly-observed edge (confidence extracted, score 1.0).

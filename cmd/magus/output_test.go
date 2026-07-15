@@ -153,24 +153,8 @@ func TestWriteTemplateSprigHelpers(t *testing.T) {
 		"a,b,c")
 }
 
-func TestBaseTypeName(t *testing.T) {
-	cases := map[string]string{
-		"string":            "string",
-		"int":               "int",
-		"[]string":          "string",
-		"[]ProjectEntry":    "ProjectEntry",
-		"*Target":           "Target",
-		"[]*Target":         "Target",
-		"map[string]Target": "Target",
-		"*time.Time":        "time.Time",
-	}
-	for in, want := range cases {
-		assert.Equalf(t, want, baseTypeName(in), "baseTypeName(%q)", in)
-	}
-}
-
-// Bare "-o template" lists a value's fields (json keys), sourced from the generated
-// schemagen.OutputTypes descriptor, and drills into referenced output types.
+// Bare "-o template" lists a value's fields (json keys) by reflecting its type, and
+// drills into referenced struct types.
 func TestWriteTemplateFields(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, writeTemplateFields(&buf, types.ProjectsOutput{
@@ -185,11 +169,37 @@ func TestWriteTemplateFields(t *testing.T) {
 	assert.NotContains(t, out, "Projects ", "should list json keys, not Go field names")
 }
 
-func TestWriteTemplateFields_unknownType(t *testing.T) {
+// Reflection makes the listing universal: any struct works (not a curated set), so a
+// type with no registration still lists its json-key fields, skips json:"-", and
+// recurses into referenced structs.
+func TestWriteTemplateFields_arbitraryStruct(t *testing.T) {
+	type inner struct {
+		Slug string `json:"slug"`
+	}
+	type outer struct {
+		Name    string   `json:"name"`
+		Tags    []string `json:"tags"`
+		Skipped int      `json:"-"`
+		Inners  []inner  `json:"inners"`
+	}
 	var buf bytes.Buffer
-	err := writeTemplateFields(&buf, struct{ X int }{})
-	require.Error(t, err, "a type absent from the descriptor should error")
-	assert.Contains(t, err.Error(), "no field list")
+	require.NoError(t, writeTemplateFields(&buf, outer{}))
+	out := buf.String()
+	assert.Contains(t, out, "name")
+	assert.Contains(t, out, "tags")
+	assert.Contains(t, out, "[]string")
+	assert.Contains(t, out, "inners")
+	assert.Contains(t, out, "inner:", "recurses into the referenced struct")
+	assert.Contains(t, out, "slug")
+	assert.NotContains(t, out, "Skipped", `json:"-" fields are omitted`)
+}
+
+// A non-struct value has no fields to list.
+func TestWriteTemplateFields_nonStruct(t *testing.T) {
+	var buf bytes.Buffer
+	err := writeTemplateFields(&buf, "just a string")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no fields")
 }
 
 func TestWriteTemplateEnvBlocked(t *testing.T) {

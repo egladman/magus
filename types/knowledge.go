@@ -11,7 +11,8 @@ package types
 // External consumers - agent skills, MCP tools, other tools reading the node-link
 // JSON - check it; a bump is a changelog event. Increment when the node/edge shape
 // or ID scheme changes in a way that would break a consumer that parsed the old form.
-const KnowledgeSchemaVersion = 1
+// v2 adds the "command" kind: one node per concrete command a target would run.
+const KnowledgeSchemaVersion = 2
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".
@@ -29,6 +30,7 @@ const (
 	KindTarget     = "target"
 	KindSpell      = "spell"
 	KindOp         = "op"
+	KindCommand    = "command" // one concrete command a target's spell would run
 	KindCharm      = "charm"
 	KindModule     = "module"
 	KindMethod     = "method"
@@ -93,6 +95,21 @@ type KnowledgeOutputRef struct {
 	Target  string
 	Ref     string
 	OK      bool
+}
+
+// KnowledgeCommand is one concrete command a target's spell would run, distilled from
+// the fully-evaluated dispatch plan (see DescribeTarget's EvaluatedSpellEntry.Command).
+// Like KnowledgeTiming it is an assembly input, not a wire type: Project and Target name
+// the owning target node, Spell names the spell that contributes the command, and Command
+// is the rendered argv (element 0 is the tool). Deterministic (static argv, no charms), so
+// the command node rides its project's shard, not the isolated @runtime one. Command is
+// EMPTY for a function-op (its argv is not statically knowable); the extractor skips those,
+// so a function-op target mints no command node.
+type KnowledgeCommand struct {
+	Project string
+	Target  string
+	Spell   string
+	Command []string
 }
 
 // KnowledgeVCS is one file's git history metadata (an assembly input, not a wire type),

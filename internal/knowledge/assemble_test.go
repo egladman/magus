@@ -314,6 +314,59 @@ func TestRuntimeOutputRefMergesOntoTarget(t *testing.T) {
 	assert.Equal(t, "buzz", build.Attrs[AttrEngine], "static engine attr survives the ref merge")
 }
 
+// TestAssembleCommands: an evaluated command with argv mints one command node (argv,
+// tool, and the spell's language on attrs) plus its target->command contains edge, a
+// command->spell uses edge, and a command->base uses edge; a function-op entry with an
+// empty Command is skipped; and two commands sharing a tool link to a SINGLE base node.
+func TestAssembleCommands(t *testing.T) {
+	in := sampleInputs()
+	in.Spells.Spells[0].Language = "go" // the "go" spell declares a language
+	in.Commands = []types.KnowledgeCommand{
+		{Project: "pkg/a", Target: "build", Spell: "go", Command: []string{"/usr/bin/go", "build", "./..."}},
+		{Project: "pkg/a", Target: "gen", Spell: "go", Command: []string{"go", "generate", "./..."}}, // same tool -> shared base
+		{Project: "pkg/a", Target: "gen", Spell: "buzzfn", Command: nil},                             // function-op -> skipped
+	}
+	out := mergeAll(AssembleShards(in)).Output()
+
+	cmdID := "command:pkg/a:build:go"
+	n, ok := nodeByID(out, cmdID)
+	require.True(t, ok, "the argv-bearing command mints a node")
+	assert.Equal(t, types.KindCommand, n.Kind)
+	assert.Equal(t, "/usr/bin/go", n.Label, "label is argv[0]")
+	assert.Equal(t, "/usr/bin/go build ./...", n.Attrs[AttrArgv], "full argv on the attr, never the ID")
+	assert.Equal(t, "/usr/bin/go", n.Attrs[AttrTool])
+	assert.Equal(t, "go", n.Attrs["language"], "command inherits its spell's language")
+	assert.Equal(t, "pkg/a", n.Source)
+
+	assert.True(t, hasEdge(out, "target:pkg/a:build", cmdID, types.RelationContains), "target contains command")
+	assert.True(t, hasEdge(out, cmdID, "spell:go", types.RelationUses), "command uses its spell")
+
+	// The function-op entry mints nothing.
+	_, ok = nodeByID(out, "command:pkg/a:gen:buzzfn")
+	assert.False(t, ok, "function-op (empty Command) mints no command node")
+
+	// Two concrete command nodes, plus exactly one base node for the shared tool.
+	baseID := "command:tool:go"
+	base, ok := nodeByID(out, baseID)
+	require.True(t, ok, "the tool grouping node exists")
+	assert.Equal(t, "go", base.Label, "base label is the tool basename (filepath.Base)")
+	assert.Empty(t, base.Source, "the base node is workspace-scoped, not project-owned")
+	assert.True(t, hasEdge(out, cmdID, baseID, types.RelationUses), "build command uses the base")
+	assert.True(t, hasEdge(out, "command:pkg/a:gen:go", baseID, types.RelationUses), "gen command uses the SAME base")
+
+	var concrete, base_ int
+	for _, node := range out.Nodes {
+		switch {
+		case node.ID == baseID:
+			base_++
+		case node.Kind == types.KindCommand:
+			concrete++
+		}
+	}
+	assert.Equal(t, 2, concrete, "two concrete command nodes")
+	assert.Equal(t, 1, base_, "exactly one base node for the shared tool")
+}
+
 func TestIsRuntimeShard(t *testing.T) {
 	assert.True(t, IsRuntimeShard(RuntimeShardName))
 	assert.False(t, IsRuntimeShard(RegistryShardName))

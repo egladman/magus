@@ -13,7 +13,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/codec"
-	schemagen "github.com/egladman/magus/schema/gen"
 )
 
 // outputDst returns the writer for structured output; mirrors to --tee file when set.
@@ -216,72 +215,134 @@ func templateJoin(list any, sep string) string {
 	return strings.Join(parts, sep)
 }
 
-// writeTemplateFields prints the fields available to -o template / -o json for v's
-// output type, instead of rendering v. This is what bare "-o template" (no body)
-// produces: the template surface documenting itself. Field names are the json-tag
-// keys (what both -o json and -o template use), sourced from the generated
-// schemagen.OutputTypes descriptor (keyed by v's Go type name), which also carries
-// each field's type and doc. Referenced output types are listed too, so a nested
-// shape (e.g. .projects -> []ProjectEntry) is drillable in the same output.
+// writeTemplateFields prints the fields available to -o template / -o json for v,
+// instead of rendering v: what bare "-o template" (no body) produces - the template
+// surface documenting itself. It REFLECTS v's type directly (the same approach config
+// uses in collectSchema), so it works for ANY output type without a curated set, and
+// lists each exported field by its json-tag key (the vocabulary -o json and -o
+// template share) with its type. Referenced struct types are listed too, so a nested
+// shape (e.g. .projects -> []ProjectEntry) is drillable in the same output. Reflection
+// cannot read Go doc comments, so this is field names + types only, no per-field docs.
 func writeTemplateFields(w io.Writer, v any) error {
-	rt := reflect.TypeOf(v)
-	for rt != nil && rt.Kind() == reflect.Ptr {
-		rt = rt.Elem()
-	}
+	rt := structType(reflect.TypeOf(v))
 	if rt == nil {
-		return fmt.Errorf("-o template: cannot list fields of a nil value")
-	}
-	root, ok := schemagen.OutputTypes[rt.Name()]
-	if !ok {
-		return fmt.Errorf("-o template: no field list for output type %q", rt.Name())
+		return fmt.Errorf("-o template: %T has no fields to list", v)
 	}
 	fmt.Fprintln(w, "# fields for -o json / -o template (bare -o template lists these):")
-	seen := map[string]bool{root.Name: true}
-	queue := []schemagen.OutputType{root}
+	seen := map[reflect.Type]bool{}
+	queue := []reflect.Type{rt}
 	for len(queue) > 0 {
-		ot := queue[0]
+		t := queue[0]
 		queue = queue[1:]
-		writeFieldBlock(w, ot)
-		for _, f := range ot.Fields {
-			if ref := baseTypeName(f.Type); ref != "" && !seen[ref] {
-				if refType, ok := schemagen.OutputTypes[ref]; ok {
-					seen[ref] = true
-					queue = append(queue, refType)
-				}
+		if seen[t] {
+			continue
+		}
+		seen[t] = true
+		for _, ref := range writeFieldBlock(w, t) {
+			if !seen[ref] {
+				queue = append(queue, ref)
 			}
 		}
 	}
 	return nil
 }
 
-// writeFieldBlock prints one output type's fields as `<json-key>  <type>  # <doc>`,
-// json-key column aligned, under a `<TypeName>:` header.
-func writeFieldBlock(w io.Writer, ot schemagen.OutputType) {
-	fmt.Fprintf(w, "\n%s:\n", ot.Name)
+// writeFieldBlock prints one struct type's exported fields as `<json-key>  <type>`,
+// json-key column aligned, under a `<TypeName>:` header, and returns the named struct
+// types those fields reference (through slice/pointer/map wrappers) so the caller can
+// list them too.
+func writeFieldBlock(w io.Writer, t reflect.Type) []reflect.Type {
+	type field struct{ key, typ string }
+	var fields []field
+	var refs []reflect.Type
 	width := 0
-	for _, f := range ot.Fields {
-		if len(f.JSON) > width {
-			width = len(f.JSON)
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() || f.Anonymous {
+			continue
+		}
+		key := jsonFieldKey(f)
+		if key == "" { // json:"-"
+			continue
+		}
+		fields = append(fields, field{key, typeLabel(f.Type)})
+		if len(key) > width {
+			width = len(key)
+		}
+		if st := structType(elemType(f.Type)); st != nil {
+			refs = append(refs, st)
 		}
 	}
-	for _, f := range ot.Fields {
-		fmt.Fprintf(w, "  %-*s  %s", width, f.JSON, f.Type)
-		if f.Doc != "" {
-			fmt.Fprintf(w, "  # %s", f.Doc)
+	fmt.Fprintf(w, "\n%s:\n", t.Name())
+	for _, f := range fields {
+		fmt.Fprintf(w, "  %-*s  %s\n", width, f.key, f.typ)
+	}
+	return refs
+}
+
+// structType dereferences pointers and returns rt when it is a struct, else nil.
+func structType(rt reflect.Type) reflect.Type {
+	for rt != nil && rt.Kind() == reflect.Ptr {
+		rt = rt.Elem()
+	}
+	if rt == nil || rt.Kind() != reflect.Struct {
+		return nil
+	}
+	return rt
+}
+
+// elemType unwraps slice/array/pointer/map(value) wrappers to the element type, so a
+// field like []ProjectEntry or *Target surfaces the struct it references.
+func elemType(rt reflect.Type) reflect.Type {
+	for rt != nil {
+		switch rt.Kind() {
+		case reflect.Ptr, reflect.Slice, reflect.Array, reflect.Map:
+			rt = rt.Elem()
+		default:
+			return rt
 		}
-		fmt.Fprintln(w)
+	}
+	return rt
+}
+
+// jsonFieldKey returns the json object key for a struct field: its json-tag name, the
+// Go field name when there is no tag (encoding/json's default), or "" when the field
+// is json-excluded (json:"-").
+func jsonFieldKey(f reflect.StructField) string {
+	tag, ok := f.Tag.Lookup("json")
+	if !ok {
+		return f.Name
+	}
+	switch name, _, _ := strings.Cut(tag, ","); name {
+	case "-":
+		return ""
+	case "":
+		return f.Name
+	default:
+		return name
 	}
 }
 
-// baseTypeName strips slice/pointer/map wrappers from a rendered type string down to
-// the named type it references ("[]ProjectEntry" -> "ProjectEntry",
-// "map[string]Target" -> "Target", "*Target" -> "Target"), so referenced output types
-// can be looked up. Returns the string unchanged when there is nothing to strip.
-func baseTypeName(t string) string {
-	if i := strings.LastIndex(t, "]"); i >= 0 { // drop a leading []… or map[…] segment
-		t = t[i+1:]
+// typeLabel renders a reflect.Type as a readable field type, dropping package
+// qualifiers ("types.ProjectEntry" -> "ProjectEntry", "time.Duration" -> "Duration")
+// so the listing reads like the json shape rather than Go's fully-qualified names.
+func typeLabel(rt reflect.Type) string {
+	switch rt.Kind() {
+	case reflect.Ptr:
+		return "*" + typeLabel(rt.Elem())
+	case reflect.Slice, reflect.Array:
+		return "[]" + typeLabel(rt.Elem())
+	case reflect.Map:
+		return "map[" + typeLabel(rt.Key()) + "]" + typeLabel(rt.Elem())
+	case reflect.Interface:
+		if rt.NumMethod() == 0 {
+			return "any"
+		}
 	}
-	return strings.TrimPrefix(t, "*")
+	if n := rt.Name(); n != "" {
+		return n
+	}
+	return rt.String()
 }
 
 // Format identifies how a command renders structured output (-o/--output).

@@ -16,9 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   opted out of.
 - Self-documenting output templates: bare `-o template` (no body) lists the
   command's output fields - the json keys usable in `-o json` and `-o template`,
-  with each field's type and doc, drilling into nested output types. Previously an
-  empty template was an error. No new command or format: it rides the existing
-  `-o template` surface.
+  with each field's type, drilling into nested types. Works for every structured
+  command (the field list is reflected from the output value, no per-type
+  registration). Previously an empty template was an error. No new command or
+  format: it rides the existing `-o template` surface.
 - Spell authoring kit: `magus init spell` scaffolds a spell, `magus buzz -t` runs a
   spell's in-file test blocks, and `magus buzz lsp` serves diagnostics and
   completion to an editor over stdio.

@@ -97,6 +97,9 @@ func TestGraphRefs(t *testing.T) {
 	assert.Equal(t, "Bar", out.Label)
 	require.Len(t, out.Defs, 1)
 	assert.Equal(t, "pkg/foo/foo.go", out.Defs[0].File)
+	// The definition line (from the symbol's Source "pkg/foo/foo.go:11") is surfaced
+	// so an agent can edit at the exact line without reading the whole file.
+	assert.Equal(t, []int{11}, out.Defs[0].Lines)
 	assert.Equal(t, 2, out.FileCount)
 	assert.Equal(t, 3, out.RefCount, "1 + 2 occurrences")
 	// Refs are sorted by file: pkg/a before pkg/b.
