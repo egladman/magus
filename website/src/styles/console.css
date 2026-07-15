@@ -599,3 +599,37 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
   color: var(--pico-muted-color);
 }
 #command-palette li[data-selected] kbd { background: transparent; color: var(--pico-primary-inverse); border-color: currentColor; }
+
+/* Keybindings editor surface (data-surface=keybindings): a scrollable table of the console's commands,
+   each with its chord and the Record / Clear / Reset controls. Class-free - styled by data-* under the
+   surface id. */
+#console-outlet [data-surface="keybindings"] { max-width: 52rem; padding: 2rem 1.25rem; }
+#console-outlet [data-surface="keybindings"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
+#console-outlet [data-surface="keybindings"] > p { margin: 0 0 1.25rem; color: var(--pico-muted-color); }
+#console-outlet [data-surface="keybindings"] h2 {
+  margin: 1.2rem 0 0.3rem; font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color);
+}
+#console-outlet [data-krow] {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.4rem 0.1rem; border-bottom: 1px solid var(--pico-muted-border-color);
+}
+#console-outlet [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
+#console-outlet [data-chord] kbd {
+  font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); color: var(--pico-color);
+}
+#console-outlet [data-chord][data-capturing] { color: var(--pico-primary); font-size: 0.78rem; font-weight: 600; }
+#console-outlet [data-chord][data-disabled] { color: var(--pico-muted-color); font-style: italic; font-size: 0.78rem; }
+#console-outlet [data-conflict] { color: var(--c-err); font-size: 0.72rem; white-space: nowrap; }
+#console-outlet [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
+#console-outlet [data-kactions] button {
+  margin: 0; padding: 0.15rem 0.55rem; font-size: 0.72rem;
+  /* --pico-contrast, NOT --pico-color: on a bare <button> --pico-color resolves to the button's
+     primary-INVERSE (dark on a dark theme -> invisible). See the pico-bare-button-hover-white trap. */
+  background: none; color: var(--pico-contrast);
+  border: 1px solid var(--pico-muted-border-color); box-shadow: none;
+}
+#console-outlet [data-kactions] button:hover:not(:disabled) { border-color: var(--pico-primary); color: var(--pico-primary); }
+#console-outlet [data-kactions] button:disabled { color: var(--pico-muted-color); border-color: var(--pico-muted-border-color); background: none; cursor: not-allowed; }
