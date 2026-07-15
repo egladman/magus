@@ -105,3 +105,84 @@ The dominant remaining CSS cost is `gen/patternfly.css` (~683KB minified) - the 
 `--pf-t-*` token palette (light + dark) plus the imported component sheets. That is the
 PurgeCSS target noted above: a fixed base cost independent of how few components we render,
 and the single biggest remaining precache win once trimmed.
+
+## Custom-CSS naming methodology (STRICT - the formula for every class we author)
+
+PatternFly owns the `pf-v6-*` vocabulary; we consume it as-is and invent NOTHING that
+overlaps it. But some bits have no PF component (the status bar, the ANSI log body, the
+graph stage, the gantt, the keybinding table, ...) and we must author classes for them.
+Every such class MUST follow the formula below - as disciplined, prefixed, and greppable
+as PatternFly's own names - so the custom surface stays tiny, self-documenting, collision-
+proof, and mechanically maintainable. There are NO bare, ad-hoc, or unprefixed class names.
+This mirrors PF's `pf-v6-c-<block>__<element>` + `pf-m-<modifier>` BEM structure.
+
+### The formula
+
+    console-<area>-<block>[__<element>][--<modifier>]
+
+- **`console-`** - the app namespace (parallel to `pf-v6-`). EVERY custom class starts with
+  it. A bare class like `.badge` or `.qchip` is forbidden; `grep -r "class=" | grep -v "pf-v6-\|console-"`
+  must eventually return nothing but real HTML attributes.
+- **`<area>`** - the region/surface that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
+  The allowed areas are a CLOSED set - pick exactly one:
+  - `console-shell-*`     the app frame: title bar, tab strip, status bar, floating gear +
+                          settings popover, command palette, keybindings overlay, tiling.
+  - `console-dashboard-*` the dashboard surface (hero, tiles, gantt, pool, stat strips, tables).
+  - `console-log-*`       the log viewer surface (filter chips, toolbar bits, zoom control).
+  - `console-graph-*`     the graph explorer surface (stage, sidebar, node cloud, legend, explain card).
+  - `console-activity-*`  the activity surface (only what is not already shared render).
+  - `console-render-*`    the SHARED render model reused by log + activity (foldable sections,
+                          status badges, ANSI spans) - one home so both surfaces stay in lockstep.
+- **`<block>`** - the component/thing, kebab-case, verbose and explicit. Prefer a full word to
+  an abbreviation: `console-log-filter`, `console-shell-statusbar`, `console-dashboard-gantt`,
+  `console-graph-nodelist`, `console-render-badge`, `console-render-ansi`.
+- **`__<element>`** - a PART of the block (BEM double-underscore): `console-shell-statusbar__dot`,
+  `console-log-filter__chip`, `console-dashboard-gantt__bar`, `console-graph-nodelist__pill`.
+  Elements do NOT nest in the name (never `__row__cell`); flatten to `__cell` under the block.
+- **`--<modifier>`** - a fixed structural/categorical VARIANT (BEM double-hyphen), used ONLY for a
+  closed enumerated set: `console-render-ansi__fg--red`, `console-render-badge--pass`,
+  `console-dashboard-gantt__bar--failed`. Do NOT use `--modifier` for transient STATE.
+
+### State is `data-*`, not a class (keeps the closed convention closed)
+
+Transient/boolean state (active, collapsed, focused, capturing, hidden, selected, a live/health
+value) is a `data-*` attribute on the element, styled as an attribute selector - NEVER a
+`--modifier` class. This matches the existing app-hook convention (`data-state`, `data-health`,
+`data-collapsed`, `data-focus`). So: `console-shell-statusbar__dot[data-state="connected"]`,
+`console-dashboard-tile[data-collapsed]`. Reserve `--modifier` for the fixed vocabularies where an
+enumerated class reads better (the 6 ANSI colours, the badge kinds, the gantt bar kinds).
+
+### IDs, data-* hooks, and PF classes are already fine - do not rename them
+
+`#console-titlebar`, `#console-statusbar`, `#console-tabs`, `#console-outlet`, `data-tab-id`,
+`data-pane-id`, `data-open`, `data-card`, every `pf-v6-*` - all stay. The formula governs only the
+custom CSS CLASSES we author. A JS "hook" that carries no styling should be a `data-*` attribute,
+not a class, wherever practical.
+
+### Examples (legacy ad-hoc -> the convention)
+
+    .a-fg-red        -> .console-render-ansi__fg--red
+    .a-bold          -> .console-render-ansi--bold
+    .badge-pass      -> .console-render-badge--pass
+    .log-section     -> .console-render-section
+    .file-bar        -> (dead: logs is a pf-v6-c-toolbar now - delete, do not rename)
+    .status-item     -> .console-shell-statusbar__item
+    .conn (dot)      -> .console-shell-statusbar__dot   (+ [data-state]/[data-health])
+    .dash-hero       -> .console-dashboard-hero
+    .gantt-bar       -> .console-dashboard-gantt__bar   (+ --running/--failed/... variants)
+    .node-pill       -> .console-graph-nodelist__pill
+    .k-<kind> dot    -> .console-graph-legend__swatch   (+ data-kind="<kind>")
+    .sw-toast        -> .console-shell-toast
+    .qchip           -> .console-log-filter__chip
+
+### The pending rename (the ~323 legacy classes)
+
+The migration KEPT the console's original ad-hoc class vocabulary for the escape-hatch content
+PF cannot render (ANSI body, gantt, node cloud, badges, ...) - repointing colours but not renaming.
+An audit counts ~323 distinct non-`pf-v6-`/non-`console-` classes still in
+console.css / overrides.css / logs.css / graph.css / dashboard.css and the TS that emits them
+(`grep -rhoE '\.[a-zA-Z][a-zA-Z0-9_-]+' src/**/*.css | sort -u | grep -vE '^\.(pf-|console-|js$|no-js$)'`).
+Renaming them to this formula (in the CSS AND the class strings in the .ts builders + scaffold.html,
+in lockstep so nothing breaks) is a dedicated follow-up pass - do it area by area
+(render/shell/log/graph/dashboard/activity), rebuild + browser-verify each, keep typecheck/tests green.
+From this point ON, no NEW custom class may be written except in this formula.
