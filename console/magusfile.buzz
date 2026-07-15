@@ -1,0 +1,89 @@
+import "magus";
+// Modules the targets use: fs (node_modules guard), os (pnpm/esbuild), vcs (drift gate).
+import "fs";
+import "os";
+import "vcs";
+
+// magusfile binds this file's own exported targets (build, typecheck, test, ci); ts adds the
+// TypeScript spell so the app's src/ is symbol-capable - its `scip` op indexes it (via tsconfig.json)
+// for the knowledge graph. ts is opaque (pnpm owns the dependency graph; informational) and does not
+// run in ci, which uses the custom targets below; it just makes the TypeScript browsable as symbols.
+import "magus/spell/magusfile";
+import "magus/spell/ts";
+
+// The console is the standalone native PWA (dashboard, logs, graph, activity as tabs + tiling). It owns
+// its whole stack - a hand-authored index.html/manifest/sw, its own esbuild build (via pnpm scripts),
+// and vendored copies of the shared lib/ui/proto/styles - with NO dependency on the docs site. This
+// magusfile registers it as a first-class magus project so `magus affected ci` covers it.
+magus.project({
+    "spells": [magusfile, ts],
+    // Affected/drift tracks this sources glob, not the import graph, so every input must be named to be
+    // watched. The client is TypeScript (esbuild strips the types) plus per-surface CSS and the
+    // scaffold fragments the surfaces fetch; the hand-authored shell (index.html/manifest/sw) and the
+    // build manifests (package.json + pnpm-lock.yaml, where the esbuild deps are pinned) round it out.
+    // pnpm is the package manager - NOT npm; .npmrc's minimum-release-age gate is the reason.
+    "sources": ["magusfile.buzz", "*.buzz",
+                "src/**/*.ts", "src/**/*.css", "src/**/*.html",
+                "index.html", "manifest.webmanifest", "sw.js",
+                "package.json", "pnpm-lock.yaml", "tsconfig.json"],
+    "outputs": ["gen/**"],
+    "targets": {
+        // build rebuilds the committed gen/ and gates on drift, so it must run every time (skip_cache)
+        // and alone (exclusive) so a peer mutating gen/ cannot trip its git-status check.
+        "build": {"skip_cache": true, "exclusive": true},
+    },
+});
+
+export fun preflight(args: [str]) > void {}
+
+// install restores the pinned build-only deps with pnpm (esbuild + the surfaces' d3/uplot/protobuf
+// clients), honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
+// local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the release-age gate.
+fun install() > void {
+    if (!fs.isDir("node_modules")) {
+        os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    }
+}
+
+// typecheck runs the TS gate (tsc --noEmit); a pure check, no output.
+export fun typecheck(args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    install();
+    os.exec("pnpm", ["run", "typecheck"], ".", {});
+}
+
+// test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).
+export fun test(args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    install();
+    os.exec("pnpm", ["run", "test"], ".", {});
+}
+
+// build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static
+// assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes
+// dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result
+// instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
+export fun build(args: [str]) > void {
+    magus.needs(magus.target.literal("preflight"));
+    final clean_before = vcs.isDirty(["gen"]) == false;
+    install();
+    os.exec("pnpm", ["run", "build"], ".", {});
+    if (magus.has_charm("rw")) {
+        return;
+    }
+    if (clean_before and vcs.isDirty(["gen"])) {
+        throw "build: gen/ drifted; re-run `magus run build:rw console` and commit";
+    }
+}
+
+// lint is the TypeScript gate for now (the console has no separate linter); kept as its own target so
+// the ci anchor and `magus run lint console` have a stable name if a real linter lands later.
+export fun lint(args: [str]) > void {
+    magus.needs(magus.target.literal("typecheck"));
+}
+
+// 'ci' is the anchor `magus affected ci` keys off: the typecheck gate, the unit tests, and the
+// build-plus-drift-gate, all first-class ci steps.
+export fun ci(args: [str]) > void {
+    magus.needs(magus.target.literal("typecheck"), magus.target.literal("test"), magus.target.literal("build"));
+}
