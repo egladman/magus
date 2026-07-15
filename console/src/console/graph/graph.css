@@ -12,18 +12,16 @@
  * The sidebar query prompt (term-prompt idiom), the node cloud, the reference disclosures, the color-
  * group/preset controls, the legend, and the explain card have no clean PF component (they are dense
  * bespoke chrome or JS-built innerHTML), so - per the class-vs-ID convention - they stay ID/data- and
- * bespoke-class scoped, repointed to tokens. pico.min.css is still loaded until W4, so the anti-Pico-
- * button-inversion mechanism (--node-fg + color resets) is KEPT for the bare custom <button>s. */
+ * bespoke-class scoped, repointed to tokens. The bare custom <button>s carry the --node-fg + color
+ * resets so they read as plain text controls in the regular text color in both themes. */
 
 :root {
   --pad: clamp(0.75rem, 2vw, 1.25rem);
 }
 
-/* --node-fg carries the PAGE text color (correct per theme). The custom text-buttons read it because
-   Pico (still loaded until W4) pins --pico-color to a fixed inverse INSIDE a <button> (invisible in
-   one theme), and its button color rule out-specifies a plain class; a var inherited from this non-
-   button element dodges both, and the id/container-scoped rule below outranks Pico. Sourced from the
-   PF text token so it stays correct once Pico is gone. */
+/* --node-fg carries the PAGE text color (correct per theme). The custom text-buttons read it via this
+   non-button element so they inherit the regular text color rather than any button-scoped override.
+   Sourced from the PF text token so it stays correct in both themes. */
 main.container-fluid {
   max-width: var(--content-wide, 78rem);
   margin-inline: auto;
@@ -416,8 +414,8 @@ main .views-panel > summary:not([role]), main .views-panel[open] > summary:not([
   font-size: 0.78rem; line-height: 1.3;
   display: inline-flex; align-items: center; gap: 0.3rem;
   background: var(--pf-t--global--background--color--primary--default);
-  /* --pf-t--global--border--color--default, not --pico-border-color: Pico shadows the latter to
-     the primary border ON the button element, which would paint every pill blue. */
+  /* The neutral default border token, so the pill reads as a quiet chip rather than an
+     accent-colored button. */
   border: 1px solid var(--pf-t--global--border--color--default);
   /* Match the site's one corner radius rather than a full pill: the chips read as
      part of the same UI as the disclosures/cards, and the leading chevron already

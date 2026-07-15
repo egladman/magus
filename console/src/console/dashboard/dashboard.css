@@ -7,7 +7,7 @@
    slot grid, the utilization/gantt SVGs, the KPI strips, the dense tables and rows, the
    attention hero), plus the two component-less shell bits (the collapse caret and the note
    slot). Colors come from the console's PF-native tokens: --console-status-* / --console-* and
-   --pf-t--* directly (theme-aware in light and dark) - never the old --pico-* or --c-* palettes.
+   --pf-t--* directly (theme-aware in light and dark) - never the old Pico-era palette.
    Per the class-vs-ID convention, app hooks added here are IDs and data-*; the bespoke inner
    classes each tile already builds (.slot, .row, .stat, .gantt-bar, ...) are kept as-is. */
 

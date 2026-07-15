@@ -11,36 +11,17 @@
   --console-gap: 0.6rem;
   --console-pad: clamp(0.6rem, 1.6vw, 1rem);
   --console-statusbar-h: 1.75rem;
-  /* Chart/accent palette. hit / error / info / ok alias Pico's semantic tokens so they
-     theme-track for free (the charts read the RESOLVED value via getComputedStyle, so a
-     var() alias is fine); only the amber miss/warn slots, which Pico has no token for, keep
-     an explicit light/dark pair below. */
-  --c-hit: var(--pico-ins-color);
-  --c-ok: var(--pico-ins-color);
-  --c-err: var(--pico-del-color);
-  --c-info: var(--pico-primary);
-  --c-miss: #d97706;
-  --c-warn: #d97706;
+  /* The chart/accent palette that used to live here (the aliased --c-* slots) moved to
+     tokens.css as the console's PF-native --console-* / --console-status-* slots; the charts
+     read those at runtime. Nothing consumes a --c-* name any more. */
 }
-@media (prefers-color-scheme: dark) {
-  :root { --c-miss: #fbbf24; --c-warn: #fbbf24; }
-}
-:root[data-theme="dark"] { --c-miss: #fbbf24; --c-warn: #fbbf24; }
-:root[data-theme="light"] { --c-miss: #d97706; --c-warn: #d97706; }
 
-/* Console-only typeface: the daemon apps use the platform system-ui stack so they read as a
-   native app, visibly distinct from the documentation site (which keeps Pico's default stack).
-   Scoped to pages that carry the console app bar (only the three daemon apps have .console-bar)
-   rather than a bare `body` rule - the playground also loads console.css (for the status bar) but
-   keeps Pico's docs typeface. Setting --pico-font-family too so Pico components that read the
-   token track the same stack. */
+/* Console-only typeface: the console surfaces use the platform system-ui stack so they read as a
+   native app. tokens.css already points PatternFly's font-family tokens at a system stack, so this
+   just applies the body token to the surface (the surfaces set the mono token directly on their
+   own code/log rows). */
 body:has(.console-bar) {
-  --pico-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  /* Monospace too: code, command samples and the log body read in the platform's UI mono (SF Mono,
-     Cascadia, ...) so the whole surface tracks the OS, not a web font. Setting Pico's token makes
-     every <code>/<pre> follow it without a per-element rule. */
-  --pico-font-family-monospace: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
-  font-family: var(--pico-font-family);
+  font-family: var(--pf-t--global--font--family--body);
 }
 
 /* Native interaction feel (console surfaces only): a single-accent text selection, no mobile
@@ -51,7 +32,7 @@ body:has(.console-bar) {
   overscroll-behavior: none;
 }
 body:has(.console-bar) ::selection {
-  background: color-mix(in srgb, var(--c-info) 28%, transparent);
+  background: color-mix(in srgb, var(--console-accent) 28%, transparent);
 }
 /* The chrome rails (top app bar, bottom status bar) are not selectable, like native window chrome;
    only the content between them is. */
@@ -65,7 +46,7 @@ body:has(.console-bar) ::selection {
    #theme-toggle from site.css) and only INVERT the palette - a sectioning-tinted bar that
    reads as a distinct control surface while staying theme-aware. */
 .console-bar.site-header {
-  background: var(--pico-card-sectioning-background-color);
+  background: var(--pf-t--global--background--color--secondary--default);
   /* Inverted (inset) shadow: the bar reads as recessed and the page content sits on top of it
      - the subtle "dashboard vs. doc site" distinction, without a new design language. */
   box-shadow: inset 0 3px 7px -5px rgba(0, 0, 0, 0.45);
@@ -82,7 +63,7 @@ body:has(.console-bar) ::selection {
 .console-bar nav > ul > li { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
 .console-bar .console-app-title {
   margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.15;
-  color: var(--pico-color); white-space: nowrap;
+  color: var(--pf-t--global--text--color--regular); white-space: nowrap;
 }
 /* The menu button is mobile-only in site.css; on the dashboard it is the primary nav, so
    show it at every width (JS-gated, like site.css - a dead button with no toggle is worse
@@ -102,9 +83,9 @@ body.console-app button:disabled,
 body.console-app button[disabled],
 body.console-app button[aria-disabled="true"] {
   opacity: 1;
-  background: var(--pico-card-sectioning-background-color);
-  border-color: var(--pico-muted-border-color);
-  color: var(--pico-muted-color);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-color: var(--pf-t--global--border--color--default);
+  color: var(--pf-t--global--text--color--subtle);
   box-shadow: none;
   cursor: not-allowed;
 }
@@ -121,9 +102,9 @@ body.console-app button[aria-disabled="true"] {
   z-index: 30;
   min-width: 11rem;
   padding: 0.35rem;
-  background: var(--pico-card-background-color);
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
 }
 .js .console-bar .nav-right.nav-open .nav-links { display: block; }
@@ -136,7 +117,7 @@ body.console-app button[aria-disabled="true"] {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--pico-muted-color);
+  color: var(--pf-t--global--text--color--subtle);
 }
 .js .console-bar .nav-links a {
   display: block;
@@ -147,9 +128,9 @@ body.console-app button[aria-disabled="true"] {
   display: block;
   margin: 0.25rem 0.15rem 0.1rem;
   padding: 0.35rem 0.6rem 0.1rem;
-  border-top: 1px solid var(--pico-muted-border-color);
+  border-top: 1px solid var(--pf-t--global--border--color--default);
   font-size: 0.72rem;
-  color: var(--pico-muted-color);
+  color: var(--pf-t--global--text--color--subtle);
 }
 /* No-js fallback: no toggle, so keep the links inline (wrapping) rather than hidden. */
 .no-js .console-bar .nav-links { flex-wrap: wrap; justify-content: flex-end; }
@@ -176,17 +157,17 @@ body.console-app button[aria-disabled="true"] {
   gap: 0.4rem;
   padding: 0.75rem 0.4rem;
   border: 1px solid transparent;
-  border-radius: var(--pico-border-radius);
+  border-radius: var(--pf-t--global--border--radius--small);
   text-align: center;
   text-decoration: none;
-  color: var(--pico-color);
+  color: var(--pf-t--global--text--color--regular);
 }
 .js .console-bar .app-grid .app-cell a:hover,
 .js .console-bar .app-grid .app-cell a:focus-visible {
-  background: var(--pico-card-sectioning-background-color);
-  border-color: var(--pico-muted-border-color);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-color: var(--pf-t--global--border--color--default);
 }
-.js .console-bar .app-grid .app-cell svg { color: var(--pico-primary); }
+.js .console-bar .app-grid .app-cell svg { color: var(--console-accent); }
 .js .console-bar .app-grid .app-cell span { font-size: 0.76rem; line-height: 1.15; }
 /* The current app keeps its launcher tile (so nothing shifts) but as a muted, non-interactive
    "you are here" marker - same layout as the links, no hover, default cursor, gray icon. Reads as
@@ -197,14 +178,14 @@ body.console-app button[aria-disabled="true"] {
   align-items: center;
   gap: 0.4rem;
   padding: 0.75rem 0.4rem;
-  border: 1px solid var(--pico-muted-border-color);
-  border-radius: var(--pico-border-radius);
-  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
   text-align: center;
-  color: var(--pico-muted-color);
+  color: var(--pf-t--global--text--color--subtle);
   cursor: default;
 }
-.js .console-bar .app-grid .app-cell-current svg { color: var(--pico-muted-color); }
+.js .console-bar .app-grid .app-cell-current svg { color: var(--pf-t--global--text--color--subtle); }
 .js .console-bar .app-grid .app-cell-current span { font-size: 0.76rem; line-height: 1.15; }
 
 /* The bottom status-bar FRAME (fixed rail + per-tab wrapper + clusters + the connection liveness
@@ -368,17 +349,17 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
   flex: 0 0 auto; box-sizing: border-box;
   display: inline-flex; align-items: center; justify-content: center;
   width: 1.25rem; height: 1.25rem; border-radius: 50%; cursor: help; user-select: none;
-  border: 1px solid var(--pico-muted-border-color); background: none;
-  color: var(--pico-muted-color); font-size: 0.7rem; font-weight: 700;
+  border: 1px solid var(--pf-t--global--border--color--default); background: none;
+  color: var(--pf-t--global--text--color--subtle); font-size: 0.7rem; font-weight: 700;
 }
-.help-glyph:hover, .help-glyph:focus-visible { color: var(--pico-color); border-color: var(--pico-color); }
+.help-glyph:hover, .help-glyph:focus-visible { color: var(--pf-t--global--text--color--regular); border-color: var(--pf-t--global--text--color--regular); }
 
 /* Shared empty-state prompt (log viewer + graph explorer): an icon over a title + sub, then
    a two-up grid of "ways" to get content loaded. These inner pieces were byte-identical across
    the two apps, so they live here; each app keeps only its own CONTAINER (position/height, the
    .log-empty / .graph-empty-state hooks) and any way-card background override. */
-.console-empty-icon { width: 3rem; height: 3rem; color: var(--pico-muted-border-color); margin-bottom: 0.9rem; }
-.console-empty-title { color: var(--pico-color); font-weight: 600; font-size: 1.15rem; margin: 0 0 0.35rem; }
+.console-empty-icon { width: 3rem; height: 3rem; color: var(--pf-t--global--border--color--default); margin-bottom: 0.9rem; }
+.console-empty-title { color: var(--pf-t--global--text--color--regular); font-weight: 600; font-size: 1.15rem; margin: 0 0 0.35rem; }
 .console-empty-sub { margin: 0 0 1.4rem; max-width: 34rem; }
 .console-empty-ways {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
@@ -387,19 +368,19 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 .console-empty-way {
   display: flex; flex-direction: column; gap: 0.45rem;
   padding: 0.85rem 0.95rem;
-  border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
-  background: var(--pico-card-background-color);
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
 }
-.console-empty-way-label { color: var(--pico-color); font-weight: 600; font-size: 0.85rem; }
+.console-empty-way-label { color: var(--pf-t--global--text--color--regular); font-weight: 600; font-size: 0.85rem; }
 .console-empty-cmd { margin: 0; }
 .console-empty-cmd code { font-size: 0.8em; }
-.console-empty-hint { font-size: 0.78rem; color: var(--pico-muted-color); }
+.console-empty-hint { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
 @media (max-width: 640px) { .console-empty-ways { grid-template-columns: 1fr; } }
 
 /* ---- Console app: the tabbed frame that hosts surfaces --------------------------------------
    Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-titlebar,
    #console-tabs, #console-outlet); the repeated bits are styled by ARIA role / [aria-*] / [data-*] /
-   element selectors under them. Styled against --pico-* tokens (not Pico component classes). All tab
+   element selectors under them. Styled against PatternFly tokens (not PF component classes). All tab
    controls are role=tab / tabindex spans, so Pico's button theming never applies.
 
    The title bar: one compact row (NOT the standalone site-header) holding the app mark, the tab strip

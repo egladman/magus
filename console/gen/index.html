@@ -12,17 +12,14 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./assets/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
-  <link rel="stylesheet" href="./assets/pico.min.css">
-  <link rel="stylesheet" href="./theme.css">
-  <link rel="stylesheet" href="./site.css">
-  <link rel="stylesheet" href="./ui-panels.css">
-  <link rel="stylesheet" href="./console.css">
-  <!-- PatternFly (W0 spike): the PF Core base + component sheets, then the console's fresh
-       PF-native token layer. Loaded LAST so pf-v6-* component classes and the token overrides
-       win over the legacy Pico-era sheets above (which still define --pico-* for un-migrated
-       chrome during the migration). W1 removes the Pico sheets; here they coexist. -->
+  <!-- PatternFly Core: the PF base + component sheets, then the console's PF-native token layer
+       (tokens.css) that squares the corners, points the fonts at a system stack, and defines the
+       --console-* semantic slots. Then console.css (the shell rules) and overrides.css. The
+       Pico-era sheets (pico/site/theme/ui-panels) were removed at the W4 cutover; the console now
+       runs on PatternFly alone. -->
   <link rel="stylesheet" href="./patternfly.css">
   <link rel="stylesheet" href="./tokens.css">
+  <link rel="stylesheet" href="./console.css">
   <!-- The one small, ID-scoped escape hatch for the shell bits PatternFly has no component for
        (the status-bar frame, the floating gear position, the connection dot). Loaded LAST so its
        ID rules win. See src/styles/overrides.css. -->

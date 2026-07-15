@@ -2,7 +2,7 @@
 // (a newer version of the assets is available) and console-settings (a browser-side pref
 // changed and takes effect on reload). Idempotent: a second call while a toast is already up
 // is a no-op, so one Refresh button covers overlapping reasons to reload. Styled by .sw-toast
-// in site.css.
+// in overrides.css.
 export function showRefreshToast(message: string): void {
   if (document.querySelector(".sw-toast")) return;
   const toast = document.createElement("div");

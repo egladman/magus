@@ -1,7 +1,7 @@
 /* tokens.css - the console's FRESH, PatternFly-native token layer (W0 spike).
  *
  * This is the ONE file that adapts PatternFly's design tokens to the console. It is NOT a
- * port of the old --c-* / --pico-* palette; every slot below is chosen anew from the
+ * port of the old Pico-era palette; every slot below is chosen anew from the
  * --pf-t-* palette so a PatternFly token rev (or a pf-v6 -> pf-v7 bump) is a contained
  * edit here. Loaded AFTER patternfly.css so these :root overrides win.
  *

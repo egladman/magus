@@ -97,3 +97,41 @@
 #keybindings-overlay [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
 #keybindings-overlay [data-conflict] { color: var(--console-status-queued); font-size: 0.72rem; white-space: nowrap; }
 #keybindings-overlay [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
+
+/* --- Legacy reference-block hide -----------------------------------------------------------------
+ * The graph and log scaffolds still carry a few <details class="ref-section"> blocks - inline
+ * reference/help copy the old docs site relocated into a slide-out drawer. The decoupled console
+ * never wires that drawer (ref-drawer.ts is unused, no #ref-drawer element is emitted), and the sheet
+ * that used to hide the un-relocated sections (ui-panels.css, `.js .ref-section { display: none }`)
+ * was removed at the W4 cutover. Keep them hidden so the surfaces render exactly as before rather than
+ * spilling dead disclosure copy into the view. */
+.ref-section { display: none; }
+
+/* --- Refresh toast --------------------------------------------------------------------------------
+ * A small bottom-left "reload" card raised by the service-worker registration (new bundles are
+ * available) and by a console-settings change (refresh-toast.ts / console-settings.ts). It is
+ * JS-injected and has no PatternFly component, so its frame lives here (migrated from the removed
+ * site.css at the W4 cutover, repointed to PF tokens). The Refresh control is a bare <button> the
+ * toast builds directly; with Pico's button base gone it needs its own quiet-chip styling. */
+.sw-toast {
+  position: fixed;
+  left: max(1rem, env(safe-area-inset-left));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 60;
+  max-width: 22rem;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 0.9rem; font-size: 0.9rem;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+.sw-toast button {
+  flex: none; width: auto; margin: 0;
+  padding: 0.25rem 0.6rem; font-size: 0.85rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--pf-t--global--text--color--regular);
+  cursor: pointer;
+}

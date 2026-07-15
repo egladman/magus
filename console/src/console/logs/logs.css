@@ -10,7 +10,7 @@
  * The LOG BODY (ANSI-colored captured output, the foldable status-accented sections) and the trace
  * WATERFALL have no PF component - they stay custom rendering, colored from the console's PF-native
  * tokens (--console-* / --console-ansi-* / --pf-t--* directly, theme-aware in light and dark) rather
- * than the old --pico-* palette. Per the class-vs-ID convention, app hooks are IDs + data-*; the
+ * than the old Pico-era palette. Per the class-vs-ID convention, app hooks are IDs + data-*; the
  * bespoke inner classes the render layer builds (.log-section, .log-line, .a-fg-*, .wf-*, ...) are
  * kept as-is.
  *
@@ -138,8 +138,32 @@
 .zoom-ctl :focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
 
 /* The parsed-filter chip row sits under the toolbar, inset to the panel padding, with a
-   hairline separating it from the header (chips themselves are site.css .search-chips/.qchip). */
+   hairline separating it from the header. The chip visuals (.search-chips/.qchip/.qop, migrated
+   from the removed site.css at the W4 Pico cutover) live here now, repointed to PF tokens - the
+   log filter is their only consumer in the console. filter.ts builds field facets as bordered
+   pills and joins parts with muted "AND" connectives (the "how your query parsed" cue). */
 .log-filter-chips { margin: 0; padding: 0.4rem 0.6rem; border-top: 1px solid var(--pf-t--global--border--color--default); }
+.search-chips {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem;
+  margin: 0.5rem 0 0; font-size: 0.75rem;
+}
+.search-chips[hidden] { display: none; }
+.qchip {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+.qchip-field {
+  color: var(--pf-t--global--text--color--regular);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.qchip-field b { font-weight: 600; }
+.qop {
+  font-weight: 600; font-size: 0.68rem; letter-spacing: 0.04em;
+  color: var(--pf-t--global--text--color--subtle);
+}
 
 /* Shown in the pretty view when the active filter matches nothing. */
 .filter-empty { padding: 1.5rem var(--log-pad); text-align: center; color: var(--pf-t--global--text--color--subtle); }

@@ -2,7 +2,7 @@
 // entry + its bundles + styles so a cold reload works offline, and serves everything else same-origin
 // cache-first-then-network. The console talks to the daemon over loopback at runtime (never cached).
 // The cache version is bumped by the build (see BUILD_ID) so a new deploy replaces the old shell.
-const BUILD_ID = "dev";
+const BUILD_ID = "w4-patternfly";
 const CACHE = "magus-console-" + BUILD_ID;
 const BASE = new URL("./", self.location).pathname;
 
@@ -11,17 +11,13 @@ const PRECACHE = [
   BASE + "index.html",
   BASE + "console.js",
   BASE + "console.css",
-  // PatternFly (W0 spike): the PF Core bundle + the console's token layer. Additive for now; W4 will
-  // drop the Pico-era sheets below (pico.min.css, site.css, ui-panels.css, theme.css) from this list
-  // and bump BUILD_ID so clients refetch the new shell.
+  // PatternFly Core is the console's only design system now. The Pico-era sheets (pico.min.css,
+  // site.css, ui-panels.css, theme.css) were removed at the W4 cutover; BUILD_ID is bumped so
+  // clients drop the old cache and refetch the PF-only shell.
   BASE + "patternfly.css",
   BASE + "tokens.css",
   BASE + "overrides.css",
-  BASE + "theme.css",
-  BASE + "site.css",
-  BASE + "ui-panels.css",
   BASE + "theme.js",
-  BASE + "assets/pico.min.css",
   BASE + "logs/log-viewer.js",
   BASE + "logs/logs.css",
   BASE + "logs/scaffold.html",

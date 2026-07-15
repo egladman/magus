@@ -75,8 +75,8 @@ export function setQueryFragment(query: string): void {
 
 // renderFilterChips echoes the parsed filter under the bar as chips - fields as bordered
 // pills, free text as plain chips, joined by "AND" connectives - so you can SEE how the query
-// was interpreted, the same "how your query parsed" cue the docs search page shows. Reuses
-// site.css's .search-chips/.qchip/.qop classes verbatim.
+// was interpreted, the same "how your query parsed" cue the docs search page shows. Uses the
+// .search-chips/.qchip/.qop classes defined in logs.css.
 export function renderFilterChips(): void {
   const host = el("filter-chips");
   if (!host) return;

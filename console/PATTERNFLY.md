@@ -12,6 +12,26 @@ margin. PatternFly Core (CSS only, no JS runtime) - the documented path for non-
 consumers. Prefix `pf-v6`; expect a `pf-v6 -> pf-v7` churn at the next major, contained
 to the class strings and this token file.
 
+## What is loaded (post-W4 cutover)
+
+PatternFly is the console's ONLY design system. The stylesheet stack, in load order, is:
+
+1. `patternfly.css` - PF Core base + the per-component sheets we render (below).
+2. `tokens.css` - the console's PF-native token layer (squares corners, system fonts, `--console-*` slots).
+3. `console.css` - the shell rules (title bar, status-bar frame vars, tiling, launcher, layout).
+4. `overrides.css` - the small ID/class-scoped escape hatch for PF-less shell chrome (status bar,
+   floating gear, connection dot, keybindings grid, the refresh toast, the legacy `.ref-section` hide).
+5. Per surface, lazily: `logs/logs.css`, `graph/graph.css`, `dashboard/dashboard.css`.
+
+The Pico-era sheets - `pico.min.css`, `site.css`, `theme.css`, `ui-panels.css` - were **removed** at
+the W4 cutover. Their few live dependents were migrated: the log filter chips (`.search-chips`/`.qchip`)
+into `logs.css`, the refresh toast (`.sw-toast`) and the `.ref-section` hide into `overrides.css`, all
+repointed to PF/`--console-*` tokens. The reference drawer (`ui/ref-drawer.ts`) is unused in the
+decoupled console, so nothing else needed `ui-panels.css`. No `--pico-*` or `--c-*` reference remains
+in `src`. **Remaining deferred optimization:** run PurgeCSS over the built bundle to drop the unused
+PF token/component rules (the single biggest precache win) - tracked separately, intentionally NOT
+part of W4.
+
 ## How PatternFly is bundled
 
 - `src/styles/patternfly.css` @imports the PF **base** + only the **per-component** sheets
@@ -64,23 +84,24 @@ version bumps.
 - **Escape hatch:** one small audited `overrides.css` for a genuinely PF-less bit (canvas/
   graph host sizing). Prefer a `pf-v6-u-*` utility or an ID-scoped rule first.
 
-## Bundle-size delta (measured, W0)
+## Bundle-size delta
 
-Additive numbers (PF added ALONGSIDE the Pico-era sheets; W4 removes Pico).
+At the W4 cutover the four Pico-era sheets were removed from `gen/`:
 
-| Metric                     | Before     | After (with PF) | Delta        |
-| -------------------------- | ---------- | --------------- | ------------ |
-| `gen/` total (all files)   | 1,007,224  | 1,473,906       | +466,682     |
-| All CSS, raw               | 197,659    | 662,345         | +464,686     |
-| All CSS, gzipped           | 31,739     | 79,533          | +47,794      |
-| `gen/patternfly.css` alone | -          | 464,861 (48KB gz) | new         |
+| Removed sheet (as shipped) | Bytes reclaimed |
+| -------------------------- | --------------- |
+| `pico.min.css` (raw copy)  | 83,319          |
+| `site.css` (minified)      | 32,685          |
+| `theme.css` (minified)     | 6,796           |
+| `ui-panels.css` (minified) | 5,524           |
+| **Total**                  | **~128,324 (~125KB)** |
 
-The dominant cost is `patternfly-base.css`: **~321KB minified on its own** (the full
-`--pf-t-*` token palette, light + dark). It is a fixed cost independent of how many
-components are imported; per-component sheets are small on top of it. At W4 cutover the
-Pico-era sheets drop (pico.min.css 83KB, site.css 33KB, ui-panels.css 6KB, theme.css 7KB,
-most of console.css) which claws back ~145KB raw, but PF base keeps the raw precache well
-above the Pico baseline. Over the wire it is modest (+48KB gzipped). **Follow-up for the
-bulk migration:** run PurgeCSS/`@fullhuman` over the built bundle to drop unused token
-definitions and component rules - the single biggest precache win, and the plan's stated
-"trim unused, don't ship silently" gate.
+Measured `gen/` total dropped **1,720KB -> 1,588KB (-132KB)** (the small extra beyond the
+sheet bytes is the removed source no longer copied). A handful of migrated rules were added
+back (`overrides.css` and `logs.css` grew a few hundred bytes each), so the net CSS reclaim
+is ~125KB raw.
+
+The dominant remaining CSS cost is `gen/patternfly.css` (~683KB minified) - the full
+`--pf-t-*` token palette (light + dark) plus the imported component sheets. That is the
+PurgeCSS target noted above: a fixed base cost independent of how few components we render,
+and the single biggest remaining precache win once trimmed.
