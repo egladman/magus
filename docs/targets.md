@@ -85,7 +85,7 @@ Two consequences:
 
 ## The target name
 
-A target name is one of the seven canonical operations. The type is `project.Target` (a `string` alias).
+A target name is typically one of the seven canonical operations (see below); custom names are allowed for work with no canonical home. The type is `project.Target` (a `string` alias).
 
 | Name        | Meaning                                          |
 | ----------- | ------------------------------------------------ |
@@ -130,9 +130,14 @@ but they are workspace-specific enough (which environment, which registry,
 which port) that forcing one shape on them would be more prescriptive than
 useful.
 
-### Name normalization (casing & delimiters)
+## Name normalization (casing & delimiters)
 
-Target names are matched **case- and delimiter-insensitively**. magus normalizes every name to canonical kebab-case (`lo.KebabCase`, via `types.DefaultTargetNameNormalizer`) on **both** sides: when a magusfile _declares_ a target and when you _reference_ one on the CLI or in `depends_on`. A target declared as `go_build` is reachable by any spelling that normalizes to `go-build`:
+Target names are matched **case- and delimiter-insensitively**. magus normalizes
+every name to canonical kebab-case (`types.DefaultTargetNameNormalizer`, a small
+hand-rolled kebab-caser matching `samber/lo`'s `KebabCase` output without the
+dependency) on **both** sides: when a magusfile _declares_ a target and when you
+_reference_ one anywhere magus reads a target name. A target declared as
+`go_build` is reachable by any spelling that normalizes to `go-build`:
 
 ```sh
 magus run go-build      # kebab
@@ -141,10 +146,67 @@ magus run goBuild       # camel
 magus run GoBuild       # pascal
 ```
 
-This is _normalize-both-sides_, not an alias table: there is exactly one registered target (`go-build`), and the same normalizer runs over your input before lookup.
+This is **normalize-both-sides**, not an alias table: there is exactly one
+registered target (`go-build`), and the same normalizer runs over your input
+before lookup, wherever that input enters.
 
-- **Collisions are a hard error.** Two declarations that collapse to the same canonical name (e.g. `fooBar` and `foo_bar`, both normalizing to `foo-bar`) cause magus to refuse the magusfile, naming the offending pair.
-- **Convention drift is a `doctor` warning.** Mixed conventions still resolve, but `magus doctor` warns when a workspace uses more than one naming convention, since call sites across CI YAML, scripts, and docs can drift.
+### The contract
+
+- **Declare in any convention, call in any convention.** The declaration side
+  (an `export fun` name in a magusfile) and the reference side (everywhere
+  else) each run through the same normalizer, independently, before either is
+  compared or stored.
+- **Exactly one registered target.** Normalization is not a lookup table with
+  multiple aliases resolving to one entry; there is one canonical key, and
+  every spelling that normalizes to it reaches the same target.
+- **Collisions are a hard load error.** Two declarations that collapse to the
+  same canonical name (e.g. `fooBar` and `foo_bar`, both normalizing to
+  `foo-bar`) make magus refuse the magusfile, naming the offending pair.
+- **Convention drift is a `doctor` warning, not an error.** Mixed conventions
+  across a workspace still resolve correctly, but `magus doctor` warns when it
+  sees more than one naming convention, since call sites across CI YAML,
+  scripts, and docs can drift out of sync with whichever one you typed.
+
+### Where it applies
+
+| Surface                                          | Example                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------- |
+| Magusfile declarations (`export fun`)              | `export fun go_build(...)` registers as `go-build`.                |
+| CLI `run` / `affected` arguments                   | `magus run goBuild` reaches the target declared `go_build`.        |
+| `magus.needs` literals                             | `magus.needs(magus.target.literal("goBuild"))` resolves `go_build`. |
+| The per-target policy map (`magus.project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa. |
+| Charm names (`NormalizeCharmName`)                 | `target:NoCache` and `target:no-cache` are the same charm.         |
+
+### Where it deliberately does not apply
+
+- **Spell op keys after `::`.** `go::golangci-lint` matches the spell's op key
+  **verbatim** - no kebab/case normalization. `go::lint` is a graceful no-op
+  (the go spell has no op literally named `lint`; its linter op is
+  `golangci-lint`), not a normalized match. See
+  [spell-qualified targets](#cli-extension-spell-qualified-targets).
+- **Spell op subscripts in Buzz.** `ts["tsc"]` is an ordinary map-key lookup
+  into the value `import "magus/spell/ts"` binds; `ts["Tsc"]` is simply a
+  different (missing) key, not a normalized alias.
+- **Project paths.** `Path` is never normalized; `api` and `Api` are different
+  (and, in practice, one of them just won't exist).
+
+### Worked example
+
+Given a magusfile declaring:
+
+```buzz
+export fun go_build(args: [str]) > void { go["go-build"](); }
+```
+
+all four of these resolve to the **one** registered target `go-build`, and thus
+the **one** cache entry:
+
+```sh
+magus run go-build   # kebab: exact match
+magus run go_build    # snake: normalizes to go-build
+magus run goBuild     # camel: normalizes to go-build
+magus run GoBuild     # pascal: normalizes to go-build
+```
 
 **Terminology note:** Target is magus's own term, distinct from Mage's vocabulary. In Mage, `extensions:build` is a single function name. In magus, `extensions` is a project Path and `build` is the target name: two orthogonal axes. Do not substitute Action, Operation, Task, Command, or Verb for Target in code, comments, or documentation.
 
