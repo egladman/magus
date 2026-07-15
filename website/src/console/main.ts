@@ -170,11 +170,16 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   registerCommand({ id: "console.tab.prev", label: "Previous tab", group: "Tabs", run: () => cycleTab(-1) });
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
-  // open adds a fresh tab for a surface and mounts it. Every open is a new instance (its own id),
-  // so the same surface can sit in two tabs.
+  // open launches a surface as a tab. A surface (logs/graph/dashboard/activity) is single-instance -
+  // it keeps module-level state, so a second instance would fight the first; if one is already open,
+  // focus it instead. Home is stateless, so "+" can always spawn a fresh launcher tab.
   function open(pageId: string): void {
     const m = registry.get(pageId);
     if (!m) return;
+    if (pageId !== "home") {
+      const existing = ws.get().tabs.find((t) => t.pageId === pageId);
+      if (existing) { activateTab(existing.id); return; }
+    }
     const tab: TabState = { id: pageId + "-" + Date.now().toString(36), pageId, title: m.title };
     ws.set(openTab(ws.get(), tab));
     void mount(tab);
