@@ -2,17 +2,53 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 
 	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/gopherbuzz/vm"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
+
+// knownProjectOptionKeys are the recognized magus.project({...}) top-level keys.
+var knownProjectOptionKeys = []string{
+	"depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
+}
+
+// knownTargetPolicyKeys are the recognized per-target policy keys inside
+// magus.project's "targets" map.
+var knownTargetPolicyKeys = []string{"skipCache", "exclusive", "slots"}
+
+// rejectUnknownKeys errors on the first key in m absent from known, so a typo
+// like "skip_cache" or "depend_on" is a loud load error instead of a silently
+// dropped option. context names the call site for the error message.
+func rejectUnknownKeys(m vm.Value, known []string, context string) error {
+	if !m.IsMap() {
+		return nil
+	}
+	sortedKnown := slices.Sorted(slices.Values(known))
+	for _, k := range m.MapKeys() {
+		if slices.Contains(known, k) {
+			continue
+		}
+		msg := fmt.Sprintf("%s: unknown option %q (known options: %s)",
+			context, k, strings.Join(sortedKnown, ", "))
+		if hint := interactive.SuggestNearest(k, known); hint != "" {
+			msg = fmt.Sprintf("%s: unknown option %q; did you mean %q? (known options: %s)",
+				context, k, hint, strings.Join(sortedKnown, ", "))
+		}
+		return errors.New(msg)
+	}
+	return nil
+}
 
 // buildProject returns magus.project, the callable that customizes the calling
 // project's options. It is OPTIONAL: a magusfile's mere presence registers its
@@ -70,6 +106,9 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	if !v.IsMap() {
 		return nil, nil
 	}
+	if err := rejectUnknownKeys(v, knownProjectOptionKeys, "magus.project"); err != nil {
+		return nil, err
+	}
 	var opts []workspace.ProjectOption
 
 	if dv, ok := v.MapGet("depends_on"); ok {
@@ -80,6 +119,11 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	if ov, ok := v.MapGet("outputs"); ok {
 		if paths := buzzValToStringSlice(ov); len(paths) > 0 {
 			opts = append(opts, workspace.WithOutputs(paths...))
+		}
+	}
+	if sv, ok := v.MapGet("sources"); ok {
+		if paths := buzzValToStringSlice(sv); len(paths) > 0 {
+			opts = append(opts, workspace.WithSources(paths...))
 		}
 	}
 	if ev, ok := v.MapGet("exclusive"); ok {
@@ -153,6 +197,10 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			if !ok || !pv.IsMap() {
 				continue
 			}
+			if err := rejectUnknownKeys(pv, knownTargetPolicyKeys,
+				fmt.Sprintf("magus.project: targets[%q]", name)); err != nil {
+				return nil, err
+			}
 			// name is normalized by workspace.WithTarget, so a policy declared
 			// under any spelling (skipCache/skip_cache aside) matches a target
 			// invoked under any other.
@@ -162,12 +210,22 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))
 			}
-			// AsInt reinterprets a float's bits as an int, so guard on IsInt: a
-			// non-int value (e.g. slots=2.5) would otherwise yield garbage.
-			if sv, ok := pv.MapGet("slots"); ok && sv.IsInt() {
-				if n := int(sv.AsInt()); n > 0 {
-					opts = append(opts, workspace.WithTarget(name, workspace.Slots(n)))
+			// A present-but-malformed slots value (non-int, or < 1) is a load
+			// error, not a silent skip: AsInt reinterprets a float's bits as an
+			// int, so slots=2.5 would otherwise yield garbage rather than
+			// vanishing quietly.
+			if sv, ok := pv.MapGet("slots"); ok {
+				if !sv.IsInt() {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].slots must be a whole number, got a %s",
+						name, sv.Kind())
 				}
+				n := int(sv.AsInt())
+				if n < 1 {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].slots must be >= 1, got %d", name, n)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Slots(n)))
 			}
 		}
 	}

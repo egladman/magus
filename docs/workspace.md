@@ -82,9 +82,15 @@ export fun ci(args: [str]) > void {
 | `spells`       | binds spell handles to the project, contributing their ops, sources, and outputs            |
 | `depends_on`   | declares upstream project paths this project depends on (repo-relative or project-relative) |
 | `outputs`      | declares the project-relative file globs this project produces                              |
+| `sources`      | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
 | `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                |
 | `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list            |
 | `targets`      | a per-target policy table (see below)                                                       |
+
+Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
+other than `skipCache`/`exclusive`/`slots`) are a magusfile load error, not a
+silently dropped option - the error names the offending key and suggests the
+nearest known one.
 
 The `targets` sub-map keys a target name to a policy table:
 

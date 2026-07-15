@@ -36,6 +36,7 @@ type Project struct {
 	Path             string   `json:"path"`
 	DependsOn        []string `json:"dependsOn"`
 	Outputs          []string `json:"outputs"`
+	Sources          []string `json:"sources"`
 	Spells           []string `json:"spells"`
 	Exclusive        bool     `json:"exclusive"`
 	NoCache          []string `json:"noCache"`          // target names opted out of caching (skipCache)

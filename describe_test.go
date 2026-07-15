@@ -222,6 +222,14 @@ func TestDescribeCharms_InverseIndex(t *testing.T) {
 	}
 }
 
+// TestDescribeTargets_CustomTargets exercises this package's own test build,
+// which deliberately does not link the Buzz interpreter (see doc.go and
+// register_test.go) — so validateTargetPolicies (A4) cannot see this project's
+// magusfile at all and its "policy names an unknown target" enforcement does not
+// apply here (see the interp.Available guard in load()). The end-to-end version
+// of that check, exercised through a real magusfile via the linked interpreter,
+// lives in cmd/magus (which blank-imports interp/bindings): see
+// TestInspect_TargetPolicyNamingUnknownTarget in cmd/magus/project_options_test.go.
 func TestDescribeTargets_CustomTargets(t *testing.T) {
 	t.Parallel()
 	const customTarget = "zzz-custom-target"

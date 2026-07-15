@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -165,11 +166,23 @@ func (m *Magus) load(ctx context.Context) error {
 	// root is only present on the run path (Magus.Run), so preload-time resolution
 	// (describe, affected, ls) could not walk spell imports up to the root.
 	ctx = types.WithWorkspace(ctx, m)
-	if err := preloadMagusfiles(ctx, m); err != nil {
+	customTargets, err := preloadMagusfiles(ctx, m)
+	if err != nil {
 		return err
 	}
 	if err := m.wsReg.Apply(m); err != nil {
 		return err
+	}
+	// Only enforceable when the Buzz interpreter is linked in (interp.Available):
+	// without it, preloadMagusfiles cannot discover a project's custom (export fun)
+	// targets, so customTargets is always empty and every per-target policy would
+	// falsely look unknown. cmd/magus links the interpreter unconditionally
+	// (packs_interp.go); a bare library caller that doesn't gets no enforcement here,
+	// same as it gets no magus.project() evaluation at all.
+	if interp.Available() {
+		if err := validateTargetPolicies(m, customTargets); err != nil {
+			return err
+		}
 	}
 	// Fold target-level cross-project deps (project imports) into DependsOn so
 	// they count toward the affected set, just like a project-level depends_on.
@@ -253,10 +266,14 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 	return cfg, nil
 }
 
-// preloadMagusfiles parses magusfiles in each project so magus.project() calls populate m.wsReg.
-func preloadMagusfiles(ctx context.Context, m *Magus) error {
+// preloadMagusfiles parses magusfiles in each project so magus.project() calls
+// populate m.wsReg, and returns each project's custom (export fun) target names,
+// keyed by project path — used afterward by validateTargetPolicies to confirm a
+// project's per-target policy table names only targets that actually exist.
+func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
+	customTargets := make(map[string][]string)
 	if !interp.Available() {
-		return nil
+		return customTargets, nil
 	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	for _, p := range m.All() {
@@ -265,13 +282,70 @@ func preloadMagusfiles(ctx context.Context, m *Magus) error {
 			if errors.Is(err, interp.ErrNoMagusfile) {
 				continue
 			}
-			return fmt.Errorf("magus: preload %q: %w", p.Path, err)
+			return nil, fmt.Errorf("magus: preload %q: %w", p.Path, err)
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
-			if _, err := interp.Parse(pctx, src); err != nil {
-				return fmt.Errorf("magus: preload %q: %w", p.Path, err)
+			targets, err := interp.Parse(pctx, src)
+			if err != nil {
+				return nil, fmt.Errorf("magus: preload %q: %w", p.Path, err)
 			}
+			for _, t := range targets {
+				customTargets[p.Path] = append(customTargets[p.Path], t.Key)
+			}
+		}
+	}
+	return customTargets, nil
+}
+
+// validateTargetPolicies errors when a project's per-target policy table
+// (magus.project's "targets" map) names a target that doesn't exist: neither a
+// spell-contributed op nor a custom export fun in that project's magusfile.
+// Without this, a typo (or a target later removed from the magusfile) silently
+// produces a phantom "custom" entry in `magus describe targets` instead of
+// surfacing as a load error. customTargets comes from preloadMagusfiles; spell
+// targets come from each project's already-resolved spells (wsReg.Apply having
+// just run), so both "kinds" of known target (per describe.go's byName) count.
+func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
+	for _, p := range m.All() {
+		if len(p.TargetPolicies) == 0 {
+			continue
+		}
+		known := make(map[string]struct{})
+		for _, s := range p.ResolvedSpells {
+			for _, t := range s.Targets() {
+				known[t] = struct{}{}
+			}
+		}
+		for _, t := range customTargets[p.Path] {
+			known[t] = struct{}{}
+		}
+		declared := make([]string, 0, len(known))
+		for t := range known {
+			declared = append(declared, t)
+		}
+		sort.Strings(declared)
+
+		policyNames := make([]string, 0, len(p.TargetPolicies))
+		for name := range p.TargetPolicies {
+			policyNames = append(policyNames, name)
+		}
+		sort.Strings(policyNames)
+
+		for _, name := range policyNames {
+			if _, ok := known[name]; ok {
+				continue
+			}
+			msg := fmt.Sprintf("magus: project %q: per-target policy names unknown target %q", p.Path, name)
+			if hint := interactive.SuggestNearest(name, declared); hint != "" {
+				msg += fmt.Sprintf("; did you mean %q?", hint)
+			}
+			if len(declared) > 0 {
+				msg += fmt.Sprintf(" (declared targets: %s)", strings.Join(declared, ", "))
+			} else {
+				msg += " (this project declares no targets)"
+			}
+			return errors.New(msg)
 		}
 	}
 	return nil

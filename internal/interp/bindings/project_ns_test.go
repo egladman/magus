@@ -40,18 +40,42 @@ func TestParseBuzzProjectOpts_TargetSlots(t *testing.T) {
 	assert.Equal(t, 4, p.TargetPolicies["lint"].Slots)
 }
 
-func TestParseBuzzProjectOpts_TargetSlotsNonPositiveIgnored(t *testing.T) {
+func TestParseBuzzProjectOpts_TargetSlotsNonPositiveErrors(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("slots", vm.IntValue(0))
-	p := applyOpts(t, targetsOpts("lint", pol))
-	assert.Equal(t, 0, p.TargetPolicies["lint"].Slots, "slots <= 0 sets no policy")
+	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+	assert.ErrorContains(t, err, `targets["lint"].slots must be >= 1`)
 }
 
-// A non-int slots value must be ignored, not reinterpreted: AsInt reads a float's
-// raw bits as an int, which would otherwise flow a garbage value into the policy.
-func TestParseBuzzProjectOpts_TargetSlotsNonIntIgnored(t *testing.T) {
+// A non-int slots value must be a load error, not reinterpreted: AsInt reads a
+// float's raw bits as an int, which would otherwise flow a garbage value into
+// the policy.
+func TestParseBuzzProjectOpts_TargetSlotsNonIntErrors(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("slots", vm.FloatValue(2.5))
-	p := applyOpts(t, targetsOpts("lint", pol))
-	assert.Equal(t, 0, p.TargetPolicies["lint"].Slots, "non-int slots sets no policy")
+	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+	assert.ErrorContains(t, err, `targets["lint"].slots must be a whole number`)
+}
+
+func TestParseBuzzProjectOpts_Sources(t *testing.T) {
+	opts := vm.NewMap()
+	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StrValue("docs/**"), vm.StrValue("../proto/**/*.proto")}))
+	p := applyOpts(t, opts)
+	assert.Equal(t, []string{"docs/**", "../proto/**/*.proto"}, p.Sources)
+}
+
+func TestParseBuzzProjectOpts_UnknownTopLevelKeyErrors(t *testing.T) {
+	opts := vm.NewMap()
+	opts.MapSet("depend_on", vm.ListValue([]vm.Value{vm.StrValue("api")}))
+	_, err := parseBuzzProjectOpts(context.Background(), opts)
+	assert.ErrorContains(t, err, `unknown option "depend_on"`)
+	assert.ErrorContains(t, err, `did you mean "depends_on"`)
+}
+
+func TestParseBuzzProjectOpts_UnknownTargetPolicyKeyErrors(t *testing.T) {
+	pol := vm.NewMap()
+	pol.MapSet("skip_cache", vm.BoolValue(true))
+	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+	assert.ErrorContains(t, err, `unknown option "skip_cache"`)
+	assert.ErrorContains(t, err, `did you mean "skipCache"`)
 }

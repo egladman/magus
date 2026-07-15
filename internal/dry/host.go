@@ -2,6 +2,8 @@ package dry
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -84,7 +86,9 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 
 	m.MapSet("project", fn("magus.project", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		path, opts := captureConfigure(args)
-		tr.traceProject(path, opts)
+		if err := tr.traceProject(path, opts); err != nil {
+			return vm.Null, err
+		}
 		return vm.Null, nil
 	}))
 
@@ -258,16 +262,101 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 	return path, opts
 }
 
+// dryKnownProjectOptionKeys / dryKnownTargetPolicyKeys mirror
+// knownProjectOptionKeys / knownTargetPolicyKeys in the real binding
+// (internal/interp/bindings/project_ns.go), so the playground/dry path rejects
+// the same typos the real engine does instead of silently dropping them.
+var (
+	dryKnownProjectOptionKeys = []string{
+		"depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
+	}
+	dryKnownTargetPolicyKeys = []string{"skipCache", "exclusive", "slots"}
+)
+
+// rejectUnknownKeys errors on the first key in m absent from known. context
+// names the call site for the error message.
+func rejectUnknownKeys(m vm.Value, known []string, context string) error {
+	if !m.IsMap() {
+		return nil
+	}
+	for _, k := range m.MapKeys() {
+		if slices.Contains(known, k) {
+			continue
+		}
+		sortedKnown := append([]string(nil), known...)
+		slices.Sort(sortedKnown)
+		msg := fmt.Sprintf("%s: unknown option %q (known options: %s)",
+			context, k, strings.Join(sortedKnown, ", "))
+		if hint := suggestNearest(k, known); hint != "" {
+			msg = fmt.Sprintf("%s: unknown option %q; did you mean %q? (known options: %s)",
+				context, k, hint, strings.Join(sortedKnown, ", "))
+		}
+		return errors.New(msg)
+	}
+	return nil
+}
+
+// suggestNearest returns the closest candidate to typed by Levenshtein
+// distance, or "" if nothing is close enough. A small local copy (rather than
+// importing internal/interactive) keeps this package a leaf, per the package
+// doc: it must stay free of anything that would break the js/wasm build.
+func suggestNearest(typed string, candidates []string) string {
+	best, bestDist := "", 3
+	for _, c := range candidates {
+		if d := levenshtein(typed, c); d < bestDist {
+			best, bestDist = c, d
+		}
+	}
+	return best
+}
+
+func levenshtein(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+	row := make([]int, len(b)+1)
+	for j := range row {
+		row[j] = j
+	}
+	for i, ca := range a {
+		prev := i + 1
+		for j, cb := range b {
+			cost := 1
+			if ca == cb {
+				cost = 0
+			}
+			cur := min(row[j]+cost, min(prev+1, row[j+1]+1))
+			row[j] = prev
+			prev = cur
+		}
+		row[len(b)] = prev
+	}
+	return row[len(b)]
+}
+
 // traceProject flattens the path and emitted options of a magus.project
-// call into the graph model. It mirrors parseBuzzProjectOpts in the real binding.
-func (r *Tracer) traceProject(path string, opts vm.Value) {
+// call into the graph model. It mirrors parseBuzzProjectOpts in the real binding,
+// including its unknown-key and bad-slots-value validation.
+func (r *Tracer) traceProject(path string, opts vm.Value) error {
 	p := Project{Path: path}
 	if opts.IsMap() {
+		if err := rejectUnknownKeys(opts, dryKnownProjectOptionKeys, "magus.project"); err != nil {
+			return err
+		}
 		if v, ok := opts.MapGet("depends_on"); ok {
 			p.DependsOn = valToStrings(v)
 		}
 		if v, ok := opts.MapGet("outputs"); ok {
 			p.Outputs = valToStrings(v)
+		}
+		if v, ok := opts.MapGet("sources"); ok {
+			p.Sources = valToStrings(v)
 		}
 		if v, ok := opts.MapGet("exclusive"); ok {
 			p.Exclusive = v.Bool()
@@ -287,6 +376,10 @@ func (r *Tracer) traceProject(path string, opts vm.Value) {
 				if !ok || !pv.IsMap() {
 					continue
 				}
+				if err := rejectUnknownKeys(pv, dryKnownTargetPolicyKeys,
+					fmt.Sprintf("magus.project: targets[%q]", rawName)); err != nil {
+					return err
+				}
 				name := types.DefaultTargetNameNormalizer.NormalizeTargetName(rawName)
 				// Per-target policy mirrors the real binding (project_ns.go):
 				// skipCache opts the target out of the cache; exclusive runs it
@@ -297,15 +390,24 @@ func (r *Tracer) traceProject(path string, opts vm.Value) {
 				if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 					p.ExclusiveTargets = append(p.ExclusiveTargets, name)
 				}
-				if sv, ok := pv.MapGet("slots"); ok && sv.IsInt() {
-					if n := sv.AsInt(); n > 0 {
-						p.Slots = append(p.Slots, name+"="+strconv.FormatInt(n, 10))
+				if sv, ok := pv.MapGet("slots"); ok {
+					if !sv.IsInt() {
+						return fmt.Errorf(
+							"magus.project: targets[%q].slots must be a whole number, got a %s",
+							rawName, sv.Kind())
 					}
+					n := sv.AsInt()
+					if n < 1 {
+						return fmt.Errorf(
+							"magus.project: targets[%q].slots must be >= 1, got %d", rawName, n)
+					}
+					p.Slots = append(p.Slots, name+"="+strconv.FormatInt(n, 10))
 				}
 			}
 		}
 	}
 	r.projects = append(r.projects, p)
+	return nil
 }
 
 // buildSpell builds the object bound by `import "magus/spell/<name>"`: each op is

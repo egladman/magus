@@ -34,6 +34,18 @@ func WithOutputs(paths ...string) ProjectOption {
 	}
 }
 
+// WithSources declares additional file globs (project-relative) that feed this
+// project's cache key and affected-set membership, alongside whatever its
+// resolved spells already contribute via their own Sources(). Use this when a
+// project's real inputs reach beyond what its spells claim - e.g. non-code
+// assets, sibling proto schemas, or docs a generator target reads.
+func WithSources(paths ...string) ProjectOption {
+	return func(p *types.Project) error {
+		p.Sources = append(p.Sources, paths...)
+		return nil
+	}
+}
+
 // WithExclusive marks a project as must-not-run-alongside-peers in a RunAll batch.
 func WithExclusive() ProjectOption {
 	return func(p *types.Project) error { p.Exclusive = true; return nil }

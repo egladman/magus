@@ -15,6 +15,13 @@ func TestWithOutputs(t *testing.T) {
 	assert.Equal(t, []string{"dist/**", "bin/**"}, p.Outputs)
 }
 
+func TestWithSources(t *testing.T) {
+	p := &types.Project{Path: "."}
+	opt := WithSources("docs/**", "../proto/**/*.proto")
+	require.NoError(t, opt(p))
+	assert.Equal(t, []string{"docs/**", "../proto/**/*.proto"}, p.Sources)
+}
+
 func TestWithExclusive(t *testing.T) {
 	p := &types.Project{Path: "."}
 	opt := WithExclusive()
