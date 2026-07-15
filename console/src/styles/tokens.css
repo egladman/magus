@@ -64,4 +64,19 @@
      than borrowing a status token. Theme-aware (PF text/border tokens resolve per theme). */
   --console-chart-axis: var(--pf-t--global--text--color--subtle);          /* axis tick labels/rule  */
   --console-chart-grid: var(--pf-t--global--border--color--default);       /* gridlines + ticks      */
+
+  /* --- 5. Terminal (ANSI) color slots --------------------------------------------------
+     The log viewer colors captured output that carries ANSI SGR escapes (render/ansi.ts maps
+     the basic 8 foreground colors to .a-fg-* classes; logs.css consumes these slots). Red/green/
+     yellow overlap the status palette and reuse those tokens so a red error line and a red [fail]
+     badge match; blue/magenta/cyan have no status equivalent (PF v6's "info" status is a purple-
+     blue that would collide with magenta), so all three borrow PF's theme-aware nonstatus blue/
+     purple/teal - six distinct, terminal-faithful hues that resolve per theme with no per-mode CSS.
+     New names, logs-scoped. */
+  --console-ansi-red: var(--console-status-danger);                        /* error text (red)     */
+  --console-ansi-green: var(--console-status-ok);                          /* success text (green) */
+  --console-ansi-yellow: var(--console-status-warn);                       /* warning text (gold)  */
+  --console-ansi-blue: var(--pf-t--global--color--nonstatus--blue--300);   /* blue -> true blue    */
+  --console-ansi-magenta: var(--pf-t--global--color--nonstatus--purple--300); /* magenta -> purple */
+  --console-ansi-cyan: var(--pf-t--global--color--nonstatus--teal--300);   /* cyan -> teal         */
 }

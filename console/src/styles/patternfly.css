@@ -38,3 +38,10 @@
  *   EmptyState - the connect/front-door screen (#dash-connect) when no daemon is streaming.
  * Card + Gallery (already above) cover the dashboard tiles and the app-waffle launcher. */
 @import "@patternfly/patternfly/components/EmptyState/empty-state.css";
+/* W3 log viewer - the log viewer surface's added components:
+ *   Toolbar - the file/query bar: the ref identity strip plus the filter field + action buttons.
+ * Button (above) covers the toolbar/section action buttons; FormControl (above) the filter field
+ * and time-range select; EmptyState (above) the cold "nothing loaded" screen. The ANSI-colored log
+ * body, the foldable sections, and the trace waterfall have no PF component - they stay custom
+ * rendering (logs.css), colored from the console's --console-* tokens. */
+@import "@patternfly/patternfly/components/Toolbar/toolbar.css";
