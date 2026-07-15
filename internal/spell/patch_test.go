@@ -329,6 +329,13 @@ var goldenBuiltins = map[string]Descriptor{
 		VersionCmd: []string{"node", "--version"},
 		Language:   "typescript",
 		Ops: map[string]types.SpellOp{
+			"biome-check": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Charms: map[string]types.Charm{
+				"rw":  {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
+			}}},
+			"biome-format": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "biome", "format", "."}, Charms: map[string]types.Charm{
+				"rw": {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+			}}},
 			"eslint": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}, Charms: map[string]types.Charm{
 				"rw":  {Ops: []types.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
 				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},

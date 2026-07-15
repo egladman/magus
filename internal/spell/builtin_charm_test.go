@@ -51,6 +51,9 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		{"ts", "vitest", "gha", []types.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
 		{"ts", "eslint", "rw", []types.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
 		{"ts", "eslint", "gha", []types.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
+		{"ts", "biome-check", "rw", []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+		{"ts", "biome-check", "gha", []types.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
+		{"ts", "biome-format", "rw", []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 		// md
 		{"md", "prettier", "rw", []types.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 		// buf

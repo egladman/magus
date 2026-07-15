@@ -2,6 +2,13 @@
 // magus treats the project as a black box rather than tracking per-file inputs.
 // It claims a broad set of web-asset globs so sibling single-file spells (json,
 // css, markdown, ...) don't also claim files inside a TS project.
+//
+// eslint+prettier or Biome: this one spell offers both toolchains as separate
+// ops (eslint/prettier vs biome-check/biome-format) rather than shipping a
+// second spell - Biome targets the same files this spell already claims, so a
+// second spell would fight mgs_listClaimedGlobs over ownership. The magusfile
+// - not the spell - decides which pair composes into lint/format; a project
+// picks one pair, not both.
 
 import "magus/target";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
@@ -37,6 +44,27 @@ export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 // lets `magus query language:typescript` reach this adapter alongside the code it builds.
 export fun mgs_getLanguage() > str { return "typescript"; }
 
+// biome-check is biome's lint/analyze pass (eslint's role, if your project
+// chose Biome over eslint+prettier - the magusfile decides which composes
+// into lint, not this spell). --write and --reporter=github verified against
+// the current Biome CLI docs (biomejs.dev/reference/cli).
+fun biomeCheck(target: Target) > Command {
+    final args = ["exec", "biome", "check", "."];
+    return Command{bin = "pnpm", args = args, charms = {
+        "rw":  after(args, "check", ["--write"]),
+        "gha": after(args, "check", ["--reporter=github"]),
+    }};
+}
+// biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat,
+// `biome format` has no --check flag to drop: it is read-only by default (reports
+// differences, writes nothing) and --write applies them, so rw ADDS a flag instead
+// of removing one.
+fun biomeFormat(target: Target) > Command {
+    final args = ["exec", "biome", "format", "."];
+    return Command{bin = "pnpm", args = args, charms = {
+        "rw": after(args, "format", ["--write"]),
+    }};
+}
 // eslint has no built-in "github" formatter (unlike ruff's --output-format=github);
 // "unix" is the built-in, no-extra-devDependency formatter closest to a CI-friendly,
 // one-line-per-problem shape for annotation/regex parsing.
@@ -89,7 +117,8 @@ fun scip(target: Target) > Command {
 // mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because
 // dev-server mixes in a Service-returning op alongside the Command-returning ones.
 export fun mgs_listTargets() > any {
-    return {"eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc,
+    return {"biome-check": biomeCheck, "biome-format": biomeFormat,
+            "eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc,
             "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest,
             "dev-server": devServer, "scip": scip};
 }

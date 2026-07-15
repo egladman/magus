@@ -29,6 +29,108 @@ Every op is invoked as `ts["<op>"](opts?)`, where the optional options map accep
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
+## biome-check
+
+biome-check is biome's lint/analyze pass (eslint's role, if your project chose Biome over eslint+prettier - the magusfile decides which composes into lint, not this spell). --write and --reporter=github verified against the current Biome CLI docs (biomejs.dev/reference/cli).
+
+**Command:** `pnpm exec biome check .`
+
+### gha
+
+Inserts `--reporter=github`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/3",
+    "value": "--reporter=github"
+  }
+]
+```
+
+</details>
+
+### rw
+
+Inserts `--write`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/3",
+    "value": "--write"
+  }
+]
+```
+
+</details>
+
+### Example
+
+<!-- run-recorder -->
+```buzz
+// biome-check lints the project through Biome (pnpm exec biome check), the
+// spell's alternative to eslint - the magusfile picks one, not both.
+import "magus";
+import "magus/spell/ts";
+
+magus.project({ "spells": [ts] });
+
+export fun lint(args: [str]) > void {
+    ts["biome-check"]();
+}
+```
+
+## biome-format
+
+biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat, `biome format` has no --check flag to drop: it is read-only by default (reports differences, writes nothing) and --write applies them, so rw ADDS a flag instead of removing one.
+
+**Command:** `pnpm exec biome format .`
+
+### rw
+
+Inserts `--write`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/3",
+    "value": "--write"
+  }
+]
+```
+
+</details>
+
+### Example
+
+<!-- run-recorder -->
+```buzz
+// biome-format checks formatting through Biome (pnpm exec biome format); the
+// rw charm (magus run format:rw) applies --write. The spell's alternative to
+// prettier - the magusfile picks one, not both.
+import "magus";
+import "magus/spell/ts";
+
+magus.project({ "spells": [ts] });
+
+export fun format(args: [str]) > void {
+    ts["biome-format"]();
+}
+```
+
 ## dev-server
 
 dev-server runs the project's package.json "dev" script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.
