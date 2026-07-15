@@ -142,6 +142,48 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 	assert.Equal(t, int32(2), calls.Load(), "ordinary run must hit the entry --no-cache refreshed, not re-execute")
 }
 
+// TestRunAffected_NoCacheReexecutes guards magus affected --no-cache
+// specifically: RunAffected (not just Run) must also honor WithNoCache. There
+// is no VCS in this temp workspace, so ExpandAffected falls back to "all
+// projects" (types.ErrAffectedFallback) rather than erroring - the same
+// documented safety net a real no-VCS or disabled-VCS workspace gets.
+func TestRunAffected_NoCacheReexecutes(t *testing.T) {
+	const spellName = "zzz-affected-no-cache-test-spell"
+	var calls atomic.Int32
+	spell := types.NewSpell(spellName,
+		types.WithTargets("build"),
+		types.WithInvoker(func(context.Context, types.InvokeRequest) (any, error) {
+			calls.Add(1)
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+
+	require.NoError(t, m.RunAffected(ctx, "build"), "first affected run")
+	assert.Equal(t, int32(1), calls.Load(), "first run: expected one real execution")
+
+	require.NoError(t, m.RunAffected(ctx, "build"), "second affected run (should hit cache)")
+	assert.Equal(t, int32(1), calls.Load(), "second run: cache hit must not re-execute")
+
+	require.NoError(t, m.RunAffected(ctx, "build", WithNoCache()), "third affected run (--no-cache)")
+	assert.Equal(t, int32(2), calls.Load(), "affected --no-cache must still genuinely re-execute a cached target")
+
+	require.NoError(t, m.RunAffected(ctx, "build"), "fourth affected run (ordinary)")
+	assert.Equal(t, int32(2), calls.Load(), "ordinary run must hit the entry --no-cache refreshed, not re-execute")
+}
+
 func TestDiagCollectorCollects(t *testing.T) {
 	d := &diagCollector{} // nil report writer: RecordDiagnostic must still collect
 	d.RecordDiagnostic(types.DiagnosticEvent{Unit: "a:build", Code: types.ExecDenied})
