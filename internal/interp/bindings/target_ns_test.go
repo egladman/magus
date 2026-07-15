@@ -89,10 +89,24 @@ func TestMatchBuzzTargets(t *testing.T) {
 func TestResolveTargetQuery(t *testing.T) {
 	targets := noopTargets("go-build", "go-test", "rust-build")
 
-	t.Run("literal lowercases and does not consult the target set", func(t *testing.T) {
-		// A literal resolves to its own lowercased name verbatim - it is not required
-		// to be a registered target here (existence is enforced later at dispatch).
+	t.Run("literal normalizes and does not consult the target set", func(t *testing.T) {
+		// A literal resolves to its own normalized name - it is not required to be a
+		// registered target here (existence is enforced later at dispatch). Uses the
+		// same normalizer targetMap registration does (execBuzzSrc), so a needs
+		// literal gets the CLI's many-spellings forgiveness.
 		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryLiteral, Pattern: "GO-Build"})
+		require.NoError(t, err)
+		require.Equal(t, []string{"go-build"}, got)
+	})
+
+	t.Run("literal normalizes camelCase to the kebab-registered name", func(t *testing.T) {
+		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryLiteral, Pattern: "goBuild"})
+		require.NoError(t, err)
+		require.Equal(t, []string{"go-build"}, got)
+	})
+
+	t.Run("literal normalizes snake_case to the kebab-registered name", func(t *testing.T) {
+		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryLiteral, Pattern: "go_build"})
 		require.NoError(t, err)
 		require.Equal(t, []string{"go-build"}, got)
 	})

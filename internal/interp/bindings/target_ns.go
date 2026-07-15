@@ -159,13 +159,15 @@ func dispatchBuzzExternal(ctx context.Context, q types.TargetQuery) error {
 }
 
 // resolveTargetQuery expands a same-project query to matching target names: literal
-// is an exact (lowercased) name, glob matches via matchBuzzTargets, regex matches
-// registered names against the compiled pattern. External queries are dispatched
-// separately and are not valid here.
+// is an exact name run through the same normalizer targetMap registration uses (see
+// execBuzzSrc), so a needs literal gets the same many-spellings forgiveness as the
+// CLI regardless of the casing/separator convention it's written in; glob matches
+// via matchBuzzTargets, regex matches registered names against the compiled
+// pattern. External queries are dispatched separately and are not valid here.
 func resolveTargetQuery(targets map[string]vm.Callable, q types.TargetQuery) ([]string, error) {
 	switch q.Mode {
 	case types.QueryLiteral:
-		return []string{strings.ToLower(q.Pattern)}, nil
+		return []string{types.DefaultTargetNameNormalizer.NormalizeTargetName(q.Pattern)}, nil
 	case types.QueryGlob:
 		return matchBuzzTargets(targets, []string{q.Pattern}), nil
 	case types.QueryRegex:
