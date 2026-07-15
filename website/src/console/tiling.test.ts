@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  leaves, splitLeaf, closePane, setRatio, pickAxis, neighborInDirection,
+  leaves, splitLeaf, closePane, setRatio, setLeafPage, pickAxis, neighborInDirection,
   MIN_RATIO, MAX_RATIO, type Pane, type Rect,
 } from "./tiling";
 
@@ -79,6 +79,17 @@ test("setRatio sets the matching split and clamps to the drag limits", () => {
 test("setRatio on an unknown split id changes nothing", () => {
   const t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
   assert.deepEqual(setRatio(t, "zzz", 0.9), t);
+});
+
+test("setLeafPage fills an empty pane's surface and leaves siblings alone", () => {
+  let t = splitLeaf(leaf("a", "dashboard"), "a", "row", "s1", { id: "p2", pageId: "" });
+  t = setLeafPage(t, "p2", "logs");
+  assert.deepEqual(leaves(t).map((l) => [l.id, l.pageId]), [["a", "dashboard"], ["p2", "logs"]]);
+});
+
+test("setLeafPage on an unknown id changes nothing", () => {
+  const t = leaf("a", "dashboard");
+  assert.deepEqual(setLeafPage(t, "zzz", "logs"), t);
 });
 
 test("pickAxis splits a wide pane into a row and a tall pane into a col", () => {

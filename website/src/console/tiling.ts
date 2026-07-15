@@ -132,6 +132,17 @@ export function closePane(root: Pane, id: string): Pane | null {
   return walk(root);
 }
 
+// setLeafPage sets the surface of the leaf `id` - how an empty pane (pageId "") becomes a chosen
+// surface once the operator picks one from the in-pane launcher. An unknown id leaves the tree
+// unchanged. Pure: it returns a new tree, replacing only the matching leaf.
+export function setLeafPage(root: Pane, id: string, pageId: string): Pane {
+  const walk = (p: Pane): Pane => {
+    if (p.kind === "leaf") return p.id === id ? { ...p, pageId } : p;
+    return { ...p, a: walk(p.a), b: walk(p.b) };
+  };
+  return walk(root);
+}
+
 // setRatio moves the divider of the split `splitId`, clamped so neither side can be
 // dragged shut. Unknown ids leave the tree unchanged.
 export function setRatio(root: Pane, splitId: string, ratio: number): Pane {

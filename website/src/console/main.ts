@@ -7,11 +7,13 @@
 // (page.ts); a heavy one activates lazily (its bundle a dynamic import) so a tab stays cheap until
 // opened. All four core lenses are real surfaces: home launcher + logs/graph/dashboard/activity.
 
-import { openTab, closeTab, setActive, workspaceStore, type TabState } from "./tabs";
+import { openTab, closeTab, setActive, setLayout, workspaceStore, type TabState } from "./tabs";
 import { createTabStrip } from "./tabStrip";
 import { homePage, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import { registerCommand, installKeybindings, mergeKeymap, type Keymap } from "./commands";
+import { createTileView, type TileView } from "./tileView";
+import { leaves, type Pane } from "./tiling";
 import { initConsoleSettings } from "../ui/console-settings";
 import { persisted } from "../lib/persist";
 import type { PageController, PageModule } from "./page";
@@ -22,9 +24,16 @@ import type { PageController, PageModule } from "./page";
 // (they land on the console's own tabs when it runs as an installed PWA window).
 const CONSOLE_KEYMAP: Keymap = {
   "console.tab.new": "mod+t",
-  "console.tab.close": "mod+w",
+  "console.tab.close": "mod+w", // closes the focused PANE, or the tab when it is the last pane
   "console.tab.next": "mod+alt+ArrowRight",
   "console.tab.prev": "mod+alt+ArrowLeft",
+  // Tiling: split the focused pane (auto axis / forced down), and vim-style directional pane focus.
+  "console.pane.split": "mod+\\",
+  "console.pane.splitDown": "mod+shift+\\",
+  "console.pane.focusLeft": "alt+h",
+  "console.pane.focusDown": "alt+j",
+  "console.pane.focusUp": "alt+k",
+  "console.pane.focusRight": "alt+l",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 
@@ -40,7 +49,7 @@ const SURFACES: Launchable[] = [
 ];
 
 
-interface Mounted { host: HTMLElement; status: HTMLElement; controller: PageController<any, any> | null; }
+interface Mounted { host: HTMLElement; status: HTMLElement; tile: TileView; }
 
 // makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
 // (#console-conn, #console-demo, #console-observing, #console-count, #offline-badge) and the
@@ -76,36 +85,47 @@ function makeStatusBar(): HTMLElement {
 
 export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, statusHost: HTMLElement): void {
   const ws = workspaceStore();
-  const mounts = new Map<string, Mounted>(); // tabId -> its mounted host + controller
+  const mounts = new Map<string, Mounted>(); // tabId -> its mounted tile + status bar
 
-  // mount activates a surface into its own host once; a second call for the same tab is a no-op
-  // (the surface stays mounted and hidden while another tab is active). mount is only ever called
-  // for a tab we are switching to, so it shows the pane BEFORE activating: a surface that measures
-  // its own DOM at init (the log viewer's segmented switches, and later charts/canvas) needs real
-  // dimensions, and a display:none host reports zero. Inactive tabs are never pre-mounted - they
-  // stay cheap until first selected.
-  async function mount(tab: TabState): Promise<void> {
-    if (mounts.has(tab.id)) return;
-    const m = registry.get(tab.pageId);
-    if (!m) return;
-    const host = document.createElement("div"); // a pane: #console-outlet > div[data-tab-id], no class
-    host.dataset.tabId = tab.id;
-    outlet.append(host);
-    const entry: Mounted = { host, status: makeStatusBar(), controller: null };
-    mounts.set(tab.id, entry);
-    show(tab.id); // visible + status attached before activate, so init-time measurement (and the log
-    // viewer's zoom-control injection into .statusbar-right) sees the real, attached DOM.
-    entry.controller = await m.activate(host);
+  // mountSurface is how a tile mounts one surface into a pane host: resolve the registered module and
+  // activate it, returning its controller (or null if unknown). A tile calls this per leaf, so all
+  // the per-surface lazy-import machinery (standalone/moduleSurface) is reused unchanged.
+  async function mountSurface(pageId: string, host: HTMLElement): Promise<PageController<unknown, unknown> | null> {
+    const m = registry.get(pageId);
+    if (!m) return null;
+    return (await m.activate(host)) as PageController<unknown, unknown>;
   }
 
-  // show reveals one tab's pane and swaps its status bar into the footer (detaching the others), so
-  // the bottom bar always reflects the active tab. It also tells each surface whether it is visible,
-  // so a background streamer suppresses its shared-status writes instead of leaking into the active
-  // tab's bar.
+  // mount builds a tab's runtime once: a host pane in the outlet, a per-tab status bar, and a tile
+  // that renders the tab's split-pane tree (a single leaf for an un-split tab). It attaches and shows
+  // the tab synchronously BEFORE any surface activates, so a surface that measures its own DOM at init
+  // (the log viewer's segmented switches, charts, canvas) sees the real, visible dimensions - a
+  // display:none host reports zero. Inactive tabs are never pre-mounted. A second call for the same
+  // tab is a no-op.
+  function mount(tab: TabState): void {
+    if (mounts.has(tab.id)) return;
+    const host = document.createElement("div"); // a pane container: #console-outlet > div[data-tab-id]
+    host.dataset.tabId = tab.id;
+    outlet.append(host);
+    const seed: Pane = tab.layout ?? { kind: "leaf", id: tab.id, pageId: tab.pageId };
+    const tile = createTileView({
+      seed,
+      surfaces: SURFACES,
+      mountSurface,
+      onLayoutChange: (tree) => ws.set(setLayout(ws.get(), tab.id, tree)),
+    });
+    host.append(tile.el);
+    mounts.set(tab.id, { host, status: makeStatusBar(), tile });
+    show(tab.id); // visible + status attached before the tile's surfaces finish activating
+  }
+
+  // show reveals one tab's tile and swaps its status bar into the footer (detaching the others), so
+  // the bottom bar always reflects the active tab. It also tells each tile whether it is visible, so
+  // a background streamer suppresses its shared-status writes instead of leaking into the active bar.
   function show(id: string | null): void {
     for (const [tid, mt] of mounts) {
       mt.host.hidden = tid !== id;
-      mt.controller?.setVisible?.(tid === id);
+      mt.tile.setVisible(tid === id);
     }
     const active = id ? mounts.get(id) : null;
     if (active) statusHost.replaceChildren(active.status);
@@ -115,7 +135,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   function unmount(id: string): void {
     const mt = mounts.get(id);
     if (!mt) return;
-    mt.controller?.deactivate();
+    mt.tile.deactivate();
     mt.host.remove();
     mt.status.remove();
     mounts.delete(id);
@@ -125,7 +145,13 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   function reveal(id: string): void {
     if (mounts.has(id)) { show(id); return; }
     const tab = ws.get().tabs.find((t) => t.id === id);
-    if (tab) void mount(tab);
+    if (tab) mount(tab);
+  }
+
+  // activeTile returns the tile of the active tab, or null - the pane commands target it.
+  function activeTile(): TileView | null {
+    const id = ws.get().activeId;
+    return (id && mounts.get(id)?.tile) || null;
   }
 
   // The console owns the workspace mutations (the strip only reports intent, so keybindings drive the
@@ -165,24 +191,45 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
   // The listener skips while typing in a field (see commands.ts), so it never eats filter input.
   registerCommand({ id: "console.tab.new", label: "New tab", group: "Tabs", run: () => open("home") });
-  registerCommand({ id: "console.tab.close", label: "Close tab", group: "Tabs", run: () => { const a = ws.get().activeId; if (a) closeTabById(a); } });
+  // mod+w closes the smallest thing: the focused PANE, falling through to the whole tab only when
+  // that was the tab's last pane (closeFocused returns true) or the tab is un-tiled (no tile).
+  registerCommand({ id: "console.tab.close", label: "Close pane or tab", group: "Tabs", run: () => {
+    const t = activeTile();
+    if (t && !t.closeFocused()) return;
+    const a = ws.get().activeId; if (a) closeTabById(a);
+  } });
   registerCommand({ id: "console.tab.next", label: "Next tab", group: "Tabs", run: () => cycleTab(1) });
   registerCommand({ id: "console.tab.prev", label: "Previous tab", group: "Tabs", run: () => cycleTab(-1) });
+  // Tiling: split the focused pane and move focus between panes. Each targets the active tab's tile.
+  registerCommand({ id: "console.pane.split", label: "Split pane", group: "Panes", run: () => activeTile()?.split() });
+  registerCommand({ id: "console.pane.splitDown", label: "Split pane down", group: "Panes", run: () => activeTile()?.split("col") });
+  registerCommand({ id: "console.pane.focusLeft", label: "Focus pane left", group: "Panes", run: () => activeTile()?.focus("left") });
+  registerCommand({ id: "console.pane.focusDown", label: "Focus pane down", group: "Panes", run: () => activeTile()?.focus("down") });
+  registerCommand({ id: "console.pane.focusUp", label: "Focus pane up", group: "Panes", run: () => activeTile()?.focus("up") });
+  registerCommand({ id: "console.pane.focusRight", label: "Focus pane right", group: "Panes", run: () => activeTile()?.focus("right") });
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
   // open launches a surface as a tab. A surface (logs/graph/dashboard/activity) is single-instance -
-  // it keeps module-level state, so a second instance would fight the first; if one is already open,
-  // focus it instead. Home is stateless, so "+" can always spawn a fresh launcher tab.
+  // it keeps module-level state, so a second instance would fight the first; if one is already open
+  // anywhere - a tab's primary surface OR a pane inside a tiled tab - focus that tab instead. Home is
+  // stateless, so "+" can always spawn a fresh launcher tab.
   function open(pageId: string): void {
     const m = registry.get(pageId);
     if (!m) return;
     if (pageId !== "home") {
-      const existing = ws.get().tabs.find((t) => t.pageId === pageId);
-      if (existing) { activateTab(existing.id); return; }
+      const hostTab = ws.get().tabs.find((t) => tabHostsSurface(t, pageId));
+      if (hostTab) { activateTab(hostTab.id); return; }
     }
     const tab: TabState = { id: pageId + "-" + Date.now().toString(36), pageId, title: m.title };
     ws.set(openTab(ws.get(), tab));
-    void mount(tab);
+    mount(tab);
+  }
+
+  // tabHostsSurface reports whether a tab already shows a surface, checking its tiled panes when it
+  // has a layout and its primary pageId otherwise - so a single-instance surface is never opened twice.
+  function tabHostsSurface(t: TabState, pageId: string): boolean {
+    const ids = t.layout ? leaves(t.layout).map((l) => l.pageId) : [t.pageId];
+    return ids.includes(pageId);
   }
 
   register(homePage(SURFACES, open));
@@ -200,7 +247,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   } else {
     const activeId = saved.activeId ?? saved.tabs[0]?.id ?? null;
     const tab = saved.tabs.find((t) => t.id === activeId) ?? saved.tabs[0];
-    if (tab) void mount(tab);
+    if (tab) mount(tab);
   }
 }
 

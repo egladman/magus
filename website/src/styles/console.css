@@ -293,17 +293,41 @@ body.console-fill > main > .panel {
 }
 /* The same full-height chain for a surface mounted as a CONSOLE TAB. The rules above key on
    `body.console-fill > main > .app` (the standalone page's single <main>), but the console mounts a
-   surface one level deeper - the outlet main holds a per-tab pane, and the surface's own <main> sits
-   inside that (#console-outlet > div[data-tab-id] > main > .app). So those direct-child rules do not
-   reach a mounted surface, and a canvas-height surface (the graph) or a cold empty state collapses to
-   nothing. Re-establish the flex chain for the nested mount. The pane rule is guarded :not([hidden])
-   so an inactive pane keeps its display:none (a bare display:flex here would outweigh [hidden]). */
+   surface deeper: the tab host holds a TILE (div[data-tile-root]) whose leaves are pane containers
+   (div[data-pane-id]), and the surface's own <main> sits inside a pane. A tab may hold one pane or a
+   tree of split panes (div[data-split-id] grids). So the flex/height chain must reach a surface
+   through the tile and its panes, or a canvas-height surface (the graph) or a cold empty state
+   collapses to nothing. The tab-host rule is guarded :not([hidden]) so an inactive tab keeps its
+   display:none (a bare display:flex would outweigh [hidden]). */
 #console-outlet > div[data-tab-id]:not([hidden]) {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden; /* the panes scroll internally, not the tab host */
 }
-#console-outlet > div[data-tab-id] > main {
+/* The tile fills the tab host; a split grid or a lone pane fills the tile / its parent grid cell. */
+#console-outlet div[data-tile-root] {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#console-outlet div[data-tile-root] > div[data-pane-id],
+#console-outlet div[data-tile-root] > div[data-split-id] { flex: 1 1 auto; }
+/* A split is a CSS grid; tileView sets the row/column template inline (from the split's ratio). */
+#console-outlet div[data-split-id] { display: grid; gap: 0; min-width: 0; min-height: 0; }
+/* A pane holds one surface (or the in-pane launcher). It fills its slot, scrolls internally, and is a
+   positioning + flex context so the surface's <main> and any absolute cold-state prompt lay out. */
+#console-outlet div[data-pane-id] {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+#console-outlet div[data-pane-id] > main {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -314,13 +338,43 @@ body.console-fill > main > .panel {
      keeping Pico's ~1rem .container-fluid inset - the console owns the whole width. */
   padding-inline: 0.4rem;
 }
-#console-outlet > div[data-tab-id] > main > .graph-app,
-#console-outlet > div[data-tab-id] > main > .panel {
+#console-outlet div[data-pane-id] > main > .graph-app,
+#console-outlet div[data-pane-id] > main > .panel {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
   margin: 0;
   position: relative;
+}
+
+/* Tiling: the divider between two panes, the focused-pane ring, and the in-pane launcher. Class-free:
+   the divider is a real grid track [data-divider] (so it IS the gap, and is a draggable hit box); the
+   split container sets no gap. data-dir carries the split axis for the resize cursor at idle. */
+#console-outlet [data-divider] {
+  align-self: stretch;
+  justify-self: stretch;
+  background: var(--pico-muted-border-color);
+  cursor: col-resize; /* row split -> vertical divider */
+  touch-action: none; /* the pointer drag owns the gesture, no scroll/zoom interference */
+}
+#console-outlet [data-divider][data-dir="col"] { cursor: row-resize; } /* col split -> horizontal divider */
+#console-outlet [data-divider]:hover,
+#console-outlet [data-divider]:active { background: var(--pico-primary); }
+/* The focused pane wears a subtle inset ring (only while tiled - tileView sets data-focus on more
+   than one pane). A thin overlay outline, offset inward so it reads as a highlight, not a border. */
+#console-outlet [data-pane-id][data-focus] {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: -2px;
+  z-index: 1;
+}
+/* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in. Center the
+   prompt + its card grid; the li[data-open] cards reuse the shared launcher-card styling below. */
+#console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
+#console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pico-muted-color); text-align: center; }
+#console-outlet [data-pane-launcher] + ul {
+  list-style: none; margin: 0; padding: 0 1rem;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: 0.5rem;
+  width: 100%; max-width: 26rem;
 }
 /* Graph cold state: the prompt normally collapses the card (and its stage) to a natural
    ~520px height, which in the full-height layout would leave a void (and a background seam)
