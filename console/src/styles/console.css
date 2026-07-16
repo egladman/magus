@@ -276,7 +276,52 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-surface="home"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
 #console-outlet [data-surface="home"] > p { margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 
-/* The command palette (#command-palette) and keybindings editor (#keybindings-overlay) were rebuilt
-   as PatternFly ModalBox/Backdrop overlays in the W2 shell pass (palette.ts / keybindings.ts). Their
-   frames are PatternFly; the keybindings row grid (which has no PF component) lives ID-scoped in
-   overrides.css alongside the kbd keycap styling. The old Pico overlay rules were removed here. */
+/* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay
+   (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives
+   ID-scoped in overrides.css alongside the kbd keycap styling.
+
+   The command palette (#command-palette, palette.ts) is NOT a modal: it is a dmenu-style bar - the
+   console's one sanctioned fully-custom component (PatternFly has no dmenu analog), classed per the
+   PATTERNFLY.md formula (console-shell-palette). ONE dense text-height bar pinned over the title bar:
+   an accent prompt block, an inline borderless input, then the matching commands run HORIZONTALLY to
+   its right, clipped at the bar's end (dmenu truncation; arrowing past the edge scrolls the run). The
+   selected item is inverted with the accent - no cards, no shadows, no icons. PF tokens throughout so
+   both themes work; selection state rides data-selected, per the state-is-data-* convention. */
+#command-palette[hidden] { display: none; }
+.console-shell-palette {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 70; /* over the title bar (settings popover is 60) */
+  display: flex; align-items: stretch;
+  height: 1.9rem;
+  font-size: 0.8rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-shell-palette__prompt {
+  flex: 0 0 auto; display: inline-flex; align-items: center;
+  padding-inline: 0.6rem;
+  background: var(--console-accent);
+  color: var(--pf-t--global--text--color--on-brand--default);
+}
+.console-shell-palette__input {
+  flex: 0 1 16rem; min-width: 6rem;
+  margin: 0; padding-inline: 0.5rem;
+  font: inherit; color: var(--pf-t--global--text--color--regular);
+  background: transparent; border: 0; outline: none;
+}
+.console-shell-palette__items {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: stretch;
+  overflow: hidden; /* dmenu: extra matches truncate off the end of the bar */
+}
+.console-shell-palette__item {
+  flex: 0 0 auto; display: inline-flex; align-items: center;
+  margin: 0; padding-inline: 0.6rem;
+  font: inherit; white-space: nowrap; cursor: pointer;
+  background: transparent; border: 0;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-palette__item:hover { color: var(--pf-t--global--text--color--regular); }
+.console-shell-palette__item[data-selected] {
+  background: var(--console-accent);
+  color: var(--pf-t--global--text--color--on-brand--default);
+}

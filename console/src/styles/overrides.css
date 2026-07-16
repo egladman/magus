@@ -72,17 +72,16 @@
 #theme-cycle .console-shell-themecycle__icon { display: inline-flex; }
 #theme-cycle .console-shell-themecycle__icon svg { width: 1em; height: 1em; }
 
-/* --- Overlays (command palette + keybindings) ---------------------------------------------------
- * Both are PF ModalBox in a Backdrop+Bullseye. Cap the box to the viewport so a long command list /
- * keybinding table scrolls inside its body rather than the page. */
-#command-palette[hidden], #keybindings-overlay[hidden] { display: none; }
-#command-palette .pf-v6-c-modal-box,
+/* --- Keybindings overlay --------------------------------------------------------------------------
+ * A PF ModalBox in a Backdrop+Bullseye. Cap the box to the viewport so a long keybinding table
+ * scrolls inside its body rather than the page. (The command palette is a dmenu-style top bar now -
+ * console-shell-palette in console.css - not a modal.) */
+#keybindings-overlay[hidden] { display: none; }
 #keybindings-overlay .pf-v6-c-modal-box { max-height: 80vh; }
-#command-palette .pf-v6-c-modal-box__body,
 #keybindings-overlay .pf-v6-c-modal-box__body { overflow: auto; min-height: 0; }
-/* kbd chord chips in both overlays and the palette rows: a compact keycap. Self-contained so the
- * shell does not lean on Pico's kbd styling (dropped at the W4 cutover). */
-#command-palette kbd, #keybindings-overlay kbd {
+/* kbd chord chips in the keybindings rows: a compact keycap. Self-contained so the shell does not
+ * lean on Pico's kbd styling (dropped at the W4 cutover). */
+#keybindings-overlay kbd {
   font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
   background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
