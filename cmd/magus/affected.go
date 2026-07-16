@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -51,6 +52,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	if hasModeFlag(args, "bisect") {
 		return affectedBisect(ctx, root, args)
+	}
+	// --impact is a read-only forensic mode: it reports the blast radius of the
+	// current changeset (changed files, seed projects, and the affected closure with
+	// each project's targets) and never executes a target. It takes no positional
+	// target, so it is detected before the target split.
+	if hasModeFlag(args, "impact") {
+		return affectedImpact(ctx, root, args)
 	}
 
 	// Find the target even if global flags precede it (`magus affected --dry-run ci`);
@@ -315,6 +323,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 func affectedUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus affected <target> [flags]")
 	fmt.Fprintln(os.Stderr, "       magus affected --explain <project> [--base <ref>]")
+	fmt.Fprintln(os.Stderr, "       magus affected --impact [--base <ref>]")
 	fmt.Fprintln(os.Stderr, "       magus affected <target> --plan [--max-shards N]")
 	fmt.Fprintln(os.Stderr, "       magus affected --bisect <project> [--target <target>] [--good <sha>]")
 	fmt.Fprintln(os.Stderr, "")
@@ -325,6 +334,7 @@ func affectedUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Forensic modes (reason about the affected set instead of executing):")
 	fmt.Fprintln(os.Stderr, "  --explain <project>  show why a project is in the affected set")
+	fmt.Fprintln(os.Stderr, "  --impact             report the blast radius of the changeset (changed files, seeds, affected)")
 	fmt.Fprintln(os.Stderr, "  <target> --plan      emit a provider-neutral JSON CI shard plan for <target> (e.g. ci)")
 	fmt.Fprintln(os.Stderr, "  --bisect <project>   drive VCS bisect to find a regression's culprit commit")
 	fmt.Fprintln(os.Stderr, "  --base <ref>         override VCS base ref (default: MAGUS_VCS_BASE_REF or origin/main)")
@@ -459,6 +469,144 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	_, err = os.Stdout.Write([]byte{'\n'})
 	return err
+}
+
+// affectedImpact reports the blast radius of the current changeset (the --impact
+// forensic mode of `magus affected`). It is strictly read-only: it maps changed files
+// to seed projects and expands the dependency-graph reverse closure to name the
+// affected projects and their targets, then surfaces `magus affected ci` as the
+// follow-up. It NEVER executes a target and takes no positional target or project.
+func affectedImpact(ctx context.Context, root string, args []string) error {
+	var (
+		baseStr    string
+		impactFlag bool
+	)
+	// --impact routed us here (hasModeFlag); bind it so the flag parser accepts it,
+	// then parse --base like the other forensic modes. No positional target is read.
+	if _, err := cmdParse("affected --impact", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&impactFlag, "impact", false, "Report the blast radius of the changeset (read-only; runs nothing)")
+		fs.StringVar(&baseStr, "base", "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or origin/main)")
+		fs.StringVar(&baseStr, "b", "", "Short for --base")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus affected --impact [--base <ref>]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Report the IMPACT of the current changeset: the changed files, the projects")
+			fmt.Fprintln(os.Stderr, "that directly contain them (seeds), and the affected closure with each")
+			fmt.Fprintln(os.Stderr, "project's targets. Read-only - it runs nothing.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags:")
+			fs.PrintDefaults()
+		}
+	}); err != nil {
+		return err
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+
+	out, err := impact.Compute(ctx, ws, baseStr)
+	if err != nil {
+		return err
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, out)
+	case outputName:
+		for _, p := range out.AffectedProjects {
+			fmt.Println(p.Path)
+		}
+		return nil
+	}
+
+	return printImpactText(out)
+}
+
+// impactFileCap bounds how many changed files are listed per seed project in text
+// mode; a large changeset stays readable while the full set is still one -o json away.
+const impactFileCap = 12
+
+// printImpactText renders the impact report in the `magus graph explain` house style:
+// counts before lists, verbs not arrows, full ids, plain ASCII. Changed files are
+// grouped under the seed project that owns them (not dumped as one flat list) so a
+// large changeset stays legible.
+func printImpactText(out *impact.Result) error {
+	if out.ChangedFileCount == 0 {
+		fmt.Printf("No changed files against %s; nothing is affected.\n", out.Base)
+		return nil
+	}
+
+	fmt.Printf("Changeset impact (base: %s)\n", out.Base)
+	fmt.Printf("%s changed, seeding %s, affecting %s.\n",
+		countLabel(out.ChangedFileCount, "file", "files"),
+		countLabel(len(out.SeedProjects), "project", "projects"),
+		countLabel(len(out.AffectedProjects), "project", "projects"))
+
+	if len(out.AffectedProjects) == 0 {
+		fmt.Printf("\nNo projects are affected (every changed file sits outside a project).\n")
+		return nil
+	}
+
+	// Seeds first (they carry the changed files), then the projects reached only
+	// through the dependency closure. Counting seeds here also yields the number of
+	// changed files that landed inside a project, for an outside-any-project note.
+	seeded := 0
+	fmt.Printf("\nAffected projects (%d, %d with tests):\n", len(out.AffectedProjects), out.TestProjectCount)
+	for _, p := range out.AffectedProjects {
+		if !p.Seed {
+			continue
+		}
+		seeded += len(p.Files)
+		fmt.Printf("  %s (seeded by %s)\n", p.Path, countLabel(len(p.Files), "changed file", "changed files"))
+		if len(p.Targets) > 0 {
+			fmt.Printf("    targets: %s\n", strings.Join(p.Targets, ", "))
+		}
+		shown := p.Files
+		if len(shown) > impactFileCap {
+			shown = shown[:impactFileCap]
+		}
+		for _, f := range shown {
+			fmt.Printf("    %s\n", f)
+		}
+		if extra := len(p.Files) - len(shown); extra > 0 {
+			fmt.Printf("    ... and %d more\n", extra)
+		}
+	}
+	for _, p := range out.AffectedProjects {
+		if p.Seed {
+			continue
+		}
+		fmt.Printf("  %s (via dependencies)\n", p.Path)
+		if len(p.Targets) > 0 {
+			fmt.Printf("    targets: %s\n", strings.Join(p.Targets, ", "))
+		}
+	}
+
+	if outside := out.ChangedFileCount - seeded; outside > 0 {
+		fmt.Printf("\n%s changed outside any project (seeded nothing).\n", countLabel(outside, "file", "files"))
+	}
+
+	for _, n := range out.Notes {
+		fmt.Printf("\nnote: %s\n", n)
+	}
+
+	fmt.Printf("\nRun the full pipeline over this set with: magus affected ci\n")
+	return nil
+}
+
+// countLabel formats n with a singular/plural noun ("1 file", "3 files").
+func countLabel(n int, singular, plural string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, singular)
+	}
+	return fmt.Sprintf("%d %s", n, plural)
 }
 
 // parseExplainArgs scans args for --explain[=<project>] and optionally --base.
