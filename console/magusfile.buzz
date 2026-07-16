@@ -45,13 +45,6 @@ fun install() > void {
     }
 }
 
-// typecheck runs the TS gate (tsc --noEmit); a pure check, no output.
-export fun typecheck(args: [str]) > void {
-    magus.needs(preflight);
-    install();
-    os.exec("pnpm", ["run", "typecheck"], ".", {});
-}
-
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).
 export fun test(args: [str]) > void {
     magus.needs(preflight);
@@ -76,14 +69,18 @@ export fun build(args: [str]) > void {
     }
 }
 
-// lint is the TypeScript gate for now (the console has no separate linter); kept as its own target so
-// the ci anchor and `magus run lint console` have a stable name if a real linter lands later.
+// lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the
+// same way a Go project's lint runs `go vet`. Composing tsc into lint (rather than a standalone
+// `typecheck` target) means `magus affected ci`, which needs lint, always covers it - a type error
+// fails lint. The console has no separate linter yet; if one lands it composes in here beside tsc.
 export fun lint(args: [str]) > void {
-    magus.needs(typecheck);
+    magus.needs(preflight);
+    install();
+    os.exec("pnpm", ["run", "typecheck"], ".", {});
 }
 
-// 'ci' is the anchor `magus affected ci` keys off: the typecheck gate, the unit tests, and the
+// 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the
 // build-plus-drift-gate, all first-class ci steps.
 export fun ci(args: [str]) > void {
-    magus.needs(typecheck, test, build);
+    magus.needs(lint, test, build);
 }
