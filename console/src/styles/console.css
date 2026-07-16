@@ -265,6 +265,21 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    (role=tablist/tab, aria-selected). See tabStrip.ts and PATTERNFLY.md. */
 #console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 
+/* Vertically center the tab close (x) and new-tab (+) controls on the tab row. PF's tab action
+   and add buttons are plain buttons with align-items:baseline, sized for an inline webfont glyph;
+   we render an inline <svg> close icon and a "+" text glyph, which baseline-align to their bottom
+   edge and hang below the row. Center the row containers and the buttons, and let the glyph sit
+   dead-center of a fixed square, so x/+ line up with the tab label instead of dropping low. */
+#console-tabs .pf-v6-c-tabs__item, #console-tabs .pf-v6-c-tabs__add { align-items: center; }
+#console-tabs .pf-v6-c-tabs__add { display: inline-flex; }
+#console-tabs .pf-v6-c-tabs__item-action button,
+#console-tabs .pf-v6-c-tabs__add button {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; width: 1.5rem; height: 1.5rem; line-height: 1;
+}
+#console-tabs .pf-v6-c-tabs__item-action-icon { display: inline-flex; align-items: center; justify-content: center; height: auto; line-height: 0; }
+#console-tabs .pf-v6-c-tabs__item-action-icon > svg { display: block; }
+
 /* The outlet holds one mounted surface per open tab (a div[data-tab-id]); only the active shows. */
 #console-outlet { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #console-outlet > div { position: absolute; inset: 0; overflow: auto; }
