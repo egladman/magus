@@ -1,8 +1,12 @@
 <main>
     <section class="console-render-panel console-log-app">
-      <!-- File/query bar: a PatternFly Toolbar. Row 1 is the ref identity strip; row 2 is the
-           filter field (PF FormControl) + the grouped action buttons (PF Buttons). The Log|Timeline
-           and Pretty|Raw view switches are PF ToggleGroups. -->
+      <!-- File/query bar: one dense PatternFly Toolbar. The ref identity strip (#log-bar-id)
+           collapses until a log loads; the controls row (#log-bar-controls) is a single
+           toolbar content-section that wraps cluster-by-cluster. Left: the filter field as a PF
+           input-group with the "?" syntax help as its attached control button. Middle: the view
+           controls (Pause, the Log|Timeline + Pretty|Raw ToggleGroups, Collapse all) and the
+           timeline-only time-range group. Right (align-end): the clipboard actions and, past a
+           vertical divider, the open/fullscreen actions. -->
       <header class="pf-v6-c-toolbar" id="log-bar">
         <div class="pf-v6-c-toolbar__content" id="log-bar-id">
           <div class="pf-v6-c-toolbar__content-section">
@@ -14,29 +18,35 @@
         </div>
         <div class="pf-v6-c-toolbar__content" id="log-bar-controls">
           <div class="pf-v6-c-toolbar__content-section">
-            <div class="pf-v6-c-toolbar__group" aria-label="Filter">
-              <div class="pf-v6-c-toolbar__item">
-                <span class="pf-v6-c-form-control">
-                  <input id="log-filter" type="text" placeholder="Filter: status:fail  target:mm  <text>" aria-label="Filter the log" spellcheck="false" autocomplete="off" enterkeyhint="search">
-                </span>
-              </div>
-              <div class="pf-v6-c-toolbar__item">
-                <span class="console-render-help-glyph" tabindex="0" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">?</span>
+            <!-- Filter field + attached "?" help control (PF input-group). -->
+            <div class="pf-v6-c-toolbar__item" id="log-filter-item">
+              <div class="pf-v6-c-input-group">
+                <div class="pf-v6-c-input-group__item pf-m-fill">
+                  <span class="pf-v6-c-form-control">
+                    <input id="log-filter" type="text" placeholder="Filter: status:fail  target:mm  <text>" aria-label="Filter the log" spellcheck="false" autocomplete="off" enterkeyhint="search">
+                  </span>
+                </div>
+                <div class="pf-v6-c-input-group__item">
+                  <button id="log-filter-help" class="pf-v6-c-button pf-m-control console-log-filter__help" type="button" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">
+                    <span class="pf-v6-c-button__text" aria-hidden="true">?</span>
+                  </button>
+                </div>
               </div>
             </div>
-            <!-- Grouped action clusters (Live / View / Time / Clipboard / Open), pushed to the row's
-                 end. Each cluster is a PF action group so it wraps as a chunk, not mid-cluster. -->
-            <div class="pf-v6-c-toolbar__group pf-m-action-group pf-m-align-end" id="log-actions">
-              <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="Live">
+
+            <!-- View controls: Pause (toggle), the Log|Timeline and Pretty|Raw ToggleGroups, and
+                 Collapse all. Grouped so they wrap together, not mid-cluster. -->
+            <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="View">
+              <div class="pf-v6-c-toolbar__item">
                 <button id="pause-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Pause auto-scroll to pin the view while the run streams" disabled>
                   <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Pause</span>
                 </button>
               </div>
-              <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="View">
-                <!-- Log|Timeline and Pretty|Raw are PF ToggleGroups (segmented controls). The log
-                     viewer JS reads/sets the selected option (data-mode + pf-m-selected); the group is
-                     disabled when the switch does not apply (timeline needs plottable timing; the
-                     pretty/raw split is meaningless in the waterfall). -->
+              <!-- Log|Timeline and Pretty|Raw are PF ToggleGroups (segmented controls). The log
+                   viewer JS reads/sets the selected option (data-mode + pf-m-selected); the group is
+                   disabled when the switch does not apply (timeline needs plottable timing; the
+                   pretty/raw split is meaningless in the waterfall). -->
+              <div class="pf-v6-c-toolbar__item">
                 <div class="pf-v6-c-toggle-group" id="timeline-mode" role="group" aria-label="Log or timeline view">
                   <div class="pf-v6-c-toggle-group__item">
                     <button type="button" class="pf-v6-c-toggle-group__button pf-m-selected" data-mode="log" aria-pressed="true" title="Show the run as a scrolling log" disabled><span class="pf-v6-c-toggle-group__text">Log</span></button>
@@ -45,6 +55,8 @@
                     <button type="button" class="pf-v6-c-toggle-group__button" data-mode="timeline" aria-pressed="false" title="Show the invocation as a trace waterfall (targets and steps on a shared time axis)" disabled><span class="pf-v6-c-toggle-group__text">Timeline</span></button>
                   </div>
                 </div>
+              </div>
+              <div class="pf-v6-c-toolbar__item">
                 <div class="pf-v6-c-toggle-group" id="view-mode" role="group" aria-label="Pretty or raw view">
                   <div class="pf-v6-c-toggle-group__item">
                     <button type="button" class="pf-v6-c-toggle-group__button pf-m-selected" data-mode="pretty" aria-pressed="true" title="The stylized structural view (folds, badges, line numbers)"><span class="pf-v6-c-toggle-group__text">Pretty</span></button>
@@ -53,14 +65,19 @@
                     <button type="button" class="pf-v6-c-toggle-group__button" data-mode="raw" aria-pressed="false" title="The exact captured text, flat"><span class="pf-v6-c-toggle-group__text">Raw</span></button>
                   </div>
                 </div>
+              </div>
+              <div class="pf-v6-c-toolbar__item">
                 <button id="fold-all-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Collapse or expand every section" disabled>
                   <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Collapse all</span>
                 </button>
               </div>
-              <!-- Time range: a wall-clock scoper (built invocation-agnostic so it scales to multiple
-                   invocations) plus the brush console-log-focus__window readout + reset. Only meaningful on the
-                   timeline, so disabled outside waterfall mode. -->
-              <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" id="log-timerange" aria-label="Time range">
+            </div>
+
+            <!-- Time range: a wall-clock scoper (built invocation-agnostic so it scales to multiple
+                 invocations) plus the brush console-log-focus__window readout + reset. Only meaningful
+                 on the timeline, so hidden until the waterfall is shown (updateTimelineControl). -->
+            <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" id="log-timerange" aria-label="Time range" hidden>
+              <div class="pf-v6-c-toolbar__item">
                 <span class="pf-v6-c-form-control">
                   <select id="time-range" aria-label="Time range" title="Scope the view to a wall-clock window (spans multiple invocations once supported); or drag across the waterfall to focus a window" disabled>
                     <option value="all">Full run</option>
@@ -72,27 +89,49 @@
                     <option value="custom" hidden>Custom</option>
                   </select>
                 </span>
+              </div>
+              <div class="pf-v6-c-toolbar__item">
                 <span id="console-log-focus__window" class="console-log-focus__window" hidden aria-live="polite"></span>
+              </div>
+              <div class="pf-v6-c-toolbar__item">
                 <button id="console-log-focus__reset" class="pf-v6-c-button pf-m-link pf-m-inline pf-m-small console-log-focus__reset" type="button" title="Reset to the full run" hidden><span class="pf-v6-c-button__text console-render-btn__label">Reset</span></button>
               </div>
+            </div>
+
+            <!-- Right-aligned action cluster (align-end): the clipboard actions, a vertical divider,
+                 then the open/fullscreen actions. Each is a PF action group so it wraps as a chunk. -->
+            <div class="pf-v6-c-toolbar__group pf-m-action-group pf-m-align-end" id="log-actions">
               <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="Clipboard">
-                <button id="copy-all-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the whole log to the clipboard">
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy</span>
-                </button>
-                <button id="copy-cmd-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy a `magus query` command that fetches this exact output (hand it to an agent)" disabled>
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy command</span>
-                </button>
-                <button id="share-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy a shareable link to this log (the output rides the link fragment; nothing is uploaded)" disabled>
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Share</span>
-                </button>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="copy-all-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the whole log to the clipboard">
+                    <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy</span>
+                  </button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="copy-cmd-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy a `magus query` command that fetches this exact output (hand it to an agent)" disabled>
+                    <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy command</span>
+                  </button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="share-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy a shareable link to this log (the output rides the link fragment; nothing is uploaded)" disabled>
+                    <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Share</span>
+                  </button>
+                </div>
+              </div>
+              <div class="pf-v6-c-toolbar__item">
+                <div class="pf-v6-c-divider pf-m-vertical" role="separator" aria-hidden="true"></div>
               </div>
               <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="Open">
-                <button id="graph-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Open this target's node in the knowledge graph explorer (new tab)" disabled>
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open in graph</span>
-                </button>
-                <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the viewer to fill the screen">
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span>
-                </button>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="graph-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Open this target's node in the knowledge graph explorer (new tab)" disabled>
+                    <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open in graph</span>
+                  </button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the viewer to fill the screen">
+                    <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -246,7 +246,11 @@ export function updateTimelineControl(): void {
   setToggleGroup("timeline-mode", state.timeline);
   // The pretty/raw switch is meaningless in the waterfall; disable it while timeline is on.
   setToggleGroupDisabled("view-mode", state.timeline);
-  // The time range only applies to the waterfall; renderWaterfall refreshes the readout when
-  // it draws, but when NOT in timeline mode nothing else does, so disable the picker here.
+  // The time range only applies to the waterfall, so the whole group hides outside timeline mode
+  // (rather than dangling as a disabled empty select in the log view).
+  const timerange = el("log-timerange");
+  if (timerange) timerange.hidden = !state.timeline;
+  // renderWaterfall refreshes the readout when it draws, but when NOT in timeline mode nothing
+  // else does, so reset the picker here.
   if (!state.timeline) updateFocusUI(null);
 }

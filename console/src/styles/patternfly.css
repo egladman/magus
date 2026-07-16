@@ -48,3 +48,7 @@
 /*   ToggleGroup - the Pretty|Raw and Log|Timeline view switches (a real PF segmented control,
  *   replacing the console's old custom sliding toggle). */
 @import "@patternfly/patternfly/components/ToggleGroup/toggle-group.css";
+/*   InputGroup - the filter field + its attached "?" syntax-help control button.
+ *   Divider     - the vertical separator between the clipboard and open/fullscreen action groups. */
+@import "@patternfly/patternfly/components/InputGroup/input-group.css";
+@import "@patternfly/patternfly/components/Divider/divider.css";

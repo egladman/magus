@@ -74,19 +74,19 @@ function setZoom(z: number): void {
   applyZoom();
 }
 
-// zoomSeg builds one control span (a role=button so Pico's button theming never touches it).
-function zoomSeg(key: string, label: string, aria: string): HTMLElement {
-  const s = document.createElement("span");
-  s.className = key === "reset" ? "console-log-zoom__readout" : "console-log-zoom__btn";
-  if (key === "reset") s.id = "console-log-zoom__readout"; // applyZoom updates the percent readout by this id
-  s.dataset.zoom = key;
-  s.textContent = label;
-  // Deliberately NO role="button": Pico themes [role=button] as a solid primary button (blue), the
-  // same trap the switch hit. tabindex keeps it keyboard-focusable and the =/-/0 keys zoom too.
-  s.setAttribute("tabindex", "0");
-  s.setAttribute("aria-label", aria);
-  s.title = aria;
-  return s;
+// zoomSeg builds one control as a real <button>: the -/+ steppers and the percent readout (which
+// doubles as the reset control). Keyboard activation and focus come for free from the button; the
+// status-bar styling in logs.css keeps them plain and dense (no PF button chrome).
+function zoomSeg(key: string, label: string, aria: string): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = key === "reset" ? "console-log-zoom__readout" : "console-log-zoom__btn";
+  if (key === "reset") b.id = "console-log-zoom__readout"; // applyZoom updates the percent readout by this id
+  b.dataset.zoom = key;
+  b.textContent = label;
+  b.setAttribute("aria-label", aria);
+  b.title = aria;
+  return b;
 }
 
 function wireZoom(): void {
@@ -98,6 +98,7 @@ function wireZoom(): void {
     ctl.setAttribute("role", "group");
     ctl.setAttribute("aria-label", "Zoom");
     ctl.append(zoomSeg("out", "-", "Zoom out"), zoomSeg("reset", "100%", "Reset zoom"), zoomSeg("in", "+", "Zoom in"));
+    // Buttons fire click on Enter/Space natively, so a delegated click handler is all we need.
     ctl.addEventListener("click", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-zoom]") as HTMLElement | null;
       if (!t) return;
@@ -105,9 +106,6 @@ function wireZoom(): void {
       if (k === "in") setZoom(zoomCell.get() + ZOOM_STEP);
       else if (k === "out") setZoom(zoomCell.get() - ZOOM_STEP);
       else setZoom(1);
-    });
-    ctl.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); (ev.target as HTMLElement).click(); }
     });
     right.prepend(ctl);
   }

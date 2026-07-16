@@ -59,7 +59,21 @@
 }
 #log-bar .pf-v6-c-toolbar__content { padding-inline: var(--log-pad); }
 #log-bar-id .pf-v6-c-toolbar__content-section { padding-block: 0.45rem 0; align-items: center; min-height: 1.7rem; }
-#log-bar-controls .pf-v6-c-toolbar__content-section { padding-block: 0.4rem 0.5rem; align-items: center; row-gap: 0.45rem; }
+/* The ref strip stays out of the layout until a log loads (setRefIdentity fills #log-ref); an empty
+   bordered pill would otherwise render as a stray hairline "-" in the cold empty state. */
+#log-bar-id:not(:has(.console-log-ref__value:not(:empty))) { display: none; }
+/* The controls row is one dense, wrapping toolbar section: clusters keep together and the gaps are
+   uniform, so a narrow pane wraps cluster-by-cluster instead of exploding into ragged rows. */
+#log-bar-controls .pf-v6-c-toolbar__content-section {
+  padding-block: 0.4rem 0.5rem; align-items: center;
+  column-gap: 0.85rem; row-gap: 0.4rem;
+}
+#log-bar-controls .pf-v6-c-toolbar__group.pf-m-action-group-inline { column-gap: 0.35rem; align-items: center; }
+#log-bar-controls .pf-v6-c-toolbar__item { align-items: center; }
+/* The filter field leads the row and is the one element that grows; every other cluster is sized to
+   its content so they pack densely. */
+#log-filter-item { flex: 1 1 16rem; min-width: 9rem; max-width: 22rem; }
+#log-actions { column-gap: 0.5rem; }
 
 /* Ref identity: the source value as a bordered pill (a distinct little label instead of hyphen-
    delimited text), with a muted "Reference ID:" prefix. */
@@ -73,23 +87,34 @@
 #log-bar .console-log-ref__label { color: var(--pf-t--global--text--color--subtle); font-weight: 400; }
 #log-bar .console-log-ref__label[hidden] { display: none; }
 
-/* The action cluster (#log-actions) pushes to the end of the controls row and wraps cluster-by-
-   cluster (PF action-group). The filter field + its "?" glyph lead the row. */
-#log-bar .pf-v6-c-form-control { width: clamp(11rem, 24vw, 16rem); }
+/* The action cluster (#log-actions) pushes to the end of the controls row (align-end) and wraps
+   cluster-by-cluster (PF action-group). The filter leads the row as a PF input-group: the field
+   fills, the "?" syntax help is its attached control button. */
+#log-filter-item .pf-v6-c-input-group { width: 100%; }
+#log-filter-item .pf-v6-c-form-control { width: 100%; }
+/* The "?" help control: a compact square addon that reads as one unit with the field. */
+.console-log-filter__help { min-width: 1.9rem; padding-inline: 0; font-weight: 700; }
+/* PF sets an explicit display:flex on .pf-v6-c-toolbar__group, which outranks the native [hidden]
+   display:none, so the time-range group needs an id-scoped rule to actually collapse when hidden
+   (it is shown only in timeline mode; render.ts toggles the attribute). */
+#log-timerange[hidden] { display: none; }
 #log-timerange .pf-v6-c-form-control { width: auto; }
 #log-timerange select {
   width: auto; min-height: 1.7rem; padding-block: 0.1rem; font-size: 0.72rem;
 }
 /* Toolbar buttons: compact (pf-m-small) icon + label. .console-render-btn__icon (svg) + .console-render-btn__label (text) are the
    render/JS hooks setBtnLabel/flashBtnLabel touch and the narrow-screen query drops. */
-#log-actions .pf-v6-c-button { font-size: 0.72rem; }
+#log-bar-controls .pf-v6-c-button { font-size: 0.72rem; }
 .console-log-app .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Pressed toolbar toggles (Pause while paused, Fullscreen while on) read as depressed. */
-#log-actions .pf-v6-c-button[aria-pressed="true"]:not(:disabled) {
+#log-bar-controls .pf-v6-c-button[aria-pressed="true"]:not(:disabled) {
   background: color-mix(in srgb, var(--console-accent) 14%, transparent);
   border-color: var(--console-accent);
   color: var(--console-accent);
 }
+/* Vertical separator between the clipboard actions and the open/fullscreen actions. The PF divider
+   inherits its height, so give it an explicit dense height and center it in the row. */
+#log-actions .pf-v6-c-divider.pf-m-vertical { height: 1.4rem; align-self: center; }
 .console-log-focus__window { font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap; }
 .console-log-focus__reset { font-size: 0.68rem; }
 
@@ -97,17 +122,19 @@
    no custom CSS; main.ts/render.ts drive the selected + disabled state. */
 
 /* Zoom control in the status bar's right cluster (by the event count): a compact -/readout/+ that
-   scales the viewer body. Built from spans (NOT <button>, dodging button theming). */
+   scales the viewer body. Real <button>s (keyboard + focus for free), reset to plain status-bar
+   chrome rather than PF button styling since they are a bespoke shell affordance. */
 .console-log-zoom { display: inline-flex; align-items: center; gap: 0.1rem; margin: 0; }
 .console-log-zoom .console-log-zoom__btn, .console-log-zoom .console-log-zoom__readout {
+  appearance: none; border: 0; background: none; margin: 0; font-family: inherit;
   cursor: pointer; color: var(--pf-t--global--text--color--subtle); user-select: none;
   border-radius: var(--pf-t--global--border--radius--small); transition: color 0.12s, background 0.12s;
 }
 .console-log-zoom .console-log-zoom__btn {
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
   width: 1.15rem; height: 1.15rem; font-size: 0.95rem; line-height: 1;
 }
-.console-log-zoom .console-log-zoom__readout { min-width: 2.7rem; text-align: center; font-variant-numeric: tabular-nums; padding: 0 0.15rem; }
+.console-log-zoom .console-log-zoom__readout { min-width: 2.7rem; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.78rem; padding: 0 0.15rem; }
 .console-log-zoom .console-log-zoom__btn:hover, .console-log-zoom .console-log-zoom__readout:hover {
   color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -314,12 +341,13 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-help dd { margin: 0; color: var(--pf-t--global--text--color--subtle); }
 .console-log-help code { font-size: 0.85em; }
 
-/* Below the tool-page breakpoint the toolbar drops its labels and becomes icon-only, so the
-   buttons don't crowd out the filter field (#log-actions, PF buttons). */
+/* Below the tool-page breakpoint the icon-bearing toolbar buttons drop their labels and become
+   icon-only, so they don't crowd out the filter field. Reset (no icon, text-only) keeps its label,
+   so it is excluded by the :has(.pf-m-start) guard. */
 @media (max-width: 900px) {
-  #log-actions .console-render-btn__label { display: none; }
-  #log-actions .pf-v6-c-button { padding-inline: 0.35rem; }
-  #log-actions .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }
+  #log-bar-controls .pf-v6-c-button:has(.pf-m-start) .console-render-btn__label { display: none; }
+  #log-bar-controls .pf-v6-c-button:has(.pf-m-start) { padding-inline: 0.35rem; }
+  #log-bar-controls .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }
 }
 /* On small screens let the filter field grow and stack the two empty-state cards. */
 @media (max-width: 640px) {
