@@ -2,7 +2,7 @@
  *
  * The class-vs-ID convention (PATTERNFLY.md) is: pf-v6-* is the only class vocabulary and app
  * hooks are IDs + data-*. A few shell bits have no PatternFly component to stand in for them - a
- * bottom STATUS BAR (PF has none), a floating settings GEAR position, the connection LIVENESS DOT,
+ * bottom STATUS BAR (PF has none), the settings popover POSITION under the gear, the connection LIVENESS DOT,
  * and viewport-capping the two modal overlays. They live here, ID-scoped, instead of scattered
  * back into console.css. Keep this file tiny; growth is a smell (reach for a pf-v6-u-* utility or a
  * real component first).
@@ -49,12 +49,24 @@
 #console-conn[data-state="connected"][data-health="warn"] { color: var(--console-status-warn); }
 #console-conn[data-state="connected"][data-health="fail"] { color: var(--console-status-queued); }
 
-/* --- Floating settings gear ---------------------------------------------------------------------
- * The gear (a PF control Button, #settings-btn) floats top-right OVER the content, and its popover
- * (a PF Menu, #settings-panel) anchors under it. Only the POSITION is here; the button/menu chrome
- * is PatternFly. #console-tabs reserves matching right room (console.css) so tabs never slide under. */
-#console-actions { position: fixed; top: 0.3rem; right: 0.45rem; z-index: 60; }
-#settings-panel { position: fixed; top: 2.5rem; right: 0.45rem; left: auto; min-width: 15rem; z-index: 60; }
+/* --- Settings popover ---------------------------------------------------------------------------
+ * The gear (a PF plain icon Button, #settings-btn) lives in the title-bar-right control group
+ * (#console-actions, positioned in console.css). Its popover (a PF Menu, #settings-panel) anchors
+ * absolutely UNDER the gear, right-aligned to the group, so it drops straight down from the gear and
+ * stays inside the viewport (the group sits a slim gutter off the right edge). Only the POSITION is
+ * here; the button/menu chrome is PatternFly. */
+#settings-panel {
+  position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
+  width: 17rem; max-width: calc(100vw - 1rem); z-index: 60;
+}
+/* Tighten the horizontal form for a compact popover: PF's default 9.375rem label column leaves a wide
+ * gap in a narrow panel, so shrink it to the label's own width and give the group a small gap. The
+ * label baseline aligns with its control (a select/input/button), reading as clean label -> field rows. */
+#settings-panel .pf-v6-c-menu__content { padding-block: 0.75rem; padding-inline: 0.85rem; }
+#settings-panel .pf-v6-c-form.pf-m-horizontal { --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: auto; }
+#settings-panel .pf-v6-c-form.pf-m-horizontal .pf-v6-c-form__group { align-items: center; grid-column-gap: 0.75rem; }
+#settings-panel .pf-v6-c-form-control,
+#settings-panel #theme-cycle { width: 100%; }
 /* theme.js paints the theme-cycle button's icon span with a bare <svg viewBox> (no width/height),
  * so size it to the button text; the gear's own svg carries explicit dimensions. */
 #theme-cycle .console-shell-themecycle__icon { display: inline-flex; }

@@ -44,6 +44,10 @@ export interface TabStrip {
 function closeIcon(): SVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
+  // Explicit dimensions: PF's close action normally holds a webfont <i> glyph with intrinsic size;
+  // an inline <svg> without width/height collapses to 0x0, so the close X must size itself.
+  svg.setAttribute("width", "12");
+  svg.setAttribute("height", "12");
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("d", "M6 6l12 12M18 6L6 18");

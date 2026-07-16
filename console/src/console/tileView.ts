@@ -241,7 +241,9 @@ export function createTileView(deps: TileDeps): TileView {
       if (treeHasSurface(s.pageId)) continue;
       const item = h("div", "pf-v6-c-card pf-m-clickable pf-m-compact");
       item.dataset.open = s.pageId;
-      // tabindex (not role=button): avoid Pico's [role=button] bleed (white-on-white) until W4.
+      // A real clickable button (role + tabindex + the Enter/Space handler below); Pico's old
+      // [role=button] white-on-white bleed was dropped at the W4 cutover, so this is safe now.
+      item.setAttribute("role", "button");
       item.tabIndex = 0;
       item.setAttribute("aria-label", "Open " + s.label);
       const titleEl = h("div", "pf-v6-c-card__title");

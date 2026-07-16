@@ -145,6 +145,7 @@ body[data-console-fill] > main > .console-render-panel {
    the divider is a real grid track [data-divider] (so it IS the gap, and is a draggable hit box); the
    split container sets no gap. data-dir carries the split axis for the resize cursor at idle. */
 #console-outlet [data-divider] {
+  position: relative; /* positions the centered grip below */
   align-self: stretch;
   justify-self: stretch;
   background: var(--pf-t--global--border--color--default);
@@ -152,8 +153,19 @@ body[data-console-fill] > main > .console-render-panel {
   touch-action: none; /* the pointer drag owns the gesture, no scroll/zoom interference */
 }
 #console-outlet [data-divider][data-dir="col"] { cursor: row-resize; } /* col split -> horizontal divider */
+/* A short centered grip so the divider reads as an intentional draggable handle, not a bare seam. A
+   pseudo-element (not markup) keeps the divider a single class-free grid track; it runs along the
+   divider's axis - a vertical pill on a row split, a horizontal pill on a col split. */
+#console-outlet [data-divider]::after {
+  content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: var(--pf-t--global--text--color--subtle); border-radius: 1px;
+}
+#console-outlet [data-divider][data-dir="row"]::after { width: 2px; height: 1.5rem; }
+#console-outlet [data-divider][data-dir="col"]::after { width: 1.5rem; height: 2px; }
 #console-outlet [data-divider]:hover,
 #console-outlet [data-divider]:active { background: var(--console-accent); }
+#console-outlet [data-divider]:hover::after,
+#console-outlet [data-divider]:active::after { background: var(--pf-t--global--text--color--on-brand--default); }
 /* The focused pane wears a subtle inset ring (only while tiled - tileView sets data-focus on more
    than one pane). A thin overlay outline, offset inward so it reads as a highlight, not a border. */
 #console-outlet [data-pane-id][data-focus] {
@@ -208,9 +220,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    element selectors under them. Styled against PatternFly tokens (not PF component classes). All tab
    controls are role=tab / tabindex spans, so Pico's button theming never applies.
 
-   The title bar: one compact row (NOT the standalone site-header) holding the app mark, the tab strip
-   merges into. There is NO brand mark and NO in-bar buttons - the title bar IS the tab strip, so it
-   reads as an app's tab row, not a site nav. The settings gear FLOATS in the corner (see below). */
+   The title bar: one compact masthead-style row (NOT the standalone site-header) holding the tab strip
+   (flex:1) and a right-aligned control group (#console-actions, the settings gear). There is NO brand
+   mark - the title bar reads as an app's tab row + its trailing action, not a site nav.
+
+   Window-Controls-Overlay: the manifest opts into window-controls-overlay, so when installed as a PWA
+   the OS title-bar buttons overlay this row. Mark the bar itself as the drag region (-webkit-app-region)
+   for the native "grab the title bar to move the window" feel; every interactive child opts back out to
+   no-drag below so tabs and the gear stay clickable. In a normal browser tab app-region is inert, so
+   this is a no-op there. */
 #console-titlebar {
   flex: 0 0 auto;
   display: flex; align-items: stretch;
@@ -221,14 +239,24 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   margin: 0; padding: 0;
   background: var(--pf-t--global--background--color--secondary--default);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  -webkit-app-region: drag; app-region: drag;
 }
+/* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
+   swallows clicks in the installed PWA). The settings popover (#settings-panel) is absolutely
+   positioned out of the flow but still a title-bar descendant, so list it too. */
+#console-titlebar button,
+#console-titlebar [role="tab"],
+#console-titlebar #console-actions,
+#settings-panel { -webkit-app-region: no-drag; app-region: no-drag; }
 
-/* The floating settings gear (a PF control Button, #settings-btn) + its popover (a PF Menu,
-   #settings-panel) are positioned in overrides.css; their chrome is PatternFly (index.html). The old
-   .console-fab / .settings-panel-anchor rules were removed in the W2 shell rebuild. */
+/* The tab strip fills the title bar; the trailing control group sits at the right, on the tab row. */
+#console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
 
-/* The tab strip fills the title bar; the right padding clears the floating gear. */
-#console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; padding-right: 2.4rem; }
+/* Title-bar-right control group: the settings gear (a PF plain icon Button) centered on the tab row,
+   and the positioning context for its popover (#settings-panel, anchored in overrides.css). A slim
+   inline gutter keeps the gear off the window edge / OS controls. */
+#console-actions { flex: 0 0 auto; position: relative; display: flex; align-items: center; padding-inline: 0.35rem; }
+#console-actions > #settings-btn { --pf-v6-c-button--PaddingBlock: 0.25rem; --pf-v6-c-button--PaddingInline: 0.35rem; }
 
 /* W0 SPIKE: the old hand-rolled tab visuals ([role=tablist]/[role=tab]/[data-close]/[data-new],
    ~30 lines) were removed here so the rebuilt PatternFly Tabs (.pf-v6-c-tabs*) render from PF's

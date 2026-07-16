@@ -27,22 +27,24 @@
   <script src="./theme.js"></script>
 </head>
 <!-- The console is a self-contained app, not a page in a site: NO site nav, NO brand mark. The title
-     bar is just the tab strip (console.js fills #console-tabs); the settings gear FLOATS in the corner
-     (#console-actions), not inside a bar; console.js mounts a surface per tab/pane into #console-outlet
-     and swaps the active tab's status bar into the empty #console-statusbar footer. Do NOT put the
-     status-bar ids (#console-conn etc.) in the footer statically - console.js creates them per tab. -->
+     bar (#console-titlebar) is a masthead-style row: the tab strip fills it (console.js fills
+     #console-tabs) and a right-aligned control group (#console-actions) holds the settings gear -
+     the masthead/toolbar idiom, not a floating corner button. console.js mounts a surface per tab/pane
+     into #console-outlet and swaps the active tab's status bar into the empty #console-statusbar footer.
+     Do NOT put the status-bar ids (#console-conn etc.) in the footer statically - console.js creates
+     them per tab. The title bar is a Window-Controls-Overlay drag region (-webkit-app-region, console.css);
+     every interactive child opts back out to no-drag so tabs/gear stay clickable in the installed PWA. -->
 <body data-console-app data-console-fill>
-  <header id="console-titlebar"><div id="console-tabs"></div></header>
-  <main id="console-outlet"></main>
-  <footer id="console-statusbar"></footer>
-
-  <!-- Floating settings: a PatternFly control Button (the gear) pinned to the corner (position in
-       overrides.css), and a PatternFly Menu as its popover. console.js's initConsoleSettings() wires
-       #settings-btn/#settings-panel (open/close + aria-expanded); theme.js wires #theme-cycle inside.
-       The controls keep their ids (#settings-poll/#settings-host/#theme-cycle) and the theme button
-       keeps its .console-shell-themecycle__icon/.console-shell-themecycle__label spans (theme.js paints them). -->
-  <div id="console-actions">
-    <button id="settings-btn" class="pf-v6-c-button pf-m-control" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings">
+  <header id="console-titlebar">
+    <div id="console-tabs"></div>
+    <!-- Title-bar-right control group: a PatternFly plain (borderless) icon Button (the gear) sitting
+         ON the tab row, with a PatternFly Menu as its popover anchored under it (position in
+         overrides.css). console.js's initConsoleSettings() wires #settings-btn/#settings-panel
+         (open/close + aria-expanded); theme.js wires #theme-cycle inside. The controls keep their ids
+         (#settings-poll/#settings-host/#theme-cycle) and the theme button keeps its
+         .console-shell-themecycle__icon/.console-shell-themecycle__label spans (theme.js paints them). -->
+    <div id="console-actions">
+    <button id="settings-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     </button>
     <div class="pf-v6-c-menu" id="settings-panel" hidden aria-label="Settings">
@@ -69,7 +71,10 @@
         </form>
       </div>
     </div>
-  </div>
+    </div>
+  </header>
+  <main id="console-outlet"></main>
+  <footer id="console-statusbar"></footer>
 
   <script type="module" src="./console.js"></script>
 </body>

@@ -40,8 +40,10 @@ export function homePage(surfaces: Launchable[], open: (pageId: string) => void)
         const card = document.createElement("div");
         card.className = "pf-v6-c-card pf-m-clickable pf-m-compact";
         card.dataset.open = s.pageId;
-        // tabindex (not role=button) keeps the card keyboard-reachable without Pico's [role=button]
-        // rule (still loaded until W4) painting it as a white-on-white centered primary button.
+        // A real clickable button: role=button + tabindex make it keyboard-reachable and announce it
+        // as a button; the Enter/Space handler below completes the contract. (Pico's old [role=button]
+        // rule that once painted this white-on-white was dropped at the W4 cutover, so it is safe now.)
+        card.setAttribute("role", "button");
         card.setAttribute("tabindex", "0");
         card.setAttribute("aria-label", "Open " + s.label);
         const titleEl = document.createElement("div");
