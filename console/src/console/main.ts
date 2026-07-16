@@ -49,10 +49,10 @@ function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
 
 // The surfaces the home launcher offers (and the console can open).
 const SURFACES: Launchable[] = [
-  { pageId: "logs", label: "Log viewer", hint: "Read a run's captured output" },
-  { pageId: "graph", label: "Graph explorer", hint: "Explore the knowledge graph" },
+  { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
+  { pageId: "graph", label: "Graph Explorer", hint: "Explore the knowledge graph" },
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
-  { pageId: "activity", label: "Activity", hint: "A history of recent magus actions" },
+  { pageId: "activity", label: "Activity Trail", hint: "A history of recent magus actions" },
 ];
 
 
@@ -323,10 +323,10 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     return ids.includes(pageId);
   }
 
-  register(standaloneSurface({ id: "logs", title: "Log viewer", dir: "logs", bundle: "log-viewer.js", css: "logs.css" }));
+  register(standaloneSurface({ id: "logs", title: "Log Viewer", dir: "logs", bundle: "log-viewer.js", css: "logs.css" }));
   register(standaloneSurface({ id: "dashboard", title: "Dashboard", dir: "dashboard", bundle: "dashboard.js", css: "dashboard.css" }));
-  register(standaloneSurface({ id: "graph", title: "Graph explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
-  register(moduleSurface({ id: "activity", title: "Activity", bundle: "activity/activity.js", css: "logs/logs.css" }));
+  register(standaloneSurface({ id: "graph", title: "Graph Explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
+  register(moduleSurface({ id: "activity", title: "Activity Trail", bundle: "activity/activity.js", css: "logs/logs.css" }));
 
   // App mode: a dedicated single-surface window, opened by the app drawer as index.html?app=<id>. It
   // shows ONE surface with the tab strip hidden (CSS keys on the [data-appmode] root) so an installed

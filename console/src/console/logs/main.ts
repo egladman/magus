@@ -110,9 +110,9 @@ function wireZoom(): void {
     });
     right.prepend(ctl);
   }
-  registerCommand({ id: "logs.zoomIn", label: "Zoom in", group: "Log viewer", run: () => setZoom(zoomCell.get() + ZOOM_STEP) });
-  registerCommand({ id: "logs.zoomOut", label: "Zoom out", group: "Log viewer", run: () => setZoom(zoomCell.get() - ZOOM_STEP) });
-  registerCommand({ id: "logs.zoomReset", label: "Reset zoom", group: "Log viewer", run: () => setZoom(1) });
+  registerCommand({ id: "logs.zoomIn", label: "Zoom in", group: "Log Viewer", run: () => setZoom(zoomCell.get() + ZOOM_STEP) });
+  registerCommand({ id: "logs.zoomOut", label: "Zoom out", group: "Log Viewer", run: () => setZoom(zoomCell.get() - ZOOM_STEP) });
+  registerCommand({ id: "logs.zoomReset", label: "Reset zoom", group: "Log Viewer", run: () => setZoom(1) });
   applyZoom();
 }
 
@@ -142,10 +142,10 @@ function clickControl(id: string): void {
 }
 
 function wireCommands(): void {
-  registerCommand({ id: "logs.filter", label: "Focus filter", group: "Log viewer", run: () => { const f = el("log-filter") || el("log-search"); if (f) f.focus(); } });
-  registerCommand({ id: "logs.raw", label: "Toggle raw / pretty", group: "Log viewer", run: () => flipToggleGroup("view-mode") });
-  registerCommand({ id: "logs.timeline", label: "Toggle timeline / log", group: "Log viewer", run: () => flipToggleGroup("timeline-mode") });
-  registerCommand({ id: "logs.fold", label: "Collapse / expand all", group: "Log viewer", run: () => clickControl("fold-all-btn") });
+  registerCommand({ id: "logs.filter", label: "Focus filter", group: "Log Viewer", run: () => { const f = el("log-filter") || el("log-search"); if (f) f.focus(); } });
+  registerCommand({ id: "logs.raw", label: "Toggle raw / pretty", group: "Log Viewer", run: () => flipToggleGroup("view-mode") });
+  registerCommand({ id: "logs.timeline", label: "Toggle timeline / log", group: "Log Viewer", run: () => flipToggleGroup("timeline-mode") });
+  registerCommand({ id: "logs.fold", label: "Collapse / expand all", group: "Log Viewer", run: () => clickControl("fold-all-btn") });
   installKeybindings(() => mergeKeymap(LOGS_KEYMAP, keymapCell.get()));
 }
 

@@ -18,7 +18,7 @@ import type { PageController, PageModule, SearchProvider } from "./page";
 
 export interface StandaloneSurface {
   id: string; // registry id / pageId, e.g. "logs"
-  title: string; // tab title, e.g. "Log viewer"
+  title: string; // tab title, e.g. "Log Viewer"
   dir: string; // gen/console/<dir>/ holding index.html + the bundle + the css
   bundle: string; // bundle filename that exports activate(), e.g. "log-viewer.js"
   css: string; // page-scoped stylesheet filename, e.g. "logs.css"
@@ -43,7 +43,7 @@ interface BootModule {
 // for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/console/.
 export interface ModuleSurface {
   id: string; // registry id / pageId, e.g. "activity"
-  title: string; // tab title, e.g. "Activity"
+  title: string; // tab title, e.g. "Activity Trail"
   bundle: string; // bundle path under gen/console/ whose activate(host) builds the DOM, e.g. "activity/activity.js"
   css: string; // page-scoped stylesheet path under gen/console/, e.g. "logs/logs.css" (the trail reuses it)
 }
