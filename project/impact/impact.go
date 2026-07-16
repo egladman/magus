@@ -11,10 +11,12 @@
 package impact
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,9 +39,137 @@ type Result struct {
 	AffectedProjects []AffectedProject `json:"affected_projects,omitempty" yaml:"affected_projects,omitempty"`
 	// TestProjectCount is how many affected projects expose at least one test target.
 	TestProjectCount int `json:"test_project_count" yaml:"test_project_count"`
+	// ChangedSymbols is the changed-symbol caller overlay: every symbol defined in a
+	// changed source file, with how widely it is referenced repo-wide. It is what a
+	// plain difftool structurally cannot show - the reach of an edited definition.
+	// Populated by Enrich when a symbol index is loaded; empty (with a Note) otherwise.
+	// Flattened across files and sorted by descending reference count so the
+	// widest-reach change leads.
+	ChangedSymbols []SymbolImpact `json:"changed_symbols,omitempty" yaml:"changed_symbols,omitempty"`
+	// ChangedFileCoverage is the coverage overlay: the observed statement coverage of
+	// each changed file the local coverage profile covers. Empty (with a Note) when no
+	// `magus run coverage` profile is loaded. Go-only and observed, never extracted.
+	ChangedFileCoverage []FileCoverageImpact `json:"changed_file_coverage,omitempty" yaml:"changed_file_coverage,omitempty"`
 	// Notes carries graceful-degradation messages (deferred overlays, missing data).
 	// It never blocks a report; a formatter prints it verbatim.
 	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
+}
+
+// SymbolImpact is one changed symbol's caller spread (and coverage, when observed): the
+// file that defines it, its identity, how many references and distinct referencing files
+// the symbol index recorded, and its covered-statement ratio if a coverage profile is
+// loaded.
+type SymbolImpact struct {
+	File      string    `json:"file"               yaml:"file"`
+	Symbol    string    `json:"symbol"             yaml:"symbol"`
+	Label     string    `json:"label,omitempty"    yaml:"label,omitempty"`
+	RefCount  int       `json:"ref_count"          yaml:"ref_count"`
+	FileCount int       `json:"file_count"         yaml:"file_count"`
+	Coverage  *Coverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
+}
+
+// FileCoverageImpact is one changed file's observed file-level coverage.
+type FileCoverageImpact struct {
+	File     string   `json:"file"     yaml:"file"`
+	Coverage Coverage `json:"coverage" yaml:"coverage"`
+}
+
+// Coverage is a covered/total statement tally and its ratio (0..1), mirrored from the
+// knowledge graph's @coverage overlay so the impact report carries the raw counts.
+type Coverage struct {
+	Ratio   float64 `json:"ratio"         yaml:"ratio"`
+	Covered int     `json:"covered_stmts" yaml:"covered_stmts"`
+	Total   int     `json:"total_stmts"   yaml:"total_stmts"`
+}
+
+// SymbolStore is the narrow knowledge-graph surface the caller and coverage overlays
+// read: whether any symbol index is loaded at all, and the per-file overlay facts. The
+// concrete *knowledge.Graph satisfies it; a test supplies a fake. Keeping it an
+// interface (rather than taking *knowledge.Graph directly) mirrors how Compute is framed
+// against a narrow handle, so a future console or HTTP caller can enrich from its own
+// store without pulling in the CLI's graph loader.
+type SymbolStore interface {
+	// HasSymbols reports whether the graph holds any ingested code symbol. False means
+	// no SCIP index was ever built, so both overlays are unavailable (not merely empty).
+	HasSymbols() bool
+	// FileFacts returns the symbols defined in a workspace-relative file with their
+	// reference spread and observed coverage. The zero value means the file has no
+	// indexed symbol (a non-code file, or one absent from the index).
+	FileFacts(relPath string) knowledge.FileFacts
+}
+
+// Enrich folds the changed-symbol caller and coverage overlays onto res, reading the
+// loaded knowledge graph. It is the ENRICHMENT step the plan keeps out of the lean
+// Compute: Compute runs against the workspace repository handle, while these overlays
+// need the heavier knowledge store (a prior symbol index and/or `magus run coverage`),
+// which the caller loads and passes here.
+//
+// It is deliberately additive and never fails: the blast radius Compute produced is left
+// untouched, overlays are appended, and absent data degrades to a Note rather than an
+// error. A nil store (the caller could not load a graph) or nil res is a no-op.
+func Enrich(res *Result, store SymbolStore) {
+	if res == nil || store == nil {
+		return
+	}
+	if !store.HasSymbols() {
+		res.Notes = append(res.Notes,
+			"no symbol index loaded: changed-symbol callers and coverage overlays are unavailable (build it with `magus graph build`)")
+		return
+	}
+
+	coverageSeen := false
+	for _, f := range res.ChangedFiles {
+		ff := store.FileFacts(f)
+		if ff.Coverage != nil {
+			res.ChangedFileCoverage = append(res.ChangedFileCoverage, FileCoverageImpact{
+				File:     f,
+				Coverage: toCoverage(ff.Coverage),
+			})
+			coverageSeen = true
+		}
+		for _, s := range ff.Symbols {
+			si := SymbolImpact{
+				File:      f,
+				Symbol:    s.ID,
+				Label:     s.Label,
+				RefCount:  s.RefCount,
+				FileCount: s.FileCount,
+			}
+			if s.Coverage != nil {
+				c := toCoverage(s.Coverage)
+				si.Coverage = &c
+				coverageSeen = true
+			}
+			res.ChangedSymbols = append(res.ChangedSymbols, si)
+		}
+	}
+
+	// Flatten-and-sort by descending reference count (widest blast radius first), then
+	// file and symbol id for a deterministic tie-break.
+	slices.SortFunc(res.ChangedSymbols, func(a, b SymbolImpact) int {
+		if c := cmp.Compare(b.RefCount, a.RefCount); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.File, b.File); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Symbol, b.Symbol)
+	})
+
+	if len(res.ChangedSymbols) == 0 {
+		res.Notes = append(res.Notes,
+			"symbol index loaded, but no changed file defines an indexed symbol (callers overlay empty)")
+	}
+	if !coverageSeen {
+		res.Notes = append(res.Notes,
+			"no coverage data on changed files (run `magus run coverage` to populate it)")
+	}
+}
+
+// toCoverage narrows the knowledge-graph coverage facts to the impact report's own
+// Coverage type, so the impact JSON does not leak the internal graph type.
+func toCoverage(c *knowledge.CoverageFacts) Coverage {
+	return Coverage{Ratio: c.Ratio, Covered: c.Covered, Total: c.Total}
 }
 
 // AffectedProject is one project in the blast radius.

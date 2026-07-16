@@ -516,6 +516,18 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
+	// Enrich with the differentiated overlays (changed-symbol callers, coverage on
+	// changed code). These read the heavier knowledge store - a prior symbol index and,
+	// for coverage, a prior `magus run coverage` - not the lean workspace handle Compute
+	// runs on, so load the graph (with the lazily-merged @symbols/@coverage shards) here
+	// and hand it to the enrichment step. Best-effort: a graph that fails to load leaves
+	// the blast radius intact and records a Note rather than failing the whole report.
+	if g, gerr := loadKnowledgeGraph(ctx, root, false /*refresh*/, false /*global*/, true /*includeSymbols*/); gerr == nil {
+		impact.Enrich(out, g)
+	} else {
+		out.Notes = append(out.Notes, "changed-symbol and coverage overlays skipped: "+gerr.Error())
+	}
+
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
@@ -593,12 +605,70 @@ func printImpactText(out *impact.Result) error {
 		fmt.Printf("\n%s changed outside any project (seeded nothing).\n", countLabel(outside, "file", "files"))
 	}
 
+	printImpactOverlays(out)
+
 	for _, n := range out.Notes {
 		fmt.Printf("\nnote: %s\n", n)
 	}
 
 	fmt.Printf("\nRun the full pipeline over this set with: magus affected ci\n")
 	return nil
+}
+
+// impactSymbolCap bounds how many changed symbols the caller overlay lists in text
+// mode; the widest-reach symbols lead (the list is sorted by descending caller count),
+// so a large changeset stays readable while the full set is one -o json away.
+const impactSymbolCap = 20
+
+// printImpactOverlays renders the differentiated overlay sections - changed-symbol
+// callers and coverage on changed code - beneath the blast radius. Each is additive and
+// self-suppressing: an overlay with no data prints nothing here (its honest output is
+// the Note the enrichment appended). Same house style as the blast radius: counts before
+// lists, verbs not arrows, plain ASCII.
+func printImpactOverlays(out *impact.Result) {
+	if len(out.ChangedSymbols) > 0 {
+		files := map[string]struct{}{}
+		for _, s := range out.ChangedSymbols {
+			files[s.File] = struct{}{}
+		}
+		fmt.Printf("\nChanged-symbol callers (%s across %s):\n",
+			countLabel(len(out.ChangedSymbols), "symbol", "symbols"),
+			countLabel(len(files), "changed file", "changed files"))
+		shown := out.ChangedSymbols
+		if len(shown) > impactSymbolCap {
+			shown = shown[:impactSymbolCap]
+		}
+		for _, s := range shown {
+			name := s.Label
+			if name == "" {
+				name = s.Symbol
+			}
+			line := fmt.Sprintf("  %s (%s): %s across %s", name, s.File,
+				countLabel(s.RefCount, "caller", "callers"),
+				countLabel(s.FileCount, "file", "files"))
+			if s.Coverage != nil {
+				line += fmt.Sprintf(" [coverage %s]", impactPct(s.Coverage.Ratio))
+			}
+			fmt.Println(line)
+		}
+		if extra := len(out.ChangedSymbols) - len(shown); extra > 0 {
+			fmt.Printf("  ... and %d more\n", extra)
+		}
+	}
+
+	if len(out.ChangedFileCoverage) > 0 {
+		fmt.Printf("\nCoverage on changed files (%s):\n",
+			countLabel(len(out.ChangedFileCoverage), "file", "files"))
+		for _, c := range out.ChangedFileCoverage {
+			fmt.Printf("  %s: %s (%d/%d stmts)\n", c.File,
+				impactPct(c.Coverage.Ratio), c.Coverage.Covered, c.Coverage.Total)
+		}
+	}
+}
+
+// impactPct renders a 0..1 coverage ratio as a whole-percent string ("80%").
+func impactPct(ratio float64) string {
+	return fmt.Sprintf("%.0f%%", ratio*100)
 }
 
 // countLabel formats n with a singular/plural noun ("1 file", "3 files").
