@@ -109,7 +109,8 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     const list = document.createElement("ul");
     list.className = "pf-v6-c-menu__list";
     list.setAttribute("role", "menu");
-    list.append(mkItem("Open", () => open(s.pageId)), mkItem("Open in a new window", () => openSurfaceWindow(s.pageId)));
+    // Clicking the card body already opens it in a tab, so the menu only carries the distinct action.
+    list.append(mkItem("Open in a new window", () => openSurfaceWindow(s.pageId)));
     const menuContent = document.createElement("div");
     menuContent.className = "pf-v6-c-menu__content";
     menuContent.append(list);

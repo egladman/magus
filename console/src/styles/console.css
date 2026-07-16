@@ -327,7 +327,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    the SECONDARY page token (the PF "grey page" behind primary-white cards) so the clickable Cards keep
    their contrast in both themes. The content stays capped at 44rem, left-aligned, so the full-bleed
    background reads as a real page. */
-#console-outlet [data-surface="home"] { position: relative; padding: 2.5rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); }
+/* Fill the outlet so the launcher's background covers the whole panel - otherwise the surface stops
+   at its content height and the page shows through below it, reading as two different backgrounds. */
+#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 100%; padding: 2.5rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); }
 
 /* Launch-the-demo affordance: a quiet icon pill in the launcher's bottom-right that expands to show its
    label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. */
