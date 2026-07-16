@@ -28,7 +28,7 @@
 
 :root { --log-pad: clamp(0.75rem, 2vw, 1.1rem); }
 
-/* --- Panel frame (shared: activity builds `.console-render-panel .activity-app`) -----------------------------
+/* --- Panel frame (shared: the activity trail builds a `.console-render-panel` too) -----------------------------
    A bordered card that fills its console pane: a toolbar/header on top, a scrolling body beneath.
    In the console the fill height is driven by console.css (the pane > main > .console-render-panel chain); the
    height calc below is a standalone fallback. */

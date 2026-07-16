@@ -172,12 +172,12 @@ body[data-console-fill] > main > .console-render-panel {
    matching the log viewer's centered empty state. The prompt's base style is already
    position:absolute; inset:0; flex-centered - it just needs a full-height positioned
    ancestor, which the stage now provides. */
-body[data-console-fill] .console-graph-app:has(.graph-empty-state:not([hidden])) .console-graph-stage {
+body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden])) .console-graph-stage {
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
-body[data-console-fill] .console-graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state {
+body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden])) #graph-empty-state {
   position: absolute;
   inset: 0;
   min-height: 0;

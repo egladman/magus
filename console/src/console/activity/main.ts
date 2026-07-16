@@ -42,14 +42,14 @@ interface Refs {
 // `.console-render-empty[hidden] { display: none }` toggle rule (PF's EmptyState is display:flex,
 // which would otherwise beat the hidden attribute).
 function buildScaffold(host: HTMLElement): Refs {
-  const panel = h("section", "console-render-panel activity-app");
+  const panel = h("section", "console-render-panel");
 
   // Toolbar: the trail title on the left, the connection note + Refresh button aligned to the right.
   const bar = h("header", "pf-v6-c-toolbar");
   const idContent = h("div", "pf-v6-c-toolbar__content");
   const idSection = h("div", "pf-v6-c-toolbar__content-section");
   const idItem = h("div", "pf-v6-c-toolbar__item");
-  idItem.append(h("span", "name", "Activity trail"));
+  idItem.append(h("span", undefined, "Activity trail"));
   idSection.append(idItem);
   idContent.append(idSection);
 
@@ -57,7 +57,7 @@ function buildScaffold(host: HTMLElement): Refs {
   const ctrlSection = h("div", "pf-v6-c-toolbar__content-section");
   const actionGroup = h("div", "pf-v6-c-toolbar__group pf-m-action-group pf-m-align-end");
   const connItem = h("div", "pf-v6-c-toolbar__item");
-  const conn = h("span", "activity-conn");
+  const conn = h("span");
   connItem.append(conn);
   const btnItem = h("div", "pf-v6-c-toolbar__item");
   const refresh = h("button", "pf-v6-c-button pf-m-secondary pf-m-small") as HTMLButtonElement;
