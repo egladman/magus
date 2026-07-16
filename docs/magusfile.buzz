@@ -10,8 +10,9 @@ import "http";
 // gopherbuzz's build. The path import binds its targets as cross-project handles
 // (gopherbuzz.build), and folds gopherbuzz into this project's affected set.
 import "project/../gopherbuzz" as gopherbuzz;
-// The static site generator, a sibling module; the targets call its entry points.
-import "render";
+// The static site generator, a sibling module. Aliased so it does not collide with the
+// `render` target below: a same-name target shadows the import and nulls its members.
+import "render" as renderer;
 
 // magusfile binds this file's own exported targets (generate, render, ci, ...); ts adds
 // the TypeScript spell so the client bundles under src/ are symbol-capable - its `scip`
@@ -172,16 +173,16 @@ export fun generate(args: [str]) > void {
     magus.needs(changelog_generate);
     // Regenerate the JS proto client from ../proto BEFORE the bundles that import it.
     generateProtoClient();
-    final site = render.site_render(ROOT, DOCS, BLOG, OUT);
+    final site = renderer.site_render(ROOT, DOCS, BLOG, OUT);
     generateJsBundles();
     // Written here, not inside site_render(): generateJsBundles() (just above)
     // writes gen/assets/mermaid.js and gen/assets/hljs.js, so the manifest can
     // only cover every served asset once both have landed.
-    render.writeSiteManifest(site);
+    renderer.writeSiteManifest(site);
     if (magus.has_charm("rw")) {
         // Record this build's URLs in the append-only ledger the abandoned-link gate
         // checks against - only under rw, so a checking render never mutates.
-        render.updateUrlLock(site);
+        renderer.updateUrlLock(site);
         return;
     }
     if (clean_before and vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md"] + CONTENT)) {
@@ -267,5 +268,5 @@ export fun build_hljs(args: [str]) > void {
 // lets render.buzz's flat imports (render_text, render_html, ...) resolve, since
 // they are looked up relative to this project's dir, not the workspace root.
 export fun render(args: [str]) > void {
-    render.site_render(ROOT, DOCS, BLOG, OUT);
+    renderer.site_render(ROOT, DOCS, BLOG, OUT);
 }

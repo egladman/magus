@@ -179,6 +179,39 @@ func spellImportNames(src string) []string {
 	return handles
 }
 
+// importBoundNames maps each import's bound namespace identifier to its path. A flat
+// import (`as _`) binds no name; an alias binds itself; a plain import binds the path's
+// last segment. Returns nil on a parse error (Exec re-parses and reports it).
+func importBoundNames(src string) map[string]string {
+	prog, err := buzz.ParseEmbedded(src)
+	if err != nil {
+		return nil
+	}
+	names := map[string]string{}
+	for _, stmt := range prog.Stmts {
+		imp, ok := stmt.(*ast.ImportStmt)
+		if !ok || imp.Alias == "_" {
+			continue
+		}
+		bound := imp.Alias
+		if bound == "" {
+			bound = imp.Path
+			if i := strings.LastIndex(bound, "/"); i >= 0 {
+				bound = bound[i+1:]
+			}
+		}
+		names[bound] = imp.Path
+	}
+	return names
+}
+
+// importTargetCollisionErr reports a target whose name shadows a same-named import,
+// which makes the module read null on member access.
+func importTargetCollisionErr(name, importPath string) error {
+	return fmt.Errorf("magusfile: target %q shadows the module import %q, so %s.<member> "+
+		"reads null; rename the target or alias the import", name, importPath, name)
+}
+
 // runBuzz executes src on a fresh Buzz session and invokes target.
 func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) error {
 	// Carry the target's directory on the context instead of os.Chdir-ing the whole
@@ -292,6 +325,8 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		buzzHostBindingsFn(ctx, buzzSess, targetMap, exportVals, parseMode)
 	}
 
+	// Import names across all the project's magusfiles, to catch a target that shadows one.
+	importNames := map[string]string{}
 	for _, path := range src.Files {
 		// rel names the offending file relative to its project dir, so a magusfiles/
 		// directory (several files) is unambiguous; the project itself is already in
@@ -307,6 +342,9 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 			return nil, nil, fmt.Errorf("magusfile: read %s: %w", rel, err)
 		}
 		code := string(data)
+		for name, importPath := range importBoundNames(code) {
+			importNames[name] = importPath
+		}
 		// Validate spell handles before Exec: an unknown `magus/spell/<handle>`
 		// resolves to nothing (gopherbuzz skips an unresolved import) and would
 		// otherwise surface much later as a disconnected "undefined" error. Fail fast,
@@ -340,6 +378,11 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		val := exports[name]
 		if !val.IsFun() {
 			continue
+		}
+		// A target that shadows a same-named import makes the module read null; fail at load.
+		if importPath, clash := importNames[name]; clash {
+			_ = buzzSess.Close()
+			return nil, nil, importTargetCollisionErr(name, importPath)
 		}
 		key := norm.NormalizeTargetName(name)
 		if prev, dup := seen[key]; dup {

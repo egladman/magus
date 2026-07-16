@@ -59,6 +59,23 @@ export fun db_migrate(args: [str]) > void {
 	assert.Equal(t, "db:migrate", string(got))
 }
 
+// TestRunImportTargetCollision verifies a target whose name collides with an imported
+// module's bound name fails at load with a clear shadow error, not a silent null when
+// the target later reads a member off the shadowed module.
+func TestRunImportTargetCollision(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs" as render;
+export fun render(args: [str]) > void {
+    render.writeFile("ran", "x");
+}
+`)
+	err := runTarget(t, dir, "render")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `target "render" shadows the module import "fs"`)
+}
+
 // TestRunImportsMagusfilesSibling verifies a magusfile resolves a plain
 // `import "<name>"` against the project's magusfiles/ directory (magus's
 // override of gopherbuzz's default search paths). The helper lives in a
