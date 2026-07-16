@@ -321,6 +321,20 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   register(standaloneSurface({ id: "graph", title: "Graph explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
   register(moduleSurface({ id: "activity", title: "Activity", bundle: "activity/activity.js", css: "logs/logs.css" }));
 
+  // App mode: a dedicated single-surface window, opened by the app drawer as index.html?app=<id>. It
+  // shows ONE surface with the tab strip hidden (CSS keys on the [data-appmode] root) so an installed
+  // PWA popup reads as a native app window. It mounts the surface DIRECTLY, bypassing the persisted
+  // workspace, so a dedicated window never disturbs the main console's saved tabs. Unknown/absent param
+  // falls through to the normal restore below.
+  const launchApp = new URLSearchParams(location.search).get("app");
+  const appSurface = launchApp ? SURFACES.find((s) => s.pageId === launchApp) : undefined;
+  if (appSurface && registry.has(appSurface.pageId)) {
+    document.documentElement.dataset.appmode = appSurface.pageId;
+    document.title = appSurface.label + " - magus";
+    mount({ id: "app-" + appSurface.pageId, pageId: appSurface.pageId, title: appSurface.label });
+    return;
+  }
+
   // Restore the persisted workspace: the tab strip already renders every saved tab (it binds to ws);
   // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount
   // lazily on first selection. Show the launcher empty state if the workspace is empty.

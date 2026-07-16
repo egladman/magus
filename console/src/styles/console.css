@@ -332,6 +332,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-surface="home"] > p { max-width: 44rem; margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 #console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 52rem; }
 
+/* App mode: a dedicated single-surface window (index.html?app=<id>). The tab strip is meaningless
+   there - the window IS the app - so hide it; the title bar keeps just its right-aligned actions
+   (app drawer, reference, settings), reading as native chrome. main.ts sets data-appmode on the root. */
+:root[data-appmode] #console-tabs { display: none; }
+
 /* Launcher cards: taller than a default PF card, an accent-tinted glyph tile up top, a lift on
    hover/focus. The card shell stays PF (pf-v6-c-card pf-m-clickable); these rules add the icon slot
    and the taller, more inviting proportions the compact default did not give. */

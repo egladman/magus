@@ -1,8 +1,9 @@
-// app-menu.ts - the title-bar Applications menu: a PatternFly Menu popover that links back to the
-// sibling magus web apps (the documentation site and the playground). It mirrors the settings gear's
-// popover wiring (open/close, aria-expanded, click-outside, Escape, focus return) so the two title-bar
-// popovers behave identically. No-ops without the #console-appmenu-btn / #console-appmenu markup. The
-// menu items are plain links, so selecting one navigates to that app; this only manages visibility+a11y.
+// app-menu.ts - the title-bar Applications menu: the console's app drawer. It opens any console
+// surface (log viewer, graph, dashboard, activity) in its OWN dedicated window - a URL-bar-less popup
+// that boots the console in single-surface "app mode" (index.html?app=<id>, handled in main.ts), so an
+// installed PWA reads it as a native app window. It also links back to the documentation site. It
+// mirrors the settings gear's popover wiring (open/close, aria-expanded, click-outside, Escape, focus
+// return) so the two title-bar popovers behave identically. No-ops without the markup.
 export function initAppMenu(): void {
   const btn = document.getElementById("console-appmenu-btn");
   const panel = document.getElementById("console-appmenu");
@@ -20,6 +21,21 @@ export function initAppMenu(): void {
     if (v) panel.querySelector<HTMLElement>("a, button")?.focus();
     else if (restoreFocus) btn.focus();
   };
+
+  // Each [data-app-window] item opens that surface in its own window. "popup" strips the tab/URL chrome
+  // in a browser; an installed PWA promotes it to a standalone app window. A stable per-surface window
+  // name means re-picking the same app focuses its existing window instead of stacking duplicates. The
+  // drawer closes once the window is requested (a menu item does not navigate this document away).
+  for (const item of panel.querySelectorAll<HTMLElement>("[data-app-window]")) {
+    item.addEventListener("click", (e) => {
+      e.preventDefault();
+      const id = item.dataset.appWindow;
+      if (!id) return;
+      const url = location.pathname + "?app=" + encodeURIComponent(id);
+      window.open(url, "magus-app-" + id, "popup,width=1180,height=800");
+      setOpen(false, true);
+    });
+  }
 
   btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
   document.addEventListener("click", (e) => {
