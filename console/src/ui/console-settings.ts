@@ -37,7 +37,15 @@ export function initConsoleSettings(): void {
     panel.hidden = !open;
     btn.setAttribute("aria-expanded", open ? "true" : "false");
   };
-  const setOpen = (v: boolean): void => { open = v; render(); };
+  // Focus management for the popover: opening moves focus to the first control so a keyboard
+  // user lands inside the panel; closing (Escape or the gear) returns focus to the gear. A
+  // close from a click outside leaves focus where the click put it.
+  const setOpen = (v: boolean, restoreFocus = false): void => {
+    open = v;
+    render();
+    if (v) (panel.querySelector<HTMLElement>("select, input, button"))?.focus();
+    else if (restoreFocus) btn.focus();
+  };
 
   btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
   // A click anywhere outside the panel (and not on the gear) closes it.
@@ -48,7 +56,7 @@ export function initConsoleSettings(): void {
     setOpen(false);
   });
   document.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape" && open) setOpen(false);
+    if (e.key === "Escape" && open) setOpen(false, true);
   });
 
   render();

@@ -98,9 +98,22 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
       label.textContent = v.title;
       link.append(label);
       link.addEventListener("click", () => select(v.id));
-      // Roving keyboard: Enter/Space activate, so a keyboard user can drive the strip.
+      // Roving keyboard (WAI-ARIA tablist): Enter/Space activate; Left/Right move focus between
+      // tabs, Home/End jump to the ends. Focus follows the arrow but activation stays on
+      // Enter/Space/click, so arrowing past tabs does not thrash the outlet.
       link.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(v.id); }
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(v.id); return; }
+        if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight" && ev.key !== "Home" && ev.key !== "End") return;
+        const tabs = [...list.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+        const here = tabs.indexOf(link);
+        if (here < 0) return;
+        ev.preventDefault();
+        let next = here;
+        if (ev.key === "ArrowLeft") next = (here - 1 + tabs.length) % tabs.length;
+        else if (ev.key === "ArrowRight") next = (here + 1) % tabs.length;
+        else if (ev.key === "Home") next = 0;
+        else if (ev.key === "End") next = tabs.length - 1;
+        tabs[next]?.focus();
       });
 
       // The close: PF renders it as a plain button inside __item-action; the icon sits in __item-action-icon.
