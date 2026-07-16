@@ -341,17 +341,17 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-help dd { margin: 0; color: var(--pf-t--global--text--color--subtle); }
 .console-log-help code { font-size: 0.85em; }
 
-/* Below the tool-page breakpoint the icon-bearing toolbar buttons drop their labels and become
-   icon-only, so they don't crowd out the filter field. Reset (no icon, text-only) keeps its label,
-   so it is excluded by the :has(.pf-m-start) guard. */
-@media (max-width: 900px) {
-  #log-bar-controls .pf-v6-c-button:has(.pf-m-start) .console-render-btn__label { display: none; }
-  #log-bar-controls .pf-v6-c-button:has(.pf-m-start) { padding-inline: 0.35rem; }
-  #log-bar-controls .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }
-}
-/* On small screens let the filter field grow and stack the two empty-state cards. */
-@media (max-width: 640px) {
-  #log-bar .pf-v6-c-form-control { width: 100%; }
+/* Responsive collapse is PatternFly's own: the secondary controls sit in a pf-m-toggle-group
+   pf-m-show-on-2xl (scaffold.html), so below 2xl PF shows the kebab toggle and wireToolbarOverflow()
+   (../toolbar.ts) moves them into the #log-bar-controls __expandable-content dropdown; at 2xl+ they
+   sit inline and hug the end (pf-m-align-end-on-2xl). No bespoke label-dropping media queries. The two
+   rules below only tidy the dropdown: a stacked action group has no use for the vertical clipboard/
+   open divider, and the buttons read better full width. */
+#log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-divider.pf-m-vertical { display: none; }
+#log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-button { justify-content: center; }
+
+/* Stack the two empty-state cards on a narrow viewport (content layout, not the toolbar). */
+@media (max-width: 40rem) {
   [data-empty-ways] { grid-template-columns: 1fr; }
 }
 

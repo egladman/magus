@@ -31,6 +31,7 @@ import { LAYERED_MAX, layoutLayered } from "./layout.js";
 import { toMermaid } from "./mermaid.js";
 import { detectFlavor, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
+import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
@@ -2325,6 +2326,11 @@ function finishInteractiveSetup() {
 export async function activate() {
   resolveDom();
   readTheme();
+
+  // Collapse the stage tools behind the PF toolbar kebab on narrow viewports (the shared
+  // responsive-toolbar pattern the log viewer uses too). Wired before any early return so it
+  // works in the live/empty states as well.
+  wireToolbarOverflow();
 
   // Register file-open listeners before any early return so the installed PWA
   // can open a .json file even when the demo graph fails to load (no #data/#src

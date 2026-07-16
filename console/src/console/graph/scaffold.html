@@ -159,13 +159,39 @@
 
       <div class="console-graph-stage">
         <div id="live-disconnect-banner" class="console-graph-live__banner" hidden role="alert"></div>
-        <div class="console-graph-stage__tools">
-          <span id="live-badge" class="pf-v6-c-label pf-m-blue pf-m-compact" hidden aria-live="polite"><span class="pf-v6-c-label__content"></span></span>
-          <span id="snapshot-badge" class="pf-v6-c-label pf-m-grey pf-m-compact" hidden aria-live="polite"><span class="pf-v6-c-label__content"></span></span>
-          <button id="fit-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Zoom to fit the whole graph (or the current matches)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fit</span></button>
-          <button id="open-file-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open file</span></button>
-          <button id="copy-mermaid-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first."><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy as Mermaid</span></button>
-          <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span></button>
+        <!-- Stage tools: a RESPONSIVE PatternFly Toolbar overlaid on the canvas, collapsing the SAME
+             way as the log viewer (shared ../toolbar.ts). The Fit / Open file / Copy as Mermaid /
+             Fullscreen actions sit in a pf-m-toggle-group pf-m-show-on-lg: below lg they fold behind
+             the single kebab toggle into the __expandable-content dropdown; at lg+ they sit inline.
+             The provenance badges (live/snapshot, usually hidden) stay put. -->
+        <div class="pf-v6-c-toolbar console-graph-stage__tools">
+          <div class="pf-v6-c-toolbar__content">
+            <div class="pf-v6-c-toolbar__content-section">
+              <span id="live-badge" class="pf-v6-c-label pf-m-blue pf-m-compact" hidden aria-live="polite"><span class="pf-v6-c-label__content"></span></span>
+              <span id="snapshot-badge" class="pf-v6-c-label pf-m-grey pf-m-compact" hidden aria-live="polite"><span class="pf-v6-c-label__content"></span></span>
+              <div class="pf-v6-c-toolbar__group pf-m-toggle-group pf-m-show-on-lg" data-overflow-group="graphtools">
+                <div class="pf-v6-c-toolbar__toggle">
+                  <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="Stage tools" title="Fit, open a graph file, copy as Mermaid, fullscreen">
+                    <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
+                  </button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="fit-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Zoom to fit the whole graph (or the current matches)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fit</span></button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="open-file-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open file</span></button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="copy-mermaid-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first."><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy as Mermaid</span></button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span></button>
+                </div>
+              </div>
+            </div>
+            <!-- Expandable dropdown for the collapsed tools; ../toolbar.ts moves them here below lg. -->
+            <div class="pf-v6-c-toolbar__expandable-content" data-overflow-panel="graphtools"></div>
+          </div>
         </div>
         <!-- Legend toggle: only shown on mobile (CSS), where the legend is collapsed
              by default so it doesn't cover the graph. Desktop keeps the legend open. -->

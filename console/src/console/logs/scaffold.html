@@ -1,12 +1,16 @@
 <main>
     <section class="console-render-panel console-log-app">
-      <!-- File/query bar: one dense PatternFly Toolbar. The ref identity strip (#log-bar-id)
-           collapses until a log loads; the controls row (#log-bar-controls) is a single
-           toolbar content-section that wraps cluster-by-cluster. Left: the filter field as a PF
-           input-group with the "?" syntax help as its attached control button. Middle: the view
-           controls (Pause, the Log|Timeline + Pretty|Raw ToggleGroups, Collapse all) and the
-           timeline-only time-range group. Right (align-end): the clipboard actions and, past a
-           vertical divider, the open/fullscreen actions. -->
+      <!-- File/query bar: one dense, RESPONSIVE PatternFly Toolbar. The ref identity strip
+           (#log-bar-id) collapses until a log loads. The controls row (#log-bar-controls) keeps the
+           filter field always visible; every secondary control (Pause, the view ToggleGroups,
+           Collapse all, the time range, and the clipboard/open/fullscreen actions) lives in a PF
+           responsive toggle-group (pf-m-toggle-group pf-m-show-on-2xl): below 2xl they collapse behind
+           the single kebab toggle into the __expandable-content dropdown, at 2xl+ they sit inline and
+           hug the end (pf-m-align-end-on-2xl). 2xl (not a lower stop) because this dense control set
+           needs ~1350px to sit on ONE row - a lower breakpoint would wrap it into ragged rows, the very
+           jank we are removing; so it is a clean single row OR a clean kebab, never ragged. The DOM move
+           + expand is the shared wireToolbarOverflow() (../toolbar.ts), so the graph explorer collapses
+           the SAME way with no duplicated breakpoints. -->
       <header class="pf-v6-c-toolbar" id="log-bar">
         <div class="pf-v6-c-toolbar__content" id="log-bar-id">
           <div class="pf-v6-c-toolbar__content-section">
@@ -18,7 +22,8 @@
         </div>
         <div class="pf-v6-c-toolbar__content" id="log-bar-controls">
           <div class="pf-v6-c-toolbar__content-section">
-            <!-- Filter field + attached "?" help control (PF input-group). -->
+            <!-- Filter field + attached "?" help control (PF input-group). The primary control: stays
+                 inline at every width and fills the row on a phone. -->
             <div class="pf-v6-c-toolbar__item" id="log-filter-item">
               <div class="pf-v6-c-input-group">
                 <div class="pf-v6-c-input-group__item pf-m-fill">
@@ -33,6 +38,16 @@
                 </div>
               </div>
             </div>
+
+            <!-- Responsive toggle-group: the secondary controls. wireToolbarOverflow() moves these
+                 between here (inline, 2xl+) and the data-overflow-panel="logbar" dropdown (below 2xl);
+                 PF's pf-m-show-on-2xl shows the kebab / reveals them inline at the same breakpoint. -->
+            <div class="pf-v6-c-toolbar__group pf-m-toggle-group pf-m-show-on-2xl pf-m-align-end-on-2xl" data-overflow-group="logbar">
+              <div class="pf-v6-c-toolbar__toggle">
+                <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="More log controls" title="Show the view, time range, and clipboard/open controls">
+                  <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
+                </button>
+              </div>
 
             <!-- View controls: Pause (toggle), the Log|Timeline and Pretty|Raw ToggleGroups, and
                  Collapse all. Grouped so they wrap together, not mid-cluster. -->
@@ -98,9 +113,10 @@
               </div>
             </div>
 
-            <!-- Right-aligned action cluster (align-end): the clipboard actions, a vertical divider,
-                 then the open/fullscreen actions. Each is a PF action group so it wraps as a chunk. -->
-            <div class="pf-v6-c-toolbar__group pf-m-action-group pf-m-align-end" id="log-actions">
+            <!-- Action cluster: the clipboard actions, a vertical divider, then the open/fullscreen
+                 actions. Each is a PF action group so it wraps as a chunk. End-alignment is on the
+                 enclosing toggle-group (pf-m-align-end-on-xl), so this group carries none of its own. -->
+            <div class="pf-v6-c-toolbar__group pf-m-action-group" id="log-actions">
               <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="Clipboard">
                 <div class="pf-v6-c-toolbar__item">
                   <button id="copy-all-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the whole log to the clipboard">
@@ -134,7 +150,11 @@
                 </div>
               </div>
             </div>
+            </div>
           </div>
+          <!-- Expandable dropdown: wireToolbarOverflow() moves the secondary controls here below xl and
+               toggles pf-m-expanded on the kebab; empty + display:none at xl+, where they sit inline. -->
+          <div class="pf-v6-c-toolbar__expandable-content" data-overflow-panel="logbar"></div>
         </div>
       </header>
 

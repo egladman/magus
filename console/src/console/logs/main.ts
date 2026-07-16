@@ -31,6 +31,7 @@ import { graphTarget, openInGraph, shareLink } from "./share";
 import { connectLive } from "./live";
 import { startDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
+import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
 
 // init() is invoked at the BOTTOM of this module (see the final line), after every shared state
@@ -409,6 +410,10 @@ function wireControls(): void {
   }
 
   wireFullscreen();
+
+  // Collapse the secondary controls behind the PF toolbar toggle on narrow viewports (the shared
+  // responsive-toolbar pattern the graph explorer uses too).
+  wireToolbarOverflow();
 }
 
 function wireFullscreen(): void {

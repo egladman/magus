@@ -79,6 +79,10 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
 
 .console-graph-sidebar {
   display: flex; flex-direction: column; min-height: 0;
+  /* min-width:0 lets the stacked single-column mobile grid shrink the sidebar to the viewport instead
+     of its (wide) min-content - without it the query field and Ask chips force the whole column past
+     the screen edge, shoving the canvas and its top-right stage tools off into the clipped overflow. */
+  min-width: 0;
   border-right: 1px solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -141,11 +145,18 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
 
 .console-graph-stage { position: relative; min-width: 0; overflow: hidden; }
 #graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
-/* Built-in action buttons floating at the stage's top-right: PF secondary Buttons, but
-   given a translucent surface fill so they sit legibly over the canvas. The overlay
-   positioning + fill are component-less stage geometry, so they stay ID/container-scoped
-   (the buttons themselves are PF). Scoped under .console-graph-stage__tools so the fill out-specifies PF. */
-.console-graph-stage__tools { position: absolute; top: 0.6rem; right: 0.6rem; z-index: 3; display: flex; gap: 0.4rem; }
+/* Built-in action buttons floating at the stage's top-right: a RESPONSIVE PatternFly Toolbar (a
+   pf-m-toggle-group that collapses behind a kebab below lg - shared ../toolbar.ts). The overlay
+   geometry (absolute top-right, translucent button fill so they sit legibly over the canvas) is
+   component-less stage chrome, so it stays container-scoped; the buttons + toolbar are PF. The
+   overrides below strip the toolbar's own padding/background/width so it stays a tight floating
+   overlay rather than a full-width bar. */
+.console-graph-stage__tools {
+  position: absolute; top: 0.6rem; right: 0.6rem; z-index: 3;
+  width: auto; padding: 0; background: transparent;
+}
+.console-graph-stage__tools .pf-v6-c-toolbar__content { padding: 0; }
+.console-graph-stage__tools .pf-v6-c-toolbar__content-section { column-gap: 0.4rem; align-items: center; }
 .console-graph-stage__tools .pf-v6-c-button {
   font-size: 0.72rem;
   background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
@@ -156,9 +167,13 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
    mode they leaked as two empty blue/grey squares to the left of Fit. Restore [hidden]
    semantics inside the stage tools so a hidden badge truly disappears. */
 .console-graph-stage__tools [hidden] { display: none; }
-/* When both provenance badges are hidden, drop the gap they would reserve so the four
-   action buttons read as one tight group. */
-.console-graph-stage__tools > .pf-v6-c-label { align-self: center; }
+/* When both provenance badges are hidden, drop the gap they would reserve so the action
+   buttons read as one tight group. */
+.console-graph-stage__tools .pf-v6-c-label { align-self: center; }
+/* The kebab's dropdown: PF anchors __expandable-content to the left edge at full toolbar width, but
+   this overlay shrinks to its content, so hang the dropdown from the right edge and size it to the
+   buttons instead of a 2rem-wide sliver under the kebab. */
+.console-graph-stage__tools .pf-v6-c-toolbar__expandable-content { inset-inline: auto 0; width: max-content; }
 /* Legend toggle (#legend-toggle, a PF Button): hidden on desktop (the legend is always
    open there). Shown only on mobile via the media query below, where it collapses the
    legend off the canvas. Positioned top-left where the legend would otherwise sit. */
@@ -322,13 +337,9 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
   .console-graph-stage { height: 60svh; min-height: 320px; }
   .console-graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
   #explain-card { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); max-height: 50svh; }
-  /* Mobile canvas chrome: collapse both floating overlays so the graph is the focus.
-     The toolbar shrinks to icons; the legend hides behind the "Legend" toggle and
-     only appears when tapped. */
-  .console-graph-stage__tools { gap: 0.3rem; }
-  .console-graph-stage__tools .console-render-btn__label { display: none; }
-  .console-graph-stage__tools .pf-v6-c-button { padding-inline: 0.4rem; }
-  .console-graph-stage__tools .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }
+  /* Mobile canvas chrome: the stage tools collapse behind the PF kebab toggle (pf-m-show-on-lg,
+     shared ../toolbar.ts) - no bespoke label-dropping here. The legend hides behind the "Legend"
+     toggle and only appears when tapped. */
   #legend-toggle { display: inline-flex; }
   .console-graph-legend { display: none; top: 2.7rem; max-height: calc(100% - 3.4rem); }
   .console-graph-legend[data-open] { display: flex; }
