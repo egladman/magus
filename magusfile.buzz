@@ -141,7 +141,7 @@ export fun image_build(args: [str]) > void {
 
 // Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.
 export fun image_scan(args: [str]) > void {
-    magus.needs(magus.target.literal("image-build"));
+    magus.needs(image_build);
     if (magus.has_charm("rw")) {
         fs.makeDirectory("dist");
         os.exec("trivy", ["image",
@@ -215,9 +215,9 @@ export fun postflight(args: [str]) > void {
 // only a regeneration that changes a clean file fails (a generator input changed
 // but its output was not re-run and committed).
 export fun generate(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     final clean_before = vcs.isDirty() == false;
-    magus.needs(magus.target.glob("*-generate"));
+    magus.needsGlob("*-generate");
     if (magus.has_charm("rw")) { return; }
 
     if (clean_before and vcs.isDirty()) {
@@ -386,23 +386,23 @@ export fun preflight(args: [str]) > void { magus.doctor([]); }
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(args: [str])  > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     if (magus.has_charm("container")) {
-        magus.needs(magus.target.literal("image-build"));
+        magus.needs(image_build);
     } else {
-        magus.needs(magus.target.literal("go-build"));
+        magus.needs(go_build);
     }
 }
 // Formats first, then runs the Go test suite.
-export fun test(args: [str])   > void { magus.needs(magus.target.literal("format")); go["go-test"](); }
+export fun test(args: [str])   > void { magus.needs(format); go["go-test"](); }
 // Formats first, then golangci-lint, go vet, govulncheck, markdownlint. golangci-lint
 // and govulncheck run via os.exec to pass -modfile=go.tool.mod (their deps live there,
 // not in the library go.mod).
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
-export fun lint(args: [str])   > void { magus.needs(magus.target.literal("format")); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]); md.markdownlint(); }
+export fun lint(args: [str])   > void { magus.needs(format); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]); md.markdownlint(); }
 // Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs.
-export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
+export fun format(args: [str]) > void { magus.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
 
 // Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate;
 // the affected/pipeline anchor - one command that also catches unregenerated output.
@@ -410,7 +410,7 @@ export fun format(args: [str]) > void { magus.needs(magus.target.literal("genera
 // first-class part of ci, independent of the mutating format/build chain. coverage
 // drift-gates assets/coverage.svg, so a stale badge fails ci instead of rotting silently.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("generate"), magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"), magus.target.literal("coverage"));
+    magus.needs(generate, lint, build, test, coverage);
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix

@@ -15,13 +15,14 @@ import (
 )
 
 // resolveProjectImport resolves `import "project/<path>"` to a module of the named
-// project's targets, each a cross-project handle ({mode literal, pattern <target>,
-// project <path>}) that magus.needs dispatches across the boundary. The path is
+// project's targets, each a callable cross-project handle: a function value that
+// dispatches the target across the boundary when invoked, and that magus.needs
+// recognizes by identity (via ext) to declare the dependency. The path is
 // dot-relative to the importing magusfile's directory (matching how the graph and
 // runtime resolve cross deps). Target names are read statically by scanning the
 // dependency's `export fun` declarations — no VM load, so no import-time recursion.
 // Returns ok=false for any non-"project/" import.
-func resolveProjectImport(ctx context.Context, importPath string) (vm.Value, bool) {
+func resolveProjectImport(ctx context.Context, importPath string, ext *externalHandles) (vm.Value, bool) {
 	const prefix = "project/"
 	if !strings.HasPrefix(importPath, prefix) {
 		return vm.Null, false
@@ -52,17 +53,20 @@ func resolveProjectImport(ctx context.Context, importPath string) (vm.Value, boo
 				continue
 			}
 			// Member key is the raw `export fun` identifier (so <alias>.build_playground
-			// resolves); the handle's target is the kebab-normalized run name.
+			// resolves); the handle's target is the kebab-normalized run name. Each
+			// member is a real function value: invoking it dispatches the cross-project
+			// target, and magus.needs recognizes it by identity through ext.
 			for _, stmt := range prog.Stmts {
 				fn, ok := stmt.(*ast.FunDecl)
 				if !ok || !fn.IsExported {
 					continue
 				}
-				m.MapSet(fn.Name, targetQueryToBuzz(types.TargetQuery{
-					Mode:    types.QueryLiteral,
-					Pattern: norm(fn.Name),
-					Project: raw,
-				}))
+				ref := externalTarget{Project: raw, Target: norm(fn.Name)}
+				handle := vm.DirectValue(raw+"."+fn.Name, func(callCtx context.Context, _ []vm.Value) (vm.Value, error) {
+					return vm.Null, dispatchBuzzExternal(callCtx, ref)
+				})
+				ext.register(handle, ref)
+				m.MapSet(fn.Name, handle)
 			}
 		}
 	}

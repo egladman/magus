@@ -53,22 +53,22 @@ import "os";
 // Each exported function is a runnable target. Leave a stage as a no-op
 // until you wire it.
 export fun preflight(args: [str]) > void {}
-export fun generate(args: [str]) > void { magus.needs(magus.target.literal("preflight")); }
-export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); }
-export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); }
-export fun build(args: [str]) > void { magus.needs(magus.target.literal("format")); os.exec("echo", ["Hello from magus"]); }
-export fun test(args: [str]) > void { magus.needs(magus.target.literal("format")); }
+export fun generate(args: [str]) > void { magus.needs(preflight); }
+export fun format(args: [str]) > void { magus.needs(generate); }
+export fun lint(args: [str]) > void { magus.needs(format); }
+export fun build(args: [str]) > void { magus.needs(format); os.exec("echo", ["Hello from magus"]); }
+export fun test(args: [str]) > void { magus.needs(format); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(lint, build, test);
 }
 ```
 
 Three ideas carry the whole model:
 
 - **Targets are exported functions.** There is no registration call for a target: export a `fun`, and its name becomes a runnable target. See [targets.md](targets.md) for the full model and the CLI grammar.
-- **`magus.needs` declares prerequisites.** `magus.needs(magus.target.literal("format"))` says "run `format` first." magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.
+- **`magus.needs` declares prerequisites.** `magus.needs(format)` says "run `format` first" - you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.
 - **`ci` is the anchor.** It is an ordinary target you compose with `magus.needs`. magus does not hardcode its steps, but it is the target `magus affected` keys off, and it always runs read-only.
 
 List what magus discovered, then run the starter `build`:
@@ -94,7 +94,7 @@ magus.project({ "spells": [go] });
 
 // Each exported function is a runnable target; its body calls the spell's ops.
 export fun build(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     go["go-build"]();
 }
 
@@ -109,7 +109,7 @@ export fun lint(args: [str]) > void {
 }
 
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     go["go-test"]();
 }
 ```
@@ -138,11 +138,7 @@ Charms are shared, composable execution modifiers attached after `:`; see [charm
 
 ```buzz
 export fun ci(args: [str]) > void {
-    magus.needs(
-        magus.target.literal("lint"),
-        magus.target.literal("build"),
-        magus.target.literal("test"),
-    );
+    magus.needs(lint, build, test);
 }
 ```
 

@@ -48,7 +48,6 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 		ispell.CharmTypeSource,
 		ispell.CommandSource,
 		ispell.ServiceSource,
-		ispell.TargetQuerySource,
 		ispell.ExecResultSource,
 		ispell.CommitAuthorSource,
 		ispell.CommitSource,
@@ -80,7 +79,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 // a magusfile referencing a member this host omits would fail to evaluate. The guard
 // test TestMagusSurfaceMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members
-// (magus.project, target.*, needs) are modeled into the graph.
+// (magus.project, needs, needsGlob) are modeled into the graph.
 func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m := vm.NewMap()
 
@@ -92,49 +91,34 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return vm.Null, nil
 	}))
 
-	// magus.target.<mode>(...) return handles (mode-tagged maps) consumed by needs;
-	// expand_globs returns an empty list (its standalone, non-dependency use).
-	// Cross-project deps (import "project/...") aren't modeled in the single-file dry
-	// run - there's no sibling project to enumerate in the sandbox.
-	target := vm.NewMap()
-	target.MapSet("literal", targetHandle("literal"))
-	target.MapSet("glob", targetHandle("glob"))
-	target.MapSet("regex", targetHandle("regex"))
-	target.MapSet("expand_globs", fn("magus.target.expand_globs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.ListValue(nil), nil
-	}))
-	m.MapSet("target", target)
-
-	// magus.needs(handle, ...): trace a same-project edge per handle. A literal
-	// handle is one exact edge; a glob/regex handle expands against the discovered
-	// target set (tr.targetKeys) and traces an edge to each match, mirroring the real
-	// binding's resolveTargetQuery. Cross-project handles aren't modeled here.
+	// magus.needs(fn, ...): trace a same-project edge per target function
+	// argument, keyed by the function's declared name (FunName) run through the
+	// same normalizer as the real binding's resolveTargetFun. Cross-project
+	// handles (import "project/...") aren't modeled in the single-file dry run -
+	// there's no sibling project to enumerate in the sandbox - so a non-function
+	// argument is skipped, best-effort.
 	m.MapSet("needs", fn("magus.needs", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		for _, a := range args {
-			if !a.IsMap() {
+			if !a.IsFun() {
 				continue
 			}
-			modeV, _ := a.MapGet("mode")
-			if !modeV.IsStr() {
+			if name := a.FunName(); name != "" {
+				tr.addEdge(normalizeTarget(name))
+			}
+		}
+		return vm.Null, nil
+	}))
+
+	// magus.needsGlob(pattern, ...): expand each pattern against the discovered
+	// target set (tr.targetKeys) and trace an edge per match, mirroring the real
+	// binding's matchBuzzTargets semantics.
+	m.MapSet("needsGlob", fn("magus.needsGlob", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		for _, a := range args {
+			if !a.IsStr() {
 				continue
 			}
-			pattern := mapStr(a, "pattern").AsString()
-			if pattern == "" {
-				continue
-			}
-			switch modeV.AsString() {
-			case "literal":
-				tr.addEdge(normalizeTarget(pattern))
-			case "glob":
-				for _, name := range tr.matchTargets(globToRegexp(pattern)) {
-					tr.addEdge(name)
-				}
-			case "regex":
-				if re, err := regexp.Compile(pattern); err == nil {
-					for _, name := range tr.matchTargets(re) {
-						tr.addEdge(name)
-					}
-				}
+			for _, name := range tr.matchTargets(globToRegexp(a.AsString())) {
+				tr.addEdge(name)
 			}
 		}
 		return vm.Null, nil
@@ -218,25 +202,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}
 
 	return m
-}
-
-// targetHandle returns the magus.target.<mode> callable producing a mode-tagged
-// handle map ({mode, pattern}) for magus.needs to read.
-func targetHandle(mode string) vm.Value {
-	return fn("magus.target."+mode, func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		h := vm.NewMap()
-		h.MapSet("mode", vm.StrValue(mode))
-		h.MapSet("pattern", vm.StrValue(strArg(args, 0, "")))
-		return h, nil
-	})
-}
-
-// mapStr reads a string field from a map value, or returns the empty string value.
-func mapStr(m vm.Value, key string) vm.Value {
-	if v, ok := m.MapGet(key); ok && v.IsStr() {
-		return v
-	}
-	return vm.StrValue("")
 }
 
 func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }

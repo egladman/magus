@@ -406,7 +406,8 @@ func (s *Session) SetPromoteTopLevel(on bool) { s.promoteTopLevel = on }
 // IncludeDirs returns the current include directory list.
 func (s *Session) IncludeDirs() []string { return s.includeDirs }
 
-// Targets returns the target map populated by magus.target.new().
+// Targets returns the session's dispatchable target map. The embedder owns its
+// contents: magus registers exported magusfile targets and spell ops into it.
 func (s *Session) Targets() map[string]vmpackage.Callable { return s.targets }
 
 // Exec parses, type-checks, compiles, and executes Buzz source code in the session's environment.

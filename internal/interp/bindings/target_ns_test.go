@@ -2,8 +2,6 @@ package bindings
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -12,9 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/workspace"
-	"github.com/egladman/magus/types"
 )
 
 // noopTargets builds a targets map whose callables are never expected to run, so a
@@ -30,12 +26,16 @@ func noopTargets(names ...string) map[string]vm.Callable {
 	return m
 }
 
+// noop is a Buzz callable that does nothing; handy for building function VALUES
+// (vm.DirectValue) to feed magus.needs in resolution tests.
+func noop(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }
+
 // requireDirect asserts that a namespace exposes name as a DirectValue and returns it.
 // A missing key or a non-callable entry is a wiring regression. Direct invocation of
 // the returned callable is not possible from outside package vm (the *directObj
 // accessor is unexported, and Session.CallValue discards a DirectValue's pushed result
 // because no frame is created); value-returning builtins are exercised end to end
-// through the interpreter instead (see TestTargetNamespaceEndToEnd).
+// through the interpreter instead.
 func requireDirect(t *testing.T, ns vm.Value, name string) vm.Value {
 	t.Helper()
 	fn, ok := ns.MapGet(name)
@@ -86,144 +86,162 @@ func TestMatchBuzzTargets(t *testing.T) {
 	}
 }
 
-func TestResolveTargetQuery(t *testing.T) {
-	targets := noopTargets("go-build", "go-test", "rust-build")
-
-	t.Run("literal normalizes and does not consult the target set", func(t *testing.T) {
-		// A literal resolves to its own normalized name - it is not required to be a
-		// registered target here (existence is enforced later at dispatch). Uses the
-		// same normalizer targetMap registration does (execBuzzSrc), so a needs
-		// literal gets the CLI's many-spellings forgiveness.
-		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryLiteral, Pattern: "GO-Build"})
+// TestResolveTargetFun pins how magus.needs maps a passed function value to its
+// canonical target key: the declared name is normalized like the run path, existence
+// is checked against the target set, and - when an export registry is available - the
+// value must BE the exported function, so a local helper sharing a target's name can't
+// stand in for it.
+func TestResolveTargetFun(t *testing.T) {
+	t.Run("named exported target resolves and normalizes", func(t *testing.T) {
+		// A camelCase-named handle normalizes to the kebab-registered key, matching
+		// the CLI's many-spellings forgiveness.
+		fn := vm.DirectValue("goBuild", noop)
+		targets := noopTargets("go-build")
+		exports := map[string]vm.Value{"go-build": fn}
+		got, err := resolveTargetFun(targets, exports, fn)
 		require.NoError(t, err)
-		require.Equal(t, []string{"go-build"}, got)
+		assert.Equal(t, "go-build", got)
 	})
 
-	t.Run("literal normalizes camelCase to the kebab-registered name", func(t *testing.T) {
-		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryLiteral, Pattern: "goBuild"})
-		require.NoError(t, err)
-		require.Equal(t, []string{"go-build"}, got)
+	t.Run("anonymous function is rejected", func(t *testing.T) {
+		for _, name := range []string{"", "<fun>"} {
+			_, err := resolveTargetFun(noopTargets("go-build"), nil, vm.DirectValue(name, noop))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "anonymous function is not a target")
+		}
 	})
 
-	t.Run("literal normalizes snake_case to the kebab-registered name", func(t *testing.T) {
-		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryLiteral, Pattern: "go_build"})
-		require.NoError(t, err)
-		require.Equal(t, []string{"go-build"}, got)
-	})
-
-	t.Run("glob defers to matchBuzzTargets", func(t *testing.T) {
-		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryGlob, Pattern: "go-*"})
-		require.NoError(t, err)
-		require.Equal(t, []string{"go-build", "go-test"}, got)
-	})
-
-	t.Run("regex matches registered names, sorted", func(t *testing.T) {
-		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryRegex, Pattern: `-build$`})
-		require.NoError(t, err)
-		require.Equal(t, []string{"go-build", "rust-build"}, got)
-	})
-
-	t.Run("regex with no match yields nil", func(t *testing.T) {
-		got, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryRegex, Pattern: `^nope$`})
-		require.NoError(t, err)
-		require.Nil(t, got)
-	})
-
-	t.Run("invalid regex is a compile error", func(t *testing.T) {
-		_, err := resolveTargetQuery(targets, types.TargetQuery{Mode: types.QueryRegex, Pattern: `([`})
+	t.Run("a named non-target function is rejected", func(t *testing.T) {
+		_, err := resolveTargetFun(noopTargets("go-build"), nil, vm.DirectValue("nope", noop))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "target.regex")
+		assert.Contains(t, err.Error(), `function "nope" does not name an exported target`)
 	})
 
-	t.Run("unknown mode is rejected", func(t *testing.T) {
-		// An external query (or any non-same-project mode) is not valid here; the
-		// caller routes those through dispatchBuzzExternal instead.
-		_, err := resolveTargetQuery(targets, types.TargetQuery{Mode: "external"})
+	t.Run("a function matching a target name but not its value is rejected", func(t *testing.T) {
+		// The identity guard: a local helper named like a target must not silently
+		// stand in for the exported target function.
+		exported := vm.DirectValue("go-build", noop)
+		impostor := vm.DirectValue("go-build", noop)
+		exports := map[string]vm.Value{"go-build": exported}
+		_, err := resolveTargetFun(noopTargets("go-build"), exports, impostor)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not a same-project query")
+		assert.Contains(t, err.Error(), "is not the exported target function")
+	})
+
+	t.Run("nil exports skips the identity check (REPL)", func(t *testing.T) {
+		// The REPL has no export-discovery pass, so identity can't be verified; a
+		// name match against the target set is enough.
+		fn := vm.DirectValue("go-build", noop)
+		got, err := resolveTargetFun(noopTargets("go-build"), nil, fn)
+		require.NoError(t, err)
+		assert.Equal(t, "go-build", got)
 	})
 }
 
-func TestTargetQueryToBuzzRoundTrip(t *testing.T) {
-	// targetQueryToBuzz encodes the same field shape decodeTargetQuery reads back, so a
-	// query survives the Buzz boundary intact. Assert the whole struct, not per-field.
-	want := types.TargetQuery{Mode: types.QueryLiteral, Pattern: "build", Project: "sub/dir"}
-	got, ok := decodeTargetQuery(targetQueryToBuzz(want))
-	require.True(t, ok)
-	require.Equal(t, want, got)
+// TestExternalHandles pins the cross-project handle registry: a handle is recovered
+// by value identity (via the new vm.Value.Equal), and an unregistered value misses.
+func TestExternalHandles(t *testing.T) {
+	ext := &externalHandles{}
+	handle := vm.DirectValue("../b.build", noop)
+	dep := externalTarget{Project: "../b", Target: "build"}
+	ext.register(handle, dep)
+
+	got, ok := ext.lookup(handle)
+	require.True(t, ok, "the registered handle must be recovered")
+	assert.Equal(t, dep, got)
+
+	_, ok = ext.lookup(vm.DirectValue("../b.build", noop))
+	assert.False(t, ok, "a distinct value with the same name must not match (identity, not name)")
 }
 
-func TestDecodeTargetQuery(t *testing.T) {
-	t.Run("valid map decodes every field", func(t *testing.T) {
-		m := vm.NewMap()
-		m.MapSet("mode", vm.StrValue(types.QueryGlob))
-		m.MapSet("pattern", vm.StrValue("go-*"))
-		m.MapSet("project", vm.StrValue("pkg/a"))
-		got, ok := decodeTargetQuery(m)
-		require.True(t, ok)
-		require.Equal(t, types.TargetQuery{Mode: types.QueryGlob, Pattern: "go-*", Project: "pkg/a"}, got)
-	})
+func TestBuildBuzzNeeds(t *testing.T) {
+	t.Run("an exported target function resolves and dispatches", func(t *testing.T) {
+		var runs atomic.Int32
+		record := func(context.Context, []vm.Value) (vm.Value, error) { runs.Add(1); return vm.Null, nil }
+		buildFn := vm.DirectValue("go-build", record)
+		targets := map[string]vm.Callable{"go-build": record}
+		exports := map[string]vm.Value{"go-build": buildFn}
+		needs := buildBuzzNeeds(targets, exports, &externalHandles{})
 
-	t.Run("non-map is rejected", func(t *testing.T) {
-		// A bare string is the classic magus.needs footgun; decode must reject it so
-		// magus.needs can demand a typed magus.target.* query.
-		_, ok := decodeTargetQuery(vm.StrValue("build"))
-		require.False(t, ok)
-	})
-
-	t.Run("map without a valid mode is rejected", func(t *testing.T) {
-		m := vm.NewMap()
-		m.MapSet("mode", vm.StrValue("bogus"))
-		m.MapSet("pattern", vm.StrValue("go-*"))
-		_, ok := decodeTargetQuery(m)
-		require.False(t, ok)
-	})
-
-	t.Run("missing pattern and project default to empty", func(t *testing.T) {
-		m := vm.NewMap()
-		m.MapSet("mode", vm.StrValue(types.QueryLiteral))
-		got, ok := decodeTargetQuery(m)
-		require.True(t, ok)
-		require.Equal(t, types.TargetQuery{Mode: types.QueryLiteral}, got)
-	})
-}
-
-func TestBuildBuzzTargetHandle(t *testing.T) {
-	t.Run("string literal builds the query shape", func(t *testing.T) {
-		handle := buildBuzzTargetHandle(types.QueryGlob)
-		v, err := handle(context.Background(), []vm.Value{vm.StrValue("go-*")})
+		v, err := needs(context.Background(), []vm.Value{buildFn})
 		require.NoError(t, err)
-		got, ok := decodeTargetQuery(v)
-		require.True(t, ok)
-		require.Equal(t, types.TargetQuery{Mode: types.QueryGlob, Pattern: "go-*"}, got)
+		require.Equal(t, vm.Null, v)
+		assert.Equal(t, int32(1), runs.Load())
 	})
 
-	t.Run("missing argument is an error", func(t *testing.T) {
-		handle := buildBuzzTargetHandle(types.QueryLiteral)
-		_, err := handle(context.Background(), nil)
+	t.Run("a string argument is rejected", func(t *testing.T) {
+		needs := buildBuzzNeeds(noopTargets("go-build"), nil, &externalHandles{})
+		_, err := needs(context.Background(), []vm.Value{vm.StrValue("go-build")})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "string literal")
+		assert.Contains(t, err.Error(), "must be a target function")
+		assert.Contains(t, err.Error(), "needsGlob")
 	})
 
-	t.Run("non-string argument is an error", func(t *testing.T) {
-		// The literal-first-arg discipline: a computed (non-str) argument would defeat
-		// the static extractor, so it is rejected at the boundary.
-		handle := buildBuzzTargetHandle(types.QueryRegex)
-		_, err := handle(context.Background(), []vm.Value{vm.IntValue(7)})
+	t.Run("an anonymous function is rejected", func(t *testing.T) {
+		needs := buildBuzzNeeds(noopTargets("go-build"), nil, &externalHandles{})
+		_, err := needs(context.Background(), []vm.Value{vm.DirectValue("", noop)})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "magus.target.regex")
+		assert.Contains(t, err.Error(), "anonymous function is not a target")
+	})
+
+	t.Run("a named non-target function is rejected", func(t *testing.T) {
+		needs := buildBuzzNeeds(noopTargets("go-build"), nil, &externalHandles{})
+		_, err := needs(context.Background(), []vm.Value{vm.DirectValue("nope", noop)})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not name an exported target")
+	})
+
+	t.Run("a cross-project handle is dispatched separately and no-ops without a coordinator", func(t *testing.T) {
+		// dispatchBuzzExternal no-ops when there is no CrossDispatch/Source/Workspace
+		// in ctx (the describe/parse path), so magus.needs of a cross handle succeeds
+		// without touching the same-project target set.
+		ext := &externalHandles{}
+		handle := vm.DirectValue("../b.build", noop)
+		ext.register(handle, externalTarget{Project: "../b", Target: "build"})
+		needs := buildBuzzNeeds(noopTargets("go-build"), nil, ext)
+
+		v, err := needs(context.Background(), []vm.Value{handle})
+		require.NoError(t, err)
+		require.Equal(t, vm.Null, v)
 	})
 }
 
-// TestBuildTargetNS asserts the namespace wiring: every magus.target.* builtin is
-// present as a DirectValue. Their value-returning behavior (expand_globs matching, the
-// literal/glob/regex constructors) is proven end to end in TestTargetNamespaceEndToEnd
-// and unit-tested directly via matchBuzzTargets / buildBuzzTargetHandle above.
-func TestBuildTargetNS(t *testing.T) {
-	ns := buildTargetNS(nil, noopTargets("go-build", "go-test", "lint"))
-	for _, name := range []string{"expand_globs", "literal", "glob", "regex"} {
-		requireDirect(t, ns, name)
-	}
+func TestBuildBuzzNeedsGlob(t *testing.T) {
+	t.Run("each pattern resolves and dispatches its matches", func(t *testing.T) {
+		var runs atomic.Int32
+		record := func(context.Context, []vm.Value) (vm.Value, error) { runs.Add(1); return vm.Null, nil }
+		targets := map[string]vm.Callable{"go-build": record, "go-test": record, "lint": record}
+		needsGlob := buildBuzzNeedsGlob(targets)
+
+		v, err := needsGlob(context.Background(), []vm.Value{vm.StrValue("go-*")})
+		require.NoError(t, err)
+		require.Equal(t, vm.Null, v)
+		assert.Equal(t, int32(2), runs.Load(), "go-* matches go-build and go-test, not lint")
+	})
+
+	t.Run("a non-string argument is rejected", func(t *testing.T) {
+		needsGlob := buildBuzzNeedsGlob(noopTargets("go-build"))
+		_, err := needsGlob(context.Background(), []vm.Value{vm.IntValue(7)})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be a glob pattern string")
+	})
+
+	t.Run("zero arguments is an error", func(t *testing.T) {
+		needsGlob := buildBuzzNeedsGlob(noopTargets("go-build"))
+		_, err := needsGlob(context.Background(), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "at least one glob pattern")
+	})
+
+	t.Run("a pattern matching nothing is a silent no-op", func(t *testing.T) {
+		var runs atomic.Int32
+		record := func(context.Context, []vm.Value) (vm.Value, error) { runs.Add(1); return vm.Null, nil }
+		needsGlob := buildBuzzNeedsGlob(map[string]vm.Callable{"go-build": record})
+		v, err := needsGlob(context.Background(), []vm.Value{vm.StrValue("python-*")})
+		require.NoError(t, err)
+		require.Equal(t, vm.Null, v)
+		assert.Equal(t, int32(0), runs.Load(), "no match runs nothing")
+	})
 }
 
 func TestBuildCacheNS(t *testing.T) {
@@ -311,54 +329,11 @@ func TestDispatchBuzzDeps(t *testing.T) {
 	})
 }
 
-func TestBuildBuzzNeeds(t *testing.T) {
-	t.Run("same-project glob resolves and dispatches", func(t *testing.T) {
-		var runs atomic.Int32
-		record := func(context.Context, []vm.Value) (vm.Value, error) {
-			runs.Add(1)
-			return vm.Null, nil
-		}
-		targets := map[string]vm.Callable{"go-build": record, "go-test": record}
-		needs := buildBuzzNeeds(targets)
-
-		glob := targetQueryToBuzz(types.TargetQuery{Mode: types.QueryGlob, Pattern: "go-*"})
-		v, err := needs(context.Background(), []vm.Value{glob})
-		require.NoError(t, err)
-		require.Equal(t, vm.Null, v)
-		assert.Equal(t, int32(2), runs.Load())
-	})
-
-	t.Run("a non-query argument is rejected", func(t *testing.T) {
-		needs := buildBuzzNeeds(noopTargets("go-build"))
-		_, err := needs(context.Background(), []vm.Value{vm.StrValue("go-build")})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "magus.target.*")
-	})
-
-	t.Run("a resolve error surfaces under magus.needs", func(t *testing.T) {
-		needs := buildBuzzNeeds(noopTargets("go-build"))
-		bad := targetQueryToBuzz(types.TargetQuery{Mode: types.QueryRegex, Pattern: `([`})
-		_, err := needs(context.Background(), []vm.Value{bad})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "magus.needs")
-	})
-
-	t.Run("an external query is dispatched separately and is a no-op without a coordinator", func(t *testing.T) {
-		// dispatchBuzzExternal no-ops when there is no CrossDispatch/Source/Workspace
-		// in ctx (the describe/parse path), so magus.needs of an external query
-		// succeeds without touching the same-project target set.
-		needs := buildBuzzNeeds(noopTargets("go-build"))
-		ext := targetQueryToBuzz(types.TargetQuery{Mode: types.QueryLiteral, Pattern: "build", Project: "other"})
-		v, err := needs(context.Background(), []vm.Value{ext})
-		require.NoError(t, err)
-		require.Equal(t, vm.Null, v)
-	})
-}
-
+// TestDispatchBuzzExternalNoCoordinator asserts the graph-only fall-through: with an
+// empty context there is no coordinator, source, or workspace, so a cross-project
+// dispatch is a silent no-op (the describe/parse path keeps the handle graph-only).
 func TestDispatchBuzzExternalNoCoordinator(t *testing.T) {
-	// Directly assert the graph-only fall-through: with an empty context there is no
-	// coordinator, source, or workspace, so the external dispatch is a silent no-op.
-	err := dispatchBuzzExternal(context.Background(), types.TargetQuery{Mode: types.QueryLiteral, Pattern: "build", Project: "other"})
+	err := dispatchBuzzExternal(context.Background(), externalTarget{Project: "../other", Target: "build"})
 	require.NoError(t, err)
 }
 
@@ -367,41 +342,3 @@ func TestDispatchBuzzExternalNoCoordinator(t *testing.T) {
 type stubErr struct{}
 
 func (stubErr) Error() string { return "boom" }
-
-// TestTargetNamespaceEndToEnd drives magus.target.* and magus.needs from a real
-// magusfile so the DirectValue closures the namespace map holds actually run through
-// the interpreter (the one path that returns their list/query values). The `all`
-// target expands a glob to its dependency targets and needs them; each dependency
-// writes a marker file, proving the same-project query resolved, deduped, and
-// dispatched via the Buzz pool. It also asserts expand_globs' returned list is usable
-// from Buzz.
-func TestTargetNamespaceEndToEnd(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
-import "fs";
-
-export fun go_build(args: [str]) > void { fs.writeFile("built", "go"); }
-export fun rust_build(args: [str]) > void { fs.writeFile("built-rust", "rust"); }
-
-export fun all(args: [str]) > void {
-    // expand_globs returns the matching target names as a Buzz list.
-    final names = magus.target.expand_globs("*-build");
-    if (names.len() != 2) { magus.fatal("expand_globs did not match both build targets"); }
-
-    // magus.needs of a glob resolves + dispatches the same-project deps.
-    magus.needs(magus.target.glob("*-build"));
-    fs.writeFile("all", "done");
-}`)
-
-	srcs, err := interp.FindAll(dir)
-	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "all", nil, dir), "magus.target/needs end-to-end")
-
-	// Every dependency ran (through the query -> resolve -> dispatch path) and the
-	// caller finished.
-	for _, marker := range []string{"built", "built-rust", "all"} {
-		_, err := os.Stat(filepath.Join(dir, marker))
-		require.NoErrorf(t, err, "marker %q not written; dependency did not run", marker)
-	}
-}

@@ -26,20 +26,20 @@ export fun generate(args: [str]) > void {
 }
 
 export fun build(args: [str]) > void {
-    magus.needs(magus.target.literal("generate"));
+    magus.needs(generate);
     go["go-build"]({"args": ["-o", "bin/app", "./cmd/app"]});
 }
 
 // Both of these need build. In the plan it appears once, not twice.
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("build"));
+    magus.needs(build);
     go["go-test"]();
 }
 export fun bundle(args: [str]) > void {
-    magus.needs(magus.target.literal("build"));
+    magus.needs(build);
     go["go-build"]({"args": ["-o", "bin/app-release", "./cmd/app"]});
 }
 
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("test"), magus.target.literal("bundle"));
+    magus.needs(test, bundle);
 }

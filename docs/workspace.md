@@ -69,7 +69,7 @@ export fun test(args: [str]) > void {}
 
 // 'ci' is the conventional anchor `magus affected ci` keys off.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(build, test);
 }
 ```
 

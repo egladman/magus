@@ -1,7 +1,8 @@
 // Package describe extracts a magusfile's target dependency graph statically,
 // without evaluating any target body. Every `export fun` is a node, its leading
-// doc comment is the node's description, and the `magus.needs(magus.target.<mode>(…))`
-// handles in its body are its edges. Because it reads
+// doc comment is the node's description, and the target functions its body
+// passes to `magus.needs(...)` (plus the patterns it passes to
+// `magus.needsGlob(...)`) are its edges. Because it reads
 // the source rather than running it, it is deterministic and sees *both* arms of
 // a runtime branch (e.g. the `container` charm toggle on `build`) — a runtime
 // trace would only ever see the arm taken.
@@ -37,8 +38,8 @@ import (
 // project's magusfile sources (load order).
 //
 // Each node's Dependencies are the resolved dependency target names — exact edges
-// first (magus.target.literal, in source order), then the names matched by each
-// glob/regex edge (magus.target.glob/regex); self-edges and duplicates are dropped.
+// first (target functions passed to magus.needs, in source order), then the names
+// matched by each magus.needsGlob pattern; self-edges and duplicates are dropped.
 // CrossDependencies hold cross-project edges (from project imports). Charms are the
 // has_charm names the body reads, sorted.
 func Extract(source string) []types.TargetGraphNode {
@@ -88,8 +89,8 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 	}
 
 	// Second pass: build each node by walking its body, resolving every edge straight
-	// into its Dependencies — exact edges (magus.target.literal) by name, glob and
-	// regex edges by matching the names collected above.
+	// into its Dependencies — exact edges (target functions passed to magus.needs)
+	// by name, pattern edges (magus.needsGlob) by matching the names collected above.
 	var nodes []types.TargetGraphNode
 	for _, stmt := range prog.Stmts {
 		fn, ok := stmt.(*ast.FunDecl)
@@ -112,17 +113,28 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 			ast.Inspect(body, func(n ast.Node) bool {
 				switch e := n.(type) {
 				case *ast.CallExpr:
-					// Dependency handles: magus.target.literal/glob/regex("...").
-					if mode, arg, ok := targetHandleCall(e); ok {
-						switch mode {
-						case "literal":
-							node.Dependencies = appendUniq(node.Dependencies, norm(arg))
-						case "glob":
-							node.Dependencies = appendMatching(node.Dependencies, names, node.Name, globRe(arg))
-						case "regex":
-							// An invalid pattern is best-effort skipped (no edges).
-							if re, cerr := regexp.Compile(arg); cerr == nil {
-								node.Dependencies = appendMatching(node.Dependencies, names, node.Name, re)
+					// Exact edges: target functions passed to magus.needs(...). An
+					// identifier argument naming an exported target (any casing) is an
+					// edge; a project-import member argument (<alias>.<target>) is
+					// collected as a cross edge by the MemberExpr case below. A computed
+					// handle (a variable holding the function) is invisible to this
+					// static read, the same way any non-literal argument is.
+					if magusCall(e, "needs") {
+						for _, a := range e.Args {
+							if id, ok := a.(*ast.IdentExpr); ok {
+								if key := norm(id.Name); slices.Contains(names, key) {
+									node.Dependencies = appendUniq(node.Dependencies, key)
+								}
+							}
+						}
+					}
+					// Pattern edges: magus.needsGlob("..."), each literal pattern
+					// resolved against the collected target names with the same
+					// semantics the runtime matcher uses.
+					if magusCall(e, "needsGlob") {
+						for _, a := range e.Args {
+							if lit, ok := a.(*ast.StringLit); ok {
+								node.Dependencies = appendMatching(node.Dependencies, names, node.Name, targetPatternRe(lit.Val))
 							}
 						}
 					}
@@ -247,35 +259,14 @@ type spellHit struct {
 	spell, op string
 }
 
-// targetHandleCall recognizes a magus.target.<mode>("arg") call and returns its mode
-// ("literal"/"glob"/"regex") and the literal string argument. ok is false for any
-// other call.
-func targetHandleCall(e *ast.CallExpr) (mode, arg string, ok bool) {
+// magusCall reports whether e is a magus.<name>(...) call.
+func magusCall(e *ast.CallExpr, name string) bool {
 	me, ok := e.Callee.(*ast.MemberExpr)
-	if !ok {
-		return "", "", false
+	if !ok || me.Name != name {
+		return false
 	}
-	switch me.Name {
-	case "literal", "glob", "regex":
-	default:
-		return "", "", false
-	}
-	inner, ok := me.Object.(*ast.MemberExpr)
-	if !ok || inner.Name != "target" {
-		return "", "", false
-	}
-	root, ok := inner.Object.(*ast.IdentExpr)
-	if !ok || root.Name != "magus" {
-		return "", "", false
-	}
-	if len(e.Args) == 0 {
-		return "", "", false
-	}
-	lit, ok := e.Args[0].(*ast.StringLit)
-	if !ok {
-		return "", "", false
-	}
-	return me.Name, lit.Val, true
+	id, ok := me.Object.(*ast.IdentExpr)
+	return ok && id.Name == "magus"
 }
 
 // ioCall recognizes a magus.inputs(...) / magus.outputs(...) call and returns its
@@ -493,13 +484,17 @@ func firstSentence(s string) string {
 	return s
 }
 
-// globRe compiles a target-name glob (only `*` is special) to an anchored regexp.
-func globRe(pattern string) *regexp.Regexp {
-	parts := strings.Split(pattern, "*")
-	for i, p := range parts {
-		parts[i] = regexp.QuoteMeta(p)
+// targetPatternRe compiles a magus.needsGlob pattern to an anchored regexp with
+// the runtime matcher's semantics (bindings' compileTargetPatterns): a pattern
+// with no "*" is suffix shorthand ("build" matches names ending in "-build"),
+// a pattern with "*" is a glob ("*" matches any run). Both forms are
+// QuoteMeta'd first, so the result is always a valid regexp - the static edge
+// set and the runtime dispatch set agree by construction.
+func targetPatternRe(pattern string) *regexp.Regexp {
+	if !strings.Contains(pattern, "*") {
+		return regexp.MustCompile(`^.*-` + regexp.QuoteMeta(pattern) + `$`)
 	}
-	return regexp.MustCompile("^" + strings.Join(parts, ".*") + "$")
+	return regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, `.*`) + "$")
 }
 
 func appendUniq(s []string, v string) []string {

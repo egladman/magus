@@ -43,9 +43,9 @@ export fun preflight(args: [str]) > void {}
 // git/porcelain shell-out), so a locally-regenerated MAGUS.md passes whether or
 // not it is committed; only a regeneration that changes a clean file fails.
 export fun generate(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
-    magus.needs(magus.target.literal("md-generate"));
+    magus.needs(md_generate);
     if (magus.has_charm("rw")) { return; }
 
     if (clean_before and vcs.isDirty(["MAGUS.md"])) {
@@ -58,14 +58,14 @@ export fun md_generate(args: [str]) > void {
     final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
-export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); go["go-fmt"](); go["go-mod-tidy"](); }
-export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }
-export fun build(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-build"](); }
-export fun test(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-test"](); }
+export fun format(args: [str]) > void { magus.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
+export fun lint(args: [str]) > void { magus.needs(format); go["go-vet"](); }
+export fun build(args: [str]) > void { magus.needs(format); go["go-build"](); }
+export fun test(args: [str]) > void { magus.needs(format); go["go-test"](); }
 
 // The anchor `magus affected ci` keys off; fans out lint/build/test after format.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(lint, build, test);
 }
 
 // Regenerates default.pgo, the Buzz VM's PGO profile. Re-run after material changes to

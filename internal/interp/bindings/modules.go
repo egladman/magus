@@ -119,12 +119,9 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 // same modules the engine loads them with. Kept separate from the base surface
 // because a plain script needs neither type until it imports a spell module.
 func RegisterSpellSourceModules(sess *buzz.Session) {
-	// Canonical value types (Target/Charm) plus the generated TargetQuery as a
-	// flat-importable source module, so a spell's mgs_listTargets can be typed
-	// {str: fun(Target, fun(any)) void/bool} instead of `any`, and a magusfile can name or
-	// build a TargetQuery. Single source of truth lives in the spell package. The
-	// built-in generator inlines only TargetModuleSource (Target/Charm) — built-ins
-	// have no use for TargetQuery — so it is appended only here, on the runtime path.
+	// Canonical value types (Target/Charm) as a flat-importable source module, so
+	// a spell's mgs_listTargets can be typed {str: fun(Target, fun(any)) void/bool}
+	// instead of `any`. Single source of truth lives in the spell package.
 	sess.SetSourceModule(ispell.TargetModulePath, strings.Join([]string{
 		ispell.TargetModuleSource,
 		// Command value types (PatchOp < Charm < Command ordering: each references
@@ -136,7 +133,6 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 		// Command), so a workspace-local spell can author a service op. The dry host
 		// registers the same bundle; keep the two in step.
 		ispell.ServiceSource,
-		ispell.TargetQuerySource,
 		ispell.ExecResultSource,
 		// Boundary mirrors of the host-method record shapes, so a magusfile can
 		// annotate a vcs.commit / fs.stat / http.* / semver.parse / parse_url result
@@ -171,18 +167,13 @@ func buzzLogFn(level slog.Level) func(context.Context, []vm.Value) (vm.Value, er
 // miss just proceeds.
 func buzzIONoop(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
 
-// MagusModuleKeys returns the member names of the magus.* module and its
-// magus.target sub-module as the real Buzz bindings register them. It exists so the
-// wasm playground (internal/playground), which keeps a SEPARATE recording
-// implementation of this same surface, can diff against the source of truth in a
-// guard test — the two host implementations must not silently drift.
-func MagusModuleKeys() (top, target []string) {
+// MagusModuleKeys returns the member names of the magus.* module as the real
+// Buzz bindings register them. It exists so the wasm playground
+// (internal/playground), which keeps a SEPARATE recording implementation of
+// this same surface, can diff against the source of truth in a guard test —
+// the two host implementations must not silently drift.
+func MagusModuleKeys() []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
-	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, true)
-	magus := sess.GetGlobal("magus")
-	top = magus.MapKeys()
-	if t, ok := magus.MapGet("target"); ok {
-		target = t.MapKeys()
-	}
-	return top, target
+	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
+	return sess.GetGlobal("magus").MapKeys()
 }

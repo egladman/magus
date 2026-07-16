@@ -21,11 +21,11 @@ import "os";
 // (build below). Leave a stage as a no-op until you wire it.
 
 export fun preflight(args: [str]) > void {}
-export fun generate(args: [str]) > void { magus.needs(magus.target.literal("preflight")); }
-export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); }
-export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); }
-export fun build(args: [str]) > void { magus.needs(magus.target.literal("format")); os.exec("echo", ["Hello from magus"]); }
-export fun test(args: [str]) > void { magus.needs(magus.target.literal("format")); }
+export fun generate(args: [str]) > void { magus.needs(preflight); }
+export fun format(args: [str]) > void { magus.needs(generate); }
+export fun lint(args: [str]) > void { magus.needs(format); }
+export fun build(args: [str]) > void { magus.needs(format); os.exec("echo", ["Hello from magus"]); }
+export fun test(args: [str]) > void { magus.needs(format); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off. magus does
 // not hardcode its steps — compose them here with magus.needs. magus runs
@@ -33,5 +33,5 @@ export fun test(args: [str]) > void { magus.needs(magus.target.literal("format")
 // as edges: ci fans out lint/build/test in parallel; they each wait for format,
 // which waits for generate, which waits for preflight. Shared deps run once.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(lint, build, test);
 }

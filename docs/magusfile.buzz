@@ -161,15 +161,15 @@ fun generateJsBundles() > void {
 // checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and
 // committed. The `rw` charm (`generate:rw`) keeps the result instead of gating.
 export fun generate(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     // CONTENT are the derived-Markdown trees content-generate owns; they are rendered into
     // the site, so they must be fresh (and drift-gated) before the render below.
     final CONTENT = ["buzz/modules", "spells", "spells.md", "manpage"];
     final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT) == false;
     // Regenerate the docs Markdown derived from the Go tree BEFORE rendering the site.
-    magus.needs(magus.target.literal("content-generate"));
-    magus.needs(magus.target.literal("md-generate"));
-    magus.needs(magus.target.literal("changelog-generate"));
+    magus.needs(content_generate);
+    magus.needs(md_generate);
+    magus.needs(changelog_generate);
     // Regenerate the JS proto client from ../proto BEFORE the bundles that import it.
     generateProtoClient();
     final site = render.site_render(ROOT, DOCS, BLOG, OUT);
@@ -189,9 +189,9 @@ export fun generate(args: [str]) > void {
     }
 }
 
-export fun format(args: [str]) > void { magus.needs(magus.target.literal("generate")); }
-export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); }
-export fun build(args: [str]) > void { magus.needs(magus.target.literal("generate")); }
+export fun format(args: [str]) > void { magus.needs(generate); }
+export fun lint(args: [str]) > void { magus.needs(format); }
+export fun build(args: [str]) > void { magus.needs(generate); }
 
 // buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in
 // --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises
@@ -201,14 +201,14 @@ export fun buzz_test(args: [str]) > void {
 }
 
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("format"), magus.target.literal("buzz-test"));
+    magus.needs(format, buzz_test);
 }
 
 // 'ci' is the anchor `magus affected ci` keys off. generate is a DIRECT dep so the
 // site render, the JS bundles it builds, and the drift gate are first-class ci steps
 // (not just reached transitively through the mutating lint/build chain).
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("generate"), magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(generate, lint, build, test);
 }
 
 // build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo
@@ -219,7 +219,7 @@ export fun ci(args: [str]) > void {
 // host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from
 // the same TinyGo that built the wasm.
 export fun build_playground(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     magus.needs(gopherbuzz.build);
     // Run from the module root (..) so TinyGo resolves its go.mod. -stack-size lifts
     // TinyGo's small default goroutine stack for deep magusfile evaluation;
@@ -239,7 +239,7 @@ export fun build_playground(args: [str]) > void {
 // it same-origin so diagrams and page styling work offline without any CDN. Run after
 // bumping the mermaid version in package.json; commit the regenerated artifact.
 export fun build_mermaid(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     if (!fs.isDir("node_modules")) {
         os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
@@ -252,7 +252,7 @@ export fun build_mermaid(args: [str]) > void {
 // syntax highlighting works offline without any CDN. Run after bumping the version in
 // package.json; commit the regenerated artifact.
 export fun build_hljs(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     if (!fs.isDir("node_modules")) {
         os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }

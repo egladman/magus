@@ -35,10 +35,10 @@ export fun build(args: [str]) > void {
 }
 
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("build"));
+    magus.needs(build);
     go["go-test"]();
 }
 
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("test"));
+    magus.needs(test);
 }

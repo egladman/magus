@@ -20,7 +20,6 @@ import (
 // Add an entry here to generate another value type.
 var registry = map[string]reflect.Type{
 	"Target":        reflect.TypeOf(types.Target{}),
-	"TargetQuery":   reflect.TypeOf(types.TargetQuery{}),
 	"Command":       reflect.TypeOf(types.Command{}),
 	"Service":       reflect.TypeOf(types.Service{}),
 	"Charm":         reflect.TypeOf(types.Charm{}),
@@ -36,7 +35,7 @@ var registry = map[string]reflect.Type{
 
 func runTypes(args []string) error {
 	fs := flag.NewFlagSet("types", flag.ExitOnError)
-	typeName := fs.String("type", "", "value type to mirror (e.g. TargetQuery)")
+	typeName := fs.String("type", "", "value type to mirror (e.g. ExecResult)")
 	outPath := fs.String("out", "", "output .buzz file path")
 	if err := fs.Parse(args); err != nil {
 		return err

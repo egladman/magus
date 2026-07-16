@@ -29,9 +29,9 @@ magus.project({
 });
 
 export fun format(args: [str]) > void { go["go-fmt"](); }
-export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }
-export fun build(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-build"](); }
-export fun ci(args: [str]) > void { magus.needs(magus.target.literal("lint"), magus.target.literal("build")); }
+export fun lint(args: [str]) > void { magus.needs(format); go["go-vet"](); }
+export fun build(args: [str]) > void { magus.needs(format); go["go-build"](); }
+export fun ci(args: [str]) > void { magus.needs(lint, build); }
 `
 
 func TestBanner_showsBuildLine(t *testing.T) {

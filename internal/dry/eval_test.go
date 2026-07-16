@@ -40,9 +40,9 @@ magus.project({
 });
 
 export fun format(args: [str]) > void { go["go-fmt"](); }
-export fun lint(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-vet"](); }
-export fun build(args: [str]) > void { magus.needs(magus.target.literal("format")); go["go-build"](); }
-export fun ci(args: [str]) > void { magus.needs(magus.target.literal("lint"), magus.target.literal("build")); }
+export fun lint(args: [str]) > void { magus.needs(format); go["go-vet"](); }
+export fun build(args: [str]) > void { magus.needs(format); go["go-build"](); }
+export fun ci(args: [str]) > void { magus.needs(lint, build); }
 `
 
 func TestLoadMagusfile_graph(t *testing.T) {
@@ -123,8 +123,8 @@ func TestLoadMagusfile_patternNeeds(t *testing.T) {
 	const src = `
 export fun proto_generate(args: [str]) > void {}
 export fun mock_generate(args: [str]) > void {}
-export fun generate(args: [str]) > void { magus.needs(magus.target.glob("*-generate")); }
-export fun regen(args: [str]) > void { magus.needs(magus.target.regex("^(proto|mock)-generate$")); }
+export fun generate(args: [str]) > void { magus.needsGlob("*-generate"); }
+export fun regen(args: [str]) > void { magus.needsGlob("proto-*", "mock-*"); }
 `
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
@@ -140,7 +140,7 @@ export fun regen(args: [str]) > void { magus.needs(magus.target.regex("^(proto|m
 		return out
 	}
 	assert.Equal(t, []string{"mock-generate", "proto-generate"}, depsOf("generate"), "glob should match both -generate targets")
-	assert.Equal(t, []string{"mock-generate", "proto-generate"}, depsOf("regen"), "regex should match both -generate targets")
+	assert.Equal(t, []string{"mock-generate", "proto-generate"}, depsOf("regen"), "the two globs should match both -generate targets")
 }
 
 func TestRun_magusRunInvocation(t *testing.T) {

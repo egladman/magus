@@ -431,6 +431,32 @@ export fun build(args: [str]) > void {}`)
 		"a project/ import must resolve when a target is run, not only parsed")
 }
 
+// TestProjectImportHandleNeedsAndDirectCall exercises the new cross-project
+// dependency surface end to end: `import "project/<path>" as b` binds each of the
+// sibling's exported targets as a callable handle, so magus.needs(b.build) declares
+// the dependency (recognized by value identity through the session's handle registry)
+// and b.build() dispatches it directly. Under interp.Run there is no CrossDispatch
+// coordinator, so the actual cross dispatch no-ops; this asserts the binding,
+// identity-recognition, and direct-invocation paths all load and run without error
+// (a bad target name in either form would fail at load).
+func TestProjectImportHandleNeedsAndDirectCall(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "a/magusfile.buzz", `import "magus";
+import "project/../b" as b;
+export fun go(args: [str]) > void {
+    magus.needs(b.build);
+    b.build();
+}`)
+	writeFile(t, root, "b/magusfile.buzz", `import "magus";
+export fun build(args: [str]) > void {}`)
+
+	src, err := interp.Find(filepath.Join(root, "a"))
+	require.NoError(t, err)
+	require.NoError(t,
+		interp.Run(context.Background(), src, "go", nil, filepath.Join(root, "a")),
+		"magus.needs(b.build) and the direct b.build() call must both resolve the cross handle")
+}
+
 // TestSpellImportIgnoresComments is the payoff of reading the AST rather than the
 // raw text: a wrong handle that appears only in a comment must not be flagged.
 func TestSpellImportIgnoresComments(t *testing.T) {

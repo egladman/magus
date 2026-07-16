@@ -22,14 +22,7 @@ aliases: [ci]
 ```buzz
 export fun ci(args: [str]) > void {
     // declare the edges you want; independent steps run in parallel
-    magus.needs(
-        magus.target.literal("preflight"),
-        magus.target.literal("generate"),
-        magus.target.literal("format"),
-        magus.target.literal("lint"),
-        magus.target.literal("build"),
-        magus.target.literal("test"),
-    );
+    magus.needs(preflight, generate, format, lint, build, test);
 }
 ```
 

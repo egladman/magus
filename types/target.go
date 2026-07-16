@@ -148,33 +148,6 @@ func ParseTarget(s string) (Target, error) {
 	return Target{Name: target, Charms: charms}, nil
 }
 
-// Target-query modes. A literal query that also names a Project is a cross-project
-// (external) edge; see TargetQuery.IsExternal.
-const (
-	QueryLiteral = "literal"
-	QueryGlob    = "glob"
-	QueryRegex   = "regex"
-)
-
-// TargetQuery is an unresolved dependency edge: a query that, resolved against a
-// project's registered targets, produces zero or more Targets. It is what
-// magus.target.literal/glob/regex return and what magus.needs consumes (a match
-// Mode plus a Pattern), as distinct from Target, which is one resolved work-unit.
-// A literal query is the degenerate 1-to-1 case; glob/regex are 1-to-N.
-//
-// The canonical Buzz `object TargetQuery` mirror is generated from this struct by
-// cmd/magus-utils types (go:generate) and shipped in the magus/target module, so
-// the Go and Buzz shapes can't drift. Keep them in lockstep through the generator.
-type TargetQuery struct {
-	Mode    string // QueryLiteral | QueryGlob | QueryRegex
-	Pattern string // exact name for literal; the glob/regex pattern otherwise
-	Project string // cross-project (external) reference; empty = same project
-}
-
-// IsExternal reports whether q is a cross-project edge: a literal query carrying
-// the path of another project. Glob/regex queries are same-project only.
-func (q TargetQuery) IsExternal() bool { return q.Mode == QueryLiteral && q.Project != "" }
-
 // ExecResult is the serializable {stdout, stderr, code, ok} shape every magus exec
 // surface returns (os.exec, magus.cmd, a captured spell op); ok is code == 0. It is
 // the boundary mirror of the richer internal run.ExecResult.

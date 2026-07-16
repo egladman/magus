@@ -45,9 +45,9 @@ func sampleInputs() Inputs {
 			{Name: "go", Targets: []string{"go-build", "go-test"}, TargetDocs: map[string]string{"go-build": "Compile."}},
 		}},
 		Modules: []types.ModuleEntry{{
-			Name:    "magus.target",
-			Doc:     "Target selectors.",
-			Methods: []types.ModuleMethodEntry{{Name: "glob", Doc: "Glob match.", Buzz: "magus.target.glob(pattern: str)"}},
+			Name:    "vcs",
+			Doc:     "Version control.",
+			Methods: []types.ModuleMethodEntry{{Name: "shortHash", Doc: "Short commit hash.", Buzz: "vcs.shortHash() str"}},
 		}},
 		Diagnostics: []types.DiagnosticCode{types.SandboxPolicyMismatch},
 	}
@@ -112,8 +112,8 @@ func TestAssembleNodes(t *testing.T) {
 		{"op:go:go-build", types.KindOp},
 		{"op:go:go-test", types.KindOp},
 		{"charm:rw", types.KindCharm},
-		{"module:magus.target", types.KindModule},
-		{"method:magus.target.glob", types.KindMethod},
+		{"module:vcs", types.KindModule},
+		{"method:vcs.shortHash", types.KindMethod},
 		{"diagnostic:MGS2010", types.KindDiagnostic},
 	} {
 		n, ok := nodeByID(out, tc.id)
@@ -137,8 +137,8 @@ func TestAssembleNodes(t *testing.T) {
 	op, _ := nodeByID(out, "op:go:go-build")
 	assert.Equal(t, "Compile.", op.Doc)
 
-	method, _ := nodeByID(out, "method:magus.target.glob")
-	assert.Equal(t, "magus.target.glob(pattern: str)", method.Attrs["buzz"])
+	method, _ := nodeByID(out, "method:vcs.shortHash")
+	assert.Equal(t, "vcs.shortHash() str", method.Attrs["buzz"])
 
 	diag, _ := nodeByID(out, "diagnostic:MGS2010")
 	assert.Equal(t, types.SandboxPolicyMismatch.URL(), diag.Attrs["url"])
@@ -171,7 +171,7 @@ func TestAssembleEdges(t *testing.T) {
 	assert.True(t, hasEdge(out, "target:pkg/a:build", "op:go:go-build", types.RelationUses), "target uses op")
 	assert.True(t, hasEdge(out, "charm:rw", "target:pkg/a:build", types.RelationReferences), "charm references target")
 	assert.True(t, hasEdge(out, "spell:go", "op:go:go-build", types.RelationContains), "spell contains op")
-	assert.True(t, hasEdge(out, "module:magus.target", "method:magus.target.glob", types.RelationContains), "module contains method")
+	assert.True(t, hasEdge(out, "module:vcs", "method:vcs.shortHash", types.RelationContains), "module contains method")
 
 	// Every Phase 1 edge is directly extracted.
 	for _, e := range out.Links {

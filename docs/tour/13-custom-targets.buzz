@@ -16,13 +16,13 @@ export fun build(args: [str]) > void {
 
 // The conventional anchor, wired with magus.needs like always.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("build"));
+    magus.needs(build);
 }
 
 // A bespoke phase. It depends on ci through the same magus.needs edge the
 // canonical targets use, then does its own extra work.
 export fun release(args: [str]) > void {
-    magus.needs(magus.target.literal("ci"));
+    magus.needs(ci);
     magus.info("tagging and publishing the release");
 }
 

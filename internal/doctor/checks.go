@@ -126,7 +126,7 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 		Status:  StatusFail,
 		Message: "no ci target defined in any project; `magus ci` / `magus affected ci` would gate nothing (silent no-op)",
 		Details: []string{
-			`define one in your magusfile, e.g.  export fun ci(_a: [str]) > void { magus.needs(magus.target.literal("build"), magus.target.literal("test"), magus.target.literal("lint")) }`,
+			`define one in your magusfile, e.g.  export fun ci(_a: [str]) > void { magus.needs(build, test, lint); }`,
 			"run 'magus describe targets' to see the available stages to compose",
 			fmt.Sprintf("see %s: %s", types.NoCITarget, types.NoCITarget.URL()),
 		},

@@ -35,7 +35,7 @@ export fun format(args: [str]) > void { go["go-fmt"](); }
 
 // Run the Go test suite; formats first.
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     go["go-test"]();
 }
 `,

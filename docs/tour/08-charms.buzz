@@ -24,5 +24,5 @@ export fun format(args: [str]) > void {
 // Charms ride down needs() edges, so a single charm on the anchor reaches the
 // whole plan: `run ci:rw` hands rw to format too. Try `run ci`, then `run ci:rw`.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
 }

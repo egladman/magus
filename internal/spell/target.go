@@ -17,9 +17,8 @@ const TargetModulePath = "magus/target"
 // (see cmd/magus-utils types), the canonical work-unit value type. It is consumed
 // both at runtime (as part of the magus/target source module) and at built-in
 // generation time (inlined into each built-in via SelfContainedBuiltinSource). The
-// other value types (TargetQuery/ExecResult/OpResult/TargetResult) are appended at
-// runtime registration only (see registerMagusModules), since built-ins don't use
-// them.
+// other value types (ExecResult/Commit/FileInfo/...) are appended at runtime
+// registration only (see registerMagusModules), since built-ins don't use them.
 //
 //go:generate go run ../../cmd/magus-utils types -type Target -out buzzlib/target.gen.buzz
 //go:embed buzzlib/target.gen.buzz
@@ -54,15 +53,6 @@ var CommandSource string
 //go:generate go run ../../cmd/magus-utils types -type Service -out buzzlib/service.gen.buzz
 //go:embed buzzlib/service.gen.buzz
 var ServiceSource string
-
-// TargetQuerySource is the generated Buzz `object TargetQuery` mirror of
-// types.TargetQuery (see cmd/magus-utils types). It ships in the magus/target source
-// module so a magusfile can annotate with or construct a TargetQuery;
-// magus.target.literal/glob/regex return the same field shape.
-//
-//go:generate go run ../../cmd/magus-utils types -type TargetQuery -out buzzlib/targetquery.gen.buzz
-//go:embed buzzlib/targetquery.gen.buzz
-var TargetQuerySource string
 
 // ExecResultSource is the generated Buzz `object ExecResult` mirror of
 // types.ExecResult (see cmd/magus-utils types). It ships alongside the other value

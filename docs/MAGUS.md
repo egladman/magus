@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **530 nodes** and **688 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **679 nodes** and **1743 edges** (schema v5). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -42,23 +42,25 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 1 | `magus query kind:project` | `website` |
-| target | 14 | `magus query kind:target` | `generate`, `ci`, `preflight` |
-| spell | 11 | `magus query kind:spell` | `go`, `py`, `rs` |
-| op | 47 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
+| project | 1 | `magus query kind:project` | `docs` |
+| target | 15 | `magus query kind:target` | `content-generate`, `generate`, `ci` |
+| spell | 11 | `magus query kind:spell` | `go`, `ts`, `docker` |
+| op | 52 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
+| tool | 13 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 26 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS2001` |
-| file | 23 | `magus query kind:file` | `scribe.buzz`, `magusfile.buzz`, `scribe_html.buzz` |
-| function | 212 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
+| diagnostic | 29 | `magus query kind:diagnostic` | `MGS5002`, `MGS4001`, `MGS5003` |
+| doc | 128 | `magus query kind:doc` | `documentation.md`, `spells.md`, `manpage/magus-affected.md` |
+| file | 23 | `magus query kind:file` | `render.buzz`, `magusfile.buzz`, `render_html.buzz` |
+| function | 211 | `magus query kind:function` | `site_render`, `renderPage`, `strLess` |
 | import | 25 | `magus query kind:import` | `magus`, `magus/spell/go`, `assert` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 14 | `magus query project:.` | `generate`, `ci`, `preflight` |
+| . | 15 | `magus query project:.` | `content-generate`, `generate`, `ci` |
 
-## Project: website
+## Project: docs
 
 | Target | What it does |
 |---|---|
@@ -71,8 +73,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. |
 | `build-mermaid` | build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. |
 | `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. |
-| `serve` | serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change - handy for local docs work. |
+| `render` | render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate). |
 | `preflight` |  |
 | `md-generate` | md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
 | `changelog-generate` | changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. |
-| `buzz-test` | buzz-test runs scribe's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so scribe's markdown/encoding imports resolve. |
+| `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
+| `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |

@@ -26,28 +26,32 @@ owns that story end to end.
 **Rule of thumb:** reach for `needs` inside a magusfile to sequence work
 ("run `generate` before I `build`"); reach for `depends_on` to declare that
 another project's changes affect you, independent of whether any target
-calls into it directly. A literal cross-project `needs` gives you both at
+calls into it directly. A cross-project `needs` gives you both at
 once - see the fold, below.
 
-## The fold: a literal cross-project `needs` also declares `depends_on`
+## The fold: a cross-project `needs` also declares `depends_on`
 
 A cross-project `magus.needs(alias.target)` (where `alias` is a project
-imported at the top of the magusfile) is **statically extracted** and
-**unioned into the consuming project's `DependsOn`** at workspace-open time
+imported at the top of the magusfile, whose exported targets it binds as
+callable handles) is **statically extracted** and **unioned into the
+consuming project's `DependsOn`** at workspace-open time
 (`applyCrossProjectDependencies`, called from `Magus.Open`'s `load`). You
 declare the dependency once, at the target that actually needs it, and it
 counts toward the affected closure and cache-key propagation exactly as if
 you had also written a `depends_on` entry - you never write both.
 
-**This fold is literal-only.** The extractor reads the magusfile's AST; it
-cannot evaluate a dynamically computed target reference. A `magus.needs`
-call built from a variable, a function return, or anything other than a
-literal `alias.target` expression is invisible to the static graph, to
-`magus describe`, and to the affected set. It still runs correctly at
-runtime (`magus.needs` itself has no such restriction), but nothing outside
-that one target's execution knows the edge exists. If a dependency needs to
-be visible to `affected`/`describe` without being called literally, declare
-it via `depends_on` instead.
+**The fold is a static read, so a computed edge is invisible.** The extractor
+reads the magusfile's AST; it resolves a same-project target passed by
+reference (`magus.needs(build)`), a cross-project handle passed as a member
+access (`magus.needs(alias.target)`), and each literal pattern given to
+`magus.needsGlob`. What it cannot evaluate is a *computed* dependency - a
+handle stored in a variable, returned from a function, or otherwise built at
+runtime. Such a `magus.needs` call is invisible to the static graph, to
+`magus describe`, and to the affected set. It still runs correctly at runtime
+(`magus.needs` itself has no such restriction), but nothing outside that one
+target's execution knows the edge exists. If a dependency needs to be visible
+to `affected`/`describe` without being passed as a plain handle, declare it
+via `depends_on` instead.
 
 ## What a bare `depends_on` does NOT do
 
@@ -81,8 +85,8 @@ consequences worth stating plainly:
   the one way a stale hit can slip through - the coarse baseline is the
   safety margin against exactly that. To attach an input to one target rather
   than widen the whole project, declare it in the body with
-  [`magus.inputs`](cache.md#per-target-inputs-and-outputs) - the same literal-first
-  static discipline this page's `needs` references follow.
+  [`magus.inputs`](cache.md#per-target-inputs-and-outputs), whose literal globs
+  are read from the AST the same way these `needs` edges are.
 
 ## Both-arms rule: the static graph and a dry run can disagree
 
@@ -101,7 +105,7 @@ is a bug when they do.
 - **Same-project runtime cycle.** A target that (transitively) needs itself
   fails with `buzzpool: dispatch: stack contains "<name>" (cycle detected)` -
   the ancestor stack that catches this also catches a direct self-loop
-  (`magus.needs(magus.target.literal("self"))` inside `self`).
+  (`magus.needs(self)` inside `self`).
 - **Cross-project runtime cycle.** Two projects whose `magus.needs` chains
   point back at each other fail with `cross-project cycle: <dir> target
   "<name>"`, detected by the same run's `CrossDispatch` coordinator.
@@ -115,15 +119,22 @@ is a bug when they do.
   undeclared dependency" - a signal you may be missing a `depends_on`, not a
   guarantee.
 
-## `needs` targeting: literal, glob, regex - same-project only
+## `needs` and `needsGlob`: functions and patterns, same-project globs
 
-`magus.target.literal/glob/regex` build the query `magus.needs` consumes.
-Glob and regex queries are **same-project only** (a cross-project edge is
-always a literal `alias.target`). A glob with no `*` is **suffix shorthand**,
-not a substring or exact match: `magus.target.glob("build")` compiles to
-`^.*-build$` and matches `go-build`/`docker-build`, but **not** a target
-literally named `build` - write `magus.target.literal("build")` for that.
-A glob containing `*` compiles as an ordinary anchored glob instead.
+`magus.needs` takes target **functions**: a same-project target passed by
+reference (`magus.needs(build, test)`) or a cross-project handle a project
+import binds (`magus.needs(alias.target)`). It never takes a string or a query
+object; a mistyped identifier is an undefined variable and fails at **load**,
+not at run time. For patterns, reach for the separate `magus.needsGlob`.
+
+`magus.needsGlob(pattern)` is **same-project only** (a cross-project edge is
+always a handle `alias.target`) and matches registered target names. A pattern
+with no `*` is **suffix shorthand**, not a substring or exact match:
+`magus.needsGlob("build")` compiles to `^.*-build$` and matches
+`go-build`/`docker-build`, but **not** a target literally named `build` - pass
+the `build` function to `magus.needs` for that. A pattern containing `*` matches
+as an ordinary anchored glob (`*-generate`). A pattern that matches nothing is a
+no-op.
 
 ## A service reached via `needs` is supervised, not foregrounded
 
@@ -137,7 +148,7 @@ blocking on the service process itself. See
 
 ## See also
 
-- [targets.md](targets.md): the `magus.needs`/`magus.target.*` grammar and the
+- [targets.md](targets.md): the `magus.needs`/`magus.needsGlob` grammar and the
   target-name model these edges resolve against.
 - [workspace.md](workspace.md): `depends_on` path resolution and the
   `magus.project` options map it lives in.

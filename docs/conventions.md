@@ -76,8 +76,8 @@ removed lines (leading `-`) as a red one.
 
 ```diff
  export fun ci(args: [str]) > void {
--    magus.needs(magus.target.literal("lint"));
-+    magus.needs(magus.target.literal("lint"), magus.target.literal("test"));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 ```
 

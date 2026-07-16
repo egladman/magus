@@ -20,8 +20,8 @@ import (
 // removing a binding without mirroring it here fails this test instead of silently
 // breaking the playground.
 func TestMagusSurfaceMatchesBindings(t *testing.T) {
-	realTop, realTarget := bindings.MagusModuleKeys()
-	require.NotEmpty(t, realTop, "bindings.MagusModuleKeys returned no top-level members")
+	realTop := bindings.MagusModuleKeys()
+	require.NotEmpty(t, realTop, "bindings.MagusModuleKeys returned no members")
 
 	m := buildMagus(buzz.NewSession(context.Background(), buzz.WithEmbedded()), newTracer())
 	have := keySet(m)
@@ -29,15 +29,8 @@ func TestMagusSurfaceMatchesBindings(t *testing.T) {
 		assert.True(t, have[k], "playground magus.* is missing %q (registered by the real bindings); add a stub in buildMagus", k)
 	}
 
-	tv, ok := m.MapGet("target")
-	require.True(t, ok, "playground magus.target is missing")
-	haveTarget := keySet(tv)
-	for _, k := range realTarget {
-		assert.True(t, haveTarget[k], "playground magus.target.* is missing %q (registered by the real bindings)", k)
-	}
-
 	// And the inverse: the playground must not expose members the real host dropped
-	// (e.g. the removed depends_on/dispatch), which would teach a dead API.
+	// (e.g. the removed magus.target namespace), which would teach a dead API.
 	for _, k := range m.MapKeys() {
 		assert.True(t, slices.Contains(realTop, k), "playground magus.%s has no counterpart in the real bindings; remove it or it teaches a dead API", k)
 	}

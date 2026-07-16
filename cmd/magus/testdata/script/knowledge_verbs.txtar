@@ -38,7 +38,7 @@ import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
 export fun lint(args: [str]) > void { acme.lint(); }
 export fun build(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"));
+    magus.needs(lint);
     if (magus.has_charm("rw")) { acme.lint(); }
 }
 -- spells/acme/spell.buzz --

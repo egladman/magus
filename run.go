@@ -172,7 +172,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	if projects := m.targetProjects(targets); len(projects) > 0 {
 		if has, scanErr := anyProjectDeclaresCI(projects); !has && scanErr == nil {
 			interactive.Emit(os.Stderr, "define a ci target in your magusfile to compose the gate, e.g.  "+
-				"export fun ci(_a: [str]) > void { magus.needs(magus.target.literal(\"build\"), magus.target.literal(\"test\"), magus.target.literal(\"lint\")) }  "+
+				"export fun ci(_a: [str]) > void { magus.needs(build, test, lint); }  "+
 				"(run 'magus describe targets' to see available stages)")
 			return types.DiagnosticErrorf(types.NoCITarget,
 				"no %q target defined in the selected project(s); it is the anchor %q and %q key off, "+

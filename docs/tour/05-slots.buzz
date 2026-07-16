@@ -42,15 +42,15 @@ export fun js_lint(args: [str]) > void {
 // lint fans out to both. The scheduler runs the 1-slot check alongside other
 // small work, but quiets the queue around js-lint's 4-slot reservation.
 export fun lint(args: [str]) > void {
-    magus.needs(magus.target.literal("go-lint"), magus.target.literal("js-lint"));
+    magus.needs(go_lint, js_lint);
 }
 
 // The conventional anchor. Kept to lint here so the plan stays short.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"));
+    magus.needs(lint);
 }
 
 // A stand-in release, so `graph` shows the exclusive policy in context.
 export fun release(args: [str]) > void {
-    magus.needs(magus.target.literal("ci"));
+    magus.needs(ci);
 }

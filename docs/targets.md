@@ -173,7 +173,7 @@ before lookup, wherever that input enters.
 | ------------------------------------------------- | ----------------------------------------------------------------- |
 | Magusfile declarations (`export fun`)              | `export fun go_build(...)` registers as `go-build`.                |
 | CLI `run` / `affected` arguments                   | `magus run goBuild` reaches the target declared `go_build`.        |
-| `magus.needs` literals                             | `magus.needs(magus.target.literal("goBuild"))` resolves `go_build`. |
+| `magus.needs` target handles                       | `magus.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
 | The per-target policy map (`magus.project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa. |
 | Charm names (`NormalizeCharmName`)                 | `target:NoCache` and `target:no-cache` are the same charm.         |
 

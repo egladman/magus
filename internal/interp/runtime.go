@@ -105,7 +105,7 @@ func RunDir(ctx context.Context, dir, target string, extraArgs []string) error {
 	return ErrUnknownTarget
 }
 
-// Parse executes src in parse mode (stubs magus.target) and returns discovered targets.
+// Parse executes src in parse mode (name discovery only) and returns discovered targets.
 func Parse(ctx context.Context, src *Source) ([]Target, error) {
 	// Carry the source so bindings resolve paths relative to the magusfile's own
 	// directory (local-spell require/import), not the process cwd, the same context
@@ -116,8 +116,11 @@ func Parse(ctx context.Context, src *Source) ([]Target, error) {
 }
 
 // BuzzHostBindingsFn registers Go-backed host modules into a Buzz session.
-// parseMode=true stubs magus.target to collect names only.
-type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, parseMode bool)
+// targets is the session's dispatchable target registry; exports maps each
+// canonical target key to the exported function value itself, so magus.needs
+// can verify a passed function IS the exported target (nil when the session
+// has no export discovery, e.g. the REPL). parseMode=true collects names only.
+type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool)
 
 var buzzHostBindingsFn BuzzHostBindingsFn
 
@@ -281,8 +284,12 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	AttachSessionObservers(ctx, buzzSess, ModeMagusfile)
 
 	targetMap := buzzSess.Targets()
+	// exportVals is filled by the export-discovery loop below, after the files
+	// execute; the bindings close over the map reference, so magus.needs sees the
+	// populated registry by the time any target body runs.
+	exportVals := map[string]vm.Value{}
 	if buzzHostBindingsFn != nil {
-		buzzHostBindingsFn(ctx, buzzSess, targetMap, parseMode)
+		buzzHostBindingsFn(ctx, buzzSess, targetMap, exportVals, parseMode)
 	}
 
 	for _, path := range src.Files {
@@ -341,6 +348,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		}
 		seen[key] = name
 		captured := val
+		exportVals[key] = val
 		targetMap[key] = func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 			return TimeCall(ctx, ModeMagusfile, func() (vm.Value, error) {
 				return buzzSess.CallValue(ctx, captured, args)
@@ -370,7 +378,9 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 	buzzSess.SetIncludeDirs(nil)
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {
-		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), false)
+		// nil exports: the REPL has no export-discovery pass, so magus.needs
+		// falls back to name-only resolution there.
+		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), nil, false)
 	}
 
 	if autoloadDir != "" {

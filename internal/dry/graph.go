@@ -83,8 +83,8 @@ type Tracer struct {
 	charms []string
 
 	// targetKeys is every discovered target's canonical key, set before probing so
-	// a magus.needs(glob/regex) can expand its pattern against the real target set
-	// (a literal edge needs no set; a pattern does).
+	// a magus.needsGlob can expand its pattern against the real target set
+	// (an exact needs edge needs no set; a pattern does).
 	targetKeys []string
 }
 

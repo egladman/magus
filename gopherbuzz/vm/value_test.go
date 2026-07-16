@@ -156,3 +156,21 @@ func TestValueEqual(t *testing.T) {
 	assert.False(t, m1.Equal(m2), "distinct content-equal maps must not be Equal")
 	assert.True(t, m1.Equal(m1), "a map value must be Equal to itself")
 }
+
+// TestValueEqualFunctionIdentity pins reference identity for function values.
+// These cases are load-bearing for magus.needs, which recovers which exported
+// target a passed function value refers to by matching it against the exports
+// it handed out.
+func TestValueEqualFunctionIdentity(t *testing.T) {
+	noop := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.NullValue(), nil }
+
+	// A function value equals itself, so host code can match a callable it
+	// handed out earlier against one a script passes back.
+	fnA := vm.DirectValue("a", noop)
+	assert.True(t, fnA.Equal(fnA), "a function value equals itself")
+
+	// Two distinct function values are never equal, even with the same name and
+	// underlying Go func: identity, not structure, for heap kinds.
+	fnB := vm.DirectValue("a", noop)
+	assert.False(t, fnA.Equal(fnB), "distinct function values are not equal")
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -19,26 +18,37 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func buildTargetNS(obs buzz.DirectObserver, targets map[string]vm.Callable) vm.Value {
-	ns := vm.NewMap()
+// externalTarget names one target of another project: the {project, target}
+// pair a cross-project handle stands for.
+type externalTarget struct {
+	Project string // project path as written after "project/" in the import
+	Target  string // kebab-normalized target name
+}
 
-	ns.MapSet("expand_globs", directVal(obs, "magus.target.expand_globs", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 {
-			return vm.ListValue(nil), nil
+// externalHandles is a session's registry of cross-project target handles: the
+// function values a `import "project/<path>"` module binds for each of the
+// dependency's targets (see resolveProjectImport), paired with the target each
+// dispatches. magus.needs matches a passed function against it by value
+// identity to recover the {project, target} the handle stands for - the handle
+// itself stays an ordinary callable, so `gopherbuzz.build()` also just works.
+// A linear scan is fine: a magusfile imports a handful of projects at most.
+type externalHandles struct {
+	vals    []vm.Value
+	targets []externalTarget
+}
+
+func (e *externalHandles) register(v vm.Value, dep externalTarget) {
+	e.vals = append(e.vals, v)
+	e.targets = append(e.targets, dep)
+}
+
+func (e *externalHandles) lookup(v vm.Value) (externalTarget, bool) {
+	for i, hv := range e.vals {
+		if hv.Equal(v) {
+			return e.targets[i], true
 		}
-		matched := matchBuzzTargets(targets, buzzValToStringSlice(args[0]))
-		return strSliceToBuzzList(matched), nil
-	}))
-
-	// literal/glob/regex return a TargetQuery (a map mirroring the magus/target
-	// `object TargetQuery` fields — mode + pattern) consumed by magus.needs. The
-	// pattern must be a string literal so the static extractor (internal/describe)
-	// can recover the edge from source without evaluating the magusfile.
-	ns.MapSet("literal", directVal(obs, "magus.target.literal", buildBuzzTargetHandle(types.QueryLiteral)))
-	ns.MapSet("glob", directVal(obs, "magus.target.glob", buildBuzzTargetHandle(types.QueryGlob)))
-	ns.MapSet("regex", directVal(obs, "magus.target.regex", buildBuzzTargetHandle(types.QueryRegex)))
-
-	return ns
+	}
+	return externalTarget{}, false
 }
 
 // buildCacheNS assembles magus.cache for a magusfile. Today it exposes remote(),
@@ -69,59 +79,6 @@ func buildCacheNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	return ns
 }
 
-// buildBuzzTargetHandle returns the magus.target.<mode> constructor (mode is one of
-// types.Query{Literal,Glob,Regex}). The argument is a required string literal (the
-// literal-first-arg discipline: the static extractor recovers the edge from source
-// without running the VM). It returns the TargetQuery's Buzz field shape.
-func buildBuzzTargetHandle(mode string) func(context.Context, []vm.Value) (vm.Value, error) {
-	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 || !args[0].IsStr() {
-			return vm.Null, fmt.Errorf("magus.target.%s: argument must be a string literal", mode)
-		}
-		return targetQueryToBuzz(types.TargetQuery{Mode: mode, Pattern: args[0].AsString()}), nil
-	}
-}
-
-// targetQueryToBuzz encodes q as the Buzz map magus.needs consumes — the same field
-// shape as the magus/target `object TargetQuery`, so a constructor result and a
-// magusfile-authored TargetQuery decode identically (see decodeTargetQuery).
-func targetQueryToBuzz(q types.TargetQuery) vm.Value {
-	m := vm.NewMap()
-	m.MapSet("mode", vm.StrValue(q.Mode))
-	m.MapSet("pattern", vm.StrValue(q.Pattern))
-	m.MapSet("project", vm.StrValue(q.Project))
-	return m
-}
-
-// decodeTargetQuery reads a magus.target.* value into a types.TargetQuery. It accepts
-// both the map the constructors emit and a TargetQuery object instance a magusfile
-// builds via `import "magus/target"` — MapView yields the field map for either. ok is
-// false for any value without a valid mode, so magus.needs rejects bare strings,
-// lists, and unrelated maps/objects.
-func decodeTargetQuery(v vm.Value) (types.TargetQuery, bool) {
-	mv, ok := v.MapView()
-	if !ok {
-		return types.TargetQuery{}, false
-	}
-	mode := ""
-	if m, ok := mv.MapGet("mode"); ok && m.IsStr() {
-		mode = m.AsString()
-	}
-	switch mode {
-	case types.QueryLiteral, types.QueryGlob, types.QueryRegex:
-	default:
-		return types.TargetQuery{}, false
-	}
-	q := types.TargetQuery{Mode: mode}
-	if p, ok := mv.MapGet("pattern"); ok && p.IsStr() {
-		q.Pattern = p.AsString()
-	}
-	if pr, ok := mv.MapGet("project"); ok && pr.IsStr() {
-		q.Project = pr.AsString()
-	}
-	return q, true
-}
-
 // dispatchBuzzExternal runs the cross-project target an external handle names,
 // through the run's CrossDispatch coordinator (run-once + cross-project cycle
 // detection). The project path is resolved with file.Resolve against the caller's
@@ -132,7 +89,7 @@ func decodeTargetQuery(v vm.Value) (types.TargetQuery, bool) {
 // It yields the caller's concurrency slot for the duration (the remote run needs
 // slots of its own), mirroring buzzDispatchViaPool. No-op when no coordinator/
 // workspace is in ctx (describe/parse), so the handle stays graph-only.
-func dispatchBuzzExternal(ctx context.Context, q types.TargetQuery) error {
+func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	cd := interp.CrossDispatchFromContext(ctx)
 	src := interp.SourceFromContext(ctx)
 	ws := types.WorkspaceFromContext(ctx)
@@ -143,7 +100,7 @@ func dispatchBuzzExternal(ctx context.Context, q types.TargetQuery) error {
 	if err != nil {
 		return fmt.Errorf("magus: cross-project dependency: %w", err)
 	}
-	depPath, err := file.Resolve(q.Project, filepath.ToSlash(callerRel))
+	depPath, err := file.Resolve(ref.Project, filepath.ToSlash(callerRel))
 	if err != nil {
 		return err
 	}
@@ -151,71 +108,96 @@ func dispatchBuzzExternal(ctx context.Context, q types.TargetQuery) error {
 	if dep == nil {
 		return fmt.Errorf("magus: cross-project dependency: unknown project %q", depPath)
 	}
-	target := strings.ToLower(q.Pattern)
+	target := strings.ToLower(ref.Target)
 	lim := cache.LimiterFromContext(ctx)
 	return proc.RunChildSync(ctx, lim, func() error {
 		return cd.Dispatch(cache.WithoutSlotHeld(ctx), dep.Dir, target)
 	})
 }
 
-// resolveTargetQuery expands a same-project query to matching target names: literal
-// is an exact name run through the same normalizer targetMap registration uses (see
-// execBuzzSrc), so a needs literal gets the same many-spellings forgiveness as the
-// CLI regardless of the casing/separator convention it's written in; glob matches
-// via matchBuzzTargets, regex matches registered names against the compiled
-// pattern. External queries are dispatched separately and are not valid here.
-func resolveTargetQuery(targets map[string]vm.Callable, q types.TargetQuery) ([]string, error) {
-	switch q.Mode {
-	case types.QueryLiteral:
-		return []string{types.DefaultTargetNameNormalizer.NormalizeTargetName(q.Pattern)}, nil
-	case types.QueryGlob:
-		return matchBuzzTargets(targets, []string{q.Pattern}), nil
-	case types.QueryRegex:
-		re, err := regexp.Compile(q.Pattern)
-		if err != nil {
-			return nil, fmt.Errorf("target.regex %q: %w", q.Pattern, err)
-		}
-		var matched []string
-		for name := range targets {
-			if re.MatchString(name) {
-				matched = append(matched, name)
-			}
-		}
-		slices.Sort(matched)
-		return matched, nil
-	default:
-		return nil, fmt.Errorf("target query: not a same-project query")
-	}
-}
-
 // buildBuzzNeeds returns magus.needs(...), the one dependency primitive. Every
-// argument must be a TargetQuery from magus.target.literal/glob/regex — bare strings
-// and lists are not accepted, so a dependency is always a typed, statically-
-// recoverable edge. Same-project queries resolve to target names awaited through the
-// VM pool / TargetMemo path (dispatchBuzzDeps); an external query dispatches
-// cross-project via CrossDispatch.
-func buildBuzzNeeds(targets map[string]vm.Callable) func(context.Context, []vm.Value) (vm.Value, error) {
+// argument is a target function: a same-project exported target passed by
+// reference (magus.needs(format)), or a cross-project handle a project import
+// binds (magus.needs(gopherbuzz.build)). Nothing else is accepted - no strings,
+// no query objects - so a dependency is always the target itself, checked at
+// the call. Patterns go through magus.needsGlob instead. Same-project targets
+// are awaited through the VM pool / TargetMemo path (dispatchBuzzDeps); a
+// cross-project handle dispatches via CrossDispatch.
+func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 		var names []string
 		for _, arg := range args {
-			q, ok := decodeTargetQuery(arg)
-			if !ok {
-				return vm.Null, fmt.Errorf("magus.needs: each argument must be a magus.target.* query (literal/glob/regex)")
+			if !arg.IsFun() {
+				return vm.Null, fmt.Errorf("magus.needs: each argument must be a target function (an exported target, or a project import member); use magus.needsGlob for patterns")
 			}
-			if q.IsExternal() {
-				if err := dispatchBuzzExternal(callCtx, q); err != nil {
+			if ref, ok := ext.lookup(arg); ok {
+				if err := dispatchBuzzExternal(callCtx, ref); err != nil {
 					return vm.Null, fmt.Errorf("magus.needs: %w", err)
 				}
 				continue
 			}
-			resolved, err := resolveTargetQuery(targets, q)
+			name, err := resolveTargetFun(targets, exports, arg)
 			if err != nil {
 				return vm.Null, fmt.Errorf("magus.needs: %w", err)
 			}
-			names = append(names, resolved...)
+			names = append(names, name)
 		}
 		if err := dispatchBuzzDeps(callCtx, targets, names); err != nil {
 			return vm.Null, fmt.Errorf("magus.needs: %w", err)
+		}
+		return vm.Null, nil
+	}
+}
+
+// resolveTargetFun maps a function value passed to magus.needs to its canonical
+// target key. The declared name (vm.Value.FunName) is run through the same
+// normalizer targetMap registration uses, so a handle gets the same
+// many-spellings forgiveness as the CLI. When the session's export registry is
+// available, the passed value must BE the exported function (value identity),
+// so a local helper that merely shares a target's normalized name cannot
+// silently stand in for it.
+func resolveTargetFun(targets map[string]vm.Callable, exports map[string]vm.Value, arg vm.Value) (string, error) {
+	name := arg.FunName()
+	// The chunk compiler names an anonymous closure "<fun>"; a Go DirectValue can
+	// legitimately carry an empty name too.
+	if name == "" || name == "<fun>" {
+		return "", fmt.Errorf("anonymous function is not a target; pass an exported target function")
+	}
+	key := types.DefaultTargetNameNormalizer.NormalizeTargetName(name)
+	if _, ok := targets[key]; !ok {
+		return "", fmt.Errorf("function %q does not name an exported target", name)
+	}
+	if exports != nil {
+		exp, ok := exports[key]
+		if !ok || !exp.Equal(arg) {
+			return "", fmt.Errorf("function %q matches target name %q but is not the exported target function", name, key)
+		}
+	}
+	return key, nil
+}
+
+// buildBuzzNeedsGlob returns magus.needsGlob(...), the pattern form of needs.
+// Each argument is a glob pattern string matched against the project's target
+// names (matchBuzzTargets semantics: "*" wildcards, and a pattern without "*"
+// matches as "-<pattern>" suffix shorthand); every match is awaited like a
+// magus.needs dependency. Patterns are a separate verb, not a needs overload,
+// so needs stays monomorphic: a dependency is a target function, a pattern is
+// a name query. A pattern matching nothing is a no-op, mirroring glob
+// semantics elsewhere.
+func buildBuzzNeedsGlob(targets map[string]vm.Callable) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
+		var patterns []string
+		for _, arg := range args {
+			if !arg.IsStr() {
+				return vm.Null, fmt.Errorf("magus.needsGlob: each argument must be a glob pattern string")
+			}
+			patterns = append(patterns, arg.AsString())
+		}
+		if len(patterns) == 0 {
+			return vm.Null, fmt.Errorf("magus.needsGlob: requires at least one glob pattern")
+		}
+		if err := dispatchBuzzDeps(callCtx, targets, matchBuzzTargets(targets, patterns)); err != nil {
+			return vm.Null, fmt.Errorf("magus.needsGlob: %w", err)
 		}
 		return vm.Null, nil
 	}

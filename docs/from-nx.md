@@ -129,7 +129,7 @@ with declared inputs and outputs:
 
 The equivalent magusfile, in the same project directory - the upstream
 dependency is declared once, at the target that needs it, via a project
-import (see [Dependencies](dependencies.md#the-fold-a-literal-cross-project-needs-also-declares-depends_on)):
+import (see [Dependencies](dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)):
 
 ```buzz
 import "magus";
@@ -152,8 +152,7 @@ export fun lint(args: [str]) > void {
 }
 
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("build"), magus.target.literal("test"),
-                magus.target.literal("lint"));
+    magus.needs(build, test, lint);
 }
 ```
 

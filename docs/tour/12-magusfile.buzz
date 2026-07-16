@@ -55,9 +55,12 @@ fun ldflags(version: str) > str {
 // and IMAGE_BUILD all define (and run) the target image-build. `magus run
 // imageBuild` and `magus run image-build` are the same command; try `run
 // mockGenerate` in the console below. Dependencies are declared with
-// magus.needs(magus.target.literal("name")): needs takes a magus.target.* query
-// wrapping a string literal (not a bare string or the function itself), so magus
-// can recover the whole DAG statically, without running the file. magus runs the
+// magus.needs(name): needs takes the target FUNCTION itself, passed by reference
+// (an exported target of this same file - a forward reference to one declared
+// later is fine, since bodies run after the whole file loads). Because it is a
+// plain identifier, a typo is an undefined variable caught at load, and magus can
+// recover the whole DAG statically, without running the bodies. For a family of
+// targets by name pattern there is magus.needsGlob (below). magus runs the
 // dependencies first, deduplicated, and in parallel wherever the graph allows.
 //
 // A spell's ops are its contributed targets, keyed by the kebab-case CLI name
@@ -75,13 +78,15 @@ export fun preflight(args: [str]) > void {}
 export fun proto_generate(args: [str]) > void { buf["buf-generate"](); }
 export fun mock_generate(args: [str])  > void { go["go-generate"](); }
 
-// The umbrella `generate` target pulls in every `*-generate` target with ONE glob
-// instead of listing each by hand: magus.target.glob("*-generate") matches every
-// target ending in -generate, so adding a `sql-generate` later needs no edit here.
-// (For arbitrary patterns there is also magus.target.regex(...).) That is the
-// payoff of naming targets by a shared convention. Try `run generate` to fan out.
+// The umbrella `generate` target pulls in every `*-generate` target with ONE
+// pattern instead of listing each by hand: magus.needsGlob("*-generate") matches
+// every target ending in -generate, so adding a `sql-generate` later needs no edit
+// here. (needsGlob is the pattern verb; needs itself stays functions-only. A
+// pattern with no `*` is suffix shorthand, so "generate" would read the same here.)
+// That is the payoff of naming targets by a shared convention. Try `run generate`.
 export fun generate(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"), magus.target.glob("*-generate"));
+    magus.needs(preflight);
+    magus.needsGlob("*-generate");
 }
 
 // Format every language. These ops CHECK by default; run `magus run format:rw`
@@ -89,7 +94,7 @@ export fun generate(args: [str]) > void {
 // --write, buf format to -w. The charm rides down from the run, so no branch is
 // needed here. (Try `run format` then `run format:rw` in the console to compare.)
 export fun format(args: [str]) > void {
-    magus.needs(magus.target.literal("generate"));
+    magus.needs(generate);
     buf["buf-format"]();
     go["go-fmt"]();
     ts["prettier"]();
@@ -102,34 +107,34 @@ export fun format(args: [str]) > void {
 // checks stay at the default of 1 slot). `magus run lint:rw` applies the
 // auto-fixable findings where a tool supports it (e.g. golangci-lint --fix).
 export fun proto_lint(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     buf["buf-lint"]();
 }
 export fun go_lint(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     go["go-vet"]();
     go["golangci-lint"]();
 }
 export fun js_lint(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     ts["eslint"]({"args": ["--concurrency=" + LINT_SLOTS]});
 }
 
-// The umbrella `lint` fans out across the whole family with one glob.
+// The umbrella `lint` fans out across the whole family with one pattern.
 export fun lint(args: [str]) > void {
-    magus.needs(magus.target.glob("*-lint"));
+    magus.needsGlob("*-lint");
 }
 
 // Compile the version-stamped server binary and type-check the client.
 export fun build(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     go["go-build"]({"args": ["-ldflags", ldflags(VERSION), "-o", "bin/api", "./cmd/api"]});
     ts["tsc"]();
 }
 
 // Run both suites.
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     go["go-test"]();
     ts["vitest"]();
 }
@@ -138,7 +143,7 @@ export fun test(args: [str]) > void {
 // its own; it fans out to lint, build, and test, which share the format ->
 // generate -> preflight spine and each run once. Try `run ci` to see the plan.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("lint"), magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(lint, build, test);
 }
 
 // Build the container image from the compiled binary. Default: a single-arch
@@ -146,7 +151,7 @@ export fun ci(args: [str]) > void {
 // pushed to the registry. Kept as its own target so `magus run image-build`
 // works standalone.
 export fun image_build(args: [str]) > void {
-    magus.needs(magus.target.literal("build"));
+    magus.needs(build);
     final tag = IMAGE + ":" + VERSION;
     if (magus.has_charm("cd")) {
         docker["docker-build"]({"args": ["--platform", "linux/amd64,linux/arm64", "--push", "-t", tag, "."]});
@@ -162,5 +167,5 @@ export fun image_build(args: [str]) > void {
 // the charm pinned in the call, but an imperative call is not a static edge, so it
 // would not appear in the graph. Both are valid; needs keeps the DAG complete.)
 export fun release(args: [str]) > void {
-    magus.needs(magus.target.literal("image-build"));
+    magus.needs(image_build);
 }

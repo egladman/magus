@@ -47,14 +47,14 @@ fun install() > void {
 
 // typecheck runs the TS gate (tsc --noEmit); a pure check, no output.
 export fun typecheck(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     install();
     os.exec("pnpm", ["run", "typecheck"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     install();
     os.exec("pnpm", ["run", "test"], ".", {});
 }
@@ -64,7 +64,7 @@ export fun test(args: [str]) > void {
 // dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result
 // instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
 export fun build(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     final clean_before = vcs.isDirty(["gen"]) == false;
     install();
     os.exec("pnpm", ["run", "build"], ".", {});
@@ -79,11 +79,11 @@ export fun build(args: [str]) > void {
 // lint is the TypeScript gate for now (the console has no separate linter); kept as its own target so
 // the ci anchor and `magus run lint console` have a stable name if a real linter lands later.
 export fun lint(args: [str]) > void {
-    magus.needs(magus.target.literal("typecheck"));
+    magus.needs(typecheck);
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the typecheck gate, the unit tests, and the
 // build-plus-drift-gate, all first-class ci steps.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("typecheck"), magus.target.literal("test"), magus.target.literal("build"));
+    magus.needs(typecheck, test, build);
 }

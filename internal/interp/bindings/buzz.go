@@ -40,19 +40,25 @@ func init() {
 // project_ns.go (magus.project), target_ns.go (magus.target/needs/cache),
 // spell_object.go (imported spell handles), modules.go (the host module surface),
 // imports.go (project/spell import resolution), and pry.go (magus.pry).
-func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, parseMode bool) {
+func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) {
 	// One host-call observer for this registration, timing every magus.* native
 	// callable into magus.buzz.host.call. nil (a pure pass-through) when telemetry
 	// is disabled, so the VM's hot native-dispatch arm is untouched on one-shot runs.
 	obs := interp.NewHostCallObserver(ctx)
+	// Cross-project handle registry for this session: project imports register
+	// each handle they bind, magus.needs matches passed functions against it.
+	ext := &externalHandles{}
 	magus := vm.NewMap()
 	magus.MapSet("project", buildProject(ctx, obs))
-	magus.MapSet("target", buildTargetNS(obs, targets))
 	magus.MapSet("cache", buildCacheNS(ctx, obs))
-	// magus.needs(...): the one dependency primitive. Each argument is a TargetQuery
-	// from magus.target.literal/glob/regex; the matched targets are awaited via
-	// the Buzz VM pool (cross-project queries dispatch through CrossDispatch).
-	magus.MapSet("needs", directVal(obs, "magus.needs", buildBuzzNeeds(targets)))
+	// magus.needs(...): the one dependency primitive. Each argument is a target
+	// function - a same-project exported target by reference, or a cross-project
+	// handle from a project import; the targets are awaited via the Buzz VM pool
+	// (cross-project handles dispatch through CrossDispatch).
+	magus.MapSet("needs", directVal(obs, "magus.needs", buildBuzzNeeds(targets, exports, ext)))
+	// magus.needsGlob(...): the pattern form - glob strings matched against the
+	// project's target names; every match is awaited like a needs dependency.
+	magus.MapSet("needsGlob", directVal(obs, "magus.needsGlob", buildBuzzNeedsGlob(targets)))
 	// magus.inputs(...) / magus.outputs(...): declare a target's cache footprint next
 	// to its body - inputs narrow the cache key, outputs the snapshot/replay set. They
 	// are read statically at load (a cache hit skips the body, so the run cannot be the
@@ -146,11 +152,12 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// ./spells/hello.buzz on demand and binds its handle under the basename (hello),
 	// registering by value when bound via magus.project.
 	// Cross-project target imports: `import "project/<path>" as <alias>` binds a
-	// module whose members are the other project's targets as cross-project handles,
-	// so `magus.needs(<alias>.<target>)` declares a target-level dependency across the
-	// project boundary (a typo in the target name fails at load, not at run time).
+	// module whose members are the other project's targets as callable handles,
+	// so `magus.needs(<alias>.<target>)` declares a target-level dependency across
+	// the project boundary (a typo in the target name fails at load, not at run
+	// time), and `<alias>.<target>()` dispatches it directly.
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
-		if v, ok := resolveProjectImport(ctx, importPath); ok {
+		if v, ok := resolveProjectImport(ctx, importPath, ext); ok {
 			return v, true
 		}
 		return resolveLocalSpellImport(ctx, importPath)

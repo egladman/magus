@@ -245,19 +245,71 @@ export fun go(_a: [str]) > void { hello.build(); }`
 	}
 }
 
-// TestDependsOnUnknownTargetFails verifies a typo'd or removed dependency fails
-// fast rather than silently no-op'ing.
-func TestDependsOnUnknownTargetFails(t *testing.T) {
+// TestNeedsNonTargetFunctionFails verifies a needs on a function that is not an
+// exported target - a non-exported helper, or a typo that resolves to some other
+// in-scope function - fails fast rather than silently no-op'ing. (A name that
+// resolves to nothing at all is a Buzz undefined-variable error even earlier; this
+// guards the reachable footgun of passing a real function value that names no target.)
+func TestNeedsNonTargetFunctionFails(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
+fun helper(args: [str]) > void {}
 export fun top(args: [str]) > void {
-    magus.needs(magus.target.literal("does_not_exist"));
+    magus.needs(helper);
 }
 `)
 	err := runTarget(t, dir, "top")
-	require.Error(t, err, "expected an error for depends_on on an unknown target")
-	assert.Contains(t, err.Error(), "unknown target")
+	require.Error(t, err, "expected an error for a needs on a non-target function")
+	assert.Contains(t, err.Error(), "does not name an exported target")
+}
+
+// TestNeedsForwardReference verifies a magus.needs on an exported target declared
+// LATER in the file resolves: target bodies run post-load, so the forward reference
+// to the later export is already bound by the time top runs.
+func TestNeedsForwardReference(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun top(_a: [str]) > void {
+    magus.needs(dep);
+    fs.writeFile("ran", "top");
+}
+export fun dep(_a: [str]) > void { fs.writeFile("dep-ran", "dep"); }
+`)
+	require.NoError(t, runTarget(t, dir, "top"))
+	_, err := os.Stat(filepath.Join(dir, "dep-ran"))
+	require.NoError(t, err, "forward-referenced dependency did not run")
+}
+
+// TestNeedsStringArgumentFails verifies magus.needs rejects a bare string - the
+// classic footgun - and points the author at magus.needsGlob for patterns.
+func TestNeedsStringArgumentFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+export fun dep(_a: [str]) > void {}
+export fun top(_a: [str]) > void { magus.needs("dep"); }
+`), 0o644))
+	err := runTarget(t, dir, "top")
+	require.Error(t, err, "expected an error for a string argument to magus.needs")
+	assert.Contains(t, err.Error(), "must be a target function")
+}
+
+// TestNeedsAnonymousFunctionFails verifies magus.needs rejects an anonymous function
+// literal: it names no target, so it cannot declare a dependency.
+func TestNeedsAnonymousFunctionFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+export fun top(_a: [str]) > void { magus.needs(fun (_a: [str]) > void {}); }
+`), 0o644))
+	err := runTarget(t, dir, "top")
+	require.Error(t, err, "expected an error for an anonymous function argument to magus.needs")
+	assert.Contains(t, err.Error(), "anonymous function is not a target")
 }
 
 // TestRunBuzzTargetNameCollision is the Buzz counterpart: two exports that
@@ -380,8 +432,8 @@ export fun viash(_a: [str]) > void {
 	require.NoError(t, runTarget(t, dir, "viash"))
 }
 
-// TestNeedsDedup verifies magus.needs runs a duplicated target once —
-// the footgun where a manually-listed target also matches an expand_globs glob.
+// TestNeedsDedup verifies magus.needs runs a duplicated target once — the footgun
+// where the same exported target is listed more than once in one needs call.
 func TestNeedsDedup(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
@@ -390,7 +442,7 @@ import "magus";
 import "os";
 
 export fun dep(_a: [str]) > void { os.execSh("printf x >> mark", ""); }
-export fun top(_a: [str]) > void { magus.needs(magus.target.literal("dep"), magus.target.literal("dep")); }
+export fun top(_a: [str]) > void { magus.needs(dep, dep); }
 `), 0o644))
 	require.NoError(t, runTarget(t, dir, "top"))
 	got, err := os.ReadFile(filepath.Join(dir, "mark"))
@@ -438,10 +490,10 @@ export fun build(args: [str]) > void {}
 	assert.True(t, keys["db-migrate"], "Parse missing 'db-migrate'")
 }
 
-// TestNeedsGlobHandle covers a magus.target.glob handle feeding a
-// meta-target's depends_on: the matched targets run (sorted) before the body,
-// and non-matching targets are skipped. With no pool in ctx the deps run
-// sequentially in the current VM, so the order is deterministic.
+// TestNeedsGlobHandle covers magus.needsGlob feeding a meta-target: the matched
+// targets run (sorted) before the body, and non-matching targets are skipped. With
+// no pool in ctx the deps run sequentially in the current VM, so the order is
+// deterministic.
 func TestNeedsGlobHandle(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
@@ -454,7 +506,7 @@ export fun go_build(_a: [str]) > void { note("go-build"); }
 export fun image_build(_a: [str]) > void { note("image-build"); }
 export fun go_test(_a: [str]) > void { note("go-test"); }
 export fun build(_a: [str]) > void {
-   magus.needs(magus.target.glob("*-build"));
+   magus.needsGlob("*-build");
    note("build-body");
 }
 `)
@@ -467,53 +519,18 @@ export fun build(_a: [str]) > void {
 	assert.NotContains(t, string(got), "go-test", "go-test ran but does not match *-build")
 }
 
-// TestExpandGlobsReturnsSortedNames covers the return value of
-// magus.target.expand_globs directly: sorted, deduped matches, and that a
-// non-glob pattern is treated as the "*-<suffix>" shorthand.
-func TestExpandGlobsReturnsSortedNames(t *testing.T) {
-	dir := t.TempDir()
-	writeMagusfile(t, dir, `
-import "magus";
-import "fs";
-export fun image_build(_a: [str]) > void {}
-export fun go_build(_a: [str]) > void {}
-export fun go_test(_a: [str]) > void {}
-export fun probe(_a: [str]) > void {
-   var glob   = magus.target.expand_globs("*-build");
-   var suffix = magus.target.expand_globs("build");
-   fs.writeFile("ran", join(glob, ",") + "|" + join(suffix, ","));
-}
-fun join(xs: [str], sep: str) > str {
-   var acc = "";
-   var first = true;
-   foreach (x in xs) {
-      if (!first) { acc = acc + sep; }
-      acc = acc + x;
-      first = false;
-   }
-   return acc;
-}
-`)
-	require.NoError(t, runTarget(t, dir, "probe"))
-	got, err := os.ReadFile(sentinel(dir))
-	require.NoError(t, err, "sentinel not created")
-	// Both the glob ("*-build") and the suffix shorthand ("build") resolve to
-	// the same sorted set; go-test is excluded.
-	want := "go-build,image-build|go-build,image-build"
-	assert.Equal(t, want, string(got))
-}
-
-// TestTargetNewBuzzIsGone verifies that magus.target.new no longer exists in
-// the Buzz binding: a magusfile.buzz using it must error at runtime.
-func TestTargetNewBuzzIsGone(t *testing.T) {
+// TestTargetNamespaceIsGone verifies the removed magus.target.* query namespace no
+// longer exists: a magusfile referencing it must error at runtime (magus.target is
+// undefined), so the old needs-by-query API cannot silently linger.
+func TestTargetNamespaceIsGone(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
-magus.target.new("build", fun(args: [str]) void {});
+export fun build(_a: [str]) > void { magus.needs(magus.target.literal("build")); }
 `), 0o644))
 	err := runTarget(t, dir, "build")
-	assert.Error(t, err, "expected an error when using magus.target.new in buzz")
+	assert.Error(t, err, "expected an error: the magus.target namespace was removed")
 }
 
 // TestRunRelativeFsResolvesToProjectDir verifies the chdir->ctx-cwd change: a

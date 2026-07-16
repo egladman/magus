@@ -224,11 +224,11 @@ fun record(name: str) > void {
 }
 export fun build(args: [str]) > void { record("build"); }
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("build"));
+    magus.needs(build);
     record("test");
 }
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("test"));
+    magus.needs(test);
 }
 `
 	writeProject(t, root, "svc", body)

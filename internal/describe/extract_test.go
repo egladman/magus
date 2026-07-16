@@ -23,8 +23,8 @@ func TestBuild(t *testing.T) {
 // ── section divider ───────────────────────────────────────
 // foo does a thing. This second sentence is dropped.
 export fun foo_bar(args: [str]) > void {
-    magus.needs(magus.target.literal("baz"));
-    // magus.needs(magus.target.literal("ignored")) — a mention in a comment must not count
+    magus.needs(baz);
+    // magus.needs(baz) — a mention in a comment must not count
 }
 
 // separated by a blank line, so it must NOT attach
@@ -32,7 +32,7 @@ export fun foo_bar(args: [str]) > void {
 export fun baz(args: [str]) > void { magus.doctor([]); }
 
 export fun gen_all(args: [str]) > void {
-    magus.needs(magus.target.glob("*-gen"));
+    magus.needsGlob("*-gen");
 }
 
 export fun a_gen(args: [str]) > void { go["x"](); }
@@ -56,8 +56,8 @@ export fun a_gen(args: [str]) > void { go["x"](); }
 // mention in a comment or string does not count.
 func TestCharms(t *testing.T) {
 	g := Extract(`export fun build(args: [str]) > void {
-    if (magus.has_charm("container")) { magus.needs(magus.target.literal("image-build")); }
-    else { magus.needs(magus.target.literal("go-build")); }
+    if (magus.has_charm("container")) { magus.needs(image_build); }
+    else { magus.needs(go_build); }
 }
 export fun fmt(args: [str]) > void {
     if (magus.has_charm("rw")) { go["go-fmt"](); }
@@ -147,8 +147,9 @@ func TestSpellOps(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
 import "magus/spell/md";
 import "os";
+export fun format(args: [str]) > void { go["go-fmt"](); }
 export fun lint(args: [str]) > void {
-    magus.needs(magus.target.literal("format"));
+    magus.needs(format);
     go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); md.markdownlint();
 }
 export fun scan(args: [str]) > void { os.exec("trivy", []); other["x"](); }
@@ -159,6 +160,7 @@ export fun scan(args: [str]) > void { os.exec("trivy", []); other["x"](); }
 		{Spell: "md", Ops: []string{"markdownlint"}},
 	}
 	assert.Equal(t, want, lint.Spells)
+	assert.Equal(t, []string{"format"}, lint.Dependencies, "the identifier edge resolves to the exported target")
 	// scan only calls a host module and an unknown identifier: no spell ops.
 	scan, _ := nodeByName(g, "scan")
 	assert.Empty(t, scan.Spells, "os.exec is host, other[] is not a spell")
@@ -183,7 +185,7 @@ fun build_variant(tag: str) > void {
 fun self_loop() > void { self_loop(); }
 
 export fun image_build(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     build_variant("latest");
 }
 export fun preflight(args: [str]) > void { go["x"](); }
@@ -220,12 +222,12 @@ export fun help(args: [str]) > void {
 }
 
 // TestNameNormalization pins the fix for the node-vs-edge name mismatch: node
-// names and depends_on names must both be normalized the way the run path
+// names and dependency identifiers must both be normalized the way the run path
 // registers targets (kebab-case), so a camelCase function and a hyphenated
-// dependency reconcile.
+// node reconcile.
 func TestNameNormalization(t *testing.T) {
 	g := Extract(`export fun goBuild(args: [str]) > void { go["x"](); }
-export fun ci(args: [str]) > void { magus.needs(magus.target.literal("goBuild")); }
+export fun ci(args: [str]) > void { magus.needs(goBuild); }
 `)
 	_, ok := nodeByName(g, "go-build")
 	require.True(t, ok, "camelCase goBuild should normalize to go-build; got %v", g)
@@ -233,12 +235,12 @@ export fun ci(args: [str]) > void { magus.needs(magus.target.literal("goBuild"))
 	assert.Equal(t, []string{"go-build"}, ci.Dependencies, "dep name normalized to match node")
 }
 
-// TestBraceInString guards collectBody: a `}` inside a string literal must not
-// truncate the body and drop the depends_on that follows it.
+// TestBraceInString guards that a `}` inside a string literal does not truncate the
+// AST body and drop the magus.needs edge that follows it.
 func TestBraceInString(t *testing.T) {
 	g := Extract(`export fun build(args: [str]) > void {
     os.exec("sh", ["-c", "echo }"]);
-    magus.needs(magus.target.literal("fmt"));
+    magus.needs(fmt);
 }
 export fun fmt(args: [str]) > void { go["x"](); }
 `)
@@ -246,11 +248,11 @@ export fun fmt(args: [str]) > void { go["x"](); }
 	assert.Equal(t, []string{"fmt"}, build.Dependencies, "brace in string must not truncate body")
 }
 
-// TestTrailingComment guards codeBody: a depends_on in a trailing inline comment
+// TestTrailingComment guards that a magus.needs handle in a trailing inline comment
 // is prose, not an edge.
 func TestTrailingComment(t *testing.T) {
 	g := Extract(`export fun build(args: [str]) > void {
-    magus.needs(magus.target.literal("real")); // magus.needs(magus.target.literal("fake"))
+    magus.needs(real); // magus.needs(fake)
 }
 export fun real(args: [str]) > void { go["x"](); }
 `)
@@ -258,11 +260,11 @@ export fun real(args: [str]) > void { go["x"](); }
 	assert.Equal(t, []string{"real"}, build.Dependencies, "trailing comment ignored")
 }
 
-// TestNeedsGlobMultiPattern guards multi-handle needs: each magus.target.glob in a
-// every pattern in it must be honored, not just the first.
+// TestNeedsGlobMultiPattern guards multi-pattern needsGlob: every pattern in a
+// single magus.needsGlob call must be honored, not just the first.
 func TestNeedsGlobMultiPattern(t *testing.T) {
 	g := Extract(`export fun all(args: [str]) > void {
-    magus.needs(magus.target.glob("*-gen"), magus.target.glob("check-*"));
+    magus.needsGlob("*-gen", "check-*");
 }
 export fun docs_gen(args: [str]) > void { go["x"](); }
 export fun check_lint(args: [str]) > void { go["x"](); }
@@ -272,30 +274,30 @@ export fun check_lint(args: [str]) > void { go["x"](); }
 	assert.Equal(t, want, all.Dependencies, "both glob patterns honored")
 }
 
-// TestNeedsHandles guards the magus.needs handle edges: named is an exact dep,
-// glob and regex resolve against sibling target names, a multi-arg needs call
-// yields every edge (per-leaf extraction, not call-spanning), and a handle in a
-// trailing comment is prose, not an edge.
+// TestNeedsHandles guards magus.needs / magus.needsGlob edges: an identifier naming
+// an exported target is an exact dep, needsGlob patterns resolve against sibling
+// target names (a starless pattern is suffix shorthand), a multi-pattern needsGlob
+// yields every match, and a handle in a trailing comment is prose, not an edge.
 func TestNeedsHandles(t *testing.T) {
 	g := Extract(`export fun build(args: [str]) > void { go["x"](); }
 export fun a_gen(args: [str]) > void { go["x"](); }
 export fun b_gen(args: [str]) > void { go["x"](); }
 export fun test(args: [str]) > void {
-    magus.needs(magus.target.literal("build"));
-    magus.needs(magus.target.glob("*-gen"), magus.target.regex("^b-"));
-    // magus.target.literal("ignored") in a comment must not count
+    magus.needs(build);
+    magus.needsGlob("*-gen", "b-*");
+    // magus.needs(ignored) in a comment must not count
 }
 `)
 	test, ok := nodeByName(g, "test")
 	require.True(t, ok, "missing test; got %v", g)
 	want := []string{"build", "a-gen", "b-gen"}
-	assert.Equal(t, want, test.Dependencies, "named exact + glob + regex; comment ignored")
+	assert.Equal(t, want, test.Dependencies, "identifier exact + glob patterns; comment ignored")
 }
 
 func TestExternalCrossDependencies(t *testing.T) {
 	g := Extract(`import "project/../gopherbuzz" as gopherbuzz;
 export fun build_playground(args: [str]) > void {
-    magus.needs(magus.target.literal("preflight"));
+    magus.needs(preflight);
     magus.needs(gopherbuzz.build);
     // gopherbuzz.ignored in a comment must not count
 }
@@ -316,27 +318,27 @@ export fun preflight(args: [str]) > void { go["x"](); }
 func TestDependencyTokensInStringLiterals(t *testing.T) {
 	g := Extract(`import "project/../api" as api;
 export fun build(args: [str]) > void {
-    magus.info("run magus.needs(magus.target.literal(\"setup\")) and api.compile first");
+    magus.info("run magus.needs(setup) and api.compile first");
     go["go-build"]();
 }
 export fun setup(args: [str]) > void { go["x"](); }
 `)
 	b, ok := nodeByName(g, "build")
 	require.True(t, ok, "missing build; got %v", g)
-	assert.Empty(t, b.Dependencies, "the literal handle is inside a string literal")
+	assert.Empty(t, b.Dependencies, "the identifier handle is inside a string literal")
 	assert.Empty(t, b.CrossDependencies, "the cross-project ref is inside a string literal")
 }
 
 func TestCycle(t *testing.T) {
-	acyclic := Extract(`export fun a(args: [str]) > void { magus.needs(magus.target.literal("b")); }
-export fun b(args: [str]) > void { magus.needs(magus.target.literal("c")); }
+	acyclic := Extract(`export fun a(args: [str]) > void { magus.needs(b); }
+export fun b(args: [str]) > void { magus.needs(c); }
 export fun c(args: [str]) > void { go["x"](); }
 `)
 	assert.Nil(t, Cycle(acyclic), "acyclic graph reported cycle")
 
-	cyclic := Extract(`export fun a(args: [str]) > void { magus.needs(magus.target.literal("b")); }
-export fun b(args: [str]) > void { magus.needs(magus.target.literal("c")); }
-export fun c(args: [str]) > void { magus.needs(magus.target.literal("a")); }
+	cyclic := Extract(`export fun a(args: [str]) > void { magus.needs(b); }
+export fun b(args: [str]) > void { magus.needs(c); }
+export fun c(args: [str]) > void { magus.needs(a); }
 `)
 	c := Cycle(cyclic)
 	require.NotNil(t, c, "cyclic graph reported no cycle")
@@ -347,8 +349,8 @@ export fun c(args: [str]) > void { magus.needs(magus.target.literal("a")); }
 // cycle written with mixed casing must still be detected once both sides are
 // normalized.
 func TestCycleAcrossNormalization(t *testing.T) {
-	g := Extract(`export fun aB(args: [str]) > void { magus.needs(magus.target.literal("bC")); }
-export fun bC(args: [str]) > void { magus.needs(magus.target.literal("aB")); }
+	g := Extract(`export fun aB(args: [str]) > void { magus.needs(bC); }
+export fun bC(args: [str]) > void { magus.needs(aB); }
 `)
 	assert.NotNil(t, Cycle(g), "mixed-case cycle aB→bC→aB not detected")
 }
