@@ -5,11 +5,12 @@
 // tab's status bar into the footer so the bottom bar is PER-TAB. The active set is the persisted
 // Workspace (tabs.ts), so the console reopens exactly as you left it. Surfaces are PageModules
 // (page.ts); a heavy one activates lazily (its bundle a dynamic import) so a tab stays cheap until
-// opened. All four core lenses are real surfaces: home launcher + logs/graph/dashboard/activity.
+// opened. The four core lenses are real surfaces (logs/graph/dashboard/activity). The launcher
+// (home.ts) is NOT a tab - it is the outlet's empty state, shown whenever zero tabs are open.
 
 import { openTab, closeTab, setActive, setLayout, workspaceStore, type TabState } from "./tabs";
 import { createTabStrip } from "./tabStrip";
-import { homePage, type Launchable } from "./home";
+import { buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import { registerCommand, dispatchCommand, listCommands, installKeybindings, mergeKeymap, isMac, type Keymap } from "./commands";
 import { createPalette } from "./palette";
@@ -27,7 +28,6 @@ import type { PageController, PageModule } from "./page";
 // arrows match a browser/editor's next/prev-tab feel; new/close are the conventional mod+t / mod+w
 // (they land on the console's own tabs when it runs as an installed PWA window).
 const CONSOLE_KEYMAP: Keymap = {
-  "console.tab.new": "mod+t",
   "console.tab.close": "mod+w", // closes the focused PANE, or the tab when it is the last pane
   "console.tab.next": "mod+alt+ArrowRight",
   "console.tab.prev": "mod+alt+ArrowLeft",
@@ -114,6 +114,16 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   const ws = workspaceStore();
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted tile + status bar
 
+  // The launcher is the outlet's EMPTY STATE, not a tab: one element appended straight into the
+  // content outlet as a sibling of the tab panes, shown only when no tab is active (show(null)),
+  // hidden the moment a tab activates. Clicking a card opens that surface as a real tab. It gets its
+  // own default status bar (identical to what the old home tab supplied: a "not connected" dot and a
+  // hidden Demo chip) so the footer stays populated at zero tabs.
+  const launcher = buildLauncher(SURFACES, open);
+  launcher.hidden = true;
+  outlet.append(launcher);
+  const launcherStatus = makeStatusBar();
+
   // mountSurface is how a tile mounts one surface into a pane host: resolve the registered module and
   // activate it, returning its controller (or null if unknown). A tile calls this per leaf, so all
   // the per-surface lazy-import machinery (standalone/moduleSurface) is reused unchanged.
@@ -155,8 +165,10 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
       mt.tile.setVisible(tid === id);
     }
     const active = id ? mounts.get(id) : null;
-    if (active) statusHost.replaceChildren(active.status);
-    else statusHost.replaceChildren();
+    // No active tab means the workspace is empty: reveal the launcher empty state and dock its default
+    // status bar. With a tab active, hide the launcher and dock the active tab's per-tab status bar.
+    launcher.hidden = active != null;
+    statusHost.replaceChildren(active ? active.status : launcherStatus);
     // Let a docked Reference panel re-read the now-active surface's help sections.
     document.dispatchEvent(new CustomEvent("console:activetab", { detail: { id } }));
   }
@@ -209,7 +221,6 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   const strip = createTabStrip(ws, {
     onSelect: (id) => activateTab(id),
     onClose: (id) => closeTabById(id),
-    onNew: () => open("home"),
   });
   stripHost.append(strip.el);
 
@@ -227,7 +238,12 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
 
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
   // The listener skips while typing in a field (see commands.ts), so it never eats filter input.
-  registerCommand({ id: "console.tab.new", label: "New tab", group: "Tabs", run: () => open("home") });
+  // Opening a surface is a command per surface (group "Open"): the launcher's cards cover the empty
+  // state, and once a tab is open the command palette is how another surface is launched. Each opens
+  // (or focuses, if already open) that single-instance surface as a tab.
+  for (const s of SURFACES) {
+    registerCommand({ id: "console.open." + s.pageId, label: "Open " + s.label, group: "Open", run: () => open(s.pageId) });
+  }
   // mod+w closes the smallest thing: the focused PANE, falling through to the whole tab only when
   // that was the tab's last pane (closeFocused returns true) or the tab is un-tiled (no tile).
   registerCommand({ id: "console.tab.close", label: "Close pane or tab", group: "Tabs", run: () => {
@@ -269,17 +285,15 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
-  // open launches a surface as a tab. A surface (logs/graph/dashboard/activity) is single-instance -
-  // it keeps module-level state, so a second instance would fight the first; if one is already open
-  // anywhere - a tab's primary surface OR a pane inside a tiled tab - focus that tab instead. Home is
-  // stateless, so "+" can always spawn a fresh launcher tab.
+  // open launches a surface as a tab. Every surface (logs/graph/dashboard/activity) is single-instance
+  // - it keeps module-level state, so a second instance would fight the first; if one is already open
+  // anywhere - a tab's primary surface OR a pane inside a tiled tab - focus that tab instead of opening
+  // a duplicate.
   function open(pageId: string): void {
     const m = registry.get(pageId);
     if (!m) return;
-    if (pageId !== "home") {
-      const hostTab = ws.get().tabs.find((t) => tabHostsSurface(t, pageId));
-      if (hostTab) { activateTab(hostTab.id); return; }
-    }
+    const hostTab = ws.get().tabs.find((t) => tabHostsSurface(t, pageId));
+    if (hostTab) { activateTab(hostTab.id); return; }
     const tab: TabState = { id: pageId + "-" + Date.now().toString(36), pageId, title: m.title };
     ws.set(openTab(ws.get(), tab));
     mount(tab);
@@ -292,7 +306,6 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     return ids.includes(pageId);
   }
 
-  register(homePage(SURFACES, open));
   register(standaloneSurface({ id: "logs", title: "Log viewer", dir: "logs", bundle: "log-viewer.js", css: "logs.css" }));
   register(standaloneSurface({ id: "dashboard", title: "Dashboard", dir: "dashboard", bundle: "dashboard.js", css: "dashboard.css" }));
   register(standaloneSurface({ id: "graph", title: "Graph explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
@@ -300,10 +313,10 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
 
   // Restore the persisted workspace: the tab strip already renders every saved tab (it binds to ws);
   // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount
-  // lazily on first selection. Land on home if the workspace is empty.
+  // lazily on first selection. Show the launcher empty state if the workspace is empty.
   const saved = ws.get();
   if (saved.tabs.length === 0) {
-    open("home");
+    show(null);
   } else {
     const activeId = saved.activeId ?? saved.tabs[0]?.id ?? null;
     const tab = saved.tabs.find((t) => t.id === activeId) ?? saved.tabs[0];

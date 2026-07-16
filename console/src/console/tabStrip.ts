@@ -1,9 +1,12 @@
 // tabStrip.ts - the DOM tab strip for the console: it renders a Workspace (tabs.ts) as a row
 // of tabs and drives the pure reducers on interaction. The console owns mounting the active surface;
-// this component owns only the strip UI and reports intent through callbacks (select / close / new).
+// this component owns only the strip UI and reports intent through callbacks (select / close).
+//
+// There is no new-tab ("+") affordance: opening a surface is the launcher empty state (zero tabs) or
+// the command palette ("Open ...") with a tab already open, so the strip is purely the open tabs.
 //
 // PatternFly (W0 spike): the strip is built from PatternFly's Tabs component classes
-// (.pf-v6-c-tabs pf-m-box, __list, __item, __link, __item-action, __add) rather than hand-styled
+// (.pf-v6-c-tabs pf-m-box, __list, __item, __link, __item-action) rather than hand-styled
 // spans - no custom presentational classes, only pf-v6-* + the app hooks (data-tab-id) and ARIA
 // (role=tab/tablist, aria-selected). The console mounts strip.el into #console-tabs and only uses the
 // callbacks below, so the tiling/reconcile logic is untouched: only the emitted classes changed.
@@ -25,12 +28,10 @@ export function tabViews(ws: Workspace): TabView[] {
   return ws.tabs.map((t) => ({ id: t.id, title: t.title, active: t.id === ws.activeId }));
 }
 
-// Callbacks the console supplies: a tab became active (mount/show it), a tab closed (unmount it), or
-// the new-tab affordance was used (the console opens a surface picker).
+// Callbacks the console supplies: a tab became active (mount/show it), or a tab closed (unmount it).
 export interface TabStripCallbacks {
   onSelect(id: string): void;
   onClose(id: string): void;
-  onNew(): void;
 }
 
 export interface TabStrip {
@@ -141,20 +142,6 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
     // A first pass added PF scroll-button chevrons over a custom overflow-scroller, but it was reverted
     // to keep this change focused - revisit as its own task (PF's own pf-m-scrollable list would not
     // respond to a programmatic scrollBy, so the scroller has to be app-owned; see git history).
-
-    // The new-tab affordance: PF's __add slot holding a plain button. The console decides which
-    // surface to open via onNew.
-    const add = document.createElement("span");
-    add.className = "pf-v6-c-tabs__add";
-    const addBtn = document.createElement("button");
-    addBtn.type = "button";
-    addBtn.className = "pf-v6-c-button pf-m-plain";
-    addBtn.setAttribute("aria-label", "New tab");
-    addBtn.title = "New tab";
-    addBtn.textContent = "+";
-    addBtn.addEventListener("click", () => cb.onNew());
-    add.append(addBtn);
-    strip.append(add);
   }
 
   // bind(ws, render) renders once now AND on every workspace change - the persisted cell already IS
