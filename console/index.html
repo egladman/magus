@@ -45,9 +45,9 @@
          .console-shell-themecycle__icon/.console-shell-themecycle__label spans (theme.js paints them). -->
     <div id="console-actions">
     <!-- Applications menu: a PatternFly Menu popover (like the settings gear) that links back to the
-         sibling magus web apps - the documentation site and the playground. console.js's initAppMenu()
-         wires #console-appmenu-btn/#console-appmenu (open/close, aria-expanded, Escape, click-outside,
-         focus return). The items are plain links; clicking one navigates to that app. -->
+         documentation site. console.js's initAppMenu() wires #console-appmenu-btn/#console-appmenu
+         (open/close, aria-expanded, Escape, click-outside, focus return). The item is a plain link;
+         clicking it navigates to the docs. (No Playground link - it lives under the docs site.) -->
     <button id="console-appmenu-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="console-appmenu" aria-expanded="false" aria-haspopup="true" aria-label="Applications" title="Applications">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg></span>
     </button>
@@ -56,9 +56,6 @@
         <ul class="pf-v6-c-menu__list" role="menu">
           <li class="pf-v6-c-menu__list-item" role="none">
             <a class="pf-v6-c-menu__item" role="menuitem" href="../documentation/"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Documentation</span></span></a>
-          </li>
-          <li class="pf-v6-c-menu__list-item" role="none">
-            <a class="pf-v6-c-menu__item" role="menuitem" href="../playground/"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Playground</span></span></a>
           </li>
         </ul>
       </div>

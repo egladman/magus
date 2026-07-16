@@ -3,9 +3,12 @@ import { loadDocIndex, runSearch, positiveTerms, snippet, type DocSearchEntry } 
 
 // ref-drawer.ts - the console's right-side Reference panel, built on a PatternFly Drawer
 // (index.html: #console-refdrawer is the pf-v6-c-drawer, #console-outlet-content its __content,
-// #console-refpanel its __panel). Opening toggles pf-m-expanded; because the drawer carries
-// pf-m-inline, an expanded panel INSETS the tab content (docked) rather than overlaying it - so
-// there is no backdrop, which is the PF-conventional docked behavior.
+// #console-refpanel its __panel). The drawer is pf-m-inline (PF v6's supported mode: the panel is a
+// flex sibling that insets the content); opening toggles pf-m-expanded. On a narrow/mobile screen the
+// panel's flex-basis is 100%, so the content shrinks to zero and the panel fills the screen (a
+// full-screen reference) - which requires #console-outlet-content to be shrinkable (min-width:0 in
+// console.css). "Pinned" is purely PERSISTENCE: it stays open across tab switches and ignores Escape /
+// outside-click; "unpinned" closes on Escape or an outside click. Both look the same (inset/docked).
 //
 // The panel shows two things: a documentation search field (searches the docs site's prebuilt
 // index via the ported Datadog grammar in lib/docsearch.ts, results open in a new tab) and the
