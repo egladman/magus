@@ -5,7 +5,7 @@
          by the console shell, opened from the nav-bar Reference button) at load, along with the
          docs search bar. They stay inline (visible) for no-JS. -->
     <!-- Views panel - question-first navigation (max 7 modes). Moved into the reference drawer at load. -->
-    <details class="views-panel ref-section" id="ask-panel">
+    <details class="views-panel" data-legacy-ref id="ask-panel">
       <summary>Ask a question</summary>
       <div class="disclosure-body">
         <p class="views-hint">Questions you might ask about a workspace. Click one to explore, or write your own query below.</p>
@@ -21,7 +21,7 @@
       </div>
     </details>
 
-    <details class="query-help ref-section">
+    <details class="query-help" data-legacy-ref>
       <summary>Views</summary>
       <div class="disclosure-body">
       <p>Each view answers a developer question. The search box speaks the same grammar as <code>magus query</code>. Click an example to run it.</p>
@@ -38,7 +38,7 @@
       </div>
     </details>
 
-    <details class="query-help ref-section">
+    <details class="query-help" data-legacy-ref>
       <summary>Search syntax</summary>
       <div class="disclosure-body">
       <p>The filter box speaks the same grammar as <code>magus query</code>. Terms combine with AND and match case-insensitively. Click an example to run it.</p>
@@ -69,7 +69,7 @@
       </div>
     </details>
 
-    <details class="display-help ref-section">
+    <details class="display-help" data-legacy-ref>
       <summary>Layout and colors</summary>
       <div class="disclosure-body">
         <p class="control-label">Layout</p>
@@ -194,7 +194,7 @@
 
     <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
 
-    <details class="url-help ref-section">
+    <details class="url-help" data-legacy-ref>
       <summary>Loading a graph by URL</summary>
       <div class="disclosure-body">
       <p><code>magus graph open</code> builds these links for you; the fragment (after <code>#</code>) is never sent to the server, so an inline graph stays local. The schemes are:</p>

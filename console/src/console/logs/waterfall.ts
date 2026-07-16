@@ -167,7 +167,7 @@ export function renderWaterfall(): void {
   const multi = buildSpansMulti(waterfallSource());
   if (!multi.groups.length) {
     const p = document.createElement("p");
-    p.className = "wf-empty";
+    p.className = "console-log-waterfall__empty";
     p.textContent = "This log has no timing data to plot as a waterfall.";
     bodyEl.appendChild(p);
     return;
@@ -188,7 +188,7 @@ export function renderWaterfall(): void {
   const nt = allTargets.length;
   const nMatch = filtering ? allTargets.filter((t) => targetRelevant(q, t)).length : nt;
   const caption = document.createElement("p");
-  caption.className = "wf-caption";
+  caption.className = "console-log-waterfall__caption";
   caption.textContent = (showHeaders ? multi.groups.length + " invocations, " : "") +
     nt + (nt === 1 ? " target" : " targets") + " over " + durMsText(total) +
     (filtering ? " - " + nMatch + " matching" : "") +
@@ -201,7 +201,7 @@ export function renderWaterfall(): void {
 
   const root = wfSvg("svg") as SVGSVGElement;
   root.setAttribute("viewBox", "0 0 " + WF_VIEW_W + " " + h);
-  root.setAttribute("class", "wf-svg");
+  root.setAttribute("class", "console-log-waterfall__svg");
   root.setAttribute("preserveAspectRatio", "xMinYMin meet");
   root.setAttribute("role", "img");
   root.setAttribute("aria-label", "Invocation trace waterfall");
@@ -236,7 +236,7 @@ function drawWfGroupHead(root: SVGSVGElement, label: string, y: number): void {
   const t = wfSvg("text");
   t.setAttribute("x", "4");
   t.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
-  t.setAttribute("class", "wf-group-head");
+  t.setAttribute("class", "console-log-waterfall__grouphead");
   t.textContent = wfTrunc(label || "invocation", 48);
   root.appendChild(t);
 }
@@ -269,7 +269,7 @@ function attachWfBrush(root: SVGSVGElement, dom: Domain, h: number): void {
     if (ev.button !== 0) return;
     sx = ev.clientX;
     rect = wfSvg("rect");
-    rect.setAttribute("class", "wf-brush");
+    rect.setAttribute("class", "console-log-waterfall__brush");
     rect.setAttribute("y", "0");
     rect.setAttribute("height", String(h));
     const x = svgXOf(sx);
@@ -300,8 +300,8 @@ function attachWfBrush(root: SVGSVGElement, dom: Domain, h: number): void {
 // picker only in waterfall mode (where a time window is meaningful).
 export function updateFocusUI(spans: SpanMulti | null): void {
   const sel = el("time-range");
-  const win = el("focus-window");
-  const reset = el("focus-reset");
+  const win = el("console-log-focus__window");
+  const reset = el("console-log-focus__reset");
   const active = state.timeline && !!spans && !!spans.groups && spans.groups.length > 0;
   if (sel) (sel as HTMLSelectElement).disabled = !active;
   if (win) {
@@ -335,7 +335,7 @@ function drawWfAxis(root: SVGSVGElement, sp: Domain, h: number): void {
   line.setAttribute("x2", String(WF_VIEW_W - WF_RIGHT));
   line.setAttribute("y1", String(WF_AXIS_H));
   line.setAttribute("y2", String(WF_AXIS_H));
-  line.setAttribute("class", "wf-axis-line");
+  line.setAttribute("class", "console-log-waterfall__axisline");
   root.appendChild(line);
   const total = sp.t1 - sp.t0;
   const ticks: [number, string][] = [[sp.t0, "0"], [sp.t0 + total / 2, durMsText(total / 2)], [sp.t1, durMsText(total)]];
@@ -346,13 +346,13 @@ function drawWfAxis(root: SVGSVGElement, sp: Domain, h: number): void {
     grid.setAttribute("x2", String(x));
     grid.setAttribute("y1", String(WF_AXIS_H));
     grid.setAttribute("y2", String(h));
-    grid.setAttribute("class", "wf-grid");
+    grid.setAttribute("class", "console-log-waterfall__grid");
     root.appendChild(grid);
     const label = wfSvg("text");
     const atEnd = t === sp.t1;
     label.setAttribute("x", String(atEnd ? x - 2 : x + 2));
     label.setAttribute("y", "11");
-    label.setAttribute("class", "wf-axis-label");
+    label.setAttribute("class", "console-log-waterfall__axislabel");
     if (atEnd) label.setAttribute("text-anchor", "end");
     label.textContent = txt;
     root.appendChild(label);
@@ -361,11 +361,12 @@ function drawWfAxis(root: SVGSVGElement, sp: Domain, h: number): void {
 
 function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void {
   const dur = row.e - row.s;
-  const dim = row.dim ? " wf-dim" : ""; // dimmed when the filter excludes this span
+  const dim = row.dim; // dimmed (data-dim) when the filter excludes this span
   const label = wfSvg("text");
   label.setAttribute("x", String(row.step ? 20 : 6));
   label.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
-  label.setAttribute("class", "wf-label " + (row.step ? "wf-step-label" : "wf-target-label") + dim);
+  label.setAttribute("class", "console-log-waterfall__label " + (row.step ? "console-log-waterfall__label--step" : "console-log-waterfall__label--target"));
+  if (dim) label.setAttribute("data-dim", "");
   label.textContent = wfTrunc(row.label || "-", row.step ? 30 : 26);
   const lt = wfSvg("title");
   lt.textContent = row.label + " (" + durMsText(dur) + ")";
@@ -381,7 +382,9 @@ function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void
   rect.setAttribute("width", Math.max(2, x2 - x1).toFixed(2));
   rect.setAttribute("height", String(bh));
   rect.setAttribute("rx", "2");
-  rect.setAttribute("class", "wf-bar" + (row.step ? " wf-step" : "") + (row.status ? " status-" + row.status : "") + dim);
+  rect.setAttribute("class", "console-log-waterfall__bar" + (row.step ? " console-log-waterfall__bar--step" : ""));
+  if (row.status) rect.setAttribute("data-status", row.status);
+  if (dim) rect.setAttribute("data-dim", "");
   const rt = wfSvg("title");
   rt.textContent = row.label + " - " + durMsText(dur);
   rect.appendChild(rt);
@@ -392,7 +395,8 @@ function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void
     const d = wfSvg("text");
     d.setAttribute("x", String(WF_VIEW_W - 2));
     d.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
-    d.setAttribute("class", "wf-dur" + dim);
+    d.setAttribute("class", "console-log-waterfall__dur");
+    if (dim) d.setAttribute("data-dim", "");
     d.setAttribute("text-anchor", "end");
     d.textContent = durMsText(dur);
     root.appendChild(d);

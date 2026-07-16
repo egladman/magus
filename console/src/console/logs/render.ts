@@ -6,7 +6,7 @@
 // the GitHub-style #L line-range highlight, and the Timeline toolbar control's enable/label sync.
 
 import { state } from "./state";
-import { bodyEl, copyToClipboard, el } from "./dom";
+import { bodyEl, copyToClipboard, el, setToggleGroup, setToggleGroupDisabled } from "./dom";
 import { statusToken, stripAnsi } from "../render/ansi";
 import { renderContent, renderLine as renderSectionLine, toggleSection } from "../render/sections";
 import { matchAllTexts, matchGroup, sectionMeta } from "./filter";
@@ -14,8 +14,8 @@ import { renderWaterfall, timelineAvailable, updateFocusUI } from "./waterfall";
 
 export function render(): void {
   bodyEl.textContent = "";
-  bodyEl.classList.toggle("raw", !state.pretty && !state.timeline);
-  bodyEl.classList.toggle("wf-mode", state.timeline);
+  bodyEl.toggleAttribute("data-raw", !state.pretty && !state.timeline);
+  bodyEl.toggleAttribute("data-waterfall", state.timeline);
   // Timeline view: a trace waterfall built from the events' timing, not the log text.
   if (state.timeline) {
     renderWaterfall();
@@ -159,7 +159,7 @@ export function render(): void {
   }
   if (filtering && shown === 0) {
     const note = document.createElement("p");
-    note.className = "filter-empty";
+    note.className = "console-log-filter__empty";
     note.textContent = "No lines match the filter.";
     bodyEl.appendChild(note);
   }
@@ -234,21 +234,18 @@ function setLineFragment(start: number, end: number): void {
   history.replaceState(null, "", location.pathname + location.search + "#" + kept.join("&"));
 }
 
-// updateTimelineControl shows/hides the Timeline button by whether the loaded log carries
-// plottable timing, forces the mode off when it does not (a new text log), and syncs the
-// button label + the sibling controls that do not apply in the waterfall view.
+// updateTimelineControl enables/disables the Log|Timeline switch by whether the loaded log carries
+// plottable timing, forces the mode off when it does not (a new text log), and syncs the switch
+// selection + the sibling controls that do not apply in the waterfall view.
 export function updateTimelineControl(): void {
-  const tlBtn = el("timeline-btn");
   const ok = timelineAvailable();
-  if (tlBtn) (tlBtn as HTMLButtonElement).disabled = !ok;
+  setToggleGroupDisabled("timeline-mode", !ok);
   // Fall back to the log view when the loaded log has no timing (a text/pasted log). During
   // the #demo reveal the first frame may briefly precede any target span, so keep the mode on.
   if (!ok && state.timeline && !state.demoActive) state.timeline = false;
-  // aria-pressed drives the segmented slider's active side (true => Timeline); no text relabel.
-  if (tlBtn) tlBtn.setAttribute("aria-pressed", state.timeline ? "true" : "false");
-  // The pretty/raw toggle is meaningless in the waterfall; hide it while timeline is on.
-  const viewBtn = el("view-toggle");
-  if (viewBtn) (viewBtn as HTMLButtonElement).disabled = state.timeline;
+  setToggleGroup("timeline-mode", state.timeline);
+  // The pretty/raw switch is meaningless in the waterfall; disable it while timeline is on.
+  setToggleGroupDisabled("view-mode", state.timeline);
   // The time range only applies to the waterfall; renderWaterfall refreshes the readout when
   // it draws, but when NOT in timeline mode nothing else does, so disable the picker here.
   if (!state.timeline) updateFocusUI(null);

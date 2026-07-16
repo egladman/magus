@@ -1,7 +1,7 @@
 import { persisted } from "../lib/persist";
 
 // ref-drawer.ts - a right-side slide-out reference panel shared by the console apps (graph
-// explorer, log viewer, ...). A page marks its reference blocks with .ref-section and supplies a
+// explorer, log viewer, ...). A page marks its reference blocks with [data-legacy-ref] and supplies a
 // trigger (.ref-trigger), the drawer (#ref-drawer) and a backdrop (#ref-backdrop). This relocates
 // the sections into the drawer (so the same blocks serve as inline no-JS content AND as the drawer
 // body - no duplicate markup) and wires open/close: the trigger, the close button, a backdrop
@@ -22,8 +22,8 @@ export function initRefDrawer(): void {
 
   // Then relocate the page's reference sections, in document order, and expand them by default so
   // they read as content, not folded-away toggles (still collapsible). CSS hides them inline
-  // (.js .ref-section) and reveals them once inside (#ref-drawer .ref-section).
-  document.querySelectorAll(".ref-section").forEach((s) => {
+  // (.js [data-legacy-ref]) and reveals them once inside (#ref-drawer [data-legacy-ref]).
+  document.querySelectorAll("[data-legacy-ref]").forEach((s) => {
     drawer.appendChild(s);
     if (s instanceof HTMLDetailsElement) s.open = true;
   });

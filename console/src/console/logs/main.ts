@@ -18,8 +18,8 @@ import { parseHash, wantsDemo } from "../../lib/daemon";
 import { decodeFragmentBytes, viewerParams } from "./fragment";
 import { state, waterfallSource } from "./state";
 import {
-  bodyEl, copyToClipboard, el, emptyEl, panelEl, resolveDom, scrollEl,
-  setBtnLabel, setRefIdentity, setStatus,
+  bodyEl, copyToClipboard, el, emptyEl, flipToggleGroup, panelEl, resolveDom, scrollEl,
+  setBtnLabel, setRefIdentity, setStatus, setToggleGroup,
 } from "./dom";
 import { stripAnsi } from "../render/ansi";
 import { buildModel, buildModelMulti } from "./model";
@@ -65,7 +65,7 @@ function applyZoom(): void {
   // SVG so it grows past the panel and the scroll box picks it up. A width:100% SVG would just
   // re-fit under a plain body zoom, so the waterfall needs its own.
   bodyEl.style.setProperty("--log-zoom", String(z));
-  const readout = el("zoom-readout");
+  const readout = el("console-log-zoom__readout");
   if (readout) readout.textContent = Math.round(z * 100) + "%";
 }
 
@@ -77,8 +77,8 @@ function setZoom(z: number): void {
 // zoomSeg builds one control span (a role=button so Pico's button theming never touches it).
 function zoomSeg(key: string, label: string, aria: string): HTMLElement {
   const s = document.createElement("span");
-  s.className = key === "reset" ? "zoom-readout" : "zoom-btn";
-  if (key === "reset") s.id = "zoom-readout"; // applyZoom updates the percent readout by this id
+  s.className = key === "reset" ? "console-log-zoom__readout" : "console-log-zoom__btn";
+  if (key === "reset") s.id = "console-log-zoom__readout"; // applyZoom updates the percent readout by this id
   s.dataset.zoom = key;
   s.textContent = label;
   // Deliberately NO role="button": Pico themes [role=button] as a solid primary button (blue), the
@@ -94,7 +94,7 @@ function wireZoom(): void {
   const right = document.querySelector("#console-statusbar .console-shell-statusbar__right");
   if (right) {
     const ctl = document.createElement("div");
-    ctl.className = "zoom-ctl console-shell-statusbar__item";
+    ctl.className = "console-log-zoom console-shell-statusbar__item";
     ctl.setAttribute("role", "group");
     ctl.setAttribute("aria-label", "Zoom");
     ctl.append(zoomSeg("out", "-", "Zoom out"), zoomSeg("reset", "100%", "Reset zoom"), zoomSeg("in", "+", "Zoom in"));
@@ -142,42 +142,10 @@ function clickControl(id: string): void {
   if (btn && !btn.disabled) btn.click();
 }
 
-// makeSegToggle turns a plain toggle button into a two-state segmented control: one fixed-width
-// pill with a solid thumb that slides to sit over the active side, so it reads as a single switch
-// and flipping never resizes the toolbar (the relabeling button did). The button stays a single
-// toggle - a click flips state, and its aria-pressed (true => second option) slides the thumb via
-// CSS - so every existing handler, disabled-state, and the keybinding keep working unchanged. The
-// two segments are forced to equal width so the 50%-wide thumb lands under either label, whatever
-// their lengths ("Log" vs "Timeline").
-function makeSegToggle(id: string, first: string, second: string): void {
-  const btn = el(id);
-  if (!btn) return;
-  btn.classList.add("seg-toggle");
-  btn.classList.remove("outline");
-  // An inner track span carries all the visuals - the button itself is left bare (Pico's button
-  // states can't bleed a color through an opaque span). thumb is first so the labels are its
-  // nth-child(2)/nth-child(3) siblings.
-  const track = document.createElement("span");
-  track.className = "seg-track";
-  const thumb = document.createElement("span");
-  thumb.className = "seg-thumb";
-  thumb.setAttribute("aria-hidden", "true");
-  const a = document.createElement("span");
-  a.className = "seg-opt";
-  a.textContent = first;
-  const b = document.createElement("span");
-  b.className = "seg-opt";
-  b.textContent = second;
-  track.append(thumb, a, b);
-  btn.replaceChildren(track);
-  const w = Math.ceil(Math.max(a.getBoundingClientRect().width, b.getBoundingClientRect().width));
-  a.style.width = b.style.width = w + "px";
-}
-
 function wireCommands(): void {
   registerCommand({ id: "logs.filter", label: "Focus filter", group: "Log viewer", run: () => { const f = el("log-filter") || el("log-search"); if (f) f.focus(); } });
-  registerCommand({ id: "logs.raw", label: "Toggle raw / pretty", group: "Log viewer", run: () => clickControl("view-toggle") });
-  registerCommand({ id: "logs.timeline", label: "Toggle timeline / log", group: "Log viewer", run: () => clickControl("timeline-btn") });
+  registerCommand({ id: "logs.raw", label: "Toggle raw / pretty", group: "Log viewer", run: () => flipToggleGroup("view-mode") });
+  registerCommand({ id: "logs.timeline", label: "Toggle timeline / log", group: "Log viewer", run: () => flipToggleGroup("timeline-mode") });
   registerCommand({ id: "logs.fold", label: "Collapse / expand all", group: "Log viewer", run: () => clickControl("fold-all-btn") });
   installKeybindings(() => mergeKeymap(LOGS_KEYMAP, keymapCell.get()));
 }
@@ -336,46 +304,53 @@ function wireControls(): void {
     graphBtn.addEventListener("click", openInGraph);
   }
 
-  // The two mode switches become segmented sliders (both states shown, fixed width) instead of
-  // relabeling buttons that resized the toolbar on every flip. They stay toggle buttons - a click
-  // flips them and aria-pressed drives the thumb - so the handlers and keybindings are unchanged.
-  makeSegToggle("view-toggle", "Pretty", "Raw");   // aria-pressed=true => Raw
-  makeSegToggle("timeline-btn", "Log", "Timeline"); // aria-pressed=true => Timeline
+  // The two mode switches are PF ToggleGroups (segmented controls). A delegated click on the group
+  // reads which option was chosen (data-mode) and flips the corresponding view state. Clearing the
+  // active search + re-rendering is shared; the fold button only applies in the pretty log view.
+  const clearSearch = (): void => {
+    const searchEl = el("log-search");
+    if (searchEl) (searchEl as HTMLInputElement).value = "";
+    clearMarks();
+    const cnt = el("search-count");
+    if (cnt) cnt.textContent = "";
+  };
+  const syncFold = (): void => {
+    const fold = el("fold-all-btn");
+    if (fold) fold.hidden = state.timeline || !state.model || state.model.titled === 0 || !state.pretty;
+  };
 
-  // Pretty <-> raw toggle. Raw shows the exact captured text (flat, no folds/badges);
-  // pretty is the stylized structural view. Re-renders and clears any active search.
-  const viewBtn = el("view-toggle");
-  if (viewBtn) {
-    viewBtn.addEventListener("click", () => {
-      state.pretty = !state.pretty;
-      viewBtn.setAttribute("aria-pressed", state.pretty ? "false" : "true");
-      const searchEl = el("log-search");
-      if (searchEl) (searchEl as HTMLInputElement).value = "";
-      clearMarks();
-      const cnt = el("search-count");
-      if (cnt) cnt.textContent = "";
+  // Pretty <-> raw. Raw shows the exact captured text (flat, no folds/badges); pretty is the
+  // stylized structural view.
+  const viewGroup = el("view-mode");
+  if (viewGroup) {
+    viewGroup.addEventListener("click", (ev) => {
+      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(".pf-v6-c-toggle-group__button");
+      if (!btn || btn.disabled) return;
+      const raw = btn.dataset.mode === "raw";
+      if (state.pretty === !raw) return; // already selected
+      state.pretty = !raw;
+      setToggleGroup("view-mode", raw);
+      clearSearch();
       if (state.model) render();
-      const fold = el("fold-all-btn");
-      if (fold) fold.hidden = !state.model || state.model.titled === 0 || !state.pretty;
+      syncFold();
     });
   }
 
-  // Timeline <-> log toggle. Switches the body between the trace waterfall and the log view;
-  // clears any active search (the waterfall has no searchable lines) and re-syncs the sibling
-  // controls (pretty/raw + fold) that do not apply while the waterfall is shown.
-  const timelineBtn = el("timeline-btn");
-  if (timelineBtn) {
-    timelineBtn.addEventListener("click", () => {
-      state.timeline = !state.timeline;
-      const searchEl = el("log-search");
-      if (searchEl) (searchEl as HTMLInputElement).value = "";
-      clearMarks();
-      const cnt = el("search-count");
-      if (cnt) cnt.textContent = "";
+  // Timeline <-> log. Switches the body between the trace waterfall and the log view, and re-syncs
+  // the sibling controls (pretty/raw + fold) that do not apply while the waterfall is shown.
+  const timelineGroup = el("timeline-mode");
+  if (timelineGroup) {
+    timelineGroup.addEventListener("click", (ev) => {
+      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(".pf-v6-c-toggle-group__button");
+      if (!btn || btn.disabled) return;
+      const timeline = btn.dataset.mode === "timeline";
+      if (state.timeline === timeline) return;
+      state.timeline = timeline;
+      setToggleGroup("timeline-mode", timeline);
+      clearSearch();
       updateTimelineControl();
       if (state.model) render();
-      const fold = el("fold-all-btn");
-      if (fold) fold.hidden = state.timeline || !state.model || state.model.titled === 0 || !state.pretty;
+      syncFold();
     });
   }
 
@@ -421,7 +396,7 @@ function wireControls(): void {
   // Time range: the wall-clock preset picker and the brushed-window reset.
   const timeSel = el("time-range");
   if (timeSel) timeSel.addEventListener("change", () => applyTimeRange((timeSel as HTMLSelectElement).value));
-  const focusResetBtn = el("focus-reset");
+  const focusResetBtn = el("console-log-focus__reset");
   if (focusResetBtn) focusResetBtn.addEventListener("click", clearFocus);
 
   const pauseBtn = el("pause-btn");

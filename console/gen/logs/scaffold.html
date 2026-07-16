@@ -1,15 +1,14 @@
-<main class="container-fluid">
-    <section class="console-render-panel log-app">
+<main>
+    <section class="console-render-panel console-log-app">
       <!-- File/query bar: a PatternFly Toolbar. Row 1 is the ref identity strip; row 2 is the
-           filter field (PF FormControl) + the grouped action buttons (PF Buttons). The old Pico
-           .file-bar is gone from here - the activity trail still builds its own .file-bar in TS
-           (logs.css keeps those rules) until it migrates. -->
+           filter field (PF FormControl) + the grouped action buttons (PF Buttons). The Log|Timeline
+           and Pretty|Raw view switches are PF ToggleGroups. -->
       <header class="pf-v6-c-toolbar" id="log-bar">
         <div class="pf-v6-c-toolbar__content" id="log-bar-id">
           <div class="pf-v6-c-toolbar__content-section">
             <div class="pf-v6-c-toolbar__item">
-              <span id="log-ref-label" class="id-label" hidden></span>
-              <span id="log-ref" class="name"></span>
+              <span id="log-ref-label" class="console-log-ref__label" hidden></span>
+              <span id="log-ref" class="console-log-ref__value"></span>
             </div>
           </div>
         </div>
@@ -22,7 +21,7 @@
                 </span>
               </div>
               <div class="pf-v6-c-toolbar__item">
-                <span class="help-glyph" tabindex="0" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">?</span>
+                <span class="console-render-help-glyph" tabindex="0" aria-label="Filter syntax" title="Terms combine with AND, case-insensitive. Free text and step:&lt;text&gt; match command/output lines; target:&lt;text&gt; matches the target label; status:pass|fail|cached|running matches the result. Shareable as #q= in the link.">?</span>
               </div>
             </div>
             <!-- Grouped action clusters (Live / View / Time / Clipboard / Open), pushed to the row's
@@ -34,18 +33,32 @@
                 </button>
               </div>
               <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="View">
-                <button id="timeline-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Show the invocation as a trace waterfall (targets and steps on a shared time axis)" disabled>
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="15" y2="6"/><line x1="3" y1="12" x2="20" y2="12"/><line x1="3" y1="18" x2="11" y2="18"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Timeline</span>
-                </button>
-                <button id="view-toggle" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Toggle between the pretty view and the raw captured text">
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Raw</span>
-                </button>
+                <!-- Log|Timeline and Pretty|Raw are PF ToggleGroups (segmented controls). The log
+                     viewer JS reads/sets the selected option (data-mode + pf-m-selected); the group is
+                     disabled when the switch does not apply (timeline needs plottable timing; the
+                     pretty/raw split is meaningless in the waterfall). -->
+                <div class="pf-v6-c-toggle-group" id="timeline-mode" role="group" aria-label="Log or timeline view">
+                  <div class="pf-v6-c-toggle-group__item">
+                    <button type="button" class="pf-v6-c-toggle-group__button pf-m-selected" data-mode="log" aria-pressed="true" title="Show the run as a scrolling log" disabled><span class="pf-v6-c-toggle-group__text">Log</span></button>
+                  </div>
+                  <div class="pf-v6-c-toggle-group__item">
+                    <button type="button" class="pf-v6-c-toggle-group__button" data-mode="timeline" aria-pressed="false" title="Show the invocation as a trace waterfall (targets and steps on a shared time axis)" disabled><span class="pf-v6-c-toggle-group__text">Timeline</span></button>
+                  </div>
+                </div>
+                <div class="pf-v6-c-toggle-group" id="view-mode" role="group" aria-label="Pretty or raw view">
+                  <div class="pf-v6-c-toggle-group__item">
+                    <button type="button" class="pf-v6-c-toggle-group__button pf-m-selected" data-mode="pretty" aria-pressed="true" title="The stylized structural view (folds, badges, line numbers)"><span class="pf-v6-c-toggle-group__text">Pretty</span></button>
+                  </div>
+                  <div class="pf-v6-c-toggle-group__item">
+                    <button type="button" class="pf-v6-c-toggle-group__button" data-mode="raw" aria-pressed="false" title="The exact captured text, flat"><span class="pf-v6-c-toggle-group__text">Raw</span></button>
+                  </div>
+                </div>
                 <button id="fold-all-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Collapse or expand every section" disabled>
                   <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Collapse all</span>
                 </button>
               </div>
               <!-- Time range: a wall-clock scoper (built invocation-agnostic so it scales to multiple
-                   invocations) plus the brush focus-window readout + reset. Only meaningful on the
+                   invocations) plus the brush console-log-focus__window readout + reset. Only meaningful on the
                    timeline, so disabled outside waterfall mode. -->
               <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" id="log-timerange" aria-label="Time range">
                 <span class="pf-v6-c-form-control">
@@ -59,8 +72,8 @@
                     <option value="custom" hidden>Custom</option>
                   </select>
                 </span>
-                <span id="focus-window" class="focus-window" hidden aria-live="polite"></span>
-                <button id="focus-reset" class="pf-v6-c-button pf-m-link pf-m-inline pf-m-small focus-reset" type="button" title="Reset to the full run" hidden><span class="pf-v6-c-button__text console-render-btn__label">Reset</span></button>
+                <span id="console-log-focus__window" class="console-log-focus__window" hidden aria-live="polite"></span>
+                <button id="console-log-focus__reset" class="pf-v6-c-button pf-m-link pf-m-inline pf-m-small console-log-focus__reset" type="button" title="Reset to the full run" hidden><span class="pf-v6-c-button__text console-render-btn__label">Reset</span></button>
               </div>
               <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="Clipboard">
                 <button id="copy-all-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the whole log to the clipboard">
@@ -87,8 +100,8 @@
       </header>
 
       <!-- Parsed-filter echo: the live "here is how your filter parsed" chip row, styled by the
-           .search-chips/.qchip rules in logs.css. Hidden until you type. -->
-      <div id="filter-chips" class="search-chips log-filter-chips" hidden aria-hidden="true"></div>
+           .console-log-filter/.console-log-filter__chip rules in logs.css. Hidden until you type. -->
+      <div id="filter-chips" class="console-log-filter" hidden aria-hidden="true"></div>
 
       <div class="console-render-scroll" id="log-scroll" tabindex="0">
         <div class="console-render-body" id="log-body" aria-label="Captured output"></div>
@@ -125,7 +138,7 @@
       </div>
 
       <noscript>
-        <div class="log-noscript">
+        <div class="console-log-noscript">
           <p><strong>The log viewer needs JavaScript.</strong> It decodes the output from the link fragment in your browser. Enable JavaScript, or <a href="../../download/">install magus</a> and run <code>magus query output &lt;ref&gt;</code> to print the output in your terminal.</p>
         </div>
       </noscript>
@@ -134,9 +147,9 @@
            reads the same as the dashboard and graph explorer instead of its own in-panel footer. -->
     </section>
 
-    <details class="url-help ref-section">
+    <details class="console-log-help" data-legacy-ref>
       <summary>Filter syntax</summary>
-      <div class="disclosure-body">
+      <div class="console-log-help__body">
         <p>The filter box narrows the log to matching lines. Terms combine with AND and match case-insensitively; the whole filter is shareable as a <code>#q=</code> link fragment.</p>
         <dl>
           <dt><code>compile</code></dt>
@@ -152,9 +165,9 @@
       </div>
     </details>
 
-    <details class="url-help ref-section">
+    <details class="console-log-help" data-legacy-ref>
       <summary>Loading a log by URL</summary>
-      <div class="disclosure-body">
+      <div class="console-log-help__body">
         <p><code>magus query output &lt;ref&gt; --open</code> builds these links for you. Everything rides the fragment (after <code>#</code>), which the browser never sends to a server, so nothing about the run - not even its ref - ever leaves your machine.</p>
         <dl>
           <dt><code>#ref=&lt;id&gt;</code></dt>

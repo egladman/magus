@@ -52,7 +52,7 @@ export function setRefIdentity(value: string, labeled: boolean): void {
 export function setStatus(msg: string, isErr?: boolean): void {
   if (!statusEl) return;
   statusEl.textContent = msg || "";
-  statusEl.classList.toggle("err", !!isErr);
+  statusEl.toggleAttribute("data-error", !!isErr);
   // The separate live event-count pill is a live-mode thing; keep it out of ref/error status.
   const countEl = el("log-count");
   if (countEl) { countEl.textContent = ""; countEl.hidden = true; }
@@ -80,6 +80,40 @@ export function copyToClipboard(text: string, btn: HTMLElement | null): void {
   } else {
     done(false);
   }
+}
+
+// --- PF ToggleGroup switches (Log|Timeline, Pretty|Raw) -----------------------
+// Each two-option PF ToggleGroup encodes a boolean: the FIRST button is false, the SECOND true.
+// setToggleGroup paints the selection (pf-m-selected + aria-pressed), setToggleGroupDisabled toggles
+// both buttons' disabled, and flipToggleGroup clicks the other (enabled) button so a keybinding
+// drives the switch through the button's own click handler - the single source of truth.
+function toggleGroupButtons(id: string): HTMLButtonElement[] {
+  const g = document.getElementById(id);
+  return g ? Array.from(g.querySelectorAll<HTMLButtonElement>(".pf-v6-c-toggle-group__button")) : [];
+}
+
+export function toggleGroupValue(id: string): boolean {
+  const b = toggleGroupButtons(id);
+  return b.length === 2 && b[1].classList.contains("pf-m-selected");
+}
+
+export function setToggleGroup(id: string, second: boolean): void {
+  toggleGroupButtons(id).forEach((btn, i) => {
+    const on = (i === 1) === second;
+    btn.classList.toggle("pf-m-selected", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
+export function setToggleGroupDisabled(id: string, disabled: boolean): void {
+  for (const btn of toggleGroupButtons(id)) btn.disabled = disabled;
+}
+
+export function flipToggleGroup(id: string): void {
+  const b = toggleGroupButtons(id);
+  if (b.length !== 2) return;
+  const other = b[toggleGroupValue(id) ? 0 : 1];
+  if (!other.disabled) other.click();
 }
 
 export function isTyping(node: EventTarget | null): boolean {

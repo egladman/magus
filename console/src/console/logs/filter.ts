@@ -73,10 +73,10 @@ export function setQueryFragment(query: string): void {
   history.replaceState(null, "", location.pathname + location.search + (frag ? "#" + frag : ""));
 }
 
-// renderFilterChips echoes the parsed filter under the bar as chips - fields as bordered
-// pills, free text as plain chips, joined by "AND" connectives - so you can SEE how the query
-// was interpreted, the same "how your query parsed" cue the docs search page shows. Uses the
-// .search-chips/.qchip/.qop classes defined in logs.css.
+// renderFilterChips echoes the parsed filter under the bar as PatternFly Labels - one per parsed
+// term, joined by muted "AND" connectives - so you can SEE how the query was interpreted, the same
+// "how your query parsed" cue the docs search page shows. The chips are PF Labels (pf-v6-c-label);
+// only the row + the "AND" connective (.console-log-filter/.console-log-filter__op) are custom.
 export function renderFilterChips(): void {
   const host = el("filter-chips");
   if (!host) return;
@@ -89,22 +89,23 @@ export function renderFilterChips(): void {
   parts.forEach((p, i) => {
     if (i > 0) {
       const op = document.createElement("span");
-      op.className = "qop";
+      op.className = "console-log-filter__op";
       op.textContent = "AND";
       host.appendChild(op);
     }
-    const chip = document.createElement("span");
+    const label = document.createElement("span");
+    label.className = "pf-v6-c-label pf-m-compact";
+    const content = document.createElement("span");
+    content.className = "pf-v6-c-label__content";
     if (p.field !== undefined) {
-      chip.className = "qchip qchip-field";
       const b = document.createElement("b");
       b.textContent = p.field;
-      chip.appendChild(b);
-      chip.appendChild(document.createTextNode(":" + p.value));
+      content.append(b, document.createTextNode(":" + p.value));
     } else {
-      chip.className = "qchip";
-      chip.textContent = p.text ?? "";
+      content.textContent = p.text ?? "";
     }
-    host.appendChild(chip);
+    label.appendChild(content);
+    host.appendChild(label);
   });
   host.hidden = false;
 }

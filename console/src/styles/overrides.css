@@ -98,13 +98,13 @@
 #keybindings-overlay [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
 
 /* --- Legacy reference-block hide -----------------------------------------------------------------
- * The graph and log scaffolds still carry a few <details class="ref-section"> blocks - inline
+ * The graph and log scaffolds still carry a few <details data-legacy-ref> blocks - inline
  * reference/help copy the old docs site relocated into a slide-out drawer. The decoupled console
  * never wires that drawer (ref-drawer.ts is unused, no #ref-drawer element is emitted), and the sheet
- * that used to hide the un-relocated sections (ui-panels.css, `.js .ref-section { display: none }`)
- * was removed at the W4 cutover. Keep them hidden so the surfaces render exactly as before rather than
- * spilling dead disclosure copy into the view. */
-.ref-section { display: none; }
+ * that used to hide the un-relocated sections (ui-panels.css) was removed at the W4 cutover. Keep them
+ * hidden (state on data-*, not a class) so the surfaces render exactly as before rather than spilling
+ * dead disclosure copy into the view. */
+[data-legacy-ref] { display: none; }
 
 /* --- Refresh toast --------------------------------------------------------------------------------
  * A small bottom-left "reload" card raised by the service-worker registration (new bundles are

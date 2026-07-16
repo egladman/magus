@@ -189,40 +189,18 @@ body[data-console-fill] .graph-app:has(.graph-empty-state:not([hidden])) .graph-
    .conn class rules were removed here. (.status-item survives in overrides.css only as the hook the
    un-migrated log viewer injects its zoom control under; it folds in when logs migrates in W3.) */
 
-/* Help glyph: the small circular "?" beside a query/filter prompt. One shared shape so every
-   console app's help affordance is an identical circle (the graph query prompt, the log filter).
-   box-sizing:border-box keeps width==height (a true circle) once the border is counted. */
-.help-glyph {
+/* Help glyph: the small circular "?" beside a query/filter prompt. One shared shape (console-render-*,
+   loaded on every surface) so every console app's help affordance is an identical circle (the graph
+   query prompt, the log filter). box-sizing:border-box keeps width==height (a true circle) once the
+   border is counted. */
+.console-render-help-glyph {
   flex: 0 0 auto; box-sizing: border-box;
   display: inline-flex; align-items: center; justify-content: center;
   width: 1.25rem; height: 1.25rem; border-radius: 50%; cursor: help; user-select: none;
   border: 1px solid var(--pf-t--global--border--color--default); background: none;
   color: var(--pf-t--global--text--color--subtle); font-size: 0.7rem; font-weight: 700;
 }
-.help-glyph:hover, .help-glyph:focus-visible { color: var(--pf-t--global--text--color--regular); border-color: var(--pf-t--global--text--color--regular); }
-
-/* Shared empty-state prompt (log viewer + graph explorer): an icon over a title + sub, then
-   a two-up grid of "ways" to get content loaded. These inner pieces were byte-identical across
-   the two apps, so they live here; each app keeps only its own CONTAINER (position/height, the
-   .log-empty / .graph-empty-state hooks) and any way-card background override. */
-.console-empty-icon { width: 3rem; height: 3rem; color: var(--pf-t--global--border--color--default); margin-bottom: 0.9rem; }
-.console-empty-title { color: var(--pf-t--global--text--color--regular); font-weight: 600; font-size: 1.15rem; margin: 0 0 0.35rem; }
-.console-empty-sub { margin: 0 0 1.4rem; max-width: 34rem; }
-.console-empty-ways {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
-  width: 100%; max-width: 34rem; margin-inline: auto; text-align: left;
-}
-.console-empty-way {
-  display: flex; flex-direction: column; gap: 0.45rem;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--primary--default);
-}
-.console-empty-way-label { color: var(--pf-t--global--text--color--regular); font-weight: 600; font-size: 0.85rem; }
-.console-empty-cmd { margin: 0; }
-.console-empty-cmd code { font-size: 0.8em; }
-.console-empty-hint { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
-@media (max-width: 640px) { .console-empty-ways { grid-template-columns: 1fr; } }
+.console-render-help-glyph:hover, .console-render-help-glyph:focus-visible { color: var(--pf-t--global--text--color--regular); border-color: var(--pf-t--global--text--color--regular); }
 
 /* ---- Console app: the tabbed frame that hosts surfaces --------------------------------------
    Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-titlebar,

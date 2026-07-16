@@ -13,15 +13,18 @@
  * than the old Pico-era palette. Per the console-<area> naming convention, the shared render model
  * the log viewer + activity trail both build (foldable sections, status badges, ANSI spans, lines,
  * the surface frame) is the console-render-* area (.console-render-section, .console-render-line,
- * .console-render-ansi__fg--*, .console-render-badge, ...); the log-only waterfall stays .wf-*
- * (a console-log-* rename pending). Transient state rides data-* (data-collapsed, data-status,
- * data-highlight, data-drag-over), never a modifier class.
+ * .console-render-ansi__fg--*, .console-render-badge, ...). The view switches are PF ToggleGroups and
+ * the filter chips are PF Labels; only the genuinely component-less log chrome (the trace waterfall,
+ * the zoom control, the filter row + "AND" connective, the ref-identity pills) is the console-log-*
+ * area (.console-log-waterfall, .console-log-zoom, .console-log-filter, .console-log-ref, ...).
+ * Transient state rides data-* (data-collapsed, data-status, data-highlight, data-drag-over,
+ * data-waterfall, data-dim), never a modifier class.
  *
  * SHARED WITH ACTIVITY: the activity trail (console/activity) reuses this sheet's console-render-*
  * frame (.console-render-panel / .console-render-scroll / .console-render-body / .console-render-empty)
  * and the buildSection markup (.console-render-section*, .console-render-line, .console-render-badge,
- * .console-render-ansi*). The activity chrome is a PF Toolbar now, so the old Pico .file-bar /
- * .log-actions / .btn-group frame is dead (removed in the activity rename pass). */
+ * .console-render-ansi*); its own chrome is a PF Toolbar. The old Pico .file-bar / .log-actions /
+ * .btn-group frame is gone. */
 
 :root { --log-pad: clamp(0.75rem, 2vw, 1.1rem); }
 
@@ -58,18 +61,17 @@
 #log-bar-id .pf-v6-c-toolbar__content-section { padding-block: 0.45rem 0; align-items: center; min-height: 1.7rem; }
 #log-bar-controls .pf-v6-c-toolbar__content-section { padding-block: 0.4rem 0.5rem; align-items: center; row-gap: 0.45rem; }
 
-/* Ref identity: source + status as bordered pills (distinct little labels instead of hyphen-
-   delimited text). Shared by the activity trail's `.file-bar-id .name`. */
-.file-bar-id { display: flex; align-items: center; gap: 0.6rem; min-height: 1.25rem; }
-.file-bar .name, #log-bar .name {
+/* Ref identity: the source value as a bordered pill (a distinct little label instead of hyphen-
+   delimited text), with a muted "Reference ID:" prefix. */
+#log-bar .console-log-ref__value {
   font-family: var(--pf-t--global--font--family--mono);
   color: var(--pf-t--global--text--color--regular); font-weight: 600;
   padding: 0.06rem 0.5rem; border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
 }
 /* "Reference ID:" prefix before the ref value: muted label text, hidden when there is no ref. */
-.file-bar-id .id-label, #log-bar .id-label { color: var(--pf-t--global--text--color--subtle); font-weight: 400; }
-.file-bar-id .id-label[hidden], #log-bar .id-label[hidden] { display: none; }
+#log-bar .console-log-ref__label { color: var(--pf-t--global--text--color--subtle); font-weight: 400; }
+#log-bar .console-log-ref__label[hidden] { display: none; }
 
 /* The action cluster (#log-actions) pushes to the end of the controls row and wraps cluster-by-
    cluster (PF action-group). The filter field + its "?" glyph lead the row. */
@@ -81,96 +83,53 @@
 /* Toolbar buttons: compact (pf-m-small) icon + label. .console-render-btn__icon (svg) + .console-render-btn__label (text) are the
    render/JS hooks setBtnLabel/flashBtnLabel touch and the narrow-screen query drops. */
 #log-actions .pf-v6-c-button { font-size: 0.72rem; }
-.log-app .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+.console-log-app .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Pressed toolbar toggles (Pause while paused, Fullscreen while on) read as depressed. */
 #log-actions .pf-v6-c-button[aria-pressed="true"]:not(:disabled) {
   background: color-mix(in srgb, var(--console-accent) 14%, transparent);
   border-color: var(--console-accent);
   color: var(--console-accent);
 }
-.focus-window { font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap; }
-.focus-reset { font-size: 0.68rem; }
+.console-log-focus__window { font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap; }
+.console-log-focus__reset { font-size: 0.68rem; }
 
-/* --- Segmented switch (Pretty|Raw, Log|Timeline) ---------------------------------------------
-   A recessed track with a raised thumb that slides over the active side. Built by makeSegToggle()
-   in main.ts (it equalizes the two segment widths). The <button> is only the interactive/disabled
-   shell - stripped bare so no PF/Pico button state bleeds through - and an inner opaque .seg-track
-   carries every visual. aria-pressed on the button (true => second option) slides the thumb.
-   Scoped under .log-app so it out-specifies the PF button base the switch still carries. */
-.log-app .seg-toggle {
-  padding: 0; border: 0; min-height: 0; background: transparent; box-shadow: none; overflow: visible;
-}
-.log-app .seg-toggle .seg-track {
-  position: relative; display: inline-flex; align-items: stretch; padding: 2px; gap: 0;
-  border-radius: var(--pf-t--global--border--radius--small); overflow: hidden;
-  background: var(--pf-t--global--background--color--secondary--default);   /* recessed track */
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.09);
-}
-.log-app .seg-toggle .seg-opt {
-  position: relative; z-index: 1;
-  display: inline-flex; align-items: center; justify-content: center;
-  min-height: 1.5rem; padding: 0 0.5rem;
-  color: var(--pf-t--global--text--color--subtle); font-weight: 400; white-space: nowrap;
-}
-.log-app .seg-toggle .seg-thumb {
-  position: absolute; z-index: 0; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px);
-  border-radius: calc(var(--pf-t--global--border--radius--small) - 1px);
-  background: var(--pf-t--global--background--color--primary--default);      /* raised thumb */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-  transition: transform 0.16s ease;
-}
-.log-app .seg-toggle[aria-pressed="true"] .seg-thumb { transform: translateX(100%); }
-.log-app .seg-toggle:disabled { opacity: 0.5; }
-.log-app .seg-toggle:focus-visible { outline: none; }
-.log-app .seg-toggle:focus-visible .seg-track { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+/* The Pretty|Raw and Log|Timeline switches are PF ToggleGroups (pf-v6-c-toggle-group, scaffold.html) -
+   no custom CSS; main.ts/render.ts drive the selected + disabled state. */
 
 /* Zoom control in the status bar's right cluster (by the event count): a compact -/readout/+ that
    scales the viewer body. Built from spans (NOT <button>, dodging button theming). */
-.zoom-ctl { display: inline-flex; align-items: center; gap: 0.1rem; margin: 0; }
-.zoom-ctl .zoom-btn, .zoom-ctl .zoom-readout {
+.console-log-zoom { display: inline-flex; align-items: center; gap: 0.1rem; margin: 0; }
+.console-log-zoom .console-log-zoom__btn, .console-log-zoom .console-log-zoom__readout {
   cursor: pointer; color: var(--pf-t--global--text--color--subtle); user-select: none;
   border-radius: var(--pf-t--global--border--radius--small); transition: color 0.12s, background 0.12s;
 }
-.zoom-ctl .zoom-btn {
+.console-log-zoom .console-log-zoom__btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 1.15rem; height: 1.15rem; font-size: 0.95rem; line-height: 1;
 }
-.zoom-ctl .zoom-readout { min-width: 2.7rem; text-align: center; font-variant-numeric: tabular-nums; padding: 0 0.15rem; }
-.zoom-ctl .zoom-btn:hover, .zoom-ctl .zoom-readout:hover {
+.console-log-zoom .console-log-zoom__readout { min-width: 2.7rem; text-align: center; font-variant-numeric: tabular-nums; padding: 0 0.15rem; }
+.console-log-zoom .console-log-zoom__btn:hover, .console-log-zoom .console-log-zoom__readout:hover {
   color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default);
 }
-.zoom-ctl :focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+.console-log-zoom :focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
 
-/* The parsed-filter chip row sits under the toolbar, inset to the panel padding, with a
-   hairline separating it from the header. The chip visuals (.search-chips/.qchip/.qop, migrated
-   from the removed site.css at the W4 Pico cutover) live here now, repointed to PF tokens - the
-   log filter is their only consumer in the console. filter.ts builds field facets as bordered
-   pills and joins parts with muted "AND" connectives (the "how your query parsed" cue). */
-.log-filter-chips { margin: 0; padding: 0.4rem 0.6rem; border-top: 1px solid var(--pf-t--global--border--color--default); }
-.search-chips {
+/* The parsed-filter chip row (.console-log-filter) sits under the toolbar, inset to the panel
+   padding, with a hairline separating it from the header. filter.ts builds each parsed term as a PF
+   Label (pf-v6-c-label) and joins them with muted "AND" connectives (.console-log-filter__op) - the
+   "how your query parsed" cue. Only the row + connective are custom; the chips are PF Labels. */
+.console-log-filter {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem;
-  margin: 0.5rem 0 0; font-size: 0.75rem;
+  margin: 0.5rem 0 0; padding: 0.4rem 0.6rem; font-size: 0.75rem;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
 }
-.search-chips[hidden] { display: none; }
-.qchip {
-  padding: 0.15rem 0.5rem;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  color: var(--pf-t--global--text--color--subtle);
-  white-space: nowrap;
-}
-.qchip-field {
-  color: var(--pf-t--global--text--color--regular);
-  background: var(--pf-t--global--background--color--secondary--default);
-}
-.qchip-field b { font-weight: 600; }
-.qop {
+.console-log-filter[hidden] { display: none; }
+.console-log-filter__op {
   font-weight: 600; font-size: 0.68rem; letter-spacing: 0.04em;
   color: var(--pf-t--global--text--color--subtle);
 }
 
 /* Shown in the pretty view when the active filter matches nothing. */
-.filter-empty { padding: 1.5rem var(--log-pad); text-align: center; color: var(--pf-t--global--text--color--subtle); }
+.console-log-filter__empty { padding: 1.5rem var(--log-pad); text-align: center; color: var(--pf-t--global--text--color--subtle); }
 
 /* --- Scrolling body (shared: activity reuses .console-render-scroll / .console-render-body) -------------------------- */
 .console-render-scroll {
@@ -188,14 +147,13 @@
   padding: 0.4rem 0;
 }
 /* Waterfall zoom: magnify the SVG itself (a width:100% SVG re-fits under a body zoom). */
-.console-render-body.wf-mode .wf-svg { zoom: var(--log-zoom, 1); }
-.console-render-body.empty { display: none; }
+.console-render-body[data-waterfall] .console-log-waterfall__svg { zoom: var(--log-zoom, 1); }
 
 /* --- Foldable sections (shared: buildSection, used by the log viewer + activity trail) ---------
    Read the head foreground from a var with a token fallback: the log viewer sets --log-head-fg on
-   .log-app; the activity trail does not, so the fallback carries it (a <button> would otherwise
+   .console-log-app; the activity trail does not, so the fallback carries it (a <button> would otherwise
    invert the color). */
-.log-app { --log-head-fg: var(--pf-t--global--text--color--regular); }
+.console-log-app { --log-head-fg: var(--pf-t--global--text--color--regular); }
 .console-render-section { border-bottom: 1px solid var(--pf-t--global--border--color--default); }
 .console-render-section:last-child { border-bottom: 0; }
 .console-render-section__head {
@@ -280,28 +238,28 @@
    The invocation's spans (targets, and their step child-spans) on a shared time axis, drawn as
    inline SVG (offline + CSP-safe, no chart library). Colors reuse the console status palette; step
    bars are muted. */
-.console-render-body.wf-mode { padding: 0.6rem var(--log-pad); }
-.wf-caption { color: var(--pf-t--global--text--color--subtle); font-size: 0.78rem; margin: 0 0 0.5rem; }
-.wf-svg { display: block; width: 100%; height: auto; cursor: crosshair; }
-.wf-axis-line { stroke: var(--pf-t--global--border--color--default); stroke-width: 1; }
-.wf-grid { stroke: var(--pf-t--global--border--color--default); stroke-width: 1; opacity: 0.35; }
-.wf-axis-label, .wf-dur { fill: var(--pf-t--global--text--color--subtle); font-size: 9px; font-family: var(--pf-t--global--font--family--mono); }
-.wf-label { font-size: 10px; font-family: var(--pf-t--global--font--family--mono); }
-.wf-target-label { fill: var(--log-head-fg, var(--pf-t--global--text--color--regular)); font-weight: 600; }
+.console-render-body[data-waterfall] { padding: 0.6rem var(--log-pad); }
+.console-log-waterfall__caption { color: var(--pf-t--global--text--color--subtle); font-size: 0.78rem; margin: 0 0 0.5rem; }
+.console-log-waterfall__svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.console-log-waterfall__axisline { stroke: var(--pf-t--global--border--color--default); stroke-width: 1; }
+.console-log-waterfall__grid { stroke: var(--pf-t--global--border--color--default); stroke-width: 1; opacity: 0.35; }
+.console-log-waterfall__axislabel, .console-log-waterfall__dur { fill: var(--pf-t--global--text--color--subtle); font-size: 9px; font-family: var(--pf-t--global--font--family--mono); }
+.console-log-waterfall__label { font-size: 10px; font-family: var(--pf-t--global--font--family--mono); }
+.console-log-waterfall__label--target { fill: var(--log-head-fg, var(--pf-t--global--text--color--regular)); font-weight: 600; }
 /* Invocation group header in a multi-invocation waterfall: the command, bolded. */
-.wf-group-head { font-size: 11px; font-weight: 700; fill: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
-.wf-step-label { fill: var(--pf-t--global--text--color--subtle); }
-.wf-bar { fill: var(--console-accent); }
-.wf-bar.wf-step { fill: var(--pf-t--global--text--color--subtle); opacity: 0.7; }
-.wf-bar.status-pass { fill: var(--console-status-ok); }
-.wf-bar.status-fail { fill: var(--console-status-danger); }
-.wf-bar.status-cached { fill: var(--pf-t--global--border--color--default); }
+.console-log-waterfall__grouphead { font-size: 11px; font-weight: 700; fill: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
+.console-log-waterfall__label--step { fill: var(--pf-t--global--text--color--subtle); }
+.console-log-waterfall__bar { fill: var(--console-accent); }
+.console-log-waterfall__bar.console-log-waterfall__bar--step { fill: var(--pf-t--global--text--color--subtle); opacity: 0.7; }
+.console-log-waterfall__bar[data-status="pass"] { fill: var(--console-status-ok); }
+.console-log-waterfall__bar[data-status="fail"] { fill: var(--console-status-danger); }
+.console-log-waterfall__bar[data-status="cached"] { fill: var(--pf-t--global--border--color--default); }
 /* Filter dim: spans the filter excludes fade back so the matching ones stand out. */
-.wf-dim { opacity: 0.18; }
-.wf-bar.wf-step.wf-dim { opacity: 0.12; }
+.console-log-waterfall__svg [data-dim] { opacity: 0.18; }
+.console-log-waterfall__bar--step[data-dim] { opacity: 0.12; }
 /* Brush selection rectangle drawn over the waterfall while dragging a focus window. */
-.wf-brush { fill: var(--console-accent); fill-opacity: 0.14; stroke: var(--console-accent); stroke-opacity: 0.5; }
-.wf-empty { padding: 2rem; text-align: center; color: var(--pf-t--global--text--color--subtle); }
+.console-log-waterfall__brush { fill: var(--console-accent); fill-opacity: 0.14; stroke: var(--console-accent); stroke-opacity: 0.5; }
+.console-log-waterfall__empty { padding: 2rem; text-align: center; color: var(--pf-t--global--text--color--subtle); }
 
 /* --- Cold empty state (PatternFly EmptyState, #log-empty) -------------------------------------
    The PF EmptyState centers within the (tall) scroll area. #log-empty is toggled `hidden` by the
@@ -331,59 +289,35 @@
   justify-content: center; min-height: 100%; box-sizing: border-box;
 }
 .console-render-empty[hidden] { display: none; }
-.log-noscript { padding: 1.5rem; color: var(--pf-t--global--text--color--subtle); }
-
-/* --- Toolbar / actions (shared: activity builds .log-actions / .btn-group / .file-bar button) --
-   Activity reuses the Pico file-bar toolbar; keep it (repointed) until it migrates. The log viewer
-   no longer uses .file-bar (its bar is the PF Toolbar above). */
-.file-bar {
-  flex: 0 0 auto;
-  display: flex; flex-direction: column; gap: 0.45rem;
-  padding: 0.55rem var(--log-pad); margin: 0;
-  background: var(--pf-t--global--background--color--secondary--default);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
-  font-size: 0.8rem;
-}
-.log-actions { margin-left: auto; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
-.log-actions .btn-group { display: inline-flex; align-items: center; gap: 0.3rem; width: auto; }
-.log-actions .btn-group > button { flex: 0 0 auto; }
-.file-bar button {
-  width: auto; margin: 0; padding: 0.2rem 0.6rem; min-height: 1.7rem;
-  font-size: 0.72rem; line-height: 1.3; border-radius: var(--pf-t--global--border--radius--small);
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.32rem;
-}
-.file-bar .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
-.file-bar button:disabled { opacity: 0.42; cursor: not-allowed; }
+.console-log-noscript { padding: 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 
 /* "Loading a log by URL" / "Filter syntax" disclosures: an uppercase, muted, tracked summary label
    over a bordered, tinted panel. Kept bespoke classes (like the render-layer inner classes). */
-.url-help { margin: 0.3rem 0 var(--log-pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
-.url-help > summary:not([role]) {
+.console-log-help { margin: 0.3rem 0 var(--log-pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
+.console-log-help > summary:not([role]) {
   width: fit-content; cursor: pointer;
   color: var(--pf-t--global--text--color--subtle); font-size: 0.8rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.05em;
 }
-main .url-help > summary:not([role]), main .url-help[open] > summary:not([role]) { color: var(--pf-t--global--text--color--subtle); }
-.url-help[open] > summary { margin-bottom: 0.5rem; }
-.url-help .disclosure-body {
+main .console-log-help > summary:not([role]), main .console-log-help[open] > summary:not([role]) { color: var(--pf-t--global--text--color--subtle); }
+.console-log-help[open] > summary { margin-bottom: 0.5rem; }
+.console-log-help .console-log-help__body {
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
-.url-help p { color: var(--pf-t--global--text--color--subtle); margin: 0 0 0.5rem; max-width: 72ch; }
-.url-help :last-child { margin-bottom: 0; }
-.url-help dl { margin: 0 0 0.6rem; display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.9rem; }
-.url-help dt { margin: 0; white-space: nowrap; }
-.url-help dd { margin: 0; color: var(--pf-t--global--text--color--subtle); }
-.url-help code { font-size: 0.85em; }
+.console-log-help p { color: var(--pf-t--global--text--color--subtle); margin: 0 0 0.5rem; max-width: 72ch; }
+.console-log-help :last-child { margin-bottom: 0; }
+.console-log-help dl { margin: 0 0 0.6rem; display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.9rem; }
+.console-log-help dt { margin: 0; white-space: nowrap; }
+.console-log-help dd { margin: 0; color: var(--pf-t--global--text--color--subtle); }
+.console-log-help code { font-size: 0.85em; }
 
 /* Below the tool-page breakpoint the toolbar drops its labels and becomes icon-only, so the
-   buttons don't crowd out the filter field. Covers the log viewer (#log-actions, PF buttons) and
-   the activity trail (.log-actions, Pico buttons). */
+   buttons don't crowd out the filter field (#log-actions, PF buttons). */
 @media (max-width: 900px) {
-  .log-actions .console-render-btn__label, #log-actions .console-render-btn__label { display: none; }
-  .file-bar button { width: 1.7rem; padding: 0; }
+  #log-actions .console-render-btn__label { display: none; }
   #log-actions .pf-v6-c-button { padding-inline: 0.35rem; }
   #log-actions .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }
 }

@@ -45,3 +45,6 @@
  * body, the foldable sections, and the trace waterfall have no PF component - they stay custom
  * rendering (logs.css), colored from the console's --console-* tokens. */
 @import "@patternfly/patternfly/components/Toolbar/toolbar.css";
+/*   ToggleGroup - the Pretty|Raw and Log|Timeline view switches (a real PF segmented control,
+ *   replacing the console's old custom sliding toggle). */
+@import "@patternfly/patternfly/components/ToggleGroup/toggle-group.css";
