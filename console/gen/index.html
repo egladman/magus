@@ -95,28 +95,58 @@
     </div>
     </div>
   </header>
-  <main id="console-outlet"></main>
+  <!-- The tab outlet is a PatternFly Drawer (pf-m-panel-right pf-m-inline): the tab surfaces
+       mount into the __content, and the Reference panel is the __panel. Opening toggles
+       pf-m-expanded, which - because of pf-m-inline - INSETS the content (the panel docks
+       beside it) rather than the old custom fixed aside + body padding-right hack. console.js
+       appends one pane per tab into #console-outlet-content; initRefDrawer() drives the panel.
+       The title-bar Reference button (#console-refbtn) toggles it; unpinned it closes on Escape
+       or outside-click, pinned it stays open across tab switches (persisted). PF Drawer does not
+       dim - there is no backdrop by design, which is the PF-conventional docked behavior. -->
+  <main id="console-outlet">
+    <div id="console-refdrawer" class="pf-v6-c-drawer pf-m-panel-right pf-m-inline">
+      <div class="pf-v6-c-drawer__main">
+        <div id="console-outlet-content" class="pf-v6-c-drawer__content"></div>
+        <div id="console-refpanel" class="pf-v6-c-drawer__panel" role="region" aria-label="Reference" aria-hidden="true">
+          <div class="pf-v6-c-drawer__body">
+            <div class="pf-v6-c-drawer__head">
+              <span class="console-shell-refdrawer__title">Reference</span>
+              <div class="pf-v6-c-drawer__actions">
+                <button id="console-refpin" class="pf-v6-c-button pf-m-plain" type="button" aria-pressed="false" aria-label="Pin the reference panel" title="Pin">
+                  <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 3H7l3-3z"/></svg></span>
+                </button>
+                <div class="pf-v6-c-drawer__close">
+                  <button id="console-refclose" class="pf-v6-c-button pf-m-plain" type="button" aria-label="Close the reference panel" title="Close">
+                    <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pf-v6-c-drawer__body">
+            <!-- Documentation search: reuses the docs site's prebuilt search-index.json and its
+                 Datadog-style query grammar (ported to src/lib/docsearch.ts). Results open in a
+                 new tab; degrades to a note when the docs index is not reachable (standalone dev).
+                 initRefDrawer() wires the input (#console-refsearch-input), results list, and note. -->
+            <div class="console-shell-refsearch">
+              <div class="pf-v6-c-text-input-group">
+                <div class="pf-v6-c-text-input-group__main pf-m-icon">
+                  <span class="pf-v6-c-text-input-group__text">
+                    <span class="pf-v6-c-text-input-group__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                    <input id="console-refsearch-input" class="pf-v6-c-text-input-group__text-input" type="text" spellcheck="false" autocomplete="off" placeholder="Search the docs..." aria-label="Search the documentation" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="console-refsearch-results">
+                  </span>
+                </div>
+              </div>
+              <p id="console-refsearch-note" class="console-shell-refsearch__note" hidden></p>
+              <ul id="console-refsearch-results" class="console-shell-refsearch__results" role="listbox" aria-label="Search results" hidden></ul>
+            </div>
+            <div id="console-refdrawer-body" class="console-shell-refdrawer__body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
   <footer id="console-statusbar"></footer>
-
-  <!-- Reference panel: a right-side slide-out that shows the ACTIVE surface's reference/help
-       sections (the graph explorer's query + search-syntax help, the log viewer's filter help).
-       console.js's initRefDrawer() fills #console-refdrawer-body by cloning the active surface's
-       [data-legacy-ref] blocks on open, wires the trigger (#console-refbtn), pin (#console-refpin),
-       close (#console-refclose), the backdrop, and Escape. Pinned docks it beside the content;
-       unpinned floats it over a dimming backdrop. Empty (display:none) until opened. -->
-  <aside id="console-refdrawer" class="console-shell-refdrawer" aria-label="Reference" aria-hidden="true">
-    <header class="console-shell-refdrawer__header">
-      <span class="console-shell-refdrawer__title">Reference</span>
-      <button id="console-refpin" class="pf-v6-c-button pf-m-plain pf-m-small" type="button" aria-pressed="false" aria-label="Pin the reference panel" title="Pin">
-        <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 3H7l3-3z"/></svg></span>
-      </button>
-      <button id="console-refclose" class="pf-v6-c-button pf-m-plain pf-m-small" type="button" aria-label="Close the reference panel" title="Close">
-        <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
-      </button>
-    </header>
-    <div id="console-refdrawer-body" class="console-shell-refdrawer__body"></div>
-  </aside>
-  <div id="console-refbackdrop" class="console-shell-refbackdrop" hidden></div>
 
   <script type="module" src="./console.js"></script>
 </body>

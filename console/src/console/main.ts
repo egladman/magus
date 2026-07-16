@@ -131,7 +131,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   // tab is a no-op.
   function mount(tab: TabState): void {
     if (mounts.has(tab.id)) return;
-    const host = document.createElement("div"); // a pane container: #console-outlet > div[data-tab-id]
+    const host = document.createElement("div"); // a pane container: #console-outlet-content > div[data-tab-id]
     host.dataset.tabId = tab.id;
     outlet.append(host);
     const seed: Pane = tab.layout ?? { kind: "leaf", id: tab.id, pageId: tab.pageId };
@@ -314,6 +314,8 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
 // Entry: wire the console page's DOM. Guarded so the module no-ops when the scaffold is absent. The
 // footer (#console-statusbar) is an empty slot the console fills with the active tab's status bar.
 const stripHost = document.getElementById("console-tabs");
-const outlet = document.getElementById("console-outlet");
+// The outlet is the PF Drawer's __content (panes mount here); the Reference panel is the
+// Drawer's __panel sibling. Falls back to #console-outlet if the drawer markup is absent.
+const outlet = document.getElementById("console-outlet-content") ?? document.getElementById("console-outlet");
 const statusHost = document.getElementById("console-statusbar");
 if (stripHost && outlet && statusHost) startConsole(stripHost, outlet, statusHost);

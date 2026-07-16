@@ -7,3 +7,7 @@ node_modules/
 # runs it under node --test (which skips node_modules, so the bundle can't live
 # there). A build artifact, not committed.
 .testcache/
+
+# Local dev data blobs (not committed): the graph export and the docs search index the
+# standalone dev console fetches. In production these are served from the site, not console/gen.
+gen/search-index.json
