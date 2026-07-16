@@ -4,6 +4,8 @@
 // installed PWA reads it as a native app window. It also links back to the documentation site. It
 // mirrors the settings gear's popover wiring (open/close, aria-expanded, click-outside, Escape, focus
 // return) so the two title-bar popovers behave identically. No-ops without the markup.
+import { openSurfaceWindow } from "../lib/appwindow";
+
 export function initAppMenu(): void {
   const btn = document.getElementById("console-appmenu-btn");
   const panel = document.getElementById("console-appmenu");
@@ -31,8 +33,7 @@ export function initAppMenu(): void {
       e.preventDefault();
       const id = item.dataset.appWindow;
       if (!id) return;
-      const url = location.pathname + "?app=" + encodeURIComponent(id);
-      window.open(url, "magus-app-" + id, "popup,width=1180,height=800");
+      openSurfaceWindow(id);
       setOpen(false, true);
     });
   }

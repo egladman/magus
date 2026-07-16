@@ -4,6 +4,8 @@
 // ("Open ...") is how another surface is launched. This module just builds the launcher DOM - a
 // heading, a lede, and a PatternFly Gallery of clickable Cards - and leaves mounting to the console.
 
+import { openSurfaceWindow } from "../lib/appwindow";
+
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
 export interface Launchable {
   pageId: string;
@@ -44,6 +46,10 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
 
   const gallery = document.createElement("div");
   gallery.className = "pf-v6-l-gallery pf-m-gutter";
+  // Every card's kebab menu registers a closer here; one document listener shuts them all on an
+  // outside click or Escape, so only one card menu is ever open.
+  const closeMenus: Array<() => void> = [];
+  const closeAll = (): void => { for (const c of closeMenus) c(); };
   for (const s of surfaces) {
     const card = document.createElement("div");
     card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
@@ -71,11 +77,61 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     const body = document.createElement("div");
     body.className = "pf-v6-c-card__body";
     body.textContent = s.hint;
-    card.append(icon, titleEl, body);
+
+    // Per-card kebab: a PF plain-button toggle over a small PF Menu with the open actions. It sits in
+    // the card's top-right corner. Clicks on the kebab/menu stopPropagation so they never trigger the
+    // card's own open handler.
+    const kebab = document.createElement("button");
+    kebab.type = "button";
+    kebab.className = "pf-v6-c-button pf-m-plain console-launcher-card__kebab";
+    kebab.setAttribute("aria-label", "More actions for " + s.label);
+    kebab.setAttribute("aria-haspopup", "true");
+    kebab.setAttribute("aria-expanded", "false");
+    kebab.innerHTML =
+      '<span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">' +
+      '<circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></span>';
+    const menu = document.createElement("div");
+    menu.className = "pf-v6-c-menu console-launcher-card__menu";
+    menu.hidden = true;
+    const mkItem = (label: string, run: () => void): HTMLLIElement => {
+      const li = document.createElement("li");
+      li.className = "pf-v6-c-menu__list-item";
+      li.setAttribute("role", "none");
+      const b = document.createElement("button");
+      b.className = "pf-v6-c-menu__item";
+      b.type = "button";
+      b.setAttribute("role", "menuitem");
+      b.innerHTML = '<span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">' + label + "</span></span>";
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); setMenu(false); run(); });
+      li.append(b);
+      return li;
+    };
+    const list = document.createElement("ul");
+    list.className = "pf-v6-c-menu__list";
+    list.setAttribute("role", "menu");
+    list.append(mkItem("Open", () => open(s.pageId)), mkItem("Open in a new window", () => openSurfaceWindow(s.pageId)));
+    const menuContent = document.createElement("div");
+    menuContent.className = "pf-v6-c-menu__content";
+    menuContent.append(list);
+    menu.append(menuContent);
+
+    const setMenu = (v: boolean): void => {
+      menu.hidden = !v;
+      kebab.setAttribute("aria-expanded", v ? "true" : "false");
+    };
+    closeMenus.push(() => setMenu(false));
+    kebab.addEventListener("click", (ev) => { ev.stopPropagation(); const willOpen = menu.hidden; closeAll(); setMenu(willOpen); });
+    menu.addEventListener("click", (ev) => ev.stopPropagation());
+
+    card.append(kebab, menu, icon, titleEl, body);
     card.addEventListener("click", () => open(s.pageId));
     card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(s.pageId); } });
     gallery.append(card);
   }
+
+  // Outside-click and Escape close any open card menu. Registered once for the whole launcher.
+  document.addEventListener("click", closeAll);
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeAll(); });
 
   root.append(title, sub, gallery);
   return root;

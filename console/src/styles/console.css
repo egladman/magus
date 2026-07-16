@@ -332,6 +332,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-surface="home"] > p { max-width: 44rem; margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 #console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 52rem; }
 
+/* App-drawer section label: distinguish the "Open in new window" group heading from the app entries
+   below it - smaller, uppercase, muted, and non-interactive-looking, so it reads as a divider label. */
+.console-appmenu__group-title {
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
 /* App mode: a dedicated single-surface window (index.html?app=<id>). The tab strip is meaningless
    there - the window IS the app - so hide it; the title bar keeps just its right-aligned actions
    (app drawer, reference, settings), reading as native chrome. main.ts sets data-appmode on the root. */
@@ -341,8 +348,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    hover/focus. The card shell stays PF (pf-v6-c-card pf-m-clickable); these rules add the icon slot
    and the taller, more inviting proportions the compact default did not give. */
 .console-launcher-card {
-  display: flex; flex-direction: column; gap: 0.35rem;
-  min-height: 11rem; padding: 1.5rem;
+  position: relative; /* anchors the kebab (top-right) and its menu */
+  display: flex; flex-direction: column; gap: 0.15rem;
+  padding: 1.15rem 1.25rem;
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 .console-launcher-card:hover,
@@ -353,13 +361,32 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 .console-launcher-card__icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 2.75rem; height: 2.75rem; margin-bottom: 0.75rem;
+  width: 2.5rem; height: 2.5rem; margin-bottom: 0.55rem;
   border-radius: var(--pf-t--global--border--radius--medium);
   color: var(--console-accent);
   background: color-mix(in srgb, var(--console-accent) 12%, transparent);
 }
-.console-launcher-card .pf-v6-c-card__title-text { font-size: 1.05rem; font-weight: 600; }
-.console-launcher-card .pf-v6-c-card__body { color: var(--pf-t--global--text--color--subtle); }
+/* The card owns its padding (above); neutralize PF's per-slot title/body padding so it does not stack
+   into extra whitespace. */
+.console-launcher-card .pf-v6-c-card__title,
+.console-launcher-card .pf-v6-c-card__body { padding: 0; }
+.console-launcher-card .pf-v6-c-card__title-text { font-size: 1rem; font-weight: 600; }
+.console-launcher-card .pf-v6-c-card__body { color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+
+/* Per-card kebab: a quiet corner affordance that brightens on hover/focus (or while its menu is open).
+   Its menu is a PF Menu anchored under it, above sibling cards. */
+.console-launcher-card__kebab {
+  position: absolute; top: 0.4rem; right: 0.4rem;
+  color: var(--pf-t--global--text--color--subtle);
+  opacity: 0; transition: opacity 0.12s ease;
+}
+.console-launcher-card:hover .console-launcher-card__kebab,
+.console-launcher-card:focus-within .console-launcher-card__kebab,
+.console-launcher-card__kebab[aria-expanded="true"] { opacity: 1; }
+.console-launcher-card__menu {
+  position: absolute; top: 2.4rem; right: 0.4rem; z-index: var(--pf-t--global--z-index--200);
+  min-width: 12rem;
+}
 
 /* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay
    (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives
