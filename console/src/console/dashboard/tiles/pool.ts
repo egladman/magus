@@ -10,14 +10,14 @@ const SLOT_CAP = 256; // soft cap on rendered cubes so a huge pool never bloats 
 
 export function poolTile(): Tile {
   const card = new Card("pool", "Pool", { term: "Pool", note: "0 / 0 slots" });
-  const grid = h("div", "slot-grid");
+  const grid = h("div", "console-dashboard-pool__grid");
   grid.setAttribute("aria-label", "Concurrency slots");
-  const legend = h("div", "pool-legend");
-  const queuedLg = h("span", "lg lg-queued");
+  const legend = h("div", "console-dashboard-pool__legend");
+  const queuedLg = h("span", "console-dashboard-legend console-dashboard-legend--queued");
   queuedLg.hidden = true;
   const queuedCount = h("span", undefined, "0");
   queuedLg.append(document.createTextNode("queued "), queuedCount);
-  legend.append(h("span", "lg lg-running", "running"), h("span", "lg lg-free", "free"), queuedLg);
+  legend.append(h("span", "console-dashboard-legend console-dashboard-legend--running", "running"), h("span", "console-dashboard-legend console-dashboard-legend--free", "free"), queuedLg);
   card.body.append(grid, legend);
 
   function render(pool: PoolView): void {
@@ -27,8 +27,9 @@ export function poolTile(): Tile {
     const total = Math.min(slots + queued, SLOT_CAP);
     const frag = document.createDocumentFragment();
     for (let i = 0; i < total; i++) {
-      const s = h("div");
-      s.className = "slot" + (i < used ? " running" : i >= slots ? " queued" : "");
+      const s = h("div", "console-dashboard-pool__slot");
+      if (i < used) s.dataset.state = "running";
+      else if (i >= slots) s.dataset.state = "queued";
       frag.append(s);
     }
     grid.replaceChildren(frag);

@@ -29,31 +29,31 @@ function countFailing(status: StatusView): number {
 }
 
 export function attentionTile(): Tile {
-  const root = h("section", "dash-hero");
+  const root = h("section", "console-dashboard-hero");
   root.setAttribute("aria-label", "Needs attention");
 
-  const headline = h("div", "hero-headline");
-  const verdict = h("p", "hero-verdict");
-  const detail = h("p", "hero-detail");
+  const headline = h("div", "console-dashboard-hero__headline");
+  const verdict = h("p", "console-dashboard-hero__verdict");
+  const detail = h("p", "console-dashboard-hero__detail");
   headline.append(verdict, detail);
 
-  const metrics = h("div", "hero-metrics");
+  const metrics = h("div", "console-dashboard-hero__metrics");
   // The failing metric is an <a> so it can deep-link to the failing run's log in live mode;
   // it degrades to a plain block (via a swapped node) when there is nothing to link to.
-  const failWrap = h("div", "hero-metric hero-fail");
-  const failLink = h("a", "hero-metric-link");
-  const failN = h("span", "hero-n", "0");
-  const failL = h("span", "hero-l", "failing");
+  const failWrap = h("div", "console-dashboard-hero__metric console-dashboard-hero__fail");
+  const failLink = h("a", "console-dashboard-hero__metriclink");
+  const failN = h("span", "console-dashboard-hero__n", "0");
+  const failL = h("span", "console-dashboard-hero__l", "failing");
   failLink.append(failN, failL);
   failWrap.append(failLink);
 
-  const runWrap = h("div", "hero-metric hero-run");
-  const runN = h("span", "hero-n", "0");
-  runWrap.append(runN, h("span", "hero-l", "running"));
+  const runWrap = h("div", "console-dashboard-hero__metric console-dashboard-hero__run");
+  const runN = h("span", "console-dashboard-hero__n", "0");
+  runWrap.append(runN, h("span", "console-dashboard-hero__l", "running"));
 
-  const queueWrap = h("div", "hero-metric hero-queue");
-  const queueN = h("span", "hero-n", "0");
-  queueWrap.append(queueN, h("span", "hero-l", "queued"));
+  const queueWrap = h("div", "console-dashboard-hero__metric console-dashboard-hero__queue");
+  const queueN = h("span", "console-dashboard-hero__n", "0");
+  queueWrap.append(queueN, h("span", "console-dashboard-hero__l", "queued"));
 
   metrics.append(failWrap, runWrap, queueWrap);
   root.append(headline, metrics);

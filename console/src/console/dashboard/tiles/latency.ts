@@ -26,19 +26,19 @@ export function latencyTile(): Tile {
   const card = new Card("latency", "Latency", { term: "Latency", defaultCollapsed: true, onReveal: () => { buildAll(); resizeAll(); } });
   // The note carries the p50/p95/p99 swatch legend plus a Percentile deep-link.
   const note = h("span");
-  note.append(h("span", "lg lg-p50", "p50"), h("span", "lg lg-p95", "p95"), h("span", "lg lg-p99", "p99"), document.createTextNode(" "));
+  note.append(h("span", "console-dashboard-legend console-dashboard-legend--p50", "p50"), h("span", "console-dashboard-legend console-dashboard-legend--p95", "p95"), h("span", "console-dashboard-legend console-dashboard-legend--p99", "p99"), document.createTextNode(" "));
   note.append(glossaryLink("Percentile", { label: "percentiles" }));
   // The note is rich (swatch legend + glossary link), not a plain string, so populate
   // the note node directly instead of via setNote.
   card.noteNode().replaceChildren(note);
 
-  const gridEl = h("div", "chart-grid");
+  const gridEl = h("div", "console-dashboard-chart__grid");
   for (const k of LAT_KEYS) {
     data[k] = emptySeries();
-    const fig = h("figure", "chart");
+    const fig = h("figure", "console-dashboard-chart");
     fig.append(h("figcaption", undefined, LAT_META[k].label));
-    const plot = h("div", "chart-plot");
-    const ro = h("div", "chart-readout", "no data yet");
+    const plot = h("div", "console-dashboard-chart__plot");
+    const ro = h("div", "console-dashboard-chart__readout", "no data yet");
     fig.append(plot, ro);
     gridEl.append(fig);
     readouts[k] = ro;

@@ -146,12 +146,12 @@ export function initRefDrawer(): void {
 
   // A glossary/reference link clicked ANYWHERE on the page (not just inside the drawer) opens its
   // target INLINE in the reference panel instead of navigating away - so looking up a term keeps you
-  // on the surface. Opt-in by class (.gloss-link) or data-ref-open, and only for same-origin doc
+  // on the surface. Opt-in by class (.console-render-glosslink) or data-ref-open, and only for same-origin doc
   // links; a fetch failure (e.g. a daemon that does not serve the page) falls back to navigation.
   document.addEventListener("click", (e) => {
     const t = e.target;
     if (!(t instanceof Element)) return;
-    const a = t.closest("a.gloss-link, a[data-ref-open]");
+    const a = t.closest("a.console-render-glosslink, a[data-ref-open]");
     if (!(a instanceof HTMLAnchorElement) || !isDocLink(a)) return;
     e.preventDefault();
     if (!isOpen) setOpen(true);

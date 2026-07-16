@@ -24,22 +24,24 @@ export function activityTile(): Tile {
 
   // Header note: a running-count chip plus an "Open in log viewer" deep-link (repointed at
   // the live host on each render). Replaces the plain note span.
-  const noteWrap = h("span", "activity-note");
-  const count = h("span", "tile-count", "0");
-  const open = h("a", "activity-open", "Open in log viewer");
+  const noteWrap = h("span", "console-dashboard-activity__note");
+  const countLabel = h("span", "pf-v6-c-label pf-m-compact");
+  const count = h("span", "pf-v6-c-label__content", "0");
+  countLabel.append(count);
+  const open = h("a", "console-dashboard-activity__open", "Open in log viewer");
   open.setAttribute("href", "../logs/");
-  noteWrap.append(count, open);
+  noteWrap.append(countLabel, open);
   card.noteNode().replaceWith(noteWrap);
 
   // A one-line guide: each running target is a trace an operator can open.
-  const caption = h("p", "activity-caption");
+  const caption = h("p", "console-dashboard-activity__caption");
   caption.append(document.createTextNode("Each running target is a live "));
   caption.append(glossaryLink("Trace"));
   caption.append(document.createTextNode(" - open it to read the full output."));
 
-  const list = h("ul", "row-list");
-  const empty = h("p", "row-empty", "Pool is idle. Nothing running right now.");
-  const preview = h("pre", "activity-log");
+  const list = h("ul", "console-dashboard-rowlist");
+  const empty = h("p", "console-dashboard-row__empty", "Pool is idle. Nothing running right now.");
+  const preview = h("pre", "console-dashboard-activity__log");
   preview.hidden = true;
   preview.setAttribute("aria-label", "Streaming output preview");
   card.body.append(caption, list, empty, preview);
@@ -62,14 +64,14 @@ export function activityTile(): Tile {
     list.replaceChildren();
     for (const c of targets) {
       const clickable = liveHost && c.invocation;
-      const row = clickable ? h("a", "row") : h("li", "row");
+      const row = clickable ? h("a", "console-dashboard-row") : h("li", "console-dashboard-row");
       if (clickable) (row as HTMLAnchorElement).href = "../logs/#live=" + encodeURIComponent(liveHost) + "&inv=" + encodeURIComponent(c.invocation);
-      const cmd = h("code", "row-cmd", fmtArgs(c.args));
+      const cmd = h("code", "console-dashboard-row__cmd", fmtArgs(c.args));
       const bits: string[] = [];
       if (c.step) bits.push(c.step);
       const t = relTime(c.startTime);
       if (t) bits.push(t);
-      row.append(cmd, h("span", "row-meta", bits.join(" - ")));
+      row.append(cmd, h("span", "console-dashboard-row__meta", bits.join(" - ")));
       list.append(row);
     }
 

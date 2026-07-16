@@ -1,7 +1,7 @@
 // gantt.ts - the live execution timeline. One row per target, grouped under its run
 // (invocation + trigger). The x-axis is wall-clock over a rolling recent window (the
 // last WINDOW_MS to "now"); each target draws a bar from its start to its end (or to
-// "now" while running), colored by state via .gantt-bar.<state> classes so it reuses
+// "now" while running), colored by state via the bar's data-state attribute so it reuses
 // the dashboard's fixed hit/miss/err/info palette. Hand-rolled inline SVG with a tiny
 // local linear time scale - a timeline is rows x time, not a node graph, so it needs no
 // layout library. A finished bar (passed|failed|cached) with an output reference
@@ -59,14 +59,14 @@ function fmtDurMs(ms: number): string {
 
 export function ganttTile(): Tile {
   const card = new Card("gantt", "Live execution", { term: "Trace", label: "trace", note: "idle" });
-  const wrap = h("div", "gantt-scroll");
-  const empty = h("p", "row-empty", "No active runs.");
-  const legend = h("div", "gantt-legend");
+  const wrap = h("div", "console-dashboard-gantt__scroll");
+  const empty = h("p", "console-dashboard-row__empty", "No active runs.");
+  const legend = h("div", "console-dashboard-gantt__legend");
   for (const [cls, text] of [
     ["running", "running"], ["queued", "queued"], ["passed", "passed"],
     ["failed", "failed"], ["cached", "cached"],
   ] as const) {
-    legend.append(h("span", "lg lg-" + cls, text));
+    legend.append(h("span", "console-dashboard-legend console-dashboard-legend--" + cls, text));
   }
   card.body.append(wrap, empty, legend);
 
@@ -85,7 +85,7 @@ export function ganttTile(): Tile {
     axisLine.setAttribute("x2", String(VIEW_W - RIGHT_PAD));
     axisLine.setAttribute("y1", String(AXIS_H));
     axisLine.setAttribute("y2", String(AXIS_H));
-    axisLine.setAttribute("class", "gantt-axis-line");
+    axisLine.setAttribute("class", "console-dashboard-gantt__axisline");
     root.appendChild(axisLine);
     // Three ticks: window start, midpoint, now.
     const ticks: [number, string][] = [
@@ -100,12 +100,12 @@ export function ganttTile(): Tile {
       grid.setAttribute("x2", String(x));
       grid.setAttribute("y1", String(AXIS_H));
       grid.setAttribute("y2", "100%");
-      grid.setAttribute("class", "gantt-grid");
+      grid.setAttribute("class", "console-dashboard-gantt__grid");
       root.appendChild(grid);
       const label = svg("text");
       label.setAttribute("x", String(txt === "now" ? x - 2 : x + 2));
       label.setAttribute("y", "10");
-      label.setAttribute("class", "gantt-axis-label");
+      label.setAttribute("class", "console-dashboard-gantt__axislabel");
       if (txt === "now") label.setAttribute("text-anchor", "end");
       label.textContent = txt;
       root.appendChild(label);
@@ -126,7 +126,8 @@ export function ganttTile(): Tile {
     rect.setAttribute("width", w.toFixed(2));
     rect.setAttribute("height", String(BAR_H));
     rect.setAttribute("rx", "2");
-    rect.setAttribute("class", "gantt-bar " + t.state);
+    rect.setAttribute("class", "console-dashboard-gantt__bar");
+    rect.setAttribute("data-state", t.state);
     const elapsed = t.durationMs > 0 ? t.durationMs : (t.startMs != null ? now - t.startMs : 0);
     const dur = fmtDurMs(elapsed);
     const title = svg("title");
@@ -141,7 +142,7 @@ export function ganttTile(): Tile {
       a.setAttribute("href", "../logs/#live=" + encodeURIComponent(liveHost) + "&ref=" + encodeURIComponent(t.outputRef));
       a.setAttribute("target", "_blank");
       a.setAttribute("rel", "noopener");
-      a.setAttribute("class", "gantt-link");
+      a.setAttribute("class", "console-dashboard-gantt__link");
       a.appendChild(rect);
       root.appendChild(a);
     } else {
@@ -179,7 +180,7 @@ export function ganttTile(): Tile {
     const totalH = AXIS_H + visibleRuns.reduce((n, r) => n + RUN_H + r.targets.length * ROW_H, 0) + 4;
     const root = svg("svg");
     root.setAttribute("viewBox", "0 0 " + VIEW_W + " " + totalH);
-    root.setAttribute("class", "gantt-svg");
+    root.setAttribute("class", "console-dashboard-gantt__svg");
     root.setAttribute("preserveAspectRatio", "xMinYMin meet");
     root.setAttribute("role", "img");
     root.setAttribute("aria-label", "Live execution timeline");
@@ -192,7 +193,7 @@ export function ganttTile(): Tile {
       const head = svg("text");
       head.setAttribute("x", "2");
       head.setAttribute("y", String(y + 12));
-      head.setAttribute("class", "gantt-run-label");
+      head.setAttribute("class", "console-dashboard-gantt__runlabel");
       const inv = run.inv ? run.inv.slice(0, 12) : "run";
       head.textContent = (run.trigger || "run") + " " + inv;
       root.appendChild(head);
@@ -202,7 +203,7 @@ export function ganttTile(): Tile {
         const label = svg("text");
         label.setAttribute("x", "8");
         label.setAttribute("y", String(y + BAR_H + 2));
-        label.setAttribute("class", "gantt-target-label");
+        label.setAttribute("class", "console-dashboard-gantt__targetlabel");
         label.textContent = truncate(t.label || t.target || "-", 22);
         const lt = svg("title");
         lt.textContent = t.label;

@@ -9,9 +9,11 @@ import { Card, h, type Tile } from "./card";
 
 export function servicesTile(): Tile {
   const card = new Card("services", "Shared services", { term: "Service", label: "shared services" });
-  const count = h("span", "tile-count", "0");
-  card.noteNode().replaceWith(count);
-  const list = h("ul", "row-list");
+  const countLabel = h("span", "pf-v6-c-label pf-m-compact");
+  const count = h("span", "pf-v6-c-label__content", "0");
+  countLabel.append(count);
+  card.noteNode().replaceWith(countLabel);
+  const list = h("ul", "console-dashboard-rowlist");
   card.body.append(list);
 
   function render(svcs: ServiceView[]): void {
@@ -20,10 +22,10 @@ export function servicesTile(): Tile {
     count.textContent = String(svcs.length);
     list.replaceChildren();
     for (const s of svcs) {
-      const li = h("li", "row");
-      const name = h("code", "row-cmd", s.label || s.command);
-      const meta = h("span", "row-meta svc-meta");
-      const state = h("span", "svc-state", s.state || "unknown");
+      const li = h("li", "console-dashboard-row");
+      const name = h("code", "console-dashboard-row__cmd", s.label || s.command);
+      const meta = h("span", "console-dashboard-row__meta console-dashboard-service__meta");
+      const state = h("span", "console-dashboard-service__state", s.state || "unknown");
       state.dataset.state = s.state;
       const detail: string[] = [];
       if (s.ports.length) detail.push(s.ports.join(", "));

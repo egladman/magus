@@ -89,7 +89,7 @@ export class Card {
     h.className = "pf-v6-c-card__title-text";
     if (opts.term) {
       // The TITLE itself is the reference link: clicking it opens the term inline in the reference
-      // panel (ref-drawer.js intercepts .gloss-link). No separate labeled link beside it - that just
+      // panel (ref-drawer.js intercepts .console-render-glosslink). No separate labeled link beside it - that just
       // repeated the title ("Workspaces Workspace", "Sandbox File system sandbox").
       h.append(glossaryLink(opts.term, { label: title, slug: opts.slug }));
     } else {
@@ -101,7 +101,7 @@ export class Card {
     const actions = document.createElement("div");
     actions.className = "pf-v6-c-card__actions";
     this.noteEl = document.createElement("span");
-    this.noteEl.className = "tile-note";
+    this.noteEl.className = "console-dashboard-tile__note";
     if (opts.note) this.noteEl.textContent = opts.note;
     actions.append(this.noteEl);
 

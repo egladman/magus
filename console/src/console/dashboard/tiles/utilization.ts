@@ -40,18 +40,18 @@ export function utilizationTile(): Tile {
   note.textContent = "no samples yet";
   footer.append(note);
 
-  const grid = h("div", "util-grid");
+  const grid = h("div", "console-dashboard-util__grid");
   grid.setAttribute("aria-label", "Pool utilization history");
-  const legend = h("div", "util-legend");
-  const scale = h("span", "util-legend-scale");
+  const legend = h("div", "console-dashboard-util__legend");
+  const scale = h("span", "console-dashboard-util__scale");
   scale.append(document.createTextNode("idle "));
-  const ramp = h("span", "util-ramp");
+  const ramp = h("span", "console-dashboard-util__ramp");
   ramp.setAttribute("aria-hidden", "true");
   // Five ramp swatches; their opacities come from .util-ramp i:nth-child(n) in
   // dashboard.css (no inline styles).
   for (let i = 0; i < 5; i++) ramp.append(h("i"));
   scale.append(ramp, document.createTextNode(" full"));
-  legend.append(scale, h("span", "lg lg-queued", "queued"));
+  legend.append(scale, h("span", "console-dashboard-legend console-dashboard-legend--queued", "queued"));
   body.append(grid, legend);
 
   card.append(header, body, footer);
@@ -80,7 +80,7 @@ export function utilizationTile(): Tile {
     const ht = Math.max(1, GRID_ROWS * (SQ + GAP) - GAP);
     const svg = document.createElementNS(SVGNS, "svg");
     svg.setAttribute("viewBox", `0 0 ${w} ${ht}`);
-    svg.setAttribute("class", "util-svg");
+    svg.setAttribute("class", "console-dashboard-util__svg");
     svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", "Pool utilization history");
@@ -97,7 +97,7 @@ export function utilizationTile(): Tile {
       r.setAttribute("rx", "2");
       r.setAttribute("fill", fill);
       r.setAttribute("fill-opacity", opacity.toFixed(3));
-      r.setAttribute("class", "util-sq");
+      r.setAttribute("class", "console-dashboard-util__square");
       const title = document.createElementNS(SVGNS, "title");
       const cap = s.capacity > 0 ? `${s.running}/${s.capacity}` : `${s.running} (unlimited)`;
       title.textContent = `${clock(s.at)} - ${cap} running${s.queued > 0 ? ", " + s.queued + " queued" : ""}`;

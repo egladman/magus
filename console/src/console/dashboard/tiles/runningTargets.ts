@@ -8,11 +8,13 @@ import { Card, h, type Tile } from "./card";
 
 export function runningTargetsTile(): Tile {
   const card = new Card("running-targets", "Running");
-  // The tile-count chip lives in the head; reuse the note slot styled as a count.
-  const count = h("span", "tile-count", "0");
-  card.noteNode().replaceWith(count);
-  const list = h("ul", "row-list");
-  const empty = h("p", "row-empty", "Pool is idle.");
+  // The count chip lives in the head as a PatternFly Label; it replaces the note slot.
+  const countLabel = h("span", "pf-v6-c-label pf-m-compact");
+  const count = h("span", "pf-v6-c-label__content", "0");
+  countLabel.append(count);
+  card.noteNode().replaceWith(countLabel);
+  const list = h("ul", "console-dashboard-rowlist");
+  const empty = h("p", "console-dashboard-row__empty", "Pool is idle.");
   card.body.append(list, empty);
 
   function render(targets: RunningTargetView[], liveHost: string | null): void {
@@ -21,14 +23,14 @@ export function runningTargetsTile(): Tile {
     list.replaceChildren();
     for (const c of targets) {
       const clickable = liveHost && c.invocation;
-      const row = clickable ? h("a", "row") : h("li", "row");
+      const row = clickable ? h("a", "console-dashboard-row") : h("li", "console-dashboard-row");
       if (clickable) (row as HTMLAnchorElement).href = "../logs/#live=" + encodeURIComponent(liveHost) + "&inv=" + encodeURIComponent(c.invocation);
-      const cmd = h("code", "row-cmd", fmtArgs(c.args));
+      const cmd = h("code", "console-dashboard-row__cmd", fmtArgs(c.args));
       const bits: string[] = [];
       if (c.step) bits.push(c.step);
       const t = relTime(c.startTime);
       if (t) bits.push(t);
-      const meta = h("span", "row-meta", bits.join(" - "));
+      const meta = h("span", "console-dashboard-row__meta", bits.join(" - "));
       row.append(cmd, meta);
       list.append(row);
     }

@@ -6,48 +6,51 @@
 import type { DashboardState, ConfigView } from "../state";
 import { Card, h, type Tile } from "./card";
 
-// Color a default charm by its EFFECT: rw mutates the tree (loud), cd delivers a side effect, gha
-// shapes output (benign), anything else is a custom charm (neutral).
-function charmEffect(charm: string): string {
-  if (charm === "rw") return "loud";
-  if (charm === "cd") return "deliver";
-  if (charm === "gha") return "benign";
-  return "neutral";
+// Color a default charm by its EFFECT, mapped to a PatternFly Label color modifier: rw mutates the
+// tree (loud -> red), cd delivers a side effect (blue), gha shapes output (benign -> green). A custom
+// charm is neutral: the empty string leaves the default PF Label, which is grey (PF v6 has no
+// pf-m-grey modifier - grey IS the uncolored default).
+function charmColor(charm: string): string {
+  if (charm === "rw") return "red";
+  if (charm === "cd") return "blue";
+  if (charm === "gha") return "green";
+  return "";
 }
 
 export function configTile(): Tile {
   const card = new Card("config", "Configuration", { term: "Charm", label: "default charms" });
-  const body = h("div", "config-body");
+  const body = h("div", "console-dashboard-config__body");
   card.body.append(body);
 
   function row(key: string, valueEl: HTMLElement): HTMLElement {
-    const r = h("div", "config-row");
-    r.append(h("span", "config-k", key), valueEl);
+    const r = h("div", "console-dashboard-config__row");
+    r.append(h("span", "console-dashboard-config__key", key), valueEl);
     return r;
   }
 
   function render(c: ConfigView, version: string, daemonVersion: string): void {
     card.el.hidden = false;
-    const pills = h("span", "config-charms");
+    const pills = h("span", "console-dashboard-config__charms");
     if (c.defaultCharms.length) {
       for (const ch of c.defaultCharms) {
-        const p = h("span", "charm-pill", ch);
-        p.dataset.effect = charmEffect(ch);
+        const color = charmColor(ch);
+        const p = h("span", "pf-v6-c-label pf-m-compact" + (color ? " pf-m-" + color : ""));
+        p.append(h("span", "pf-v6-c-label__content", ch));
         pills.append(p);
       }
     } else {
-      pills.append(h("span", "config-v", "none"));
+      pills.append(h("span", "console-dashboard-config__value", "none"));
     }
     const rows = [
       row("Default charms", pills),
-      row("Concurrency", h("span", "config-v", c.concurrency ? String(c.concurrency) : "auto")),
-      row("Sandbox", h("span", "config-v", c.sandbox ? "on" : "off")),
+      row("Concurrency", h("span", "console-dashboard-config__value", c.concurrency ? String(c.concurrency) : "auto")),
+      row("Sandbox", h("span", "console-dashboard-config__value", c.sandbox ? "on" : "off")),
     ];
     // The daemon's magus version lives here with the rest of the config, not as a stray number card.
     // Show the daemon version too only when it differs from the reported magus version.
     if (version) {
       const v = daemonVersion && daemonVersion !== version ? version + " (daemon " + daemonVersion + ")" : version;
-      rows.push(row("magus version", h("span", "config-v", v)));
+      rows.push(row("magus version", h("span", "console-dashboard-config__value", v)));
     }
     body.replaceChildren(...rows);
   }

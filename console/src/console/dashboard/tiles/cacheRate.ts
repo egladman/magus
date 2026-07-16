@@ -19,9 +19,9 @@ export function cacheRateTile(): Tile {
     term: "Cache", note: "per-interval hits / (hits + misses)",
     onReveal: () => { chart.build(); chart.resize(); },
   });
-  const plot = h("div", "chart-plot");
-  const legend = h("div", "chart-legend");
-  legend.append(h("span", "lg lg-hit", "hit rate"));
+  const plot = h("div", "console-dashboard-chart__plot");
+  const legend = h("div", "console-dashboard-chart__legend");
+  legend.append(h("span", "console-dashboard-legend console-dashboard-legend--hit", "hit rate"));
   card.body.append(plot, legend);
 
   chart = new TimeChart(plot, {

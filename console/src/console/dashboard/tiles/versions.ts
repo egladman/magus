@@ -5,7 +5,7 @@ import { glossaryLink } from "../../../lib/glossary";
 import { h, type Tile } from "./card";
 
 export function versionsTile(): Tile {
-  const footer = h("footer", "dash-versions");
+  const footer = h("footer", "console-dashboard-versions");
   const magus = h("span");
   const daemon = h("span");
   footer.append(magus, daemon);

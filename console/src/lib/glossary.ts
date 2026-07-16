@@ -29,7 +29,7 @@ export function glossaryUrl(term: string, slug?: string): string {
 // drawer it navigates to the glossary page normally.
 export function glossaryLink(term: string, opts: { label?: string; slug?: string } = {}): HTMLAnchorElement {
   const a = document.createElement("a");
-  a.className = "gloss-link";
+  a.className = "console-render-glosslink";
   a.href = glossaryUrl(term, opts.slug);
   a.textContent = opts.label ?? term;
   a.title = "Look up " + term + " in the reference panel";

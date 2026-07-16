@@ -14,12 +14,12 @@ export class StatStrip {
   private cells = new Map<string, HTMLElement>();
 
   constructor(specs: { key: string; label: string; accent: Accent }[]) {
-    this.el = h("div", "stat-strip");
+    this.el = h("div", "console-dashboard-statstrip");
     for (const s of specs) {
-      const cell = h("div", "stat");
+      const cell = h("div", "console-dashboard-stat");
       cell.dataset.accent = s.accent;
-      cell.append(h("span", "stat-k", s.label));
-      const v = h("span", "stat-v", "-");
+      cell.append(h("span", "console-dashboard-stat__key", s.label));
+      const v = h("span", "console-dashboard-stat__value", "-");
       cell.append(v);
       this.cells.set(s.key, v);
       this.el.append(cell);
@@ -40,15 +40,15 @@ export class MetricGrid {
   private cells = new Map<string, HTMLElement>();
 
   constructor(groups: { caption?: string; items: { key: string; label: string }[] }[]) {
-    this.el = h("div", "metric-groups");
+    this.el = h("div", "console-dashboard-metric__groups");
     for (const g of groups) {
-      const section = h("div", "metric-group");
-      if (g.caption) section.append(h("p", "metric-caption", g.caption));
-      const grid = h("div", "metric-grid");
+      const section = h("div", "console-dashboard-metric__group");
+      if (g.caption) section.append(h("p", "console-dashboard-metric__caption", g.caption));
+      const grid = h("div", "console-dashboard-metric__grid");
       for (const it of g.items) {
-        const cell = h("div", "metric");
-        cell.append(h("span", "metric-k", it.label));
-        const v = h("span", "metric-v", "-");
+        const cell = h("div", "console-dashboard-metric");
+        cell.append(h("span", "console-dashboard-metric__key", it.label));
+        const v = h("span", "console-dashboard-metric__value", "-");
         this.cells.set(it.key, v);
         cell.append(v);
         grid.append(cell);
@@ -93,13 +93,14 @@ export class SortableTable<T> {
     this.sortKey = opts.sortKey ?? cols[0].key;
     this.sortDir = 1;
 
-    const wrap = h("div", "table-wrap");
-    const table = h("table", "dash-table");
+    const wrap = h("div", "console-dashboard-table__wrap");
+    const table = h("table", "console-dashboard-table");
     const thead = h("thead");
     const tr = h("tr");
     for (const c of cols) {
-      const th = h("th", c.numeric ? "num" : undefined);
-      const btn = h("button", "th-sort", c.label);
+      const th = h("th");
+      if (c.numeric) th.dataset.num = "";
+      const btn = h("button", "console-dashboard-table__sort", c.label);
       btn.type = "button";
       btn.addEventListener("click", () => this.toggleSort(c.key));
       th.append(btn);
@@ -111,7 +112,7 @@ export class SortableTable<T> {
     table.append(thead, this.tbody);
     wrap.append(table);
 
-    this.empty = h("p", "row-empty", opts.emptyText ?? "No data yet.");
+    this.empty = h("p", "console-dashboard-row__empty", opts.emptyText ?? "No data yet.");
     this.empty.hidden = true;
 
     const host = h("div");
@@ -152,7 +153,8 @@ export class SortableTable<T> {
     for (const row of sorted) {
       const tr = h("tr");
       for (const c of this.cols) {
-        const td = h("td", c.numeric ? "num" : undefined, c.text(row));
+        const td = h("td", undefined, c.text(row));
+        if (c.numeric) td.dataset.num = "";
         tr.append(td);
       }
       this.tbody.append(tr);

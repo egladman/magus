@@ -164,16 +164,16 @@ function volatilityTile(): Tile {
 // button) and the five lens tiles. main.ts mounts the band and forwards store
 // updates to each tile. onRefresh forces an out-of-band /api/v1/insight refetch.
 export function insightSection(onRefresh: () => void): { el: HTMLElement; tiles: Tile[] } {
-  const band = h("div", "insight-band");
-  const head = h("div", "insight-band-head");
-  head.append(h("h2", "insight-band-title", "Insight"));
-  const refresh = h("button", "insight-refresh", "Refresh");
+  const band = h("div", "console-dashboard-insight");
+  const head = h("div", "console-dashboard-insight__head");
+  head.append(h("h2", "console-dashboard-insight__title", "Insight"));
+  const refresh = h("button", "console-dashboard-insight__refresh", "Refresh");
   refresh.type = "button";
   refresh.title = "Refetch the insight lenses now";
   refresh.addEventListener("click", () => onRefresh());
   head.append(refresh);
   band.append(head);
-  band.append(h("p", "insight-band-sub",
+  band.append(h("p", "console-dashboard-insight__sub",
     "Where a codebase's attention and risk concentrate: four lenses read git history, volatility reads run outcomes."));
 
   const tiles = [hotspotsTile(), affinityTile(), ownershipTile(), trendTile(), volatilityTile()];

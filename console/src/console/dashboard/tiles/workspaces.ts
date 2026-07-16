@@ -7,10 +7,12 @@ import { Card, h, type Tile } from "./card";
 
 export function workspacesTile(): Tile {
   const card = new Card("workspaces", "Workspaces", { term: "Workspace", label: "workspaces" });
-  const count = h("span", "tile-count", "0");
-  card.noteNode().replaceWith(count);
-  const list = h("ul", "row-list");
-  const empty = h("p", "row-empty", "No workspaces loaded.");
+  const countLabel = h("span", "pf-v6-c-label pf-m-compact");
+  const count = h("span", "pf-v6-c-label__content", "0");
+  countLabel.append(count);
+  card.noteNode().replaceWith(countLabel);
+  const list = h("ul", "console-dashboard-rowlist");
+  const empty = h("p", "console-dashboard-row__empty", "No workspaces loaded.");
   card.body.append(list, empty);
 
   function render(wss: WorkspaceView[]): void {
@@ -18,13 +20,17 @@ export function workspacesTile(): Tile {
     empty.hidden = wss.length > 0;
     list.replaceChildren();
     for (const w of wss) {
-      const li = h("li", "row");
-      const root = h("code", "row-cmd", w.root);
-      const meta = h("span", "row-ws-cache");
+      const li = h("li", "console-dashboard-row");
+      const root = h("code", "console-dashboard-row__cmd", w.root);
+      const meta = h("span", "console-dashboard-row__wscache");
       if (w.hits != null) {
-        const mk = (cls: string, label: string, v: number): HTMLElement => h("span", cls, label + " " + (v || 0));
-        meta.append(mk("h", "H", w.hits), mk("m", "M", w.misses ?? 0));
-        if ((w.errors ?? 0) > 0) meta.append(mk("e", "E", w.errors ?? 0));
+        const mk = (cache: string, label: string, v: number): HTMLElement => {
+          const s = h("span", undefined, label + " " + (v || 0));
+          s.dataset.cache = cache;
+          return s;
+        };
+        meta.append(mk("hit", "H", w.hits), mk("miss", "M", w.misses ?? 0));
+        if ((w.errors ?? 0) > 0) meta.append(mk("err", "E", w.errors ?? 0));
       } else {
         meta.textContent = relTime(w.lastAccessTime);
       }
