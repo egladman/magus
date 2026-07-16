@@ -485,3 +485,33 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* A class-set display beats the [hidden] attribute's UA display:none, so re-hide explicitly. */
 .console-shell-refsearch__preview[hidden],
 .console-shell-refsearch__loading[hidden] { display: none; }
+
+/* Keyboard cheat sheet (cheatsheet.ts): a read-only hold-"?" overlay. Sits above the drawer content
+   on the PF modal z-index; the card is a two-column label/chord grid grouped by command area. */
+#console-cheatsheet { z-index: var(--pf-t--global--z-index--400); }
+.console-cheatsheet-box { max-height: min(80vh, 40rem); overflow-y: auto; }
+.console-cheatsheet-box__body { display: flex; flex-direction: column; gap: 1rem; }
+.console-cheatsheet-box__hint {
+  margin: 0; padding: 0.6rem 1.5rem 1rem; font-size: 0.75rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-cheatsheet-box__empty { margin: 0; color: var(--pf-t--global--text--color--subtle); }
+.console-cheatsheet-group__title {
+  margin: 0 0 0.4rem; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--pf-t--global--text--color--subtle);
+}
+.console-cheatsheet-group__list {
+  display: grid; grid-template-columns: 1fr auto; align-items: center;
+  gap: 0.35rem 1.5rem; margin: 0;
+}
+.console-cheatsheet-group__label { margin: 0; font-size: 0.85rem; }
+.console-cheatsheet-group__chord { margin: 0; display: inline-flex; align-items: center; gap: 0.2rem; justify-self: end; }
+.console-cheatsheet-group__plus { color: var(--pf-t--global--text--color--subtle); font-size: 0.75rem; }
+.console-cheatsheet-kbd {
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem; line-height: 1;
+  padding: 0.2rem 0.35rem; min-width: 1.1rem; text-align: center;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+  box-shadow: 0 1px 0 var(--pf-t--global--border--color--default);
+}

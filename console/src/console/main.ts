@@ -15,6 +15,7 @@ import { standaloneSurface, moduleSurface } from "./standalone";
 import { registerCommand, dispatchCommand, listCommands, installKeybindings, mergeKeymap, isMac, type Keymap } from "./commands";
 import { createPalette } from "./palette";
 import { createKeybindingsOverlay } from "./keybindings";
+import { createCheatsheet } from "./cheatsheet";
 import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane } from "./tiling";
 import { initConsoleSettings } from "../ui/console-settings";
@@ -282,6 +283,15 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   });
   document.body.append(keybindings.el);
   registerCommand({ id: "console.settings.keybindings", label: "Edit keybindings", group: "General", run: () => keybindings.open() });
+
+  // A read-only, hold-to-reveal cheat sheet (hold "?"). It teaches the effective bindings and is
+  // deliberately separate from the editor above - reading the same live command list + merged keymap.
+  const cheatsheet = createCheatsheet({
+    commands: listCommands,
+    keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
+    mac: isMac(),
+  });
+  document.body.append(cheatsheet.el);
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
