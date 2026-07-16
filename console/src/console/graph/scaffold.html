@@ -74,9 +74,9 @@
       <div class="console-graph-help__body">
         <p class="console-graph-display__sublabel">Layout</p>
         <div class="console-graph-display__layoutrow">
-          <!-- Text-only PF button; main.ts drives its label via textContent (Layered/Force), so it
-               carries raw text rather than a __text span (textContent would strip the span). -->
-          <button id="layout-toggle-btn" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small" title="Switch to layered DAG layout">Layered</button>
+          <!-- Text-only PF button with canonical anatomy; main.ts drives the label by setting the
+               __text span's textContent (Layered/Force), so the Button structure stays intact. -->
+          <button id="layout-toggle-btn" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small" title="Switch to layered DAG layout"><span class="pf-v6-c-button__text">Layered</span></button>
           <span class="console-graph-display__hint">Force: physics simulation. Layered: deterministic DAG (Sugiyama-style, left-to-right). Target graphs default to layered; knowledge graphs default to force. Capped at 500 visible nodes.</span>
         </div>
         <p class="console-graph-display__sublabel">Layout forces</p>
@@ -88,16 +88,16 @@
         <p class="console-graph-display__sublabel">Color presets</p>
         <p class="console-graph-display__controlhint">One-click color coding over the kind palette. Active preset serializes to the URL.</p>
         <div class="console-graph-colorgroup__presetrow">
-          <button type="button" class="console-graph-colorgroup__preset" data-preset="spell" title="Color each spell a distinct hue - shows toolchain as architectural layer">Color by spell</button>
-          <button type="button" class="console-graph-colorgroup__preset" data-preset="project" title="Color each project a distinct hue - shows project boundaries">Color by project</button>
-          <button type="button" class="console-graph-colorgroup__preset" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout) - shows architectural layers">Color by DAG depth</button>
+          <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="spell" title="Color each spell a distinct hue - shows toolchain as architectural layer"><span class="pf-v6-c-button__text">Color by spell</span></button>
+          <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="project" title="Color each project a distinct hue - shows project boundaries"><span class="pf-v6-c-button__text">Color by project</span></button>
+          <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout) - shows architectural layers"><span class="pf-v6-c-button__text">Color by DAG depth</span></button>
         </div>
         <p class="console-graph-display__sublabel">Color groups</p>
         <p>Paint every node matching a query one color, on top of the kind palette - keep several at once to compare slices of the graph.</p>
         <div class="console-graph-colorgroup__addrow">
           <input id="group-query" type="text" placeholder="kind:spell" aria-label="Color-group query" spellcheck="false" autocomplete="off">
           <input id="group-color" type="color" value="#e8590c" aria-label="Color-group color">
-          <button id="group-add" type="button" class="console-graph-colorgroup__addbtn">Add</button>
+          <button id="group-add" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small"><span class="pf-v6-c-button__text">Add</span></button>
         </div>
         <div id="group-list" aria-label="Color groups"></div>
       </div>
@@ -127,7 +127,7 @@
             </div>
             <div class="pf-v6-c-input-group__item">
               <button id="search-copy-btn" type="button" class="pf-v6-c-button pf-m-control" title="Copy this query as a shell command" aria-label="Copy magus query command">
-                <span class="pf-v6-c-button__text" aria-hidden="true">&#10697;</span>
+                <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
               </button>
             </div>
           </div>
@@ -147,11 +147,11 @@
           </div>
         </div>
         <!-- Phase 5: projection unfold button - shown when default projection is active. -->
-        <button id="projection-unfold-btn" type="button" class="console-graph-sidebar__unfold" hidden>Show full graph</button>
+        <button id="projection-unfold-btn" type="button" class="pf-v6-c-button pf-m-link console-graph-sidebar__unfold" hidden><span class="pf-v6-c-button__text">Show full graph</span></button>
         <!-- Phase 5: empty-state suggestion chips - populated after graph loads. -->
         <div id="suggestions" class="console-graph-sidebar__suggestions" hidden aria-label="Suggestions"></div>
-        <button id="list-toggle" class="console-graph-sidebar__count" type="button" aria-expanded="false" aria-controls="node-list">
-          <span id="graph-count">loading...</span>
+        <button id="list-toggle" class="pf-v6-c-button pf-m-link console-graph-sidebar__count" type="button" aria-expanded="false" aria-controls="node-list">
+          <span class="pf-v6-c-button__text" id="graph-count">loading...</span>
           <span class="console-graph-sidebar__chevron" aria-hidden="true"></span>
         </button>
         <ul id="node-list" aria-label="Graph nodes" hidden></ul>
@@ -164,7 +164,7 @@
           <span id="snapshot-badge" class="pf-v6-c-label pf-m-grey pf-m-compact" hidden aria-live="polite"><span class="pf-v6-c-label__content"></span></span>
           <button id="fit-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Zoom to fit the whole graph (or the current matches)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fit</span></button>
           <button id="open-file-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open file</span></button>
-          <button id="copy-mermaid-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first."><span class="pf-v6-c-button__icon pf-m-start" aria-hidden="true">&#10697;</span><span class="pf-v6-c-button__text console-render-btn__label">Copy as Mermaid</span></button>
+          <button id="copy-mermaid-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram - paste into a GitHub PR or docs. Refused over 150 nodes; narrow first."><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy as Mermaid</span></button>
           <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span></button>
         </div>
         <!-- Legend toggle: only shown on mobile (CSS), where the legend is collapsed
@@ -201,7 +201,7 @@
                 </div>
                 <div data-empty-way>
                   <span data-empty-way-label>Try the demo</span>
-                  <button id="demo-explore-btn" type="button" class="pf-v6-c-button pf-m-secondary"><span class="pf-v6-c-button__text">Explore the magus graph</span></button>
+                  <button id="demo-explore-btn" type="button" class="pf-v6-c-button pf-m-primary"><span class="pf-v6-c-button__text">Explore the magus graph</span></button>
                   <span data-empty-hint>Loads the magus project's own graph.</span>
                 </div>
               </div>

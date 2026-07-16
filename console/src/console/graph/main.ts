@@ -392,7 +392,8 @@ function switchLayout(mode: string) {
   layoutMode = mode;
   const btn = el("layout-toggle-btn");
   if (btn) {
-    btn.textContent = mode === "layered" ? "Force" : "Layered";
+    const label = btn.querySelector<HTMLElement>(".pf-v6-c-button__text") ?? btn;
+    label.textContent = mode === "layered" ? "Force" : "Layered";
     btn.title = mode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
   }
   // Show/hide force sliders: hidden in layered mode.
@@ -971,7 +972,9 @@ function renderGroups() {
   const list = el("group-list") as HTMLElement;
   list.innerHTML = groups.map((g, i) =>
     '<span class="console-graph-colorgroup__chip"><span class="console-graph-colorgroup__swatch" style="background:' + escapeHtml(g.color) + '"></span>' +
-    escapeHtml(g.query) + '<button type="button" class="console-graph-colorgroup__remove" data-i="' + i + '" aria-label="Remove group">&times;</button></span>').join("");
+    escapeHtml(g.query) +
+    '<button type="button" class="pf-v6-c-button pf-m-plain pf-m-small console-graph-colorgroup__remove" data-i="' + i + '" aria-label="Remove group">' +
+    '<span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button></span>').join("");
   list.querySelectorAll<HTMLElement>(".console-graph-colorgroup__remove").forEach((b) =>
     b.addEventListener("click", () => { groups.splice(+b.dataset.i!, 1); renderGroups(); draw(); }));
 }
@@ -1302,7 +1305,8 @@ function replaceGraph(data: any, statusMsg: string) {
 function syncLayoutToggle() {
   const btn = el("layout-toggle-btn");
   if (btn) {
-    btn.textContent = layoutMode === "layered" ? "Force" : "Layered";
+    const label = btn.querySelector<HTMLElement>(".pf-v6-c-button__text") ?? btn;
+    label.textContent = layoutMode === "layered" ? "Force" : "Layered";
     btn.title = layoutMode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
   }
   const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
@@ -1812,7 +1816,7 @@ function renderSuggestions() {
   if (!chips.length) { wrap.hidden = true; return; }
   wrap.hidden = false;
   wrap.innerHTML = chips.map((c, i) =>
-    '<button type="button" class="console-graph-sidebar__suggestion" data-i="' + i + '">' + escapeHtml(c.text) + '</button>'
+    '<button type="button" class="pf-v6-c-button pf-m-link pf-m-inline console-graph-sidebar__suggestion" data-i="' + i + '"><span class="pf-v6-c-button__text">' + escapeHtml(c.text) + '</span></button>'
   ).join("");
   wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
     b.addEventListener("click", () => {

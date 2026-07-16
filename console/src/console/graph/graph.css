@@ -28,9 +28,7 @@
   --node-fg: var(--pf-t--global--text--color--regular);
 }
 #node-list .console-graph-nodelist__pill,
-#list-toggle,
 #graph-legend .console-graph-legend__row,
-.console-graph-help .console-graph-help__example,
 #explain-card .console-graph-card__ref {
   color: var(--node-fg);
 }
@@ -95,16 +93,19 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238891a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: 0.5rem center; background-size: 0.85rem 0.85rem;
 }
-/* The count doubles as the collapse toggle for the node cloud (collapsed by default
-   so the canvas is the focus on first load). */
+/* The count doubles as the collapse toggle for the node cloud (collapsed by default so the
+   canvas is the focus on first load). It is a PF link Button reshaped into a full-width sidebar
+   row: the count reads as quiet data (subtle color, not a blue link), the tinted chevron carries
+   the disclosure affordance, and the row keeps its bottom-border divider. */
 .console-graph-sidebar__count {
   width: 100%; margin: 0; text-align: left; cursor: pointer;
   display: flex; align-items: center; justify-content: flex-start; gap: 0.35rem;
   padding: 0.4rem 0.6rem; font-size: 0.72rem; line-height: 1.3;
-  background: transparent;
-  border: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
+  color: var(--pf-t--global--text--color--subtle);
+  background: transparent; text-decoration: none;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
 }
-.console-graph-sidebar__count:hover { background: color-mix(in srgb, var(--console-accent) 8%, transparent); }
+.console-graph-sidebar__count:hover { color: var(--pf-t--global--text--color--regular); background: color-mix(in srgb, var(--console-accent) 8%, transparent); text-decoration: none; }
 /* Links inside the app must not fall to Pico's low-contrast :visited color in dark
    mode (the explain-card source/reference links especially). */
 .console-graph-app a:visited, #explain-card a:visited { color: var(--console-accent); }
@@ -357,13 +358,8 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-help dt { margin: 0; white-space: nowrap; }
 .console-graph-help dd { margin: 0; color: var(--pf-t--global--text--color--subtle); }
 .console-graph-help code { font-size: 0.85em; }
-/* The search-syntax examples are natural-language calls to action, not code chips: plain clickable
-   text (primary color, underline on hover), no box or monospace. The syntax lives in each definition. */
-.console-graph-help__example {
-  width: auto; margin: 0; padding: 0; font: inherit; text-align: left;
-  background: none; border: 0; color: var(--console-accent); cursor: pointer;
-}
-.console-graph-help__example:hover, .console-graph-help__example:focus-visible { text-decoration: underline; }
+/* The Search-syntax and Views-table examples (.console-graph-help__example) share the one chip
+   look defined with .console-graph-views__chip below - see that block. */
 
 /* The "?" help circle on the query prompt (matches the log viewer's filter help): a quiet outlined
    marker whose title spells out the query syntax, since what to type is not obvious. */
@@ -372,8 +368,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 /* Layout mode: a compact toggle button with its explanation beneath it. Stacked, because these
    controls now live in the narrow reference drawer where a button + long hint on one row wrapped
    into a malformed jumble. */
-.console-graph-display__layoutrow { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.2rem; }
-#layout-toggle-btn { align-self: flex-start; }
+.console-graph-display__layoutrow { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; margin-bottom: 0.2rem; }
 .console-graph-display__hint { font-size: 0.75rem; color: var(--pf-t--global--text--color--subtle); line-height: 1.45; }
 
 /* Live layout-force sliders (the "alive" wobble is tunable). Stacked one per row so each label and
@@ -391,31 +386,20 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-colorgroup__addrow { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.4rem; }
 .console-graph-colorgroup__addrow input[type="text"] { width: auto; flex: 1 1 8rem; min-width: 6rem; margin: 0; height: 1.7rem; font-size: 0.78rem; padding: 0.15rem 0.4rem; }
 .console-graph-colorgroup__addrow input[type="color"] { flex: 0 0 auto; width: 1.9rem; height: 1.7rem; margin: 0; padding: 0.1rem; }
-/* Compact add button sized to match the row inputs (not a full-width Pico button). */
-.console-graph-colorgroup__addbtn {
-  flex: 0 0 auto; width: auto; height: 1.7rem; margin: 0; padding: 0 0.7rem;
-  font-size: 0.75rem; line-height: 1;
-}
+/* #group-add is a PF secondary small Button - no bespoke sizing needed; the addrow centers it. */
 #group-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.console-graph-colorgroup__chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.12rem 0.15rem 0.12rem 0.4rem; border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small); font-size: 0.72rem; font-family: var(--pf-t--global--font--family--mono); }
+.console-graph-colorgroup__chip { display: inline-flex; align-items: center; gap: 0.15rem; padding: 0.08rem 0.1rem 0.08rem 0.4rem; border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small); font-size: 0.72rem; font-family: var(--pf-t--global--font--family--mono); }
 .console-graph-colorgroup__swatch { width: 0.7em; height: 0.7em; border-radius: 50%; flex: 0 0 auto; }
-.console-graph-colorgroup__remove { width: auto; margin: 0; padding: 0 0.25rem; background: transparent; border: 0; color: var(--pf-t--global--text--color--subtle); cursor: pointer; font-size: 0.95rem; line-height: 1; }
-.console-graph-colorgroup__remove:hover { color: var(--console-status-danger); }
-
-/* ---- Chrome-button text-color reset --------------------------------------- */
-/* Pico gives every <button> white text by locally shadowing --pf-t--global--text--color--regular with
-   --pf-t--global--text--color--on-brand--default and painting color:var(--pf-t--global--text--color--regular). Any chrome button
-   that swaps in a surface background (card/sectioning) must restore readable text
-   or it renders white-on-white in light mode. This is the recurring trap: a new
-   button class sets `background` and forgets `color`. Reset it once here for the
-   surface-styled graph buttons; their active/primary states re-override color
-   afterward and win on specificity. Use `inherit` (not var(--pf-t--global--text--color--regular)) because
-   Pico shadows that variable ON the button element itself, so var() would still
-   resolve to the white inverse - inherit pulls the real text color from the
-   ancestor and stays correct in both light and dark mode. */
-.console-graph-views .console-graph-views__chip,
-.console-graph-help__table .console-graph-views__chip,
-.console-graph-colorgroup__preset { color: inherit; }
+/* The remove control is a PF plain small icon-button; tighten its inline padding so it sits
+   flush inside the compact chip, and flip the x icon to the danger color on hover. */
+.console-graph-colorgroup__remove {
+  --pf-v6-c-button--m-plain--PaddingInlineStart: 0.2rem;
+  --pf-v6-c-button--m-plain--PaddingInlineEnd: 0.2rem;
+  --pf-v6-c-button--m-plain--m-small--PaddingInlineStart: 0.2rem;
+  --pf-v6-c-button--m-plain--m-small--PaddingInlineEnd: 0.2rem;
+}
+.console-graph-colorgroup__remove .console-render-btn__icon { width: 0.8em; height: 0.8em; }
+.console-graph-colorgroup__remove:hover .console-render-btn__icon { color: var(--console-status-danger); }
 
 /* ---- Phase 5: question-first views panel ("Ask") -------------------------- */
 /* A curated, hard-capped set of questions (max 7), each a button named by the
@@ -430,44 +414,51 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
    toolbar of commands - so a first-time visitor reads them as starting points. */
 .console-graph-views__hint { margin: 0 0 0.55rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.8rem; line-height: 1.45; }
 .console-graph-views__body { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
-.console-graph-views .console-graph-views__chip {
-  width: auto; margin: 0; padding: 0.33rem 0.75rem 0.33rem 0.6rem;
-  font-size: 0.78rem; line-height: 1.3;
+/* ONE shared chip look for every "run this view / example" affordance - the Ask-panel and
+   sidebar question chips (.console-graph-views__chip) AND the Search-syntax and Views-table
+   examples (.console-graph-help__example). These are a sanctioned custom escape hatch (no PF
+   component fits a dense, chevroned suggestion chip), but they render IDENTICALLY in every
+   context: a bordered pill with a leading run-chevron; active/disabled ride data-* attributes. */
+.console-graph-views__chip,
+.console-graph-help__example {
+  width: auto; margin: 0; padding: 0.3rem 0.7rem 0.3rem 0.55rem;
+  font: inherit; font-size: 0.76rem; line-height: 1.3; text-align: left; color: inherit;
   display: inline-flex; align-items: center; gap: 0.3rem;
   background: var(--pf-t--global--background--color--primary--default);
   /* The neutral default border token, so the pill reads as a quiet chip rather than an
-     accent-colored button. */
+     accent-colored button. One corner radius (not a full pill) keeps the chips part of the
+     same UI as the disclosures/cards; the leading chevron carries the "clickable" signal. */
   border: 1px solid var(--pf-t--global--border--color--default);
-  /* Match the site's one corner radius rather than a full pill: the chips read as
-     part of the same UI as the disclosures/cards, and the leading chevron already
-     carries the "clickable suggestion" signal. */
   border-radius: var(--pf-t--global--border--radius--small);
   cursor: pointer;
   transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
 }
 /* Leading chevron marks each chip as "click to run this view". */
-.console-graph-views .console-graph-views__chip::before {
+.console-graph-views__chip::before,
+.console-graph-help__example::before {
   content: "\203A"; color: var(--console-accent); font-weight: 700; opacity: 0.85;
 }
-.console-graph-views .console-graph-views__chip:hover {
+.console-graph-views__chip:hover,
+.console-graph-help__example:hover,
+.console-graph-help__example:focus-visible {
   border-color: var(--console-accent);
   background: color-mix(in srgb, var(--console-accent) 8%, var(--pf-t--global--background--color--primary--default));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
 }
-.console-graph-views .console-graph-views__chip[data-active] {
+.console-graph-views__chip[data-active] {
   background: var(--console-accent); color: var(--pf-t--global--text--color--on-brand--default);
   border-color: var(--console-accent);
 }
-.console-graph-views .console-graph-views__chip[data-active]::before { color: var(--pf-t--global--text--color--on-brand--default); opacity: 1; }
+.console-graph-views__chip[data-active]::before { color: var(--pf-t--global--text--color--on-brand--default); opacity: 1; }
 /* Disabled = Phase 9 "affected" button. Not greyed - just visually demoted, and
    inert on hover. */
-.console-graph-views .console-graph-views__chip[disabled], .console-graph-views .console-graph-views__chip[data-disabled] {
+.console-graph-views__chip[disabled], .console-graph-views__chip[data-disabled] {
   opacity: 0.45; cursor: not-allowed;
 }
-.console-graph-views .console-graph-views__chip[disabled]:hover, .console-graph-views .console-graph-views__chip[data-disabled]:hover {
+.console-graph-views__chip[disabled]:hover, .console-graph-views__chip[data-disabled]:hover {
   border-color: var(--pf-t--global--border--color--default); background: var(--pf-t--global--background--color--primary--default); box-shadow: none;
 }
-.console-graph-views .console-graph-views__chip[data-conditional] { display: none; } /* hidden until DurationMs data present */
+.console-graph-views__chip[data-conditional] { display: none; } /* hidden until DurationMs data present */
 /* Clear sits apart from the question chips: a quiet text button pushed to the end. */
 .console-graph-views__clear {
   width: auto; margin: 0 0 0 auto; padding: 0.33rem 0.6rem;
@@ -506,6 +497,8 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 }
 .console-graph-querybar .pf-v6-c-form-control { font-family: var(--pf-t--global--font--family--mono); }
 .console-graph-querybar .pf-v6-c-button.pf-m-control { padding-inline: 0.45rem; }
+/* Size the copy-as-command SVG icon to sit level with the neighboring "?" help control's glyph. */
+.console-graph-querybar .console-render-btn__icon { width: 0.9em; height: 0.9em; flex: 0 0 auto; }
 
 /* Ask a question: the question-first view chips, surfaced directly in the sidebar (the
    ref-drawer #ask-panel is display:none in the decoupled console). The chips reuse the
@@ -520,56 +513,45 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   color: var(--pf-t--global--text--color--subtle);
 }
 
-/* Phase 5: projection unfold button. Shown when default projection is active. */
+/* Phase 5: projection unfold button. Shown when default projection is active. A PF link Button,
+   centered as a full-width sidebar row with the same bottom-border divider as the count row; PF
+   supplies the accent text + hover treatment. */
 .console-graph-sidebar__unfold {
-  width: 100%; margin: 0; padding: 0.28rem 0.6rem;
-  font-size: 0.72rem; line-height: 1.3; text-align: center;
-  background: var(--pf-t--global--background--color--primary--default);
-  border: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
-  cursor: pointer; color: var(--console-accent);
+  width: 100%; margin: 0; display: flex; justify-content: center;
+  padding: 0.3rem 0.6rem; font-size: 0.72rem; line-height: 1.3;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
 }
-.console-graph-sidebar__unfold:hover { text-decoration: underline; }
 
-/* Phase 5: empty-state suggestion chips. */
+/* Phase 5: empty-state suggestions. Each is a PF inline link Button (a quiet accent text
+   affordance), stacked left-aligned and wrapping; PF supplies the color + hover. */
 .console-graph-sidebar__suggestions {
-  display: flex; flex-direction: column; gap: 0.25rem;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem;
   padding: 0.35rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-graph-sidebar__suggestion {
-  width: 100%; margin: 0; padding: 0.22rem 0.5rem; text-align: left;
-  font-size: 0.7rem; line-height: 1.35; white-space: normal;
-  background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  cursor: pointer; color: var(--pf-t--global--text--color--subtle);
+  margin: 0; text-align: left; justify-content: flex-start;
+  white-space: normal; font-size: 0.7rem; line-height: 1.35;
 }
-/* Plain muted text at rest, firming to the primary blue on hover (the Claude-Desktop idiom Eli
-   prefers). NOT color:var(--pf-t--global--text--color--regular) - on a bare <button> Pico resolves that to white, so the
-   label vanished on hover; the primary is a real color. See pico-bare-button-hover-white. */
-.console-graph-sidebar__suggestion:hover { border-color: var(--console-accent); color: var(--console-accent); }
 
-/* Phase 5: color preset buttons. */
+/* Phase 5: color preset buttons - PF secondary small Buttons. The pressed/active coding (set by
+   JS via data-active) fills the button with the accent by overriding PF's own button color vars,
+   so the active state reads at a glance and rides on top of PF's secondary styling in both themes. */
 .console-graph-colorgroup__presetrow { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; }
-.console-graph-colorgroup__preset {
-  width: auto; margin: 0; padding: 0.18rem 0.6rem;
-  font-size: 0.72rem; line-height: 1.3;
-  background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  cursor: pointer;
+.console-graph-colorgroup__preset[data-active] {
+  --pf-v6-c-button--BackgroundColor: var(--console-accent);
+  --pf-v6-c-button--Color: var(--pf-t--global--text--color--on-brand--default);
+  --pf-v6-c-button--BorderColor: var(--console-accent);
+  --pf-v6-c-button--hover--BackgroundColor: var(--console-accent);
+  --pf-v6-c-button--hover--Color: var(--pf-t--global--text--color--on-brand--default);
+  --pf-v6-c-button--hover--BorderColor: var(--console-accent);
 }
-.console-graph-colorgroup__preset:hover { border-color: var(--console-accent); }
-.console-graph-colorgroup__preset[data-active] { background: var(--console-accent); color: var(--pf-t--global--text--color--on-brand--default); border-color: var(--console-accent); }
 .console-graph-display__controlhint { margin: -0.15rem 0 0.3rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 
 /* Phase 5: views-table in help panel. */
 .console-graph-help__table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 0.7rem; }
 .console-graph-help__table th, .console-graph-help__table td { padding: 0.25rem 0.5rem; text-align: left; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
 .console-graph-help__table th { color: var(--pf-t--global--text--color--subtle); font-weight: 600; font-size: 0.72rem; }
-.console-graph-help__table .console-graph-views__chip {
-  width: auto; margin: 0; padding: 0.1rem 0.4rem; font-size: 0.72rem; line-height: 1.2;
-  background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small); cursor: pointer;
-}
-.console-graph-help__table .console-graph-views__chip:hover { border-color: var(--console-accent); }
+/* The Views-table chips reuse the one shared .console-graph-views__chip look (above). */
 
 
 /* Phase 9: live mode status strip and banners. The live/snapshot badges are PF Labels
