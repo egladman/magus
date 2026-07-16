@@ -511,7 +511,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   padding-inline: 0.4rem;
 }
 .console-graph-querybar .pf-v6-c-form-control { font-family: var(--pf-t--global--font--family--mono); }
-.console-graph-querybar .pf-v6-c-button.pf-m-control { padding-inline: 0.45rem; }
+.console-graph-querybar .pf-v6-c-button.pf-m-control { padding-inline: 0.45rem; align-self: stretch; }
 /* Size the copy-as-command SVG icon to sit level with the neighboring "?" help control's glyph. */
 .console-graph-querybar .console-render-btn__icon { width: 0.9em; height: 0.9em; flex: 0 0 auto; }
 

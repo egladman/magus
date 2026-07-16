@@ -93,7 +93,9 @@
 #log-filter-item .pf-v6-c-input-group { width: 100%; }
 #log-filter-item .pf-v6-c-form-control { width: 100%; }
 /* The "?" help control: a compact square addon that reads as one unit with the field. */
-.console-log-filter__help { min-width: 1.9rem; padding-inline: 0; font-weight: 700; }
+/* Stretch the "?" control to the filter field's height so the input-group reads as one unit (PF's
+   control button is a touch shorter than the form-control field otherwise). */
+.console-log-filter__help { min-width: 1.9rem; padding-inline: 0; font-weight: 700; align-self: stretch; }
 /* PF sets an explicit display:flex on .pf-v6-c-toolbar__group, which outranks the native [hidden]
    display:none, so the time-range group needs an id-scoped rule to actually collapse when hidden
    (it is shown only in timeline mode; render.ts toggles the attribute). */
