@@ -24,6 +24,16 @@
   root.classList.remove("no-js");
   root.classList.add("js");
 
+  // Platform-aware corner radius: Apple platforms (macOS / iOS / iPadOS) are opinionated toward
+  // rounder corners, so tag the root and let tokens.css nudge the console's radius scale for them
+  // (the docs site does not consume the --pf-t radius tokens, so this only affects the console). Set
+  // pre-paint from <head> so there is no radius flash. iPadOS reports as "MacIntel"; the Mac match
+  // covers it.
+  try {
+    const plat = (navigator.platform || navigator.userAgent || "");
+    if (/Mac|iPhone|iPad|iPod/i.test(plat)) root.setAttribute("data-platform", "apple");
+  } catch (e) { /* ignore */ }
+
   // Feather-style stroke icons (matching the search magnifier, hamburger, and TOC
   // glyphs): a full sun for light, a crescent for dark, and a half-filled circle for
   // auto (the OS decides, so the disc is split). Sized in em via CSS so they track the

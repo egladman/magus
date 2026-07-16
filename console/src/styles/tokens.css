@@ -37,7 +37,29 @@
   --pf-t--global--border--radius--action--plain--default: 6px;
   --pf-t--global--border--radius--control--default: 6px;
   --pf-t--global--border--radius--control--form-element: 6px;
+}
 
+/* Apple platforms (macOS / iOS / iPadOS) favor rounder corners than the crisp default, so nudge the
+   whole scale up when theme.js has tagged the root data-platform="apple". Same two-tier idea
+   (interactive controls rounder than containers), just softer overall to feel native on Apple. */
+:root[data-platform="apple"] {
+  --pf-t--global--border--radius--100: 4px;
+  --pf-t--global--border--radius--200: 5px;
+  --pf-t--global--border--radius--300: 6px;
+  --pf-t--global--border--radius--400: 7px;
+  --pf-t--global--border--radius--500: 9px;
+  --pf-t--global--border--radius--tiny: 4px;
+  --pf-t--global--border--radius--small: 6px;
+  --pf-t--global--border--radius--medium: 7px;
+  --pf-t--global--border--radius--large: 9px;
+  --pf-t--global--border--radius--pill: 9px;
+  --pf-t--global--border--radius--action--default: 9px;
+  --pf-t--global--border--radius--action--plain--default: 9px;
+  --pf-t--global--border--radius--control--default: 9px;
+  --pf-t--global--border--radius--control--form-element: 9px;
+}
+
+:root {
   /* --- 2. System font stack ------------------------------------------------------------
      Point PatternFly's font-family tokens at a system stack so its @font-face RedHat
      declarations (still present in the base) are never referenced and never fetched. This
