@@ -57,13 +57,19 @@
  * here; the button/menu chrome is PatternFly. */
 #settings-panel {
   position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
-  width: 17rem; max-width: calc(100vw - 1rem); z-index: 60;
+  width: 17rem; max-width: calc(100vw - 1rem);
+  /* Above the PatternFly Drawer content (z-index 100) and its panel (200), on PF's own z-index scale
+     so the title-bar popovers layer consistently with the framework rather than an arbitrary number. */
+  z-index: var(--pf-t--global--z-index--300);
 }
 /* Tighten the horizontal form for a compact popover: PF's default 9.375rem label column leaves a wide
  * gap in a narrow panel, so shrink it to the label's own width and give the group a small gap. The
  * label baseline aligns with its control (a select/input/button), reading as clean label -> field rows. */
 #settings-panel .pf-v6-c-menu__content { padding-block: 0.75rem; padding-inline: 0.85rem; }
-#settings-panel .pf-v6-c-form.pf-m-horizontal { --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: auto; }
+/* A FIXED (not auto) label column so every row's control starts at the same x - the labels sit left,
+   the controls line up in a column on the right. Sized to the longest label ("Refresh rate") so it
+   stays compact. PF's default 9.375rem is too wide for this narrow popover; auto misaligned the rows. */
+#settings-panel .pf-v6-c-form.pf-m-horizontal { --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: 6.5rem; }
 #settings-panel .pf-v6-c-form.pf-m-horizontal .pf-v6-c-form__group { align-items: center; grid-column-gap: 0.75rem; }
 
 /* The Applications menu popover (a PF Menu, #console-appmenu) drops from the same title-bar control
@@ -71,7 +77,8 @@
  * is PatternFly. */
 #console-appmenu {
   position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
-  min-width: 11rem; max-width: calc(100vw - 1rem); z-index: 60;
+  min-width: 11rem; max-width: calc(100vw - 1rem);
+  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
 #settings-panel .pf-v6-c-form-control,
 #settings-panel #theme-cycle { width: 100%; }
@@ -134,7 +141,7 @@
   position: fixed;
   left: max(1rem, env(safe-area-inset-left));
   bottom: max(1rem, env(safe-area-inset-bottom));
-  z-index: 60;
+  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
   max-width: 22rem;
   display: flex; align-items: center; gap: 0.75rem;
   padding: 0.6rem 0.9rem; font-size: 0.9rem;

@@ -257,7 +257,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    and the positioning context for its popover (#settings-panel, anchored in overrides.css). A slim
    inline gutter keeps the gear off the window edge / OS controls. */
 #console-actions { flex: 0 0 auto; position: relative; display: flex; align-items: center; padding-inline: 0.35rem; }
-#console-actions > #settings-btn { --pf-v6-c-button--PaddingBlock: 0.25rem; --pf-v6-c-button--PaddingInline: 0.35rem; }
+/* PF plain buttons default to align-items:baseline (sized for a text+icon button), so the title-bar
+   icon-only buttons (apps menu, reference, gear) hang their svg off the baseline - a few px above the
+   button centre, most visible on mobile. Centre the icon so the three chrome buttons sit dead-centre. */
+#console-actions > .pf-v6-c-button { align-items: center; }
+#console-actions > .pf-v6-c-button > .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
 
 /* W0 SPIKE: the old hand-rolled tab visuals ([role=tablist]/[role=tab]/[data-close]/[data-new],
    ~30 lines) were removed here so the rebuilt PatternFly Tabs (.pf-v6-c-tabs*) render from PF's
@@ -305,7 +309,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    div[data-tab-id], only the active shows), and its __panel is the Reference panel. */
 #console-outlet { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; }
 #console-refdrawer { flex: 1 1 auto; min-height: 0; }
-#console-outlet-content { position: relative; overflow: hidden; }
+/* min-width:0 lets the drawer content shrink so the inline Reference panel fits: on desktop the
+   content insets by the panel's 22rem, and on a narrow/mobile screen it shrinks to zero so the panel
+   (flex-basis 100% there) fills the screen. Without it PF's flex __content keeps its intrinsic width
+   and the panel overflows off the right edge (the mobile "blank page"). */
+#console-outlet-content { position: relative; overflow: hidden; min-width: 0; }
 #console-outlet-content > div { position: absolute; inset: 0; overflow: auto; }
 #console-outlet-content > div[hidden] { display: none; }
 
@@ -335,7 +343,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    both themes work; selection state rides data-selected, per the state-is-data-* convention. */
 #command-palette[hidden] { display: none; }
 .console-shell-palette {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 70; /* over the title bar (settings popover is 60) */
+  /* Above the PatternFly Drawer content (z-index 100) + panel (200) and the title-bar popovers (300),
+     using PF's own z-index scale so the chrome layers stay consistent with the framework. */
+  position: fixed; top: 0; left: 0; right: 0; z-index: var(--pf-t--global--z-index--400);
   display: flex; align-items: stretch;
   height: 1.9rem;
   font-size: 0.8rem;
@@ -383,6 +393,22 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-refdrawer {
   --pf-v6-c-drawer__panel--md--FlexBasis: var(--console-refdrawer-w);
   --pf-v6-c-drawer__panel--xl--FlexBasis: var(--console-refdrawer-w);
+}
+/* Mobile: below the drawer's own 48rem breakpoint the panel's flex-basis is 100%, so PF's INLINE
+   drawer (a flex sibling) has no room to sit it beside the content and it overflows off the right edge
+   (the "blank page" on a phone). PF v6's CSS-only Drawer has no overlay mode, so for narrow screens
+   dock the expanded panel as a full-screen overlay over the content region (__main). Justified custom
+   CSS: it makes the PF Drawer usable on mobile, which its inline flex model does not. */
+@media (max-width: 47.999rem) {
+  /* A clean fixed full-screen overlay covering the content region (below the 2.35rem title bar, above
+     the fixed status bar). Neutralize PF's inline flex sizing (flex-basis), its collapse margin, and
+     its slide transform so the panel is not pushed off-screen. */
+  #console-refdrawer.pf-m-expanded > .pf-v6-c-drawer__main > #console-refpanel {
+    position: fixed; inset: 2.35rem 0 var(--console-statusbar-h) 0;
+    width: auto; max-width: none; min-width: 0; flex-basis: auto;
+    margin: 0; transform: none;
+    z-index: var(--pf-t--global--z-index--200);
+  }
 }
 /* Skip the slide/flex-basis transition while applying the persisted (pinned) state on load. */
 .console-shell-refdrawer--instant .pf-v6-c-drawer__panel { transition: none !important; }
