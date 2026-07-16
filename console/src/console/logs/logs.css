@@ -354,3 +354,15 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   #log-bar .pf-v6-c-form-control { width: 100%; }
   [data-empty-ways] { grid-template-columns: 1fr; }
 }
+
+/* Activity surface (loads this shared render sheet, main.ts:288). The trail header is a PF
+   Toolbar: the title left, the connection note + Refresh aligned end on ONE dense row. These
+   two classes only size the title heading and subdue the note; everything else is PF + shared
+   console-render-*. */
+.console-activity-title {
+  margin: 0; font-size: 0.95rem; font-weight: 600; line-height: 1.2;
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-activity-conn {
+  font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
+}

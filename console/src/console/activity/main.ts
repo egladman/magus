@@ -45,19 +45,18 @@ function buildScaffold(host: HTMLElement): Refs {
   const panel = h("section", "console-render-panel");
 
   // Toolbar: the trail title on the left, the connection note + Refresh button aligned to the right.
+  // ONE toolbar content section (not two stacked __content blocks - those wrap to separate rows and
+  // leave a tall dead band): the title item, then an align-end action group carrying the note + button.
   const bar = h("header", "pf-v6-c-toolbar");
-  const idContent = h("div", "pf-v6-c-toolbar__content");
-  const idSection = h("div", "pf-v6-c-toolbar__content-section");
-  const idItem = h("div", "pf-v6-c-toolbar__item");
-  idItem.append(h("span", undefined, "Activity trail"));
-  idSection.append(idItem);
-  idContent.append(idSection);
+  const content = h("div", "pf-v6-c-toolbar__content");
+  const section = h("div", "pf-v6-c-toolbar__content-section");
 
-  const ctrlContent = h("div", "pf-v6-c-toolbar__content");
-  const ctrlSection = h("div", "pf-v6-c-toolbar__content-section");
+  const idItem = h("div", "pf-v6-c-toolbar__item");
+  idItem.append(h("h1", "console-activity-title", "Activity trail"));
+
   const actionGroup = h("div", "pf-v6-c-toolbar__group pf-m-action-group pf-m-align-end");
   const connItem = h("div", "pf-v6-c-toolbar__item");
-  const conn = h("span");
+  const conn = h("span", "console-activity-conn");
   connItem.append(conn);
   const btnItem = h("div", "pf-v6-c-toolbar__item");
   const refresh = h("button", "pf-v6-c-button pf-m-secondary pf-m-small") as HTMLButtonElement;
@@ -68,9 +67,10 @@ function buildScaffold(host: HTMLElement): Refs {
   refresh.append(refreshIcon, h("span", "pf-v6-c-button__text console-render-btn__label", "Refresh"));
   btnItem.append(refresh);
   actionGroup.append(connItem, btnItem);
-  ctrlSection.append(actionGroup);
-  ctrlContent.append(ctrlSection);
-  bar.append(idContent, ctrlContent);
+
+  section.append(idItem, actionGroup);
+  content.append(section);
+  bar.append(content);
 
   const scroll = h("div", "console-render-scroll");
   const body = h("div", "console-render-body");
