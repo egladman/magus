@@ -25,6 +25,7 @@ config knowledge.max_size_mb
 config knowledge.symbol_indexing.disabled
 config knowledge.symbol_indexing.min_interval_seconds
 config knowledge.symbol_indexing.quiet_seconds
+config knowledge.vcs.authorship
 config knowledge.vcs.enabled
 config knowledge.vcs.max_commits
 config knowledge.workspaces
