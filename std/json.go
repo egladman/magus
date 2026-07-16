@@ -46,7 +46,7 @@ func JSONParse(_ context.Context, s string) (any, error) {
 }
 
 // JSONStringify encodes a value as a JSON string. An empty indent (the
-// omitted-arg case — the binding layer passes "" rather than a missing value)
+// omitted-arg case - the binding layer passes "" rather than a missing value)
 // yields compact output; any non-empty indent selects pretty, multi-line output
 // with that string per nesting level. The two share one entry point because
 // "compact" is just the no-indent case, so an author has a single call to learn.

@@ -124,7 +124,7 @@ export fun generate(args: [str]) > void {
 
 ## go-mod-tidy
 
-tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes — safe for CI gating); the write charm applies the changes.
+tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes - safe for CI gating); the write charm applies the changes.
 
 **Command:** `go mod tidy --diff`
 
@@ -164,7 +164,7 @@ export fun tidy(args: [str]) > void {
 
 ## go-test
 
-The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out — the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
+The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
 
 **Command:** `go test ./...`
 

@@ -66,7 +66,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "is_dirty",
-			Doc:  "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) — the right way to gate generated outputs without shelling out to git or parsing porcelain.",
+			Doc:  "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.",
 			Args: []Arg{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
@@ -81,7 +81,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "commit",
-			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up — test a field (e.g. c.date == \"\") rather than for null.",
+			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == \"\") rather than for null.",
 			Args: []Arg{
 				{Name: "rev", Type: TypeString, Optional: true},
 			},
@@ -105,7 +105,7 @@ var Vcs = Module{
 		},
 		{
 			Name:    "describe",
-			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) — so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.",
+			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.",
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    VcsDescribe,
 		},
@@ -291,7 +291,7 @@ func VcsMetadata(ctx context.Context) (map[string]any, error) {
 
 // VcsCommit resolves rev (empty = current revision) to its commit record. When
 // no VCS is resolved or the revision can't be looked up it returns the zero
-// types.Commit — an all-empty record (id/date/… are ""), so a caller tests a
+// types.Commit - an all-empty record (id/date/… are ""), so a caller tests a
 // field (e.g. c.date == "") rather than a null.
 func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
@@ -322,7 +322,7 @@ func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 // VcsDescribe returns a human-readable version string from the nearest tag (see
 // the driver Describe methods), or "" when no VCS is resolved or the backend has
 // no describe concept. A query failure is reported as "" rather than raising,
-// matching the metadata accessors — callers treat "" as "no describe" and fall back.
+// matching the metadata accessors - callers treat "" as "no describe" and fall back.
 func VcsDescribe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {

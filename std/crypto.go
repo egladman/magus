@@ -20,10 +20,10 @@ import (
 func init() { Register(Crypto) }
 
 // Crypto is the "crypto" host module: content digests for checksum manifests
-// (SHA256SUMS for release assets) and verifying downloads. Digests only — not a
+// (SHA256SUMS for release assets) and verifying downloads. Digests only - not a
 // general crypto toolkit (no HMAC, encryption, or signing). SHA-256/512 are the
 // strong defaults; SHA-1 and MD5 exist for interop with legacy checksums and are
-// not collision-resistant — never use them for anything security-relevant.
+// not collision-resistant - never use them for anything security-relevant.
 var Crypto = Module{
 	Name: "crypto",
 	Doc:  "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).",
@@ -58,28 +58,28 @@ var Crypto = Module{
 		},
 		{
 			Name:    "sha1_hex",
-			Doc:     "Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
+			Doc:     "Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
 			Args:    []Arg{{Name: "data", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    CryptoSha1Hex,
 		},
 		{
 			Name:    "sha1_file",
-			Doc:     "Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
+			Doc:     "Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    CryptoSha1File,
 		},
 		{
 			Name:    "md5_hex",
-			Doc:     "Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.",
+			Doc:     "Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
 			Args:    []Arg{{Name: "data", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    CryptoMd5Hex,
 		},
 		{
 			Name:    "md5_file",
-			Doc:     "Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.",
+			Doc:     "Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    CryptoMd5File,

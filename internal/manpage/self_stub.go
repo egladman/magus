@@ -2,7 +2,7 @@
 
 package manpage
 
-// selfCommand (noselfupdate build) — update is compiled in by default and is
+// selfCommand (noselfupdate build) - update is compiled in by default and is
 // omitted here because this build used -tags noselfupdate.
 var selfCommand = Command{
 	Name:        "self",

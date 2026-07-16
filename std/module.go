@@ -112,7 +112,7 @@ type Method struct {
 
 // Field is a static, table-level value on a Module. Unlike a Method, a Field
 // is resolved once at registration time and stored as a plain value on the
-// module's Buzz map — callers read it without function invocation (e.g.
+// module's Buzz map - callers read it without function invocation (e.g.
 // `vcs.name`, not `vcs.name()`).
 type Field struct {
 	Name string

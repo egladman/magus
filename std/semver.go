@@ -19,7 +19,7 @@ var Semver = Module{
 	Methods: []Method{
 		{
 			Name: "compare",
-			Doc:  `Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" — true when the relation holds.`,
+			Doc:  `Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true when the relation holds.`,
 			Args: []Arg{
 				{Name: "a", Type: TypeString},
 				{Name: "op", Type: TypeString},

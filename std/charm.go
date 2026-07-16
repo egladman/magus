@@ -88,7 +88,7 @@ var Charm = Module{
 		},
 		{
 			Name:    "path",
-			Doc:     `Return the JSON Pointer ("/N") of the first argv element equal to anchor — the index, auto-calculated, for hand-built move/copy/test ops.`,
+			Doc:     `Return the JSON Pointer ("/N") of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.`,
 			Args:    []Arg{{Name: "argv", Type: TypeStringSlice}, {Name: "anchor", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}}, Impl: CharmPath,
 		},
@@ -162,7 +162,7 @@ func addOps(start int, vals []string) map[string]any {
 }
 
 // anchorIndex returns the position of the first argv element equal to anchor, or
-// an error — a not-found anchor is a spell bug, surfaced now (author/load time)
+// an error - a not-found anchor is a spell bug, surfaced now (author/load time)
 // rather than silently mis-targeting an index.
 func anchorIndex(argv []string, anchor string) (int, error) {
 	if i := slices.Index(argv, anchor); i >= 0 {

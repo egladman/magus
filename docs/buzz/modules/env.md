@@ -88,7 +88,7 @@ Return the current user's home directory.
 
 ### get_or
 
-Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is — def only applies when the variable is absent.
+Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is - def only applies when the variable is absent.
 
 **Signature:** `env.getOr(name, def) → string` · [source](https://github.com/egladman/magus/blob/main/std/env.go#L189)
 

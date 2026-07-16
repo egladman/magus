@@ -149,7 +149,7 @@ Drop (remove) the first argv element for which fn(s) is truthy.
 
 ### path
 
-Return the JSON Pointer ("/N") of the first argv element equal to anchor — the index, auto-calculated, for hand-built move/copy/test ops.
+Return the JSON Pointer ("/N") of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.
 
 **Signature:** `charm.path(argv, anchor) → string` · [source](https://github.com/egladman/magus/blob/main/std/charm.go#L284)
 

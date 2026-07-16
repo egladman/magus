@@ -13,7 +13,7 @@ func init() { Register(Strings) }
 // Strings is the "strings" host module: case-conversion and word helpers Buzz's
 // builtins lack. Buzz strings already do upper/lower/trim/split/replace/sub, but
 // codegen and naming tasks constantly need to re-case an identifier
-// (snake↔camel↔kebab↔Pascal) or split prose into words — operations with fiddly
+// (snake↔camel↔kebab↔Pascal) or split prose into words - operations with fiddly
 // edge cases (acronyms, separators) that are easy to get subtly wrong in script.
 // These delegate to samber/lo so the behavior matches a well-tested Go
 // implementation. Pure string transforms: no filesystem or environment access.

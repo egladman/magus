@@ -13,7 +13,7 @@ func init() { Register(Time) }
 // Time is the "time" host module: timestamp formatting/parsing and duration
 // parsing, delegated straight to Go's time package so a spell doesn't reinvent
 // calendar math. Times cross the VM boundary as Unix epoch milliseconds carried
-// as float64 — the exact type (and unit) Buzz's os.time() already returns, so a
+// as float64 - the exact type (and unit) Buzz's os.time() already returns, so a
 // timestamp flows through os.time() → extra.time without a conversion, and the
 // 64-bit value never narrows to a 32-bit int. Layouts are Go reference-time
 // strings (e.g. "2006-01-02T15:04:05Z07:00"). Formatting and parsing are anchored

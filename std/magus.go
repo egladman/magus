@@ -31,7 +31,7 @@ var Magus = Module{
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists — magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -81,7 +81,7 @@ var Magus = Module{
 		},
 		{
 			Name: "bust_cache",
-			Doc:  "Invalidate the build cache. Escape hatch — prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.",
+			Doc:  "Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.",
 			Args: []Arg{
 				{Name: "project_path", Type: TypeString, Optional: true},
 			},
@@ -112,7 +112,7 @@ func MagusHasCharm(ctx context.Context, name string) (bool, error) {
 // all manifests are cleared; otherwise only entries for that project are removed.
 // A structured warning is always emitted: this is an escape hatch, not routine.
 func MagusBustCache(ctx context.Context, projectPath string) error {
-	slog.Warn("magus.bust_cache called — consider modeling the missing input as a Source instead",
+	slog.Warn("magus.bust_cache called - consider modeling the missing input as a Source instead",
 		"project_path", projectPath)
 	c := cache.CacheFromContext(ctx)
 	if c == nil {

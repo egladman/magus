@@ -2,10 +2,10 @@
 //
 // Two modes, selected by -format:
 //
-//	roff (default) — groff_man(7) .1 source for `man`, written to -out
+//	roff (default) - groff_man(7) .1 source for `man`, written to -out
 //	                 (default: manpage/). A distribution artifact, owned at the
 //	                 repo root and shipped for the `man` command.
-//	md             — Markdown for the docs site, written to -out
+//	md             - Markdown for the docs site, written to -out
 //	                 (default: docs/manpage/). Docs-site content, owned by the docs
 //	                 project (docs/magusfile.buzz), which renders these to HTML like
 //	                 any other doc.

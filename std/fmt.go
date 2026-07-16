@@ -11,7 +11,7 @@ func init() { Register(Fmt) }
 
 // Fmt is the "fmt" host module: string formatting via Go's printf verbs. It
 // exists to collapse long "+"-concatenation chains into a single readable call.
-// Args are strings (the variadic boundary only carries strings), so use %s/%q —
+// Args are strings (the variadic boundary only carries strings), so use %s/%q -
 // numeric verbs like %d have nothing typed to act on.
 var Fmt = Module{
 	Name: "fmt",

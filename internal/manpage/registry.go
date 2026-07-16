@@ -106,7 +106,7 @@ arguments, selects the project containing the current directory, or all projects
 if the current directory is not inside a project. Explicit project paths on the
 command line select exactly those projects.
 
-The target ci is an ordinary magusfile-defined target — magus does not hardcode
+The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
 the rw charm (e.g. 'magus run format:rw') to mutate files.`,
@@ -146,7 +146,7 @@ absolute path to stdout. Designed for shell substitution:
 
 Filters are AND-combined substrings. On a unique top score the path is
 printed and the command exits 0. On ambiguity, candidates are listed on
-stderr and the command exits 2. No interactive picker — use magus x for
+stderr and the command exits 2. No interactive picker - use magus x for
 that.`,
 	Usage: "magus where [filter...]",
 	Examples: []Example{
@@ -443,8 +443,8 @@ var statusCommand = Command{
 	Short:       "Inspect concurrency pool and configuration",
 	Description: "Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.",
 	Tags:        []string{"cli", "magus status", "status", "concurrency", "pool", "daemon", "monitoring"},
-	Long: `Show the magus configuration that affects this process — telemetry, cache
-settings — and, when a parent magus process is running, the live state of its
+	Long: `Show the magus configuration that affects this process - telemetry, cache
+settings - and, when a parent magus process is running, the live state of its
 concurrency pool (current slot usage, queued waiters).
 
 When --watch is non-zero, status polls and reprints at that interval. On a

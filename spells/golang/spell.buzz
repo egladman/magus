@@ -1,4 +1,4 @@
-// Every op is a fork of a tool on PATH — no shell.
+// Every op is a fork of a tool on PATH - no shell.
 //
 // Op naming follows the convention in docs/spells.md: the op key is the literal
 // CLI command (kebab-case) and the handler is that command in lowerCamelCase, so
@@ -47,7 +47,7 @@ fun golangCILint(target: Target) > Command {
     }};
 }
 // The cd charm instruments the run with an atomic-mode coverage profile written
-// to coverage.out — the deliverable a CD pipeline ships to a coverage service
+// to coverage.out - the deliverable a CD pipeline ships to a coverage service
 // (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
 fun goTest(target: Target) > Command {
     return Command{bin = "go", args = ["test", "./..."], charms = {
@@ -55,7 +55,7 @@ fun goTest(target: Target) > Command {
         "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
 }
-// tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes —
+// tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes -
 // safe for CI gating); the write charm applies the changes.
 fun goModTidy(target: Target) > Command {
     final args = ["mod", "tidy", "--diff"];

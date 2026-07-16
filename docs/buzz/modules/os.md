@@ -15,7 +15,7 @@ Process execution. os.exec runs a command directly (no shell); os.exec_sh runs a
 
 ### exec
 
-Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input — pipe by passing a prior call's stdout.
+Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout.
 
 **Signature:** `os.exec(cmd, [args], [dir], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L331)
 
@@ -30,7 +30,7 @@ Run cmd directly (no shell; args are never shell-interpolated). Output streams l
 
 ### exec_sh
 
-Run line through a shell — for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. "bash") to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes — for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.
+Run line through a shell - for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. "bash") to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes - for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.
 
 **Signature:** `os.execSh(line, [dir], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L345)
 
@@ -74,7 +74,7 @@ Return the Docker/OCI platform triple: (os, arch, variant).
 
 ### exit
 
-Abort the current run with the given exit code — typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.
+Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.
 
 **Signature:** `os.exit(code)` · [source](https://github.com/egladman/magus/blob/main/std/os.go#L232)
 

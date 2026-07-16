@@ -71,7 +71,7 @@ var Env = Module{
 		},
 		{
 			Name:    "get_or",
-			Doc:     "Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is — def only applies when the variable is absent.",
+			Doc:     "Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is - def only applies when the variable is absent.",
 			Args:    []Arg{{Name: "name", Type: TypeString}, {Name: "def", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    EnvGetOr,
