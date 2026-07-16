@@ -77,7 +77,7 @@ body[data-console-fill] > main {
 /* The app card stretches to fill the main region as a flex child - more robust than a
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
    min-heights + Pico's section margin so short viewports still fit without a page scroll. */
-body[data-console-fill] > main > .graph-app,
+body[data-console-fill] > main > .console-graph-app,
 body[data-console-fill] > main > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
@@ -132,7 +132,7 @@ body[data-console-fill] > main > .console-render-panel {
      keeping Pico's ~1rem .container-fluid inset - the console owns the whole width. */
   padding-inline: 0.4rem;
 }
-#console-outlet div[data-pane-id] > main > .graph-app,
+#console-outlet div[data-pane-id] > main > .console-graph-app,
 #console-outlet div[data-pane-id] > main > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
@@ -172,12 +172,12 @@ body[data-console-fill] > main > .console-render-panel {
    matching the log viewer's centered empty state. The prompt's base style is already
    position:absolute; inset:0; flex-centered - it just needs a full-height positioned
    ancestor, which the stage now provides. */
-body[data-console-fill] .graph-app:has(.graph-empty-state:not([hidden])) .graph-stage {
+body[data-console-fill] .console-graph-app:has(.graph-empty-state:not([hidden])) .console-graph-stage {
   height: 100%;
   min-height: 0;
   overflow: hidden;
 }
-body[data-console-fill] .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state {
+body[data-console-fill] .console-graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-state {
   position: absolute;
   inset: 0;
   min-height: 0;

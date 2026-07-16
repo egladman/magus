@@ -286,7 +286,7 @@ async function loadGraph() {
 function setStatus(msg: string, isError?: boolean) {
   if (!statusEl) return;
   statusEl.textContent = msg;
-  statusEl.classList.toggle("err", !!isError);
+  statusEl.toggleAttribute("data-error", !!isError);
 }
 
 // ---- graph prep ------------------------------------------------------------
@@ -396,7 +396,7 @@ function switchLayout(mode: string) {
     btn.title = mode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
   }
   // Show/hide force sliders: hidden in layered mode.
-  const forceControls = document.querySelector<HTMLElement>(".force-controls");
+  const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
   if (forceControls) forceControls.hidden = (mode === "layered");
 
   updateHash();
@@ -709,7 +709,7 @@ function safeUrl(u: any) {
 function nodeRefHtml(id: string) {
   const n = graph.byId.get(id);
   const label = n ? n.label : id;
-  return '<button type="button" class="node-ref" data-id="' + escapeHtml(id) + '">' + escapeHtml(label) + "</button>";
+  return '<button type="button" class="console-graph-card__ref" data-id="' + escapeHtml(id) + '">' + escapeHtml(label) + "</button>";
 }
 
 function relSectionHtml(title: any, rows: any) {
@@ -723,10 +723,10 @@ function relSectionHtml(title: any, rows: any) {
   const rels = [...byRel.keys()].sort((a, b) => RELATIONS.indexOf(a) - RELATIONS.indexOf(b));
   for (const rel of rels) {
     const items = byRel.get(rel);
-    html += '<div class="rel-group"><span class="rel-name">' + escapeHtml(rel) +
-      ' <span class="rel-count">(' + items.length + ")</span></span> ";
+    html += '<div class="console-graph-card__relgroup"><span class="console-graph-card__relname">' + escapeHtml(rel) +
+      ' <span class="console-graph-card__relcount">(' + items.length + ")</span></span> ";
     html += items.slice(0, 40).map((r: any) => nodeRefHtml(r.other)).join(" ");
-    if (items.length > 40) html += " <span class=\"muted\">+" + (items.length - 40) + " more</span>";
+    if (items.length > 40) html += " <span class=\"console-graph-card__muted\">+" + (items.length - 40) + " more</span>";
     html += "</div>";
   }
   return html + "</dd>";
@@ -734,15 +734,15 @@ function relSectionHtml(title: any, rows: any) {
 
 function renderCard(id: string | null) {
   const n = id ? graph.byId.get(id) : null;
-  if (!n) { cardEl.innerHTML = ""; cardEl.hidden = true; document.body.classList.remove("has-card"); return; }
-  document.body.classList.add("has-card");
+  if (!n) { cardEl.innerHTML = ""; cardEl.hidden = true; document.body.toggleAttribute("data-has-card", false); return; }
+  document.body.toggleAttribute("data-has-card", true);
   const { out, inc } = incidentEdges(id!);
   let html = "";
-  html += '<p class="card-section">Node details</p>';
-  html += '<header class="card-head">';
-  html += '<span class="kind-dot k-' + escapeHtml(n.kind) + '"></span>';
+  html += '<p class="console-graph-card__section">Node details</p>';
+  html += '<header class="console-graph-card__head">';
+  html += '<span class="console-graph-kinddot" data-kind="' + escapeHtml(n.kind) + '"></span>';
   html += "<h2>" + escapeHtml(n.label) + "</h2>";
-  html += '<span class="kind-tag">' + escapeHtml(n.kind) + "</span>";
+  html += '<span class="console-graph-card__kindtag">' + escapeHtml(n.kind) + "</span>";
   html += "</header>";
   html += "<dl>";
   html += "<dt>id</dt><dd><code>" + escapeHtml(n.id) + "</code></dd>";
@@ -769,12 +769,12 @@ function renderCard(id: string | null) {
   // a link-styled action (not a chunky button) so it sits quietly in the dense card and
   // doesn't compete with the canvas toolbar's Copy as Mermaid; still a <button> because
   // it acts (copies to clipboard) rather than navigates.
-  html += '<div class="card-actions"><button type="button" class="card-mermaid-link" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="copy-glyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button></div>';
+  html += '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__mermaidlink" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="console-graph-card__copyglyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button></div>';
   cardEl.innerHTML = html;
   cardEl.hidden = false;
-  cardEl.querySelectorAll<HTMLElement>(".node-ref").forEach((b) =>
+  cardEl.querySelectorAll<HTMLElement>(".console-graph-card__ref").forEach((b) =>
     b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true)));
-  const mermaidCardBtn = cardEl.querySelector<HTMLElement>(".card-mermaid-link");
+  const mermaidCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__mermaidlink");
   if (mermaidCardBtn) mermaidCardBtn.addEventListener("click", copyAsMermaid);
 }
 
@@ -907,7 +907,7 @@ function clearFocusOrQuery() {
   // Clear any active view.
   if (activeView) {
     activeView = null; viewNode = null; viewNodeTo = null;
-    document.querySelectorAll<HTMLElement>(".view-btn").forEach((b) => b.classList.remove("view-active"));
+    document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => b.removeAttribute("data-active"));
     renderViewCommand(null, null, null);
   }
   renderList();
@@ -920,7 +920,7 @@ function clearFocusOrQuery() {
   }
 }
 
-// applyLens is the legacy entry point for .lens-btn clicks; now delegates to
+// applyLens is the legacy entry point for [data-lens] clicks; now delegates to
 // activateView so the view system handles state/hash/CLI idiom uniformly.
 function applyLens(name: string) {
   activateView(name === "hubs" ? "hubs" : "orphans");
@@ -934,7 +934,7 @@ function syncConditionalViews() {
     (n.DurationMs || 0) > 0 || (n.duration_ms || 0) > 0 || (Number((n.attrs && n.attrs.DurationMs) || 0) > 0)
   );
   document.querySelectorAll<HTMLElement>("[data-view='critical']").forEach((btn) => {
-    btn.classList.toggle("view-conditional", !hasDuration);
+    btn.toggleAttribute("data-conditional", !hasDuration);
   });
 }
 
@@ -970,9 +970,9 @@ function addGroup() {
 function renderGroups() {
   const list = el("group-list") as HTMLElement;
   list.innerHTML = groups.map((g, i) =>
-    '<span class="group-chip"><span class="group-swatch" style="background:' + escapeHtml(g.color) + '"></span>' +
-    escapeHtml(g.query) + '<button type="button" class="group-x" data-i="' + i + '" aria-label="Remove group">&times;</button></span>').join("");
-  list.querySelectorAll<HTMLElement>(".group-x").forEach((b) =>
+    '<span class="console-graph-colorgroup__chip"><span class="console-graph-colorgroup__swatch" style="background:' + escapeHtml(g.color) + '"></span>' +
+    escapeHtml(g.query) + '<button type="button" class="console-graph-colorgroup__remove" data-i="' + i + '" aria-label="Remove group">&times;</button></span>').join("");
+  list.querySelectorAll<HTMLElement>(".console-graph-colorgroup__remove").forEach((b) =>
     b.addEventListener("click", () => { groups.splice(+b.dataset.i!, 1); renderGroups(); draw(); }));
 }
 
@@ -1065,7 +1065,7 @@ function applyQuery(q: any) {
   // Clear active view when query is typed.
   if (activeView) {
     activeView = null; viewNode = null; viewNodeTo = null;
-    document.querySelectorAll<HTMLElement>(".view-btn").forEach((b) => b.classList.remove("view-active"));
+    document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => b.removeAttribute("data-active"));
     renderViewCommand(null, null, null);
   }
   query = q.trim();
@@ -1123,23 +1123,23 @@ function renderList() {
   // Compact rows: a kind-colored dot (keyed to the legend) + the label. The kind
   // name lives in the title tooltip rather than a column, to keep rows dense.
   listEl.innerHTML = shown.map((n) =>
-    '<li><button type="button" class="node-pill" data-id="' + escapeHtml(n.id) + '"' +
+    '<li><button type="button" class="console-graph-nodelist__pill" data-id="' + escapeHtml(n.id) + '"' +
     ' title="' + escapeHtml(n.kind + " · " + n.label) + '"' +
     (n.id === selected ? ' aria-current="true"' : "") + ">" +
-    '<span class="kind-dot k-' + escapeHtml(n.kind) + '"></span>' +
-    "<span class=\"row-label\">" + escapeHtml(n.label) + "</span>" +
+    '<span class="console-graph-kinddot" data-kind="' + escapeHtml(n.kind) + '"></span>' +
+    "<span class=\"console-graph-nodelist__label\">" + escapeHtml(n.label) + "</span>" +
     "</button></li>").join("");
   if (pool.length > shown.length) {
-    listEl.innerHTML += '<li class="muted list-more">+' + (pool.length - shown.length) + " more (refine the search)</li>";
+    listEl.innerHTML += '<li class="console-graph-nodelist__more">+' + (pool.length - shown.length) + " more (refine the search)</li>";
   }
-  listEl.querySelectorAll<HTMLElement>(".node-pill").forEach((b) => {
+  listEl.querySelectorAll<HTMLElement>(".console-graph-nodelist__pill").forEach((b) => {
     b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true));
     b.addEventListener("dblclick", () => focusNode(b.dataset.id!, focusDepth));
   });
 }
 
 function syncListSelection() {
-  listEl.querySelectorAll<HTMLElement>(".node-pill").forEach((b) => {
+  listEl.querySelectorAll<HTMLElement>(".console-graph-nodelist__pill").forEach((b) => {
     if (b.dataset.id === selected) b.setAttribute("aria-current", "true");
     else b.removeAttribute("aria-current");
   });
@@ -1151,10 +1151,10 @@ function renderLegend() {
   // Each legend row is a button that filters to kind:<k> (the CLI query it maps to),
   // so clicking a color isolates that kind - a quick, Obsidian-style filter.
   legendEl.innerHTML = KINDS.filter((k) => counts.has(k)).map((k) =>
-    '<li><button type="button" class="legend-row" data-kind="' + escapeHtml(k) + '" title="Filter to kind:' + escapeHtml(k) + '">' +
-    '<span class="kind-dot k-' + escapeHtml(k) + '"></span>' +
-    escapeHtml(k) + ' <span class="muted">' + counts.get(k) + "</span></button></li>").join("");
-  legendEl.querySelectorAll<HTMLElement>(".legend-row").forEach((b) =>
+    '<li><button type="button" class="console-graph-legend__row" data-kind="' + escapeHtml(k) + '" title="Filter to kind:' + escapeHtml(k) + '">' +
+    '<span class="console-graph-kinddot" data-kind="' + escapeHtml(k) + '"></span>' +
+    escapeHtml(k) + ' <span class="console-graph-legend__count">' + counts.get(k) + "</span></button></li>").join("");
+  legendEl.querySelectorAll<HTMLElement>(".console-graph-legend__row").forEach((b) =>
     b.addEventListener("click", () => {
       const q = "kind:" + b.dataset.kind;
       // Toggle: clicking the active kind filter clears it.
@@ -1251,8 +1251,8 @@ function replaceGraph(data: any, statusMsg: string) {
   groups.splice(0, groups.length);
   projectionUnfolded = false;
   projectionSet = null;
-  document.querySelectorAll<HTMLElement>(".view-btn").forEach((b) => b.classList.remove("view-active"));
-  document.querySelectorAll<HTMLElement>(".preset-btn").forEach((b) => b.classList.remove("preset-active"));
+  document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => b.removeAttribute("data-active"));
+  document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => b.removeAttribute("data-active"));
   renderViewCommand(null, null, null);
   // Apply projection: show only projects by default if the count is small.
   const ps = buildProjectionSet();
@@ -1305,7 +1305,7 @@ function syncLayoutToggle() {
     btn.textContent = layoutMode === "layered" ? "Force" : "Layered";
     btn.title = layoutMode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
   }
-  const forceControls = document.querySelector<HTMLElement>(".force-controls");
+  const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
   if (forceControls) forceControls.hidden = (layoutMode === "layered");
 }
 
@@ -1541,8 +1541,8 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   query = "";
 
   // Sync button active state and show the clear button.
-  document.querySelectorAll<HTMLElement>(".view-btn").forEach((b) => {
-    b.classList.toggle("view-active", b.dataset.view === name);
+  document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => {
+    b.toggleAttribute("data-active", b.dataset.view === name);
   });
   const cvb = el("clear-view-btn");
   if (cvb) cvb.hidden = false;
@@ -1627,7 +1627,7 @@ function clearView() {
   activeView = null;
   viewNode = null;
   viewNodeTo = null;
-  document.querySelectorAll<HTMLElement>(".view-btn").forEach((b) => b.classList.remove("view-active"));
+  document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => b.removeAttribute("data-active"));
   const cvb = el("clear-view-btn");
   if (cvb) cvb.hidden = true;
   renderViewCommand(null, null, null);
@@ -1750,10 +1750,10 @@ function renderViewCommand(name: string | null, nodeId?: string | null, nodeTo?:
   const args = cmd.slice(verb.length).trim();
   wrap.hidden = false;
   wrap.innerHTML =
-    '<span class="ps1" aria-hidden="true">' + escapeHtml(verb) + ' <span class="chevron">&#10095;</span></span>' +
-    '<span class="view-cmd-args">' + escapeHtml(args) + '</span>' +
-    '<button type="button" class="cmd-copy" title="Copy this command to the clipboard" aria-label="Copy command">&#10697;</button>';
-  wrap.querySelector<HTMLElement>(".cmd-copy")!.addEventListener("click", () => {
+    '<span class="console-graph-prompt__ps1" aria-hidden="true">' + escapeHtml(verb) + ' <span class="console-graph-prompt__chevron">&#10095;</span></span>' +
+    '<span class="console-graph-views__cmdargs">' + escapeHtml(args) + '</span>' +
+    '<button type="button" class="console-graph-views__copy" title="Copy this command to the clipboard" aria-label="Copy command">&#10697;</button>';
+  wrap.querySelector<HTMLElement>(".console-graph-views__copy")!.addEventListener("click", () => {
     navigator.clipboard.writeText(cmd).then(() => {
       setStatus("Copied: " + cmd);
     });
@@ -1812,9 +1812,9 @@ function renderSuggestions() {
   if (!chips.length) { wrap.hidden = true; return; }
   wrap.hidden = false;
   wrap.innerHTML = chips.map((c, i) =>
-    '<button type="button" class="suggestion-chip" data-i="' + i + '">' + escapeHtml(c.text) + '</button>'
+    '<button type="button" class="console-graph-sidebar__suggestion" data-i="' + i + '">' + escapeHtml(c.text) + '</button>'
   ).join("");
-  wrap.querySelectorAll<HTMLElement>(".suggestion-chip").forEach((b) => {
+  wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
     b.addEventListener("click", () => {
       chips[+b.dataset.i!].action();
       wrap.hidden = true; // hide after first use
@@ -1914,13 +1914,13 @@ function applyPreset(presetId: string) {
   if (activePreset === presetId) {
     // Toggle off.
     activePreset = null;
-    document.querySelectorAll<HTMLElement>(".preset-btn").forEach((b) => b.classList.remove("preset-active"));
+    document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => b.removeAttribute("data-active"));
     renderGroups(); draw(); updateHash();
     return;
   }
   activePreset = presetId;
-  document.querySelectorAll<HTMLElement>(".preset-btn").forEach((b) =>
-    b.classList.toggle("preset-active", b.dataset.preset === presetId));
+  document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) =>
+    b.toggleAttribute("data-active", b.dataset.preset === presetId));
   if (!graph.relIndex) graph.relIndex = relationIndex();
   const newGroups = preset.groups();
   for (const g of newGroups) {
@@ -2161,9 +2161,12 @@ function updateLiveBadge() {
   if (badge) {
     if (liveHost) {
       const ws = liveWorkspaceName || liveHost;
-      badge.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
+      const content = badge.querySelector<HTMLElement>(".pf-v6-c-label__content");
+      if (content) content.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
       badge.hidden = false;
-      badge.className = liveConnected ? "live-badge live-badge-connected" : "live-badge live-badge-disconnected";
+      // Blue PF Label when connected, grey while (re)connecting or disconnected.
+      badge.classList.toggle("pf-m-blue", liveConnected);
+      badge.classList.toggle("pf-m-grey", !liveConnected);
     } else {
       badge.hidden = true;
     }
@@ -2194,7 +2197,8 @@ function updateSnapshotBadge(source: string | null) {
   const badge = el("snapshot-badge");
   if (!badge) return;
   if (source === "local" || source === "loopback") {
-    badge.textContent = "snapshot: " + source;
+    const content = badge.querySelector<HTMLElement>(".pf-v6-c-label__content");
+    if (content) content.textContent = "snapshot: " + source;
     badge.hidden = false;
   } else {
     badge.hidden = true;
@@ -2483,18 +2487,18 @@ function bootWireEvents() {
     });
   }
 
-  // Wire view buttons (.view-btn). Blast and trace need node-picking mode.
-  document.querySelectorAll<HTMLElement>(".view-btn").forEach((b) => {
+  // Wire view buttons (.console-graph-views__chip). Blast and trace need node-picking mode.
+  document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => {
     b.addEventListener("click", () => {
       const v = b.dataset.view!;
-      if ((b as HTMLButtonElement).disabled || b.classList.contains("view-disabled")) return;
+      if ((b as HTMLButtonElement).disabled || b.hasAttribute("data-disabled")) return;
       if (activeView === v) { clearView(); return; }
       if (v === "blast" || v === "trace") {
         // Enter picking mode: status tells user to click a node.
         activeView = v;
         viewNode = null;
         viewNodeTo = null;
-        document.querySelectorAll<HTMLElement>(".view-btn").forEach((x) => x.classList.toggle("view-active", x.dataset.view === v));
+        document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((x) => x.toggleAttribute("data-active", x.dataset.view === v));
         renderViewCommand(v, null, null);
         if (v === "blast") setStatus("Click a node to see what breaks if you change it.");
         else setStatus("Click the first node for the path (trace view).");
@@ -2534,17 +2538,18 @@ function bootWireEvents() {
   const legendEl = el("graph-legend");
   if (legendToggle && legendEl) {
     legendToggle.addEventListener("click", () => {
-      const open = legendEl.classList.toggle("legend-open");
+      const open = legendEl.toggleAttribute("data-open");
       legendToggle.setAttribute("aria-expanded", open ? "true" : "false");
     });
   }
 
-  // Lenses (magus graph stats parity): hubs / orphans set the match set.
-  document.querySelectorAll<HTMLElement>(".lens-btn").forEach((b) =>
+  // Lenses (magus graph stats parity): hubs / orphans set the match set. The lens
+  // buttons are marked by their data-lens hook (no presentational class of their own).
+  document.querySelectorAll<HTMLElement>("[data-lens]").forEach((b) =>
     b.addEventListener("click", () => applyLens(b.dataset.lens!)));
 
   // Phase 5: color preset buttons.
-  document.querySelectorAll<HTMLElement>(".preset-btn").forEach((b) => {
+  document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => {
     b.addEventListener("click", () => applyPreset(b.dataset.preset!));
   });
 
@@ -2583,15 +2588,15 @@ function bootWireEvents() {
   installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
 
   // Query-syntax reference: each example runs itself in the filter (teach-by-doing).
-  // Scope to [data-q] so the lens/add-group buttons (which share .q-example for its
+  // Scope to [data-q] so the lens/add-group buttons (which share .console-graph-help__example for its
   // chip styling but carry no data-q) aren't wired as examples.
-  document.querySelectorAll<HTMLElement>(".q-example[data-q]").forEach((b) =>
+  document.querySelectorAll<HTMLElement>(".console-graph-help__example[data-q]").forEach((b) =>
     b.addEventListener("click", () => {
       const q = b.dataset.q ?? "";
       searchEl.value = q;
       applyQuery(q);
       searchEl.focus();
-      document.querySelector<HTMLElement>(".graph-app")!.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      document.querySelector<HTMLElement>(".console-graph-app")!.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }));
 
   // "Copy as Mermaid" toolbar button: emit the current scope as a mermaid diagram.
@@ -2613,7 +2618,7 @@ function bootWireEvents() {
   // Hidden if the browser lacks the Fullscreen API rather than showing a dead
   // button; label + aria-pressed follow fullscreenchange so Esc stays in sync.
   const fsBtn = el("fullscreen-btn");
-  const appEl = document.querySelector<HTMLElement>(".graph-app");
+  const appEl = document.querySelector<HTMLElement>(".console-graph-app");
   if (fsBtn && appEl && appEl.requestFullscreen) {
     fsBtn.addEventListener("click", () => {
       if (document.fullscreenElement) document.exitFullscreen();
