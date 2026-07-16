@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
@@ -133,7 +134,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			return err
 		}
 		listTarget := types.Target{Path: parsedTarget.Path, Name: "ls"}
-		targets, source, err := resolveTargets(ws, listTarget, projectArgs)
+		targets, source, err := resolveTargets(ws, listTarget, projectArgs, clientCwd(ctx))
 		if err != nil {
 			return err
 		}
@@ -145,7 +146,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
-	targets, source, err := resolveTargets(m, parsedTarget, projectArgs)
+	// cwd is the caller's directory: for an adopted run it is the client's, carried on
+	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
+	// on the invocation's journal, so both agree with where the user actually ran.
+	cwd := clientCwd(ctx)
+	targets, source, err := resolveTargets(m, parsedTarget, projectArgs, cwd)
 	if err != nil {
 		return err
 	}
@@ -172,8 +177,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
 	m.LogCharms(strings.Join(charms, ","))
 	if len(targets) == 0 {
-		slog.InfoContext(ctx, "run: no projects selected", slog.String("target", targetName))
-		return nil
+		// Zero targets here means the fan-out found no projects at all in the resolved
+		// workspace - a degenerate or wrong-workspace resolution, not "nothing to do".
+		// (A named target no project serves already errored in filterServedTargets above.)
+		// An adopted run that mis-resolved the client's workspace lands here; fail loudly,
+		// naming the workspace and target, so it can never pass with nothing executed.
+		// m.Root() is the resolved root (the root arg is "" for a local run that walked up).
+		return fmt.Errorf("run: workspace %s has no projects to run target %q", m.Root(), targetName)
 	}
 
 	opts, optsErr := outputOptionsOrDefault()
@@ -238,7 +248,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if targetName == "ci" {
 		trigger = journal.TriggerCI
 	}
-	cwd, _ := os.Getwd()
 	liveBC, stopLive := beginLive(ctx, *live)
 	defer stopLive()
 	// An adopted run (dispatched by the daemon) also feeds the daemon's live-run registry,
@@ -267,8 +276,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 }
 
 // resolveTargets resolves targets from the workspace: by path, explicit args, cwd-scope, or all.
-func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []string) ([]types.Target, string, error) {
-	anchor := cwdAnchor(ws.Root())
+// cwd is the caller's working directory (the client's, for an adopted run - see clientCwd);
+// it anchors relative project args and the cwd-scope lookup. Resolving cwd-scope against the
+// daemon's own os.Getwd() is exactly the transposition that let a daemon adopt a run for an
+// unrelated workspace and pass it vacuously, so the cwd is threaded in rather than read here.
+func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []string, cwd string) ([]types.Target, string, error) {
+	anchor := cwdAnchor(ws.Root(), cwd)
 	if t.Path != "" {
 		resolved, err := resolveProjectArg(t.Path, anchor)
 		if err != nil {
@@ -293,12 +306,12 @@ func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []
 		}
 		return all, "", nil
 	}
-	cwdTargets, found, err := ws.ExpandCwd(t)
-	if err != nil {
-		return nil, "", err
-	}
-	if found {
-		return cwdTargets, "cwd", nil
+	// cwd-scope: run only the project containing the caller's cwd, when it is inside one.
+	// Keyed on the explicit cwd (not ws.ExpandCwd, which reads os.Getwd internally).
+	if cwd != "" {
+		if p, ok := ws.Where(cwd); ok {
+			return []types.Target{{Path: p.Path, Name: t.Name}}, "cwd", nil
+		}
 	}
 	targets, err := ws.ExpandPath(t)
 	return targets, "", err
@@ -392,11 +405,11 @@ func resolveProjectArg(arg, anchor string) (string, error) {
 	return file.Resolve(arg, anchor)
 }
 
-// cwdAnchor returns the working directory as a slash path relative to root.
-// It falls back to "." when the cwd cannot be located.
-func cwdAnchor(root string) string {
-	cwd, err := os.Getwd()
-	if err != nil {
+// cwdAnchor returns cwd as a slash path relative to root, the anchor for
+// resolving relative project args. It falls back to "." when cwd is empty or
+// cannot be made relative to root.
+func cwdAnchor(root, cwd string) string {
+	if cwd == "" {
 		return "."
 	}
 	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
@@ -407,6 +420,22 @@ func cwdAnchor(root string) string {
 		return "."
 	}
 	return filepath.ToSlash(rel)
+}
+
+// clientCwd returns the working directory that scopes this invocation. An adopted
+// run is dispatched inside the long-lived daemon, whose own os.Getwd() is unrelated
+// to (and in a stale daemon may be a deleted) directory; the daemon carries the
+// client's cwd on ctx (proc.CwdFromContext), so prefer it. A plain local run has no
+// ctx cwd and falls back to os.Getwd(). Empty only when neither is available.
+func clientCwd(ctx context.Context) string {
+	if c := proc.CwdFromContext(ctx); c != "" {
+		return c
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return cwd
 }
 
 func targetUsage() error {

@@ -174,7 +174,7 @@ func serverSync(ctx context.Context, args []string) error {
 	if serr != nil || st == nil || st.Mode != "daemon" {
 		return nil
 	}
-	inv, err := proc.SubmitJob(ctx, addr, []string{"graph", "build"})
+	inv, err := proc.SubmitJob(ctx, addr, []string{"graph", "build"}, version)
 	if err != nil {
 		// Best-effort: a hook must not fail a checkout. Swallow and succeed; the daemon
 		// (or a manual `magus graph build`) will catch up.

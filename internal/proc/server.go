@@ -40,6 +40,16 @@ const (
 	cwdCtxKey
 )
 
+// WithRoot returns ctx carrying the client-sent workspace root, readable via RootFromContext.
+func WithRoot(ctx context.Context, root string) context.Context {
+	return context.WithValue(ctx, rootCtxKey, root)
+}
+
+// WithCwd returns ctx carrying the client's working directory, readable via CwdFromContext.
+func WithCwd(ctx context.Context, cwd string) context.Context {
+	return context.WithValue(ctx, cwdCtxKey, cwd)
+}
+
 // RootFromContext returns the workspace root stored by the proc server, or "".
 func RootFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(rootCtxKey).(string); ok {
@@ -148,6 +158,7 @@ func New(opts Options) (*Server, error) {
 		parentCtx:       serverCtx,
 		lim:             lim,
 		version:         opts.Version,
+		gateVersion:     adoptionIdentity(opts.Version),
 		workspaceLister: opts.WorkspaceLister,
 		serviceLister:   opts.ServiceLister,
 		onJobDone:       opts.OnJobDone,
@@ -358,7 +369,8 @@ type service struct {
 	handler         func(ctx context.Context, args []string) error
 	parentCtx       context.Context
 	lim             *cache.Limiter
-	version         string
+	version         string // human-facing display version; surfaced as StatusReply.DaemonVersion
+	gateVersion     string // adoption identity for the version gate (see adoptionIdentity); "" disables the gate
 	workspaceLister func() []Workspace
 	serviceLister   func() []types.StatusService
 	serviceHost     ServiceHost
@@ -369,6 +381,15 @@ type service struct {
 	shutdownFn      func() // called by shutdown handler; set by New to srv.Close
 }
 
+// versionAdmits reports whether a request carrying reqVersion may be adopted by this
+// server. It is the single gate shared by run and submitJob: both the client's reqVersion
+// and the server's gateVersion are adoption identities (see adoptionIdentity), so a match
+// means the two builds are provably the same code. An empty identity on EITHER side
+// disables the check - the "" escape hatch for test injection and pre-versioning clients.
+func (s *service) versionAdmits(reqVersion string) bool {
+	return s.gateVersion == "" || reqVersion == "" || reqVersion == s.gateVersion
+}
+
 func (s *service) run(req RunRequest, reply *RunReply) error {
 	if len(req.Args) > maxArgs {
 		return fmt.Errorf("proc: RunRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
@@ -376,16 +397,15 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 	if req.Protocol != "" && req.Protocol != ProtocolV2 {
 		return ErrProtocolMismatch
 	}
-	// Both-empty intentionally passes (test injection / pre-versioning clients).
-	if s.version != "" && req.Version != "" && req.Version != s.version {
+	if !s.versionAdmits(req.Version) {
 		return ErrVersionMismatch
 	}
 
 	ctx, cancel := context.WithCancel(s.parentCtx)
 	defer cancel()
 
-	ctx = context.WithValue(ctx, rootCtxKey, req.Root)
-	ctx = context.WithValue(ctx, cwdCtxKey, req.Cwd)
+	ctx = WithRoot(ctx, req.Root)
+	ctx = WithCwd(ctx, req.Cwd)
 
 	key := cycleKey(req.Root, req.Cwd, req.Args)
 	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
@@ -460,7 +480,7 @@ func (s *service) submitJob(req JobRequest, reply *JobReply) error {
 	if req.Protocol != "" && req.Protocol != ProtocolV2 {
 		return ErrProtocolMismatch
 	}
-	if s.version != "" && req.Version != "" && req.Version != s.version {
+	if !s.versionAdmits(req.Version) {
 		return ErrVersionMismatch
 	}
 
@@ -496,8 +516,8 @@ func (s *service) submitJob(req JobRequest, reply *JobReply) error {
 
 		ctx, cancel := context.WithCancel(s.parentCtx)
 		defer cancel()
-		ctx = context.WithValue(ctx, rootCtxKey, req.Root)
-		ctx = context.WithValue(ctx, cwdCtxKey, req.Cwd)
+		ctx = WithRoot(ctx, req.Root)
+		ctx = WithCwd(ctx, req.Cwd)
 		ctx = journal.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
 

@@ -36,7 +36,11 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	defer func() { _ = conn.Close() }()
 
 	cwd, _ := os.Getwd()
-	req := RunRequest{Args: args, Version: version, Cwd: cwd, Root: root, Protocol: ProtocolV2}
+	// Send the adoption identity, not the raw display version: a dev build is fingerprinted
+	// from its VCS stamp so it never matches a differently-built dev daemon (see
+	// adoptionIdentity). A stale pre-fix daemon compares this against its stored "unknown"
+	// and mismatches, so the fix fails closed against old daemons too.
+	req := RunRequest{Args: args, Version: adoptionIdentity(version), Cwd: cwd, Root: root, Protocol: ProtocolV2}
 	if err := writeFrame(conn, typeRun, req); err != nil {
 		return 0, fmt.Errorf("proc: forward: write: %w", err)
 	}
@@ -115,8 +119,10 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 // the caller's working directory (computed here, like Forward, so there is no
 // transposition-prone dir argument); the daemon walks up from it to the workspace root.
 // Used by the VCS refresh hook, which must not block a checkout. addr accepts a unix://
-// URL or a path.
-func SubmitJob(ctx context.Context, addr string, args []string) (string, error) {
+// URL or a path. version is the caller's build version; it is sent as an adoption identity
+// (see adoptionIdentity) so a background job is version-gated exactly like a forwarded run
+// - a stale dev daemon will not silently run a fresh client's job with the wrong code.
+func SubmitJob(ctx context.Context, addr string, args []string, version string) (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("proc: job: getwd: %w", err)
@@ -137,7 +143,7 @@ func SubmitJob(ctx context.Context, addr string, args []string) (string, error) 
 	}
 	_ = conn.SetDeadline(deadline)
 
-	req := JobRequest{Magic: JobMagic, Args: args, Protocol: ProtocolV2, Cwd: cwd}
+	req := JobRequest{Magic: JobMagic, Args: args, Version: adoptionIdentity(version), Protocol: ProtocolV2, Cwd: cwd}
 	if err := writeFrame(conn, typeJob, req); err != nil {
 		return "", fmt.Errorf("proc: job: write: %w", err)
 	}

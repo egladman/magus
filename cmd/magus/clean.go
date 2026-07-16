@@ -44,7 +44,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	targets, _, err := resolveTargets(m, types.Target{Name: "clean"}, projectArgs)
+	targets, _, err := resolveTargets(m, types.Target{Name: "clean"}, projectArgs, clientCwd(ctx))
 	if err != nil {
 		return err
 	}

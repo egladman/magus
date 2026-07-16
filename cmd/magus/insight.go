@@ -125,7 +125,7 @@ func insightSetup(ctx context.Context, root, lens, def string, args []string,
 	if wholeWorkspace {
 		opts.Dir = ""
 	} else {
-		opts.Dir = filepath.Join(root, cwdAnchor(root))
+		opts.Dir = filepath.Join(root, cwdAnchor(root, clientCwd(ctx)))
 	}
 	return a, opts, outOpts, nil
 }

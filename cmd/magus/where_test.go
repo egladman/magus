@@ -86,12 +86,14 @@ func TestCwdAnchor(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sub, 0o755), "mkdir")
 
 	t.Run("subdir resolves to slash-relative anchor", func(t *testing.T) {
-		t.Chdir(sub)
-		assert.Equal(t, "web/studio", cwdAnchor(root))
+		assert.Equal(t, "web/studio", cwdAnchor(root, sub))
 	})
 
 	t.Run("root resolves to dot", func(t *testing.T) {
-		t.Chdir(root)
-		assert.Equal(t, ".", cwdAnchor(root))
+		assert.Equal(t, ".", cwdAnchor(root, root))
+	})
+
+	t.Run("empty cwd falls back to dot", func(t *testing.T) {
+		assert.Equal(t, ".", cwdAnchor(root, ""))
 	})
 }

@@ -285,7 +285,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if target == "ci" {
 		trigger = journal.TriggerCI
 	}
-	cwd, _ := os.Getwd()
+	// The client's cwd (carried on ctx for an adopted affected run), not the daemon's
+	// process cwd, so the invocation's journal records where the user actually ran.
+	cwd := clientCwd(ctx)
 	liveBC, stopLive := beginLive(ctx, *live)
 	defer stopLive()
 	// An adopted affected run (dispatched by the daemon) also feeds the daemon's live-run
