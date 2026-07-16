@@ -18,6 +18,7 @@ import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane } from "./tiling";
 import { initConsoleSettings } from "../ui/console-settings";
 import { initRefDrawer } from "../ui/ref-drawer";
+import { initAppMenu } from "../ui/app-menu";
 import { persisted } from "../lib/persist";
 import type { PageController, PageModule } from "./page";
 
@@ -215,6 +216,10 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   // Wire the title-bar settings gear (theme is wired separately by theme.js). No-ops if the page
   // did not supply the #settings-btn / #settings-panel markup.
   initConsoleSettings();
+
+  // Wire the title-bar Applications menu (links back to the docs site + playground). No-ops without
+  // the #console-appmenu markup.
+  initAppMenu();
 
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
   // markup. It reads the active surface's [data-legacy-ref] help blocks (refreshed on tab change).

@@ -136,6 +136,12 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
     }
     strip.append(list);
 
+    // DEFERRED: tab overflow scrolling. When the strip is too narrow for every tab (many tabs, a
+    // narrow window, or the reference panel pinned open) the extra tabs are clipped and unreachable.
+    // A first pass added PF scroll-button chevrons over a custom overflow-scroller, but it was reverted
+    // to keep this change focused - revisit as its own task (PF's own pf-m-scrollable list would not
+    // respond to a programmatic scrollBy, so the scroller has to be app-owned; see git history).
+
     // The new-tab affordance: PF's __add slot holding a plain button. The console decides which
     // surface to open via onNew.
     const add = document.createElement("span");

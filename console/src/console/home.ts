@@ -23,7 +23,7 @@ const noSearch: SearchProvider<null> = {
 export function homePage(surfaces: Launchable[], open: (pageId: string) => void): PageModule<null, null> {
   return {
     id: "home",
-    title: "Home",
+    title: "Start",
     async activate(host: HTMLElement): Promise<PageController<null, null>> {
       // data-surface tags the pane; its heading/lede layout is ID-scoped in console.css. The launcher
       // is a PatternFly Gallery of clickable Cards - the [data-open] hook the click handler keys on

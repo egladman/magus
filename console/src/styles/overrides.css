@@ -65,6 +65,14 @@
 #settings-panel .pf-v6-c-menu__content { padding-block: 0.75rem; padding-inline: 0.85rem; }
 #settings-panel .pf-v6-c-form.pf-m-horizontal { --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: auto; }
 #settings-panel .pf-v6-c-form.pf-m-horizontal .pf-v6-c-form__group { align-items: center; grid-column-gap: 0.75rem; }
+
+/* The Applications menu popover (a PF Menu, #console-appmenu) drops from the same title-bar control
+ * group, right-aligned so it stays inside the viewport. Only the POSITION is here; the menu chrome
+ * is PatternFly. */
+#console-appmenu {
+  position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
+  min-width: 11rem; max-width: calc(100vw - 1rem); z-index: 60;
+}
 #settings-panel .pf-v6-c-form-control,
 #settings-panel #theme-cycle { width: 100%; }
 /* theme.js paints the theme-cycle button's icon span with a bare <svg viewBox> (no width/height),

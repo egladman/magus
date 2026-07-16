@@ -281,6 +281,27 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-tabs .pf-v6-c-tabs__item-action-icon { display: inline-flex; align-items: center; justify-content: center; height: auto; line-height: 0; }
 #console-tabs .pf-v6-c-tabs__item-action-icon > svg { display: block; }
 
+/* Active-tab treatment. PF's box variant leaves the current item transparent here (there is no
+   content panel behind the strip to fill it), so the only selection cue was a thin accent line
+   floating on the title bar - it read as debris, not a selected tab. Instead: drop that accent line
+   (PF token -> transparent), give the current tab a raised fill one step lighter than the darker
+   title bar, round its top corners, and brighten its label. Inactive tabs stay flat with a muted
+   label and a quiet hover. This is the native "the selected tab is a raised card" look. */
+#console-tabs { --pf-v6-c-tabs__link--after--BorderColor: transparent; }
+#console-tabs .pf-v6-c-tabs__item {
+  border-top-left-radius: var(--pf-t--global--border--radius--medium);
+  border-top-right-radius: var(--pf-t--global--border--radius--medium);
+}
+#console-tabs .pf-v6-c-tabs__item.pf-m-current {
+  background: var(--pf-t--global--background--color--primary--default);
+}
+#console-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--regular); }
+#console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--subtle); }
+#console-tabs .pf-v6-c-tabs__item:not(.pf-m-current):hover { background: var(--pf-t--global--background--color--secondary--hover, rgba(127, 127, 127, 0.12)); }
+
+/* DEFERRED: tab overflow scroll chevrons + a custom overflow-scroller lived here; reverted to keep
+   the change focused. Revisit tab overflow scrolling as its own task (see tabStrip.ts). */
+
 /* The outlet holds one mounted surface per open tab (a div[data-tab-id]); only the active shows. */
 #console-outlet { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #console-outlet > div { position: absolute; inset: 0; overflow: auto; }

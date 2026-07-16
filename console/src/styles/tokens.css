@@ -12,26 +12,31 @@
  */
 
 :root {
-  /* --- 1. Squarish corners -------------------------------------------------------------
+  /* --- 1. Two-tier corner radius -------------------------------------------------------
      PatternFly builds every component's radius from a small set of global primitives
-     (--...--radius--100..500) plus semantic aliases (small/medium/large/pill/...). Override
-     the primitives to a near-zero 2px and the whole component set (cards, buttons, inputs,
-     tabs, chips) squares up together - no per-component CSS. We also pin the semantic and
-     role aliases directly so nothing slips through a reference chain we did not trace. */
+     (--...--radius--100..500) plus semantic aliases (small/medium/large/pill/...). We do NOT
+     want one uniform radius on everything - that reads flat. Instead two tiers:
+       - interactive controls (buttons, inputs, selects, the theme/gear/close buttons): 6px,
+         clearly rounded, the primary "soft" cue. Set via the action/control role aliases.
+       - containers and passive chrome (cards, menus/popovers, tabs, chips/labels): a much
+         subtler 2-3px so panels stay crisp and the rounded buttons stand out against them.
+     So the primitives/semantic aliases (which cards/menus/chips consume) stay small, and only
+     the action/control role aliases go to 6px. We pin each directly so nothing slips through
+     an untraced reference chain. */
   --pf-t--global--border--radius--100: 2px;
   --pf-t--global--border--radius--200: 2px;
-  --pf-t--global--border--radius--300: 2px;
-  --pf-t--global--border--radius--400: 2px;
-  --pf-t--global--border--radius--500: 2px; /* was 999px (pill) - kill the cylinder */
+  --pf-t--global--border--radius--300: 3px;
+  --pf-t--global--border--radius--400: 3px;
+  --pf-t--global--border--radius--500: 4px; /* was 999px (pill) - crisp rounded rect, not a cylinder */
   --pf-t--global--border--radius--tiny: 2px;
-  --pf-t--global--border--radius--small: 2px;
-  --pf-t--global--border--radius--medium: 2px;
-  --pf-t--global--border--radius--large: 2px;
-  --pf-t--global--border--radius--pill: 2px;
-  --pf-t--global--border--radius--action--default: 2px;
-  --pf-t--global--border--radius--action--plain--default: 2px;
-  --pf-t--global--border--radius--control--default: 2px;
-  --pf-t--global--border--radius--control--form-element: 2px;
+  --pf-t--global--border--radius--small: 3px;
+  --pf-t--global--border--radius--medium: 3px;
+  --pf-t--global--border--radius--large: 4px;
+  --pf-t--global--border--radius--pill: 4px;
+  --pf-t--global--border--radius--action--default: 6px;
+  --pf-t--global--border--radius--action--plain--default: 6px;
+  --pf-t--global--border--radius--control--default: 6px;
+  --pf-t--global--border--radius--control--form-element: 6px;
 
   /* --- 2. System font stack ------------------------------------------------------------
      Point PatternFly's font-family tokens at a system stack so its @font-face RedHat
