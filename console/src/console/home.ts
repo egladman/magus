@@ -1,6 +1,6 @@
 // home.ts - the console's launcher. It is NOT a tab: the console renders it as the outlet's empty
 // state (main.ts) whenever the workspace has zero open tabs (fresh load, or after the last tab is
-// closed). Clicking a card opens that surface as a real tab; with a tab open, the command palette
+// closed). Clicking a card opens that surface as a real tab; with a tab open, the command bar
 // ("Open ...") is how another surface is launched. This module just builds the launcher DOM - a
 // heading, a lede, and a PatternFly Gallery of clickable Cards - and leaves mounting to the console.
 

@@ -25,7 +25,7 @@
  *   Label       - the status-bar chips (#console-demo, #offline-badge)
  *   Menu        - the floating settings popover (#settings-panel) surface
  *   Form/FormControl - the settings-panel controls (poll/host inputs, theme button)
- *   ModalBox + Backdrop + Bullseye - the command palette and keybindings overlays
+ *   ModalBox + Backdrop + Bullseye - the keybindings editor and cheat sheet overlays
  * Card + Gallery (already above) also cover the home launcher and the in-pane launcher. */
 @import "@patternfly/patternfly/components/Label/label.css";
 @import "@patternfly/patternfly/components/Menu/menu.css";

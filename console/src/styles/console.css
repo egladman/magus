@@ -223,7 +223,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    element selectors under them. Styled against PatternFly tokens (not PF component classes). All tab
    controls are role=tab / tabindex spans, so Pico's button theming never applies.
 
-   The title bar: one compact masthead-style row (NOT the standalone site-header) holding the tab strip
+   The title bar: one compact masthead-style row (NOT the standalone site-header) holding the tab bar
    (flex:1) and a right-aligned control group (#console-actions, the settings gear). There is NO brand
    mark - the title bar reads as an app's tab row + its trailing action, not a site nav.
 
@@ -252,7 +252,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-titlebar #console-actions,
 #settings-panel { -webkit-app-region: no-drag; app-region: no-drag; }
 
-/* The tab strip fills the title bar; the trailing control group sits at the right, on the tab row. */
+/* The tab bar fills the title bar; the trailing control group sits at the right, on the tab row. */
 #console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
 
 /* Title-bar-right control group: the settings gear (a PF plain icon Button) centered on the tab row,
@@ -269,7 +269,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    ~30 lines) were removed here so the rebuilt PatternFly Tabs (.pf-v6-c-tabs*) render from PF's
    own classes. Those id+attr selectors out-specify PF's single-class rules, so they had to go for
    the spike; this is exactly the W2 shell rebuild, previewed. The PF strip carries its own ARIA
-   (role=tablist/tab, aria-selected). See tabStrip.ts and PATTERNFLY.md. */
+   (role=tablist/tab, aria-selected). See tabBar.ts and PATTERNFLY.md. */
 #console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 
 /* Vertically center the tab close (x) control on the tab row. PF's tab action button is a plain
@@ -304,7 +304,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current):hover { background: var(--pf-t--global--background--color--secondary--hover, rgba(127, 127, 127, 0.12)); }
 
 /* DEFERRED: tab overflow scroll chevrons + a custom overflow-scroller lived here; reverted to keep
-   the change focused. Revisit tab overflow scrolling as its own task (see tabStrip.ts). */
+   the change focused. Revisit tab overflow scrolling as its own task (see tabBar.ts). */
 
 /* The outlet is the PatternFly Drawer host (#console-refdrawer inside it); the drawer fills the
    main region, its __content (#console-outlet-content) holds one mounted surface per open tab (a
@@ -328,8 +328,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    their contrast in both themes. The content stays capped at 44rem, left-aligned, so the full-bleed
    background reads as a real page. */
 /* Fill the outlet so the launcher's background covers the whole panel - otherwise the surface stops
-   at its content height and the page shows through below it, reading as two different backgrounds. */
-#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 100%; padding: 2.5rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); }
+   at its content height and the page shows through below it, reading as two different backgrounds.
+   A small inset from the outlet edges plus a generous radius (larger than the card tiles' container
+   radius) lets the rounded corners read, so the panel presents as a distinct, inviting rounded
+   surface floating in the outlet rather than a flush square fill. The radius is built from the large
+   token (device-aware via the tokens.css platform gate), doubled so the curve is unmistakable. */
+#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; margin: 0.6rem; padding: 2rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); border-radius: calc(var(--pf-t--global--border--radius--large) * 2); }
 
 /* Launch-the-demo affordance: a quiet icon pill in the launcher's bottom-right that expands to show its
    label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. */
@@ -364,10 +368,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   color: var(--pf-t--global--text--color--subtle);
 }
 
-/* App mode: a dedicated single-surface window (index.html?app=<id>). The tab strip is meaningless
+/* App mode: a dedicated single-surface window (index.html?app=<id>). The tab bar is meaningless
    there - the window IS the app - so hide it; the title bar keeps just its right-aligned actions
    (app drawer, reference, settings), reading as native chrome. main.ts sets data-appmode on the root. */
 :root[data-appmode] #console-tabs { display: none; }
+/* With the tab bar (the flex:1 spacer) hidden, nothing holds #console-actions against the right edge,
+   so it would collapse to the left. Push it back with an auto start-margin to keep the actions
+   right-aligned - matching the shell and the intent above. */
+:root[data-appmode] #console-actions { margin-inline-start: auto; }
 
 /* Launcher cards: taller than a default PF card, an accent-tinted glyph tile up top, a lift on
    hover/focus. The card shell stays PF (pf-v6-c-card pf-m-clickable); these rules add the icon slot
@@ -417,53 +425,101 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives
    ID-scoped in overrides.css alongside the kbd keycap styling.
 
-   The command palette (#command-palette, palette.ts) is NOT a modal: it is a dmenu-style bar - the
+   The command bar (#command-bar, commandBar.ts) is NOT a modal: it is a dmenu-style bar - the
    console's one sanctioned fully-custom component (PatternFly has no dmenu analog), classed per the
-   PATTERNFLY.md formula (console-shell-palette). ONE dense text-height bar pinned over the title bar:
-   an accent prompt block, an inline borderless input, then the matching commands run HORIZONTALLY to
-   its right, clipped at the bar's end (dmenu truncation; arrowing past the edge scrolls the run). The
-   selected item is inverted with the accent - no cards, no shadows, no icons. PF tokens throughout so
-   both themes work; selection state rides data-selected, per the state-is-data-* convention. */
-#command-palette[hidden] { display: none; }
-.console-shell-palette {
+   PATTERNFLY.md formula (console-shell-commandbar). ONE bar pinned over the title bar at its exact
+   height (2.35rem), reading as a soft sheet that descends from the top: rounded bottom corners and a
+   drop shadow, no hard rule. A faint accent "run" prompt cap, an inline borderless input, then the
+   matching command TOKENS (monospace, fuzzy-matched chars highlighted) run HORIZONTALLY to its right,
+   clipped at the bar's end (dmenu truncation; arrowing past the edge scrolls the run), with the
+   selected command's plain-language label previewed at the far right. The selected token is a gentle
+   accent-tinted, rounded, inset pill (not a full-bleed accent slab). PF tokens throughout so both
+   themes work; selection state rides data-selected, per the state-is-data-* convention. */
+#command-bar[hidden] { display: none; }
+.console-shell-commandbar {
   /* Above the PatternFly Drawer content (z-index 100) + panel (200) and the title-bar popovers (300),
      using PF's own z-index scale so the chrome layers stay consistent with the framework. */
   position: fixed; top: 0; left: 0; right: 0; z-index: var(--pf-t--global--z-index--400);
   display: flex; align-items: stretch;
-  height: 1.9rem;
-  font-size: 0.8rem;
+  /* Match the title bar it drops over exactly (#console-titlebar is 2.35rem) so the descending sheet
+     covers it cleanly rather than leaving a sliver. */
+  height: 2.35rem;
+  font-size: 0.82rem;
   background: var(--pf-t--global--background--color--secondary--default);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  /* Square and flush to the top/side edges - rounding the bottom corners exposed the title bar
+     underneath, so the bar stays a clean full-width sheet. A drop shadow (not a hard rule) is what
+     lifts it off the title bar it covers. overflow:hidden keeps the prompt cap and selection pills
+     clipped to the bar. */
+  border: 0;
+  box-shadow: var(--pf-t--global--box-shadow--lg);
+  overflow: hidden;
 }
-.console-shell-palette__prompt {
+.console-shell-commandbar__prompt {
   flex: 0 0 auto; display: inline-flex; align-items: center;
-  padding-inline: 0.6rem;
-  background: var(--console-accent);
-  color: var(--pf-t--global--text--color--on-brand--default);
+  padding-inline: 0.7rem;
+  font-weight: 600;
+  /* Softened from the old solid-accent slab: accent-colored text on a faint accent wash so the "run"
+     cue reads without shouting. */
+  color: var(--console-accent);
+  background: color-mix(in srgb, var(--console-accent) 12%, transparent);
 }
-.console-shell-palette__input {
+.console-shell-commandbar__input {
   flex: 0 1 16rem; min-width: 6rem;
   margin: 0; padding-inline: 0.5rem;
-  font: inherit; color: var(--pf-t--global--text--color--regular);
+  font: inherit; font-family: var(--pf-t--global--font--family--mono); /* you type command paths, not prose */
+  color: var(--pf-t--global--text--color--regular);
   background: transparent; border: 0; outline: none;
 }
-.console-shell-palette__items {
+.console-shell-commandbar__items {
   flex: 1 1 auto; min-width: 0;
   display: flex; align-items: stretch;
   overflow: hidden; /* dmenu: extra matches truncate off the end of the bar */
+  /* Slide-in: at rest (empty input, placeholder showing) the token run sits shifted right, leaving a
+     visible gap after the prompt; the first keystroke sets data-typed and it slides left into its
+     tight position - a swift, carriage-like motion (ease-out, ~180ms). */
+  transform: translateX(1.75rem);
+  transition: transform 0.18s var(--pf-t--global--motion--timing-function--decelerate, ease-out);
 }
-.console-shell-palette__item {
+.console-shell-commandbar__items[data-typed] { transform: translateX(0); }
+@media (prefers-reduced-motion: reduce) {
+  .console-shell-commandbar__items { transform: none; transition: none; }
+}
+.console-shell-commandbar__item {
+  /* A small block margin insets every token from the bar's top/bottom edges so the selection reads as
+     a rounded pill floating in the bar, not a full-height slab. The radius rounds that pill. */
   flex: 0 0 auto; display: inline-flex; align-items: center;
-  margin: 0; padding-inline: 0.6rem;
-  font: inherit; white-space: nowrap; cursor: pointer;
+  margin-block: 0.3rem; padding-inline: 0.55rem;
+  border-radius: var(--pf-t--global--border--radius--medium);
+  font: inherit; font-family: var(--pf-t--global--font--family--mono); /* tokens read as code, not prose */
+  white-space: nowrap; cursor: pointer;
   background: transparent; border: 0;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-shell-palette__item:hover { color: var(--pf-t--global--text--color--regular); }
-.console-shell-palette__item[data-selected] {
-  background: var(--console-accent);
-  color: var(--pf-t--global--text--color--on-brand--default);
+.console-shell-commandbar__item:hover {
+  color: var(--pf-t--global--text--color--regular);
+  background: color-mix(in srgb, var(--console-accent) 8%, transparent);
 }
+.console-shell-commandbar__item[data-selected] {
+  /* Softened from the old full-bleed solid-accent square: a gentle accent-tinted, rounded, inset pill
+     (via the block margin + radius above) with regular text - inviting, not harsh. */
+  background: color-mix(in srgb, var(--console-accent) 20%, transparent);
+  color: var(--pf-t--global--text--color--regular);
+}
+/* Matched characters from the fuzzy filter - accent + bold so the operator sees exactly what the query
+   hit. The selected pill is now a faint tint (not a solid accent fill), so the accent hit stays legible
+   on it - no inverted/underline treatment needed. */
+.console-shell-commandbar__hit { color: var(--console-accent); font-weight: 600; }
+/* Selected-command preview: the plain-language label at the bar's right end, dim and clipped, so the
+   terse token row always has a meaning attached without a per-item description crowding it. */
+.console-shell-commandbar__preview {
+  flex: 0 1 auto; min-width: 0; margin-left: auto;
+  display: inline-flex; align-items: center;
+  padding-inline: 0.7rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--pf-t--global--text--color--subtle);
+  border-left: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-shell-commandbar__preview:empty { border-left: 0; } /* no divider when nothing is selected */
 
 /* --- Reference panel (PatternFly Drawer __panel) -------------------------------------------------
    The Reference panel is #console-refpanel, the pf-v6-c-drawer__panel of the outlet Drawer
@@ -476,6 +532,33 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-refdrawer {
   --pf-v6-c-drawer__panel--md--FlexBasis: var(--console-refdrawer-w);
   --pf-v6-c-drawer__panel--xl--FlexBasis: var(--console-refdrawer-w);
+}
+/* Unpinned = OVERLAY. Pinning adds pf-m-inline (ref-drawer.ts), which lets PF inset the __content so
+   the surfaces reflow narrower (snap-to-fit). Unpinned drops pf-m-inline; PF's CSS-only non-inline
+   drawer then parks the expanded panel off the right edge (the __content yields no width), so pull it
+   back as a right-docked overlay that floats over the full-width content - a quick peek. Desktop only:
+   below 48rem the panel is a full-screen overlay (the block below). The overlay width tracks the same
+   panel flex-basis the splitter drives, so a dragged width still applies. */
+@media (min-width: 48rem) {
+  #console-refdrawer:not(.pf-m-inline).pf-m-expanded > .pf-v6-c-drawer__main { position: relative; }
+  #console-refdrawer:not(.pf-m-inline).pf-m-expanded > .pf-v6-c-drawer__main > #console-refpanel {
+    position: absolute; inset-block: 0; inset-inline-end: 0; inset-inline-start: auto;
+    width: var(--pf-v6-c-drawer__panel--md--FlexBasis, var(--console-refdrawer-w)); max-width: 100%;
+    margin: 0; transform: none;
+    box-shadow: var(--pf-t--global--box-shadow--lg);
+    z-index: var(--pf-t--global--z-index--200);
+  }
+}
+/* Pinned pin button: a POP OF ORANGE marks the depressed/"on" state so a pinned panel is unmistakable.
+   The nonstatus-orange accent (theme-aware alias in tokens.css) sits apart from the brand-blue accent
+   and the status hues, so it reads as "toggled on", not an error. aria-pressed is the state the render
+   sets; the plain button (icon = currentColor) picks up the color, plus a faint same-hue wash. */
+#console-refpin[aria-pressed="true"] {
+  /* The glyph is an SVG on currentColor, and PF's .pf-v6-c-button__icon resets its own color from this
+     token - so drive the icon color var (not just the button color) to actually tint the pin. */
+  --pf-v6-c-button__icon--Color: var(--console-pin-active);
+  color: var(--console-pin-active);
+  background: color-mix(in srgb, var(--console-pin-active) 14%, transparent);
 }
 /* Mobile: below the drawer's own 48rem breakpoint the panel's flex-basis is 100%, so PF's INLINE
    drawer (a flex sibling) has no room to sit it beside the content and it overflows off the right edge
@@ -569,8 +652,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 
 /* Keyboard cheat sheet (cheatsheet.ts): a read-only hold-"?" overlay. Sits above the drawer content
    on the PF modal z-index; the card is a two-column label/chord grid grouped by command area. */
-#console-cheatsheet { z-index: var(--pf-t--global--z-index--400); }
-.console-cheatsheet-box { max-height: min(80vh, 40rem); overflow-y: auto; }
+/* Read-only: the backdrop is click-through so it never blocks the page (and the status-bar toggle
+   button that flips it stays clickable while it is open); the box itself stays interactive so a long
+   list still scrolls. */
+#console-cheatsheet { z-index: var(--pf-t--global--z-index--400); pointer-events: none; }
+.console-cheatsheet-box { max-height: min(80vh, 40rem); overflow-y: auto; pointer-events: auto; }
 .console-cheatsheet-box__body { display: flex; flex-direction: column; gap: 1rem; }
 .console-cheatsheet-box__hint {
   margin: 0; padding: 0.6rem 1.5rem 1rem; font-size: 0.75rem;
@@ -596,3 +682,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   background: var(--pf-t--global--background--color--secondary--default);
   box-shadow: 0 1px 0 var(--pf-t--global--border--color--default);
 }
+
+/* Commands cheat sheet (commandsCheatsheet.ts): a read-only overlay listing EVERY registered command,
+   grouped by area - the token, the prose label, and the chord when one is bound. Shares the keyboard
+   cheat sheet's overlay/box/kbd chrome; only the three-column row grid is authored here. */
+#console-commands { z-index: var(--pf-t--global--z-index--400); pointer-events: none; }
+.console-commands-group__list {
+  display: grid; grid-template-columns: max-content 1fr max-content;
+  align-items: center; gap: 0.35rem 1.5rem; margin: 0;
+}
+.console-commands-token {
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
+  color: var(--console-accent);
+}
+.console-commands-label { font-size: 0.85rem; }
+.console-commands-chord { display: inline-flex; align-items: center; gap: 0.2rem; justify-self: end; }

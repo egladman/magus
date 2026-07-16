@@ -33,6 +33,24 @@
 #console-statusbar .console-shell-statusbar__item { white-space: nowrap; line-height: 1.35; } /* the log viewer's injected zoom control reuses .console-shell-statusbar__item */
 #console-statusbar [data-item] { white-space: nowrap; line-height: 1.35; }
 
+/* Build fingerprint: a quiet monospace chip at the far right (version + commit inline, full detail on
+ * hover via title). Muted and dim by default so it never competes with the live status; brightens on
+ * hover to invite the tooltip. */
+#console-statusbar .console-shell-statusbar__version {
+  white-space: nowrap; line-height: 1.35; cursor: default;
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem;
+  color: var(--pf-t--global--text--color--subtle); opacity: 0.65;
+}
+#console-statusbar .console-shell-statusbar__version:hover { opacity: 1; }
+
+/* Keyboard-shortcuts toggle: a quiet icon button matching the version chip's muted-until-hover weight,
+ * sized down to sit on the slim rail without inflating it. */
+#console-statusbar .console-shell-statusbar__shortcuts {
+  padding: 0 0.15rem; min-height: 0; line-height: 0; border: 0; background: none;
+  color: var(--pf-t--global--text--color--subtle); opacity: 0.65;
+}
+#console-statusbar .console-shell-statusbar__shortcuts:hover { opacity: 1; }
+
 /* Connection liveness item: a leading dot whose color IS the link/health state, read from the
  * console status tokens (theme-aware). The dot follows the text color (currentColor), so each state
  * only sets `color`. Surfaces drive [data-state] / [data-health] on #console-conn (their contract). */
@@ -89,8 +107,8 @@
 
 /* --- Keybindings overlay --------------------------------------------------------------------------
  * A PF ModalBox in a Backdrop+Bullseye. Cap the box to the viewport so a long keybinding table
- * scrolls inside its body rather than the page. (The command palette is a dmenu-style top bar now -
- * console-shell-palette in console.css - not a modal.) */
+ * scrolls inside its body rather than the page. (The command bar is a dmenu-style top bar now -
+ * console-shell-commandbar in console.css - not a modal.) */
 #keybindings-overlay[hidden] { display: none; }
 #keybindings-overlay .pf-v6-c-modal-box { max-height: 80vh; }
 #keybindings-overlay .pf-v6-c-modal-box__body { overflow: auto; min-height: 0; }

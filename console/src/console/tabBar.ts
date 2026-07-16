@@ -1,14 +1,14 @@
-// tabStrip.ts - the DOM tab strip for the console: it renders a Workspace (tabs.ts) as a row
+// tabBar.ts - the DOM tab bar for the console: it renders a Workspace (tabs.ts) as a row
 // of tabs and drives the pure reducers on interaction. The console owns mounting the active surface;
-// this component owns only the strip UI and reports intent through callbacks (select / close).
+// this component owns only the bar UI and reports intent through callbacks (select / close).
 //
 // There is no new-tab ("+") affordance: opening a surface is the launcher empty state (zero tabs) or
-// the command palette ("Open ...") with a tab already open, so the strip is purely the open tabs.
+// the command bar ("Open ...") with a tab already open, so the bar is purely the open tabs.
 //
-// PatternFly (W0 spike): the strip is built from PatternFly's Tabs component classes
+// PatternFly (W0 spike): the bar is built from PatternFly's Tabs component classes
 // (.pf-v6-c-tabs pf-m-box, __list, __item, __link, __item-action) rather than hand-styled
 // spans - no custom presentational classes, only pf-v6-* + the app hooks (data-tab-id) and ARIA
-// (role=tab/tablist, aria-selected). The console mounts strip.el into #console-tabs and only uses the
+// (role=tab/tablist, aria-selected). The console mounts bar.el into #console-tabs and only uses the
 // callbacks below, so the tiling/reconcile logic is untouched: only the emitted classes changed.
 // tabViews stays pure so the Workspace->view mapping is unit-tested; the DOM wiring is a thin layer.
 
@@ -16,27 +16,26 @@ import { type Workspace } from "./tabs";
 import type { Persisted } from "../lib/persist";
 import { bind, scope } from "./view";
 
-// A tab as the strip renders it: identity, label, and whether it is the active surface.
+// A tab as the bar renders it: identity, label, and whether it is the active surface.
 export interface TabView {
   id: string;
   title: string;
   active: boolean;
 }
 
-// tabViews maps a Workspace to the per-tab view models the strip renders. Pure.
+// tabViews maps a Workspace to the per-tab view models the bar renders. Pure.
 export function tabViews(ws: Workspace): TabView[] {
   return ws.tabs.map((t) => ({ id: t.id, title: t.title, active: t.id === ws.activeId }));
 }
 
 // Callbacks the console supplies: a tab became active (mount/show it), or a tab closed (unmount it).
-export interface TabStripCallbacks {
+export interface TabBarCallbacks {
   onSelect(id: string): void;
   onClose(id: string): void;
 }
 
-export interface TabStrip {
+export interface TabBar {
   readonly el: HTMLElement;
-  refresh(): void; // re-render from the current workspace (e.g. after the console opens a tab)
   destroy(): void; // drop the workspace subscription
 }
 
@@ -59,23 +58,23 @@ function closeIcon(): SVGElement {
   return svg;
 }
 
-// createTabStrip builds the strip bound to the persisted workspace: interactions read-modify-write
+// createTabBar builds the bar bound to the persisted workspace: interactions read-modify-write
 // it through the tabs.ts reducers, then re-render. It subscribes to the cell so a change elsewhere
 // (another browser tab, or the console opening a surface) reflects here too.
-export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks): TabStrip {
+export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): TabBar {
   // PatternFly Tabs root: pf-m-box gives the boxed/raised active-tab look the console wants (an app
-  // tab row, not an underline nav). The <ul> is the role=tablist; the strip itself is the PF chrome.
-  const strip = document.createElement("div");
-  strip.className = "pf-v6-c-tabs pf-m-box";
+  // tab row, not an underline nav). The <ul> is the role=tablist; the bar itself is the PF chrome.
+  const bar = document.createElement("div");
+  bar.className = "pf-v6-c-tabs pf-m-box";
 
-  // The strip only REPORTS intent - the console owns the workspace mutations (activate/close) so the
-  // keybindings can drive the same operations. The strip re-renders automatically because it is bound
+  // The bar only REPORTS intent - the console owns the workspace mutations (activate/close) so the
+  // keybindings can drive the same operations. The bar re-renders automatically because it is bound
   // to the persisted workspace (bind(ws, render) below), so a console-side ws.set reflects here.
   const select = (id: string): void => cb.onSelect(id);
   const close = (id: string): void => cb.onClose(id);
 
   function render(): void {
-    strip.replaceChildren();
+    bar.replaceChildren();
 
     const list = document.createElement("ul");
     list.className = "pf-v6-c-tabs__list";
@@ -135,9 +134,9 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
       item.append(link, action);
       list.append(item);
     }
-    strip.append(list);
+    bar.append(list);
 
-    // DEFERRED: tab overflow scrolling. When the strip is too narrow for every tab (many tabs, a
+    // DEFERRED: tab overflow scrolling. When the bar is too narrow for every tab (many tabs, a
     // narrow window, or the reference panel pinned open) the extra tabs are clipped and unreachable.
     // A first pass added PF scroll-button chevrons over a custom overflow-scroller, but it was reverted
     // to keep this change focused - revisit as its own task (PF's own pf-m-scrollable list would not
@@ -149,5 +148,5 @@ export function createTabStrip(ws: Persisted<Workspace>, cb: TabStripCallbacks):
   // subscription so destroy() drops it cleanly (the reference use of the console/view primitives).
   const sc = scope();
   sc.add(bind(ws, render));
-  return { el: strip, refresh: render, destroy: () => sc.dispose() };
+  return { el: bar, destroy: () => sc.dispose() };
 }

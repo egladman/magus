@@ -2,7 +2,7 @@
 // centered card lists every command and its current chord, grouped by area; release the key to
 // dismiss. It is STRICTLY read-only: a teaching aid, deliberately separate from the keybinding
 // editor (keybindings.ts), which is the surface that rebinds and persists. It reads the SAME live
-// command list + merged keymap the palette and the global key listener use, so what it shows is
+// command list + merged keymap the command bar and the global key listener use, so what it shows is
 // always the effective bindings - a rebind in the editor is reflected here on the next reveal.
 
 import { formatChord, type Command, type Keymap } from "./commands";
@@ -20,7 +20,7 @@ export interface Cheatsheet {
   readonly el: HTMLElement;
   show(): void;
   hide(): void;
-  isOpen(): boolean;
+  toggle(): void; // the status-bar button flips it open/closed (the hold-"?" gesture only reveals)
 }
 
 // isTyping mirrors commands.ts's guard: never hijack "?" while the operator is typing it into a
@@ -36,7 +36,7 @@ function isTyping(node: EventTarget | null): boolean {
 export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   const HOLD_MS = 250;
 
-  // PF backdrop + bullseye + modal-box, same family as the palette and keybinding editor, so the
+  // PF backdrop + bullseye + modal-box, same family as the keybinding editor, so the
   // cheat sheet reads as a member of the console's overlay set. It is read-only, so it neither traps
   // focus nor takes pointer events - releasing the key is the only way it goes away.
   const overlay = h("div", "pf-v6-c-backdrop");
@@ -53,7 +53,7 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Keyboard shortcuts"));
   head.append(titleWrap);
   const body = h("div", "pf-v6-c-modal-box__body console-cheatsheet-box__body");
-  const foot = h("p", "console-cheatsheet-box__hint", "Release to dismiss. Open the command palette to rebind.");
+  const foot = h("p", "console-cheatsheet-box__hint", "Press Esc to dismiss. Open the command bar to rebind.");
   box.append(head, body, foot);
   bullseye.append(box);
   overlay.append(bullseye);
@@ -107,6 +107,10 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
     overlay.hidden = true;
     open = false;
   }
+  function toggle(): void {
+    if (open) hide();
+    else show();
+  }
 
   // Hold-to-reveal: a "?" keydown (not while typing) arms a short timer; if the key is still held
   // when it fires, the sheet appears. Any keyup of the chord's keys - "?", "/", or Shift - or a
@@ -127,5 +131,5 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   });
   window.addEventListener("blur", () => { clearTimer(); hide(); });
 
-  return { el: overlay, show, hide, isOpen: () => open };
+  return { el: overlay, show, hide, toggle };
 }

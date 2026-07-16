@@ -302,6 +302,12 @@ export function initRefDrawer(): void {
 
   const render = (): void => {
     drawer.classList.toggle("pf-m-expanded", isOpen);
+    // Pin is what SNAPS THE LAYOUT TO FIT: pinned docks the panel INLINE (pf-m-inline), so PF's own
+    // drawer mechanics inset the __content and the surfaces reflow to the narrower box. Unpinned drops
+    // pf-m-inline, so the panel floats over the content as an overlay (content keeps full width) - a
+    // quick peek that Escape / an outside click dismisses. (PF's CSS-only non-inline drawer parks the
+    // panel off the right edge, so the unpinned overlay position is authored in console.css.)
+    drawer.classList.toggle("pf-m-inline", pinned && isOpen);
     panel.setAttribute("aria-hidden", isOpen ? "false" : "true");
     trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
     pinBtn?.setAttribute("aria-pressed", pinned && isOpen ? "true" : "false");

@@ -1,6 +1,6 @@
 // tabs.test.ts - the workspace reducers are pure, so they are tested without a DOM.
 // Run: `pnpm run test` (esbuild bundles every *.test.ts to node and runs it under
-// node --test). Covers the focus-transfer rules that a tab strip is easy to get wrong.
+// node --test). Covers the focus-transfer rules that a tab bar is easy to get wrong.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

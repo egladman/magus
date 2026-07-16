@@ -77,6 +77,11 @@
      --c-* ones. */
   --console-accent: var(--pf-t--global--color--brand--default);            /* primary/active accent  */
   --console-accent-hover: var(--pf-t--global--color--brand--hover);        /* link/action hover      */
+  /* "Toggled on" accent for a depressed/active control (the Reference panel pin). Deliberately the
+     nonstatus ORANGE - it stands apart from the brand-blue accent and the status hues, so a pinned
+     toggle reads as "on" rather than an error/warning. The plain nonstatus token is NOT theme-aware
+     (see the node palette note below), so it is remapped to the dark ramp under .pf-v6-theme-dark. */
+  --console-pin-active: var(--pf-t--global--color--nonstatus--orange--300);
   --console-status-running: var(--pf-t--global--icon--color--status--info--default);    /* pool busy  (blue)  */
   --console-status-queued: var(--pf-t--global--icon--color--status--danger--default);   /* saturation (red)   */
   --console-status-ok: var(--pf-t--global--icon--color--status--success--default);      /* healthy    (green) */
@@ -145,6 +150,7 @@
    .pf-v6-theme-dark class on <html> for both an explicit dark choice and OS-dark). Same 14 kinds,
    same family/shade pairing, sourced from the dark ramp so the fills read on the dark canvas. */
 :root.pf-v6-theme-dark {
+  --console-pin-active: var(--pf-t--global--dark--color--nonstatus--orange--300);
   --console-node-project: var(--pf-t--global--dark--color--nonstatus--teal--300);
   --console-node-file: var(--pf-t--global--dark--color--nonstatus--teal--200);
   --console-node-target: var(--pf-t--global--dark--color--nonstatus--blue--300);

@@ -1,12 +1,12 @@
 // commands.ts - the console's single command surface and its keybinding engine. Every console
 // action (toggle raw view, fold all, focus the filter, split a pane, close a tab) is registered
-// here as a named command; menus, the tab strip, a future palette, and keybindings all dispatch
+// here as a named command; menus, the tab bar, the command bar, and keybindings all dispatch
 // through this one map, so an action is defined once and bound once. The design is borrowed from
 // Tack's registerCommand/dispatchCommand + flat keymap record, re-expressed in the console's
 // idioms. Everything except installKeybindings' single listener is a pure function (the registry
 // map, chord normalization, keymap merge, and command resolution), unit-tested without a browser.
 
-// A command: a stable id, a human label for menus/palette, an optional group for ordering, and
+// A command: a stable id, a human label for menus/command bar, an optional group for ordering, and
 // the handler. arg carries an optional payload (e.g. a direction for a "focus pane" command).
 export interface Command {
   id: string;
@@ -43,7 +43,7 @@ export function unregisterCommand(id: string): void {
 }
 
 // dispatchCommand runs a registered command by id, returning whether one was found. Menus, the
-// tab strip, the palette, and the keybinding listener all funnel through here.
+// tab bar, the command bar, and the keybinding listener all funnel through here.
 export function dispatchCommand(id: string, arg?: unknown): boolean {
   const cmd = registry.get(id);
   if (!cmd) return false;
@@ -51,7 +51,7 @@ export function dispatchCommand(id: string, arg?: unknown): boolean {
   return true;
 }
 
-// listCommands returns the registered commands, for a palette or a menu/shortcuts view.
+// listCommands returns the registered commands, for a command bar or a menu/shortcuts view.
 export function listCommands(): Command[] {
   return [...registry.values()];
 }
@@ -156,7 +156,7 @@ const KEY_LABELS: Record<string, string> = {
 };
 
 // formatChord renders a stored chord ("mod+shift+k") for display ("Cmd+Shift+K" on macOS,
-// "Ctrl+Shift+K" elsewhere) - what the command palette and a keybinding editor show beside a command.
+// "Ctrl+Shift+K" elsewhere) - what the command bar and a keybinding editor show beside a command.
 // Pure and platform-parameterized (mac passed in) so it is testable without a navigator. An empty
 // chord (deliberately unbound) renders as "".
 export function formatChord(chord: Chord, mac: boolean): string {

@@ -1,13 +1,13 @@
 // keybindings.ts - the keybinding editor: a table of the console's commands, each with its current
 // chord and controls to rebind, disable, or reset it. It edits the ONE persisted "keymap" cell that
-// installKeybindings and the palette read live, so a rebind takes effect immediately - no save step.
-// It is an integrated modal OVERLAY (a sibling of the command palette), not a page/tab: a keybinding
+// installKeybindings and the command bar read live, so a rebind takes effect immediately - no save step.
+// It is an integrated modal OVERLAY (a sibling of the command bar), not a page/tab: a keybinding
 // editor is a quick, transient dialog you summon over your work, not a lens you keep parked in a tab.
 // The row model (keybindingRows) is pure and unit-tested; the capture/DOM below is a thin layer over
 // the commands.ts chord helpers.
 //
 // Scope: it edits the CONSOLE's own commands (the ones with a known default in CONSOLE_KEYMAP - tabs,
-// panes, the palette). Surface-level bindings (a log viewer's own keys) live in their bundles and are
+// panes, the command bar). Surface-level bindings (a log viewer's own keys) live in their bundles and are
 // out of scope here; this stays a bounded, honest editor rather than a half-built global one.
 
 import {
@@ -50,11 +50,10 @@ export interface KeybindingsOverlay {
   readonly el: HTMLElement;
   open(): void;
   close(): void;
-  isOpen(): boolean;
 }
 
-// createKeybindingsOverlay builds the editor as a modal overlay (the same family as the command
-// palette: a centered box over a dimmed backdrop). It is created once and appended to the body; open()
+// createKeybindingsOverlay builds the editor as a modal overlay (the same family as the cheat
+// sheet: a centered box over a dimmed backdrop). It is created once and appended to the body; open()
 // paints the table from the live keymap and subscribes for outside edits, close() tears the capture and
 // subscription down. Edits write straight through to the shared keymap cell, so every change is live.
 export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOverlay {
@@ -63,7 +62,7 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   let unbind: (() => void) | null = null; // active capture listener teardown
   let unsub: (() => void) | null = null; // keymap subscription, live only while open
 
-  // PatternFly (W2): a ModalBox centered in a Backdrop+Bullseye, matching the command palette. The
+  // PatternFly (W2): a ModalBox centered in a Backdrop+Bullseye, matching the cheat sheet. The
   // overlay id, role=dialog/aria-modal, the [data-kbBox]/[data-kbClose]/[data-rows] hooks, and the
   // capture/keydown behavior are all preserved; only the shell chrome is PatternFly. The row grid has
   // no PF component, so it stays ID-scoped in overrides.css (like the status bar).
@@ -214,5 +213,5 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   // fills the backdrop, so test containment against the box rather than an exact overlay-target match.
   overlay.addEventListener("pointerdown", (ev) => { if (!box.contains(ev.target as Node)) close(); });
 
-  return { el: overlay, open, close, isOpen: () => !overlay.hidden };
+  return { el: overlay, open, close };
 }

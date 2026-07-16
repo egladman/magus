@@ -131,7 +131,7 @@ export interface StatusView {
   // Shared services the daemon is hosting right now (deduped across the whole daemon, kept warm
   // between runs). Empty when none are held.
   services: ServiceView[];
-  magusVersion: string;
+  magusVersion: string;      // the daemon binary's version (status BuildInfo.version)
   daemonVersion: string;
 }
 
@@ -202,7 +202,7 @@ export function mapStatus(st: Status): StatusView {
       ports: sv.port || [], state: sv.state || "", dependents: sv.dependents || 0,
       startedAt: sv.startedAt,
     })),
-    magusVersion: st.magusVersion || "",
+    magusVersion: st.build?.version || "",
     daemonVersion: (pool && pool.daemonVersion) || "",
   };
 }

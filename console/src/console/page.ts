@@ -1,7 +1,7 @@
 // page.ts - the console "surface" contract. A surface is a thing you can open in a
 // tab or a tiling pane (dashboard, graph, logs). The console drives these interfaces;
 // each surface implements them. This file is PURE TYPES - no runtime, erased at build
-// - so it is the seam the tab strip (tabs.ts), the tiling layout (tiling.ts), and the
+// - so it is the seam the tab bar (tabs.ts), the tiling layout (tiling.ts), and the
 // shared search box are written against before any surface implements it.
 //
 // Two generics per surface: S is the surface's own state type, Q its search-query

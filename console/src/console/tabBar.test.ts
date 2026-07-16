@@ -1,9 +1,9 @@
-// tabStrip.test.ts - the pure Workspace->view mapping the tab strip renders from. The DOM wiring
+// tabBar.test.ts - the pure Workspace->view mapping the tab bar renders from. The DOM wiring
 // needs a browser; tabViews is pure and runs under node. Run: `pnpm run test`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tabViews } from "./tabStrip";
+import { tabViews } from "./tabBar";
 import { openTab, emptyWorkspace } from "./tabs";
 
 test("tabViews maps every tab and marks exactly the active one", () => {

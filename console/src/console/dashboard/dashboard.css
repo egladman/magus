@@ -209,7 +209,6 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-service__state[data-state="idle"] { color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-row__empty { font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); margin: 0.2rem 0 0; }
 
-.console-dashboard-versions { display: flex; gap: 1rem; font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); padding: 0.2rem 0.1rem; }
 
 /* Attention hero: the board headline, first in the panels grid and never collapsed. A verdict +
    detail on the left, three loud counts on the right; the left accent rule and the verdict/count

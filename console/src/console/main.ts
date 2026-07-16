@@ -1,5 +1,5 @@
 // main.ts - the console composition root and SPA-island entry. The page supplies three slots - the
-// tab strip host (#console-tabs), the content outlet (#console-outlet), and the status-bar footer
+// tab bar host (#console-tabs), the content outlet (#console-outlet), and the status-bar footer
 // (#console-statusbar) - and this wires them: it mounts one surface per open tab (each kept in the
 // DOM and hidden when inactive, so switching is instant and closing tears down), and swaps the active
 // tab's status bar into the footer so the bottom bar is PER-TAB. The active set is the persisted
@@ -9,19 +9,21 @@
 // (home.ts) is NOT a tab - it is the outlet's empty state, shown whenever zero tabs are open.
 
 import { openTab, closeTab, setActive, setLayout, workspaceStore, type TabState } from "./tabs";
-import { createTabStrip } from "./tabStrip";
+import { createTabBar } from "./tabBar";
 import { buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
-import { registerCommand, dispatchCommand, listCommands, installKeybindings, mergeKeymap, isMac, type Keymap } from "./commands";
-import { createPalette } from "./palette";
+import { registerCommand, dispatchCommand, listCommands, installKeybindings, mergeKeymap, formatChord, isMac, type Keymap } from "./commands";
+import { createCommandBar } from "./commandBar";
 import { createKeybindingsOverlay } from "./keybindings";
 import { createCheatsheet } from "./cheatsheet";
+import { createCommandsCheatsheet } from "./commandsCheatsheet";
 import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane } from "./tiling";
 import { initConsoleSettings } from "../ui/console-settings";
 import { initRefDrawer } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { persisted } from "../lib/persist";
+import { parseHash, wantsDemo, validateLiveHost, getLiveToken, authHeaders } from "../lib/daemon";
 import type { PageController, PageModule } from "./page";
 
 // The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
@@ -39,8 +41,8 @@ const CONSOLE_KEYMAP: Keymap = {
   "console.pane.focusDown": "alt+j",
   "console.pane.focusUp": "alt+k",
   "console.pane.focusRight": "alt+l",
-  // The command palette: one searchable list of every command (and its chord).
-  "console.palette.open": "mod+k",
+  // The command bar: one searchable list of every command (and its chord).
+  "console.commandBar.open": "mod+k",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 
@@ -65,7 +67,7 @@ interface Mounted { host: HTMLElement; status: HTMLElement; tile: TileView; }
 function pfLabel(id: string, colorMod: string, text: string): HTMLElement {
   const label = document.createElement("span");
   label.id = id;
-  label.className = "pf-v6-c-label pf-m-compact pf-m-outline " + colorMod;
+  label.className = ("pf-v6-c-label pf-m-compact pf-m-outline " + colorMod).trim();
   label.hidden = true;
   label.setAttribute("aria-live", "polite");
   const content = document.createElement("span");
@@ -76,6 +78,86 @@ function pfLabel(id: string, colorMod: string, text: string): HTMLElement {
   content.append(txt);
   label.append(content);
   return label;
+}
+
+// The status bar shows the connected daemon's build: its version inline, the full fingerprint on
+// hover. Read from GET /api/v1/status (build_info) - the running binary reports its own identity, so
+// the bar reflects the daemon you are talking to. In the daemon-free demo it shows a demo value; with
+// no daemon and no demo the chip stays hidden. Cached once and applied to every tab's status bar.
+let buildVersion: string | null = null;
+let buildFingerprint = "";
+
+function fillVersionChip(el: HTMLElement): void {
+  if (!buildVersion) return;
+  el.textContent = buildVersion;
+  el.title = buildFingerprint || "magus " + buildVersion;
+  el.hidden = false;
+}
+
+function setBuild(version: string, fingerprint: string): void {
+  if (!version) return;
+  buildVersion = version;
+  buildFingerprint = fingerprint;
+  document.querySelectorAll<HTMLElement>("[data-version-chip]").forEach(fillVersionChip);
+}
+
+function loadBuildInfo(): void {
+  const params = parseHash();
+  if (wantsDemo(params)) { setBuild("v1.4.2", "magus v1.4.2 (a1b2c3d) built 2026-07-16T00:00:00Z"); return; }
+  const host = params.live ? validateLiveHost(params.live) : null;
+  if (!host) return;
+  fetch("http://" + host + "/api/v1/status", { headers: authHeaders(getLiveToken()) })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((st) => { if (st?.build_info?.version) setBuild(st.build_info.version, st.build_info.fingerprint || ""); })
+    .catch(() => {});
+}
+
+// keyboardIcon returns the status-bar shortcuts glyph as an inline SVG (keys row over a space bar),
+// built via createElementNS to match the console's icon convention (no innerHTML, themes on currentColor).
+function keyboardIcon(): SVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.6");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const rect = document.createElementNS(NS, "rect");
+  rect.setAttribute("x", "2.5");
+  rect.setAttribute("y", "6");
+  rect.setAttribute("width", "19");
+  rect.setAttribute("height", "12");
+  rect.setAttribute("rx", "2");
+  const keys = document.createElementNS(NS, "path");
+  keys.setAttribute("d", "M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8");
+  svg.append(rect, keys);
+  return svg;
+}
+
+// commandsIcon returns the status-bar "all commands" glyph as an inline SVG: a command-prompt ">_"
+// (a chevron over an underscore caret), distinct from the keyboard glyph beside it so the two footer
+// toggles read apart. Built via createElementNS to match the console's icon convention (no innerHTML,
+// themes on currentColor).
+function commandsIcon(): SVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.6");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const prompt = document.createElementNS(NS, "path");
+  prompt.setAttribute("d", "M5 8l4 4-4 4M12 16h7");
+  svg.append(prompt);
+  return svg;
 }
 
 // makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
@@ -99,7 +181,7 @@ function makeStatusBar(): HTMLElement {
   const conn = document.createElement("span");
   conn.id = "console-conn"; conn.setAttribute("aria-live", "polite");
   conn.textContent = "not connected";
-  left.append(conn, pfLabel("console-demo", "pf-m-blue", "Demo"));
+  left.append(conn, pfLabel("console-demo", "", "demo"));
   const right = document.createElement("div");
   right.dataset.cluster = ""; right.className = "console-shell-statusbar__right";
   for (const id of ["console-count", "console-observing"] as const) {
@@ -107,11 +189,51 @@ function makeStatusBar(): HTMLElement {
     s.id = id; s.dataset.item = ""; s.hidden = true; s.setAttribute("aria-live", "polite");
     right.append(s);
   }
+  // Keyboard-shortcuts toggle: a quiet icon button that flips the cheat sheet (the same overlay the
+  // hold-"?" gesture reveals). data-cheatsheet-toggle is the hook; startConsole wires ONE delegated
+  // click on the footer so every tab's button (built here) drives the single shared cheat sheet.
+  const shortcuts = document.createElement("button");
+  shortcuts.type = "button";
+  shortcuts.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__shortcuts";
+  shortcuts.dataset.cheatsheetToggle = "";
+  shortcuts.setAttribute("aria-label", "Keyboard shortcuts");
+  shortcuts.title = "Keyboard shortcuts";
+  const shortcutsIcon = document.createElement("span");
+  shortcutsIcon.className = "pf-v6-c-button__icon";
+  shortcutsIcon.append(keyboardIcon());
+  shortcuts.append(shortcutsIcon);
+  right.append(shortcuts);
+
+  // All-commands toggle: a sibling quiet icon button, immediately next to the keyboard one, that flips
+  // the commands cheat sheet (the full command catalogue, distinct from the chorded keyboard sheet).
+  // data-commands-toggle is the hook; startConsole wires ONE delegated footer click so every tab's
+  // button drives the single shared overlay. Reuses the shortcuts button's muted footer styling.
+  const commands = document.createElement("button");
+  commands.type = "button";
+  commands.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__shortcuts";
+  commands.dataset.commandsToggle = "";
+  commands.setAttribute("aria-label", "All commands");
+  commands.title = "All commands";
+  const commandsIconWrap = document.createElement("span");
+  commandsIconWrap.className = "pf-v6-c-button__icon";
+  commandsIconWrap.append(commandsIcon());
+  commands.append(commandsIconWrap);
+  right.append(commands);
+
+  // Build fingerprint, far-right and quiet: version + commit inline, full detail on hover. Hidden
+  // until version.json loads (fills from the cache if it already has).
+  const ver = document.createElement("span");
+  ver.className = "console-shell-statusbar__version";
+  ver.dataset.versionChip = "";
+  ver.hidden = true;
+  fillVersionChip(ver);
+  right.append(ver);
   bar.append(left, right);
   return bar;
 }
 
-export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, statusHost: HTMLElement): void {
+export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statusHost: HTMLElement): void {
+  loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   const ws = workspaceStore();
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted tile + status bar
 
@@ -203,8 +325,8 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     return (id && mounts.get(id)?.tile) || null;
   }
 
-  // The console owns the workspace mutations (the strip only reports intent, so keybindings drive the
-  // same ops). activateTab records the active tab (the strip re-renders via its ws binding) then
+  // The console owns the workspace mutations (the bar only reports intent, so keybindings drive the
+  // same ops). activateTab records the active tab (the bar re-renders via its ws binding) then
   // reveals it; closeTabById removes a tab and reveals whatever the reducer chose next.
   function activateTab(id: string): void {
     ws.set(setActive(ws.get(), id));
@@ -217,7 +339,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     if (next.activeId) reveal(next.activeId);
     else show(null);
   }
-  // cycleTab moves to the next (+1) or previous (-1) tab, wrapping around the strip.
+  // cycleTab moves to the next (+1) or previous (-1) tab, wrapping around the bar.
   function cycleTab(dir: 1 | -1): void {
     const cur = ws.get();
     if (cur.tabs.length < 2) return;
@@ -226,11 +348,11 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     activateTab(cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length].id);
   }
 
-  const strip = createTabStrip(ws, {
+  const bar = createTabBar(ws, {
     onSelect: (id) => activateTab(id),
     onClose: (id) => closeTabById(id),
   });
-  stripHost.append(strip.el);
+  tabBarHost.append(bar.el);
 
   // Wire the title-bar settings gear (theme is wired separately by theme.js). No-ops if the page
   // did not supply the #settings-btn / #settings-panel markup.
@@ -247,7 +369,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
   // The listener skips while typing in a field (see commands.ts), so it never eats filter input.
   // Opening a surface is a command per surface (group "Open"): the launcher's cards cover the empty
-  // state, and once a tab is open the command palette is how another surface is launched. Each opens
+  // state, and once a tab is open the command bar is how another surface is launched. Each opens
   // (or focuses, if already open) that single-instance surface as a tab.
   for (const s of SURFACES) {
     registerCommand({ id: "console.open." + s.pageId, label: "Open " + s.label, group: "Open", run: () => open(s.pageId) });
@@ -269,20 +391,29 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   registerCommand({ id: "console.pane.focusUp", label: "Focus pane up", group: "Panes", run: () => activeTile()?.focus("up") });
   registerCommand({ id: "console.pane.focusRight", label: "Focus pane right", group: "Panes", run: () => activeTile()?.focus("right") });
 
-  // The command palette: a searchable overlay over every registered command. Register it AFTER the
+  // The command bar: a searchable overlay over every registered command. Register it AFTER the
   // other commands so it lists them; it reads the live command list + merged keymap on each open.
-  const palette = createPalette({
+  const commandBar = createCommandBar({
     commands: listCommands,
     keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
     mac: isMac(),
     onRun: (id) => dispatchCommand(id),
   });
-  document.body.append(palette.el);
-  registerCommand({ id: "console.palette.open", label: "Command palette", group: "General", run: () => palette.open() });
+  document.body.append(commandBar.el);
+  registerCommand({ id: "console.commandBar.open", label: "Command bar", group: "General", run: () => commandBar.open() });
 
-  // The keybinding editor is an integrated modal overlay (a sibling of the palette), not a tab. It
+  // The title-bar trigger (index.html #console-commandbar-btn) opens the same command bar, so it is
+  // discoverable without the chord. Stamp the effective chord into the tooltip so it also teaches it.
+  const commandBarBtn = document.getElementById("console-commandbar-btn");
+  if (commandBarBtn) {
+    commandBarBtn.addEventListener("click", () => commandBar.open());
+    const chord = formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())["console.commandBar.open"] ?? "", isMac());
+    if (chord) commandBarBtn.title = "Command bar (" + chord + ")";
+  }
+
+  // The keybinding editor is an integrated modal overlay (a sibling of the command bar), not a tab. It
   // edits the console's own commands (those with a CONSOLE_KEYMAP default) against the shared keymap
-  // cell. Built here AFTER the palette command is registered so it appears among the editable rows.
+  // cell. Built here AFTER the command bar command is registered so it appears among the editable rows.
   const keybindings = createKeybindingsOverlay({
     commands: listCommands().filter((c) => Object.prototype.hasOwnProperty.call(CONSOLE_KEYMAP, c.id)),
     defaults: CONSOLE_KEYMAP,
@@ -299,6 +430,26 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     mac: isMac(),
   });
   document.body.append(cheatsheet.el);
+  // Make the cheat sheet a first-class command (discoverable in the command bar, bindable) and drive it from the
+  // status-bar button. One delegated click on the footer covers every tab's button (present and future),
+  // since makeStatusBar rebuilds a button per tab but they all toggle the single shared cheat sheet.
+  registerCommand({ id: "console.cheatsheet.toggle", label: "Keyboard shortcuts", group: "General", run: () => cheatsheet.toggle() });
+
+  // A read-only catalogue of EVERY registered command (the chorded keyboard sheet above shows only the
+  // bound ones), driven from the sibling status-bar button - same delegated-click pattern, reading the
+  // same live command list + merged keymap.
+  const commandsSheet = createCommandsCheatsheet({
+    commands: listCommands,
+    keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
+    mac: isMac(),
+  });
+  document.body.append(commandsSheet.el);
+  registerCommand({ id: "console.commands.toggle", label: "All commands", group: "General", run: () => commandsSheet.toggle() });
+  statusHost.addEventListener("click", (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest("[data-cheatsheet-toggle]")) cheatsheet.toggle();
+    else if (t.closest("[data-commands-toggle]")) commandsSheet.toggle();
+  });
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
@@ -329,7 +480,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   register(moduleSurface({ id: "activity", title: "Activity Trail", bundle: "activity/activity.js", css: "logs/logs.css" }));
 
   // App mode: a dedicated single-surface window, opened by the app drawer as index.html?app=<id>. It
-  // shows ONE surface with the tab strip hidden (CSS keys on the [data-appmode] root) so an installed
+  // shows ONE surface with the tab bar hidden (CSS keys on the [data-appmode] root) so an installed
   // PWA popup reads as a native app window. It mounts the surface DIRECTLY, bypassing the persisted
   // workspace, so a dedicated window never disturbs the main console's saved tabs. Unknown/absent param
   // falls through to the normal restore below.
@@ -342,7 +493,7 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     return;
   }
 
-  // Restore the persisted workspace: the tab strip already renders every saved tab (it binds to ws);
+  // Restore the persisted workspace: the tab bar already renders every saved tab (it binds to ws);
   // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount
   // lazily on first selection. Show the launcher empty state if the workspace is empty.
   const saved = ws.get();
@@ -357,9 +508,9 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
 
 // Entry: wire the console page's DOM. Guarded so the module no-ops when the scaffold is absent. The
 // footer (#console-statusbar) is an empty slot the console fills with the active tab's status bar.
-const stripHost = document.getElementById("console-tabs");
+const tabBarHost = document.getElementById("console-tabs");
 // The outlet is the PF Drawer's __content (panes mount here); the Reference panel is the
 // Drawer's __panel sibling. Falls back to #console-outlet if the drawer markup is absent.
 const outlet = document.getElementById("console-outlet-content") ?? document.getElementById("console-outlet");
 const statusHost = document.getElementById("console-statusbar");
-if (stripHost && outlet && statusHost) startConsole(stripHost, outlet, statusHost);
+if (tabBarHost && outlet && statusHost) startConsole(tabBarHost, outlet, statusHost);

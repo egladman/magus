@@ -66,7 +66,7 @@ function setConn(conn: ConnView): void {
 }
 
 // surfaceHidden is set true by the exported setVisible() when the dashboard is mounted in the console
-// and its tab is backgrounded. While hidden, renderChrome skips the SHARED status-bar writes (the
+// and its tab is backgrounded. While hidden, renderStatusBar skips the SHARED status-bar writes (the
 // console detaches this tab's status bar, so those el() lookups would resolve to the ACTIVE tab's bar
 // and leak "connected / observing since" into, say, the log viewer). The dashboard's OWN panel reveal
 // and its tiles keep updating in the background. lastState lets setVisible(true) replay the current
@@ -76,13 +76,13 @@ let lastState: DashboardState | null = null;
 
 export function setVisible(visible: boolean): void {
   surfaceHidden = !visible;
-  if (visible && lastState) renderChrome(lastState);
+  if (visible && lastState) renderStatusBar(lastState);
 }
 
-// renderChrome reflects the store into the app bar and the panel visibility. It is
+// renderStatusBar reflects the store into the app bar and the panel visibility. It is
 // subscribed BEFORE the tiles so the panels are revealed (width > 0) before a chart
 // tile tries to build in the same publish.
-function renderChrome(s: DashboardState): void {
+function renderStatusBar(s: DashboardState): void {
   lastState = s;
 
   // Panel reveal is the dashboard's OWN per-pane DOM (one #dash-connect/#dash-panels), so it is safe
@@ -195,7 +195,7 @@ function mountTiles(): void {
   tiles = [...ordered, ...insight.tiles];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
-  store.subscribe(renderChrome);
+  store.subscribe(renderStatusBar);
   for (const t of tiles) store.subscribe((s) => t.update(s));
 }
 

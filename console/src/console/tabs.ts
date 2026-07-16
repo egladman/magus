@@ -4,7 +4,7 @@
 // the reducers never mutate their input, they return a new Workspace. A persisted cell
 // (workspaceStore) keeps the whole thing durable so reopening the console restores the
 // exact set of tabs and the active one - the native "your workspace survived a restart"
-// feel. The DOM tab strip that renders a Workspace lives with the console app (Phase 6),
+// feel. The DOM tab bar that renders a Workspace lives with the console app (Phase 6),
 // which is the only place multiple surfaces share one document; it reads and writes
 // through these reducers.
 
@@ -42,7 +42,7 @@ export function openTab(ws: Workspace, tab: TabState): Workspace {
 
 // closeTab removes a tab. When the closed tab was active, focus falls to its left
 // neighbor (or the new left end), else to null when the last tab closes - the
-// least-surprising "what gets focus next" for a tab strip. Closing a non-active tab
+// least-surprising "what gets focus next" for a tab bar. Closing a non-active tab
 // leaves the active one untouched.
 export function closeTab(ws: Workspace, id: string): Workspace {
   const idx = ws.tabs.findIndex((t) => t.id === id);
@@ -73,7 +73,7 @@ export function setLayout(ws: Workspace, tabId: string, layout: Pane): Workspace
 }
 
 // workspaceStore is the durable cell the console binds to: read-modify-write it with the
-// reducers and re-render the strip. Because it is persisted, the tab set and active tab
+// reducers and re-render the bar. Because it is persisted, the tab set and active tab
 // come back on the next load.
 export function workspaceStore(): Persisted<Workspace> {
   return persisted<Workspace>("workspace", emptyWorkspace);

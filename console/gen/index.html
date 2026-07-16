@@ -44,6 +44,12 @@
          (#settings-poll/#settings-host/#theme-cycle) and the theme button keeps its
          .console-shell-themecycle__icon/.console-shell-themecycle__label spans (theme.js paints them). -->
     <div id="console-actions">
+    <!-- Command bar trigger: opens the dmenu-style runner (also mod+k). A plain icon button, so the
+         command bar is discoverable without knowing the chord. console.js's startConsole() wires it to
+         commandBar.open() and stamps the effective chord into the tooltip. -->
+    <button id="console-commandbar-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-haspopup="dialog" aria-controls="command-bar" aria-label="Command bar" title="Command bar">
+      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg></span>
+    </button>
     <!-- Applications menu: a PatternFly Menu popover (like the settings gear) that links back to the
          documentation site. console.js's initAppMenu() wires #console-appmenu-btn/#console-appmenu
          (open/close, aria-expanded, Escape, click-outside, focus return). The item is a plain link;
@@ -110,16 +116,16 @@
     </div>
     </div>
   </header>
-  <!-- The tab outlet is a PatternFly Drawer (pf-m-panel-right pf-m-inline): the tab surfaces
-       mount into the __content, and the Reference panel is the __panel. Opening toggles
-       pf-m-expanded, which - because of pf-m-inline - INSETS the content (the panel docks
-       beside it) rather than the old custom fixed aside + body padding-right hack. console.js
-       appends one pane per tab into #console-outlet-content; initRefDrawer() drives the panel.
-       The title-bar Reference button (#console-refbtn) toggles it; unpinned it closes on Escape
-       or outside-click, pinned it stays open across tab switches (persisted). PF Drawer does not
-       dim - there is no backdrop by design, which is the PF-conventional docked behavior. -->
+  <!-- The tab outlet is a PatternFly Drawer (pf-m-panel-right): the tab surfaces mount into the
+       __content, and the Reference panel is the __panel. Opening toggles pf-m-expanded. PINNING
+       toggles pf-m-inline (initRefDrawer): pinned = docked inline, which INSETS the content (the
+       panel snaps the layout to fit and the surfaces reflow narrower); unpinned = an overlay that
+       floats over the full-width content and dismisses on Escape / outside-click. console.js appends
+       one pane per tab into #console-outlet-content; initRefDrawer() drives the panel. The title-bar
+       Reference button (#console-refbtn) toggles it; pinned it stays open across tab switches
+       (persisted). PF Drawer does not dim - there is no backdrop by design. -->
   <main id="console-outlet">
-    <div id="console-refdrawer" class="pf-v6-c-drawer pf-m-panel-right pf-m-inline">
+    <div id="console-refdrawer" class="pf-v6-c-drawer pf-m-panel-right">
       <div class="pf-v6-c-drawer__main">
         <div id="console-outlet-content" class="pf-v6-c-drawer__content"></div>
         <div id="console-refpanel" class="pf-v6-c-drawer__panel pf-m-resizable" role="region" aria-label="Reference" aria-hidden="true">
