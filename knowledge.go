@@ -496,8 +496,23 @@ func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) st
 	if err != nil || head.ID == "" {
 		return ""
 	}
-	sum := sha256.Sum256(fmt.Appendf(nil, "v%d\x00%s\x00%d", types.KnowledgeSchemaVersion, head.ID, vcsMaxCommits(cfg)))
-	return hex.EncodeToString(sum[:])
+	// The @vcs shard filters onto the LIVE file nodes, which move when the working tree
+	// changes without a commit (a tracked source file deleted but not committed is no
+	// longer a node). So fold the uncommitted-file set in: an unchanged commit AND an
+	// unchanged dirty set reuse the shard, but adding/removing a tracked file re-scans and
+	// re-filters, so the cached shard can never outlive the files it references. A content
+	// edit to an already-dirty file does not change the set (committed history is the same),
+	// so the skip still holds mid-edit. Cheap (one status); a dirty-list error just omits
+	// the detail, falling back to HEAD-only (conservative, worst case a transient stale entry).
+	dirty, _ := res.VCS.DirtyFiles(ctx, root, nil)
+	slices.Sort(dirty)
+	h := sha256.New()
+	fmt.Fprintf(h, "v%d\x00%s\x00%d\x00", types.KnowledgeSchemaVersion, head.ID, vcsMaxCommits(cfg))
+	for _, f := range dirty {
+		h.Write([]byte(f))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // vcsPathPrefix returns the "<subdir>/" prefix ChangesByCommit paths carry when the

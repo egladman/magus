@@ -110,6 +110,13 @@ func TestVCSInputFingerprint(t *testing.T) {
 	widened := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true, MaxCommits: 5}}}
 	assert.NotEqual(t, vcsInputFingerprint(ctx, cfg, root), vcsInputFingerprint(ctx, widened, root), "a changed max_commits changes the fingerprint")
 
+	// A working-tree change with no commit (delete a tracked file) moves the dirty set, so
+	// the fingerprint changes - the cached @vcs shard must not outlive the file nodes it
+	// filters onto. This is the regression guard for the "skip on unchanged HEAD" phantom.
+	clean := vcsInputFingerprint(ctx, cfg, root)
+	require.NoError(t, os.Remove(filepath.Join(root, "a.buzz")))
+	assert.NotEqual(t, clean, vcsInputFingerprint(ctx, cfg, root), "an uncommitted deletion changes the fingerprint")
+
 	// Disabled or non-git yields an empty fingerprint, so the caller never skips the scan.
 	assert.Empty(t, vcsInputFingerprint(ctx, config.Config{}, root), "disabled -> empty")
 	assert.Empty(t, vcsInputFingerprint(ctx, cfg, t.TempDir()), "non-git -> empty")
