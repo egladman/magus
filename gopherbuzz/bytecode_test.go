@@ -998,6 +998,37 @@ func wantBool(t *testing.T, v vmpackage.Value, want bool) {
 	assert.Equalf(t, want, v.AsBool(), "got %v (%s), want bool %v", v.String(), v.Kind(), want)
 }
 
+// TestListIndexOfConformance pins list.indexOf to the upstream buzz semantics
+// (validated against the 0.6.0-dev binary): strings match by content, lists and
+// maps match by reference identity only, a missing element returns null. This
+// source runs under every value representation (nanbox, buzz_safe, buzz_unsafe)
+// and must agree in all three - the pre-fix RawEqual path made any same-tag heap
+// needle match the first element under buzz_safe/buzz_unsafe.
+func TestListIndexOfConformance(t *testing.T) {
+	wantNull := func(v vmpackage.Value, msg string) {
+		t.Helper()
+		assert.Truef(t, v.IsNull(), "%s: got %v (%s), want null", msg, v.String(), v.Kind())
+	}
+
+	// String needle matches by content, including a runtime-built (concatenated)
+	// string rather than the literal.
+	wantInt(t, runProg(t, `return ["a", "b"].indexOf("b");`, CompileOptions{}), 1)
+	wantInt(t, runProg(t, `var n = "b" + ""; return ["a", "b"].indexOf(n);`, CompileOptions{}), 1)
+	wantNull(runProg(t, `return ["a", "b"].indexOf("z");`, CompileOptions{}), "missing string needle")
+
+	// List needle matches by reference identity: a fresh content-equal literal is
+	// not found, but the actual element (via a variable) is.
+	wantNull(runProg(t, `return [[1], [2]].indexOf([2]);`, CompileOptions{}), "fresh content-equal list needle")
+	wantInt(t, runProg(t, `var xs = [[1], [2]]; var e = xs[1]; return xs.indexOf(e);`, CompileOptions{}), 1)
+
+	// Map needle: same reference-identity rule as lists.
+	wantNull(runProg(t, `return [{"a": 1}].indexOf({"a": 1});`, CompileOptions{}), "fresh content-equal map needle")
+	wantInt(t, runProg(t, `var m = {"a": 1}; return [m].indexOf(m);`, CompileOptions{}), 0)
+
+	// Numbers compare by value; a missing number returns null.
+	wantNull(runProg(t, `return [1, 2, 3].indexOf(99);`, CompileOptions{}), "missing number needle")
+}
+
 func TestArithmetic(t *testing.T) {
 	wantInt(t, evalResult(t, "1 + 2 * 3"), 7)
 	wantInt(t, evalResult(t, "(1 + 2) * 3"), 9)
@@ -1329,8 +1360,9 @@ func TestPromoteEquivalence(t *testing.T) {
 	for _, src := range srcs {
 		promote := runProg(t, src, promoteOpts)
 		shared := runProg(t, src, sharedOpts)
-		// RawEqual is raw-bits (pointer identity for heap values), so compare by
-		// kind + rendered content to cover string results too.
+		// RawEqual is raw tag+num bits - heap reference identity holds only in
+		// the nanbox build; under buzz_safe/buzz_unsafe any two same-tag heap
+		// values compare equal - so compare by kind + rendered content instead.
 		assert.Equalf(t, shared.String(), promote.String(), "promote vs shared mismatch for %q", src)
 		assert.Equalf(t, shared.IsStr(), promote.IsStr(), "promote vs shared kind mismatch for %q", src)
 	}
@@ -1418,7 +1450,7 @@ func TestSlotEnvEquivalence(t *testing.T) {
 	for _, src := range srcs {
 		slot := runProg(t, src, CompileOptions{})
 		env := runProg(t, src, CompileOptions{SharedGlobals: true})
-		assert.Truef(t, slot.RawEqual(env), "mode mismatch for %q: slot=%s env=%s", src, slot.String(), env.String())
+		assert.Truef(t, slot.Equal(env), "mode mismatch for %q: slot=%s env=%s", src, slot.String(), env.String())
 	}
 }
 

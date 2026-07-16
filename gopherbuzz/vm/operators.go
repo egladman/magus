@@ -490,7 +490,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 				return Null, fmt.Errorf("list.indexOf: requires a value argument")
 			}
 			for i, it := range lo.Items {
-				if it.RawEqual(args[0]) {
+				if it.Equal(args[0]) {
 					return IntValue(int64(i)), nil
 				}
 			}

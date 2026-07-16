@@ -643,11 +643,22 @@ func valuesEqual(a, b Value) bool {
 // without reaching into unexported representation. Mutation must go through
 // MapSet so the map's key-iteration cache stays consistent.
 
-// RawEqual reports whether two scalar values have identical tag and numeric
-// representation. For heap values (str, list, map, fun, object, fib) it
-// compares pointer identity, not structural equality. Intended for tests that
-// need to assert two values produced by different execution paths are
-// "the same scalar kind and payload".
+// Equal implements Buzz `==` semantics: int/float numeric coercion, string
+// content equality, and reference identity for lists, maps, objects, and
+// functions. It is identical across all value representations (nanbox,
+// buzz_safe, buzz_unsafe), so host code and language-level equality agree
+// regardless of build tag. Prefer this over RawEqual for anything that must
+// match `==`.
+func (v Value) Equal(other Value) bool {
+	return valuesEqual(v, other)
+}
+
+// RawEqual reports whether two values have identical raw tag and num bits.
+// Heap reference identity holds only in the nanbox build, which packs a heap
+// index into num; under buzz_safe and buzz_unsafe num is 0 for every heap
+// value (str, list, map, fun, object, fib), so any two same-tag heap values
+// compare equal here. It is therefore only meaningful for scalar values
+// (null, bool, int, float) - use Equal for language-level equality.
 func (v Value) RawEqual(other Value) bool {
 	return v.tag() == other.tag() && v.num() == other.num()
 }

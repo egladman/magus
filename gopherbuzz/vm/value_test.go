@@ -104,6 +104,10 @@ func TestValueString(t *testing.T) {
 }
 
 func TestValueRawEqual(t *testing.T) {
+	// This is a scalar-only spec: RawEqual compares raw tag+num bits, so heap
+	// values (str, list, map, ...) are not covered here - under buzz_safe and
+	// buzz_unsafe their num is 0 and any two same-tag heap values compare equal.
+	// Use Equal (see TestValueEqual) for heap and language-level equality.
 	// Scalars with same tag and payload must be equal.
 	assert.True(t, vm.IntValue(5).RawEqual(vm.IntValue(5)))
 	assert.False(t, vm.IntValue(5).RawEqual(vm.IntValue(6)))
@@ -112,4 +116,43 @@ func TestValueRawEqual(t *testing.T) {
 	assert.False(t, vm.BoolValue(true).RawEqual(vm.BoolValue(false)))
 	// Different types are not raw-equal even for the same numeric payload.
 	assert.False(t, vm.IntValue(0).RawEqual(vm.NullValue()))
+}
+
+// TestValueEqual pins down Buzz `==` semantics as exposed by Value.Equal. This
+// source runs under every value representation (nanbox, buzz_safe, buzz_unsafe)
+// and must agree in all three - RawEqual would diverge here for the heap cases.
+func TestValueEqual(t *testing.T) {
+	// String content equality, including a string built at runtime (not a
+	// compile-time literal) versus a literal of the same content.
+	built := string([]byte{'b'})
+	assert.True(t, vm.StrValue(built).Equal(vm.StrValue("b")))
+	assert.True(t, vm.StrValue("hello").Equal(vm.StrValue("hello")))
+	assert.False(t, vm.StrValue("a").Equal(vm.StrValue("b")))
+
+	// int/float numeric coercion, matching the == operator.
+	assert.True(t, vm.IntValue(1).Equal(vm.FloatValue(1.0)))
+	assert.True(t, vm.FloatValue(2.0).Equal(vm.IntValue(2)))
+	assert.False(t, vm.IntValue(1).Equal(vm.FloatValue(1.5)))
+	assert.False(t, vm.IntValue(1).Equal(vm.IntValue(2)))
+
+	// null and bool scalars.
+	assert.True(t, vm.NullValue().Equal(vm.NullValue()))
+	assert.True(t, vm.BoolValue(true).Equal(vm.BoolValue(true)))
+	assert.False(t, vm.BoolValue(true).Equal(vm.BoolValue(false)))
+	assert.False(t, vm.NullValue().Equal(vm.IntValue(0)))
+
+	// Lists compare by reference identity: two distinct values with equal
+	// content are NOT equal, but a value is equal to itself.
+	l1 := vm.ListValue([]vm.Value{vm.IntValue(1)})
+	l2 := vm.ListValue([]vm.Value{vm.IntValue(1)})
+	assert.False(t, l1.Equal(l2), "distinct content-equal lists must not be Equal")
+	assert.True(t, l1.Equal(l1), "a list value must be Equal to itself")
+
+	// Maps compare by reference identity too.
+	m1 := vm.NewMap()
+	m1.MapSet("a", vm.IntValue(1))
+	m2 := vm.NewMap()
+	m2.MapSet("a", vm.IntValue(1))
+	assert.False(t, m1.Equal(m2), "distinct content-equal maps must not be Equal")
+	assert.True(t, m1.Equal(m1), "a map value must be Equal to itself")
 }
