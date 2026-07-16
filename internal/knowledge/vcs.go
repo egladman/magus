@@ -22,17 +22,15 @@ import (
 // VCSShardName is the singleton shard holding git-history attrs and author edges.
 const VCSShardName = "@vcs"
 
-// maxAuthorFanout caps how many `authored` edges one author may emit. A contributor over
-// it (a solo maintainer who touches nearly every file) would be a god node that informs
-// little, so they get a files_authored COUNT attr and no edges instead. Same guard as
-// maxIOFanout, just per author.
-const maxAuthorFanout = 60
-
 // assembleVCS folds git history metadata onto the file nodes named by fileNodePaths - a
 // typed partial file node per file so the merge is order-independent - and mints an author
-// node per contributor with `authored` edges to the (node-backed) files they touched.
+// node per contributor with an `authored` edge to each (node-backed) file they touched.
 // Entries and edges for a path with no file node are dropped, so nothing phantom is added.
-// Nodes and edges are sorted for deterministic output.
+// There is no per-author cap: the history window (knowledge.vcs.max_commits) already bounds
+// the scan, so the edges are proportional to recent activity, not the whole repo - a
+// dominant maintainer legitimately having many is a fact to teach the agent, not a smell,
+// and any single query stays bounded by its neighborhood budget. Nodes and edges are sorted
+// for deterministic output.
 func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool) Shard {
 	s := Shard{Name: VCSShardName}
 	authorFiles := map[string][]string{}
@@ -50,20 +48,13 @@ func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool) Sh
 		}
 	}
 
-	// One author node per contributor. Under the fan-out cap, an `authored` edge to each
-	// file they touched; over it, a files_authored count instead of a god node's worth of
-	// edges. Sorted author order keeps the shard deterministic.
+	// One author node per contributor, with an `authored` edge to each file they touched.
+	// Sorted author order keeps the shard deterministic.
 	for _, a := range slices.Sorted(maps.Keys(authorFiles)) {
-		files := authorFiles[a]
-		node := types.KnowledgeNode{ID: authorID(a), Kind: types.KindAuthor, Label: sanitize(a, maxLabelLen)}
-		if len(files) > maxAuthorFanout {
-			node.Attrs = map[string]string{AttrFilesAuthored: strconv.Itoa(len(files))}
-			s.Nodes = append(s.Nodes, node)
-			continue
-		}
-		s.Nodes = append(s.Nodes, node)
-		for _, f := range files {
-			s.Edges = append(s.Edges, extractedEdge(authorID(a), fileID(f), types.RelationAuthored, ""))
+		aID := authorID(a)
+		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: aID, Kind: types.KindAuthor, Label: sanitize(a, maxLabelLen)})
+		for _, f := range authorFiles[a] {
+			s.Edges = append(s.Edges, extractedEdge(aID, fileID(f), types.RelationAuthored, ""))
 		}
 	}
 

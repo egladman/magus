@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - File authorship is now first-class in the graph (schema v6): an `author` node per git
   contributor with `authored` edges to the files they touched, so `explain author:<name>`
   shows what someone maintains and it can be set against a file's declared CODEOWNERS owner
-  (the emergent maintainer vs the owner of record). A per-author fan-out cap gives a prolific
-  maintainer a `files_authored` count instead of a god node's worth of edges. Extracted from
-  the same git-history scan (author facts in the graph; aggregate analytics stay in insight).
+  (the emergent maintainer vs the owner of record). The edges are uncapped - bounded only by
+  the `knowledge.vcs.max_commits` history window, not an arbitrary per-author limit - so a
+  solo maintainer's full authorship is a fact the graph teaches, not a summary it hides.
+  Extracted from the same git-history scan (author facts in the graph; aggregate analytics
+  stay in insight).
 - File nodes now carry `vcs_last_author` (the last commit's author) alongside the existing
   `vcs_last_commit`/`vcs_last_modified`/`vcs_commits`, so a file's EMERGENT maintainer (who
   actually edits it) can be set against its DECLARED CODEOWNERS owner - a gap a pure

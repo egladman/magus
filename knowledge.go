@@ -479,6 +479,14 @@ func vcsMaxCommits(cfg config.Config) int {
 	return vcsDefaultMaxCommits
 }
 
+// vcsAssemblyVersion invalidates the input-fingerprinted @vcs shard when the SHAPE of what
+// assembleVCS emits changes (an added attr, a new edge, a dropped cap), independently of the
+// global KnowledgeSchemaVersion - so a warm cache never serves the old shape on an unchanged
+// HEAD, without a whole-store rebuild. Bump on any change to the @vcs assembly output.
+//
+//	v2: dropped the per-author fan-out cap; author `authored` edges are now uncapped.
+const vcsAssemblyVersion = 2
+
 // vcsInputFingerprint identifies the git-history scan's inputs - HEAD, the window, and the
 // schema (which fixes the attr shape) - as one SHA256 (the same hash the shards use). When
 // it is unchanged the @vcs shard is byte-identical, so the caller skips the scan and Sync
@@ -507,7 +515,7 @@ func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) st
 	dirty, _ := res.VCS.DirtyFiles(ctx, root, nil)
 	slices.Sort(dirty)
 	h := sha256.New()
-	fmt.Fprintf(h, "v%d\x00%s\x00%d\x00", types.KnowledgeSchemaVersion, head.ID, vcsMaxCommits(cfg))
+	fmt.Fprintf(h, "v%d\x00a%d\x00%s\x00%d\x00", types.KnowledgeSchemaVersion, vcsAssemblyVersion, head.ID, vcsMaxCommits(cfg))
 	for _, f := range dirty {
 		h.Write([]byte(f))
 		h.Write([]byte{0})
