@@ -23,10 +23,10 @@ func TestStatusProtoMapsPool(t *testing.T) {
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, Step: "go-build"}},
 		},
 	}
-	s := statusReportToProto(r, "v1.2.3")
+	s := statusReportToProto(r, types.BuildInfo{Version: "v1.2.3"})
 
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, s.GetHealth())
-	assert.Equal(t, "v1.2.3", s.GetMagusVersion())
+	assert.Equal(t, "v1.2.3", s.GetBuild().GetVersion())
 
 	p := s.GetPool()
 	require.NotNil(t, p)
@@ -55,7 +55,7 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 			},
 		},
 	}
-	p := statusReportToProto(r, "v1").GetPool()
+	p := statusReportToProto(r, types.BuildInfo{Version: "v1"}).GetPool()
 	require.NotNil(t, p)
 
 	// Per-running-target invocation id.
@@ -80,14 +80,14 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 
 // TestStatusProtoHealth derives DOWN when no pool is present and DEGRADED on a pool error.
 func TestStatusProtoHealth(t *testing.T) {
-	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusReportToProto(types.StatusReport{}, "v1").GetHealth())
+	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusReportToProto(types.StatusReport{}, types.BuildInfo{Version: "v1"}).GetHealth())
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED,
-		statusReportToProto(types.StatusReport{Pool: &types.StatusOutput{}, PoolError: "boom"}, "v1").GetHealth())
+		statusReportToProto(types.StatusReport{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
 }
 
 // TestEncodeStatusEventRoundTrip confirms a status snapshot decodes back: base64 -> proto.
 func TestEncodeStatusEventRoundTrip(t *testing.T) {
-	ev, err := EncodeStatusEvent(types.StatusReport{Pool: &types.StatusOutput{Capacity: 4}}, "v1")
+	ev, err := EncodeStatusEvent(types.StatusReport{Pool: &types.StatusOutput{Capacity: 4}}, types.BuildInfo{Version: "v1"})
 	require.NoError(t, err)
 	raw, err := base64.StdEncoding.DecodeString(ev)
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 			},
 		}},
 	}
-	s := statusReportToProto(r, "v1")
+	s := statusReportToProto(r, types.BuildInfo{Version: "v1"})
 
 	require.Len(t, s.GetRuns(), 1)
 	run := s.GetRuns()[0]

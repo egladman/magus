@@ -13,6 +13,19 @@ type StatusBase struct {
 	Build     BuildStatus
 }
 
+// BuildInfo is the running binary's linker-stamped identity (version, commit, date).
+// Distinct from BuildStatus, which reports cache/build activity.
+type BuildInfo struct {
+	Version string
+	Commit  string
+	Date    string
+}
+
+// Fingerprint is the full human identity, matching what `magus --version` prints.
+func (b BuildInfo) Fingerprint() string {
+	return "magus " + b.Version + " (" + b.Commit + ") built " + b.Date
+}
+
 // StatusReport is the canonical JSON/YAML shape returned by `magus status -o json`.
 // It is also served verbatim by GET /api/v1/status on the console so both
 // consumers share one definition. Fields are exported so pkg types can be read from
@@ -21,8 +34,11 @@ type StatusReport struct {
 	Telemetry TelemetryStatus `json:"telemetry" yaml:"telemetry"`
 	Cache     CacheStatus     `json:"cache" yaml:"cache"`
 	Build     BuildStatus     `json:"build" yaml:"build"`
-	Pool      *StatusOutput   `json:"pool,omitempty" yaml:"pool,omitempty"`
-	PoolError string          `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
+	// BuildInfo is the reporting binary's identity (version/commit/date), so a client of
+	// GET /api/v1/status knows which magus it is talking to. Distinct from Build above.
+	BuildInfo BuildInfo     `json:"build_info" yaml:"build_info"`
+	Pool      *StatusOutput `json:"pool,omitempty" yaml:"pool,omitempty"`
+	PoolError string        `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
 	// Runs are the invocations the daemon is executing right now (adopted
 	// dispatches), each with its per-target execution state. Empty when nothing is
 	// running or when reported by a process that is not the daemon.

@@ -21,11 +21,24 @@ enum Health {
 
 // Status is the live snapshot.
 message Status {
+  reserved 3;                    // was string magus_version; replaced by the granular BuildInfo below
+  reserved "magus_version";
   Health health = 1;
-  Pool pool = 2;        // live concurrency; absent when no daemon/pool is running
-  string magus_version = 3;
-  repeated Run runs = 4; // runs the daemon is executing right now (adopted dispatches)
+  Pool pool = 2;                 // live concurrency; absent when no daemon/pool is running
+  repeated Run runs = 4;         // runs the daemon is executing right now (adopted dispatches)
   repeated Service services = 5; // long-running shared services the daemon is hosting right now
+  BuildInfo build = 6;           // the running daemon's build identity
+}
+
+// BuildInfo identifies the running magus binary: the version tag, the commit it was built
+// from, the build date, and the full human fingerprint (what `magus --version` prints).
+// Reported so a dashboard shows exactly which daemon it is talking to. All fields are
+// "unknown" for an unstamped dev build.
+message BuildInfo {
+  string version = 1;     // git describe, e.g. "v0.1.0-3-gabc1234"
+  string commit = 2;      // short commit hash
+  string date = 3;        // build date, RFC3339
+  string fingerprint = 4; // full identity: "magus <version> (<commit>) built <date>"
 }
 
 // Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`

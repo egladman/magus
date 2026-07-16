@@ -26,12 +26,14 @@ type statusSource interface {
 // base; pool and pool_error are live so the response reflects current daemon state.
 type StatusHandler struct {
 	handler.Base
-	src statusSource
+	src   statusSource
+	build types.BuildInfo
 }
 
-// NewStatusHandler returns the GET /api/v1/status handler reading from src.
-func NewStatusHandler(src statusSource, log *slog.Logger) *StatusHandler {
-	h := &StatusHandler{src: src}
+// NewStatusHandler returns the GET /api/v1/status handler reading from src. build stamps the
+// reporting binary's identity onto every response.
+func NewStatusHandler(src statusSource, build types.BuildInfo, log *slog.Logger) *StatusHandler {
+	h := &StatusHandler{src: src, build: build}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -46,7 +48,9 @@ func (h *StatusHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := json.Marshal(h.src.StatusReport(r.Context()))
+	report := h.src.StatusReport(r.Context())
+	report.BuildInfo = h.build
+	body, err := json.Marshal(report)
 	if err != nil {
 		http.Error(w, "marshal error: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -72,21 +76,21 @@ func (h *StatusHandler) serve(w http.ResponseWriter, r *http.Request) {
 type EventsHandler struct {
 	handler.Base
 	src            statusSource
-	version        string
+	build          types.BuildInfo
 	metrics        func(ctx context.Context) ([]byte, error)
 	invalidate     <-chan struct{}
 	heartbeat      time.Duration
 	statusInterval time.Duration
 }
 
-// NewEventsHandler returns the GET /api/v1/events SSE handler. version stamps (and gates)
-// the status frames; metrics, when non-nil, feeds the metrics channel; invalidate drives the
-// graph channel; heartbeat and statusInterval override the default 25s / 2s periods (zero
-// uses the defaults).
-func NewEventsHandler(src statusSource, version string, metrics func(ctx context.Context) ([]byte, error), invalidate <-chan struct{}, heartbeat, statusInterval time.Duration, log *slog.Logger) *EventsHandler {
+// NewEventsHandler returns the GET /api/v1/events SSE handler. build stamps (and gates via its
+// version) the status frames; metrics, when non-nil, feeds the metrics channel; invalidate
+// drives the graph channel; heartbeat and statusInterval override the default 25s / 2s periods
+// (zero uses the defaults).
+func NewEventsHandler(src statusSource, build types.BuildInfo, metrics func(ctx context.Context) ([]byte, error), invalidate <-chan struct{}, heartbeat, statusInterval time.Duration, log *slog.Logger) *EventsHandler {
 	h := &EventsHandler{
 		src:            src,
-		version:        version,
+		build:          build,
 		metrics:        metrics,
 		invalidate:     invalidate,
 		heartbeat:      heartbeat,
@@ -132,7 +136,7 @@ func (h *EventsHandler) serve(w http.ResponseWriter, r *http.Request) {
 	// a version to stamp; metrics on the snapshot fn. A bare handler stays heartbeat/graph-only.
 	var lastStatus string
 	pushStatus := func() {
-		enc, err := EncodeStatusEvent(h.src.StatusReport(r.Context()), h.version)
+		enc, err := EncodeStatusEvent(h.src.StatusReport(r.Context()), h.build)
 		if err != nil || enc == lastStatus {
 			return
 		}
@@ -155,7 +159,7 @@ func (h *EventsHandler) serve(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 	}
 
-	statusOn := h.version != ""
+	statusOn := h.build.Version != ""
 	metricsOn := h.metrics != nil
 	var pollTick <-chan time.Time
 	if statusOn || metricsOn {

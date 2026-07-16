@@ -28,6 +28,10 @@ type Options struct {
 	// initialize handshake.
 	Version string
 
+	// Build is the running binary's full identity (version, commit, date), reported on
+	// the status wire so the console shows which daemon it is talking to.
+	Build types.BuildInfo
+
 	// Config is the resolved workspace configuration. Used to check the
 	// daemon address for the magus_status tool.
 	Config config.Config

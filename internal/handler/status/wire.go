@@ -1,8 +1,5 @@
-// Package status holds the magus.status.v1 wire contract: the code that maps the live
-// portion of the domain status report (types.StatusReport) onto the versioned protobuf
-// dashboard message and encodes it for a browser (a base64 protobuf blob on a StreamStatus
-// SSE line). It consumes domain types directly and maps them explicitly to the wire proto -
-// no intermediate DTOs, no single-use converters.
+// Package status maps the live status report onto the magus.status.v1 wire message and
+// base64-encodes it for the dashboard's SSE stream.
 package status
 
 import (
@@ -18,10 +15,15 @@ import (
 // onto the magus.status.v1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
 // intentionally not on this dashboard contract - it is `magus status`/config.
-func statusReportToProto(r types.StatusReport, magusVersion string) *statusv1.Status {
+func statusReportToProto(r types.StatusReport, build types.BuildInfo) *statusv1.Status {
 	s := &statusv1.Status{
-		Health:       deriveHealth(r),
-		MagusVersion: magusVersion,
+		Health: deriveHealth(r),
+		Build: &statusv1.BuildInfo{
+			Version:     build.Version,
+			Commit:      build.Commit,
+			Date:        build.Date,
+			Fingerprint: build.Fingerprint(),
+		},
 	}
 	if r.Pool != nil {
 		s.Pool = poolToProto(r.Pool)
@@ -102,8 +104,8 @@ func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
 // EncodeStatusEvent marshals a status snapshot to base64(protobuf) for a StreamStatus
 // SSE `data:` line - the live-dashboard delivery. The JS client base64-decodes then
 // Status.fromBinary.
-func EncodeStatusEvent(r types.StatusReport, magusVersion string) (string, error) {
-	raw, err := proto.Marshal(statusReportToProto(r, magusVersion))
+func EncodeStatusEvent(r types.StatusReport, build types.BuildInfo) (string, error) {
+	raw, err := proto.Marshal(statusReportToProto(r, build))
 	if err != nil {
 		return "", err
 	}

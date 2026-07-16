@@ -27,7 +27,7 @@ func (f fakeSource) StatusReport(context.Context) types.StatusReport { return f.
 // --- statusHandler ---
 
 func TestStatusHandler_Returns200WithJSON(t *testing.T) {
-	h := NewStatusHandler(fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon"}}}, nil)
+	h := NewStatusHandler(fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon"}}}, types.BuildInfo{}, nil)
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -41,7 +41,7 @@ func TestStatusHandler_Returns200WithJSON(t *testing.T) {
 }
 
 func TestStatusHandler_MethodNotAllowed(t *testing.T) {
-	h := NewStatusHandler(fakeSource{}, nil)
+	h := NewStatusHandler(fakeSource{}, types.BuildInfo{}, nil)
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/status", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -51,7 +51,7 @@ func TestStatusHandler_MethodNotAllowed(t *testing.T) {
 }
 
 func TestStatusHandler_OptionsNoContent(t *testing.T) {
-	h := NewStatusHandler(fakeSource{}, nil)
+	h := NewStatusHandler(fakeSource{}, types.BuildInfo{}, nil)
 	r := httptest.NewRequest(http.MethodOptions, "/api/v1/status", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -64,7 +64,7 @@ func TestStatusHandler_OptionsNoContent(t *testing.T) {
 }
 
 func TestEventsHandler_OptionsNoContent(t *testing.T) {
-	h := NewEventsHandler(fakeSource{}, "", nil, nil, 0, 0, nil)
+	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, nil, 0, 0, nil)
 	r := httptest.NewRequest(http.MethodOptions, "/api/v1/events", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -74,7 +74,7 @@ func TestEventsHandler_OptionsNoContent(t *testing.T) {
 }
 
 func TestEventsHandler_MethodNotAllowed(t *testing.T) {
-	h := NewEventsHandler(fakeSource{}, "", nil, nil, 0, 0, nil)
+	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, nil, 0, 0, nil)
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/events", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -95,7 +95,7 @@ func (n *nonFlusherWriter) Write(b []byte) (int, error) { return len(b), nil }
 func (n *nonFlusherWriter) WriteHeader(code int)        { n.code = code }
 
 func TestEventsHandler_StreamingUnsupported(t *testing.T) {
-	h := NewEventsHandler(fakeSource{}, "", nil, nil, 0, 0, nil)
+	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, nil, 0, 0, nil)
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/events", nil)
 	w := &nonFlusherWriter{header: make(http.Header)}
 	h.ServeHTTP(w, r)
@@ -107,7 +107,7 @@ func TestEventsHandler_StreamingUnsupported(t *testing.T) {
 // --- eventsHandler ---
 
 func TestEventsHandler_HeartbeatOnly(t *testing.T) {
-	h := NewEventsHandler(fakeSource{}, "", nil, nil, 50*time.Millisecond, 0, nil)
+	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, nil, 50*time.Millisecond, 0, nil)
 	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
 	if !strings.Contains(data, ": heartbeat") {
 		t.Errorf("want heartbeat, got %q", data)
@@ -116,7 +116,7 @@ func TestEventsHandler_HeartbeatOnly(t *testing.T) {
 
 func TestEventsHandler_GraphEvent(t *testing.T) {
 	inv := make(chan struct{}, 1)
-	h := NewEventsHandler(fakeSource{}, "", nil, inv, 0, 0, nil)
+	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, inv, 0, 0, nil)
 	inv <- struct{}{}
 	data := drainSSE(t, h, "/api/v1/events", "event: graph")
 	if !strings.Contains(data, "event: graph") || !strings.Contains(data, `"seq":`) {
@@ -126,7 +126,7 @@ func TestEventsHandler_GraphEvent(t *testing.T) {
 
 func TestEventsHandler_StatusEvent(t *testing.T) {
 	src := fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}}
-	h := NewEventsHandler(src, "1.2.3", nil, nil, 0, 50*time.Millisecond, nil)
+	h := NewEventsHandler(src, types.BuildInfo{Version: "1.2.3"}, nil, nil, 0, 50*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", "event: status")
 
 	raw, err := base64.StdEncoding.DecodeString(sseDataLine(t, data))
@@ -137,8 +137,8 @@ func TestEventsHandler_StatusEvent(t *testing.T) {
 	if err := proto.Unmarshal(raw, &st); err != nil {
 		t.Fatalf("unmarshal Status: %v", err)
 	}
-	if st.MagusVersion != "1.2.3" {
-		t.Errorf("want magus_version 1.2.3, got %q", st.MagusVersion)
+	if st.GetBuild().GetVersion() != "1.2.3" {
+		t.Errorf("want magus_version 1.2.3, got %q", st.GetBuild().GetVersion())
 	}
 	if st.Health != statusv1.Health_HEALTH_HEALTHY {
 		t.Errorf("want HEALTH_HEALTHY, got %v", st.Health)
@@ -153,7 +153,7 @@ func TestEventsHandler_StatusEvent(t *testing.T) {
 func TestEventsHandler_InvalidateClosed(t *testing.T) {
 	inv := make(chan struct{})
 	close(inv)
-	h := NewEventsHandler(fakeSource{}, "", nil, inv, 30*time.Millisecond, 0, nil)
+	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, inv, 30*time.Millisecond, 0, nil)
 	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
 	if !strings.Contains(data, ": heartbeat") {
 		t.Errorf("want heartbeat after invalidate close, got %q", data)
@@ -163,7 +163,7 @@ func TestEventsHandler_InvalidateClosed(t *testing.T) {
 // TestEventsHandler_MetricsError confirms a metrics-snapshot error suppresses the metrics frame
 // (no event: metrics) while heartbeats still flow.
 func TestEventsHandler_MetricsError(t *testing.T) {
-	h := NewEventsHandler(fakeSource{}, "",
+	h := NewEventsHandler(fakeSource{}, types.BuildInfo{},
 		func(context.Context) ([]byte, error) { return nil, io.ErrUnexpectedEOF },
 		nil, 30*time.Millisecond, 30*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", ": heartbeat")
@@ -174,7 +174,7 @@ func TestEventsHandler_MetricsError(t *testing.T) {
 
 func TestEventsHandler_MetricsEvent(t *testing.T) {
 	want := []byte{0x0a, 0x02, 0x08, 0x01}
-	h := NewEventsHandler(fakeSource{}, "", func(context.Context) ([]byte, error) { return want, nil }, nil, 0, 50*time.Millisecond, nil)
+	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, func(context.Context) ([]byte, error) { return want, nil }, nil, 0, 50*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", "event: metrics")
 
 	raw, err := base64.StdEncoding.DecodeString(sseDataLine(t, data))

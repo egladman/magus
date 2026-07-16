@@ -128,6 +128,7 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 		Magus:      m,
 		Logger:     slog.Default(),
 		Version:    version,
+		Build:      types.BuildInfo{Version: version, Commit: commit, Date: buildDate},
 		Config:     globalCfg,
 		HTTPAddr:   addr,
 		StatusBase: buildStatusBase(),

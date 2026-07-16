@@ -187,8 +187,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// rides in the URL. CORS still advertises the Authorization header for
 			// the cross-origin preflight.
 			bridgeMux := http.NewServeMux()
-			bridgeMux.Handle("/api/v1/status", cors(status.NewStatusHandler(svc, log)))
-			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Version, nil, inv, 0, 0, log)))
+			bridgeMux.Handle("/api/v1/status", cors(status.NewStatusHandler(svc, opts.Build, log)))
+			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)))
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
 			// In-daemon insight: the four VCS-history lenses (cached scan) plus the folded-in
 			// run-outcome volatility lens, all under the single "volatility" key of InsightView.
