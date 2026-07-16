@@ -476,6 +476,10 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
   display: flex; align-items: baseline; gap: 0.5rem;
 }
+/* The command bar is JS-toggled with the hidden attribute; its display:flex above outspecifies the UA
+   [hidden]{display:none}, so guard it or an empty bordered box shows under the graph when nothing is
+   loaded (the visible "copy this query" bar only appears once a selection/view produces a command). */
+.console-graph-views__cmdbar[hidden] { display: none; }
 .console-graph-views__cmdbar .console-graph-prompt__ps1 { color: var(--pf-t--global--text--color--subtle); font-weight: 500; white-space: nowrap; }
 .console-graph-views__cmdbar .console-graph-prompt__ps1 .console-graph-prompt__chevron { color: var(--console-accent); }
 .console-graph-views__cmdargs { color: var(--pf-t--global--text--color--regular); flex: 1; }
