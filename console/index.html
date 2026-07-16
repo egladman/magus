@@ -104,7 +104,11 @@
     <div id="console-refdrawer" class="pf-v6-c-drawer pf-m-panel-right pf-m-inline">
       <div class="pf-v6-c-drawer__main">
         <div id="console-outlet-content" class="pf-v6-c-drawer__content"></div>
-        <div id="console-refpanel" class="pf-v6-c-drawer__panel" role="region" aria-label="Reference" aria-hidden="true">
+        <div id="console-refpanel" class="pf-v6-c-drawer__panel pf-m-resizable" role="region" aria-label="Reference" aria-hidden="true">
+          <div id="console-refsplitter" class="pf-v6-c-drawer__splitter pf-m-vertical" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize the reference panel" aria-valuemin="0" aria-valuemax="100" aria-valuenow="30">
+            <div class="pf-v6-c-drawer__splitter-handle" aria-hidden="true"></div>
+          </div>
+          <div class="pf-v6-c-drawer__panel-main">
           <div class="pf-v6-c-drawer__body">
             <div class="pf-v6-c-drawer__head">
               <span class="console-shell-refdrawer__title">Reference</span>
@@ -138,6 +142,7 @@
               <ul id="console-refsearch-results" class="console-shell-refsearch__results" role="listbox" aria-label="Search results" hidden></ul>
             </div>
             <div id="console-refdrawer-body" class="console-shell-refdrawer__body"></div>
+          </div>
           </div>
         </div>
       </div>

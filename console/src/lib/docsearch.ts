@@ -280,6 +280,34 @@ export function positiveTerms(raw: string): string[] {
   return collect(buildQuery(raw).ast, false, []);
 }
 
+// One interpreted piece of a query, for the "how this parsed" preview: the scope (a field or free
+// text), the value, and whether it is negated / a phrase / a wildcard.
+export interface QueryPart {
+  field: string | null;
+  value: string;
+  neg: boolean;
+  phrase: boolean;
+  wildcard: boolean;
+}
+
+// describeQuery walks the parsed AST and returns the interpreted parts in order, so the UI can show a
+// user how their typed query was understood (field scoping, exclusions, phrases, wildcards) - the same
+// teach-the-grammar-as-you-type cue the docs site gives. Returns [] for an empty/unparseable query.
+export function describeQuery(raw: string): QueryPart[] {
+  const parts: QueryPart[] = [];
+  const walk = (node: QueryNode | null, neg: boolean): void => {
+    if (!node) return;
+    if (node.op === "term") {
+      parts.push({ field: node.field, value: node.value, neg, phrase: node.phrase, wildcard: node.wildcard });
+      return;
+    }
+    if (node.op === "not") { walk(node.kid, !neg); return; }
+    node.kids.forEach((k) => walk(k, neg));
+  };
+  walk(buildQuery(raw).ast, false);
+  return parts;
+}
+
 // runSearch scores the whole index against the raw query and returns matches sorted by
 // relevance (ties broken by shorter title). Needs at least one positive term - a bare
 // -exclusion or pure operators match nothing (avoids a stray "-" dumping the corpus).

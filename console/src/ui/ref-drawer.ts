@@ -1,5 +1,5 @@
 import { persisted } from "../lib/persist";
-import { loadDocIndex, runSearch, positiveTerms, snippet, type DocSearchEntry } from "../lib/docsearch";
+import { loadDocIndex, runSearch, positiveTerms, snippet, describeQuery, type DocSearchEntry } from "../lib/docsearch";
 
 // ref-drawer.ts - the console's right-side Reference panel, built on a PatternFly Drawer
 // (index.html: #console-refdrawer is the pf-v6-c-drawer, #console-outlet-content its __content,
@@ -118,8 +118,69 @@ export function initRefDrawer(): void {
     let loaded = false; // the fetch has completed (with or without an index)
     let sel = -1;
 
+    // A "how this parsed" preview above the results (teach the grammar as you type), and a PF Spinner
+    // that fills the results area while the ~486KB index loads. Both are created here and inserted
+    // around the results list so no extra scaffold markup is needed.
+    const previewEl = document.createElement("div");
+    previewEl.className = "console-shell-refsearch__preview";
+    previewEl.hidden = true;
+    resultsEl.before(previewEl);
+
+    const spinnerEl = document.createElement("div");
+    spinnerEl.className = "console-shell-refsearch__loading";
+    spinnerEl.hidden = true;
+    spinnerEl.innerHTML =
+      '<svg class="pf-v6-c-spinner pf-m-md" role="status" viewBox="0 0 100 100" aria-label="Loading the docs search index">' +
+      '<circle class="pf-v6-c-spinner__path" cx="50" cy="50" r="45" fill="none"></circle></svg>';
+    resultsEl.before(spinnerEl);
+
     const showNote = (text: string): void => { noteEl.textContent = text; noteEl.hidden = false; };
     const clearNote = (): void => { noteEl.hidden = true; noteEl.textContent = ""; };
+
+    // markMatches builds a fragment with the query's positive terms wrapped in <mark>, so the matched
+    // text stands out in a result's title/snippet. Text-node based (never innerHTML from the index), so
+    // it cannot inject markup. Case-insensitive; longer terms first so they win an overlap.
+    const markMatches = (text: string, terms: string[]): DocumentFragment => {
+      const frag = document.createDocumentFragment();
+      const uniq = [...new Set(terms.filter((t) => t.length >= 2))].sort((a, b) => b.length - a.length);
+      if (uniq.length === 0) { frag.append(text); return frag; }
+      const esc = uniq.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const re = new RegExp("(" + esc.join("|") + ")", "ig");
+      let last = 0;
+      for (let m = re.exec(text); m; m = re.exec(text)) {
+        if (m.index > last) frag.append(text.slice(last, m.index));
+        const mark = document.createElement("mark");
+        mark.className = "console-shell-refsearch__hl";
+        mark.textContent = m[0];
+        frag.append(mark);
+        last = m.index + m[0].length;
+        if (re.lastIndex === m.index) re.lastIndex++; // guard a zero-width match
+      }
+      if (last < text.length) frag.append(text.slice(last));
+      return frag;
+    };
+
+    // renderPreview shows the parsed query as compact read-only chips (field scoping, exclusions,
+    // phrases, wildcards), so a user sees how their query was understood.
+    const renderPreview = (raw: string): void => {
+      const parts = describeQuery(raw);
+      previewEl.replaceChildren();
+      if (parts.length === 0) { previewEl.hidden = true; return; }
+      for (const p of parts) {
+        const chip = document.createElement("span");
+        chip.className = "console-shell-refsearch__chip";
+        if (p.neg) chip.dataset.neg = "";
+        const scope = document.createElement("span");
+        scope.className = "console-shell-refsearch__chip-scope";
+        scope.textContent = (p.neg ? "exclude " : "") + (p.field ? p.field : (p.phrase ? "phrase" : "text"));
+        const val = document.createElement("span");
+        val.className = "console-shell-refsearch__chip-value";
+        val.textContent = p.value + (p.wildcard ? " *" : "");
+        chip.append(scope, val);
+        previewEl.append(chip);
+      }
+      previewEl.hidden = false;
+    };
 
     const optionEls = (): HTMLAnchorElement[] =>
       [...resultsEl.querySelectorAll<HTMLAnchorElement>('a[role="option"]')];
@@ -136,6 +197,8 @@ export function initRefDrawer(): void {
     const closeResults = (): void => {
       resultsEl.replaceChildren();
       resultsEl.hidden = true;
+      previewEl.hidden = true;
+      spinnerEl.hidden = true;
       sel = -1;
       searchInput.setAttribute("aria-expanded", "false");
       searchInput.removeAttribute("aria-activedescendant");
@@ -151,12 +214,15 @@ export function initRefDrawer(): void {
     const render = (): void => {
       const raw = searchInput.value.trim();
       if (!raw) { closeResults(); clearNote(); return; }
+      renderPreview(raw); // show how the query parsed as soon as there is a query, even while loading
       if (!index) {
-        // Not yet loaded, or the load failed. loaded=false: a fetch is pending, the input handler
-        // re-renders when it lands. loaded=true with no index: the docs index is unreachable.
-        if (loaded) { closeResults(); showNote("Search needs the docs site."); }
+        // Not yet loaded, or the load failed. loaded=false: a fetch is pending -> show the spinner; the
+        // input handler re-renders when it lands. loaded=true with no index: the docs index is unreachable.
+        if (loaded) { spinnerEl.hidden = true; closeResults(); renderPreview(raw); showNote("Search needs the docs site."); }
+        else { spinnerEl.hidden = false; resultsEl.hidden = true; }
         return;
       }
+      spinnerEl.hidden = true;
       clearNote();
       const res = runSearch(index, raw);
       const terms = positiveTerms(raw);
@@ -184,13 +250,13 @@ export function initRefDrawer(): void {
         a.rel = "noopener";
         const title = document.createElement("span");
         title.className = "console-shell-refsearch__title";
-        title.textContent = r.entry.title;
+        title.append(markMatches(r.entry.title, terms));
         a.append(title);
         const snip = snippet(r.entry.text || r.entry.description || "", terms);
         if (snip) {
           const sn = document.createElement("span");
           sn.className = "console-shell-refsearch__snippet";
-          sn.textContent = snip;
+          sn.append(markMatches(snip, terms));
           a.append(sn);
         }
         li.append(a);
@@ -276,6 +342,61 @@ export function initRefDrawer(): void {
   document.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key === "Escape" && isOpen && !pinned) setOpen(false);
   });
+
+  // --- Resize (PF resizable Drawer) ---------------------------------------------------------
+  // The panel width is user-draggable via PF's splitter handle. PF Core ships the splitter markup
+  // and styling; the drag/keyboard interaction is ours (PF Core is CSS-only). We drive the panel's
+  // flex-basis vars in px so the width holds across breakpoints, clamp to a sane range, and persist
+  // it. On a phone the panel is a full-screen overlay (CSS), so the splitter is hidden there.
+  const splitter = document.getElementById("console-refsplitter");
+  if (splitter) {
+    const MIN_W = 280;
+    const widthCell = persisted("ref-width", 0); // 0 = "use the PF default until first drag"
+    const maxW = (): number => Math.min(760, Math.max(MIN_W, Math.round(drawer.getBoundingClientRect().width * 0.85)));
+    const applyWidth = (w: number): void => {
+      const clamped = Math.max(MIN_W, Math.min(maxW(), Math.round(w)));
+      panel.style.setProperty("--pf-v6-c-drawer__panel--md--FlexBasis", clamped + "px");
+      panel.style.setProperty("--pf-v6-c-drawer__panel--xl--FlexBasis", clamped + "px");
+      const dw = drawer.getBoundingClientRect().width || 1;
+      splitter.setAttribute("aria-valuenow", String(Math.round((clamped / dw) * 100)));
+      widthCell.set(clamped);
+    };
+    const savedW = widthCell.get();
+    if (savedW >= MIN_W) applyWidth(savedW);
+
+    let dragging = false;
+    const onMove = (e: PointerEvent): void => {
+      if (!dragging) return;
+      // Right-docked panel: width grows as the pointer moves toward the left edge.
+      applyWidth(drawer.getBoundingClientRect().right - e.clientX);
+    };
+    const stop = (): void => {
+      if (!dragging) return;
+      dragging = false;
+      splitter.classList.remove("console-shell-refsplitter--dragging");
+      document.body.style.removeProperty("user-select");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+    };
+    splitter.addEventListener("pointerdown", (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      splitter.classList.add("console-shell-refsplitter--dragging");
+      document.body.style.userSelect = "none"; // no text selection while dragging
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", stop);
+      e.preventDefault();
+    });
+    // Keyboard resize: the splitter is focusable (role=separator); arrows nudge, Home/End jump.
+    splitter.addEventListener("keydown", (e: KeyboardEvent) => {
+      const cur = panel.getBoundingClientRect().width;
+      const step = e.shiftKey ? 48 : 16;
+      if (e.key === "ArrowLeft") { applyWidth(cur + step); e.preventDefault(); }
+      else if (e.key === "ArrowRight") { applyWidth(cur - step); e.preventDefault(); }
+      else if (e.key === "Home") { applyWidth(maxW()); e.preventDefault(); }
+      else if (e.key === "End") { applyWidth(MIN_W); e.preventDefault(); }
+    });
+  }
 
   // main.ts dispatches this when the active tab changes; a docked/open panel re-reads the new
   // surface's help sections.

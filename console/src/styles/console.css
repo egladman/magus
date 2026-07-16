@@ -411,7 +411,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     margin: 0; transform: none;
     z-index: var(--pf-t--global--z-index--200);
   }
+  /* No x-axis resize when the panel is a full-screen overlay: hide the splitter on a phone. */
+  #console-refsplitter { display: none; }
 }
+/* While dragging the splitter, suppress the panel's width transition so it tracks the pointer 1:1. */
+#console-refsplitter.console-shell-refsplitter--dragging { touch-action: none; }
+#console-refpanel:has(.console-shell-refsplitter--dragging) { transition: none !important; }
 /* Skip the slide/flex-basis transition while applying the persisted (pinned) state on load. */
 .console-shell-refdrawer--instant .pf-v6-c-drawer__panel { transition: none !important; }
 .console-shell-refdrawer__title { align-self: center; font-size: 0.85rem; font-weight: 600; }
@@ -458,3 +463,25 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-refsearch__result[aria-selected="true"] .console-shell-refsearch__snippet { color: inherit; }
 .console-shell-refsearch__title { display: block; font-weight: 600; }
 .console-shell-refsearch__snippet { display: block; margin-top: 0.1rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Matched terms highlighted in a result's title/snippet. Uses the accent tint so it reads on both the
+   normal row and the accent-inverted hover/selected row. */
+.console-shell-refsearch__hl { background: color-mix(in srgb, var(--console-accent) 35%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.console-shell-refsearch__result:hover .console-shell-refsearch__hl,
+.console-shell-refsearch__result[aria-selected="true"] .console-shell-refsearch__hl { background: color-mix(in srgb, var(--pf-t--global--text--color--on-brand--default) 30%, transparent); }
+/* Parsed-query preview: compact read-only chips showing how the query was interpreted (scope + value).
+   Wraps on a phone. Each chip's scope is subtle, its value regular; a negated part is struck + muted. */
+.console-shell-refsearch__preview { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.5rem 0 0; }
+.console-shell-refsearch__chip {
+  display: inline-flex; align-items: baseline; gap: 0.3rem;
+  padding: 0.1rem 0.4rem; font-size: 0.7rem; line-height: 1.5;
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-shell-refsearch__chip-scope { color: var(--pf-t--global--text--color--subtle); text-transform: lowercase; }
+.console-shell-refsearch__chip-value { color: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
+.console-shell-refsearch__chip[data-neg] .console-shell-refsearch__chip-value { text-decoration: line-through; color: var(--pf-t--global--text--color--subtle); }
+/* Load spinner while the docs index fetches: centered in the results area. */
+.console-shell-refsearch__loading { display: flex; justify-content: center; padding: 1rem 0; }
+/* A class-set display beats the [hidden] attribute's UA display:none, so re-hide explicitly. */
+.console-shell-refsearch__preview[hidden],
+.console-shell-refsearch__loading[hidden] { display: none; }

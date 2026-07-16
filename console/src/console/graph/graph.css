@@ -591,3 +591,13 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 
 /* No-JS fallback message. */
 .console-graph-noscript { color: var(--pf-t--global--text--color--subtle); }
+
+/* Load spinner overlay (#graph-loading): centered over the stage while boot fetches the demo graph.json.
+   [hidden] guard because the stage's flex rules would otherwise beat the attribute. */
+.console-graph-loading {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem;
+  background: var(--pf-t--global--background--color--primary--default);
+}
+.console-graph-loading[hidden] { display: none; }
+.console-graph-loading__label { margin: 0; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }

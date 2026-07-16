@@ -198,6 +198,12 @@
         <button id="legend-toggle" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-expanded="false" aria-controls="graph-legend-panel">
           <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><line x1="11" y1="6" x2="20" y2="6"/><line x1="11" y1="18" x2="20" y2="18"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Legend</span></button>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
+        <!-- Load spinner: shown while boot fetches the demo graph.json (~1.4MB). main.ts toggles it
+             around `await loadGraph()`; hidden by default (a cold visit shows the empty state instead). -->
+        <div id="graph-loading" class="console-graph-loading" hidden>
+          <svg class="pf-v6-c-spinner pf-m-lg" role="status" viewBox="0 0 100 100" aria-label="Loading the graph"><circle class="pf-v6-c-spinner__path" cx="50" cy="50" r="45" fill="none"></circle></svg>
+          <p class="console-graph-loading__label">Loading the graph...</p>
+        </div>
         <div id="graph-legend-panel" class="console-graph-legend">
           <p class="console-graph-legend__title">Node kinds</p>
           <ul id="graph-legend" aria-label="Node kinds"></ul>

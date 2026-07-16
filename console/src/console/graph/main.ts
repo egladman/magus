@@ -2362,7 +2362,16 @@ export async function activate() {
   // Returns true if handled (either connected or errored); false falls through.
   if (await bootLive()) return;
 
-  const loaded = await loadGraph();
+  // Show the load spinner while loadGraph() is in flight (it fetches the ~1.4MB demo graph.json on a
+  // #demo / deep-link boot). A cold visit returns instantly, so the spinner never visibly flashes.
+  const loadingEl = el("graph-loading");
+  if (loadingEl) loadingEl.hidden = false;
+  let loaded;
+  try {
+    loaded = await loadGraph();
+  } finally {
+    if (loadingEl) loadingEl.hidden = true;
+  }
   if (!loaded) { document.body.classList.add("graph-empty"); return; }
 
   // Detect graph flavor at the top of the pipeline, before prepareGraph.

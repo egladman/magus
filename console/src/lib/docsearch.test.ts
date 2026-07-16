@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runSearch, positiveTerms, snippet, type DocSearchEntry } from "./docsearch";
+import { runSearch, positiveTerms, snippet, describeQuery, type DocSearchEntry } from "./docsearch";
 
 const INDEX: DocSearchEntry[] = [
   { url: "modules/cache/", title: "Remote cache", tags: ["cache", "remote"], description: "Share build outputs across machines.", text: "The remote cache stores build outputs keyed by input hash." },
@@ -87,4 +87,24 @@ test("snippet centers on the first matched term with ellipses", () => {
   const s = snippet(long, ["build"]);
   assert.ok(s.includes("build"));
   assert.ok(s.startsWith("...")); // the term sits far enough in that the window opens after the start
+});
+
+test("describeQuery reports field scope, exclusion, phrase and wildcard", () => {
+  assert.deepEqual(describeQuery("tag:cache"), [
+    { field: "tag", value: "cache", neg: false, phrase: false, wildcard: false },
+  ]);
+  assert.deepEqual(describeQuery("-remote"), [
+    { field: null, value: "remote", neg: true, phrase: false, wildcard: false },
+  ]);
+  assert.deepEqual(describeQuery('"remote cache"'), [
+    { field: null, value: "remote cache", neg: false, phrase: true, wildcard: false },
+  ]);
+  const wild = describeQuery("build*");
+  assert.equal(wild.length, 1);
+  assert.equal(wild[0].wildcard, true);
+});
+
+test("describeQuery lists each AND term in order", () => {
+  const parts = describeQuery("cache build");
+  assert.deepEqual(parts.map((p) => p.value), ["cache", "build"]);
 });
