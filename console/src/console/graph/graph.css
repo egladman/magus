@@ -150,6 +150,14 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
   background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
 }
 .console-graph-stage__tools .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
+/* The live/snapshot provenance badges are PF Labels; PF's .pf-v6-c-label sets `display`,
+   which outspecifies the [hidden] attribute's UA `display:none`, so in demo/snapshot-less
+   mode they leaked as two empty blue/grey squares to the left of Fit. Restore [hidden]
+   semantics inside the stage tools so a hidden badge truly disappears. */
+.console-graph-stage__tools [hidden] { display: none; }
+/* When both provenance badges are hidden, drop the gap they would reserve so the four
+   action buttons read as one tight group. */
+.console-graph-stage__tools > .pf-v6-c-label { align-self: center; }
 /* Legend toggle (#legend-toggle, a PF Button): hidden on desktop (the legend is always
    open there). Shown only on mobile via the media query below, where it collapses the
    legend off the canvas. Positioned top-left where the legend would otherwise sit. */
@@ -162,13 +170,28 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
 /* Fullscreen: the panel fills the screen (like the playground's .panel:fullscreen);
    the opaque background is required or the element shows through to black. */
 .console-graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pf-t--global--background--color--primary--default); }
-#graph-legend {
-  position: absolute; top: 0.6rem; left: 0.6rem; margin: 0; padding: 0.5rem 0.65rem;
-  list-style: none; display: flex; flex-direction: column; gap: 0.15rem;
-  font-size: 0.72rem; line-height: 1.5;
+/* Legend: a compact overlay panel (translucent so the graph shows through) with a header
+   row and a dense swatch+name+count list. The panel wrapper carries the position and chrome;
+   the inner <ul> is the scrollable list. Positioned top-left over the canvas. */
+.console-graph-legend {
+  position: absolute; top: 0.6rem; left: 0.6rem; z-index: 3;
+  display: flex; flex-direction: column; gap: 0.3rem;
+  padding: 0.4rem 0.5rem 0.45rem;
   background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 88%, transparent);
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  max-height: calc(100% - 1.2rem); overflow-y: auto;
+  max-height: calc(100% - 1.2rem); min-height: 0;
+}
+.console-graph-legend__title {
+  margin: 0; padding: 0 0.25rem 0.3rem;
+  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--pf-t--global--text--color--subtle);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+#graph-legend {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 0.1rem;
+  font-size: 0.72rem; line-height: 1.5;
+  overflow-y: auto; min-height: 0;
 }
 #graph-legend li { list-style: none; }
 .console-graph-legend__row {
@@ -227,7 +250,7 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
 .console-graph-app:has(#graph-empty-state:not([hidden])) .console-graph-stage > :not(#graph-empty-state),
 /* #id-level rules beat these elements' own #id display, which a plain class selector can't. */
 .console-graph-app:has(#graph-empty-state:not([hidden])) #graph-canvas,
-.console-graph-app:has(#graph-empty-state:not([hidden])) #graph-legend,
+.console-graph-app:has(#graph-empty-state:not([hidden])) #graph-legend-panel,
 .console-graph-app:has(#graph-empty-state:not([hidden])) #legend-toggle { display: none; }
 /* Give the cold-state prompt a tall-enough area and keep it vertically centered (PF EmptyState
    is already flex-centered), so it sits in the middle of the emptiness rather than at the top. */
@@ -306,8 +329,8 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
   .console-graph-stage__tools .pf-v6-c-button { padding-inline: 0.4rem; }
   .console-graph-stage__tools .pf-v6-c-button__icon.pf-m-start { margin-inline-end: 0; }
   #legend-toggle { display: inline-flex; }
-  #graph-legend { display: none; top: 2.7rem; max-height: calc(100% - 3.4rem); }
-  #graph-legend[data-open] { display: flex; }
+  .console-graph-legend { display: none; top: 2.7rem; max-height: calc(100% - 3.4rem); }
+  .console-graph-legend[data-open] { display: flex; }
 }
 
 /* Reference disclosures (Views, Search syntax, Layout and colors, Loading a graph by URL):
@@ -472,30 +495,30 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 }
 .console-graph-views__copy:hover { color: var(--console-accent); }
 
-/* Phase 5: search prompt styled as magus query term-prompt. */
-/* Overrides the plain .console-graph-sidebar__search/node-search rules above with the terminal idiom. */
-.console-graph-sidebar__prompt {
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
-  display: flex; align-items: baseline; gap: 0.4rem;
-  padding: 0.35rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+/* Query bar: a PF input-group scoped to the sidebar. The "magus query" prompt is a subtle
+   monospace text addon, the field fills, and the "?" help + copy-as-command are attached
+   control buttons. Dense so it fits the 18rem sidebar without the field truncating. */
+.console-graph-querybar { font-size: 0.76rem; }
+.console-graph-querybar__prompt {
+  font-family: var(--pf-t--global--font--family--mono); font-weight: 500;
+  color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
+  padding-inline: 0.4rem;
 }
-.console-graph-sidebar__prompt .console-graph-prompt__ps1 { color: var(--pf-t--global--text--color--subtle); font-weight: 500; white-space: nowrap; }
-.console-graph-sidebar__prompt .console-graph-prompt__ps1 .console-graph-prompt__chevron { color: var(--console-accent); }
-.console-graph-sidebar__prompt #node-search {
-  /* Reset the magnifier-icon background from the plain search style. */
-  background-image: none; padding: 0; border: 0; margin: 0;
-  flex: 1; background: transparent; font-family: inherit; font-size: inherit;
-  color: var(--pf-t--global--text--color--regular); height: auto; width: auto; line-height: 1.3;
-  border-radius: 0;
+.console-graph-querybar .pf-v6-c-form-control { font-family: var(--pf-t--global--font--family--mono); }
+.console-graph-querybar .pf-v6-c-button.pf-m-control { padding-inline: 0.45rem; }
+
+/* Ask a question: the question-first view chips, surfaced directly in the sidebar (the
+   ref-drawer #ask-panel is display:none in the decoupled console). The chips reuse the
+   sanctioned .console-graph-views__chip styling below; this only frames the group. */
+.console-graph-sidebar__views {
+  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-graph-sidebar__prompt #node-search::placeholder { color: var(--pf-t--global--text--color--subtle); }
-.console-graph-sidebar__prompt #node-search:focus { box-shadow: none; outline: none; }
-.console-graph-sidebar__copy {
-  width: auto; margin: 0; padding: 0 0.3rem; background: transparent; border: 0;
-  color: var(--pf-t--global--text--color--subtle); cursor: pointer; font-size: 1rem; line-height: 1;
-  flex: 0 0 auto;
+.console-graph-sidebar__views .console-graph-views__body { gap: 0.3rem; }
+.console-graph-sidebar__viewslabel {
+  margin: 0 0 0.35rem; padding: 0;
+  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--pf-t--global--text--color--subtle);
 }
-.console-graph-sidebar__copy:hover { color: var(--console-accent); }
 
 /* Phase 5: projection unfold button. Shown when default projection is active. */
 .console-graph-sidebar__unfold {

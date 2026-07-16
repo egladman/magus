@@ -105,13 +105,46 @@
 
     <section class="console-graph-app">
       <aside class="console-graph-sidebar">
-        <!-- Phase 5: search box styled as a magus query prompt (term-prompt idiom from playground.html). -->
-        <!-- The console-graph-prompt__ps1 prefix is aria-hidden decoration; the input keeps its own label. -->
-        <div class="console-graph-sidebar__search console-graph-sidebar__prompt">
-          <span class="console-graph-prompt__ps1" aria-hidden="true">magus query <span class="console-graph-prompt__chevron">&#10095;</span></span>
-          <input id="node-search" type="text" placeholder="kind:spell project:web" aria-label="Query the graph" spellcheck="false" autocomplete="off" disabled>
-          <span class="console-render-help-glyph" tabindex="0" aria-label="Query syntax" title="Filter the graph by typing terms. Free text matches names; kind:spell / project:web / relation:uses / id:build filter by field; a leading - excludes. Terms combine with AND. Full list under Reference > Search syntax.">?</span>
-          <button id="search-copy-btn" type="button" class="console-graph-sidebar__copy" title="Copy this query as a shell command" aria-label="Copy magus query command">&#10697;</button>
+        <!-- Query bar: a PF input-group so the prompt/input/controls stay contained in the
+             sidebar (the old terminal-prompt row overflowed its "?" help and copy glyphs onto
+             the canvas, landing in the legend's corner). The "magus query" prompt is a text
+             addon, the field fills, and the syntax help + copy-as-command are attached control
+             buttons. Keeps #node-search and #search-copy-btn (main.ts wires them by id). -->
+        <div class="console-graph-sidebar__search">
+          <div class="pf-v6-c-input-group console-graph-querybar">
+            <div class="pf-v6-c-input-group__item">
+              <span class="pf-v6-c-input-group__text console-graph-querybar__prompt" id="query-prompt" aria-hidden="true">magus query</span>
+            </div>
+            <div class="pf-v6-c-input-group__item pf-m-fill">
+              <span class="pf-v6-c-form-control">
+                <input id="node-search" type="text" placeholder="kind:spell project:web" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" disabled>
+              </span>
+            </div>
+            <div class="pf-v6-c-input-group__item">
+              <button type="button" class="pf-v6-c-button pf-m-control" aria-label="Query syntax" title="Filter the graph by typing terms. Free text matches names; kind:spell / project:web / relation:uses / id:build filter by field; a leading - excludes. Terms combine with AND. Full list under Reference > Search syntax.">
+                <span class="pf-v6-c-button__text" aria-hidden="true">?</span>
+              </button>
+            </div>
+            <div class="pf-v6-c-input-group__item">
+              <button id="search-copy-btn" type="button" class="pf-v6-c-button pf-m-control" title="Copy this query as a shell command" aria-label="Copy magus query command">
+                <span class="pf-v6-c-button__text" aria-hidden="true">&#10697;</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- Ask a question: the question-first views, surfaced in the sidebar. The original
+             #ask-panel reference block is display:none in the decoupled console (no ref drawer),
+             so these are the live control. Reuses the sanctioned console-graph-views__chip
+             escape hatch; main.ts wires them by class + data-view/data-lens. -->
+        <div class="console-graph-views console-graph-sidebar__views" aria-label="Ask a question">
+          <p class="console-graph-sidebar__viewslabel">Ask a question</p>
+          <div class="console-graph-views__body" role="group" aria-label="Question views">
+            <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a node to see everything that depends on it (reverse BFS over depends_on). CLI: magus explain &lt;node-id&gt;">What breaks if I change this?</button>
+            <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two nodes to find the shortest depends_on path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Why does A depend on B?</button>
+            <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="Longest duration-weighted chain. Hidden when no timing data is present. CLI: magus graph deps -o json">What's slow?</button>
+            <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree nodes - the ones everything touches. CLI: magus query kind:target">What's a hub?</button>
+            <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Nodes with no edges - potentially dead code or unconfigured targets. CLI: magus query -kind:project">What's dead?</button>
+          </div>
         </div>
         <!-- Phase 5: projection unfold button - shown when default projection is active. -->
         <button id="projection-unfold-btn" type="button" class="console-graph-sidebar__unfold" hidden>Show full graph</button>
@@ -136,10 +169,13 @@
         </div>
         <!-- Legend toggle: only shown on mobile (CSS), where the legend is collapsed
              by default so it doesn't cover the graph. Desktop keeps the legend open. -->
-        <button id="legend-toggle" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-expanded="false" aria-controls="graph-legend">
+        <button id="legend-toggle" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-expanded="false" aria-controls="graph-legend-panel">
           <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><line x1="11" y1="6" x2="20" y2="6"/><line x1="11" y1="18" x2="20" y2="18"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Legend</span></button>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
-        <ul id="graph-legend" aria-label="Node kinds"></ul>
+        <div id="graph-legend-panel" class="console-graph-legend">
+          <p class="console-graph-legend__title">Node kinds</p>
+          <ul id="graph-legend" aria-label="Node kinds"></ul>
+        </div>
         <p id="live-status-strip" class="console-graph-live__strip" hidden aria-live="polite"></p>
         <!-- Empty state: shown when nothing is loaded (no #data/#src/#live and the demo has
              not been launched). Mirrors the log viewer's empty state - an intuitive prompt

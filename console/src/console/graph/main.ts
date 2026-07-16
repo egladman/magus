@@ -2535,10 +2535,10 @@ function bootWireEvents() {
   // Harmless on desktop, where the toggle is display:none and the legend is always
   // shown.
   const legendToggle = el("legend-toggle");
-  const legendEl = el("graph-legend");
-  if (legendToggle && legendEl) {
+  const legendPanel = el("graph-legend-panel");
+  if (legendToggle && legendPanel) {
     legendToggle.addEventListener("click", () => {
-      const open = legendEl.toggleAttribute("data-open");
+      const open = legendPanel.toggleAttribute("data-open");
       legendToggle.setAttribute("aria-expanded", open ? "true" : "false");
     });
   }
