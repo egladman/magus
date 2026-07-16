@@ -45,6 +45,45 @@ func readManifest(t *testing.T, cacheDir string) manifest {
 	return m
 }
 
+// TestInputFingerprintRetainsSkippedShard: a shard produced from an expensive input carries
+// an input fingerprint. When the caller SKIPS producing it (absent from the build) but the
+// input is unchanged, Sync reuses it from disk instead of pruning it - the mechanism that
+// lets the git scan be skipped without a bespoke cache file. A changed input drops it.
+func TestInputFingerprintRetainsSkippedShard(t *testing.T) {
+	cacheDir := filepath.Join(t.TempDir(), ".magus")
+	store := NewStore(cacheDir, false, 0, nil, nil)
+	ctx := context.Background()
+
+	vcs := Shard{Name: "@vcs", Nodes: []types.KnowledgeNode{
+		{ID: "file:a.go", Kind: types.KindFile, Source: "a.go", Attrs: map[string]string{"vcs_last_author": "Ada"}},
+	}}
+	fp, err := fingerprintShardContent(vcs)
+	require.NoError(t, err)
+
+	// Build 1: produce @vcs, keyed by input fingerprint "head1".
+	g1, err := store.Sync(ctx, []Shard{vcs}, map[string]string{"@vcs": fp}, map[string]string{"@vcs": "head1"}, false)
+	require.NoError(t, err)
+	n, ok := g1.node("file:a.go")
+	require.True(t, ok)
+	assert.Equal(t, "Ada", n.Attrs["vcs_last_author"])
+	assert.Equal(t, "head1", readManifest(t, cacheDir).Shards["@vcs"].InputFingerprint)
+
+	// Build 2: @vcs SKIPPED (absent from the build), input unchanged -> reused from disk.
+	g2, err := store.Sync(ctx, nil, nil, map[string]string{"@vcs": "head1"}, false)
+	require.NoError(t, err)
+	n2, ok := g2.node("file:a.go")
+	require.True(t, ok, "the skipped-but-fresh @vcs shard is reused from disk")
+	assert.Equal(t, "Ada", n2.Attrs["vcs_last_author"])
+	assert.FileExists(t, store.shardPath("@vcs"))
+
+	// Build 3: @vcs SKIPPED, but the input CHANGED -> not reused (the caller was expected
+	// to rebuild it, so a stale shard is dropped rather than served).
+	g3, err := store.Sync(ctx, nil, nil, map[string]string{"@vcs": "head2"}, false)
+	require.NoError(t, err)
+	_, ok = g3.node("file:a.go")
+	assert.False(t, ok, "a changed input drops the stale shard")
+}
+
 func TestBuildPersistsAndReloads(t *testing.T) {
 	cacheDir, in := buildFixture(t)
 	g1 := build(t, cacheDir, BuildOptions{}, in)

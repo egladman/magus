@@ -15,6 +15,11 @@ type BuildOptions struct {
 	Refresh   bool         // force a full rebuild regardless of fingerprints
 	MaxBytes  int64        // soft cap on the shards dir; 0 = unlimited
 	Remote    RemoteShards // optional remote shard backing; nil = local-only
+	// InputFingerprints maps a shard name to the fingerprint of its EXPENSIVE input (a git
+	// scan), for shards whose producer the caller may skip when the input is unchanged.
+	// Sync records it and reuses a skipped-but-fresh shard from disk. Empty for the common
+	// case (all shards content-fingerprinted and rebuilt each time).
+	InputFingerprints map[string]string
 }
 
 // Build is the cache-first entry point: it assembles every shard from the
@@ -58,5 +63,5 @@ func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, l
 	}
 
 	store := NewStore(cacheDir, opts.Immutable, opts.MaxBytes, opts.Remote, log)
-	return store.Sync(ctx, shards, fps, opts.Refresh)
+	return store.Sync(ctx, shards, fps, opts.InputFingerprints, opts.Refresh)
 }

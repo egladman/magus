@@ -54,7 +54,7 @@ func TestLoadKnowledgeVCSHistory(t *testing.T) {
 	writeCommit(t, root, "café.buzz", "u\n") // non-ASCII path
 
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}
-	entries := loadKnowledgeVCS(context.Background(), cfg, root, t.TempDir(), slog.Default())
+	entries := loadKnowledgeVCS(context.Background(), cfg, root, slog.Default())
 	require.NotEmpty(t, entries)
 
 	byPath := map[string]int{}
@@ -80,51 +80,39 @@ func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 	root := t.TempDir()
 	gitRun(t, root, "init", "-q")
 	writeCommit(t, root, "a.buzz", "x\n")
-	assert.Nil(t, loadKnowledgeVCS(context.Background(), config.Config{}, root, t.TempDir(), slog.Default()))
+	assert.Nil(t, loadKnowledgeVCS(context.Background(), config.Config{}, root, slog.Default()))
 
 	// Enabled but not a git repo: best-effort nil, no error.
 	enabled := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}
-	assert.Nil(t, loadKnowledgeVCS(context.Background(), enabled, t.TempDir(), t.TempDir(), slog.Default()))
+	assert.Nil(t, loadKnowledgeVCS(context.Background(), enabled, t.TempDir(), slog.Default()))
 }
 
-// TestLoadKnowledgeVCSHeadCache proves the scan is gated on the revision: the first call
-// writes a sidecar keyed by the current commit, and a second call with an unchanged
-// revision reuses it (identical results, sidecar head matches HEAD).
-func TestLoadKnowledgeVCSHeadCache(t *testing.T) {
+// TestVCSInputFingerprint proves the scan's input fingerprint is stable on an unchanged
+// tree and moves when HEAD or the window moves - which is what lets the caller skip the git
+// scan and reuse the @vcs shard from disk on an unchanged commit (no bespoke cache file).
+func TestVCSInputFingerprint(t *testing.T) {
 	root := t.TempDir()
 	gitRun(t, root, "init", "-q")
 	writeCommit(t, root, "a.buzz", "x\n")
-	cacheDir := t.TempDir()
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}
+	ctx := context.Background()
 
-	first := loadKnowledgeVCS(context.Background(), cfg, root, cacheDir, slog.Default())
-	require.NotEmpty(t, first)
+	fp1 := vcsInputFingerprint(ctx, cfg, root)
+	require.NotEmpty(t, fp1, "an enabled git repo yields a fingerprint")
+	assert.Equal(t, fp1, vcsInputFingerprint(ctx, cfg, root), "unchanged HEAD + window -> stable fingerprint")
 
-	cached, ok := readVCSCache(filepath.Join(cacheDir, "knowledge", "vcs-inputs.json"))
-	require.True(t, ok, "first call writes the sidecar")
-	assert.Equal(t, gitHeadFull(t, root), cached.Head, "sidecar is keyed by the current revision")
+	// A new commit moves HEAD, so the fingerprint changes (the scan must re-run).
+	writeCommit(t, root, "b.buzz", "y\n")
+	assert.NotEqual(t, fp1, vcsInputFingerprint(ctx, cfg, root), "a new commit changes the fingerprint")
 
-	// Second call with the same cache and unchanged revision returns the same entries.
-	second := loadKnowledgeVCS(context.Background(), cfg, root, cacheDir, slog.Default())
-	assert.Equal(t, first, second)
-}
+	// The window is part of the key, so changing max_commits changes the fingerprint even
+	// when the result would be identical (conservative: re-scan on a widened window).
+	widened := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true, MaxCommits: 5}}}
+	assert.NotEqual(t, vcsInputFingerprint(ctx, cfg, root), vcsInputFingerprint(ctx, widened, root), "a changed max_commits changes the fingerprint")
 
-// TestLoadKnowledgeVCSMaxInvalidatesCache confirms a changed max_commits (not just a new
-// commit) invalidates the cache, since the resolved bound is part of the key.
-func TestLoadKnowledgeVCSMaxInvalidatesCache(t *testing.T) {
-	root := t.TempDir()
-	gitRun(t, root, "init", "-q")
-	writeCommit(t, root, "a.buzz", "x\n")
-	cacheDir := t.TempDir()
-	sidecar := filepath.Join(cacheDir, "knowledge", "vcs-inputs.json")
-
-	loadKnowledgeVCS(context.Background(), config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}, root, cacheDir, slog.Default())
-	c1, _ := readVCSCache(sidecar)
-	assert.Equal(t, vcsDefaultMaxCommits, c1.Max, "unset max resolves to the default in the key")
-
-	loadKnowledgeVCS(context.Background(), config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true, MaxCommits: 5}}}, root, cacheDir, slog.Default())
-	c2, _ := readVCSCache(sidecar)
-	assert.Equal(t, 5, c2.Max, "a changed max_commits rewrites the sidecar with the new bound")
+	// Disabled or non-git yields an empty fingerprint, so the caller never skips the scan.
+	assert.Empty(t, vcsInputFingerprint(ctx, config.Config{}, root), "disabled -> empty")
+	assert.Empty(t, vcsInputFingerprint(ctx, cfg, t.TempDir()), "non-git -> empty")
 }
 
 // TestLoadKnowledgeVCSNestedWorkspace confirms the prefix strip: when the workspace root
@@ -139,7 +127,7 @@ func TestLoadKnowledgeVCSNestedWorkspace(t *testing.T) {
 	writeCommit(t, repo, "sub/proj/app.buzz", "nested\n")
 
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.VCSConfig{Enabled: true}}}
-	entries := loadKnowledgeVCS(context.Background(), cfg, sub, t.TempDir(), slog.Default())
+	entries := loadKnowledgeVCS(context.Background(), cfg, sub, slog.Default())
 	require.NotEmpty(t, entries)
 
 	paths := map[string]bool{}

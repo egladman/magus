@@ -83,6 +83,12 @@ target ...:a,b` before a run. Disjoint edits never trip it.
 
 ### Changed
 
+- The knowledge graph's git-history (`@vcs`) scan is now cached through the standard shard
+  store - keyed by an input fingerprint (HEAD + window + schema) recorded in the manifest -
+  instead of a bespoke `vcs-inputs.json` sidecar. The expensive scan runs only when HEAD or
+  the window actually moves; an unchanged tree reuses the shard from disk with no extra
+  serialization. The window (`knowledge.vcs.max_commits`, default 1000) bounds the scan so
+  it never walks a whole monorepo's history.
 - `magus explain` and `magus path` now render as compact natural-language text by
   default, for both the CLI and the MCP tools: an edge's direction is folded into a
   verb (`used by`, `depends on`, `part of`, `required by`), edges are grouped by that

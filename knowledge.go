@@ -3,8 +3,10 @@ package magus
 import (
 	"cmp"
 	"context"
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -17,7 +19,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/knowledge"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
@@ -144,6 +145,22 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 	spells := ws.DescribeSpells()
 	graph := ws.DescribeGraph()
 	projects := ws.DescribeProjects()
+
+	// The @vcs shard is produced by an expensive git-history scan. Fingerprint its inputs
+	// (HEAD + window) and, when unchanged, SKIP the scan entirely: Sync reuses the shard
+	// from disk via the standard store. No bespoke cache file, and the walk runs only when
+	// HEAD actually moved. An empty fingerprint (VCS off / unresolvable) always runs the
+	// scan (which itself no-ops when disabled).
+	vcsFP := vcsInputFingerprint(ctx, cfg, root)
+	inputFPs := map[string]string{}
+	var vcsEntries []types.KnowledgeVCS
+	if vcsFP != "" {
+		inputFPs[knowledge.VCSShardName] = vcsFP
+	}
+	if vcsFP == "" || refresh || !knowledge.ShardInputFresh(cacheDir, knowledge.VCSShardName, vcsFP) {
+		vcsEntries = loadKnowledgeVCS(ctx, cfg, root, log)
+	}
+
 	in := knowledge.Inputs{
 		Graph:       graph,
 		Spells:      spells,
@@ -157,15 +174,16 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 			cfg: cfg, root: root, cacheDir: cacheDir,
 			projects: projects, spells: spells, log: log,
 		}),
-		VCS:            loadKnowledgeVCS(ctx, cfg, root, cacheDir, log),
+		VCS:            vcsEntries,
 		DeclaredSpells: declaredSpellSet(projects),
 		Coverage:       loadKnowledgeCoverage(root),
 	}
 	return knowledge.Build(ctx, cacheDir, knowledge.BuildOptions{
-		Immutable: cacheImmutable(cfg),
-		Refresh:   refresh,
-		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
-		Remote:    remoteShardsFor(ws),
+		Immutable:         cacheImmutable(cfg),
+		Refresh:           refresh,
+		MaxBytes:          int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
+		Remote:            remoteShardsFor(ws),
+		InputFingerprints: inputFPs,
 	}, in, log)
 }
 
@@ -422,29 +440,14 @@ func symbolIndexDeclarations(in symbolIngestInputs) []resolvedSymbolIndex {
 // budget, so the effective in-subdir window is smaller than the bound.
 const vcsDefaultMaxCommits = 1000
 
-// vcsInputCache is the sidecar that gates the churn scan: keyed by the current revision
-// and the commit bound, the metadata is re-derived only when either moves, so query-time
-// builds pay nothing on an unchanged tree.
-// vcsCacheVersion invalidates the on-disk vcs-inputs.json when the KnowledgeVCS shape
-// changes, so a warm cache from an older magus does not hide a newly-captured field (the
-// author). Bump it whenever aggregateFileHistory records something new.
-const vcsCacheVersion = 2
-
-type vcsInputCache struct {
-	Version int                  `json:"version"`
-	Head    string               `json:"head"`
-	Max     int                  `json:"max"`
-	Entries []types.KnowledgeVCS `json:"entries"`
-}
-
 // loadKnowledgeVCS gathers per-file history for the @vcs shard when opt-in
 // (knowledge.vcs.enabled), routed through the VCS abstraction so it is not git-specific:
 // any resolved backend that implements ChurnReporter works, and one that does not is
 // skipped. Best-effort: a disabled/absent VCS or a scan error yields no metadata (the
-// shard is simply absent), never an error. The walk is cached against the current
-// revision and the commit bound in <cacheDir>/knowledge/vcs-inputs.json, so an unchanged
-// commit reuses the prior result and the scan never runs on the query path.
-func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root, cacheDir string, log *slog.Logger) []types.KnowledgeVCS {
+// shard is simply absent), never an error. This is the EXPENSIVE half; the caller skips
+// it entirely when vcsInputFingerprint is unchanged (the @vcs shard is reused from disk
+// via the standard shard store), so it runs only when HEAD or the window actually moved.
+func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *slog.Logger) []types.KnowledgeVCS {
 	if !cfg.Knowledge.VCS.Enabled {
 		return nil
 	}
@@ -453,34 +456,47 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root, cacheDir str
 		log.Debug("knowledge: vcs enabled but no version control resolved, skipping")
 		return nil
 	}
-	head, err := res.VCS.FindCommit(ctx, root, "") // "" = the current revision
-	if err != nil || head.ID == "" {
-		log.Debug("knowledge: cannot resolve current revision, skipping vcs")
-		return nil
-	}
-
-	maxCommits := cfg.Knowledge.VCS.MaxCommits
-	if maxCommits <= 0 {
-		maxCommits = vcsDefaultMaxCommits
-	}
-	cachePath := filepath.Join(cacheDir, "knowledge", "vcs-inputs.json")
-	if cached, ok := readVCSCache(cachePath); ok && cached.Version == vcsCacheVersion && cached.Head == head.ID && cached.Max == maxCommits {
-		return cached.Entries
-	}
-
 	reporter, ok := res.VCS.(types.ChurnReporter)
 	if !ok {
 		log.Debug("knowledge: vcs backend cannot report per-commit files, skipping", slog.String("vcs", res.Name))
 		return nil
 	}
-	changes, err := reporter.ChangesByCommit(ctx, root, maxCommits, "")
+	changes, err := reporter.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
 	if err != nil {
 		log.Warn("knowledge: vcs history scan failed, skipping", slog.String("error", err.Error()))
 		return nil
 	}
-	entries := aggregateFileHistory(changes, vcsPathPrefix(root, res.VCS.Claims()))
-	writeVCSCache(cachePath, vcsInputCache{Version: vcsCacheVersion, Head: head.ID, Max: maxCommits, Entries: entries}, log)
-	return entries
+	return aggregateFileHistory(changes, vcsPathPrefix(root, res.VCS.Claims()))
+}
+
+// vcsMaxCommits is the bounded history window: the most recent N commits, never the whole
+// history (the scale guard for a large monorepo). Configurable via knowledge.vcs.max_commits.
+func vcsMaxCommits(cfg config.Config) int {
+	if m := cfg.Knowledge.VCS.MaxCommits; m > 0 {
+		return m
+	}
+	return vcsDefaultMaxCommits
+}
+
+// vcsInputFingerprint identifies the git-history scan's inputs - HEAD, the window, and the
+// schema (which fixes the attr shape) - as one SHA256 (the same hash the shards use). When
+// it is unchanged the @vcs shard is byte-identical, so the caller skips the scan and Sync
+// reuses the shard from disk. Empty (never skip, run the scan) when VCS is off or a revision
+// cannot be resolved. Cheap: one FindCommit, no history walk.
+func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) string {
+	if !cfg.Knowledge.VCS.Enabled {
+		return ""
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
+		return ""
+	}
+	head, err := res.VCS.FindCommit(ctx, root, "")
+	if err != nil || head.ID == "" {
+		return ""
+	}
+	sum := sha256.Sum256(fmt.Appendf(nil, "v%d\x00%s\x00%d", types.KnowledgeSchemaVersion, head.ID, vcsMaxCommits(cfg)))
+	return hex.EncodeToString(sum[:])
 }
 
 // vcsPathPrefix returns the "<subdir>/" prefix ChangesByCommit paths carry when the
@@ -563,37 +579,6 @@ func shortRevision(id string) string {
 		return id[:short]
 	}
 	return id
-}
-
-// readVCSCache loads the scan cache, returning ok=false on any miss (absent or
-// unreadable/corrupt) so the caller simply rescans.
-func readVCSCache(path string) (vcsInputCache, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return vcsInputCache{}, false
-	}
-	var c vcsInputCache
-	if err := json.Unmarshal(data, &c); err != nil {
-		return vcsInputCache{}, false
-	}
-	return c, true
-}
-
-// writeVCSCache persists the scan result, best-effort: a write failure only costs a
-// rescan next time, so it is logged at debug and never fatal. The write is atomic
-// (temp + rename), matching the shard store, so a concurrent build never reads a torn file.
-func writeVCSCache(path string, c vcsInputCache, log *slog.Logger) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		log.Debug("knowledge: cannot create vcs cache dir", slog.String("error", err.Error()))
-		return
-	}
-	data, err := json.Marshal(c)
-	if err != nil {
-		return
-	}
-	if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
-		log.Debug("knowledge: cannot write vcs cache", slog.String("error", err.Error()))
-	}
 }
 
 // knowledgeRemoteNamespace is the fixed "project path" the knowledge shard store
