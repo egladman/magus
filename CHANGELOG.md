@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- File nodes now carry `vcs_last_author` (the last commit's author) alongside the existing
+  `vcs_last_commit`/`vcs_last_modified`/`vcs_commits`, so a file's EMERGENT maintainer (who
+  actually edits it) can be set against its DECLARED CODEOWNERS owner - a gap a pure
+  code-graph cannot see. Captured from the commit history magus already scans.
 - Knowledge graph indexes the build I/O layer and authored markdown (schema v5). Each
   target's declared `magus.outputs` / `magus.inputs` becomes a `produces` / `consumes`
   edge to the file and doc nodes it matches, so a generated file is self-labeled by its

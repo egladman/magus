@@ -11,7 +11,7 @@ import (
 func TestAssembleVCS(t *testing.T) {
 	entries := []types.KnowledgeVCS{
 		{Path: "b.buzz", LastCommit: "beef", LastUnix: 1_700_000_000, Commits: 3},
-		{Path: "a.buzz", LastCommit: "cafe", LastUnix: 1_600_000_000, Commits: 1},
+		{Path: "a.buzz", LastCommit: "cafe", LastUnix: 1_600_000_000, LastAuthor: "Ada", Commits: 1},
 		{Path: "gone.buzz", LastCommit: "dead", LastUnix: 1, Commits: 9}, // no file node -> dropped
 	}
 	known := map[string]bool{"a.buzz": true, "b.buzz": true}
@@ -24,6 +24,7 @@ func TestAssembleVCS(t *testing.T) {
 	assert.Equal(t, map[string]string{
 		"vcs_last_commit":   "cafe",
 		"vcs_last_modified": "2020-09-13",
+		"vcs_last_author":   "Ada",
 		"vcs_commits":       "1",
 	}, s.Nodes[0].Attrs)
 	assert.Equal(t, fileID("b.buzz"), s.Nodes[1].ID)

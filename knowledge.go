@@ -425,7 +425,13 @@ const vcsDefaultMaxCommits = 1000
 // vcsInputCache is the sidecar that gates the churn scan: keyed by the current revision
 // and the commit bound, the metadata is re-derived only when either moves, so query-time
 // builds pay nothing on an unchanged tree.
+// vcsCacheVersion invalidates the on-disk vcs-inputs.json when the KnowledgeVCS shape
+// changes, so a warm cache from an older magus does not hide a newly-captured field (the
+// author). Bump it whenever aggregateFileHistory records something new.
+const vcsCacheVersion = 2
+
 type vcsInputCache struct {
+	Version int                  `json:"version"`
 	Head    string               `json:"head"`
 	Max     int                  `json:"max"`
 	Entries []types.KnowledgeVCS `json:"entries"`
@@ -458,7 +464,7 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root, cacheDir str
 		maxCommits = vcsDefaultMaxCommits
 	}
 	cachePath := filepath.Join(cacheDir, "knowledge", "vcs-inputs.json")
-	if cached, ok := readVCSCache(cachePath); ok && cached.Head == head.ID && cached.Max == maxCommits {
+	if cached, ok := readVCSCache(cachePath); ok && cached.Version == vcsCacheVersion && cached.Head == head.ID && cached.Max == maxCommits {
 		return cached.Entries
 	}
 
@@ -473,7 +479,7 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root, cacheDir str
 		return nil
 	}
 	entries := aggregateFileHistory(changes, vcsPathPrefix(root, res.VCS.Claims()))
-	writeVCSCache(cachePath, vcsInputCache{Head: head.ID, Max: maxCommits, Entries: entries}, log)
+	writeVCSCache(cachePath, vcsInputCache{Version: vcsCacheVersion, Head: head.ID, Max: maxCommits, Entries: entries}, log)
 	return entries
 }
 
@@ -512,6 +518,7 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	type acc struct {
 		lastCommit string
 		lastUnix   int64
+		lastAuthor string
 		commits    int
 	}
 	byPath := map[string]*acc{}
@@ -533,7 +540,8 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 			}
 			a := byPath[f]
 			if a == nil {
-				a = &acc{lastCommit: short, lastUnix: unix} // first sighting = most recent commit
+				// First sighting = the most recent commit (changes are newest-first).
+				a = &acc{lastCommit: short, lastUnix: unix, lastAuthor: c.Author}
 				byPath[f] = a
 				order = append(order, f)
 			}
@@ -543,7 +551,7 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	entries := make([]types.KnowledgeVCS, 0, len(order))
 	for _, p := range order {
 		a := byPath[p]
-		entries = append(entries, types.KnowledgeVCS{Path: p, LastCommit: a.lastCommit, LastUnix: a.lastUnix, Commits: a.commits})
+		entries = append(entries, types.KnowledgeVCS{Path: p, LastCommit: a.lastCommit, LastUnix: a.lastUnix, LastAuthor: a.lastAuthor, Commits: a.commits})
 	}
 	return entries
 }

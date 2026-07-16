@@ -116,12 +116,14 @@ type KnowledgeOutputRef struct {
 // inferred, and deterministic per commit: the same HEAD yields the same values, so the
 // shard is remote-shareable (unlike @runtime). Path is workspace-relative and matches a
 // file node's Source. Commits is the number of commits touching the file within the
-// scanned window; LastCommit/LastUnix are the most recent such commit's short SHA and
-// author time.
+// scanned window; LastCommit/LastUnix/LastAuthor are the most recent such commit's short
+// SHA, author time, and author name - the last is the EMERGENT maintainer, comparable
+// against a file's DECLARED CODEOWNERS owner.
 type KnowledgeVCS struct {
 	Path       string
 	LastCommit string
 	LastUnix   int64
+	LastAuthor string
 	Commits    int
 }
 

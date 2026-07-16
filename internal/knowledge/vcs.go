@@ -58,6 +58,11 @@ func vcsAttrs(e types.KnowledgeVCS) map[string]string {
 	if e.LastUnix > 0 {
 		attrs["vcs_last_modified"] = time.Unix(e.LastUnix, 0).UTC().Format("2006-01-02")
 	}
+	if e.LastAuthor != "" {
+		// The EMERGENT maintainer (who last touched the file), to set against a file's
+		// DECLARED CODEOWNERS owner - the owner-of-record vs who is actually editing.
+		attrs["vcs_last_author"] = sanitize(e.LastAuthor, maxLabelLen)
+	}
 	if e.Commits > 0 {
 		attrs["vcs_commits"] = strconv.Itoa(e.Commits)
 	}

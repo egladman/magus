@@ -64,6 +64,7 @@ func TestLoadKnowledgeVCSHistory(t *testing.T) {
 		last[e.Path] = e.LastCommit
 		assert.NotEmpty(t, e.LastCommit, "every entry has a last commit")
 		assert.Positive(t, e.LastUnix, "every entry has an author time")
+		assert.Equal(t, "t", e.LastAuthor, "the last commit's author is captured (GIT_AUTHOR_NAME)")
 	}
 	assert.Equal(t, 2, byPath["a.buzz"], "a.buzz was touched by two commits")
 	assert.Equal(t, 1, byPath["b.buzz"], "b.buzz was touched by one commit")
