@@ -180,6 +180,32 @@ After `magus run coverage` (or `ci`), a `coverage` attr (with `covered_stmts` /
 that reference a symbol. Sort symbols by `coverage` ascending for "what is untested",
 or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
 
+**What does a target produce or consume, and is a file generated?** magus indexes each
+target's declared `magus.outputs` / `magus.inputs`, so the graph knows the build's file
+flow - which a pure code-graph cannot.
+
+```sh
+magus explain "target:.:content-generate"   # the files a target produces and consumes
+magus explain "doc:docs/spells/go.md"        # a "produced by" edge means it is generated
+```
+
+Each declared output/input becomes a `produces` / `consumes` edge to the file and doc
+node it matches, so a generated file is self-labeled by its producing target (no marker
+needed) and you can walk from a target to exactly what it writes.
+
+**Which markdown is what?** Every authored markdown file in the workspace is a `doc`
+node tagged with a `role` from a universal filename convention - so it works in any repo.
+
+```sh
+magus query "kind:doc role:agent"    # the agent-instruction files (AGENTS.md, CLAUDE.md)
+magus query "role:readme"            # every README, wherever it lives
+magus query "kind:doc role:skill"    # skill definitions (SKILL.md)
+```
+
+Roles are `readme`, `agent`, `skill`, `changelog`, `contributing`, `license`, or a plain
+`doc`. Each doc attaches to the project whose directory holds it (`project --contains-->
+doc`), so from a project you reach its README and design notes as contextual docs.
+
 ## Graph Explorer
 
 `magus graph open` opens the graph in an interactive, force-directed

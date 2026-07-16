@@ -13,7 +13,7 @@ func TestDocsDanglingCodeReferenceMGS7002(t *testing.T) {
 	// MGS2001 is registered (PathReadDenied); MGS9998 is not.
 	writeFile(t, root, "docs/x.md", "See MGS2001, but MGS9998 does not exist.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{})}).Output()
+	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{}, nil)}).Output()
 
 	// A registered code still gets its inferred documents edge.
 	assert.True(t, hasEdge(out, "doc:docs/x.md", "diagnostic:MGS2001", types.RelationDocuments))
@@ -33,7 +33,7 @@ func TestDocsFrontmatterAttrs(t *testing.T) {
 	writeFile(t, root, "docs/charms.md", "---\ntitle: Charms\ntags: [reference, argv]\n---\n\nCharms modify argv.\n")
 	writeFile(t, root, "docs/plain.md", "# Plain\nNo frontmatter here.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{})}).Output()
+	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{}, nil)}).Output()
 
 	charms, ok := nodeByID(out, "doc:docs/charms.md")
 	require.True(t, ok)
@@ -53,7 +53,7 @@ func TestDocsFrontmatterCoexistsWithDiagnostic(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "docs/x.md", "---\ntitle: X\n---\n\nMentions MGS9998 which does not exist.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{})}).Output()
+	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{}, nil)}).Output()
 
 	d, ok := nodeByID(out, "doc:docs/x.md")
 	require.True(t, ok)
@@ -70,7 +70,7 @@ func TestMagusMdNotIngested(t *testing.T) {
 	writeFile(t, root, "MAGUS.md", "# magus\nUses the `go` spell; see MGS2001.\n")
 	writeFile(t, root, "README.md", "The `go` spell.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{Spells: []types.SpellEntry{{Name: "go"}}})}).Output()
+	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{Spells: []types.SpellEntry{{Name: "go"}}}, nil)}).Output()
 
 	_, ok := nodeByID(out, "doc:MAGUS.md")
 	assert.False(t, ok, "generated MAGUS.md must not be ingested as a doc node")
@@ -88,7 +88,7 @@ func TestAssembleDocs(t *testing.T) {
 	writeFile(t, root, "docs/spells/go.md", "# go\nThe go spell.\n")
 	writeFile(t, root, "README.md", "Uses the `go` spell; see MGS2010 when it fails.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{Spells: []types.SpellEntry{{Name: "go"}}})}).Output()
+	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{Spells: []types.SpellEntry{{Name: "go"}}}, nil)}).Output()
 
 	for _, id := range []string{"doc:docs/codes/sandbox/MGS2010.md", "doc:docs/spells/go.md", "doc:README.md"} {
 		_, ok := nodeByID(out, id)

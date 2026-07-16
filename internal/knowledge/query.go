@@ -65,7 +65,7 @@ const wildcardTermScore = 1
 
 // knownFields are the recognized field:value prefixes. kind/project/id/language
 // constrain which nodes match; relation constrains which edges a neighborhood traverses.
-var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true, "language": true}
+var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true, "language": true, "role": true}
 
 type parsedQuery struct {
 	terms     []string            // positive free-text tokens (AND)
@@ -200,6 +200,15 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 		return 0, false
 	}
 	if vals := q.negFields["language"]; slices.Contains(vals, n.Attrs["language"]) {
+		return 0, false
+	}
+	// role filters on the doc-classification attr (readme/agent/changelog/...), so
+	// `kind:doc role:agent` finds the agent-instruction files. A node without the attr
+	// never matches a positive role constraint.
+	if vals, ok := q.fields["role"]; ok && !slices.Contains(vals, n.Attrs[AttrRole]) {
+		return 0, false
+	}
+	if vals := q.negFields["role"]; slices.Contains(vals, n.Attrs[AttrRole]) {
 		return 0, false
 	}
 

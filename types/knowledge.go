@@ -16,7 +16,11 @@ package types
 // a redundant copy of the op) and moves the model onto the op: an op carries an `argv`
 // attr and `uses` the tool (argv[0]) it runs, so `explain tool:go` reaches every op
 // that runs go and a target reaches its tool via target->op->tool. v2/v3 were unreleased.
-const KnowledgeSchemaVersion = 4
+// v5 adds the build I/O layer: `produces`/`consumes` edges from a target's declared
+// magus.outputs/inputs to the file and doc nodes they match, so a generated file is
+// self-labeled by its producing target; plus workspace-wide authored-markdown doc nodes
+// carrying a `role` attr (readme/agent/changelog/...) and a `documents` edge to their project.
+const KnowledgeSchemaVersion = 5
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".
@@ -55,7 +59,7 @@ const (
 // Knowledge edge relations. Values are stable wire strings.
 const (
 	RelationDependsOn    = "depends_on"    // project->project, target->target
-	RelationContains     = "contains"      // project->target, spell->op
+	RelationContains     = "contains"      // project->target, spell->op, project->file/doc
 	RelationUses         = "uses"          // target->op
 	RelationReferences   = "references"    // charm->target/project; reused for file->symbol (SCIP)
 	RelationDocuments    = "documents"     // doc->spell/diagnostic/module (phase 4)
@@ -65,6 +69,8 @@ const (
 	RelationEmits        = "emits"         // target->diagnostic, runtime (phase 8)
 	RelationOwns         = "owns"          // owner->project/file, from CODEOWNERS
 	RelationDefines      = "defines"       // file->symbol, from a SCIP index
+	RelationProduces     = "produces"      // target->file/doc, from magus.outputs (v5)
+	RelationConsumes     = "consumes"      // target->file/doc, from magus.inputs (v5)
 )
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score

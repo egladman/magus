@@ -121,6 +121,11 @@ const (
 	// (value "true"), distinct from a compiled-in builtin that is merely available. The
 	// orphan lens flags only declared-but-unused spells as dead.
 	AttrDeclared = "declared"
+	// AttrRole classifies a doc node by what the markdown file IS, from a universal
+	// filename convention (readme, agent, changelog, contributing, license), or "doc"
+	// for anything else. It is workspace-agnostic - no magus-specific filenames - so
+	// `query "kind:doc role:agent"` finds the agent-instruction files in any repo.
+	AttrRole = "role"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are

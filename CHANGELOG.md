@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Knowledge graph indexes the build I/O layer and authored markdown (schema v5). Each
+  target's declared `magus.outputs` / `magus.inputs` becomes a `produces` / `consumes`
+  edge to the file and doc nodes it matches, so a generated file is self-labeled by its
+  producing target (`explain doc:docs/spells/go.md` shows "produced by content-generate")
+  and you can walk a target to exactly what it writes; a per-glob fan-out cap keeps a
+  broad declaration from turning a target into a god node. Separately, every authored
+  markdown file workspace-wide (README, AGENTS.md/CLAUDE.md, CHANGELOG, SKILL.md, ...) is
+  now a `doc` node carrying a `role` attr from a universal filename convention and a
+  `contains` edge from its project, so `query "kind:doc role:agent"` finds the
+  agent-instruction files in any repo.
 - Knowledge graph gains build and runtime dimensions: each spell op now carries the
   base argv it runs (an `argv` attr) and `use`s a `tool` node for the program it runs,
   so `explain tool:go` lists every op that runs go and `kind:tool` is the workspace's

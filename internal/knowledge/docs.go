@@ -32,7 +32,7 @@ var (
 // backtick-wrapped spell names) are INFERRED; markdown links to other scanned docs
 // are references. Extracted edges win over inferred on dedup, so a code page's own
 // path edge is not weakened by the same code appearing in its body.
-func assembleDocs(root string, spells types.SpellsOutput) Shard {
+func assembleDocs(root string, spells types.SpellsOutput, projects []types.TargetGraphProject) Shard {
 	s := Shard{Name: DocsShardName}
 	files := findDocFiles(root)
 	scanned := make(map[string]bool, len(files))
@@ -59,18 +59,29 @@ func assembleDocs(root string, spells types.SpellsOutput) Shard {
 		dID := docID(rel)
 		node := types.KnowledgeNode{ID: dID, Kind: types.KindDoc, Label: rel, Source: rel}
 
-		// Surface the page's frontmatter title/tags onto the node so a query result
-		// reads as the doc's human name, not just its path. Best-effort: a page with
-		// no frontmatter (README.md, a stub) simply carries neither attr.
+		// Every doc carries a role - what the markdown IS (readme/agent/changelog/...),
+		// from a universal filename convention - plus its frontmatter title/tags where
+		// present, so a query result reads as the doc's human name and an agent can ask
+		// `kind:doc role:agent` in any repo. A page with no frontmatter (a README, a stub)
+		// simply carries no title/tags.
+		docAttrs := map[string]string{AttrRole: roleFromRel(rel)}
 		if fm, ok := docs.ParseFrontmatter(content); ok {
-			docAttrs := map[string]string{}
 			if fm.Title != "" {
 				docAttrs[AttrTitle] = fm.Title
 			}
 			if len(fm.Tags) > 0 {
 				docAttrs[AttrTags] = strings.Join(fm.Tags, ",")
 			}
-			node.Attrs = nilIfEmpty(docAttrs)
+		}
+		node.Attrs = docAttrs
+
+		// Attach the doc to the project whose directory holds it - structural containment,
+		// exactly as a source file attaches (project -> contains -> file). This is the
+		// contextual link: from a project you reach its README and design notes, with the
+		// role attr telling you which is which. It never claims the doc "documents" the
+		// project (a spell page documents the spell, not the root project it sits under).
+		if owner, ok := owningProjectPath(rel, projects); ok {
+			s.Edges = append(s.Edges, extractedEdge(projectID(owner), dID, types.RelationContains, rel))
 		}
 
 		if code, ok := diagnosticFromPath(rel); ok {
@@ -174,42 +185,82 @@ func resolveDocLink(fromRel, link string, scanned map[string]bool) (string, bool
 	return "", false
 }
 
-// findDocFiles returns every markdown doc path (rel to root), sorted: everything
-// under docs/, plus the top-level README.md, skipping ignore dirs.
+// findDocFiles returns every authored markdown path (rel to root), sorted, by walking
+// the whole workspace. Skipped: the dot-dirs and build/dependency dirs project.IsIgnoreDir
+// already excludes (.git, .claude, node_modules, gen, vendor, target), plus dist/ (a build
+// output), plus MAGUS.md at any level. Generated markdown is NOT skipped here - a generated
+// page is ingested and self-labeled by its producing target's `produces` edge (see
+// assembleIO); only true build-output dirs and the fixpoint file below are dropped.
 //
-// MAGUS.md is deliberately NOT ingested. It is a generated catalog (rendered by
-// `magus describe graph -o markdown`) whose body carries live node/edge counts, and
-// its doc node would emit body-derived edges (MGS codes, backticked spell names,
-// markdown links). Ingesting it makes it both an input and an output: regenerating
-// the counts changes the body, which changes the edge count, which changes the
-// counts - no single-pass fixpoint. Everything in MAGUS.md is already a first-class
-// node in the graph, so excluding it loses nothing.
+// MAGUS.md is the one exclusion by name. It is a generated catalog (rendered by
+// `magus describe graph -o markdown`) whose body carries live node/edge counts, so its
+// doc node would emit body-derived edges (MGS codes, backticked spell names, markdown
+// links). Ingesting it makes it both an input and an output: regenerating the counts
+// changes the body, which changes the edge count, which changes the counts - no
+// single-pass fixpoint. Everything in MAGUS.md is already a first-class node, so
+// excluding it loses nothing.
 func findDocFiles(root string) []string {
 	var out []string
-	for _, top := range []string{"README.md"} {
-		if _, err := os.Stat(filepath.Join(root, top)); err == nil {
-			out = append(out, top)
-		}
-	}
-	_ = filepath.WalkDir(filepath.Join(root, "docs"), func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // WalkDir: skip unreadable entries, continue walking
 		}
 		if d.IsDir() {
-			if project.IsIgnoreDir(d.Name()) {
+			// Never skip the walk root itself: the workspace we are indexing is often a
+			// worktree, and skipDocWalkDir's nested-worktree guard would otherwise skip
+			// everything. The guard applies only to worktrees found BELOW the root.
+			if p != root && skipDocWalkDir(p, d.Name()) {
 				return fs.SkipDir
 			}
 			return nil
 		}
-		if strings.HasSuffix(path, ".md") {
-			if rel, err := filepath.Rel(root, path); err == nil {
-				out = append(out, filepath.ToSlash(rel))
-			}
+		if !strings.HasSuffix(p, ".md") || filepath.Base(p) == "MAGUS.md" {
+			return nil
+		}
+		if rel, err := filepath.Rel(root, p); err == nil {
+			out = append(out, filepath.ToSlash(rel))
 		}
 		return nil
 	})
 	slices.Sort(out)
 	return out
+}
+
+// skipDocWalkDir reports whether the doc walk should not descend into dir. Unlike
+// project.IsIgnoreDir (which skips ALL dot-dirs), the doc walk DOES descend into
+// meaningful hidden dirs - .claude/skills holds SKILL.md agent files, .github holds
+// templates - and skips only genuine noise: VCS internals, the magus cache, build and
+// dependency trees, and any nested git worktree (a second checkout of the same repo
+// whose files would otherwise be indexed twice).
+func skipDocWalkDir(path, name string) bool {
+	switch name {
+	case ".git", ".magus", "node_modules", "vendor", "gen", "target", "dist":
+		return true
+	}
+	return project.IsNestedWorktree(path)
+}
+
+// roleFromRel classifies a markdown file by what it IS, from cross-ecosystem filename
+// conventions - never magus-specific names, so the same rule is meaningful in any repo.
+// Anything without a recognized convention is a plain "doc".
+func roleFromRel(rel string) string {
+	stem := strings.ToLower(strings.TrimSuffix(filepath.Base(rel), ".md"))
+	switch stem {
+	case "readme":
+		return "readme"
+	case "agents", "claude":
+		return "agent"
+	case "skill":
+		return "skill"
+	case "changelog":
+		return "changelog"
+	case "contributing":
+		return "contributing"
+	case "license", "licence":
+		return "license"
+	default:
+		return "doc"
+	}
 }
 
 // uniqSortedStrings returns the sorted unique values of xs.

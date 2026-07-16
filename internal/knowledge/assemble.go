@@ -97,8 +97,15 @@ func AssembleShards(in Inputs) []Shard {
 	// Docs and buzz-source extraction scan the filesystem, so they run only when a
 	// workspace root is set (synthetic-Inputs tests leave it empty). Empty shards
 	// are dropped so no empty files are persisted.
+	// pathToNode maps a workspace-relative path to the file/doc node sitting at it, so the
+	// I/O pass can resolve each target's output/input globs to the nodes they produce or
+	// consume. Populated as the path-bearing shards (docs, buzz, symbols) are built.
+	pathToNode := map[string]string{}
 	if in.Root != "" {
-		if d := assembleDocs(in.Root, in.Spells); len(d.Nodes) > 0 {
+		if d := assembleDocs(in.Root, in.Spells, in.Graph.Projects); len(d.Nodes) > 0 {
+			for _, n := range d.Nodes {
+				pathToNode[n.Source] = n.ID
+			}
 			shards = append(shards, d)
 		}
 		fileNodePaths := map[string]bool{}
@@ -109,6 +116,7 @@ func AssembleShards(in Inputs) []Shard {
 				}
 				owned = append(owned, ownedNode{ID: n.ID, Path: n.Source})
 				fileNodePaths[n.Source] = true
+				pathToNode[n.Source] = n.ID
 				// Link each source file to the project that owns it. Without this a file
 				// (and any symbol defined in it) reaches only its functions and imports,
 				// never up to its project or the workspace. Edges added before the shard
@@ -138,8 +146,19 @@ func AssembleShards(in Inputs) []Shard {
 	// so the shard slice is deterministic despite the map input.
 	for _, project := range slices.Sorted(maps.Keys(in.Symbols)) {
 		if s := assembleSymbols(project, in.Symbols[project], in.Graph.Projects); len(s.Nodes) > 0 {
+			for _, n := range s.Nodes {
+				if n.Kind == types.KindFile {
+					pathToNode[n.Source] = n.ID
+				}
+			}
 			shards = append(shards, s)
 		}
+	}
+	// The build I/O layer: produces/consumes edges from each target's declared outputs and
+	// inputs to the file and doc nodes they match. Runs last, so every path-bearing node
+	// (docs, buzz, symbols) is known; it links only existing nodes, never a phantom.
+	if io := assembleIO(in.Graph.Projects, pathToNode); len(io.Edges) > 0 {
+		shards = append(shards, io)
 	}
 	// The observed coverage overlay: a single isolated shard folding a coverage ratio
 	// onto the file/symbol nodes above. Lazily loaded (its targets are), so an empty

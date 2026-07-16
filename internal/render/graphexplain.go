@@ -34,6 +34,8 @@ var relationPhrase = map[string][2]string{
 	types.RelationOwns:         {"owns", "owned by"},
 	types.RelationDefines:      {"defines", "defined by"},
 	types.RelationRationaleFor: {"explains", "explained by"},
+	types.RelationProduces:     {"produces", "produced by"},
+	types.RelationConsumes:     {"consumes", "consumed by"},
 }
 
 // phraseFor returns the natural-language verb for a relation in the given
