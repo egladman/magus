@@ -214,9 +214,9 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       { a: "website/dashboard.css", b: "website/js/dashboard/main.ts", count: 9, hidden: true },
     ],
     ownership: [
-      { path: "gopherbuzz", primary: "eli", primaryShare: 0.92, authors: 2, busFactor1: true, stale: false },
-      { path: "internal/sandbox", primary: "eli", primaryShare: 0.78, authors: 3, busFactor1: false, stale: true },
-      { path: "website", primary: "eli", primaryShare: 0.85, authors: 2, busFactor1: false, stale: false },
+      { path: "gopherbuzz", primary: "eli", primaryShare: 92, authors: 2, busFactor1: true, stale: false },
+      { path: "internal/sandbox", primary: "eli", primaryShare: 78, authors: 3, busFactor1: false, stale: true },
+      { path: "website", primary: "eli", primaryShare: 85, authors: 2, busFactor1: false, stale: false },
     ],
     trend: [
       { path: "internal/service/console", delta: 18, recent: 24, earlier: 6 },

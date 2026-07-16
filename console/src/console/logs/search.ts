@@ -21,7 +21,7 @@ export function runSearch(query: string): void {
     return;
   }
   const needle = query.toLowerCase();
-  for (const lc of bodyEl.querySelectorAll(".lc")) {
+  for (const lc of bodyEl.querySelectorAll(".console-render-line__content")) {
     highlightIn(lc, needle);
   }
   if (countEl) countEl.textContent = searchMarks.length ? "1/" + searchMarks.length : "0";

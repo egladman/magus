@@ -10,7 +10,7 @@
 
 import { Kind } from "../../gen/magus/viewer/v1/viewer_pb";
 import type { Event, Status } from "../../gen/magus/viewer/v1/viewer_pb";
-import type { FocusWin, InvocationView, Source, SpanMulti, SpanTree, Step, TargetSpan } from "./state";
+import type { InvocationView, Source, SpanMulti, SpanTree, Step, TargetSpan } from "./state";
 import { state, waterfallSource } from "./state";
 import { bodyEl, el } from "./dom";
 import { cmdLabel, statusName } from "./model";
@@ -402,6 +402,3 @@ function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void
     root.appendChild(d);
   }
 }
-
-// FocusWin re-export kept local; nothing outside needs it.
-export type { FocusWin };

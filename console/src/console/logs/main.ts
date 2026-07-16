@@ -118,7 +118,7 @@ function wireZoom(): void {
 
 // --- Keyboard commands --------------------------------------------------------
 // The log viewer's actions double as named commands so a keybinding (and, later, the console's
-// menu/palette) can trigger them. Each command DISPATCHES TO the existing control - the button's
+// menu/command bar) can trigger them. Each command DISPATCHES TO the existing control - the button's
 // own click handler stays the single source of truth for the action, so there is no duplicated
 // behavior. The default chords are single keys, matching the viewer's existing "/" idiom (a
 // keyboard-driven reader, like less/gh) and deliberately avoiding browser-owned combos

@@ -34,13 +34,19 @@ export type HashParams = Record<string, string>;
 // e.g. the log viewer's "L10-L20" line token) is kept with an empty value so a
 // caller that rewrites the fragment (consumeLiveToken) can round-trip it.
 export function parseHash(): HashParams {
+  // A malformed percent-escape (e.g. a truncated shared link) makes
+  // decodeURIComponent throw; keep the raw text rather than aborting boot, since
+  // parseHash runs before any surface mounts.
+  const decode = (s: string): string => {
+    try { return decodeURIComponent(s); } catch { return s; }
+  };
   const h = location.hash.replace(/^#/, "");
   const params: HashParams = {};
   for (const part of h.split("&")) {
     if (!part) continue;
     const i = part.indexOf("=");
     if (i < 0) { params[part] = ""; continue; }
-    params[decodeURIComponent(part.slice(0, i))] = decodeURIComponent(part.slice(i + 1));
+    params[decode(part.slice(0, i))] = decode(part.slice(i + 1));
   }
   return params;
 }

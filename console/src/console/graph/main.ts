@@ -1354,42 +1354,6 @@ function buildProjectionSet() {
   return projectIds;
 }
 
-// Apply (or clear) the default projection. Called at boot and when user unfolds.
-function applyProjection() {
-  if (projectionUnfolded) {
-    projectionSet = null;
-    const btn = el("projection-unfold-btn");
-    if (btn) btn.hidden = true;
-    matchSet = null;
-    renderList();
-    updateHash();
-    if (layoutMode === "layered") {
-      for (const e of graph.links) delete e.layoutReversed;
-      applyLayeredMode();
-    } else {
-      draw();
-    }
-    return;
-  }
-  const ps = buildProjectionSet();
-  projectionSet = ps;
-  // If no projection applies, nothing to do.
-  if (!ps) return;
-  // Set matchSet = projectionSet so the node list and count reflect the projection.
-  matchSet = new Set(ps);
-  // Park non-projection nodes out of the force simulation by pinning them at a
-  // far-off location. They are not drawn (draw() skips them when projectionActive),
-  // and pinning removes them from the effective sim space so visible nodes settle
-  // without interference from the hidden 1600-node soup.
-  if (graph) {
-    for (const n of graph.nodes) {
-      if (!ps.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
-    }
-  }
-  renderList();
-  updateProjectionStatus();
-}
-
 function updateProjectionStatus() {
   if (!projectionSet || projectionUnfolded) return;
   const n = projectionSet.size;
@@ -1503,15 +1467,21 @@ function criticalPath() {
     if (e.relation !== "depends_on") continue;
     let sf = fwdAdj.get(s); if (!sf) { sf = new Set(); fwdAdj.set(s, sf); } sf.add(t);
   }
-  const memo = new Map(); // id -> { cost, next }
-  function dp(id: string) {
-    if (memo.has(id)) return memo.get(id);
-    let best = { cost: dur(graph.byId.get(id) || {}), next: null };
+  const memo = new Map<string, { cost: number; next: string | null }>();
+  const onStack = new Set<string>(); // nodes on the current recursion stack: guards depends_on cycles
+  function dp(id: string): { cost: number; next: string | null } {
+    const cached = memo.get(id);
+    if (cached) return cached;
+    onStack.add(id);
+    const self = dur(graph.byId.get(id) || {});
+    let best: { cost: number; next: string | null } = { cost: self, next: null };
     for (const nb of fwdAdj.get(id) || []) {
+      if (onStack.has(nb)) continue; // back-edge: skip to break the cycle
       const child = dp(nb);
-      const c = dur(graph.byId.get(id) || {}) + child.cost;
+      const c = self + child.cost;
       if (c > best.cost) best = { cost: c, next: nb };
     }
+    onStack.delete(id);
     memo.set(id, best);
     return best;
   }
@@ -1527,7 +1497,7 @@ function criticalPath() {
   if (!bestRoot) return null;
   // Reconstruct path.
   const path = [];
-  let cur = bestRoot;
+  let cur: string | null = bestRoot;
   while (cur) { path.push(cur); cur = dp(cur).next; }
   return path.length > 1 ? path : null;
 }
