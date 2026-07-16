@@ -76,7 +76,7 @@ function pfLabel(id: string, colorMod: string, text: string): HTMLElement {
 }
 
 // makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
-// (#console-conn, #console-demo, #console-observing, #console-count, #offline-badge) and the
+// (#console-conn, #console-demo, #console-observing, #console-count) and the
 // .console-shell-statusbar__right slot the log viewer injects its zoom control into. It is a real element (not an
 // innerHTML snapshot) so the surface's live handles + listeners survive tab switches. Only the ACTIVE
 // tab's status bar is attached to the footer, so getElementById resolves to the active surface's
@@ -84,8 +84,8 @@ function pfLabel(id: string, colorMod: string, text: string): HTMLElement {
 // through getElementById to the active bar; no surface does that today except a live dashboard/log,
 // a known edge.)
 //
-// PatternFly (W2 shell rebuild): the discrete chips (#console-demo, #offline-badge) are PF Labels;
-// the text items (#console-conn with its liveness dot, #console-count, #console-observing) are plain
+// PatternFly (W2 shell rebuild): the #console-demo chip is a PF Label; the text items (#console-conn
+// with its liveness dot, #console-count, #console-observing) are plain
 // spans the surfaces write via textContent + [data-state]/[data-health], styled ID-scoped in
 // overrides.css (PF has no status-bar component). The wrapper + clusters are class-free (data hooks);
 // only .console-shell-statusbar__right stays a class because the log viewer queries it to inject its zoom control.
@@ -96,7 +96,7 @@ function makeStatusBar(): HTMLElement {
   const conn = document.createElement("span");
   conn.id = "console-conn"; conn.setAttribute("aria-live", "polite");
   conn.textContent = "not connected";
-  left.append(conn, pfLabel("console-demo", "pf-m-blue", "Demo data"));
+  left.append(conn, pfLabel("console-demo", "pf-m-blue", "Demo"));
   const right = document.createElement("div");
   right.dataset.cluster = ""; right.className = "console-shell-statusbar__right";
   for (const id of ["console-count", "console-observing"] as const) {
@@ -104,7 +104,6 @@ function makeStatusBar(): HTMLElement {
     s.id = id; s.dataset.item = ""; s.hidden = true; s.setAttribute("aria-live", "polite");
     right.append(s);
   }
-  right.append(pfLabel("offline-badge", "pf-m-orange", "offline"));
   bar.append(left, right);
   return bar;
 }
