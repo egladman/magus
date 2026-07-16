@@ -11,6 +11,21 @@ export interface Launchable {
   hint: string;
 }
 
+// One representative glyph per surface, drawn in the console's shared icon idiom (24x24, stroked
+// currentColor, round caps) so the launcher matches the title-bar and toolbar iconography. Keyed by
+// pageId; a surface with no entry falls back to a neutral square. The paths are the inner geometry -
+// buildLauncher wraps each in the <svg> shell.
+const SURFACE_ICONS: Record<string, string> = {
+  // Log viewer: a document with text lines.
+  logs: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h6"/>',
+  // Graph explorer: three connected nodes.
+  graph: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="9" r="2.5"/><circle cx="9" cy="18" r="2.5"/><path d="M8.3 7.2 15.6 8.4M8.6 16 8.2 8.6"/>',
+  // Dashboard: a gauge/speedometer.
+  dashboard: '<path d="M3.5 18a10 10 0 1 1 17 0"/><path d="M12 14l3.5-3.5"/>',
+  // Activity: a pulse/activity line.
+  activity: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
+};
+
 // buildLauncher builds the launcher DOM as the outlet's empty state. `surfaces` is what it offers to
 // open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
@@ -23,21 +38,30 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   root.dataset.surface = "home";
 
   const title = document.createElement("h1");
-  title.textContent = "magus console";
+  title.textContent = "What do you want to open?";
   const sub = document.createElement("p");
-  sub.textContent = "Pick a tool to open it in a tab.";
+  sub.textContent = "Each tool opens in its own tab.";
 
   const gallery = document.createElement("div");
   gallery.className = "pf-v6-l-gallery pf-m-gutter";
   for (const s of surfaces) {
     const card = document.createElement("div");
-    card.className = "pf-v6-c-card pf-m-clickable pf-m-compact";
+    card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
     card.dataset.open = s.pageId;
     // A real clickable button: role=button + tabindex make it keyboard-reachable and announce it
     // as a button; the Enter/Space handler below completes the contract.
     card.setAttribute("role", "button");
     card.setAttribute("tabindex", "0");
     card.setAttribute("aria-label", "Open " + s.label);
+    // A representative glyph in an accent-tinted tile, in the console's shared icon style. Decorative
+    // (the accessible name is the card's aria-label), so aria-hidden.
+    const icon = document.createElement("span");
+    icon.className = "console-launcher-card__icon";
+    icon.innerHTML =
+      '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (SURFACE_ICONS[s.pageId] ?? '<rect x="4" y="4" width="16" height="16" rx="2"/>') +
+      "</svg>";
     const titleEl = document.createElement("div");
     titleEl.className = "pf-v6-c-card__title";
     const titleText = document.createElement("span");
@@ -47,7 +71,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     const body = document.createElement("div");
     body.className = "pf-v6-c-card__body";
     body.textContent = s.hint;
-    card.append(titleEl, body);
+    card.append(icon, titleEl, body);
     card.addEventListener("click", () => open(s.pageId));
     card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(s.pageId); } });
     gallery.append(card);

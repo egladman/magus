@@ -330,7 +330,31 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-surface="home"] { padding: 2.5rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); }
 #console-outlet [data-surface="home"] h1 { max-width: 44rem; margin: 0 0 0.2rem; font-size: 1.4rem; }
 #console-outlet [data-surface="home"] > p { max-width: 44rem; margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
-#console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 44rem; }
+#console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 52rem; }
+
+/* Launcher cards: taller than a default PF card, an accent-tinted glyph tile up top, a lift on
+   hover/focus. The card shell stays PF (pf-v6-c-card pf-m-clickable); these rules add the icon slot
+   and the taller, more inviting proportions the compact default did not give. */
+.console-launcher-card {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  min-height: 11rem; padding: 1.5rem;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.console-launcher-card:hover,
+.console-launcher-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--console-accent);
+  box-shadow: var(--pf-t--global--box-shadow--md);
+}
+.console-launcher-card__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.75rem; height: 2.75rem; margin-bottom: 0.75rem;
+  border-radius: var(--pf-t--global--border--radius--medium);
+  color: var(--console-accent);
+  background: color-mix(in srgb, var(--console-accent) 12%, transparent);
+}
+.console-launcher-card .pf-v6-c-card__title-text { font-size: 1.05rem; font-weight: 600; }
+.console-launcher-card .pf-v6-c-card__body { color: var(--pf-t--global--text--color--subtle); }
 
 /* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay
    (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives
