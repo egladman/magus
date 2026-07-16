@@ -533,6 +533,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   --pf-v6-c-drawer__panel--md--FlexBasis: var(--console-refdrawer-w);
   --pf-v6-c-drawer__panel--xl--FlexBasis: var(--console-refdrawer-w);
 }
+/* Pinned pin button pops orange (aria-pressed, set in ref-drawer.ts) so the toggled-on state is
+   obvious - a deliberate accent, not a warning; icon color + a faint same-hue wash. Reads on both
+   themes at this mid value. */
+#console-refpin[aria-pressed="true"] {
+  color: var(--pf-t--color--orange--60);
+  background: color-mix(in srgb, var(--pf-t--color--orange--60) 14%, transparent);
+}
 /* Unpinned = OVERLAY. Pinning adds pf-m-inline (ref-drawer.ts), which lets PF inset the __content so
    the surfaces reflow narrower (snap-to-fit). Unpinned drops pf-m-inline; PF's CSS-only non-inline
    drawer then parks the expanded panel off the right edge (the __content yields no width), so pull it
