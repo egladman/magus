@@ -120,7 +120,14 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   // hidden the moment a tab activates. Clicking a card opens that surface as a real tab. It gets its
   // own default status bar (identical to what the old home tab supplied: a "not connected" dot and a
   // hidden Demo chip) so the footer stays populated at zero tabs.
-  const launcher = buildLauncher(SURFACES, open);
+  // launchDemo opens every surface in the daemon-free demo: it sets the shared #demo fragment each
+  // surface reads when it activates, then opens them as tabs (Dashboard last so its live-updating demo
+  // is the active tab). The launcher only shows at zero tabs, so all four mount fresh into demo mode.
+  const launchDemo = (): void => {
+    history.replaceState(null, "", location.pathname + location.search + "#demo");
+    for (const id of ["logs", "graph", "activity", "dashboard"]) open(id);
+  };
+  const launcher = buildLauncher(SURFACES, open, launchDemo);
   launcher.hidden = true;
   outlet.append(launcher);
   const launcherStatus = makeStatusBar();

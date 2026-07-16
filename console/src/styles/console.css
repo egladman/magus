@@ -327,7 +327,30 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    the SECONDARY page token (the PF "grey page" behind primary-white cards) so the clickable Cards keep
    their contrast in both themes. The content stays capped at 44rem, left-aligned, so the full-bleed
    background reads as a real page. */
-#console-outlet [data-surface="home"] { padding: 2.5rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); }
+#console-outlet [data-surface="home"] { position: relative; padding: 2.5rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); }
+
+/* Launch-the-demo affordance: a quiet icon pill in the launcher's bottom-right that expands to show its
+   label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. */
+.console-launcher-demo {
+  position: absolute; bottom: 1.25rem; right: 1.25rem;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem; border-radius: 999px;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, padding 0.12s ease;
+}
+.console-launcher-demo:hover,
+.console-launcher-demo:focus-visible { color: var(--console-accent); border-color: var(--console-accent); padding: 0.4rem 0.75rem; }
+.console-launcher-demo__icon { display: inline-flex; }
+.console-launcher-demo__label {
+  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
+  font-size: 0.8rem; font-weight: 500;
+  transition: max-width 0.16s ease, opacity 0.12s ease;
+}
+.console-launcher-demo:hover .console-launcher-demo__label,
+.console-launcher-demo:focus-visible .console-launcher-demo__label { max-width: 9rem; opacity: 1; }
 #console-outlet [data-surface="home"] h1 { max-width: 44rem; margin: 0 0 0.2rem; font-size: 1.4rem; }
 #console-outlet [data-surface="home"] > p { max-width: 44rem; margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 #console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 52rem; }

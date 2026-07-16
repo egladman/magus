@@ -32,7 +32,7 @@ const SURFACE_ICONS: Record<string, string> = {
 // open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
 // #console-outlet-content as a sibling of the tab panes, shown only when no tab is active.
-export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => void): HTMLElement {
+export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => void, launchDemo: () => void): HTMLElement {
   // data-surface tags the empty state; its heading/lede layout is ID-scoped in console.css. The
   // launcher is a PatternFly Gallery of clickable Cards - the [data-open] hook the click handler keys
   // on rides on each card, and the whole card is the keyboard-reachable target (tabindex + Enter/Space).
@@ -133,6 +133,21 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   document.addEventListener("click", closeAll);
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeAll(); });
 
-  root.append(title, sub, gallery);
+  // A quiet corner affordance to launch the full demo: opens every surface with representative,
+  // daemon-free demo data (see main.ts's launchDemo). It sits bottom-right of the launcher and reveals
+  // its label on hover/focus, so it reads as a subtle "try it" rather than a primary action.
+  const demo = document.createElement("button");
+  demo.type = "button";
+  demo.className = "console-launcher-demo";
+  demo.setAttribute("aria-label", "Launch the demo");
+  demo.setAttribute("title", "Launch the demo");
+  demo.innerHTML =
+    '<span class="console-launcher-demo__icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
+    '<path d="M12 3l1.6 4.8L18 9l-4.4 1.2L12 15l-1.6-4.8L6 9l4.4-1.2z"/>' +
+    '<path d="M18 14l.6 1.9 1.9.6-1.9.6L18 19l-.6-1.9-1.9-.6 1.9-.6z"/></svg></span>' +
+    '<span class="console-launcher-demo__label">Launch the demo</span>';
+  demo.addEventListener("click", () => launchDemo());
+
+  root.append(title, sub, gallery, demo);
   return root;
 }
