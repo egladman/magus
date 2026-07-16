@@ -1,12 +1,49 @@
 package knowledge
 
 import (
+	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestAssembleVCSAuthors: an author gets a node with an `authored` edge to each node-backed
+// file they touched; a file with no graph node contributes no author or edge; and an author
+// over the fan-out cap gets a files_authored COUNT with NO edges (the god-node guard).
+func TestAssembleVCSAuthors(t *testing.T) {
+	fileNodePaths := map[string]bool{"a.buzz": true, "b.buzz": true}
+	entries := []types.KnowledgeVCS{
+		{Path: "a.buzz", LastCommit: "c1", Authors: []string{"Ada", "Bob"}, Commits: 2},
+		{Path: "b.buzz", LastCommit: "c2", Authors: []string{"Ada"}, Commits: 1},
+		{Path: "ghost.buzz", LastCommit: "c3", Authors: []string{"Cy"}, Commits: 1}, // no file node
+	}
+	for i := 0; i < maxAuthorFanout+3; i++ { // push "Prolific" past the cap
+		p := fmt.Sprintf("p%03d.buzz", i)
+		fileNodePaths[p] = true
+		entries = append(entries, types.KnowledgeVCS{Path: p, LastCommit: "x", Authors: []string{"Prolific"}, Commits: 1})
+	}
+	out := mergeAll([]Shard{assembleVCS(entries, fileNodePaths)}).Output()
+
+	// Under-cap authors get a per-file `authored` edge.
+	assert.True(t, hasEdge(out, "author:Ada", "file:a.buzz", types.RelationAuthored))
+	assert.True(t, hasEdge(out, "author:Ada", "file:b.buzz", types.RelationAuthored))
+	assert.True(t, hasEdge(out, "author:Bob", "file:a.buzz", types.RelationAuthored))
+
+	// An author of only non-node files (ghost.buzz has no node) contributes nothing.
+	_, ok := nodeByID(out, "author:Cy")
+	assert.False(t, ok, "no node for an author who touched no node-backed file")
+
+	// Over-cap author: a files_authored count, and NOT one edge.
+	prolific, ok := nodeByID(out, "author:Prolific")
+	require.True(t, ok)
+	assert.Equal(t, strconv.Itoa(maxAuthorFanout+3), prolific.Attrs[AttrFilesAuthored], "count instead of edges")
+	for _, e := range out.Links {
+		assert.NotEqual(t, "author:Prolific", e.Source, "an over-cap author emits no authored edges")
+	}
+}
 
 func TestAssembleVCS(t *testing.T) {
 	entries := []types.KnowledgeVCS{

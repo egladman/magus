@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -535,6 +536,7 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 		lastCommit string
 		lastUnix   int64
 		lastAuthor string
+		authors    map[string]bool
 		commits    int
 	}
 	byPath := map[string]*acc{}
@@ -557,9 +559,12 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 			a := byPath[f]
 			if a == nil {
 				// First sighting = the most recent commit (changes are newest-first).
-				a = &acc{lastCommit: short, lastUnix: unix, lastAuthor: c.Author}
+				a = &acc{lastCommit: short, lastUnix: unix, lastAuthor: c.Author, authors: map[string]bool{}}
 				byPath[f] = a
 				order = append(order, f)
+			}
+			if c.Author != "" {
+				a.authors[c.Author] = true
 			}
 			a.commits++
 		}
@@ -567,7 +572,7 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	entries := make([]types.KnowledgeVCS, 0, len(order))
 	for _, p := range order {
 		a := byPath[p]
-		entries = append(entries, types.KnowledgeVCS{Path: p, LastCommit: a.lastCommit, LastUnix: a.lastUnix, LastAuthor: a.lastAuthor, Commits: a.commits})
+		entries = append(entries, types.KnowledgeVCS{Path: p, LastCommit: a.lastCommit, LastUnix: a.lastUnix, LastAuthor: a.lastAuthor, Authors: slices.Sorted(maps.Keys(a.authors)), Commits: a.commits})
 	}
 	return entries
 }

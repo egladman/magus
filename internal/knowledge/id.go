@@ -55,6 +55,8 @@ func rationaleID(relPath string, line int) string {
 
 func ownerID(name string) string { return types.KindOwner + ":" + name }
 
+func authorID(name string) string { return types.KindAuthor + ":" + name }
+
 func symbolID(key string) string { return types.KindSymbol + ":" + key }
 
 // sanitize normalizes free-form repo text (labels, docs, provenance) before it
@@ -126,6 +128,11 @@ const (
 	// for anything else. It is workspace-agnostic - no magus-specific filenames - so
 	// `query "kind:doc role:agent"` finds the agent-instruction files in any repo.
 	AttrRole = "role"
+	// AttrFilesAuthored is the number of files an author touched, set on an author node
+	// INSTEAD of an `authored` edge per file when the count exceeds the fan-out cap - a
+	// prolific author (a solo maintainer who touches everything) would otherwise be a god
+	// node. The count is the signal; the edges are omitted to keep the graph legible.
+	AttrFilesAuthored = "files_authored"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are

@@ -20,7 +20,9 @@ package types
 // magus.outputs/inputs to the file and doc nodes they match, so a generated file is
 // self-labeled by its producing target; plus workspace-wide authored-markdown doc nodes
 // carrying a `role` attr (readme/agent/changelog/...) and a `documents` edge to their project.
-const KnowledgeSchemaVersion = 5
+// v6 adds the "author" kind: a git contributor, with `authored` edges to the files they
+// touched (the EMERGENT maintainer, to set against a file's DECLARED CODEOWNERS owner).
+const KnowledgeSchemaVersion = 6
 
 // KnowledgeGraphDefinition is the human-readable description printed by
 // "magus graph export".
@@ -54,6 +56,7 @@ const (
 	KindRationale  = "rationale" // a NOTE/WHY/HACK/TODO comment (phase 4)
 	KindOwner      = "owner"     // a CODEOWNERS owner (@user, @org/team, email)
 	KindSymbol     = "symbol"    // a definition ingested from a SCIP index (compiled-language source, e.g. Go)
+	KindAuthor     = "author"    // a git contributor; `authored` the files they touched (emergent, vs the declared owner)
 )
 
 // Knowledge edge relations. Values are stable wire strings.
@@ -71,6 +74,7 @@ const (
 	RelationDefines      = "defines"       // file->symbol, from a SCIP index
 	RelationProduces     = "produces"      // target->file/doc, from magus.outputs (v5)
 	RelationConsumes     = "consumes"      // target->file/doc, from magus.inputs (v5)
+	RelationAuthored     = "authored"      // author->file, from git history (v6)
 )
 
 // Edge confidence. Extracted edges are read directly off a parsed source (score
@@ -124,7 +128,11 @@ type KnowledgeVCS struct {
 	LastCommit string
 	LastUnix   int64
 	LastAuthor string
-	Commits    int
+	// Authors is the distinct set of authors who touched the file within the scanned
+	// window (sorted), the source for the `author --authored--> file` edges. LastAuthor
+	// is one of them (the most recent).
+	Authors []string
+	Commits int
 }
 
 // KnowledgeSymbol is one code symbol ingested from a SCIP index (an assembly input,
