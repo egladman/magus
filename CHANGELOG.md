@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the `knowledge.vcs.max_commits` history window, not an arbitrary per-author limit - so a
   solo maintainer's full authorship is a fact the graph teaches, not a summary it hides.
   Extracted from the same git-history scan (author facts in the graph; aggregate analytics
-  stay in insight).
+  stay in insight). Set `knowledge.vcs.authorship: false` (env `MAGUS_KNOWLEDGE_VCS_AUTHORSHIP`)
+  to keep only the per-file `vcs_*` attrs and omit the author node/edge layer; on by default.
 - File nodes now carry `vcs_last_author` (the last commit's author) alongside the existing
   `vcs_last_commit`/`vcs_last_modified`/`vcs_commits`, so a file's EMERGENT maintainer (who
   actually edits it) can be set against its DECLARED CODEOWNERS owner - a gap a pure

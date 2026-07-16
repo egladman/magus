@@ -60,6 +60,7 @@ var ConfigFlags = []ConfigFlag{
 	{"knowledge-max-size-mb", "MAGUS_KNOWLEDGE_MAX_SIZE_MB", "int"},
 	{"knowledge-vcs-enabled", "MAGUS_KNOWLEDGE_VCS_ENABLED", "bool"},
 	{"knowledge-vcs-max-commits", "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS", "int"},
+	{"", "MAGUS_KNOWLEDGE_VCS_AUTHORSHIP", "boolptr"},
 	{"knowledge-symbol-indexing-disabled", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED", "bool"},
 	{"knowledge-symbol-indexing-quiet-seconds", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS", "int"},
 	{"knowledge-symbol-indexing-min-interval-seconds", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS", "int"},

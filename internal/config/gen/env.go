@@ -196,6 +196,10 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Knowledge.VCS.MaxCommits = n
 		}
 	}
+	if v := getenv("MAGUS_KNOWLEDGE_VCS_AUTHORSHIP"); v != "" {
+		b := parseBoolEnv(v, cfg.Knowledge.VCS.Authorship != nil && *cfg.Knowledge.VCS.Authorship)
+		cfg.Knowledge.VCS.Authorship = &b
+	}
 	if v := getenv("MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED"); v != "" {
 		cfg.Knowledge.SymbolIndexing.Disabled = parseBoolEnv(v, cfg.Knowledge.SymbolIndexing.Disabled)
 	}

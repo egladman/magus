@@ -176,6 +176,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 			projects: projects, spells: spells, log: log,
 		}),
 		VCS:            vcsEntries,
+		VCSAuthorship:  cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship,
 		DeclaredSpells: declaredSpellSet(projects),
 		Coverage:       loadKnowledgeCoverage(root),
 	}
@@ -514,8 +515,9 @@ func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) st
 	// the detail, falling back to HEAD-only (conservative, worst case a transient stale entry).
 	dirty, _ := res.VCS.DirtyFiles(ctx, root, nil)
 	slices.Sort(dirty)
+	authorship := cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship
 	h := sha256.New()
-	fmt.Fprintf(h, "v%d\x00a%d\x00%s\x00%d\x00", types.KnowledgeSchemaVersion, vcsAssemblyVersion, head.ID, vcsMaxCommits(cfg))
+	fmt.Fprintf(h, "v%d\x00a%d\x00%s\x00%d\x00%t\x00", types.KnowledgeSchemaVersion, vcsAssemblyVersion, head.ID, vcsMaxCommits(cfg), authorship)
 	for _, f := range dirty {
 		h.Write([]byte(f))
 		h.Write([]byte{0})

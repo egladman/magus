@@ -62,6 +62,9 @@ type Inputs struct {
 	// dead spell (declared here, nothing runs it) from a compiled-in builtin that is
 	// merely available and unused - only declared spells are orphan candidates.
 	DeclaredSpells map[string]bool
+	// VCSAuthorship includes the author nodes + authored edges in the @vcs shard
+	// (knowledge.vcs.authorship, default on). False keeps only the per-file vcs_* attrs.
+	VCSAuthorship bool
 	// Coverage carries per-file statement coverage parsed from the local Go coverage
 	// profile (empty unless a profile is present). Like Runtime/Timings it is observed,
 	// not extracted, so it lands in the isolated @coverage shard - folding a coverage
@@ -132,7 +135,7 @@ func AssembleShards(in Inputs) []Shard {
 		}
 		// Git history folds onto the file nodes just built; a path with no file node
 		// (VCS metadata for a file the graph does not model) is dropped, no phantom.
-		if v := assembleVCS(in.VCS, fileNodePaths); len(v.Nodes) > 0 {
+		if v := assembleVCS(in.VCS, fileNodePaths, in.VCSAuthorship); len(v.Nodes) > 0 {
 			shards = append(shards, v)
 		}
 	}

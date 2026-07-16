@@ -408,19 +408,27 @@ knowledge:
   vcs:
     enabled: true
     max_commits: 1000 # optional: bound the history walk (default 1000)
+    authorship: true  # optional: include author nodes + authored edges (default on)
 ```
 
-When enabled and the workspace is a git repo, a `@vcs` shard adds three attrs to every
+When enabled and the workspace is a git repo, a `@vcs` shard adds four attrs to every
 file node: `vcs_last_commit` (short SHA of the most recent commit touching the file),
-`vcs_last_modified` (its date), and `vcs_commits` (commits touching the file within the
-window). The values are EXTRACTED from git and deterministic per commit, so the shard is
-remote-shareable like the other extracted shards (blame-derived ownership and author
-churn stay out - that is analytics, not a graph fact). The `git log` walk is bounded by
-`max_commits` and cached against the current revision (`<cache>/knowledge/vcs-inputs.json`),
-so it runs only when the commit changes, never on the query path. A non-git workspace or a
-git error simply yields no shard. Because these attrs vary by commit, `graph diff` strips
-them from both sides, so a file node is not reported as changed just because its last
-commit moved - the diff stays structural.
+`vcs_last_modified` (its date), `vcs_last_author` (who last touched it), and
+`vcs_commits` (commits touching the file within the window). It also mints an `author`
+node per contributor with an `authored` edge to each file they touched in the window -
+who edits what, so an agent can ask `explain author:Ada` or trace ownership. These edges
+are uncapped: `max_commits` already bounds the scan, so a dominant maintainer legitimately
+having many is a fact to teach, not a smell. Set `authorship: false` to keep only the
+per-file `vcs_*` attrs and drop the author layer.
+
+The values are EXTRACTED from git and deterministic per commit, so the shard is
+remote-shareable like the other extracted shards. The `git log` walk is bounded by
+`max_commits` and keyed by an input fingerprint (schema, HEAD, the window, the dirty-file
+set, and the `authorship` flag), so the standard shard store reuses it whole and it
+re-runs only when one of those actually moves - never on the query path. A non-git
+workspace or a git error simply yields no shard. Because the `vcs_*` attrs vary by commit,
+`graph diff` strips them from both sides, so a file node is not reported as changed just
+because its last commit moved - the diff stays structural.
 
 ## Exporting to external tools
 

@@ -31,7 +31,7 @@ const VCSShardName = "@vcs"
 // dominant maintainer legitimately having many is a fact to teach the agent, not a smell,
 // and any single query stays bounded by its neighborhood budget. Nodes and edges are sorted
 // for deterministic output.
-func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool) Shard {
+func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool, authorship bool) Shard {
 	s := Shard{Name: VCSShardName}
 	authorFiles := map[string][]string{}
 	for _, e := range entries {
@@ -41,6 +41,9 @@ func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool) Sh
 		if attrs := vcsAttrs(e); len(attrs) > 0 {
 			s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(e.Path), Kind: types.KindFile, Label: e.Path, Attrs: attrs})
 		}
+		if !authorship {
+			continue
+		}
 		for _, a := range e.Authors {
 			if a != "" {
 				authorFiles[a] = append(authorFiles[a], e.Path)
@@ -48,8 +51,8 @@ func assembleVCS(entries []types.KnowledgeVCS, fileNodePaths map[string]bool) Sh
 		}
 	}
 
-	// One author node per contributor, with an `authored` edge to each file they touched.
-	// Sorted author order keeps the shard deterministic.
+	// One author node per contributor, with an `authored` edge to each file they touched
+	// (omitted entirely when authorship is off). Sorted author order keeps it deterministic.
 	for _, a := range slices.Sorted(maps.Keys(authorFiles)) {
 		aID := authorID(a)
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: aID, Kind: types.KindAuthor, Label: sanitize(a, maxLabelLen)})

@@ -288,6 +288,11 @@ type VCSConfig struct {
 	// built-in default; a small value keeps the scan fast on a large repo at the cost
 	// of undercounting commits for long-lived files.
 	MaxCommits int `yaml:"max_commits" validate:"gte=0"`
+	// Authorship includes the `author` nodes and `authored` edges (who touched which
+	// files) in the graph. Defaults to ON (nil = on): authorship is context that helps
+	// an agent, and the edges are already bounded by MaxCommits. Set false to keep only
+	// the per-file vcs_* attrs and omit the author layer.
+	Authorship *bool `yaml:"authorship"`
 }
 
 // SymbolIndex declares one project's SCIP index for symbol ingestion.
@@ -387,7 +392,8 @@ func Defaults() Config {
 			Threshold:        0.05,
 			AnnotateGHA:      true,
 		},
-		Hints: Hints{Enabled: boolPtr(true)},
+		Hints:     Hints{Enabled: boolPtr(true)},
+		Knowledge: Knowledge{VCS: VCSConfig{Authorship: boolPtr(true)}},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",
 			ServiceName: "magus",

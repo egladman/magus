@@ -340,6 +340,14 @@ func init() {
 			Usage:    "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits. 0 uses a",
 		},
 		{
+			GoPath:   "Knowledge.VCS.Authorship",
+			YamlPath: "knowledge.vcs.authorship",
+			EnvVar:   "MAGUS_KNOWLEDGE_VCS_AUTHORSHIP",
+			Flag:     FlagNames{Long: ""},
+			Kind:     KindBoolPtr,
+			Usage:    "MAGUS_KNOWLEDGE_VCS_AUTHORSHIP: Authorship includes the 'author' nodes and 'authored' edges (who touched which",
+		},
+		{
 			GoPath:   "Knowledge.SymbolIndexing.Disabled",
 			YamlPath: "knowledge.symbol_indexing.disabled",
 			EnvVar:   "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED",

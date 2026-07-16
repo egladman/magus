@@ -74,6 +74,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `knowledge.symbol_indexing.disabled` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED` | `--knowledge-symbol-indexing-disabled` | bool |
 | `knowledge.symbol_indexing.min_interval_seconds` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS` | `--knowledge-symbol-indexing-min-interval-seconds` | int |
 | `knowledge.symbol_indexing.quiet_seconds` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS` | `--knowledge-symbol-indexing-quiet-seconds` | int |
+| `knowledge.vcs.authorship` | `MAGUS_KNOWLEDGE_VCS_AUTHORSHIP` | _(env only)_ | bool _(env only)_ |
 | `knowledge.vcs.enabled` | `MAGUS_KNOWLEDGE_VCS_ENABLED` | `--knowledge-vcs-enabled` | bool |
 | `knowledge.vcs.max_commits` | `MAGUS_KNOWLEDGE_VCS_MAX_COMMITS` | `--knowledge-vcs-max-commits` | int |
 | `knowledge.workspaces` | `MAGUS_KNOWLEDGE_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |
