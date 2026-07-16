@@ -175,14 +175,34 @@ not a class, wherever practical.
     .sw-toast        -> .console-shell-toast
     .qchip           -> .console-log-filter__chip
 
-### The pending rename (the ~323 legacy classes)
+### The rename + PF-swap pass (DONE)
 
-The migration KEPT the console's original ad-hoc class vocabulary for the escape-hatch content
+The migration originally KEPT the console's ad-hoc class vocabulary for the escape-hatch content
 PF cannot render (ANSI body, gantt, node cloud, badges, ...) - repointing colours but not renaming.
-An audit counts ~323 distinct non-`pf-v6-`/non-`console-` classes still in
-console.css / overrides.css / logs.css / graph.css / dashboard.css and the TS that emits them
-(`grep -rhoE '\.[a-zA-Z][a-zA-Z0-9_-]+' src/**/*.css | sort -u | grep -vE '^\.(pf-|console-|js$|no-js$)'`).
-Renaming them to this formula (in the CSS AND the class strings in the .ts builders + scaffold.html,
-in lockstep so nothing breaks) is a dedicated follow-up pass - do it area by area
-(render/shell/log/graph/dashboard/activity), rebuild + browser-verify each, keep typecheck/tests green.
-From this point ON, no NEW custom class may be written except in this formula.
+That pass is now COMPLETE, area by area (render, shell, log, graph, dashboard, activity - one commit
+each), rebuilt + browser-verified on a fresh port each time (the service worker serves stale bundles
+otherwise), typecheck 0 / 70 tests green throughout. Every authored class now conforms to the formula;
+the acceptance sweep returns nothing:
+
+    for f in src/styles/*.css src/console/**/*.css; do perl -0777 -pe 's{/\*.*?\*/}{}gs' "$f"; done \
+      | grep -oE '\.[a-zA-Z][a-zA-Z0-9_-]*' | sort -u \
+      | grep -vE '^\.(pf-v6|pf-m|console-|u-[a-z]|uplot|js$|no-js$)'   # (u-*/uplot are vendored uPlot)
+
+Following Eli's PF-FIRST steer ("use as much premade UI from the framework as possible; the less custom
+CSS the better"), the pass SWAPPED to PatternFly components wherever one cleanly fit, deleting the custom
+CSS, and only renamed the genuinely component-less escape hatches. Swaps made:
+
+- Log viewer: the custom sliding **segmented switch -> PF ToggleGroup** (Log|Timeline, Pretty|Raw); the
+  parsed-filter chips -> **PF Labels**.
+- Dashboard: the charm effect pills and header count chips -> **PF Labels**.
+- Graph: the live/snapshot badges -> **PF Labels**.
+
+Escape hatches that stay custom (renamed to the formula): the ANSI log body + foldable sections + status
+badges (console-render-*), the trace waterfall + zoom control + ref pills (console-log-*), the d3 graph
+stage + node cloud + legend + explain card + Ask views (console-graph-*), the dense dashboard tiles - stat
+strips, pool grid, gantt, utilization heatmap, tables, hero (console-dashboard-*), the status bar +
+theme-cycle + refresh toast (console-shell-*). Transient state moved onto data-* attributes throughout
+(data-collapsed, data-status, data-kind, data-active, data-has-card, data-waterfall, ...).
+
+From this point ON, no NEW custom class may be written except in this formula, and only when no PF
+component fits.
