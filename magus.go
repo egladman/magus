@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
-	"github.com/egladman/magus/internal/depgraph"
+	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
@@ -496,7 +496,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 func (m *Magus) Root() string                   { return m.ws.Root }
 func (m *Magus) All() []*types.Project          { return m.ws.All() }
 func (m *Magus) Get(path string) *types.Project { return m.ws.Get(path) }
-func (m *Magus) Graph() (*types.Graph, error)   { return depgraph.Build(m.ws) }
+func (m *Magus) Graph() (*types.Graph, error)   { return dependency.Build(m.ws) }
 
 // SetGraphObserver installs an observer on the workspace; pass nil to clear.
 func (m *Magus) SetGraphObserver(o types.Observer) {

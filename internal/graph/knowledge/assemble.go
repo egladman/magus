@@ -22,7 +22,7 @@ const RegistryShardName = "@registry"
 
 // Inputs are the already-gathered describe outputs the assembler composes. The
 // caller (the CLI/composition root) fetches these from the workspace so that
-// internal/knowledge depends only on types - it never reaches into the registry,
+// internal/graph/knowledge depends only on types - it never reaches into the registry,
 // host, or spell packages itself.
 type Inputs struct {
 	Graph       types.TargetGraphOutput // DescribeGraph(): projects, targets, deps, charms, spell ops

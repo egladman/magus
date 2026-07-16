@@ -11,7 +11,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
-	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"

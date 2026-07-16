@@ -13,7 +13,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )

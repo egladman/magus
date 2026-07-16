@@ -16,7 +16,7 @@ func NewGraph(repo DepGraphRepository, projects map[string]*Project) *Graph {
 	return &Graph{repo: repo, projects: projects}
 }
 
-// GraphOption configures a call to depgraph.Build (or (*Magus).Graph).
+// GraphOption configures a call to dependency.Build (or (*Magus).Graph).
 type GraphOption func(*GraphConfig)
 
 // GraphConfig carries configuration for a graph build.

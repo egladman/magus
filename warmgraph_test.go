@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

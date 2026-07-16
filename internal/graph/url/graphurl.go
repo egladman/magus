@@ -21,7 +21,7 @@
 // command, exactly as graphOpenLive does it. When the daemon is not reachable
 // the caller passes an empty Host (and/or Token) and GraphLink returns
 // ErrNoDaemon, so the command can OMIT the link rather than print a dead one.
-package graphurl
+package url
 
 import (
 	"errors"

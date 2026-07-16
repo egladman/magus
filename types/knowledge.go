@@ -5,7 +5,7 @@ package types
 // later - docs and buzz source nodes). Every node and edge is EXTRACTED or
 // rubric-INFERRED from parseable workspace sources; nothing here is LLM-authored
 // or otherwise unverifiable. These are pure domain types (stdlib-only leaf); the
-// builder lives in internal/knowledge and the CLI surface in cmd/magus.
+// builder lives in internal/graph/knowledge and the CLI surface in cmd/magus.
 
 // KnowledgeSchemaVersion is stamped into every exported graph, shard, and manifest.
 // External consumers - agent skills, MCP tools, other tools reading the node-link

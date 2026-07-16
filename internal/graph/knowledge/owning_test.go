@@ -20,11 +20,11 @@ func TestOwningProjectPath(t *testing.T) {
 		file string
 		want string
 	}{
-		{"docs/render.buzz", "docs"}, // nested project wins over root
-		{"magusfile.buzz", "."},            // root-level file falls to the root project
-		{"foo/bar/x.buzz", "foo/bar"},      // longest matching project wins
-		{"foo/x.buzz", "foo"},              // not deep enough for foo/bar
-		{"foobar/x.buzz", "."},             // "foo" must not claim "foobar" (path-prefix guard)
+		{"docs/render.buzz", "docs"},  // nested project wins over root
+		{"magusfile.buzz", "."},       // root-level file falls to the root project
+		{"foo/bar/x.buzz", "foo/bar"}, // longest matching project wins
+		{"foo/x.buzz", "foo"},         // not deep enough for foo/bar
+		{"foobar/x.buzz", "."},        // "foo" must not claim "foobar" (path-prefix guard)
 	}
 	for _, c := range cases {
 		got, ok := owningProjectPath(c.file, projects)

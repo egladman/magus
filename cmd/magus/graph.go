@@ -13,7 +13,7 @@ import (
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,7 +71,7 @@ func TestQueryToolInvokeThroughFake(t *testing.T) {
 	assert.Empty(t, got.NextCursor, "an unpaged query has no next cursor")
 }
 
-// The knowledge tools' graph traversal is covered by internal/knowledge and the
+// The knowledge tools' graph traversal is covered by internal/graph/knowledge and the
 // CLI txtars; here we pin the MCP surface: tool names and required-param
 // validation (which returns before any workspace access, so no Magus is needed).
 func TestKnowledgeToolNames(t *testing.T) {

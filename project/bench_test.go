@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/depgraph"
+	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/types"
 )
 
@@ -75,7 +75,7 @@ func BenchmarkGraph(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, err := depgraph.Build(ws)
+				_, err := dependency.Build(ws)
 				if err != nil {
 					b.Fatal(err)
 				}

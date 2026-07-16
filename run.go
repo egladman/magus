@@ -24,7 +24,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"

@@ -33,7 +33,7 @@ import (
 
 // Extract parses a Buzz magusfile's source into its target nodes (best-effort, never
 // errors — a source that fails to parse yields an empty graph). Named Extract, not
-// Build, to signal static-source extraction and to not collide with depgraph.Build,
+// Build, to signal static-source extraction and to not collide with dependency.Build,
 // which constructs a different graph. Pass the concatenated contents of all of a
 // project's magusfile sources (load order).
 //

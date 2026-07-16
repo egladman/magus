@@ -4,12 +4,12 @@ import "context"
 
 // This file collects the repository-style domain interfaces — the access surfaces
 // consumers depend on, implemented by concrete types elsewhere (e.g. *Workspace,
-// internal/depgraph). Interfaces that are ports/callbacks rather than repositories
+// internal/graph/dependency). Interfaces that are ports/callbacks rather than repositories
 // (SpellDriver, VCSDriver, MergeDriverInstaller, Observer, TargetNameNormalizer) stay
 // beside their domain types: each is referenced by a types-level declaration, so
 // hoisting it here would make types import its implementer and cycle.
 
-// DepGraphRepository is the interface that internal/depgraph implements.
+// DepGraphRepository is the interface that internal/graph/dependency implements.
 type DepGraphRepository interface {
 	TopoSort() []string
 	ReverseClosure(seeds []string) []string

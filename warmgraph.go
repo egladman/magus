@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/file/watch"
-	"github.com/egladman/magus/internal/knowledge"
+	"github.com/egladman/magus/internal/graph/knowledge"
 )
 
 // warmGraph is the daemon's concurrency-safe cache of the workspace knowledge

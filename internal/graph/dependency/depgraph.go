@@ -1,5 +1,5 @@
 // Package depgraph constructs the project dependency DAG, translating path strings to node IDs.
-package depgraph
+package dependency
 
 import (
 	"context"

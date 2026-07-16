@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/depgraph"
+	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -51,7 +51,7 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 	}
 	slices.Sort(seed)
 
-	g, err := depgraph.Build(w, graphObserverOpts(ctx)...)
+	g, err := dependency.Build(w, graphObserverOpts(ctx)...)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func AffectedFromPaths(ctx context.Context, w *types.Workspace, paths []string) 
 	}
 	slices.Sort(seed)
 
-	g, err := depgraph.Build(w, graphObserverOpts(ctx)...)
+	g, err := dependency.Build(w, graphObserverOpts(ctx)...)
 	if err != nil {
 		return nil, err
 	}

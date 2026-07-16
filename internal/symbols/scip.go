@@ -3,7 +3,7 @@
 // imports the SCIP bindings: magus never parses source code itself - a per-language
 // indexer (scip-go, scip-typescript, ...) emits the index, and this reads it - so
 // adding a language is a build-config change, never a magus code change. Keeping the
-// scip dependency here leaves internal/knowledge a types-only leaf.
+// scip dependency here leaves internal/graph/knowledge a types-only leaf.
 package symbols
 
 import (

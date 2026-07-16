@@ -10,7 +10,7 @@ import (
 // Symbol ingestion is EXTRACTED, never inferred: the symbol nodes and their
 // defines/references edges come straight from a SCIP index a per-language indexer
 // produced. This assembler is types-only - the SCIP parsing lives in internal/symbols
-// and reaches here as neutral types.KnowledgeSymbol records - so internal/knowledge
+// and reaches here as neutral types.KnowledgeSymbol records - so internal/graph/knowledge
 // stays free of the SCIP dependency. Per the scale plan, symbol shards are per
 // project and, once wired, loaded lazily; this file only builds the shard.
 

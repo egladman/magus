@@ -1,4 +1,4 @@
-package depgraph
+package dependency
 
 import "github.com/egladman/magus/types"
 

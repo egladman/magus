@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/depgraph"
+	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )
@@ -191,8 +191,8 @@ func buildWorkspace(t *testing.T, entries [][]string) *types.Workspace {
 
 func mustGraph(t *testing.T, ws *types.Workspace) *types.Graph {
 	t.Helper()
-	g, err := depgraph.Build(ws)
-	require.NoError(t, err, "depgraph.Build()")
+	g, err := dependency.Build(ws)
+	require.NoError(t, err, "dependency.Build()")
 	return g
 }
 
@@ -566,7 +566,7 @@ func TestGraphNoWarnWhenDepsResolve(t *testing.T) {
 		{"api", "go", "internal/db"},
 		{"internal/db", "go"},
 	})
-	_, err := depgraph.Build(ws)
+	_, err := dependency.Build(ws)
 	require.NoError(t, err)
 	assert.Empty(t, buf.String(), "unexpected warning output")
 }
@@ -580,7 +580,7 @@ func TestGraphFailsOnUnregisteredDep(t *testing.T) {
 		{"internal/db", "go"},
 	})
 
-	_, err := depgraph.Build(ws)
+	_, err := dependency.Build(ws)
 	require.Error(t, err, "expected error for unregistered dep")
 	assert.ErrorIs(t, err, types.ErrUnregisteredDep)
 	var ude *types.UnregisteredDepError
@@ -600,7 +600,7 @@ func TestUnregisteredDepErrorAggregates(t *testing.T) {
 		{"svc", "go", "missing-c"},
 	})
 
-	_, err := depgraph.Build(ws)
+	_, err := dependency.Build(ws)
 	require.Error(t, err, "expected aggregated error")
 	var ude *types.UnregisteredDepError
 	require.ErrorAs(t, err, &ude)
