@@ -167,9 +167,11 @@ body[data-console-fill] > main > .console-render-panel {
 #console-outlet [data-divider]:active { background: var(--console-accent); }
 #console-outlet [data-divider]:hover::after,
 #console-outlet [data-divider]:active::after { background: var(--pf-t--global--text--color--on-brand--default); }
-/* The focused pane wears a subtle inset ring (only while tiled - tileView sets data-focus on more
-   than one pane). A thin overlay outline, offset inward so it reads as a highlight, not a border. */
-#console-outlet [data-pane-id][data-focus] {
+/* The focused pane's ring is OFF by default (a click does not ring the pane); it shows ONLY on
+   keyboard focus (:focus-visible), so a keyboard user can still see which pane is active without the
+   ring cluttering ordinary mouse use. data-focus still drives the logic (status-bar ownership); this
+   is purely the visual. */
+#console-outlet [data-pane-id]:focus-visible {
   outline: 2px solid var(--console-accent);
   outline-offset: -2px;
   z-index: 1;
