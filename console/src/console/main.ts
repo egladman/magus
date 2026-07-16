@@ -17,6 +17,7 @@ import { createKeybindingsOverlay } from "./keybindings";
 import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane } from "./tiling";
 import { initConsoleSettings } from "../ui/console-settings";
+import { initRefDrawer } from "../ui/ref-drawer";
 import { persisted } from "../lib/persist";
 import type { PageController, PageModule } from "./page";
 
@@ -48,8 +49,8 @@ function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
 const SURFACES: Launchable[] = [
   { pageId: "logs", label: "Log viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph explorer", hint: "Explore the knowledge graph" },
-  { pageId: "dashboard", label: "Dashboard", hint: "Live daemon state" },
-  { pageId: "activity", label: "Activity", hint: "The daemon's audit trail" },
+  { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
+  { pageId: "activity", label: "Activity", hint: "A history of recent magus actions" },
 ];
 
 
@@ -155,6 +156,8 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
     const active = id ? mounts.get(id) : null;
     if (active) statusHost.replaceChildren(active.status);
     else statusHost.replaceChildren();
+    // Let a docked Reference panel re-read the now-active surface's help sections.
+    document.dispatchEvent(new CustomEvent("console:activetab", { detail: { id } }));
   }
 
   function unmount(id: string): void {
@@ -212,6 +215,10 @@ export function startConsole(stripHost: HTMLElement, outlet: HTMLElement, status
   // Wire the title-bar settings gear (theme is wired separately by theme.js). No-ops if the page
   // did not supply the #settings-btn / #settings-panel markup.
   initConsoleSettings();
+
+  // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
+  // markup. It reads the active surface's [data-legacy-ref] help blocks (refreshed on tab change).
+  initRefDrawer();
 
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
   // The listener skips while typing in a field (see commands.ts), so it never eats filter input.

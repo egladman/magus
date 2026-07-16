@@ -32,7 +32,7 @@ export function homePage(surfaces: Launchable[], open: (pageId: string) => void)
       const title = document.createElement("h1");
       title.textContent = "magus console";
       const sub = document.createElement("p");
-      sub.textContent = "Open a surface as a tab. Each is a live lens on the daemon.";
+      sub.textContent = "Pick a tool to open it in a tab.";
 
       const gallery = document.createElement("div");
       gallery.className = "pf-v6-l-gallery pf-m-gutter";

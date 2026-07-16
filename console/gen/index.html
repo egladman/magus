@@ -44,6 +44,9 @@
          (#settings-poll/#settings-host/#theme-cycle) and the theme button keeps its
          .console-shell-themecycle__icon/.console-shell-themecycle__label spans (theme.js paints them). -->
     <div id="console-actions">
+    <button id="console-refbtn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="console-refdrawer" aria-expanded="false" aria-label="Reference" title="Reference">
+      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22.5z"/><path d="M4 19.5V4.5"/></svg></span>
+    </button>
     <button id="settings-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     </button>
@@ -75,6 +78,26 @@
   </header>
   <main id="console-outlet"></main>
   <footer id="console-statusbar"></footer>
+
+  <!-- Reference panel: a right-side slide-out that shows the ACTIVE surface's reference/help
+       sections (the graph explorer's query + search-syntax help, the log viewer's filter help).
+       console.js's initRefDrawer() fills #console-refdrawer-body by cloning the active surface's
+       [data-legacy-ref] blocks on open, wires the trigger (#console-refbtn), pin (#console-refpin),
+       close (#console-refclose), the backdrop, and Escape. Pinned docks it beside the content;
+       unpinned floats it over a dimming backdrop. Empty (display:none) until opened. -->
+  <aside id="console-refdrawer" class="console-shell-refdrawer" aria-label="Reference" aria-hidden="true">
+    <header class="console-shell-refdrawer__header">
+      <span class="console-shell-refdrawer__title">Reference</span>
+      <button id="console-refpin" class="pf-v6-c-button pf-m-plain pf-m-small" type="button" aria-pressed="false" aria-label="Pin the reference panel" title="Pin">
+        <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 3H7l3-3z"/></svg></span>
+      </button>
+      <button id="console-refclose" class="pf-v6-c-button pf-m-plain pf-m-small" type="button" aria-label="Close the reference panel" title="Close">
+        <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+      </button>
+    </header>
+    <div id="console-refdrawer-body" class="console-shell-refdrawer__body"></div>
+  </aside>
+  <div id="console-refbackdrop" class="console-shell-refbackdrop" hidden></div>
 
   <script type="module" src="./console.js"></script>
 </body>

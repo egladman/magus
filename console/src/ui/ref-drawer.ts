@@ -1,180 +1,142 @@
 import { persisted } from "../lib/persist";
 
-// ref-drawer.ts - a right-side slide-out reference panel shared by the console apps (graph
-// explorer, log viewer, ...). A page marks its reference blocks with [data-legacy-ref] and supplies a
-// trigger (.ref-trigger), the drawer (#ref-drawer) and a backdrop (#ref-backdrop). This relocates
-// the sections into the drawer (so the same blocks serve as inline no-JS content AND as the drawer
-// body - no duplicate markup) and wires open/close: the trigger, the close button, a backdrop
-// click, and Escape. No-ops where there is no drawer, like every other main.js module.
+// ref-drawer.ts - the console's right-side slide-out Reference panel. It shows the ACTIVE surface's
+// reference sections: the help blocks each surface scaffold carries marked [data-legacy-ref] (the
+// graph explorer's query/search-syntax help, the log viewer's filter help). The old docs-site drawer
+// relocated those blocks once at load, but the console mounts surfaces dynamically, so this CLONES
+// the active surface's blocks each time it opens (and refreshes when the active tab changes while
+// open). It can be pinned (docked beside the content) or float as an overlay with a dimming backdrop;
+// the pinned state persists. No-ops where the drawer markup is absent.
+//
+// Cloned example buttons are inert (cloneNode drops listeners), so a click inside the drawer on an
+// example that carries a distinguishing data-* (the graph's data-q / data-view / data-lens) is
+// forwarded to the matching live control in the active surface pane, which IS wired.
 export function initRefDrawer(): void {
-  const drawer = document.getElementById("ref-drawer");
-  const backdrop = document.getElementById("ref-backdrop");
-  if (!drawer || !backdrop) return;
+  const drawer = document.getElementById("console-refdrawer");
+  const backdrop = document.getElementById("console-refbackdrop");
+  const bodyEl = document.getElementById("console-refdrawer-body");
+  const trigger = document.getElementById("console-refbtn");
+  if (!drawer || !backdrop || !bodyEl || !trigger) return;
 
-  // Pull the injected docs search bar (.page-tools, built by search.js) up into the drawer, so on the
-  // CONSOLE apps "quick search" lives in the reference panel. Gated on data-relocate-search: the DOCS
-  // site keeps its prominent top search bar in place (its drawer holds only reference links), so its
-  // drawer omits the flag. search.js is imported before this module (main.ts) so the element exists.
-  if (drawer.dataset.relocateSearch === "true") {
-    const search = document.querySelector(".page-tools");
-    if (search) drawer.appendChild(search);
-  }
+  const pinBtn = document.getElementById("console-refpin");
+  const closeBtn = document.getElementById("console-refclose");
 
-  // Then relocate the page's reference sections, in document order, and expand them by default so
-  // they read as content, not folded-away toggles (still collapsible). CSS hides them inline
-  // (.js [data-legacy-ref]) and reveals them once inside (#ref-drawer [data-legacy-ref]).
-  document.querySelectorAll("[data-legacy-ref]").forEach((s) => {
-    drawer.appendChild(s);
-    if (s instanceof HTMLDetailsElement) s.open = true;
-  });
+  // The active surface is the one visible pane in the outlet (main.ts hides the others).
+  const activePane = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>("#console-outlet div[data-tab-id]:not([hidden])");
 
-  // --- inline docs browsing ------------------------------------------------
-  // A docs link clicked inside the drawer (a search result, or a link within an already-open doc)
-  // loads that page's <article> INTO the panel instead of navigating away, with a back trail. Only
-  // same-origin HTML pages are taken over; external / asset / in-page-hash links navigate normally.
-  const docview = document.createElement("div");
-  docview.className = "ref-docview";
-  const backBtn = document.createElement("button");
-  backBtn.type = "button";
-  backBtn.className = "ref-doc-back";
-  backBtn.textContent = "← Back";
-  const docBody = document.createElement("div");
-  docBody.className = "ref-doc";
-  const docBar = document.createElement("div");
-  docBar.className = "ref-docview-bar";
-  docBar.append(backBtn);
-  docview.append(docBar, docBody);
-  drawer.appendChild(docview);
+  const collect = (pane: HTMLElement | null): HTMLElement[] =>
+    pane ? [...pane.querySelectorAll<HTMLElement>("[data-legacy-ref]")].filter((b) => b.id !== "ask-panel") : [];
 
-  const trail: string[] = [];
-
-  const showReference = (): void => {
-    drawer.classList.remove("browsing");
-    trail.length = 0;
-    docBody.replaceChildren();
-    drawer.scrollTop = 0;
-  };
-
-  const isDocLink = (a: HTMLAnchorElement): boolean => {
-    if (a.origin !== location.origin) return false;              // external
-    if (a.hasAttribute("download") || (a.target && a.target !== "_self")) return false;
-    if (/\.(png|jpe?g|webp|gif|svg|css|js|json|xml|txt|pdf|wasm|zip)(\?|$)/i.test(a.pathname)) return false;
-    if (a.pathname === location.pathname && a.hash) return false; // in-page anchor: let it scroll
-    return true;
-  };
-
-  const openDoc = async (url: string): Promise<void> => {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) { location.href = url; return; }
-      const parsed = new DOMParser().parseFromString(await res.text(), "text/html");
-      const article = parsed.querySelector("main article") ?? parsed.querySelector("main");
-      if (!article) { location.href = url; return; }
-      article.querySelectorAll("script").forEach((s) => s.remove());
-      // Resolve relative href/src against the fetched page so its links + images work from the panel.
-      article.querySelectorAll("[href], [src]").forEach((el) => {
-        (["href", "src"] as const).forEach((attr) => {
-          const v = el.getAttribute(attr);
-          if (v && !/^(https?:|data:|mailto:|#)/i.test(v)) el.setAttribute(attr, new URL(v, url).href);
-        });
-      });
-      docBody.replaceChildren(article);
-      drawer.classList.add("browsing");
-      // If the link carried a #anchor (a glossary term, a section), scroll that heading into view in
-      // the panel so the reader lands on the exact definition; otherwise start at the top.
-      const hash = url.includes("#") ? url.slice(url.indexOf("#") + 1) : "";
-      const target = hash ? docBody.querySelector('[id="' + CSS.escape(hash) + '"]') : null;
-      if (target) target.scrollIntoView(); else drawer.scrollTop = 0;
-    } catch {
-      location.href = url; // network/parse failure: just navigate there
+  // Paint the given reference blocks into the panel body. Cloning (not moving) keeps the source intact
+  // so a surface can unmount/remount freely. Nested <details> open so the reference reads as content;
+  // ids are stripped from clones to avoid duplicates.
+  const paint = (blocks: HTMLElement[]): void => {
+    bodyEl.replaceChildren();
+    if (blocks.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "console-shell-refdrawer__empty";
+      empty.textContent = "No reference for this view.";
+      bodyEl.append(empty);
+      return;
+    }
+    for (const b of blocks) {
+      const clone = b.cloneNode(true) as HTMLElement;
+      clone.removeAttribute("data-legacy-ref"); // clones are shown; the [data-legacy-ref]{display:none} rule hides only sources
+      clone.removeAttribute("id");
+      clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+      if (clone instanceof HTMLDetailsElement) clone.open = true;
+      clone.querySelectorAll("details").forEach((d) => { (d as HTMLDetailsElement).open = true; });
+      bodyEl.append(clone);
     }
   };
 
-  backBtn.addEventListener("click", () => {
-    trail.pop();                          // drop the current doc
-    const prev = trail[trail.length - 1]; // the one before it, if any
-    if (prev) void openDoc(prev); else showReference();
-  });
+  // Show the active surface's reference sections. #ask-panel is skipped (the graph explorer surfaces
+  // those "Ask a question" views in its sidebar already). A freshly opened surface mounts its scaffold
+  // asynchronously (its bundle is a dynamic import), so if the pane has no blocks yet, watch it briefly
+  // and repaint once its content lands - otherwise a just-opened tab would read "No reference".
+  let watcher: MutationObserver | null = null;
+  const refresh = (): void => {
+    watcher?.disconnect();
+    watcher = null;
+    const pane = activePane();
+    const blocks = collect(pane);
+    paint(blocks);
+    if (pane && blocks.length === 0) {
+      const obs = new MutationObserver(() => {
+        const found = collect(pane);
+        if (found.length > 0) { obs.disconnect(); watcher = null; paint(found); }
+      });
+      watcher = obs;
+      obs.observe(pane, { childList: true, subtree: true });
+      // Stop watching a genuinely reference-less surface after it has had time to mount.
+      setTimeout(() => { if (watcher === obs) { obs.disconnect(); watcher = null; } }, 3000);
+    }
+  };
 
-  drawer.addEventListener("click", (e) => {
+  // Forward a click on a cloned example to the live control in the active surface. Match by the first
+  // distinguishing attribute present; the source control (same attr+value) carries the real listener.
+  const FORWARD_ATTRS = ["data-q", "data-view", "data-lens"] as const;
+  bodyEl.addEventListener("click", (e) => {
     const t = e.target;
     if (!(t instanceof Element)) return;
-    const a = t.closest("a");
-    if (!(a instanceof HTMLAnchorElement) || !isDocLink(a)) return;
-    e.preventDefault();
-    trail.push(a.href);
-    void openDoc(a.href);
+    const src = t.closest<HTMLElement>("[data-q],[data-view],[data-lens]");
+    if (!src) return;
+    const pane = activePane();
+    if (!pane) return;
+    for (const attr of FORWARD_ATTRS) {
+      const val = src.getAttribute(attr);
+      if (val === null) continue;
+      const live = pane.querySelector<HTMLElement>(`[${attr}="${CSS.escape(val)}"]`);
+      if (live) { e.preventDefault(); live.click(); return; }
+    }
   });
 
-  const triggers = document.querySelectorAll(".ref-trigger");
-  const pinBtn = drawer.querySelector(".ref-pin");
-
-  // Pinned state persists across pages: pin it once and the panel stays docked as you navigate
-  // between the console apps. A pinned panel docks beside the content (no dim); an unpinned one is
-  // a temporary overlay with a dimming backdrop. `pinned` is a local mirror of the durable cell.
+  // Pinned persists: a pinned panel is docked open on load and stays docked as you switch tabs; an
+  // unpinned panel is a temporary overlay dimmed by the backdrop.
   const pinnedCell = persisted("ref-pinned", false);
   let pinned = pinnedCell.get();
-  const savePinned = (v: boolean): void => pinnedCell.set(v);
-
-  let isOpen = pinned; // a pinned panel is open on load
+  let isOpen = pinned;
 
   const render = (): void => {
-    drawer.classList.toggle("open", isOpen);
-    drawer.classList.toggle("pinned", isOpen && pinned);
-    // The reflow (content shrinks to make room) and the un-dimmed view are the pinned mode.
-    document.body.classList.toggle("ref-pinned", isOpen && pinned);
-    // The backdrop only dims in overlay mode; a pinned panel sits beside the content, undimmed.
-    backdrop.classList.toggle("open", isOpen && !pinned);
+    drawer.toggleAttribute("data-open", isOpen);
+    drawer.toggleAttribute("data-pinned", isOpen && pinned);
+    document.body.toggleAttribute("data-ref-pinned", isOpen && pinned);
+    backdrop.hidden = !(isOpen && !pinned);
     drawer.setAttribute("aria-hidden", isOpen ? "false" : "true");
-    triggers.forEach((t) => t.setAttribute("aria-expanded", isOpen ? "true" : "false"));
-    if (pinBtn) pinBtn.setAttribute("aria-pressed", pinned ? "true" : "false");
+    trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    pinBtn?.setAttribute("aria-pressed", pinned ? "true" : "false");
   };
 
   const setOpen = (open: boolean): void => {
     isOpen = open;
-    // Closing returns to the reference view (leave any doc you were reading); closing a pinned panel
-    // also unpins it so it does not spring back on the next page.
-    if (!open) { showReference(); if (pinned) { pinned = false; savePinned(false); } }
+    if (open) refresh();
+    // Closing a pinned panel also unpins it, so it does not spring back on the next open.
+    if (!open && pinned) { pinned = false; pinnedCell.set(false); }
     render();
   };
+
   const togglePin = (): void => {
     pinned = !pinned;
-    savePinned(pinned);
-    if (pinned) isOpen = true; // pinning docks it open
+    pinnedCell.set(pinned);
+    if (pinned) isOpen = true;
     render();
   };
 
-  // A glossary/reference link clicked ANYWHERE on the page (not just inside the drawer) opens its
-  // target INLINE in the reference panel instead of navigating away - so looking up a term keeps you
-  // on the surface. Opt-in by class (.console-render-glosslink) or data-ref-open, and only for same-origin doc
-  // links; a fetch failure (e.g. a daemon that does not serve the page) falls back to navigation.
-  document.addEventListener("click", (e) => {
-    const t = e.target;
-    if (!(t instanceof Element)) return;
-    const a = t.closest("a.console-render-glosslink, a[data-ref-open]");
-    if (!(a instanceof HTMLAnchorElement) || !isDocLink(a)) return;
-    e.preventDefault();
-    if (!isOpen) setOpen(true);
-    trail.length = 0;
-    trail.push(a.href);
-    void openDoc(a.href);
-  });
-
-  triggers.forEach((t) => t.addEventListener("click", () => setOpen(!isOpen)));
-  const closeBtn = drawer.querySelector(".ref-drawer-close");
-  if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
+  trigger.addEventListener("click", () => setOpen(!isOpen));
+  closeBtn?.addEventListener("click", () => setOpen(false));
+  pinBtn?.addEventListener("click", togglePin);
   backdrop.addEventListener("click", () => setOpen(false));
-  if (pinBtn) pinBtn.addEventListener("click", togglePin);
   document.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key !== "Escape" || !isOpen) return;
-    // While reading a doc, Escape steps back to the reference view first; then it closes an overlay
-    // panel (a pinned panel stays put).
-    if (drawer.classList.contains("browsing")) { showReference(); return; }
-    if (!pinned) setOpen(false);
+    if (e.key === "Escape" && isOpen && !pinned) setOpen(false);
   });
 
-  // Apply the persisted state on load without animating the slide/reflow on every navigation.
+  // main.ts dispatches this when the active tab changes; a docked/open panel re-reads the new surface.
+  document.addEventListener("console:activetab", () => { if (isOpen) refresh(); });
+
+  // Apply the persisted (pinned) state without animating the slide on load.
   document.documentElement.classList.add("ref-instant");
   render();
+  if (isOpen) refresh();
   requestAnimationFrame(() => document.documentElement.classList.remove("ref-instant"));
 }
