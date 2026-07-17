@@ -61,8 +61,9 @@ and still catches breakage in a project you never opened. See [CI](docs/targets/
 
 Every target declares its inputs and outputs. magus hashes the inputs, and if
 it has already seen that hash it replays the stored output instead of running
-the work again. The cache is a plain content-addressed store on disk (SHA-256),
-and entries are signed, so a replayed result is one magus can prove it produced.
+the work again. The cache is a plain content-addressed store on disk (SHA-256):
+the input hash is the key, and the stored outputs are addressed by their own
+content hash, so a replay is a byte-for-byte reproduction of the recorded run.
 
 ### The knowledge graph
 
