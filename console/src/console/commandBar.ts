@@ -118,21 +118,21 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
   bar.id = "command-bar";
   bar.hidden = true;
   bar.setAttribute("role", "dialog");
-  bar.setAttribute("aria-label", "Command bar");
+  bar.setAttribute("aria-label", "Action bar");
 
   const prompt = h("span", "console-shell-commandbar__prompt", "run");
   prompt.setAttribute("aria-hidden", "true");
 
   const input = h("input", "console-shell-commandbar__input");
   input.type = "text";
-  input.setAttribute("aria-label", "Search commands");
+  input.setAttribute("aria-label", "Search actions");
   input.setAttribute("autocomplete", "off");
   input.setAttribute("spellcheck", "false");
-  input.placeholder = "run your command"; // a terse prompt; the "run" cap already names the verb
+  input.placeholder = "Run an action"; // a terse prompt; the "run" cap already names the verb
 
   const items = h("div", "console-shell-commandbar__items");
   items.setAttribute("role", "listbox");
-  items.setAttribute("aria-label", "Matching commands");
+  items.setAttribute("aria-label", "Matching actions");
 
   // A quiet preview of the SELECTED command's prose label, pinned to the bar's right end. The row
   // shows terse command tokens (open.logs); this says what the focused one does in plain words.

@@ -37,6 +37,13 @@ export function initAppMenu(): void {
     });
   }
 
+  // Link items (e.g. Documentation, which opens the docs site in a new tab) don't dispatch a command, so
+  // they aren't covered by the loop above. Close the menu when one is activated so it isn't left hanging
+  // open behind the newly opened tab.
+  for (const link of panel.querySelectorAll<HTMLAnchorElement>("a.pf-v6-c-menu__item")) {
+    link.addEventListener("click", () => setOpen(false));
+  }
+
   btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
   document.addEventListener("click", (e) => {
     if (!open) return;

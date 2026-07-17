@@ -171,6 +171,7 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
       }
       const row = h("div");
       row.dataset.krow = "";
+      row.dataset.command = r.id; // deep-link target for the Actions surface's per-row "edit shortcut"
       row.append(h("span", undefined, r.label));
 
       const chordCell = h("span");

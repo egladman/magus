@@ -53,12 +53,17 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
   closeBtn.addEventListener("click", () => hide());
   const body = h("div", "pf-v6-c-modal-box__body console-cheatsheet-box__body");
-  const foot = h("p", "console-cheatsheet-box__hint", "Press Esc or click outside to dismiss. Open the command bar to rebind.");
+  const foot = h("p", "console-cheatsheet-box__hint", "Press Esc or click outside to dismiss. Open the action bar to rebind.");
   box.append(head, closeBtn, body, foot);
   bullseye.append(box);
   overlay.append(bullseye);
-  // A click on the backdrop (outside the box) dismisses; a click inside the box does not.
-  overlay.addEventListener("pointerdown", (ev) => { if (!box.contains(ev.target as Node)) hide(); });
+  // A click on the backdrop (outside the box) dismisses; a click inside the box does not. This must
+  // stay "click", not "pointerdown": while open, the backdrop covers the status-bar toggle button
+  // that opened the sheet. A "pointerdown" listener hides the overlay before the browser re-hit-tests
+  // for the trailing "click" event, so that click lands on the now-exposed toggle button underneath
+  // and immediately reopens it (flash-and-stay-open). "click" fires only after the full gesture,
+  // while the backdrop is still on top, so the toggle button never sees the event.
+  overlay.addEventListener("click", (ev) => { if (!box.contains(ev.target as Node)) hide(); });
 
   // render paints the grouped rows from the current commands + effective keymap. Commands with no
   // (effective) chord are omitted - this is a keybinding sheet, not a command list. Groups keep

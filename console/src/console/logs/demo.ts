@@ -118,7 +118,9 @@ export function startDemo(): void {
   state.timeline = true;       // open straight into the waterfall so it visibly fills in
   state.currentRef = "";
   if (emptyEl) emptyEl.hidden = true;
-  setRefIdentity("demo", false);
+  // No real identity in demo mode - an empty value hides the ref pill entirely (setRefIdentity)
+  // rather than showing a bordered box around the literal word "demo".
+  setRefIdentity("", false);
   setLiveStatus("streaming");
 
   // Prime the first frame with enough events that a target span exists immediately (so the

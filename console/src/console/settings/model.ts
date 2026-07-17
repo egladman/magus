@@ -3,7 +3,8 @@
 // merges an inbound envelope back onto the current values (importSettings), so both are unit-tested
 // without a browser.
 //
-// Forward-compat contract: the envelope is { schemaVersion, settings: { poll, host, theme, keymap } }.
+// Forward-compat contract: the envelope is
+// { schemaVersion, settings: { poll, host, theme, focusRing, keymap } }.
 // On import, unknown keys are ignored and missing/wrong-typed keys keep the current value; only a
 // structurally broken envelope (not JSON, or no settings object) is a hard error.
 
@@ -22,6 +23,7 @@ export interface Settings {
   poll: number; // insight/refresh poll interval, ms (settings.getPollMs)
   host: string; // explicit default daemon host, "host:port" or "" (settings.getDefaultHost)
   theme: ThemePref; // color theme override (theme.ts / localStorage "theme")
+  focusRing: boolean; // always show the split-pane focus outline vs keyboard-only (settings.getFocusRing)
   keymap: Keymap; // the user's command chord overrides (the shared "keymap" cell)
 }
 
@@ -35,7 +37,7 @@ export interface SettingsEnvelope {
 export function buildSettingsEnvelope(p: Settings): SettingsEnvelope {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
-    settings: { poll: p.poll, host: p.host, theme: p.theme, keymap: p.keymap },
+    settings: { poll: p.poll, host: p.host, theme: p.theme, focusRing: p.focusRing, keymap: p.keymap },
   };
 }
 
@@ -86,6 +88,10 @@ export function importSettings(raw: string, current: Settings): ImportResult {
     next.theme = settings.theme;
     applied.push("theme");
   }
+  if (typeof settings.focusRing === "boolean") {
+    next.focusRing = settings.focusRing;
+    applied.push("focusRing");
+  }
   if (isKeymap(settings.keymap)) {
     next.keymap = settings.keymap;
     applied.push("keymap");
@@ -101,8 +107,8 @@ export function importSettings(raw: string, current: Settings): ImportResult {
 // The Settings surface stages edits in a DRAFT and shows the diff against the committed baseline before
 // it is saved or applied. One human-readable before -> after entry per changed field.
 export interface PendingChange {
-  key: string; // stable id: "poll" | "host" | "theme" | "keymap:<commandId>"
-  label: string; // "Refresh rate", "Theme", "Daemon host", "Keybinding Close pane or tab"
+  key: string; // stable id: "poll" | "host" | "theme" | "focusRing" | "keymap:<commandId>"
+  label: string; // "Refresh rate", "Theme", "Daemon host", "Focus ring", "Keybinding Close pane or tab"
   before: string; // display value of the committed side, e.g. "20s"
   after: string; // display value of the draft side, e.g. "10s"
 }
@@ -115,6 +121,7 @@ export interface DiffContext {
   pollLabel: (ms: number) => string;
   themeLabel: (t: ThemePref) => string;
   hostLabel: (host: string) => string;
+  focusRingLabel: (on: boolean) => string;
   commandLabel: (id: string) => string;
   effectiveChord: (keymap: Keymap, id: string) => string;
   commandIds: string[];
@@ -133,6 +140,12 @@ export function computePendingChanges(committed: Settings, draft: Settings, ctx:
   }
   if (committed.theme !== draft.theme) {
     changes.push({ key: "theme", label: "Theme", before: ctx.themeLabel(committed.theme), after: ctx.themeLabel(draft.theme) });
+  }
+  if (committed.focusRing !== draft.focusRing) {
+    changes.push({
+      key: "focusRing", label: "Focus ring",
+      before: ctx.focusRingLabel(committed.focusRing), after: ctx.focusRingLabel(draft.focusRing),
+    });
   }
   for (const id of ctx.commandIds) {
     const before = ctx.effectiveChord(committed.keymap, id);

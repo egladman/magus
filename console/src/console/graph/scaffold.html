@@ -120,7 +120,10 @@
               </span>
             </div>
             <div class="pf-v6-c-input-group__item">
-              <button type="button" class="pf-v6-c-button pf-m-control" aria-label="Query syntax" title="Filter the graph by typing terms. Free text matches names; kind:spell / project:web / relation:uses / id:build filter by field; a leading - excludes. Terms combine with AND. Full list under Reference > Search syntax.">
+              <!-- attachHelpPopover (main.ts) upgrades this into a tap-to-open popover, reading the
+                   title= below as its body and stripping the attribute - a bare title tooltip never
+                   fires on touch, so on mobile this button used to do nothing. -->
+              <button id="graph-query-help" type="button" class="pf-v6-c-button pf-m-control" aria-label="Query syntax" title="Filter the graph by typing terms. Free text matches names; kind:spell / project:web / relation:uses / id:build filter by field; a leading - excludes. Terms combine with AND. Full list under Reference > Search syntax.">
                 <span class="pf-v6-c-button__text" aria-hidden="true">?</span>
               </button>
             </div>

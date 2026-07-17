@@ -43,10 +43,13 @@ export function setBtnLabel(btn: HTMLElement | null, text: string): void {
 
 // setRefIdentity fills the file-bar identity strip. A real ref gets a "Reference ID:" label
 // (the codebase term, per docs/glossary.md) before the value; a non-ref state (a live run, a
-// pasted log) shows just the value with no label.
+// pasted log) shows just the value with no label. An empty value (demo mode has no identity at
+// all) hides the pill entirely rather than leaving a bordered box with nothing in it - #log-bar-id's
+// own :has(:not(:empty)) rule already collapses the row on an empty value, so this keeps the pill
+// itself consistent with that.
 export function setRefIdentity(value: string, labeled: boolean): void {
   if (refLabelEl) { refLabelEl.hidden = !labeled; refLabelEl.textContent = labeled ? "Reference ID:" : ""; }
-  if (refEl) refEl.textContent = value;
+  if (refEl) { refEl.hidden = !value; refEl.textContent = value; }
 }
 
 export function setStatus(msg: string, isErr?: boolean): void {

@@ -28,11 +28,13 @@ export function tabViews(ws: Workspace): TabView[] {
   return ws.tabs.map((t) => ({ id: t.id, title: t.title, active: t.id === ws.activeId }));
 }
 
-// Callbacks the console supplies: a tab became active (mount/show it), a tab closed (unmount it), or a
-// tab should move out into its own OS window (the console opens the app window and closes the tab).
+// Callbacks the console supplies: a tab became active (mount/show it), a tab closed (unmount it), a
+// tab's tile should split (a new pane appears beside/below its currently focused one), or a tab should
+// move out into its own OS window (the console opens the app window and closes the tab).
 export interface TabBarCallbacks {
   onSelect(id: string): void;
   onClose(id: string): void;
+  onSplit(id: string, dir: "row" | "col"): void;
   onMoveToWindow(id: string): void;
 }
 
@@ -112,6 +114,8 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
 
   const openCtx = (id: string, title: string, x: number, y: number): void => {
     ctxList.replaceChildren(
+      ctxItem("Split horizontal", () => cb.onSplit(id, "row")),
+      ctxItem("Split vertical", () => cb.onSplit(id, "col")),
       ctxItem("Move to new window", () => cb.onMoveToWindow(id)),
       ctxItem("Close " + title, () => close(id)),
     );

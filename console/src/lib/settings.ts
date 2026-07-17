@@ -45,3 +45,31 @@ export function setDefaultHost(value: string): void {
 export function saveDefaultHost(value: string): void {
   host.persistOnly(value.trim());
 }
+
+// Whether the split-pane focus outline is always shown, or only during keyboard navigation (the
+// default). Off matches the browser's native :focus-visible behavior (no outline after a mouse click);
+// On adds :root[data-focus-ring="always"] so the focused pane's outline shows regardless of input
+// method. Distinct from theme (a repaint) - this only toggles an attribute, so it never needs a reload.
+const focusRing = persisted<boolean>("console-focus-ring", false);
+
+export function getFocusRing(): boolean {
+  return focusRing.get();
+}
+
+export function setFocusRing(on: boolean): void {
+  focusRing.set(on);
+}
+
+// Durably save the focus-ring preference WITHOUT applying it to the running session (Settings "Save"):
+// it takes effect on the next load. See persist.persistOnly.
+export function saveFocusRing(on: boolean): void {
+  focusRing.persistOnly(on);
+}
+
+// applyFocusRing reflects the preference onto the document root so the CSS keyed on
+// :root[data-focus-ring="always"] takes effect. Call once at boot with the persisted value
+// (getFocusRing()), and again whenever Settings applies a change live (Save & Apply).
+export function applyFocusRing(on: boolean): void {
+  if (on) document.documentElement.setAttribute("data-focus-ring", "always");
+  else document.documentElement.removeAttribute("data-focus-ring");
+}

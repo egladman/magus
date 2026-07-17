@@ -33,6 +33,7 @@ import { detectFlavor, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
+import { attachHelpPopover } from "../../ui/help-popover";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
 // the SSE handler writes for the view code to read, and the PWA File Handling API entry point.
@@ -1105,11 +1106,34 @@ function applyQuery(q: any) {
 // The node cloud is collapsed by default (canvas-first on load); a query, or the
 // count toggle, reveals it.
 let listExpanded = false;
+// Mobile only (graph.css scopes #node-list's position:fixed to the same breakpoint): the node
+// cloud overlays the canvas instead of pushing it down in-flow, since the stacked sidebar has
+// no headroom to push into without shoving the canvas off-screen. Desktop's #node-list keeps
+// its plain in-flow disclosure, so this query gates the JS half of that split.
+const mobileListQuery = matchMedia("(max-width: 900px)");
+let overlayResizeWired = false; // guards the resize listener in bootWireEvents against a second wiring
+// Places the fixed-position node-list panel directly under #list-toggle, clamped into the
+// viewport - the same placement idiom as help-popover.ts's place(). Re-run on open and on
+// resize/orientation change so a rotated phone doesn't leave the panel stranded.
+function positionNodeListOverlay() {
+  if (!mobileListQuery.matches) return;
+  const btn = el("list-toggle");
+  if (!btn) return;
+  const r = btn.getBoundingClientRect();
+  const margin = 8;
+  const w = listEl.getBoundingClientRect().width || 320;
+  let left = r.left;
+  if (left + w > window.innerWidth - margin) left = window.innerWidth - margin - w;
+  if (left < margin) left = margin;
+  listEl.style.left = left + "px";
+  listEl.style.top = (r.bottom + 6) + "px";
+}
 function setListExpanded(v: any) {
   listExpanded = v;
   listEl.hidden = !v;
   const btn = el("list-toggle");
   if (btn) btn.setAttribute("aria-expanded", v ? "true" : "false");
+  if (v) positionNodeListOverlay();
 }
 
 // The node list is the accessible twin of the canvas: it always reflects the
@@ -2465,6 +2489,13 @@ function bootWireEvents() {
     });
   }
 
+  // The query-syntax "?" button used to be a bare title= tooltip - invisible on touch, since
+  // hover never fires there. attachHelpPopover upgrades it to a tap-to-open popover (reusing
+  // the title text as the body, then stripping it); a re-run of bootWireEvents is a no-op since
+  // the title is already gone by then.
+  const queryHelpBtn = el("graph-query-help");
+  if (queryHelpBtn) attachHelpPopover(queryHelpBtn);
+
   // Wire the projection unfold button ("Show full graph").
   const unfoldBtnWire = el("projection-unfold-btn");
   if (unfoldBtnWire) {
@@ -2512,6 +2543,15 @@ function bootWireEvents() {
   // The count row toggles the (default-collapsed) node cloud.
   const listToggle = el("list-toggle");
   if (listToggle) listToggle.addEventListener("click", () => setListExpanded(!listExpanded));
+
+  // Keep the mobile node-list overlay glued under its toggle across a resize/rotation. Wired
+  // once (bootWireEvents can re-run from the live-mode path); the listener itself no-ops via
+  // positionNodeListOverlay's own mobileListQuery/listExpanded guards, so a second registration
+  // would just be redundant rather than harmful, but there's no reason to keep both around.
+  if (!overlayResizeWired) {
+    overlayResizeWired = true;
+    window.addEventListener("resize", () => { if (listExpanded) positionNodeListOverlay(); });
+  }
 
   // Zoom-to-fit: frame the current matches (or the whole graph) in the viewport.
   const fitBtn = el("fit-btn");

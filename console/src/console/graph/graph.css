@@ -319,7 +319,13 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 /* Narrow screens: stack the columns; canvas gets a fixed height, the list and card
    flow beneath it. */
 @media (max-width: 900px) {
-  .console-graph-app, body[data-has-card] .console-graph-app { grid-template-columns: 1fr; grid-auto-rows: min-content; height: auto; }
+  /* grid-template-rows must be reset here - the desktop rule's minmax(0, 1fr) single row
+     otherwise survives into this stacked layout and collapses the whole app to ~1px tall (grid-
+     auto-rows alone only sizes rows ADDED beyond the explicit template; it does not replace it).
+     The sidebar's children (search box, count row, node list) then overflowed and painted UNDER
+     the canvas (.console-graph-stage sits later in DOM with no stacking context of its own),
+     so a tap meant for "N nodes, N edges" landed on a graph node instead. */
+  .console-graph-app, body[data-has-card] .console-graph-app { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: min-content; height: auto; }
   .console-graph-stage { height: 60svh; min-height: 320px; }
   .console-graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
   #explain-card { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); max-height: 50svh; }
@@ -329,6 +335,22 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
   #legend-toggle { display: inline-flex; }
   .console-graph-legend { display: none; top: 2.7rem; max-height: calc(100% - 3.4rem); }
   .console-graph-legend[data-open] { display: flex; }
+  /* The count/chevron toggle row is the tap target for the stats disclosure below; give it
+     comfortable tap padding and a legible chevron (it was ~9px, effectively untappable). */
+  .console-graph-sidebar__count { padding-block: 0.55rem; }
+  .console-graph-sidebar__chevron { font-size: 1.6em; }
+  /* The node cloud OVERLAYS the canvas here instead of pushing it down in-flow: main.ts
+     positions this panel (fixed, viewport coordinates) under #list-toggle whenever it expands,
+     via setListExpanded's positionNodeListOverlay(). z-index sits above the stage tools/legend
+     (3-5) so it always wins a tap over the canvas beneath it. */
+  #node-list {
+    position: fixed; z-index: 6;
+    max-height: min(55svh, 420px); width: min(20rem, calc(100vw - 1.2rem));
+    border: 1px solid var(--pf-t--global--border--color--default);
+    border-radius: var(--pf-t--global--border--radius--small);
+    background: var(--pf-t--global--background--color--primary--default);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  }
 }
 
 /* Reference disclosures (Views, Search syntax, Layout and colors, Loading a graph by URL):
@@ -491,14 +513,32 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
    copy-as-command hang off it. The "magus query" prompt sits ABOVE as a label - inline it consumed a
    third of the sidebar and squeezed the field down to "kind:...". Left lowercase + mono because it is a
    literal command (the field reads as its argument), not a section heading. */
-.console-graph-querybar { font-size: 0.76rem; }
+.console-graph-querybar {
+  font-size: 0.76rem;
+  /* PF's input-group top-anchors each item's child by default (--AlignItems: start), so the
+     field's compact box floated shorter than the flanking buttons even though the item boxes
+     themselves were already equal height. Stretch every item's child to that shared row height
+     instead - the field and both buttons now settle on one line box. */
+  --pf-v6-c-input-group__item--AlignItems: stretch;
+}
 .console-graph-querybar__prompt {
   margin: 0 0 0.3rem; padding: 0;
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.68rem;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-graph-querybar .pf-v6-c-form-control { font-family: var(--pf-t--global--font--family--mono); }
-.console-graph-querybar .pf-v6-c-button.pf-m-control { padding-inline: 0.45rem; align-self: stretch; }
+.console-graph-querybar .pf-v6-c-form-control {
+  font-family: var(--pf-t--global--font--family--mono);
+  /* PF's own grid (display:grid, align-items:start) top-anchors #node-search inside the now-
+     stretched box; this field carries no adornment column, so a plain flex box centers it. */
+  display: flex; align-items: center;
+}
+/* Both buttons drop to #node-search's own compact block padding/font/line-height (below) so
+   the stretched row settles at the field's natural height rather than PF's larger default
+   control size - matching sizes, not just matching outer heights. */
+.console-graph-querybar .pf-v6-c-button.pf-m-control {
+  padding-inline: 0.45rem; padding-block: 0.25rem;
+  font-size: 0.78rem; line-height: 1.4;
+}
 /* Size the copy-as-command SVG icon to sit level with the neighboring "?" help control's glyph. */
 .console-graph-querybar .console-render-btn__icon { width: 0.9em; height: 0.9em; flex: 0 0 auto; }
 

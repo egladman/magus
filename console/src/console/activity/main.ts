@@ -45,15 +45,12 @@ interface Refs {
 function buildScaffold(host: HTMLElement): Refs {
   const panel = h("section", "console-render-panel");
 
-  // Toolbar: the trail title on the left, the connection note + Refresh button aligned to the right.
-  // ONE toolbar content section (not two stacked __content blocks - those wrap to separate rows and
-  // leave a tall dead band): the title item, then an align-end action group carrying the note + button.
+  // Toolbar: the connection note + Refresh button, aligned to the right on one dense row. No
+  // in-app title - the tab already names the app, so a second "Activity trail" heading here would
+  // just duplicate it.
   const bar = h("header", "pf-v6-c-toolbar");
   const content = h("div", "pf-v6-c-toolbar__content");
   const section = h("div", "pf-v6-c-toolbar__content-section");
-
-  const idItem = h("div", "pf-v6-c-toolbar__item");
-  idItem.append(h("h1", "console-activity-title", "Activity trail"));
 
   const actionGroup = h("div", "pf-v6-c-toolbar__group pf-m-action-group pf-m-align-end");
   const connItem = h("div", "pf-v6-c-toolbar__item");
@@ -69,7 +66,7 @@ function buildScaffold(host: HTMLElement): Refs {
   btnItem.append(refresh);
   actionGroup.append(connItem, btnItem);
 
-  section.append(idItem, actionGroup);
+  section.append(actionGroup);
   content.append(section);
   bar.append(content);
 
@@ -129,7 +126,7 @@ export function activate(host: HTMLElement): () => void {
   const refs = buildScaffold(host);
   let stale = false;
 
-  function render(events: ActivityEvent[], demo: boolean): void {
+  function render(events: ActivityEvent[]): void {
     refs.body.replaceChildren();
     const model = activityToModel(events);
     // The adapter puts the ok/error accent in meta.status; buildSection defaults its accent from a
@@ -137,11 +134,11 @@ export function activate(host: HTMLElement): () => void {
     for (const sec of model.sections) refs.body.append(buildSection(sec, { status: sec.meta?.status }));
     const has = events.length > 0;
     refs.empty.hidden = has;
-    // The toolbar (title, count, Refresh) belongs with the populated trail; in the empty state it read as
-    // a floating heading over a "not connected" note, so hide it and let the golden empty card stand alone.
+    // The toolbar (count, Refresh) belongs with the populated trail; in the empty state it read as
+    // a floating bar over a "not connected" note, so hide it and let the golden empty card stand alone.
     refs.bar.hidden = !has;
     const n = events.length;
-    refs.conn.textContent = demo ? "demo data" : n + (n === 1 ? " event" : " events");
+    refs.conn.textContent = n + (n === 1 ? " event" : " events");
   }
 
   function showEmpty(title: string, sub: string, conn: string): void {
@@ -159,7 +156,7 @@ export function activate(host: HTMLElement): () => void {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
       const resp = await client.listActivity({ pageSize: PAGE_SIZE });
       if (stale) return;
-      render(resp.events, false);
+      render(resp.events);
       if (resp.events.length === 0) {
         showEmpty("No activity yet", "The daemon is connected but has not recorded any actions in this session.", "0 events");
       }
@@ -175,7 +172,7 @@ export function activate(host: HTMLElement): () => void {
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
-    if (wantsDemo(params)) { render(demoEvents(Date.now()), true); return; }
+    if (wantsDemo(params)) { render(demoEvents(Date.now())); return; }
     const linked = params.live !== undefined ? validateLiveHost(params.live) : null;
     const remembered = daemonCell.get();
     const daemonHost = linked ?? (remembered ? validateLiveHost(remembered) : null);
@@ -184,7 +181,7 @@ export function activate(host: HTMLElement): () => void {
   }
 
   refs.refresh.addEventListener("click", load);
-  refs.demoBtn.addEventListener("click", () => render(demoEvents(Date.now()), true));
+  refs.demoBtn.addEventListener("click", () => render(demoEvents(Date.now())));
   load();
 
   return () => { stale = true; };

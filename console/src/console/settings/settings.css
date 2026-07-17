@@ -193,6 +193,9 @@
 .console-settings-theme { width: auto; align-items: center; }
 .console-settings-theme .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
 
+/* The focus-ring toggle group is the same 2-way control, sized like the theme toggle above. */
+.console-settings-focusring { width: auto; align-items: center; }
+
 /* Backup: the export/import controls stack, with the action rows wrapping on a narrow pane. */
 .console-settings-io { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
 .console-settings-io__actions { display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--sm); }

@@ -33,6 +33,7 @@ import { startDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
+import { attachHelpPopover } from "../../ui/help-popover";
 
 // init() is invoked at the BOTTOM of this module (see the final line), after every shared state
 // field has initialized. The order matters: loadFromURL()'s setFilter() applies the #q= deep link,
@@ -378,6 +379,12 @@ function wireControls(): void {
       if ((ev as KeyboardEvent).key === "Enter") { ev.preventDefault(); stepActiveMark((ev as KeyboardEvent).shiftKey ? -1 : 1); }
     });
   }
+  // Filter syntax help: the "?" trigger's title= is a tooltip only (invisible on touch, no click
+  // handler); attachHelpPopover upgrades it into a tap-to-open popover, reading that same title=
+  // as the body text.
+  const filterHelpBtn = el("log-filter-help");
+  if (filterHelpBtn) attachHelpPopover(filterHelpBtn);
+
   // Filter box: debounced live-filter that narrows both views and syncs the #q= fragment.
   const filterEl = el("log-filter");
   if (filterEl) {

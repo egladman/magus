@@ -13,6 +13,7 @@ import { createKeybindingsEditor, type KeybindingsDeps } from "../keybindings";
 import { formatChord, isMac, mergeKeymap, type Keymap } from "../commands";
 import {
   getPollMs, setPollMs, savePollMs, getDefaultHost, setDefaultHost, saveDefaultHost,
+  getFocusRing, setFocusRing, saveFocusRing, applyFocusRing,
 } from "../../lib/settings";
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
 import { probeDaemon } from "../../lib/daemon";
@@ -91,16 +92,17 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
 
   // Committed baseline: what the running session currently has. Re-read after each commit.
   const readCommitted = (): Settings => ({
-    poll: getPollMs(), host: getDefaultHost(), theme: getThemePref(), keymap: kb.keymap.get(),
+    poll: getPollMs(), host: getDefaultHost(), theme: getThemePref(), focusRing: getFocusRing(), keymap: kb.keymap.get(),
   });
   let committed = readCommitted();
 
   // The draft: scalar fields held here, keymap held in a draft-backed cell so the embedded editor drives
   // it live within the surface without touching the real shared cell. onChange recomputes the pending diff.
-  const draftScalar = { poll: committed.poll, host: committed.host, theme: committed.theme };
+  const draftScalar = { poll: committed.poll, host: committed.host, theme: committed.theme, focusRing: committed.focusRing };
   const keymapDraft = createDraftCell<Keymap>({ ...committed.keymap }, () => recompute());
   const draftPrefs = (): Settings => ({
-    poll: draftScalar.poll, host: draftScalar.host.trim(), theme: draftScalar.theme, keymap: keymapDraft.get(),
+    poll: draftScalar.poll, host: draftScalar.host.trim(), theme: draftScalar.theme, focusRing: draftScalar.focusRing,
+    keymap: keymapDraft.get(),
   });
 
   // The diff formatters: human labels for scalars, effective (merged) display chords for keybindings.
@@ -108,6 +110,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     pollLabel,
     themeLabel: (t) => THEME_LABEL[t],
     hostLabel: (host) => (host === "" ? "loopback" : host),
+    focusRingLabel: (on) => (on ? "On" : "Off"),
     commandLabel: (id) => kb.commands.find((c) => c.id === id)?.label ?? id,
     effectiveChord: (keymap, id) => formatChord(mergeKeymap(kb.defaults, keymap)[id] ?? "", mac) || "None",
     commandIds: kb.commands.map((c) => c.id),
@@ -309,6 +312,36 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   const themeBody = h("div", "console-settings-section__body");
   themeBody.append(buildFormGroup("Theme", null, themeGroup, "System follows your operating system. Applies on Save & Apply."));
 
+  // A 2-way focus-ring toggle group, mirrored on the theme toggle above. Off (default) shows the
+  // split-pane focus outline only during keyboard navigation; On always shows it, including after a
+  // mouse click.
+  const focusRingGroup = h("div", "pf-v6-c-toggle-group console-settings-focusring");
+  focusRingGroup.setAttribute("role", "group");
+  focusRingGroup.setAttribute("aria-label", "Focus ring");
+  const focusRingButtons = new Map<boolean, HTMLButtonElement>();
+  for (const v of [false, true]) {
+    const item = h("div", "pf-v6-c-toggle-group__item");
+    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
+    btn.type = "button";
+    btn.append(h("span", "pf-v6-c-toggle-group__text", v ? "On" : "Off"));
+    btn.addEventListener("click", () => { draftScalar.focusRing = v; paintFocusRingToggle(); recompute(); });
+    item.append(btn);
+    focusRingGroup.append(item);
+    focusRingButtons.set(v, btn);
+  }
+  function paintFocusRingToggle(): void {
+    for (const [v, btn] of focusRingButtons) {
+      const on = draftScalar.focusRing === v;
+      btn.classList.toggle("pf-m-selected", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+  paintFocusRingToggle();
+  themeBody.append(buildFormGroup(
+    "Focus ring", null, focusRingGroup,
+    "Always show the outline on the focused pane. Off shows it only during keyboard navigation.",
+  ));
+
   // --- Keybindings: the shared editor core over the DRAFT keymap ---
   const editor = createKeybindingsEditor({ commands: kb.commands, defaults: kb.defaults, keymap: keymapDraft });
 
@@ -387,9 +420,11 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     draftScalar.poll = p.poll;
     draftScalar.host = p.host;
     draftScalar.theme = p.theme;
+    draftScalar.focusRing = p.focusRing;
     pollSelect.value = String(p.poll);
     hostInput.value = p.host;
     paintThemeToggle();
+    paintFocusRingToggle();
     keymapDraft.set({ ...p.keymap }); // re-renders the editor via its subscription; onChange recomputes
     recompute();
   }
@@ -408,11 +443,13 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       if (keys.has("poll")) setPollMs(d.poll);
       if (keys.has("host")) setDefaultHost(d.host);
       if (keys.has("theme")) setTheme(false);
+      if (keys.has("focusRing")) { setFocusRing(d.focusRing); applyFocusRing(d.focusRing); }
       if (keys.has("keymap")) kb.keymap.set(d.keymap);
     } else {
       if (keys.has("poll")) savePollMs(d.poll);
       if (keys.has("host")) saveDefaultHost(d.host);
       if (keys.has("theme")) setTheme(true);
+      if (keys.has("focusRing")) saveFocusRing(d.focusRing);
       if (keys.has("keymap")) kb.keymap.persistOnly(d.keymap);
     }
     committed = { ...d, keymap: { ...d.keymap } };

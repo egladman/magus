@@ -14,6 +14,7 @@ const base: Settings = {
   poll: 20000,
   host: "127.0.0.1:7391",
   theme: "dark",
+  focusRing: false,
   keymap: { "console.tab.close": "mod+w" },
 };
 
@@ -24,6 +25,7 @@ test("buildSettingsEnvelope: wraps the snapshot in the versioned envelope", () =
       poll: 20000,
       host: "127.0.0.1:7391",
       theme: "dark",
+      focusRing: false,
       keymap: { "console.tab.close": "mod+w" },
     },
   });
@@ -31,11 +33,11 @@ test("buildSettingsEnvelope: wraps the snapshot in the versioned envelope", () =
 
 test("round-trip: import(build(p)) restores every value onto a different current", () => {
   const raw = JSON.stringify(buildSettingsEnvelope(base));
-  const current: Settings = { poll: 5000, host: "", theme: "auto", keymap: {} };
+  const current: Settings = { poll: 5000, host: "", theme: "auto", focusRing: true, keymap: {} };
   const res = importSettings(raw, current);
   assert.ok(res.ok);
   assert.deepEqual(res.next, base);
-  assert.deepEqual(res.applied.sort(), ["host", "keymap", "poll", "theme"]);
+  assert.deepEqual(res.applied.sort(), ["focusRing", "host", "keymap", "poll", "theme"]);
 });
 
 test("import: unknown keys are ignored, known keys still apply", () => {
@@ -126,6 +128,7 @@ const diffCtx: DiffContext = {
   pollLabel: (ms) => ms / 1000 + "s",
   themeLabel: (t) => (t === "auto" ? "System" : t === "light" ? "Light" : "Dark"),
   hostLabel: (h) => (h === "" ? "loopback" : h),
+  focusRingLabel: (on) => (on ? "On" : "Off"),
   commandLabel: (id) => (id === "console.tab.close" ? "Close pane or tab" : id),
   effectiveChord: (keymap, id) => {
     const chord = Object.prototype.hasOwnProperty.call(keymap, id) ? keymap[id] : "mod+w"; // "mod+w" = the default

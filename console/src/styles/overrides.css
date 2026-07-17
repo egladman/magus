@@ -58,6 +58,16 @@
 }
 #console-statusbar .console-shell-statusbar__shortcuts:hover { opacity: 1; }
 
+/* Panes tray toggle (main.ts): the same quiet weight as the shortcuts button, but its glyph is a live
+ * readout of the persisted split direction (panesIcon) rather than a static icon, so it stays a touch
+ * brighter than "muted chrome" and gets the accent while its popup is open. */
+#console-statusbar .console-shell-statusbar__panes {
+  padding: 0 0.15rem; min-height: 0; line-height: 0; border: 0; background: none;
+  color: var(--pf-t--global--text--color--subtle); opacity: 0.8;
+}
+#console-statusbar .console-shell-statusbar__panes:hover { opacity: 1; }
+#console-statusbar .console-shell-statusbar__panes[aria-expanded="true"] { color: var(--console-accent); opacity: 1; }
+
 /* Connection liveness item: a leading dot whose color IS the link/health state, read from the
  * console status tokens (theme-aware). The dot follows the text color (currentColor), so each state
  * only sets `color`. Surfaces drive [data-state] / [data-health] on #console-conn (their contract). */
@@ -73,6 +83,23 @@
 /* When connected, the dot takes the daemon's HEALTH color so one indicator carries live + well. */
 #console-conn[data-state="connected"][data-health="warn"] { color: var(--console-status-warn); }
 #console-conn[data-state="connected"][data-health="fail"] { color: var(--console-status-queued); }
+/* At zero tabs (the launcher's default bar) there is no [data-state="connected"] to gate on - the
+ * readiness poller (main.ts) writes data-health straight from the daemon's own /readyz report there,
+ * so the three tiers need to read on their own too. */
+#console-conn[data-health="ok"] { color: var(--console-status-ok); }
+#console-conn[data-health="warn"] { color: var(--console-status-warn); }
+#console-conn[data-health="fail"] { color: var(--console-status-queued); }
+
+/* Clickable: #console-conn is a real (if bare) control now - it jumps to the daemon-address setting -
+ * so it needs to read as one. cursor + a hover shift toward the console accent teaches "click me"; the
+ * dot's own state/health color still wins at rest, this only nudges legibility on interaction. */
+#console-conn { cursor: pointer; }
+#console-conn:hover { text-decoration: underline; text-decoration-color: var(--console-accent); }
+#console-conn:focus-visible {
+  outline: 2px solid var(--console-accent);
+  outline-offset: 2px;
+  border-radius: var(--pf-t--global--border--radius--small);
+}
 
 /* The Applications menu popover (a PF Menu, #console-appmenu) drops from the title-bar control group,
  * right-aligned so it stays inside the viewport. Only the POSITION is here; the menu chrome is
@@ -84,24 +111,10 @@
   position: fixed; min-width: 12rem; max-width: calc(100vw - 1rem);
   z-index: var(--pf-t--global--z-index--400); /* over the title bar and the two title-bar popovers (300) */
 }
-#console-appmenu,
-#console-panesmenu {
+#console-appmenu {
   position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
-  min-width: 11rem; max-width: calc(100vw - 1rem);
+  min-width: 15rem; max-width: calc(100vw - 1rem);
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
-}
-/* Wider than the panes menu: PF reserves inline-end space on any row carrying an __item-action, and at
-   11rem that squeezed the longest app name to "Graph Expl...". */
-#console-appmenu { min-width: 15rem; }
-/* The Panes menu stamps each item's chord after the label - the menu is the discoverable route, the
-   chord is the fast one, so showing both teaches the shortcut instead of hiding it. Blank on a binding
-   the user cleared. The label opts out of PF's ellipsis truncation: it is short and fixed, and the chord
-   must not squeeze it ("Split down" -> "Split ..."). */
-#console-panesmenu .pf-v6-c-menu__item-main { display: flex; align-items: center; gap: 1.5rem; }
-#console-panesmenu .pf-v6-c-menu__item-text { flex: 0 0 auto; overflow: visible; text-overflow: clip; }
-.console-panesmenu__chord {
-  margin-left: auto;
-  font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
 }
 
 /* --- Keybindings editor --------------------------------------------------------------------------

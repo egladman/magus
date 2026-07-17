@@ -118,6 +118,54 @@ export async function probeDaemon(hostPort: string, timeoutMs = 3000): Promise<P
   }
 }
 
+// ---- readiness probe --------------------------------------------------------
+
+// ReadinessComponent/ReadinessReport mirror the daemon's GET /readyz JSON body. Component names are
+// currently "workspaces", "symbol_index", "services", "knowledge_graph"; status is one of
+// "ok"|"degraded"|"down"|"idle"|"disabled". Kept as bare strings (not a union) because this is parsed
+// from the network - a future daemon component or status value must not fail to typecheck against a
+// stale frontend union, it should just render as unrecognized text.
+export type ReadinessComponent = { name: string; status: string; detail: string };
+export type ReadinessReport = { ready: boolean; components: ReadinessComponent[] };
+
+// fetchReadiness reads GET /readyz for the daemon's own component-level health (workspaces, symbol
+// index, services, knowledge graph) - richer than probeDaemon's bare "did anything answer". Unlike
+// /livez, /readyz answers WITH CORS headers and a JSON body on current daemons, so this is a normal
+// (cors-mode) fetch whose response is actually readable, not an opaque no-cors probe. No Authorization
+// header rides along: the health routes are tokenless by design (a kubelet cannot supply a bearer
+// token), and adding one would turn a simple GET into a needlessly CORS-preflighted request.
+//
+// WHY graceful degradation: the daemon the caller is pointed at may PREDATE this endpoint's CORS/JSON
+// support. Every failure mode here - network error, timeout, an old daemon's opaque/non-CORS response,
+// a non-200/503 status, a malformed body - must resolve to null quietly (no thrown error, no
+// console.error), so a caller can fall back to the existing SSE-derived connection state without
+// spamming the console for anyone still on an older release. 200 and 503 both carry a valid body (503
+// just means "not ready yet"), so both are treated as a successful read.
+export async function fetchReadiness(hostPort: string, timeoutMs = 3000): Promise<ReadinessReport | null> {
+  const host = validateLiveHost(hostPort);
+  if (!host) return null;
+  const url = "http://" + host + "/readyz";
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
+    if (res.status !== 200 && res.status !== 503) return null;
+    const body = await res.json();
+    if (typeof body !== "object" || body === null || typeof body.ready !== "boolean") return null;
+    const components: ReadinessComponent[] = Array.isArray(body.components)
+      ? body.components.map((c: any) => ({
+          name: String(c?.name ?? ""),
+          status: String(c?.status ?? ""),
+          detail: String(c?.detail ?? ""),
+        }))
+      : [];
+    return { ready: body.ready, components };
+  } catch {
+    // Covers the timeout, a refused/CORS-blocked connection, and a response body that is not valid
+    // JSON (an old daemon serving a plain-text /readyz, or none at all) - all collapse to the one
+    // "could not read" signal a caller falls back from.
+    return null;
+  }
+}
+
 // ---- the shared token ------------------------------------------------------
 
 const TOKEN_KEY = "magus-live-token";

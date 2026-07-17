@@ -213,11 +213,121 @@ body[data-console-fill] > main > .console-render-panel {
   outline-offset: -2px;
   z-index: 1;
 }
+/* Focus ring "always" mode: the Settings toggle sets data-focus-ring="always" on the root, opting back
+   into ringing the focused pane on any focus (including a mouse click), for users who want a persistent
+   i3-style focus indicator. data-focus is the pane the tile view marks as focused (tileView.applyFocus). */
+:root[data-focus-ring="always"] #console-outlet [data-pane-id][data-focus] {
+  outline: 2px solid var(--console-accent);
+  outline-offset: -2px;
+  z-index: 1;
+}
 /* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in (a PF Gallery
    of Cards, built in tileView). Center the prompt + its card grid within the pane. */
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
 #console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pf-t--global--text--color--subtle); text-align: center; }
 #console-outlet [data-pane-launcher] + .pf-v6-l-gallery { width: 100%; max-width: 26rem; padding: 0 1rem; }
+
+/* The Panes tray popup (main.ts, #console-panespopup): a small floating control panel opened by the
+   status-bar Panes button - a live, Moom-style spatial MAP of the active tab's pane tree, replacing
+   the old d-pad of anonymous Split/Focus/Move chevrons (unintuitive - "like a cheap remote"). Point at
+   a pane to focus it, drag one pane onto another to swap them, split the pane you are pointing at.
+   ONE shared element, so it is class-free save for the console-shell-panespopup*/console-shell-panesmap*
+   formula names; position:fixed + JS-clamped coordinates, opening UPWARD from its anchor (main.ts's
+   placePanesPopup) since the tray sits on the bottom status bar. Mirrors .console-help-popover's card
+   treatment below. */
+.console-shell-panespopup {
+  position: fixed;
+  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
+  max-width: calc(100vw - 1rem);
+  padding: 0.6rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
+  box-shadow: var(--pf-t--global--box-shadow--md);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-shell-panespopup__body { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
+.console-shell-panespopup__closebtn { width: 100%; }
+
+/* The map itself: a fixed-size miniature of the active tab's pane tree (main.ts's buildPaneMapNode),
+   nesting flex boxes that mirror tileView's own row/col split semantics - row splits side by side, col
+   stacks. Fixed size (not "flex to fill the popup") keeps it reading as a small MAP, not a real layout. */
+.console-shell-panesmap {
+  width: 260px;
+  height: 150px;
+  display: flex;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  overflow: hidden;
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-shell-panesmap__split { display: flex; flex: 1; gap: 2px; min-width: 0; min-height: 0; }
+.console-shell-panesmap__split[data-dir="row"] { flex-direction: row; }
+.console-shell-panesmap__split[data-dir="col"] { flex-direction: column; }
+.console-shell-panesmap__split > * { flex-basis: 0; min-width: 0; min-height: 0; }
+
+/* Leaf cells: a tappable rectangle standing in for one real pane. Real tap targets (28px+), not the
+   bare minimum - the map is meant to work on touch, the same reasoning the old d-pad's iconbtn had.
+   touch-action:none hands the cell's own pointermove stream to the drag-to-swap wiring (wirePaneCellDrag)
+   instead of the browser's scroll gesture - this map is too small to need scrolling anyway. */
+.console-shell-panesmap__cell {
+  position: relative;
+  flex: 1;
+  min-width: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: 0.65rem;
+  text-align: center;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.console-shell-panesmap__cell:hover { border-color: var(--console-accent); color: var(--pf-t--global--text--color--regular); }
+/* The focused cell - the "you are here" ring, matching #console-outlet [data-pane-id][data-focus]'s
+   accent treatment so the tray's map and the real tiled panes read as the same idea. */
+.console-shell-panesmap__cell[data-focus] {
+  border-color: var(--console-accent);
+  outline: 2px solid var(--console-accent);
+  outline-offset: -3px;
+  color: var(--pf-t--global--text--color--regular);
+  background: color-mix(in srgb, var(--console-accent) 10%, var(--pf-t--global--background--color--primary--default));
+}
+/* The drag-drop target: a stronger tint than the focus ring, so mid-drag "drop here" never reads as
+   "already focused". */
+.console-shell-panesmap__cell[data-drop] {
+  border-color: var(--console-accent);
+  background: color-mix(in srgb, var(--console-accent) 25%, var(--pf-t--global--background--color--primary--default));
+}
+.console-shell-panesmap__celllabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* The focused cell's split controls: two small H/V buttons docked to its bottom edge - no direction to
+   decode, since splitting acts on the pane the operator already pointed at. */
+.console-shell-panesmap__splitctl { position: absolute; bottom: 2px; display: flex; gap: 2px; }
+.console-shell-panesmap__splitbtn {
+  min-width: 18px; min-height: 16px; padding: 0 0.25rem;
+  font-size: 0.62rem; line-height: 1;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: var(--pf-t--global--text--color--regular);
+  cursor: pointer;
+}
+.console-shell-panesmap__splitbtn:hover { border-color: var(--console-accent); color: var(--console-accent); }
+
+/* The keycap hint line below the map: folds the split/focus/move chords into one teaching row, reusing
+   the cheat sheet's kbd chip styling (.console-cheatsheet-kbd) - the map has no buttons for focus/move
+   to hang a tooltip off (that is now pointer + drag), so this line is where that teaching lives. */
+.console-shell-panesmap__hinthost { max-width: 260px; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); overflow-x: auto; }
+.console-shell-panesmap__hint { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
+.console-shell-panesmap__hintgroup { display: inline-flex; align-items: center; gap: 0.2rem; }
+
 /* Graph cold state: the prompt normally collapses the card (and its stage) to a natural
    ~520px height, which in the full-height layout would leave a void (and a background seam)
    below it. Instead let the stage fill the card and the prompt fill + center within it,
@@ -253,6 +363,23 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   color: var(--pf-t--global--text--color--subtle); font-size: 0.7rem; font-weight: 700;
 }
 .console-render-help-glyph:hover, .console-render-help-glyph:focus-visible { color: var(--pf-t--global--text--color--regular); border-color: var(--pf-t--global--text--color--regular); }
+
+/* Help popover: the click-to-toggle panel the shared "?" affordance (ui/help-popover.ts) opens. A hover
+   title= tooltip is invisible on touch, so every surface's "?" now opens this instead. position:fixed +
+   JS-clamped coordinates so it never spills off a phone screen; z-index above the surface chrome/canvas
+   but below the app-level modals (cheatsheet/commands sit at z 400). */
+.console-help-popover {
+  position: fixed;
+  z-index: 350;
+  max-width: min(22rem, calc(100vw - 1rem));
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
+  box-shadow: var(--pf-t--global--box-shadow--md);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-help-popover__body { margin: 0; font-size: 0.8rem; line-height: 1.45; }
 
 /* ---- Console app: the tabbed frame that hosts surfaces --------------------------------------
    Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-titlebar,
@@ -314,6 +441,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @media (max-width: 47.999rem) {
   :root { --console-topchrome-h: calc(var(--console-titlebar-h) * 2); }
   #console-titlebar { flex-direction: column; }
+  /* Zero open tabs (the launcher screen): the second row would be empty, so collapse back to a single
+     row - drop the doubled height and hide the empty tab strip, so the home screen isn't topped by a
+     blank bar. data-no-tabs is set in main.ts's show() when the workspace has no active tab. */
+  :root[data-no-tabs] { --console-topchrome-h: var(--console-titlebar-h); }
+  :root[data-no-tabs] #console-tabs { display: none; }
+  :root[data-no-tabs] #console-actions { border-bottom: none; }
   /* A hairline between the two rows, the same one the status bar uses to part itself from the content.
      Stacked, the rows share a background and read as one tall smear without it. The border sits INSIDE
      the row's height (border-box), so the pair still totals --console-topchrome-h and nothing beneath
@@ -449,12 +582,21 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    card. A margin-bottom here cannot collapse, so the pill keeps its own space at every card count. */
 #console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 52rem; margin-bottom: 2.5rem; }
 
-/* App-drawer section label: distinguish the "Open in new window" group heading from the app entries
-   below it - smaller, uppercase, muted, and non-interactive-looking, so it reads as a divider label. */
+/* App-drawer section label: the "Menu" group heading above the app entries - smaller, uppercase, muted,
+   and non-interactive-looking, so it reads as a divider label rather than a menu row. */
 .console-appmenu__group-title {
   font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
+
+/* Documentation row: a trailing external-link glyph that marks it as leaving for the separate docs site
+   (it opens in a new tab). margin-left:auto floats it to the row's trailing edge; it inherits the row's
+   currentColor and dims slightly so it reads as a hint, not a second action. */
+.console-appmenu__ext-icon {
+  display: inline-flex; align-items: center; margin-left: auto; padding-left: 0.5rem;
+  color: var(--pf-t--global--icon--color--subtle, var(--pf-t--global--text--color--subtle));
+}
+.pf-v6-c-menu__item:hover .console-appmenu__ext-icon { color: inherit; }
 
 /* App mode: a dedicated single-surface window (index.html?app=<id>). The tab bar is meaningless
    there - the window IS the app - so hide it; the title bar keeps just its right-aligned actions
@@ -769,17 +911,87 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   box-shadow: 0 1px 0 var(--pf-t--global--border--color--default);
 }
 
-/* Commands cheat sheet (commandsCheatsheet.ts): a read-only overlay listing EVERY registered command,
-   grouped by area - the token, the prose label, and the chord when one is bound. Shares the keyboard
-   cheat sheet's overlay/box/kbd chrome; only the three-column row grid is authored here. */
-#console-commands { z-index: var(--pf-t--global--z-index--400); }
+/* Actions surface (actions.ts, data-surface="actions"): a first-class tab listing EVERY registered
+   command, grouped by area - the token, the prose label, and the chord when one is bound. Reuses the
+   keyboard cheat sheet's group/kbd chrome (it is the same row shape, just in a tab instead of a
+   modal); only the three-column row grid and the page frame are authored here. Frames the surface as
+   a single scrolling column, same idiom as the Settings page: the pane host already supplies height
+   and clips (#console-outlet-content > div), so this just owns its own padding and scroll. */
+#console-outlet [data-surface="actions"] {
+  height: 100%; overflow-y: auto; display: flex; flex-direction: column;
+  gap: 1.25rem; padding: 1.5rem 1.5rem 2.5rem;
+}
+/* The banner: a bordered callout leading the surface, replacing the old read-only lede now that a row
+   both runs and (for a rebindable command) edits. The Edit-keybindings button sits at the trailing edge
+   so the callout reads as "here's what this page does, and here's the one related control". */
+.console-actions__banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem;
+  max-width: 54rem; padding: 0.65rem 0.9rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-actions__banner p { margin: 0; font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
 .console-commands-group__list {
   display: grid; grid-template-columns: max-content 1fr max-content;
-  align-items: center; gap: 0.35rem 1.5rem; margin: 0;
+  gap: 0; margin: 0;
 }
+/* One command per row: a subgrid over the list's shared tracks, so token/label/chord stay aligned
+   column-to-column across every group while each row is a single box that can take a background. Also
+   click-to-run (role="button" in actions.ts) - cursor + hover + focus-visible say so; the hover tint
+   sits ABOVE the zebra band in source order so it wins on an odd row without needing higher specificity. */
+.console-commands-row {
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
+  align-items: center; column-gap: 1.5rem;
+  padding: 0.3rem 0.65rem; border-radius: var(--pf-t--global--border--radius--small);
+  cursor: pointer;
+}
+/* Zebra band on alternate rows: the log viewer's readability trick. On these wide lines the token and
+   its chord can sit far apart; a faint alternating fill keeps the eye on one row across the gap. Subtle
+   (the secondary surface token) and theme-aware, so it never fights the text. */
+.console-commands-row:nth-child(odd) { background: var(--pf-t--global--background--color--secondary--default); }
+.console-commands-row:hover { background: color-mix(in srgb, var(--console-accent) 8%, transparent); }
+.console-commands-row:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 .console-commands-token {
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
   color: var(--console-accent);
 }
 .console-commands-label { font-size: 0.85rem; }
-.console-commands-chord { display: inline-flex; align-items: center; gap: 0.2rem; justify-self: end; }
+.console-commands-chord { display: inline-flex; align-items: center; gap: 0.35rem; justify-self: end; }
+/* Per-row edit-shortcut control: small and muted at rest (never fully hidden - a hover-only affordance
+   is unreachable by keyboard and invisible on touch), brightening on row hover/focus so it still reads
+   as secondary to the run action. */
+.console-commands-editbtn {
+  color: var(--pf-t--global--text--color--subtle);
+  opacity: 0.6;
+}
+.console-commands-row:hover .console-commands-editbtn,
+.console-commands-editbtn:hover,
+.console-commands-editbtn:focus-visible {
+  color: var(--console-accent);
+  opacity: 1;
+}
+
+/* Below phone width the three-column row (token / label / chord) clips or crams - there is no room for
+   max-content + 1fr + max-content side by side. Reflow to two lines per command instead: token and
+   chord share a top row (the chord floats to the trailing edge), the label wraps beneath at full
+   width. The row stays a subgrid, now over two tracks, so the zebra band still spans the whole line. */
+@media (max-width: 47.999rem) {
+  .console-commands-group__list { grid-template-columns: max-content 1fr; }
+  .console-commands-row { grid-template-columns: subgrid; row-gap: 0.1rem; }
+  .console-commands-token { grid-column: 1; }
+  .console-commands-chord { grid-column: 2; justify-self: end; }
+  .console-commands-label { grid-column: 1 / -1; white-space: normal; }
+}
+
+/* Keybindings deep-link highlight: openKeybindings (main.ts) stamps this on the targeted
+   [data-krow] when the Actions surface's per-row "edit shortcut" sends the operator here, then clears
+   it after ~1.2s - the transition below is what makes that clear read as a FADE rather than a cut. The
+   base [data-krow] rules live in overrides.css (it owns the keybindings grid); this only adds the
+   transition + the highlighted-state paint, so it is additive regardless of sheet load order. */
+[data-kbeditor] [data-krow] { transition: background-color 0.6s ease, outline-color 0.6s ease; }
+[data-kbeditor] [data-krow][data-kb-highlight] {
+  background: color-mix(in srgb, var(--console-accent) 20%, transparent);
+  outline: 2px solid var(--console-accent);
+  outline-offset: 2px;
+}

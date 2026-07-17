@@ -18,6 +18,7 @@
 
 import {
   leaves, splitLeaf, closePane, setRatio, setLeafPage, pickAxis, neighborInDirection,
+  swapLeaves, siblingLeafId,
   type Pane, type Split, type Leaf, type Direction,
 } from "./tiling";
 import type { PageController } from "./page";
@@ -49,6 +50,11 @@ export interface TileView {
   split(dir?: Split["dir"]): void; // split the focused pane; dir defaults to pickAxis(aspect)
   closeFocused(): boolean; // close the focused pane; returns true when it was the LAST pane (tab empties)
   focus(dir: Direction): void; // move focus to the nearest pane in a screen direction
+  move(dir: Direction): void; // swap the focused pane with its screen-direction neighbor, keeping focus on the moved surface
+  focusParent(): void; // jump focus across the nearest divider to the pane this one was split from
+  snapshot(): { tree: Pane; focusId: string }; // read-only tree + focus for a renderer (the panes map)
+  focusLeaf(id: string): void; // focus a specific pane by id; no-op for an unknown id
+  swap(idA: string, idB: string): void; // exchange two leaves' tree positions (drag-to-move)
   setVisible(visible: boolean): void; // the tab became active (true) or was hidden by another (false)
   deactivate(): void; // tear down every mounted surface
 }
@@ -315,6 +321,57 @@ export function createTileView(deps: TileDeps): TileView {
     if (target) { setFocus(target); panes.get(target)?.host.focus(); }
   }
 
+  // move relocates the focused pane's SURFACE to the neighbor slot in a screen direction, using the
+  // same neighbor search as focus(). It is swapLeaves under the hood: because buildPane reconciles
+  // panes by id, swapping the two leaf nodes' tree positions carries the mounted host (and thus scroll
+  // position, live stream, everything) along with it - a move, not a teardown/remount. focusId itself
+  // never changes: the id travels with its leaf, so focus silently follows the moved surface to its
+  // new position. No-op when nothing lies that way.
+  function move(dir: Direction): void {
+    const from = panes.get(focusId);
+    if (!from) return;
+    const candidates = leaves(tree)
+      .filter((l) => l.id !== focusId)
+      .map((l) => ({ id: l.id, rect: panes.get(l.id)!.host.getBoundingClientRect() }));
+    const target = neighborInDirection(from.host.getBoundingClientRect(), candidates, dir);
+    if (!target) return;
+    tree = swapLeaves(tree, focusId, target);
+    commit();
+    render();
+  }
+
+  // focusParent jumps focus across the nearest divider to the pane the current one was split from
+  // (siblingLeafId's sibling-subtree walk), the alt+a chord's target - useful once a pane has been
+  // split several times and the nearest screen-direction neighbor is not the pane you came from.
+  function focusParent(): void {
+    const sib = siblingLeafId(tree, focusId);
+    if (sib) { setFocus(sib); panes.get(sib)?.host.focus(); }
+  }
+
+  // snapshot exposes the live tree + focus for a read-only renderer (the Panes tray's spatial map).
+  // Returns the tree reference itself, not a copy - every mutator here replaces `tree` wholesale
+  // rather than mutating it in place, so a caller that renders once and discards the reference never
+  // sees it change underneath it.
+  function snapshot(): { tree: Pane; focusId: string } {
+    return { tree, focusId };
+  }
+
+  // focusLeaf is setFocus's public face - point-and-focus for the spatial map, where the operator taps
+  // a pane instead of decoding a screen-direction chevron.
+  function focusLeaf(id: string): void {
+    setFocus(id);
+    panes.get(id)?.host.focus();
+  }
+
+  // swap is the drag-to-move primitive: exchange two leaves' tree positions (swapLeaves already
+  // no-ops for an unknown or equal id), then reconcile. Both surfaces keep their mounted host, scroll,
+  // and stream - buildPane reconciles by leaf id, so a position swap carries the DOM with it.
+  function swap(idA: string, idB: string): void {
+    tree = swapLeaves(tree, idA, idB);
+    commit();
+    render();
+  }
+
   function setVisible(visible: boolean): void {
     tabVisible = visible;
     applyVisibility();
@@ -328,5 +385,5 @@ export function createTileView(deps: TileDeps): TileView {
   }
 
   render();
-  return { el, split, closeFocused, focus, setVisible, deactivate };
+  return { el, split, closeFocused, focus, move, focusParent, snapshot, focusLeaf, swap, setVisible, deactivate };
 }

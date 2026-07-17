@@ -153,3 +153,43 @@ export function setRatio(root: Pane, splitId: string, ratio: number): Pane {
   };
   return walk(root);
 }
+
+// swapLeaves returns a new tree with the leaf NODES at idA and idB exchanged in position: each keeps
+// its own id and pageId, only their place in the tree trades. This is the "move pane" primitive - the
+// render layer (tileView) reconciles panes by id, so relocating a leaf's position moves its mounted
+// surface (host element, scroll offset, live stream) along with it rather than tearing it down and
+// remounting elsewhere. A no-op (the same tree, unchanged) when either id is not a leaf in the tree,
+// or when idA === idB.
+export function swapLeaves(root: Pane, idA: string, idB: string): Pane {
+  if (idA === idB) return root;
+  const find = (p: Pane, id: string): Leaf | null => {
+    if (p.kind === "leaf") return p.id === id ? p : null;
+    return find(p.a, id) ?? find(p.b, id);
+  };
+  const leafA = find(root, idA);
+  const leafB = find(root, idB);
+  if (!leafA || !leafB) return root;
+  const walk = (p: Pane): Pane => {
+    if (p.kind === "leaf") {
+      if (p.id === idA) return leafB;
+      if (p.id === idB) return leafA;
+      return p;
+    }
+    return { ...p, a: walk(p.a), b: walk(p.b) };
+  };
+  return walk(root);
+}
+
+// siblingLeafId returns the id of the FIRST leaf of the sibling subtree of leaf `id` within its
+// IMMEDIATE parent split - the target of "focus parent" (jump across the nearest divider to the pane
+// this one was split from). Returns null when `id` is the root leaf (no parent to jump to) or unknown.
+export function siblingLeafId(root: Pane, id: string): string | null {
+  const find = (p: Pane): Pane | null => {
+    if (p.kind === "leaf") return null;
+    if (p.a.kind === "leaf" && p.a.id === id) return p.b;
+    if (p.b.kind === "leaf" && p.b.id === id) return p.a;
+    return find(p.a) ?? find(p.b);
+  };
+  const sibling = find(root);
+  return sibling ? (leaves(sibling)[0]?.id ?? null) : null;
+}

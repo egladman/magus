@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   leaves, splitLeaf, closePane, setRatio, setLeafPage, pickAxis, neighborInDirection,
+  swapLeaves, siblingLeafId,
   MIN_RATIO, MAX_RATIO, type Pane, type Rect,
 } from "./tiling";
 
@@ -125,4 +126,57 @@ test("neighborInDirection prefers the closer of two panes in the same direction"
   const near = { id: "near", rect: { left: 100, top: 0, width: 100, height: 100 } };
   const far = { id: "far", rect: { left: 400, top: 0, width: 100, height: 100 } };
   assert.equal(neighborInDirection(from, [far, near], "right"), "near");
+});
+
+// --- swapLeaves ---------------------------------------------------------------
+
+test("swapLeaves swaps two leaves and leaves the rest intact", () => {
+  let t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
+  t = splitLeaf(t, "b", "col", "s2", { id: "c", pageId: "c" }); // a | (b / c)
+  const swapped = swapLeaves(t, "a", "c");
+  // a and c trade places: the position that held "a" now holds "c" (its id AND pageId travel with
+  // it), the position that held "c" now holds "a", and "b" - untouched - stays exactly where it was.
+  assert.deepEqual(leaves(swapped).map((l) => [l.id, l.pageId]), [["c", "c"], ["b", "b"], ["a", "a"]]);
+});
+
+test("swapLeaves with an unknown id is a no-op", () => {
+  const t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
+  assert.equal(swapLeaves(t, "a", "zzz"), t);
+  assert.equal(swapLeaves(t, "zzz", "a"), t);
+});
+
+test("swapLeaves preserves the ids and pageIds of the swapped leaves", () => {
+  const t = splitLeaf(leaf("a", "dashboard"), "a", "row", "s1", { id: "b", pageId: "logs" });
+  const swapped = swapLeaves(t, "a", "b");
+  assert.deepEqual(leaves(swapped).map((l) => [l.id, l.pageId]), [["b", "logs"], ["a", "dashboard"]]);
+});
+
+test("swapLeaves with the same id twice is a no-op", () => {
+  const t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
+  assert.equal(swapLeaves(t, "a", "a"), t);
+});
+
+// --- siblingLeafId -------------------------------------------------------------
+
+test("siblingLeafId returns the sibling's first leaf in a simple split", () => {
+  const t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
+  assert.equal(siblingLeafId(t, "a"), "b");
+  assert.equal(siblingLeafId(t, "b"), "a");
+});
+
+test("siblingLeafId returns null for a lone root leaf", () => {
+  assert.equal(siblingLeafId(leaf("a"), "a"), null);
+});
+
+test("siblingLeafId returns null for an unknown id", () => {
+  const t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
+  assert.equal(siblingLeafId(t, "zzz"), null);
+});
+
+test("siblingLeafId picks the correct sibling in a nested tree", () => {
+  let t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
+  t = splitLeaf(t, "b", "col", "s2", { id: "c", pageId: "c" }); // a | (b / c)
+  assert.equal(siblingLeafId(t, "a"), "b"); // a's sibling subtree is (b/c); its first leaf is b
+  assert.equal(siblingLeafId(t, "b"), "c"); // b's immediate sibling is c
+  assert.equal(siblingLeafId(t, "c"), "b"); // c's immediate sibling is b
 });
