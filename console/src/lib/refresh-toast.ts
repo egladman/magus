@@ -24,15 +24,16 @@ export function showRefreshToast(message: string): void {
   document.body.appendChild(toast);
 }
 
-// showToast pops a transient, auto-dismissing status toast (no action button) in the same bottom-left
-// slot as the reload prompt. Used to confirm a Settings save/apply. A fresh call replaces any transient
-// toast already up, so rapid saves do not stack. Styled by .console-shell-toast (+ --transient modifier)
-// in overrides.css.
-export function showToast(message: string, ms = 2600): void {
+// showToast pops a transient, auto-dismissing toast (no action button) in the same bottom-left slot as
+// the reload prompt: a Settings save/apply confirmation, or an error explaining why something failed.
+// A fresh call replaces any transient toast already up, so rapid calls do not stack. Errors linger
+// longer than confirmations - they have to be read. Styled by .console-shell-toast in overrides.css.
+export function showToast(message: string, kind: "ok" | "error" = "ok", ms = kind === "error" ? 6000 : 2600): void {
   document.querySelector(".console-shell-toast--transient")?.remove();
   const toast = document.createElement("div");
   toast.className = "console-shell-toast console-shell-toast--transient";
-  toast.setAttribute("role", "status");
+  toast.dataset.kind = kind;
+  toast.setAttribute("role", kind === "error" ? "alert" : "status");
   const msg = document.createElement("span");
   msg.textContent = message;
   toast.appendChild(msg);

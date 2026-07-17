@@ -211,17 +211,6 @@ function beginDemo(): void {
   store.set({ observingSince: Date.now() - 92 * 60 * 1000 });
   store.set({ config: { defaultCharms: ["rw"], concurrency: 8, sandbox: true } });
   demo = startDemo(store);
-  // Chain the sibling apps' demos off the same `#demo` fragment so the showcase flows
-  // across all three surfaces as one unified demo. Both the graph explorer and the log
-  // viewer have their own #demo mode.
-  for (const id of ["launch-graph", "menu-graph"]) {
-    const a = opt(id) as HTMLAnchorElement | null;
-    if (a) a.href = "../graph/#demo";
-  }
-  for (const id of ["launch-logs", "menu-logs"]) {
-    const a = opt(id) as HTMLAnchorElement | null;
-    if (a) a.href = "../logs/#demo";
-  }
 }
 
 // ---- live connection lifecycle ---------------------------------------------
@@ -234,7 +223,6 @@ function onLiveOpen(host: string): void {
   failCount = 0;
   everConnected = true;
   setConn({ state: "connected" });
-  wireLaunchers(host);
   saveDaemon(host); // remember it so a reload resumes
 }
 
@@ -301,17 +289,6 @@ function wireResumeForm(): void {
       "The dashboard streams a running magus daemon's pool, cache, and health. Start the daemon, then open the live link it prints.");
     setConn({ state: "none" });
   });
-}
-
-// wireLaunchers points the log-viewer / graph-explorer links at live mode when the
-// dashboard is connected (host only - the token is shared via sessionStorage).
-function wireLaunchers(host: string): void {
-  const logs = "../logs/#live=" + encodeURIComponent(host);
-  const graph = "../graph/#live=" + encodeURIComponent(host);
-  (el("launch-logs") as HTMLAnchorElement).href = logs;
-  (el("launch-graph") as HTMLAnchorElement).href = graph;
-  (el("menu-logs") as HTMLAnchorElement).href = logs;
-  (el("menu-graph") as HTMLAnchorElement).href = graph;
 }
 
 // ---- service worker --------------------------------------------------------

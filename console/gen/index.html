@@ -47,6 +47,31 @@
     <button id="console-commandbar-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-haspopup="dialog" aria-controls="command-bar" aria-label="Command bar" title="Command bar">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg></span>
     </button>
+    <!-- Panes menu: split and close the tiled panes from the UI. Tiling used to be chord-only, which made
+         it unreachable on a phone; every item here dispatches the SAME command id its keybinding does, and
+         initPaneMenu() stamps the effective chord in so the menu also teaches the shortcut. Focus is
+         deliberately absent - tapping a pane already focuses it, on touch and desktop alike. -->
+    <button id="console-panes-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="console-panesmenu" aria-expanded="false" aria-haspopup="true" aria-label="Panes" title="Panes">
+      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/></svg></span>
+    </button>
+    <div class="pf-v6-c-menu" id="console-panesmenu" hidden aria-label="Panes">
+      <div class="pf-v6-c-menu__content">
+        <ul class="pf-v6-c-menu__list" role="menu">
+          <li class="pf-v6-c-menu__list-item" role="none">
+            <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-command="console.pane.split"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Split pane</span><span class="console-panesmenu__chord" data-chord aria-hidden="true"></span></span></button>
+          </li>
+          <li class="pf-v6-c-menu__list-item" role="none">
+            <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-command="console.pane.splitDown"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Split pane down</span><span class="console-panesmenu__chord" data-chord aria-hidden="true"></span></span></button>
+          </li>
+        </ul>
+        <hr class="pf-v6-c-divider" role="separator" />
+        <ul class="pf-v6-c-menu__list" role="menu">
+          <li class="pf-v6-c-menu__list-item" role="none">
+            <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-command="console.tab.close"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Close pane or tab</span><span class="console-panesmenu__chord" data-chord aria-hidden="true"></span></span></button>
+          </li>
+        </ul>
+      </div>
+    </div>
     <!-- Applications menu: a PatternFly Menu popover (like the settings gear) that links back to the
          documentation site. console.js's initAppMenu() wires #console-appmenu-btn/#console-appmenu
          (open/close, aria-expanded, Escape, click-outside, focus return). The item is a plain link;

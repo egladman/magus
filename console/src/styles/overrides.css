@@ -78,10 +78,21 @@
  * right-aligned so it stays inside the viewport. Only the POSITION is here; the menu chrome is
  * PatternFly. (The old settings popover, #settings-panel, was retired when Settings became a real
  * surface/tab - the gear now opens that tab. The theme cycle moved into the surface too.) */
-#console-appmenu {
+#console-appmenu,
+#console-panesmenu {
   position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
   min-width: 11rem; max-width: calc(100vw - 1rem);
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
+}
+/* The Panes menu stamps each item's chord after the label - the menu is the discoverable route, the
+   chord is the fast one, so showing both teaches the shortcut instead of hiding it. Blank on a binding
+   the user cleared. The label opts out of PF's ellipsis truncation: it is short and fixed, and the chord
+   must not squeeze it ("Split down" -> "Split ..."). */
+#console-panesmenu .pf-v6-c-menu__item-main { display: flex; align-items: center; gap: 1.5rem; }
+#console-panesmenu .pf-v6-c-menu__item-text { flex: 0 0 auto; overflow: visible; text-overflow: clip; }
+.console-panesmenu__chord {
+  margin-left: auto;
+  font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
 }
 
 /* --- Keybindings editor --------------------------------------------------------------------------
@@ -174,8 +185,9 @@
   color: var(--pf-t--global--text--color--regular);
   cursor: pointer;
 }
-/* The transient confirmation toast (a settings save/apply) carries no action button; a success-tinted
-   left edge marks it as a positive confirmation, and it fades up on entry before auto-dismissing. */
+/* The transient toast (a settings save/apply, or an error) carries no action button; a tinted left edge
+   carries the outcome, and it fades up on entry before auto-dismissing. */
 .console-shell-toast--transient { border-left: 3px solid var(--console-status-ok); animation: console-toast-in 0.16s ease-out; }
+.console-shell-toast--transient[data-kind="error"] { border-left-color: var(--pf-t--global--border--color--status--danger--default); }
 @keyframes console-toast-in { from { opacity: 0; transform: translateY(0.4rem); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .console-shell-toast--transient { animation: none; } }

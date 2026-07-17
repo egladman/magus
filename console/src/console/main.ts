@@ -22,6 +22,7 @@ import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane } from "./tiling";
 import { initRefDrawer } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
+import { initPaneMenu } from "../ui/pane-menu";
 import { persisted } from "../lib/persist";
 import { parseHash, wantsDemo, validateLiveHost, getLiveToken, authHeaders } from "../lib/daemon";
 import type { PageController, PageModule } from "./page";
@@ -52,7 +53,7 @@ function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
 // The surfaces the home launcher offers (and the console can open).
 const SURFACES: Launchable[] = [
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
-  { pageId: "graph", label: "Graph Explorer", hint: "Explore the knowledge graph" },
+  { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
   { pageId: "activity", label: "Activity Trail", hint: "A history of recent magus actions" },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
@@ -389,6 +390,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     const chord = formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())["console.commandBar.open"] ?? "", isMac());
     if (chord) commandBarBtn.title = "Command bar (" + chord + ")";
   }
+
+  // The Panes menu drives the same split/close commands the chords do, so tiling is reachable without a
+  // keyboard. Registered AFTER the pane commands above so every id it dispatches exists.
+  initPaneMenu((id) => formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac()));
 
   // The keybinding editor is an integrated modal overlay (a sibling of the command bar), not a tab. It
   // edits the console's own commands (those with a CONSOLE_KEYMAP default) against the shared keymap

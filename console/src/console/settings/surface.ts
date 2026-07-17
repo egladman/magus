@@ -15,6 +15,7 @@ import {
   getPollMs, setPollMs, savePollMs, getDefaultHost, setDefaultHost, saveDefaultHost,
 } from "../../lib/settings";
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
+import { probeDaemon } from "../../lib/daemon";
 import { h } from "../view";
 import {
   buildSettingsEnvelope, computePendingChanges, createDraftCell, diffLines, importSettings,
@@ -251,9 +252,35 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   hostControl.append(hostInput);
   hostInput.addEventListener("input", () => { draftScalar.host = hostInput.value; recompute(); });
 
+  // Test attaches to the field so a typed host can be checked BEFORE saving it - the draft value is what
+  // gets probed. It reports through a toast rather than the pending-changes bar: this is a one-off action,
+  // not a staged edit.
+  const testBtn = h("button", "pf-v6-c-button pf-m-control console-settings-host__test", "Test") as HTMLButtonElement;
+  testBtn.type = "button";
+  testBtn.title = "Try to reach a daemon at this address";
+  testBtn.addEventListener("click", () => {
+    const raw = hostInput.value.trim();
+    if (!raw) { showToast("Enter a host to test, for example 127.0.0.1:7391.", "error"); return; }
+    testBtn.disabled = true;
+    void probeDaemon(raw).then((res) => {
+      testBtn.disabled = false;
+      // "Reachable", not "connected": /livez answers opaquely cross-origin, so this proves a server
+      // answered at that address, not that it is a healthy magus daemon.
+      if (res.ok) showToast("Reachable: a server answered at " + raw + ".");
+      else showToast(res.reason, "error");
+    });
+  });
+
+  const hostGroup = h("div", "pf-v6-c-input-group");
+  const hostFill = h("div", "pf-v6-c-input-group__item pf-m-fill");
+  hostFill.append(hostControl);
+  const testItem = h("div", "pf-v6-c-input-group__item");
+  testItem.append(testBtn);
+  hostGroup.append(hostFill, testItem);
+
   generalForm.append(
     buildFormGroup("Refresh rate", pollSelect.id, pollControl, "How often the VCS insight lenses re-poll the daemon."),
-    buildFormGroup("Daemon host", hostInput.id, hostControl, "Default host:port when no live link is present. Blank uses loopback."),
+    buildFormGroup("Daemon host", hostInput.id, hostGroup, "Default host:port when no live link is present. Blank uses loopback."),
   );
 
   // --- Appearance: a 3-way theme toggle group (staged; applies on Save & Apply) ---

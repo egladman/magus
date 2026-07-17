@@ -87,6 +87,33 @@ export function validateLiveHost(hostPort: string): string | null {
   return u.host;
 }
 
+// ---- reachability probe ----------------------------------------------------
+
+export type ProbeResult = { ok: true } | { ok: false; reason: string };
+
+// probeDaemon answers "is anything listening at this host:port?" for the Settings test-connection
+// control. /livez is the daemon's only tokenless route (health checks are mounted unguarded so a kubelet
+// can reach them), but it carries no CORS headers, so its RESPONSE is unreadable from another origin. A
+// no-cors request still gets sent, and resolve-vs-reject reports whether the connection was answered -
+// which is the question being asked. Success therefore means "a server answered", NOT "magus is healthy":
+// the body, and even the status code, are opaque. The browser also refuses to distinguish a refused
+// connection from a CORS/mixed-content block, so those collapse into one honest message.
+export async function probeDaemon(hostPort: string, timeoutMs = 3000): Promise<ProbeResult> {
+  const host = validateLiveHost(hostPort);
+  if (!host) {
+    return { ok: false, reason: "Not a loopback address. Use 127.0.0.1 or [::1] with a port - hostnames (including localhost) are not accepted." };
+  }
+  try {
+    await fetch("http://" + host + "/livez", { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
+    return { ok: true };
+  } catch (e: any) {
+    if (e && (e.name === "TimeoutError" || e.name === "AbortError")) {
+      return { ok: false, reason: "No response from " + host + " within " + Math.round(timeoutMs / 1000) + "s. Check the port, or something is dropping the connection." };
+    }
+    return { ok: false, reason: "Could not reach " + host + ". Is the daemon running? Start it with: magus server start" };
+  }
+}
+
 // ---- the shared token ------------------------------------------------------
 
 const TOKEN_KEY = "magus-live-token";
