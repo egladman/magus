@@ -174,7 +174,7 @@ var (
 	_ graphResolver = (*magus.Magus)(nil)
 )
 
-func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentFn func(context.Context) string, trailDir string) {
+func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string) {
 	// The MCP tool ctx is not stamped with the telemetry provider, so grab the
 	// shared one here and close over it in wrap. Telemetry() returns a nil-safe
 	// disabledProvider when telemetry is off; a nil Magus (some test paths)
@@ -195,7 +195,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, agentFn, trailDir, tel, rotateCount, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, tel, rotateCount, adapt(t)))
 	}
 }
 
@@ -207,17 +207,23 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, agentF
 // both sides of the exchange captured as content-addressed blobs - and records
 // the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
 // only; never by argument values or result content). A nil tel is a no-op.
-func wrap(log *slog.Logger, agentFn func(context.Context) string, trailDir string, tel observability.Provider, rotateCount *atomic.Uint64, fn handlerFn) server.ToolHandlerFunc {
+func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string, tel observability.Provider, rotateCount *atomic.Uint64, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-		agentID := agentFn(ctx)
+		o := originFn(ctx)
+		agentID := o.Agent
 		toolName := req.Params.Name
 
-		ctx = origin.WithContext(ctx, origin.Origin{Agent: agentID})
+		ctx = origin.WithContext(ctx, o)
 
 		reqLog := log.With(
 			slog.String("agent", agentID),
 			slog.String("tool", toolName),
 		)
+		// The HTTP User-Agent is a second identity signal (empty over stdio);
+		// attach it only when present so stdio call logs stay unchanged.
+		if o.UserAgent != "" {
+			reqLog = reqLog.With(slog.String("user_agent", o.UserAgent))
+		}
 		ctx = withLogger(ctx, reqLog)
 
 		reqLog.Info("[AGENT] tool called")
@@ -241,6 +247,7 @@ func wrap(log *slog.Logger, agentFn func(context.Context) string, trailDir strin
 			Ts:            start.UnixMilli(),
 			Kind:          trail.KindMCPToolCall,
 			Actor:         agentID,
+			UserAgent:     o.UserAgent,
 			Action:        toolName,
 			Outcome:       trail.OutcomeOK,
 			DurMs:         dur.Milliseconds(),

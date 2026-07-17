@@ -22,8 +22,30 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/trail"
 )
+
+// uaCtxKey keys the client's HTTP User-Agent in a request context. It is set by
+// the Streamable-HTTP transport's WithHTTPContextFunc before any hook runs, so
+// the initialize hook can read it back and fold it into the session identity.
+type uaCtxKey struct{}
+
+// withUserAgent returns ctx carrying the client's raw HTTP User-Agent header.
+func withUserAgent(ctx context.Context, ua string) context.Context {
+	return context.WithValue(ctx, uaCtxKey{}, ua)
+}
+
+// userAgentFromContext returns the User-Agent stashed by withUserAgent, or ""
+// over stdio or before the context func has run.
+func userAgentFromContext(ctx context.Context) string {
+	ua, _ := ctx.Value(uaCtxKey{}).(string)
+	return ua
+}
+
+// unknownOrigin is the fallback identity for a tool call whose session was never
+// seen at initialize time (e.g. a race, or a client that skipped the handshake).
+var unknownOrigin = origin.Origin{Agent: "unknown"}
 
 // sseHeartbeat is how often the Streamable-HTTP server pings an open GET (SSE)
 // stream. mark3labs disables heartbeats by default; enabling them keeps a
@@ -94,8 +116,8 @@ func agentFromRequest(req *mcp.InitializeRequest) string {
 // registers all tools. The three transports (newServer, ServeHTTP, ServeStdio)
 // share this so the server name, instructions, capabilities, recovery, and tool
 // set can never drift between them; each caller supplies only the
-// transport-specific hooks (agent tracking) and the agentFn used at tool-call time.
-func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, agentFn func(context.Context) string) *mcpserver.MCPServer {
+// transport-specific hooks (agent tracking) and the originFn used at tool-call time.
+func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originFn func(context.Context) origin.Origin) *mcpserver.MCPServer {
 	srv := mcpserver.NewMCPServer(
 		"magus", opts.Version,
 		mcpserver.WithInstructions(serverInstructions),
@@ -114,24 +136,24 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, agentFn
 		cacheDir = opts.Magus.CacheDir()
 	}
 	trail.Rotate(cacheDir)
-	registerTools(srv, opts, log, agentFn, cacheDir)
+	registerTools(srv, opts, log, originFn, cacheDir)
 	return srv
 }
 
-// newServer constructs and registers tools on a new MCPServer. agentFn is called
-// with the current request ctx to resolve the agent client identity at tool-call
+// newServer constructs and registers tools on a new MCPServer. originFn is called
+// with the current request ctx to resolve the caller identity at tool-call
 // time so each handler's wrap closure captures the right per-session value.
-func newServer(opts Options, log *slog.Logger, agentFn func(context.Context) string) *mcpserver.MCPServer {
+func newServer(opts Options, log *slog.Logger, originFn func(context.Context) origin.Origin) *mcpserver.MCPServer {
 	hooks := &mcpserver.Hooks{}
 	hooks.AddBeforeInitialize(func(_ context.Context, _ any, req *mcp.InitializeRequest) {
 		agent := agentFromRequest(req)
 		log.Info("[AGENT] client connected", slog.String("agent", agent))
 	})
-	return buildServer(opts, log, hooks, agentFn)
+	return buildServer(opts, log, hooks, originFn)
 }
 
 // HTTPHandler builds the MCP Streamable-HTTP handler for daemon mode: it
-// validates opts, wires per-session agent tracking, and returns the bare MCP
+// validates opts, wires per-session origin tracking, and returns the bare MCP
 // handler. It mounts no routes and opens no listener - the daemon package owns
 // the HTTP server assembly (guards, health routes, console) so this package
 // need not depend on the httpx server core, the dashboard bridge, or the file
@@ -143,34 +165,54 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 	}
 	log := opts.logger()
 
-	// sessionAgents maps sessionID → agent client identifier, populated by the
-	// BeforeInitialize hook and cleaned up on session unregister. This avoids
-	// the server-wide atomic.Value which would race across concurrent clients.
-	var sessionAgents sync.Map
+	// sessionOrigins maps sessionID → origin.Origin (clientInfo + User-Agent),
+	// populated by the BeforeInitialize hook and cleaned up on session unregister.
+	// This avoids the server-wide atomic.Value which would race across concurrent
+	// clients.
+	var sessionOrigins sync.Map
 
 	hooks := &mcpserver.Hooks{}
 	hooks.AddBeforeInitialize(func(hCtx context.Context, _ any, req *mcp.InitializeRequest) {
-		agent := agentFromRequest(req)
+		// clientInfo comes off the initialize params; the User-Agent was stashed
+		// on hCtx by the WithHTTPContextFunc below, which runs per HTTP request
+		// before the message (and thus this hook) is dispatched.
+		o := origin.Origin{Agent: agentFromRequest(req), UserAgent: userAgentFromContext(hCtx)}
 		if session := mcpserver.ClientSessionFromContext(hCtx); session != nil {
-			sessionAgents.Store(session.SessionID(), agent)
+			sessionOrigins.Store(session.SessionID(), o)
 		}
-		log.Info("[AGENT] client connected", slog.String("agent", agent))
+		attrs := []any{slog.String("agent", o.Agent)}
+		if o.UserAgent != "" { // omit an empty field so the line stays clean over headerless clients
+			attrs = append(attrs, slog.String("user_agent", o.UserAgent))
+		}
+		log.Info("[AGENT] client connected", attrs...)
 	})
 	hooks.AddOnUnregisterSession(func(_ context.Context, session mcpserver.ClientSession) {
-		sessionAgents.Delete(session.SessionID())
+		sessionOrigins.Delete(session.SessionID())
 	})
 
-	agentFn := func(tCtx context.Context) string {
+	originFn := func(tCtx context.Context) origin.Origin {
 		if session := mcpserver.ClientSessionFromContext(tCtx); session != nil {
-			if v, ok := sessionAgents.Load(session.SessionID()); ok {
-				return v.(string)
+			// Comma-ok on the assertion too: fall back to unknownOrigin rather than
+			// panic if a non-Origin value is ever stored under a session id.
+			if v, ok := sessionOrigins.Load(session.SessionID()); ok {
+				if o, ok := v.(origin.Origin); ok {
+					return o
+				}
 			}
 		}
-		return "unknown"
+		return unknownOrigin
 	}
 
-	srv := buildServer(opts, log, hooks, agentFn)
-	return mcpserver.NewStreamableHTTPServer(srv, mcpserver.WithHeartbeatInterval(sseHeartbeat)), nil
+	srv := buildServer(opts, log, hooks, originFn)
+	return mcpserver.NewStreamableHTTPServer(srv,
+		mcpserver.WithHeartbeatInterval(sseHeartbeat),
+		// Lift the client's User-Agent off the live *http.Request into the request
+		// context so the initialize hook can capture it. stdio has no equivalent -
+		// it carries no request headers - so this signal is HTTP-only by nature.
+		mcpserver.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
+			return withUserAgent(ctx, r.Header.Get("User-Agent"))
+		}),
+	), nil
 }
 
 // ServeStdio runs the magus MCP server over standard I/O, blocking until
@@ -182,24 +224,25 @@ func ServeStdio(ctx context.Context, opts Options) error {
 	}
 	log := opts.logger()
 
-	// Stdio is single-client; track the agent atomically so the BeforeInitialize
-	// write and the agentFn reads across worker goroutines are race-free.
-	var currentAgent atomic.Value
+	// Stdio is single-client; track the origin atomically so the BeforeInitialize
+	// write and the originFn reads across worker goroutines are race-free. Stdio
+	// carries no request headers, so UserAgent is always empty here.
+	var currentOrigin atomic.Value
 	hooks := &mcpserver.Hooks{}
 	hooks.AddBeforeInitialize(func(_ context.Context, _ any, req *mcp.InitializeRequest) {
 		agent := agentFromRequest(req)
-		currentAgent.Store(agent)
+		currentOrigin.Store(origin.Origin{Agent: agent})
 		log.Info("[AGENT] client connected", slog.String("agent", agent))
 	})
 
-	agentFn := func(_ context.Context) string {
-		if v, ok := currentAgent.Load().(string); ok && v != "" {
-			return v
+	originFn := func(_ context.Context) origin.Origin {
+		if o, ok := currentOrigin.Load().(origin.Origin); ok && o.Agent != "" {
+			return o
 		}
-		return "unknown"
+		return unknownOrigin
 	}
 
-	srv := buildServer(opts, log, hooks, agentFn)
+	srv := buildServer(opts, log, hooks, originFn)
 
 	log.Info("[AGENT] stdio server started")
 	return mcpserver.NewStdioServer(srv).Listen(ctx, os.Stdin, os.Stdout)

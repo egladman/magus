@@ -9,6 +9,8 @@ import (
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/handler/mcp/origin"
 )
 
 // resultText joins every text block of a result so a test can assert on the full
@@ -106,13 +108,13 @@ func TestFirstRef(t *testing.T) {
 func TestWrapAppliesHintsAndCountsTheirBytes(t *testing.T) {
 	t.Parallel()
 
-	agentFn := func(context.Context) string { return "test-agent" }
+	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "test-agent"} }
 
 	t.Run("soft error result gets the hint and its bytes are measured", func(t *testing.T) {
 		tel := &fakeTel{}
 		// adapt turns an Invoke error into an IsError text result with a nil Go
 		// error, mirroring the real dispatch path.
-		h := wrap(quietLogger(), agentFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultError("mcp: no node matches foo"), nil
 		})
 		result, err := h(context.Background(), callRequest("magus_explain", map[string]any{"node": "foo"}))
@@ -125,7 +127,7 @@ func TestWrapAppliesHintsAndCountsTheirBytes(t *testing.T) {
 
 	t.Run("plain success is not decorated", func(t *testing.T) {
 		tel := &fakeTel{}
-		h := wrap(quietLogger(), agentFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText(`{"ok":true}`), nil
 		})
 		result, err := h(context.Background(), callRequest("magus_query", map[string]any{"query": "kind:target"}))

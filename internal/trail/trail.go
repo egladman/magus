@@ -82,6 +82,7 @@ type Event struct {
 	Ts            int64  `json:"ts"`                      // unix milliseconds at the action's start
 	Kind          string `json:"kind"`                    // one of the Kind* constants
 	Actor         string `json:"actor"`                   // who: an agent id, "daemon", a user
+	UserAgent     string `json:"user_agent,omitempty"`    // caller's HTTP User-Agent, when known (MCP over HTTP)
 	Workspace     string `json:"workspace,omitempty"`     // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
 	Action        string `json:"action"`                  // the specific action: a tool name, a job command, "connector.create"
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 )
@@ -43,13 +44,13 @@ func callRequest(name string, args map[string]any) mcplib.CallToolRequest {
 func TestWrapRecordsMCPCall(t *testing.T) {
 	t.Parallel()
 
-	agentFn := func(context.Context) string { return "test-agent" }
+	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "test-agent"} }
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
 		tel := &fakeTel{}
 		const out = "hello world result"
-		h := wrap(quietLogger(), agentFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText(out), nil
 		})
 
@@ -68,7 +69,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 
 	t.Run("error outcome nil result contributes zero output", func(t *testing.T) {
 		tel := &fakeTel{}
-		h := wrap(quietLogger(), agentFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return nil, errors.New("boom")
 		})
 
@@ -85,13 +86,14 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	})
 
 	t.Run("nil telemetry is a no-op", func(t *testing.T) {
-		h := wrap(quietLogger(), agentFn, "", nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText("ok"), nil
 		})
 		result, err := h(context.Background(), req)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
+
 }
 
 func TestWrapCapturesExchange(t *testing.T) {
@@ -99,10 +101,13 @@ func TestWrapCapturesExchange(t *testing.T) {
 
 	dir := t.TempDir()
 
-	agentFn := func(context.Context) string { return "test-agent" }
+	// The session User-Agent comes off originFn and is recorded on the event.
+	originFn := func(context.Context) origin.Origin {
+		return origin.Origin{Agent: "test-agent", UserAgent: "claude-code/1.2.3"}
+	}
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 	const out = "hello world result payload"
-	h := wrap(quietLogger(), agentFn, dir, nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), originFn, dir, nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText(out), nil
 	})
 
@@ -116,6 +121,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 
 	assert.Equal(t, trail.KindMCPToolCall, ev.Kind)
 	assert.Equal(t, "test-agent", ev.Actor)
+	assert.Equal(t, "claude-code/1.2.3", ev.UserAgent, "the session User-Agent is recorded on the event")
 	assert.Equal(t, "magus_query", ev.Action)
 	assert.Equal(t, trail.OutcomeOK, ev.Outcome)
 	assert.Equal(t, int64(len(out)), ev.ResponseBytes)
@@ -139,8 +145,8 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	// metric) must record it as error, not ok - the regression the review caught.
 	dir := t.TempDir()
 	tel := &fakeTel{}
-	agentFn := func(context.Context) string { return "a" }
-	h := wrap(quietLogger(), agentFn, dir, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "a"} }
+	h := wrap(quietLogger(), originFn, dir, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
 	})
 
