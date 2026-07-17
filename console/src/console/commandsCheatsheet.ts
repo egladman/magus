@@ -24,16 +24,15 @@ export interface CommandsCheatsheet {
   toggle(): void; // the status-bar button flips it open/closed
 }
 
-// createCommandsCheatsheet builds the overlay once (the console appends el) and owns its own Escape
-// listener. Same PF backdrop + bullseye + modal-box family as the keyboard cheat sheet, so the two
-// read as members of one overlay set; read-only, so the backdrop is click-through (pointer-events off
-// in CSS) while the box stays interactive - a long catalogue scrolls and the footer toggle stays live.
+// createCommandsCheatsheet builds the overlay once (the console appends el). Same PF backdrop +
+// bullseye + modal-box family as the keyboard cheat sheet; dismiss with the X, a backdrop click, or
+// Escape. Read-only - the command bar is where a command is actually run.
 export function createCommandsCheatsheet(deps: CommandsCheatsheetDeps): CommandsCheatsheet {
   const overlay = h("div", "pf-v6-c-backdrop");
   overlay.id = "console-commands";
   overlay.hidden = true;
   overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "false");
+  overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "All commands");
 
   const bullseye = h("div", "pf-v6-l-bullseye");
@@ -42,11 +41,18 @@ export function createCommandsCheatsheet(deps: CommandsCheatsheetDeps): Commands
   const titleWrap = h("div", "pf-v6-c-modal-box__title");
   titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "All commands"));
   head.append(titleWrap);
+  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
+  closeBtn.addEventListener("click", () => hide());
   const body = h("div", "pf-v6-c-modal-box__body console-cheatsheet-box__body");
-  const foot = h("p", "console-cheatsheet-box__hint", "Press Esc to dismiss. Open the command bar to run one.");
-  box.append(head, body, foot);
+  const foot = h("p", "console-cheatsheet-box__hint", "Press Esc or click outside to dismiss. Open the command bar to run one.");
+  box.append(head, closeBtn, body, foot);
   bullseye.append(box);
   overlay.append(bullseye);
+  // A click on the backdrop (outside the box) dismisses; a click inside the box does not.
+  overlay.addEventListener("pointerdown", (ev) => { if (!box.contains(ev.target as Node)) hide(); });
 
   // render paints EVERY command grouped by area (first-seen order, so the layout is stable). Each row
   // is a token / label / chord triple; a command with no effective chord simply leaves the chord blank.
@@ -104,8 +110,7 @@ export function createCommandsCheatsheet(deps: CommandsCheatsheetDeps): Commands
     else show();
   }
 
-  // Escape closes it (the only key gesture it owns - there is no hold-to-reveal here; the footer
-  // button and the command bar are how it opens).
+  // Escape closes it (the footer button and the command bar are how it opens; no hold-to-reveal here).
   document.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key === "Escape" && open) { hide(); }
   });

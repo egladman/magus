@@ -45,7 +45,6 @@ export type Direction = "left" | "right" | "up" | "down";
 // pickAxis chooses a split direction from the pane's aspect ratio, so a split needs no direction
 // UI: a wider-than-tall pane splits into a "row" (the new pane to the right); a taller pane splits
 // into a "col" (the new pane below). Called on each new leaf, this walks a Fibonacci-spiral tiling.
-// Ported from Tack's pickAxis (its 'v'/'h' become our "row"/"col").
 export function pickAxis(rect: Rect): Split["dir"] {
   return rect.width >= rect.height ? "row" : "col";
 }
@@ -54,7 +53,7 @@ export function pickAxis(rect: Rect): Split["dir"] {
 // requested direction - the target of an alt+hjkl focus move. A candidate qualifies only if its
 // centroid sits strictly in that half-plane (a small epsilon avoids picking a pane merely aligned on
 // the axis); among those, the least Manhattan-distant centroid wins. Returns null when nothing lies
-// that way. Ported from Tack's neighborInDirection, re-expressed over our Rect + Direction.
+// that way.
 export function neighborInDirection(
   from: Rect,
   candidates: { id: string; rect: Rect }[],

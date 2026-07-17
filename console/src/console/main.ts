@@ -15,11 +15,11 @@ import { standaloneSurface, moduleSurface } from "./standalone";
 import { registerCommand, dispatchCommand, listCommands, installKeybindings, mergeKeymap, formatChord, isMac, type Keymap } from "./commands";
 import { createCommandBar } from "./commandBar";
 import { createKeybindingsOverlay } from "./keybindings";
+import { settingsSurface } from "./settings/surface";
 import { createCheatsheet } from "./cheatsheet";
 import { createCommandsCheatsheet } from "./commandsCheatsheet";
 import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane } from "./tiling";
-import { initConsoleSettings } from "../ui/console-settings";
 import { initRefDrawer } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { persisted } from "../lib/persist";
@@ -55,6 +55,7 @@ const SURFACES: Launchable[] = [
   { pageId: "graph", label: "Graph Explorer", hint: "Explore the knowledge graph" },
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
   { pageId: "activity", label: "Activity Trail", hint: "A history of recent magus actions" },
+  { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
 ];
 
 
@@ -354,9 +355,11 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   });
   tabBarHost.append(bar.el);
 
-  // Wire the title-bar settings gear (theme is wired separately by theme.js). No-ops if the page
-  // did not supply the #settings-btn / #settings-panel markup.
-  initConsoleSettings();
+  // Wire the title-bar settings gear to OPEN the Settings surface as a tab (single-instance: open()
+  // focuses it if it is already open). The old gear popover was retired; its controls live on the
+  // surface now. No-op if the page did not supply the #settings-btn markup.
+  const settingsBtn = document.getElementById("settings-btn");
+  if (settingsBtn) settingsBtn.addEventListener("click", () => open("settings"));
 
   // Wire the title-bar Applications menu (links back to the docs site + playground). No-ops without
   // the #console-appmenu markup.
@@ -414,11 +417,11 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // The keybinding editor is an integrated modal overlay (a sibling of the command bar), not a tab. It
   // edits the console's own commands (those with a CONSOLE_KEYMAP default) against the shared keymap
   // cell. Built here AFTER the command bar command is registered so it appears among the editable rows.
-  const keybindings = createKeybindingsOverlay({
-    commands: listCommands().filter((c) => Object.prototype.hasOwnProperty.call(CONSOLE_KEYMAP, c.id)),
-    defaults: CONSOLE_KEYMAP,
-    keymap: keymapCell,
-  });
+  // The console's own editable commands (those with a CONSOLE_KEYMAP default). Shared by the modal
+  // overlay and the Settings surface's embedded editor - both drive the one shared keymap cell, so
+  // the two never fork. Snapshotted here, after every CONSOLE_KEYMAP command is registered.
+  const editableCommands = listCommands().filter((c) => Object.prototype.hasOwnProperty.call(CONSOLE_KEYMAP, c.id));
+  const keybindings = createKeybindingsOverlay({ commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell });
   document.body.append(keybindings.el);
   registerCommand({ id: "console.settings.keybindings", label: "Edit keybindings", group: "General", run: () => keybindings.open() });
 
@@ -478,6 +481,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   register(standaloneSurface({ id: "dashboard", title: "Dashboard", dir: "dashboard", bundle: "dashboard.js", css: "dashboard.css" }));
   register(standaloneSurface({ id: "graph", title: "Graph Explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
   register(moduleSurface({ id: "activity", title: "Activity Trail", bundle: "activity/activity.js", css: "logs/logs.css" }));
+  // Settings is registered from the shell bundle (not a lazy surface bundle) so its Keybindings
+  // editor drives the SAME live keymap cell installKeybindings reads - a separate bundle would get its
+  // own non-syncing persisted("keymap"). The shell injects the editable command list, defaults, and cell.
+  register(settingsSurface({ keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell } }));
 
   // App mode: a dedicated single-surface window, opened by the app drawer as index.html?app=<id>. It
   // shows ONE surface with the tab bar hidden (CSS keys on the [data-appmode] root) so an installed

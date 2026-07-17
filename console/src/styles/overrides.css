@@ -67,79 +67,60 @@
 #console-conn[data-state="connected"][data-health="warn"] { color: var(--console-status-warn); }
 #console-conn[data-state="connected"][data-health="fail"] { color: var(--console-status-queued); }
 
-/* --- Settings popover ---------------------------------------------------------------------------
- * The gear (a PF plain icon Button, #settings-btn) lives in the title-bar-right control group
- * (#console-actions, positioned in console.css). Its popover (a PF Menu, #settings-panel) anchors
- * absolutely UNDER the gear, right-aligned to the group, so it drops straight down from the gear and
- * stays inside the viewport (the group sits a slim gutter off the right edge). Only the POSITION is
- * here; the button/menu chrome is PatternFly. */
-#settings-panel {
-  position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
-  width: 17rem; max-width: calc(100vw - 1rem);
-  /* Above the PatternFly Drawer content (z-index 100) and its panel (200), on PF's own z-index scale
-     so the title-bar popovers layer consistently with the framework rather than an arbitrary number. */
-  z-index: var(--pf-t--global--z-index--300);
-}
-/* Tighten the horizontal form for a compact popover: PF's default 9.375rem label column leaves a wide
- * gap in a narrow panel, so shrink it to the label's own width and give the group a small gap. The
- * label baseline aligns with its control (a select/input/button), reading as clean label -> field rows. */
-#settings-panel .pf-v6-c-menu__content { padding-block: 0.75rem; padding-inline: 0.85rem; }
-/* A FIXED (not auto) label column so every row's control starts at the same x - the labels sit left,
-   the controls line up in a column on the right. Sized to the longest label ("Refresh rate") so it
-   stays compact. PF's default 9.375rem is too wide for this narrow popover; auto misaligned the rows. */
-#settings-panel .pf-v6-c-form.pf-m-horizontal { --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: 6.5rem; }
-#settings-panel .pf-v6-c-form.pf-m-horizontal .pf-v6-c-form__group { align-items: center; grid-column-gap: 0.75rem; }
-
-/* The Applications menu popover (a PF Menu, #console-appmenu) drops from the same title-bar control
- * group, right-aligned so it stays inside the viewport. Only the POSITION is here; the menu chrome
- * is PatternFly. */
+/* The Applications menu popover (a PF Menu, #console-appmenu) drops from the title-bar control group,
+ * right-aligned so it stays inside the viewport. Only the POSITION is here; the menu chrome is
+ * PatternFly. (The old settings popover, #settings-panel, was retired when Settings became a real
+ * surface/tab - the gear now opens that tab. The theme cycle moved into the surface too.) */
 #console-appmenu {
   position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
   min-width: 11rem; max-width: calc(100vw - 1rem);
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
-#settings-panel .pf-v6-c-form-control,
-#settings-panel #theme-cycle { width: 100%; }
-/* theme.js paints the theme-cycle button's icon span with a bare <svg viewBox> (no width/height),
- * so size it to the button text; the gear's own svg carries explicit dimensions. */
-#theme-cycle .console-shell-themecycle__icon { display: inline-flex; }
-#theme-cycle .console-shell-themecycle__icon svg { width: 1em; height: 1em; }
 
-/* --- Keybindings overlay --------------------------------------------------------------------------
- * A PF ModalBox in a Backdrop+Bullseye. Cap the box to the viewport so a long keybinding table
- * scrolls inside its body rather than the page. (The command bar is a dmenu-style top bar now -
- * console-shell-commandbar in console.css - not a modal.) */
+/* --- Keybindings editor --------------------------------------------------------------------------
+ * The editor core ([data-kbeditor], keybindings.ts) is a keybinding-table grid PatternFly has no
+ * component for (like the status bar), so it stays data-scoped here. It appears in TWO places - the
+ * modal overlay (#keybindings-overlay) and the Settings surface's Keybindings section - so its rows
+ * are keyed on [data-kbeditor], not the overlay id, and both embeddings get the same styling. Only the
+ * modal shell chrome (viewport cap, scroll, focus) is overlay-scoped. */
 #keybindings-overlay[hidden] { display: none; }
 #keybindings-overlay .pf-v6-c-modal-box { max-height: 80vh; }
 #keybindings-overlay .pf-v6-c-modal-box__body { overflow: auto; min-height: 0; }
+#keybindings-overlay .pf-v6-c-modal-box:focus { outline: none; } /* the box is focused only to own keydowns */
 /* kbd chord chips in the keybindings rows: a compact keycap. Self-contained so the shell does not
  * lean on Pico's kbd styling (dropped at the W4 cutover). */
-#keybindings-overlay kbd {
+[data-kbeditor] kbd {
   font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
   background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   color: var(--pf-t--global--text--color--regular);
 }
-
-/* Keybindings editor rows: the table inside the PF ModalBox is a keybinding-editor grid PatternFly
-   has no component for (like the status bar), so it stays ID-scoped here. The Record/Clear/Reset
-   controls are PF buttons; only the row/heading/chord-state layout lives below. */
-#keybindings-overlay .pf-v6-c-modal-box:focus { outline: none; } /* the box is focused only to own keydowns */
-#keybindings-overlay h3 {
+[data-kbeditor] [data-kbdesc] {
+  margin: 0 0 0.5rem; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle);
+}
+[data-kbeditor] h3 {
   margin: 0.9rem 0 0.3rem; font-size: 0.72rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle);
 }
-#keybindings-overlay h3:first-child { margin-top: 0; }
-#keybindings-overlay [data-krow] {
+[data-kbeditor] [data-rows] > h3:first-child { margin-top: 0; }
+[data-kbeditor] [data-krow] {
   display: flex; align-items: center; gap: 0.75rem;
   padding: 0.4rem 0.1rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-#keybindings-overlay [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
-#keybindings-overlay [data-chord][data-capturing] { color: var(--console-accent); font-weight: 600; }
-#keybindings-overlay [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
-#keybindings-overlay [data-conflict] { color: var(--console-status-queued); font-size: 0.72rem; white-space: nowrap; }
-#keybindings-overlay [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
+[data-kbeditor] [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
+[data-kbeditor] [data-chord][data-capturing] { color: var(--console-accent); font-weight: 600; }
+[data-kbeditor] [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
+[data-kbeditor] [data-conflict] { color: var(--console-status-queued); font-size: 0.72rem; white-space: nowrap; }
+[data-kbeditor] [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
+/* The row controls carry a leading glyph; center the button row and the inline <svg> so the glyph
+ * lines up with the label instead of hanging off PF's default baseline alignment. */
+[data-kbeditor] [data-kactions] .pf-v6-c-button { align-items: center; }
+[data-kbeditor] [data-kactions] .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
+/* The glyph-only reset-to-default control carries a subtle danger tint so it reads as the destructive
+ * revert without competing with the surface's Reset button; it dims when there is nothing to restore. */
+[data-kbeditor] [data-kactions] .pf-v6-c-button[data-role="reset"] { color: var(--pf-t--global--text--color--status--danger--default); }
+[data-kbeditor] [data-kactions] .pf-v6-c-button[data-role="reset"]:disabled { color: var(--pf-t--global--text--color--subtle); opacity: 0.5; }
 
 /* --- Reference-block source hide -----------------------------------------------------------------
  * The graph and log scaffolds carry a few <details data-legacy-ref> blocks - inline reference/help

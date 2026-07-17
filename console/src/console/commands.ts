@@ -1,10 +1,10 @@
 // commands.ts - the console's single command surface and its keybinding engine. Every console
 // action (toggle raw view, fold all, focus the filter, split a pane, close a tab) is registered
 // here as a named command; menus, the tab bar, the command bar, and keybindings all dispatch
-// through this one map, so an action is defined once and bound once. The design is borrowed from
-// Tack's registerCommand/dispatchCommand + flat keymap record, re-expressed in the console's
-// idioms. Everything except installKeybindings' single listener is a pure function (the registry
-// map, chord normalization, keymap merge, and command resolution), unit-tested without a browser.
+// through this one map, so an action is defined once and bound once. It is a registerCommand/
+// dispatchCommand registry over a flat keymap record. Everything except installKeybindings' single
+// listener is a pure function (the registry map, chord normalization, keymap merge, and command
+// resolution), unit-tested without a browser.
 
 // A command: a stable id, a human label for menus/command bar, an optional group for ordering, and
 // the handler. arg carries an optional payload (e.g. a direction for a "focus pane" command).

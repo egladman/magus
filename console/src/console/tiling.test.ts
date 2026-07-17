@@ -95,7 +95,7 @@ test("setLeafPage on an unknown id changes nothing", () => {
 test("pickAxis splits a wide pane into a row and a tall pane into a col", () => {
   assert.equal(pickAxis({ left: 0, top: 0, width: 1200, height: 400 }), "row");
   assert.equal(pickAxis({ left: 0, top: 0, width: 400, height: 900 }), "col");
-  // A square (width === height) prefers a row, matching Tack's >= tie-break.
+  // A square (width === height) prefers a row (the >= tie-break in pickAxis).
   assert.equal(pickAxis({ left: 0, top: 0, width: 500, height: 500 }), "row");
 });
 

@@ -37,12 +37,9 @@
 <body data-console-app data-console-fill>
   <header id="console-titlebar">
     <div id="console-tabs"></div>
-    <!-- Title-bar-right control group: a PatternFly plain (borderless) icon Button (the gear) sitting
-         ON the tab row, with a PatternFly Menu as its popover anchored under it (position in
-         overrides.css). console.js's initConsoleSettings() wires #settings-btn/#settings-panel
-         (open/close + aria-expanded); theme.js wires #theme-cycle inside. The controls keep their ids
-         (#settings-poll/#settings-host/#theme-cycle) and the theme button keeps its
-         .console-shell-themecycle__icon/.console-shell-themecycle__label spans (theme.js paints them). -->
+    <!-- Title-bar-right control group: PatternFly plain (borderless) icon Buttons sitting ON the tab row
+         (command bar, applications, reference, settings). The settings gear opens the Settings
+         surface as a tab; console.js's startConsole() wires it. -->
     <div id="console-actions">
     <!-- Command bar trigger: opens the dmenu-style runner (also mod+k). A plain icon button, so the
          command bar is discoverable without knowing the chord. console.js's startConsole() wires it to
@@ -87,33 +84,13 @@
     <button id="console-refbtn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="console-refdrawer" aria-expanded="false" aria-label="Reference" title="Reference">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22.5z"/><path d="M4 19.5V4.5"/></svg></span>
     </button>
-    <button id="settings-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings">
+    <!-- The settings gear opens the Settings surface as a tab (single-instance: console.js focuses it
+         if already open). It is a plain trigger, not a popover anchor - the old #settings-panel dropdown
+         (refresh rate / daemon host / theme cycle) was retired when those controls moved onto the
+         Settings surface. console.js's startConsole() wires the click to open("settings"). -->
+    <button id="settings-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-label="Settings" title="Settings">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     </button>
-    <div class="pf-v6-c-menu" id="settings-panel" hidden aria-label="Settings">
-      <div class="pf-v6-c-menu__content">
-        <form class="pf-v6-c-form pf-m-horizontal">
-          <div class="pf-v6-c-form__group">
-            <div class="pf-v6-c-form__group-label"><label class="pf-v6-c-form__label" for="settings-poll"><span class="pf-v6-c-form__label-text">Refresh rate</span></label></div>
-            <div class="pf-v6-c-form__group-control">
-              <span class="pf-v6-c-form-control"><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></span>
-            </div>
-          </div>
-          <div class="pf-v6-c-form__group">
-            <div class="pf-v6-c-form__group-label"><label class="pf-v6-c-form__label" for="settings-host"><span class="pf-v6-c-form__label-text">Daemon host</span></label></div>
-            <div class="pf-v6-c-form__group-control">
-              <span class="pf-v6-c-form-control"><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></span>
-            </div>
-          </div>
-          <div class="pf-v6-c-form__group">
-            <div class="pf-v6-c-form__group-label"><span class="pf-v6-c-form__label"><span class="pf-v6-c-form__label-text">Theme</span></span></div>
-            <div class="pf-v6-c-form__group-control">
-              <button type="button" id="theme-cycle" class="pf-v6-c-button pf-m-secondary" aria-label="Color theme"><span class="pf-v6-c-button__icon console-shell-themecycle__icon" aria-hidden="true"></span><span class="pf-v6-c-button__text console-shell-themecycle__label">Auto</span></button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
     </div>
   </header>
   <!-- The tab outlet is a PatternFly Drawer (pf-m-panel-right): the tab surfaces mount into the

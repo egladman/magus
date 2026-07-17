@@ -270,7 +270,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       runs: runs.map((r) => ({ ...r, targets: r.targets.slice() })),
       workspaces: [
         { root: "~/Repos/magus", hits: Math.round(hits * 0.82), misses: Math.round(misses * 0.8), errors, lastAccessTime: timestampFromMs(now - 1200) },
-        { root: "~/Repos/tack2", hits: Math.round(hits * 0.18), misses: Math.round(misses * 0.2), errors: 0, lastAccessTime: timestampFromMs(now - 38_000) },
+        { root: "~/Repos/acme", hits: Math.round(hits * 0.18), misses: Math.round(misses * 0.2), errors: 0, lastAccessTime: timestampFromMs(now - 38_000) },
       ],
       services: [
         { id: "svc9f21", label: "postgres:16", command: "docker run postgres:16", ports: ["5432"], state: "running", dependents: 3, startedAt: timestampFromMs(now - 214_000) },

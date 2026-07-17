@@ -23,6 +23,11 @@ export interface Persisted<T> {
   // one (splicing one key of a map, incrementing a counter), so two updates in the same
   // tick compose instead of the second clobbering the first with a value read before the first ran.
   update(fn: (prev: T) => T): void;
+  // Durably write `value` WITHOUT updating the in-memory `current` or notifying subscribers, so the
+  // running session keeps its live value and the write only surfaces on the next load. Backs the
+  // Settings surface's "Save" (commit without hot-reload). Cross-tab caveat: another tab's storage-event
+  // listener will still pick this write up and go live there - acceptable, it matches localStorage semantics.
+  persistOnly(value: T): void;
   subscribe(fn: (value: T) => void): () => void; // returns an unsubscribe fn
 }
 
@@ -82,6 +87,9 @@ export function persisted<T>(key: string, fallback: T): Persisted<T> {
     // Read-modify-write against the LIVE current, so consecutive updates compose. Delegates
     // to set() so the sync-notify + serialized-write invariants hold identically.
     update: (fn: (prev: T) => T): void => set(fn(current)),
+    // Durable write only: reuse the serialized write chain but leave `current` and subscribers alone,
+    // so this session never picks the value up (it lands on the next load).
+    persistOnly: (value: T): void => enqueueWrite(value),
     subscribe(fn): () => void {
       listeners.add(fn);
       return () => listeners.delete(fn);

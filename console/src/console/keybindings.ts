@@ -1,14 +1,7 @@
-// keybindings.ts - the keybinding editor: a table of the console's commands, each with its current
-// chord and controls to rebind, disable, or reset it. It edits the ONE persisted "keymap" cell that
-// installKeybindings and the command bar read live, so a rebind takes effect immediately - no save step.
-// The row model (keybindingRows) is pure and unit-tested; createKeybindingsEditor is the reusable
-// table + capture core (a thin layer over the commands.ts chord helpers), and createKeybindingsOverlay
-// wraps it in a modal shell. The SAME editor core is embedded read-write in the Preferences surface's
-// Keybindings section, so the two never fork - both drive the one shared keymap cell.
-//
-// Scope: it edits the CONSOLE's own commands (the ones with a known default in CONSOLE_KEYMAP - tabs,
-// panes, the command bar). Surface-level bindings (a log viewer's own keys) live in their bundles and are
-// out of scope here; this stays a bounded, honest editor rather than a half-built global one.
+// keybindings.ts - the keybinding editor over the console's commands: a per-row table against a
+// Persisted<Keymap> cell. keybindingRows is the pure row model; createKeybindingsEditor is the reusable
+// table + capture core (the live shared cell in the modal, a draft cell in the Settings surface);
+// createKeybindingsOverlay wraps it in a modal. Scope: only commands with a CONSOLE_KEYMAP default.
 
 import {
   chordFromEvent, conflicts, formatChord, isMac, mergeKeymap, normalizeChord,
@@ -17,8 +10,57 @@ import {
 import type { Persisted } from "../lib/persist";
 import { h } from "./view";
 
-// One editor row: the command, its EFFECTIVE chord (a user override wins over the default), and where
-// that chord came from - so the UI can badge a custom/disabled binding and enable "reset".
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// svgEl creates an SVG child element (createElementNS, per the console's no-innerHTML icon convention).
+function svgEl(tag: string, attrs: Record<string, string>): SVGElement {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+// rowIcon builds a 14px control glyph: a filled dot for Record, an x for Clear, a revert arrow for reset.
+function rowIcon(kind: "record" | "clear" | "reset"): SVGElement {
+  const filled = kind === "record";
+  const svg = svgEl("svg", {
+    viewBox: "0 0 24 24", width: "14", height: "14",
+    fill: filled ? "currentColor" : "none", stroke: filled ? "none" : "currentColor",
+    "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true",
+  });
+  if (kind === "record") svg.append(svgEl("circle", { cx: "12", cy: "12", r: "5" }));
+  else if (kind === "clear") svg.append(svgEl("path", { d: "M6 6l12 12M18 6L6 18" }));
+  else svg.append(
+    svgEl("polyline", { points: "1 4 1 10 7 10" }),
+    svgEl("path", { d: "M3.51 15a9 9 0 1 0 2.13-9.36L1 10" }),
+  );
+  return svg;
+}
+
+// actionButton builds one row control: a small PF button with a leading glyph and a text label.
+function actionButton(variant: string, label: string, glyph: SVGElement): HTMLButtonElement {
+  const btn = h("button", "pf-v6-c-button pf-m-small " + variant) as HTMLButtonElement;
+  btn.type = "button";
+  const icon = h("span", "pf-v6-c-button__icon pf-m-start");
+  icon.append(glyph);
+  btn.append(icon, h("span", "pf-v6-c-button__text", label));
+  return btn;
+}
+
+// iconButton builds a glyph-only row control (no text). aria-label carries the name so it reads to
+// assistive tech; used for the reset-to-default control so it does not compete with the action bar's Reset.
+function iconButton(variant: string, ariaLabel: string, glyph: SVGElement): HTMLButtonElement {
+  const btn = h("button", ("pf-v6-c-button pf-m-small pf-m-plain " + variant).trim()) as HTMLButtonElement;
+  btn.type = "button";
+  btn.setAttribute("aria-label", ariaLabel);
+  btn.title = ariaLabel;
+  const icon = h("span", "pf-v6-c-button__icon");
+  icon.append(glyph);
+  btn.append(icon);
+  return btn;
+}
+
+// One editor row: the command, its effective chord (a user override wins over the default), and where
+// that chord came from - so the UI can badge a custom/disabled binding and enable Reset.
 export interface KeybindingRow {
   id: string;
   label: string;
@@ -27,8 +69,8 @@ export interface KeybindingRow {
   source: "default" | "custom" | "disabled";
 }
 
-// keybindingRows computes the editor rows for the console's commands: the effective chord is the user
-// override when present (including "" = deliberately disabled), else the default. Pure.
+// keybindingRows computes the editor rows: the effective chord is the user override when present
+// (including "" = deliberately disabled), else the default. Pure.
 export function keybindingRows(commands: Command[], defaults: Keymap, user: Keymap): KeybindingRow[] {
   return commands.map((c) => {
     const overridden = Object.prototype.hasOwnProperty.call(user, c.id);
@@ -46,57 +88,39 @@ export interface KeybindingsDeps {
   keymap: Persisted<Keymap>;
 }
 
+// The reusable editor core: the [data-kbeditor] table and its capture machinery, no modal chrome. It
+// subscribes to the shared keymap and re-renders live; destroy() drops the subscription. Embedded both
+// in the modal overlay and in the Settings surface's Keybindings section.
+export interface KeybindingsEditor {
+  readonly el: HTMLElement;
+  destroy(): void;
+}
+
 export interface KeybindingsOverlay {
   readonly el: HTMLElement;
   open(): void;
   close(): void;
 }
 
-// createKeybindingsOverlay builds the editor as a modal overlay (the same family as the cheat
-// sheet: a centered box over a dimmed backdrop). It is created once and appended to the body; open()
-// paints the table from the live keymap and subscribes for outside edits, close() tears the capture and
-// subscription down. Edits write straight through to the shared keymap cell, so every change is live.
-export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOverlay {
+// createKeybindingsEditor builds the table + capture core into a [data-kbeditor] container, re-rendering
+// on any keymap change so both embeddings stay in lockstep. The row grid is data-scoped in overrides.css.
+export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEditor {
   const mac = isMac();
   let capturing: string | null = null; // the command id currently being rebound
   let unbind: (() => void) | null = null; // active capture listener teardown
-  let unsub: (() => void) | null = null; // keymap subscription, live only while open
+  let unsub: (() => void) | null = null; // keymap subscription, live for the editor's lifetime
 
-  // PatternFly (W2): a ModalBox centered in a Backdrop+Bullseye, matching the cheat sheet. The
-  // overlay id, role=dialog/aria-modal, the [data-kbBox]/[data-kbClose]/[data-rows] hooks, and the
-  // capture/keydown behavior are all preserved; only the shell chrome is PatternFly. The row grid has
-  // no PF component, so it stays ID-scoped in overrides.css (like the status bar).
-  const overlay = h("div", "pf-v6-c-backdrop");
-  overlay.id = "keybindings-overlay";
-  overlay.hidden = true;
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", "Keybindings");
-
-  const bullseye = h("div", "pf-v6-l-bullseye");
-  const box = h("div", "pf-v6-c-modal-box pf-m-md");
-  box.dataset.kbBox = "";
-  box.tabIndex = -1; // focusable so the open editor owns keydowns (Esc closes, chords do not leak out)
-  const head = h("div", "pf-v6-c-modal-box__header");
-  head.dataset.kbHead = "";
-  const titleWrap = h("div", "pf-v6-c-modal-box__title");
-  titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Keybindings"));
-  head.append(titleWrap);
-  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
-  closeBtn.type = "button";
-  closeBtn.dataset.kbClose = "";
-  closeBtn.setAttribute("aria-label", "Close");
-  closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
-  closeBtn.addEventListener("click", () => close());
-  const sub = h("p", "pf-v6-c-modal-box__description", "Rebind a command: Record, then press the keys. Clear disables it; Reset restores the default. Changes take effect immediately.");
-  const table = h("div", "pf-v6-c-modal-box__body");
+  const root = h("div");
+  root.dataset.kbeditor = "";
+  const desc = h("p");
+  desc.dataset.kbdesc = "";
+  desc.textContent = "Rebind a command: Record, then press the keys. Clear disables a binding; the revert icon restores the default.";
+  const table = h("div");
   table.dataset.rows = "";
-  box.append(head, closeBtn, sub, table);
-  bullseye.append(box);
-  overlay.append(bullseye);
+  root.append(desc, table);
 
-  // setChord writes one command's override into the shared keymap cell (immediate effect). A null
-  // value RESETS (drops the override, back to the default); "" DISABLES; a chord CUSTOMIZES.
+  // setChord writes one command's override into the shared keymap cell: null RESETS (drop the override),
+  // "" DISABLES, a chord CUSTOMIZES.
   function setChord(id: string, chord: string | null): void {
     deps.keymap.update((prev) => {
       const next = { ...prev };
@@ -112,8 +136,7 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   }
 
   // beginCapture listens in the CAPTURE phase so it intercepts the keystroke before the global
-  // keybinding listener (which is on the bubble phase) can fire it. Escape cancels; a bare modifier
-  // keeps waiting; any real chord is recorded.
+  // keybinding listener fires it. Escape cancels; a bare modifier keeps waiting; any real chord records.
   function beginCapture(id: string): void {
     stopCapture();
     capturing = id;
@@ -123,8 +146,8 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
       if (e.key === "Escape") { stopCapture(); render(); return; }
       const chord = chordFromEvent({ metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, key: e.key, code: e.code }, mac);
       if (chord === "") return; // a lone modifier - keep waiting
-      // Clear the capturing flag BEFORE writing, so the keymap-change subscription re-renders the
-      // row with its new chord rather than the "Press keys..." capturing state.
+      // Clear the capturing flag before writing, so the subscription re-renders the new chord, not the
+      // "Press keys..." state.
       stopCapture();
       setChord(id, chord);
     };
@@ -134,8 +157,7 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   }
 
   // render repaints the table from the current keymap, grouped by command group. Each row shows the
-  // effective chord (or "Press keys..." while capturing, "Disabled" when silenced), a conflict
-  // warning when two commands share a chord, and the Record / Clear / Reset controls.
+  // effective chord (or a capture/disabled state), any conflict warning, and its controls.
   function render(): void {
     const user = deps.keymap.get();
     const merged = mergeKeymap(deps.defaults, user);
@@ -171,14 +193,14 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
 
       const actions = h("div");
       actions.dataset.kactions = "";
-      const record = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", capturing === r.id ? "Cancel" : "Record");
-      record.type = "button";
+      // Record starts/cancels capture; Clear disables the binding; reset (a glyph-only danger-tinted
+      // control, aria-label "Reset to default") drops the custom binding back to the default.
+      const record = actionButton("pf-m-secondary", capturing === r.id ? "Cancel" : "Record", rowIcon("record"));
       record.addEventListener("click", () => { if (capturing === r.id) { stopCapture(); render(); } else beginCapture(r.id); });
-      const clear = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Clear");
-      clear.type = "button";
+      const clear = actionButton("pf-m-secondary", "Clear", rowIcon("clear"));
       clear.addEventListener("click", () => { setChord(r.id, ""); });
-      const reset = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Reset");
-      reset.type = "button";
+      const reset = iconButton("", "Reset to default", rowIcon("reset"));
+      reset.dataset.role = "reset";
       reset.disabled = r.source === "default";
       reset.addEventListener("click", () => { setChord(r.id, null); });
       actions.append(record, clear, reset);
@@ -187,32 +209,70 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
     }
   }
 
+  // Re-render on any keymap change (this editor's writes, or another embedding's) so the table always
+  // reflects the live bindings.
+  unsub = deps.keymap.subscribe(() => render());
+  render();
+
+  return {
+    el: root,
+    destroy(): void {
+      stopCapture();
+      if (unsub) { unsub(); unsub = null; }
+    },
+  };
+}
+
+// createKeybindingsOverlay wraps the editor core in a modal overlay matching the cheat sheet. Its editor
+// drives the live shared cell, so rebinds here take effect immediately (unlike the staged Settings surface).
+export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOverlay {
+  const overlay = h("div", "pf-v6-c-backdrop");
+  overlay.id = "keybindings-overlay";
+  overlay.hidden = true;
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "Keybindings");
+
+  const bullseye = h("div", "pf-v6-l-bullseye");
+  const box = h("div", "pf-v6-c-modal-box pf-m-md");
+  box.dataset.kbBox = "";
+  box.tabIndex = -1; // focusable so the open editor owns keydowns (Esc closes, chords do not leak out)
+  const head = h("div", "pf-v6-c-modal-box__header");
+  head.dataset.kbHead = "";
+  const titleWrap = h("div", "pf-v6-c-modal-box__title");
+  titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Keybindings"));
+  head.append(titleWrap);
+  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
+  closeBtn.type = "button";
+  closeBtn.dataset.kbClose = "";
+  closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
+  closeBtn.addEventListener("click", () => close());
+  const bodyWrap = h("div", "pf-v6-c-modal-box__body");
+  const editor = createKeybindingsEditor(deps);
+  bodyWrap.append(editor.el);
+  box.append(head, closeBtn, bodyWrap);
+  bullseye.append(box);
+  overlay.append(bullseye);
+
   function open(): void {
     if (!overlay.hidden) return;
     overlay.hidden = false;
-    // Re-render on any keymap change (this editor's own writes, or another surface's) while open, so the
-    // table always reflects the live bindings. Subscribed only for the open lifetime.
-    unsub = deps.keymap.subscribe(() => render());
-    render();
     box.focus();
   }
 
   function close(): void {
     if (overlay.hidden) return;
-    stopCapture();
-    if (unsub) { unsub(); unsub = null; }
     overlay.hidden = true;
   }
 
-  // Local keyboard handling on the box: Escape closes (when not mid-capture, which the capture-phase
-  // listener owns). stopPropagation keeps the global keybinding listener from acting on keys typed while
-  // the editor owns the screen - a chord meant for a rebind must never also fire its command.
+  // Escape closes; stopPropagation keeps keys typed while the editor owns the screen from reaching the
+  // global keybinding listener (a capturing row already swallowed its own keydown upstream).
   box.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && capturing === null) { ev.preventDefault(); close(); }
+    if (ev.key === "Escape") { ev.preventDefault(); close(); }
     ev.stopPropagation();
   });
-  // A click on the backdrop (outside the box) dismisses; a click inside stays. The Bullseye layout
-  // fills the backdrop, so test containment against the box rather than an exact overlay-target match.
+  // A click on the backdrop (outside the box) dismisses; a click inside stays.
   overlay.addEventListener("pointerdown", (ev) => { if (!box.contains(ev.target as Node)) close(); });
 
   return { el: overlay, open, close };

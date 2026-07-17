@@ -1,0 +1,180 @@
+/* settings.css - the Settings surface's page-scoped stylesheet (loaded lazily when the tab opens,
+ * like logs.css / graph.css / dashboard.css). Layout only: the surface is built from PatternFly Form,
+ * Button, and text-input components, so this file just frames the scrollable page and its titled
+ * sections. The keybindings editor grid is styled globally in overrides.css ([data-kbeditor]) because
+ * the same core also appears in the modal overlay, which exists before this tab is ever opened.
+ *
+ * Conventions (PATTERNFLY.md): pf-v6-* is the only borrowed vocabulary; app hooks are console-settings-*
+ * classes and data-*; colors come from --pf-t-* / --console-* tokens, never a raw hex. */
+
+/* The page is a single scrolling column, capped for readability and centered in the pane. */
+.console-settings-page {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--2xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xl);
+}
+.console-settings-title {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--heading--h1);
+  font-weight: var(--pf-t--global--font--weight--heading--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+
+/* --- Action bar: the staged-config controls ------------------------------------------------------
+ * A pending-count indicator on the left, the Save & Apply / Save / Reset buttons on the right. Sticks
+ * to the top of the scrolling column so the commit controls stay reachable on a long page. */
+.console-settings-actionbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-settings-actionbar__count {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-settings-actionbar__actions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--sm);
+}
+
+/* Save = green. PatternFly has no green button variant, so this is a success-token outline (border +
+ * text from the success status ramp) that reads clearly green for the Save action, filling on hover. */
+.console-settings-actionbar__save {
+  color: var(--pf-t--global--text--color--status--success--default);
+  background: transparent;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--status--success--default);
+}
+.console-settings-actionbar__save:hover:not(:disabled) {
+  color: var(--pf-t--global--text--color--status--success--hover);
+  border-color: var(--pf-t--global--border--color--status--success--hover);
+  background: var(--pf-t--global--color--status--success--100);
+}
+.console-settings-actionbar__save:active:not(:disabled) {
+  color: var(--pf-t--global--text--color--status--success--clicked);
+  border-color: var(--pf-t--global--border--color--status--success--clicked);
+}
+.console-settings-actionbar__save:disabled { opacity: 0.5; }
+
+/* The status line: neutral by default, tinted by outcome via data-kind. */
+.console-settings-actionbar__status {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-settings-actionbar__status[data-kind="ok"] { color: var(--console-status-ok); }
+.console-settings-actionbar__status[data-kind="error"] { color: var(--console-status-queued); }
+
+/* --- Pending diff: the readable before -> after list ---------------------------------------------
+ * One row per changed field, hidden entirely when the draft matches the baseline. The before/after
+ * values sit in mono so a chord or host:port reads as a literal, with an arrow between them. */
+.console-settings-diff {
+  max-width: 48rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--md);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-settings-diff[hidden] { display: none; }
+.console-settings-diff__title {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--heading--h4);
+  font-weight: var(--pf-t--global--font--weight--heading--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-settings-diff__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.25rem; }
+.console-settings-diff__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+}
+.console-settings-diff__label { flex: 0 0 auto; color: var(--pf-t--global--text--color--regular); font-weight: var(--pf-t--global--font--weight--body--bold); }
+.console-settings-diff__change { display: inline-flex; align-items: baseline; gap: 0.4rem; font-family: var(--pf-t--global--font--family--mono); }
+.console-settings-diff__before { color: var(--pf-t--global--text--color--subtle); text-decoration: line-through; }
+.console-settings-diff__arrow { color: var(--pf-t--global--text--color--subtle); }
+.console-settings-diff__after { color: var(--console-status-ok); }
+
+/* A titled section: a heading with a small accent marker, an optional lede, and its body. Sections
+ * stack with a hairline rule between them so the surface reads as grouped settings, not one long form. */
+.console-settings-section {
+  max-width: 48rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
+  padding-top: var(--pf-t--global--spacer--lg);
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-settings-section:first-of-type { border-top: 0; padding-top: 0; }
+.console-settings-section__head { display: flex; flex-direction: column; gap: 0.15rem; }
+/* A leading accent bar gives each section a point of interest and reinforces the hierarchy. */
+.console-settings-section__title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--heading--h3);
+  font-weight: var(--pf-t--global--font--weight--heading--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-settings-section__title::before {
+  content: "";
+  flex: 0 0 auto;
+  width: var(--pf-t--global--spacer--xs);
+  height: 1em;
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--console-accent);
+}
+.console-settings-section__lede,
+.console-settings-io__lede {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-settings-section__body { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
+
+/* The General form: keep the label column tight (PF's default 9.375rem is wide for two short labels)
+ * and let the control column carry a small helper line under each field. */
+.console-settings-page .pf-v6-c-form.pf-m-horizontal {
+  --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: 9rem;
+}
+.console-settings-form__help {
+  margin: 0.35rem 0 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* The theme button sits at its natural width, not stretched across the control column. PF buttons
+ * default to align-items:baseline (sized for a text glyph); center the row and the inline <svg> glyph
+ * so the icon lines up with the label instead of hanging off the baseline. */
+.console-settings-theme { width: auto; align-items: center; }
+.console-settings-theme .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
+
+/* Backup: the export/import controls stack, with the action rows wrapping on a narrow pane. */
+.console-settings-io { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
+.console-settings-io__actions { display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--sm); }
+.console-settings-io__paste { width: 100%; resize: vertical; font-family: var(--pf-t--global--font--family--mono); }
+
+/* The file picker is a styled PF Button label wrapping a visually-hidden <input type=file>. */
+.console-settings-io__file { position: relative; overflow: hidden; cursor: pointer; }
+.console-settings-io__file input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}

@@ -1,15 +1,14 @@
-// cheatsheet.ts - a read-only, hold-to-reveal keyboard cheat sheet. Hold "?" (Shift+/) and a
-// centered card lists every command and its current chord, grouped by area; release the key to
-// dismiss. It is STRICTLY read-only: a teaching aid, deliberately separate from the keybinding
-// editor (keybindings.ts), which is the surface that rebinds and persists. It reads the SAME live
-// command list + merged keymap the command bar and the global key listener use, so what it shows is
-// always the effective bindings - a rebind in the editor is reflected here on the next reveal.
+// cheatsheet.ts - a read-only keyboard cheat sheet: a centered card listing every command and its
+// current chord, grouped by area. It reads the live command list + merged keymap, so it always shows
+// the effective bindings. Open it by holding "?" (Shift+/) or the footer button; dismiss with the X,
+// a click on the backdrop, or Escape. It is read-only - the keybinding editor (keybindings.ts) is the
+// surface that rebinds and persists.
 
 import { formatChord, type Command, type Keymap } from "./commands";
 import { h } from "./view";
 
-// What the console injects: the live command list and the effective (merged default+user) keymap,
-// both read fresh on each reveal, plus the platform so chords label correctly (Cmd vs Ctrl).
+// The live command list, the effective (merged) keymap, and the platform (for Cmd vs Ctrl labels),
+// all read fresh on each reveal.
 export interface CheatsheetDeps {
   commands: () => Command[];
   keymap: () => Keymap;
@@ -23,27 +22,23 @@ export interface Cheatsheet {
   toggle(): void; // the status-bar button flips it open/closed (the hold-"?" gesture only reveals)
 }
 
-// isTyping mirrors commands.ts's guard: never hijack "?" while the operator is typing it into a
-// field (the filter box, the docs search, a rebind capture).
+// isTyping mirrors commands.ts's guard: never hijack "?" while the operator is typing it into a field.
 function isTyping(node: EventTarget | null): boolean {
   const t = (node && (node as HTMLElement).tagName) || "";
   return t === "INPUT" || t === "TEXTAREA" || (node !== null && (node as HTMLElement).isContentEditable);
 }
 
-// createCheatsheet builds the overlay once, appends nothing (the console appends el), and owns its
-// own hold-to-reveal key listeners. HOLD_MS distinguishes a deliberate hold from an incidental "?"
-// keystroke, so a quick tap does not flash the sheet.
+// createCheatsheet builds the overlay once (the console appends el) and owns its hold-to-reveal key
+// listeners. HOLD_MS distinguishes a deliberate hold from an incidental "?" keystroke.
 export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   const HOLD_MS = 250;
 
-  // PF backdrop + bullseye + modal-box, same family as the keybinding editor, so the
-  // cheat sheet reads as a member of the console's overlay set. It is read-only, so it neither traps
-  // focus nor takes pointer events - releasing the key is the only way it goes away.
+  // A dismissible modal: PF backdrop + bullseye + modal-box, matching the keybinding editor.
   const overlay = h("div", "pf-v6-c-backdrop");
   overlay.id = "console-cheatsheet";
   overlay.hidden = true;
   overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "false");
+  overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "Keyboard shortcuts");
 
   const bullseye = h("div", "pf-v6-l-bullseye");
@@ -52,11 +47,18 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   const titleWrap = h("div", "pf-v6-c-modal-box__title");
   titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Keyboard shortcuts"));
   head.append(titleWrap);
+  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
+  closeBtn.addEventListener("click", () => hide());
   const body = h("div", "pf-v6-c-modal-box__body console-cheatsheet-box__body");
-  const foot = h("p", "console-cheatsheet-box__hint", "Press Esc to dismiss. Open the command bar to rebind.");
-  box.append(head, body, foot);
+  const foot = h("p", "console-cheatsheet-box__hint", "Press Esc or click outside to dismiss. Open the command bar to rebind.");
+  box.append(head, closeBtn, body, foot);
   bullseye.append(box);
   overlay.append(bullseye);
+  // A click on the backdrop (outside the box) dismisses; a click inside the box does not.
+  overlay.addEventListener("pointerdown", (ev) => { if (!box.contains(ev.target as Node)) hide(); });
 
   // render paints the grouped rows from the current commands + effective keymap. Commands with no
   // (effective) chord are omitted - this is a keybinding sheet, not a command list. Groups keep
