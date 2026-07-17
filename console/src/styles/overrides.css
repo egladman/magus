@@ -159,12 +159,12 @@
 }
 
 /* --- Reference-block source hide -----------------------------------------------------------------
- * The graph and log scaffolds carry a few <details data-legacy-ref> blocks - inline reference/help
+ * The graph and log scaffolds carry a few <details data-ref-section> blocks - inline reference/help
  * copy. The Reference panel (ref-drawer.ts, a PatternFly Drawer) CLONES these into the panel on open;
  * the SOURCE blocks stay hidden here (state on data-*, not a class) so the surfaces render without
- * spilling the disclosure copy into the view - only the cloned copies (which drop data-legacy-ref)
+ * spilling the disclosure copy into the view - only the cloned copies (which drop data-ref-section)
  * show. Do not remove: without this the help copy would appear inline in the graph/log surfaces. */
-[data-legacy-ref] { display: none; }
+[data-ref-section] { display: none; }
 
 /* --- Refresh toast --------------------------------------------------------------------------------
  * A small bottom-left "reload" card raised by the service-worker registration (new bundles are

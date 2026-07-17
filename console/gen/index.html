@@ -43,9 +43,12 @@
     <div id="console-actions">
     <!-- Command bar trigger: opens the dmenu-style runner (also mod+k). A plain icon button, so the
          command bar is discoverable without knowing the chord. console.js's startConsole() wires it to
-         commandBar.open() and stamps the effective chord into the tooltip. -->
+         commandBar.open() and stamps the effective chord into the tooltip.
+         A ">_" prompt, NOT a magnifier: this runs commands, and the magnifier in this window already
+         means search - the Reference panel's docs search. Two magnifiers doing different jobs read as
+         one broken one. -->
     <button id="console-commandbar-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-haspopup="dialog" aria-controls="command-bar" aria-label="Command bar" title="Command bar">
-      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.8-3.8"/></svg></span>
+      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8l4 4-4 4M12 16h7"/></svg></span>
     </button>
     <!-- Panes menu: split and close the tiled panes from the UI. Tiling used to be chord-only, which made
          it unreachable on a phone; every item here dispatches the SAME command id its keybinding does, and
@@ -176,6 +179,36 @@
     </div>
   </main>
   <footer id="console-statusbar"></footer>
+
+  <!-- Console-wide reference. ref-drawer.ts clones these into the Reference panel AFTER whatever the
+       active surface contributes: chords and tiling are true of every surface, so they belong to the
+       shell rather than to any one of them - and they are the whole of what the launcher shows, which
+       has no surface and so used to read "No reference for this view". Hidden in place like every other
+       [data-ref-section] source; only the panel's clones are shown, and the panel's own CSS
+       (.console-shell-refdrawer__body, console.css) styles the details/summary/dl. -->
+  <div id="console-ref-shell" hidden>
+    <details data-ref-section>
+      <summary>Keyboard and chords</summary>
+      <p>A <b>chord</b> is a key combination bound to a command, written <code>mod+k</code>. <code>mod</code> is Cmd on macOS and Ctrl elsewhere, so one binding fits both.</p>
+      <p>Nothing here is chord-only: the <b>command bar</b> lists every command with its chord, and the title-bar menus dispatch those same commands.</p>
+      <dl>
+        <dt><code>mod+k</code></dt><dd>Command bar - search every command.</dd>
+        <dt><code>mod+\</code></dt><dd>Split the focused pane.</dd>
+        <dt><code>mod+shift+\</code></dt><dd>Split the focused pane downward.</dd>
+        <dt><code>mod+w</code></dt><dd>Close the focused pane, or the tab once it is the last one.</dd>
+        <dt><code>mod+alt+&larr;</code> / <code>&rarr;</code></dt><dd>Previous / next tab.</dd>
+        <dt><code>alt+h j k l</code></dt><dd>Move focus between panes.</dd>
+      </dl>
+      <p>Rebind any of them under <b>Settings &gt; Keybindings</b>: Record a new chord, Clear to disable one, or revert to the default.</p>
+    </details>
+    <details data-ref-section>
+      <summary>Tabs and panes</summary>
+      <p>Each app opens as a <b>tab</b>. Opening one you already have focuses its tab instead of a second copy - every surface is single-instance.</p>
+      <p>A tab splits into <b>panes</b>. A split divides the focused pane along its longer side, so the same action tiles side-by-side on a desktop and stacks on a phone. Tap or click a pane to focus it; drag the divider to re-weight the split.</p>
+      <p>The <b>Panes</b> menu in the title bar drives all of it without a keyboard.</p>
+      <p>To leave this window, right-click a tab and choose <b>Move to new window</b>. That is the only route to a separate OS window - opening an app never takes you out of the one you are in.</p>
+    </details>
+  </div>
 
   <script type="module" src="./console.js"></script>
 </body>

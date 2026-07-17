@@ -13,7 +13,7 @@ import { loadDocIndex, runSearch, positiveTerms, snippet, describeQuery, type Do
 // The panel shows two things: a documentation search field (searches the docs site's prebuilt
 // index via the ported Datadog grammar in lib/docsearch.ts, results open in a new tab) and the
 // ACTIVE surface's reference sections. Each surface scaffold carries help blocks marked
-// [data-legacy-ref] (the graph explorer's query/search-syntax help, the log viewer's filter
+// [data-ref-section] (the graph explorer's query/search-syntax help, the log viewer's filter
 // help). Because surfaces mount dynamically, this CLONES the active surface's blocks each time
 // it opens (and refreshes on tab change while docked).
 //
@@ -37,7 +37,15 @@ export function initRefDrawer(): void {
     document.querySelector<HTMLElement>("#console-outlet-content div[data-tab-id]:not([hidden])");
 
   const collect = (pane: HTMLElement | null): HTMLElement[] =>
-    pane ? [...pane.querySelectorAll<HTMLElement>("[data-legacy-ref]")].filter((b) => b.id !== "ask-panel") : [];
+    pane ? [...pane.querySelectorAll<HTMLElement>("[data-ref-section]")].filter((b) => b.id !== "ask-panel") : [];
+
+  // The shell's own reference (chords, tabs and panes) is not surface-specific, so it trails EVERY
+  // surface's sections rather than belonging to one - and it is the whole of what the launcher shows,
+  // which has no surface and so previously read "No reference for this view".
+  const shellBlocks = (): HTMLElement[] => {
+    const shell = document.getElementById("console-ref-shell");
+    return shell ? [...shell.querySelectorAll<HTMLElement>("[data-ref-section]")] : [];
+  };
 
   // Paint the given reference blocks into the panel body. Cloning (not moving) keeps the source
   // intact so a surface can unmount/remount freely. Nested <details> open so the reference reads
@@ -53,7 +61,7 @@ export function initRefDrawer(): void {
     }
     for (const b of blocks) {
       const clone = b.cloneNode(true) as HTMLElement;
-      clone.removeAttribute("data-legacy-ref"); // clones are shown; the [data-legacy-ref]{display:none} rule hides only sources
+      clone.removeAttribute("data-ref-section"); // clones are shown; the [data-ref-section]{display:none} rule hides only sources
       clone.removeAttribute("id");
       clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
       if (clone instanceof HTMLDetailsElement) clone.open = true;
@@ -73,11 +81,11 @@ export function initRefDrawer(): void {
     watcher = null;
     const pane = activePane();
     const blocks = collect(pane);
-    paint(blocks);
+    paint([...blocks, ...shellBlocks()]);
     if (pane && blocks.length === 0) {
       const obs = new MutationObserver(() => {
         const found = collect(pane);
-        if (found.length > 0) { obs.disconnect(); watcher = null; paint(found); }
+        if (found.length > 0) { obs.disconnect(); watcher = null; paint([...found, ...shellBlocks()]); }
       });
       watcher = obs;
       obs.observe(pane, { childList: true, subtree: true });

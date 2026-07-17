@@ -313,6 +313,41 @@ positive delta is a rising hotspot; a negative one is cooling. See
 <p>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be
 referenced and looked up; some are guardrails (see <a href="../../../wards/">wards</a>), others hard
 errors.</p>
+<h2 id="console">Console</h2>
+<p>The vocabulary of the browser app. These terms name things you only meet in the
+console's UI, so they are defined here rather than left to be inferred from it.</p>
+<h3 id="console-1">Console</h3>
+<p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
+log viewer, graph explorer, dashboard, and activity trail. It is a separate
+static app, not something the daemon serves - the daemon only exposes a
+read-only loopback API it calls. See <a href="../../../reference/console/">reference/console</a>.</p>
+<h3 id="surface">Surface</h3>
+<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
+Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
+you navigate to: it is mounted into a tab, or into a pane beside another one.
+Each is single-instance - opening one you already have focuses it instead of
+duplicating it. See <a href="../../../reference/console/">reference/console</a>.</p>
+<h3 id="pane">Pane</h3>
+<p>A split within a tab. Splitting divides the focused pane along its longer side,
+so the same action tiles side-by-side on a desktop and stacks on a phone; a tab
+with no split is a single pane. Drag the divider to re-weight the split. See
+<a href="../../../reference/console/">reference/console</a>.</p>
+<h3 id="chord">Chord</h3>
+<p>A key combination bound to a console command, written <code>mod+k</code> - where <code>mod</code> is
+Cmd on macOS and Ctrl elsewhere, so one binding fits both. Every chord is
+rebindable (Settings &gt; Keybindings), and a command remains reachable from the
+command bar whether or not it has one. See <a href="../../../reference/console/">reference/console</a>.</p>
+<h3 id="command-bar">Command bar</h3>
+<p>The console's runner: one searchable list of every command and its chord,
+opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
+chords dispatch the same commands it does. See <a href="../../../reference/console/">reference/console</a>.</p>
+<h3 id="live-link">Live link</h3>
+<p>The URL that points a surface at a running daemon, carrying the loopback address
+and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
+console consumes the token, stores it, and strips it from the URL, so the secret
+never lingers in history or a copied link. The host must be literal loopback -
+<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+reads only what rides in the link itself. See <a href="../../../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../../../conventions/">Documentation conventions</a> - how to read the placeholders,

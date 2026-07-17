@@ -1,7 +1,7 @@
 ---
 title: Glossary
-description: The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, and engine - each defined in one line with a pointer to the page that covers it in full.
-tags: [glossary, reference, terminology, concepts]
+description: The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, engine, and the console's own terms - each defined in one line with a pointer to the page that covers it in full.
+tags: [glossary, reference, terminology, concepts, console]
 ---
 
 # Glossary
@@ -249,6 +249,55 @@ positive delta is a rising hotspot; a negative one is cooling. See
 A stable `MGSxxxx` identifier attached to a magus warning or error, so it can be
 referenced and looked up; some are guardrails (see [wards](wards.md)), others hard
 errors.
+
+## Console
+
+The vocabulary of the browser app. These terms name things you only meet in the
+console's UI, so they are defined here rather than left to be inferred from it.
+
+### Console
+
+The browser app that reads a magus workspace: a tabbed, tiling page hosting the
+log viewer, graph explorer, dashboard, and activity trail. It is a separate
+static app, not something the daemon serves - the daemon only exposes a
+read-only loopback API it calls. See [reference/console.md](reference/console.md).
+
+### Surface
+
+One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
+Trail, Settings). "Surface" rather than "page" because one is never a document
+you navigate to: it is mounted into a tab, or into a pane beside another one.
+Each is single-instance - opening one you already have focuses it instead of
+duplicating it. See [reference/console.md](reference/console.md).
+
+### Pane
+
+A split within a tab. Splitting divides the focused pane along its longer side,
+so the same action tiles side-by-side on a desktop and stacks on a phone; a tab
+with no split is a single pane. Drag the divider to re-weight the split. See
+[reference/console.md](reference/console.md).
+
+### Chord
+
+A key combination bound to a console command, written `mod+k` - where `mod` is
+Cmd on macOS and Ctrl elsewhere, so one binding fits both. Every chord is
+rebindable (Settings > Keybindings), and a command remains reachable from the
+command bar whether or not it has one. See [reference/console.md](reference/console.md).
+
+### Command bar
+
+The console's runner: one searchable list of every command and its chord,
+opened with `mod+k`. It is the discoverable route to any action - the menus and
+chords dispatch the same commands it does. See [reference/console.md](reference/console.md).
+
+### Live link
+
+The URL that points a surface at a running daemon, carrying the loopback address
+and a bearer token (`#live=127.0.0.1:7391&token=...`). The daemon prints it; the
+console consumes the token, stores it, and strips it from the URL, so the secret
+never lingers in history or a copied link. The host must be literal loopback -
+`localhost` and hostnames are rejected before any request. Without one, a surface
+reads only what rides in the link itself. See [reference/console.md](reference/console.md).
 
 ## See also
 

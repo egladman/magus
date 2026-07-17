@@ -353,7 +353,7 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   initAppMenu();
 
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
-  // markup. It reads the active surface's [data-legacy-ref] help blocks (refreshed on tab change).
+  // markup. It reads the active surface's [data-ref-section] help blocks (refreshed on tab change).
   initRefDrawer();
 
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.

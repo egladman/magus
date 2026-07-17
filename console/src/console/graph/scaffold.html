@@ -1,11 +1,14 @@
 <main class="console-graph-main">
 
-    <!-- The reference blocks below (Ask, Query syntax and views, Display, Loading a graph by URL)
-         are each marked .ref-section; ref-drawer.js moves them into the shared #ref-drawer (emitted
-         by the console shell, opened from the nav-bar Reference button) at load, along with the
-         docs search bar. They stay inline (visible) for no-JS. -->
-    <!-- Views panel - question-first navigation (max 7 modes). Moved into the reference drawer at load. -->
-    <details class="console-graph-views" data-legacy-ref id="ask-panel">
+    <!-- The blocks below marked [data-ref-section] are this surface's reference copy (Ask, Views, Search
+         syntax, Layout and colors, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
+         panel (#console-refpanel, opened from the title-bar Reference button) each time it opens, and
+         again on a tab change while docked - cloning, not moving, so the surface can unmount and remount
+         freely. The sources are hidden in place by [data-ref-section]{display:none} (overrides.css);
+         only the clones are shown. -->
+    <!-- Views panel - question-first navigation. The one [data-ref-section] the drawer SKIPS (by its
+         #ask-panel id): its chips are the live sidebar control, not reference copy. -->
+    <details class="console-graph-views" data-ref-section id="ask-panel">
       <summary>Ask a question</summary>
       <div class="console-graph-help__body">
         <p class="console-graph-views__hint">Questions you might ask about a workspace. Click one to explore, or write your own query below.</p>
@@ -21,7 +24,7 @@
       </div>
     </details>
 
-    <details class="console-graph-help" data-legacy-ref>
+    <details class="console-graph-help" data-ref-section>
       <summary>Views</summary>
       <div class="console-graph-help__body">
       <p>Each view answers a developer question. The search box speaks the same grammar as <code>magus query</code>. Click an example to run it.</p>
@@ -38,7 +41,7 @@
       </div>
     </details>
 
-    <details class="console-graph-help" data-legacy-ref>
+    <details class="console-graph-help" data-ref-section>
       <summary>Search syntax</summary>
       <div class="console-graph-help__body">
       <p>The filter box speaks the same grammar as <code>magus query</code>. Terms combine with AND and match case-insensitively. Click an example to run it.</p>
@@ -69,7 +72,7 @@
       </div>
     </details>
 
-    <details class="console-graph-help" data-legacy-ref>
+    <details class="console-graph-help" data-ref-section>
       <summary>Layout and colors</summary>
       <div class="console-graph-help__body">
         <p class="console-graph-display__sublabel">Layout</p>
@@ -258,7 +261,7 @@
 
     <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
 
-    <details class="console-graph-help" data-legacy-ref>
+    <details class="console-graph-help" data-ref-section>
       <summary>Loading a graph by URL</summary>
       <div class="console-graph-help__body">
       <p><code>magus graph open</code> builds these links for you; the fragment (after <code>#</code>) is never sent to the server, so an inline graph stays local. The schemes are:</p>

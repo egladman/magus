@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>Glossary — magus</title>
-  <meta name="description" content="The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, and engine - each defined in one line with a pointer to the page that covers it in full.">
+  <meta name="description" content="The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, engine, and the console&#39;s own terms - each defined in one line with a pointer to the page that covers it in full.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/glossary/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="Glossary — magus">
-  <meta property="og:description" content="The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, and engine - each defined in one line with a pointer to the page that covers it in full.">
+  <meta property="og:description" content="The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, engine, and the console&#39;s own terms - each defined in one line with a pointer to the page that covers it in full.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/glossary/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -76,12 +76,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#core-model" title="Core model">Core model</a><ul><li><a href="#workspace" title="Workspace">Workspace</a></li><li><a href="#project" title="Project">Project</a></li><li><a href="#magusfile" title="Magusfile">Magusfile</a></li><li><a href="#target" title="Target">Target</a></li><li><a href="#operation" title="Operation">Operation</a></li><li><a href="#spell" title="Spell">Spell</a></li><li><a href="#charm" title="Charm">Charm</a></li><li><a href="#ward" title="Ward">Ward</a></li><li><a href="#module" title="Module">Module</a></li><li><a href="#buzz" title="Buzz">Buzz</a></li><li><a href="#engine" title="Engine">Engine</a></li></ul></li><li><a href="#execution-and-caching" title="Execution and caching">Execution and caching</a><ul><li><a href="#cache" title="Cache">Cache</a></li><li><a href="#affected" title="Affected">Affected</a></li><li><a href="#sandbox" title="Sandbox">Sandbox</a></li><li><a href="#service" title="Service">Service</a></li><li><a href="#daemon" title="Daemon">Daemon</a></li><li><a href="#ci" title="CI">CI</a></li><li><a href="#output-reference" title="Output reference">Output reference</a></li><li><a href="#trace" title="Trace">Trace</a></li><li><a href="#span" title="Span">Span</a></li><li><a href="#pool" title="Pool">Pool</a></li><li><a href="#slot" title="Slot">Slot</a></li><li><a href="#concurrency" title="Concurrency">Concurrency</a></li><li><a href="#queued" title="Queued">Queued</a></li><li><a href="#pool-mode" title="Pool mode">Pool mode</a></li><li><a href="#one-off" title="One-off">One-off</a></li><li><a href="#remote-cache" title="Remote cache">Remote cache</a></li><li><a href="#snapshot" title="Snapshot">Snapshot</a></li><li><a href="#backfill" title="Backfill">Backfill</a></li></ul></li><li><a href="#telemetry-and-health" title="Telemetry and health">Telemetry and health</a><ul><li><a href="#latency" title="Latency">Latency</a></li><li><a href="#percentile" title="Percentile">Percentile</a></li><li><a href="#health" title="Health">Health</a></li><li><a href="#volatility" title="Volatility">Volatility</a></li></ul></li><li><a href="#insight-and-knowledge" title="Insight and knowledge">Insight and knowledge</a><ul><li><a href="#knowledge-graph" title="Knowledge graph">Knowledge graph</a></li><li><a href="#insight" title="Insight">Insight</a></li><li><a href="#hotspot" title="Hotspot">Hotspot</a></li><li><a href="#affinity" title="Affinity">Affinity</a></li><li><a href="#ownership" title="Ownership">Ownership</a></li><li><a href="#trend" title="Trend">Trend</a></li><li><a href="#diagnostic-code" title="Diagnostic code">Diagnostic code</a></li></ul></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#core-model" title="Core model">Core model</a><ul><li><a href="#workspace" title="Workspace">Workspace</a></li><li><a href="#project" title="Project">Project</a></li><li><a href="#magusfile" title="Magusfile">Magusfile</a></li><li><a href="#target" title="Target">Target</a></li><li><a href="#operation" title="Operation">Operation</a></li><li><a href="#spell" title="Spell">Spell</a></li><li><a href="#charm" title="Charm">Charm</a></li><li><a href="#ward" title="Ward">Ward</a></li><li><a href="#module" title="Module">Module</a></li><li><a href="#buzz" title="Buzz">Buzz</a></li><li><a href="#engine" title="Engine">Engine</a></li></ul></li><li><a href="#execution-and-caching" title="Execution and caching">Execution and caching</a><ul><li><a href="#cache" title="Cache">Cache</a></li><li><a href="#affected" title="Affected">Affected</a></li><li><a href="#sandbox" title="Sandbox">Sandbox</a></li><li><a href="#service" title="Service">Service</a></li><li><a href="#daemon" title="Daemon">Daemon</a></li><li><a href="#ci" title="CI">CI</a></li><li><a href="#output-reference" title="Output reference">Output reference</a></li><li><a href="#trace" title="Trace">Trace</a></li><li><a href="#span" title="Span">Span</a></li><li><a href="#pool" title="Pool">Pool</a></li><li><a href="#slot" title="Slot">Slot</a></li><li><a href="#concurrency" title="Concurrency">Concurrency</a></li><li><a href="#queued" title="Queued">Queued</a></li><li><a href="#pool-mode" title="Pool mode">Pool mode</a></li><li><a href="#one-off" title="One-off">One-off</a></li><li><a href="#remote-cache" title="Remote cache">Remote cache</a></li><li><a href="#snapshot" title="Snapshot">Snapshot</a></li><li><a href="#backfill" title="Backfill">Backfill</a></li></ul></li><li><a href="#telemetry-and-health" title="Telemetry and health">Telemetry and health</a><ul><li><a href="#latency" title="Latency">Latency</a></li><li><a href="#percentile" title="Percentile">Percentile</a></li><li><a href="#health" title="Health">Health</a></li><li><a href="#volatility" title="Volatility">Volatility</a></li></ul></li><li><a href="#insight-and-knowledge" title="Insight and knowledge">Insight and knowledge</a><ul><li><a href="#knowledge-graph" title="Knowledge graph">Knowledge graph</a></li><li><a href="#insight" title="Insight">Insight</a></li><li><a href="#hotspot" title="Hotspot">Hotspot</a></li><li><a href="#affinity" title="Affinity">Affinity</a></li><li><a href="#ownership" title="Ownership">Ownership</a></li><li><a href="#trend" title="Trend">Trend</a></li><li><a href="#diagnostic-code" title="Diagnostic code">Diagnostic code</a></li></ul></li><li><a href="#console" title="Console">Console</a><ul><li><a href="#console-1" title="Console">Console</a></li><li><a href="#surface" title="Surface">Surface</a></li><li><a href="#pane" title="Pane">Pane</a></li><li><a href="#chord" title="Chord">Chord</a></li><li><a href="#command-bar" title="Command bar">Command bar</a></li><li><a href="#live-link" title="Live link">Live link</a></li></ul></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">6 min read</small>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="glossary">Glossary</h1>
 <p>The vocabulary that runs through the rest of the docs. Each entry is a short
@@ -243,6 +243,41 @@ positive delta is a rising hotspot; a negative one is cooling. See
 <p>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be
 referenced and looked up; some are guardrails (see <a href="../wards/">wards</a>), others hard
 errors.</p>
+<h2 id="console">Console</h2>
+<p>The vocabulary of the browser app. These terms name things you only meet in the
+console's UI, so they are defined here rather than left to be inferred from it.</p>
+<h3 id="console-1">Console</h3>
+<p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
+log viewer, graph explorer, dashboard, and activity trail. It is a separate
+static app, not something the daemon serves - the daemon only exposes a
+read-only loopback API it calls. See <a href="../reference/console/">reference/console</a>.</p>
+<h3 id="surface">Surface</h3>
+<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
+Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
+you navigate to: it is mounted into a tab, or into a pane beside another one.
+Each is single-instance - opening one you already have focuses it instead of
+duplicating it. See <a href="../reference/console/">reference/console</a>.</p>
+<h3 id="pane">Pane</h3>
+<p>A split within a tab. Splitting divides the focused pane along its longer side,
+so the same action tiles side-by-side on a desktop and stacks on a phone; a tab
+with no split is a single pane. Drag the divider to re-weight the split. See
+<a href="../reference/console/">reference/console</a>.</p>
+<h3 id="chord">Chord</h3>
+<p>A key combination bound to a console command, written <code>mod+k</code> - where <code>mod</code> is
+Cmd on macOS and Ctrl elsewhere, so one binding fits both. Every chord is
+rebindable (Settings &gt; Keybindings), and a command remains reachable from the
+command bar whether or not it has one. See <a href="../reference/console/">reference/console</a>.</p>
+<h3 id="command-bar">Command bar</h3>
+<p>The console's runner: one searchable list of every command and its chord,
+opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
+chords dispatch the same commands it does. See <a href="../reference/console/">reference/console</a>.</p>
+<h3 id="live-link">Live link</h3>
+<p>The URL that points a surface at a running daemon, carrying the loopback address
+and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
+console consumes the token, stores it, and strips it from the URL, so the secret
+never lingers in history or a copied link. The host must be literal loopback -
+<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+reads only what rides in the link itself. See <a href="../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../conventions/">Documentation conventions</a> - how to read the placeholders,
@@ -270,7 +305,7 @@ for magusfile authors.
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22glossary%22">glossary</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a><a class="tag" href="../search/?q=tag%3A%22terminology%22">terminology</a><a class="tag" href="../search/?q=tag%3A%22concepts%22">concepts</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22glossary%22">glossary</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a><a class="tag" href="../search/?q=tag%3A%22terminology%22">terminology</a><a class="tag" href="../search/?q=tag%3A%22concepts%22">concepts</a><a class="tag" href="../search/?q=tag%3A%22console%22">console</a></div>
     <small>Last updated <time datetime="2026-07-15T03:29:22Z">July 15, 2026, 3:29 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/109842745f294e0dae5497d5d596d20d7d338079" data-tooltip="109842745f294e0dae5497d5d596d20d7d338079" title="109842745f294e0dae5497d5d596d20d7d338079">10984274</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/bde4304001b4a1b3f0bdeded83e2a8c07416b68d"><code>bde43040</code></a> <small><time datetime="2026-07-11T13:21:06Z">Jul 11, 2026</time></small> - format five markdown files with prettier</li><li><a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92"><code>0fb66e19</code></a> <small><time datetime="2026-07-11T04:22:33Z">Jul 11, 2026</time></small> - rename the flake and flaky vocabulary to volatile</li><li><a href="https://github.com/egladman/magus/commit/716014272f69f21e855cf266e2556e714dcff3a5"><code>71601427</code></a> <small><time datetime="2026-07-11T03:44:30Z">Jul 11, 2026</time></small> - unify execution-state terminology to running and queued across</li><li><a href="https://github.com/egladman/magus/commit/4449683ba61a4c56c21a40130fa7c0adee537a1e"><code>4449683b</code></a> <small><time datetime="2026-07-11T00:42:28Z">Jul 11, 2026</time></small> - give every glossary term a stable anchor</li><li><a href="https://github.com/egladman/magus/commit/5e25b1bc7ea89210da788a72f7b89dcfd9821a84"><code>5e25b1bc</code></a> <small><time datetime="2026-07-10T16:46:36Z">Jul 10, 2026</time></small> - sync output-ref docs to `magus query output &lt;ref&gt;`</li><li><a href="https://github.com/egladman/magus/commit/f2cf6ff93ea52db3ab66d0eb5f8fe287eae0109c"><code>f2cf6ff9</code></a> <small><time datetime="2026-07-10T14:36:41Z">Jul 10, 2026</time></small> - adopt &#34;output reference&#34; plus trace and span glossary</li><li><a href="https://github.com/egladman/magus/commit/e59f5200cda35d3a094fae01ffba6687f77701be"><code>e59f5200</code></a> <small><time datetime="2026-07-10T04:19:03Z">Jul 10, 2026</time></small> - document output refs; regenerate site and catalog</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/glossary.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/glossary.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
@@ -435,6 +470,41 @@ positive delta is a rising hotspot; a negative one is cooling. See
 <p>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be
 referenced and looked up; some are guardrails (see <a href="../wards/">wards</a>), others hard
 errors.</p>
+<h2 id="console">Console</h2>
+<p>The vocabulary of the browser app. These terms name things you only meet in the
+console's UI, so they are defined here rather than left to be inferred from it.</p>
+<h3 id="console-1">Console</h3>
+<p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
+log viewer, graph explorer, dashboard, and activity trail. It is a separate
+static app, not something the daemon serves - the daemon only exposes a
+read-only loopback API it calls. See <a href="../reference/console/">reference/console</a>.</p>
+<h3 id="surface">Surface</h3>
+<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
+Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
+you navigate to: it is mounted into a tab, or into a pane beside another one.
+Each is single-instance - opening one you already have focuses it instead of
+duplicating it. See <a href="../reference/console/">reference/console</a>.</p>
+<h3 id="pane">Pane</h3>
+<p>A split within a tab. Splitting divides the focused pane along its longer side,
+so the same action tiles side-by-side on a desktop and stacks on a phone; a tab
+with no split is a single pane. Drag the divider to re-weight the split. See
+<a href="../reference/console/">reference/console</a>.</p>
+<h3 id="chord">Chord</h3>
+<p>A key combination bound to a console command, written <code>mod+k</code> - where <code>mod</code> is
+Cmd on macOS and Ctrl elsewhere, so one binding fits both. Every chord is
+rebindable (Settings &gt; Keybindings), and a command remains reachable from the
+command bar whether or not it has one. See <a href="../reference/console/">reference/console</a>.</p>
+<h3 id="command-bar">Command bar</h3>
+<p>The console's runner: one searchable list of every command and its chord,
+opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
+chords dispatch the same commands it does. See <a href="../reference/console/">reference/console</a>.</p>
+<h3 id="live-link">Live link</h3>
+<p>The URL that points a surface at a running daemon, carrying the loopback address
+and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
+console consumes the token, stores it, and strips it from the URL, so the secret
+never lingers in history or a copied link. The host must be literal loopback -
+<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+reads only what rides in the link itself. See <a href="../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../conventions/">Documentation conventions</a> - how to read the placeholders,
