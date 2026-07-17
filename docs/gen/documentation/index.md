@@ -46,7 +46,7 @@ export fun test(args: [str]) > void {}
 
 // 'ci' is the conventional anchor `magus affected ci` keys off.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(build, test);
 }
 ```
 
@@ -62,6 +62,7 @@ Start here to understand the model magus is built on.
 
 - [Workspace and projects](workspace.md) - how magus discovers projects, the magusfile layout, `depends_on`, and monorepo patterns.
 - [Targets](targets.md) - the named operations you run (`build`, `test`, `lint`), declared as exported functions in a magusfile.
+- [Dependencies](dependencies.md) - `magus.needs` versus `depends_on`, the cross-project fold between them, and how they interact with the cache and the affected set.
 - [Spells](spells.md) - language/toolchain adapters that provide tool-native operations (`go-build`, `go-test`, ...) for your targets to compose. See [Spells vs Targets](spells.md#spells-vs-targets) for where the line falls.
 - [Charms](charms.md) - execution modifiers attached with `:` (for example `lint:rw` to let a read-only target write).
 - [Operations and the work hierarchy](operations.md) - how a run is scheduled and parallelized across projects.
@@ -85,15 +86,19 @@ Once the basics click, these cover running magus at scale and in CI.
 - [MCP](mcp.md) - drive magus from agents over the Model Context Protocol.
 - [Telemetry](telemetry.md) - OpenTelemetry traces and metrics.
 
+## Coming from other tools
+
+- [Coming from Nx](from-nx.md) - a terminology map and porting sketch for teams migrating a workspace from Nx.
+
 ## Reference
 
 Generated man pages for every command:
 
-- [`magus`](manpage/gen/magus.md) - the umbrella page: global flags, environment variables, and the full subcommand list.
-- [`magus run`](manpage/gen/magus-run.md) - run a target; the everyday command.
-- [`magus affected`](manpage/gen/magus-affected.md) - run targets only for projects a change touched, with sharding and bisection for CI.
-- [`magus ls`](manpage/gen/magus-ls.md) and [`magus describe`](manpage/gen/magus-describe.md) - inspect projects, targets, and the dependency graph.
-- [`magus watch`](manpage/gen/magus-watch.md) and [`magus x`](manpage/gen/magus-x.md) - re-run on change, and the interactive target picker.
+- [`magus`](manpage/magus.md) - the umbrella page: global flags, environment variables, and the full subcommand list.
+- [`magus run`](manpage/magus-run.md) - run a target; the everyday command.
+- [`magus affected`](manpage/magus-affected.md) - run targets only for projects a change touched, with sharding and bisection for CI.
+- [`magus ls`](manpage/magus-ls.md) and [`magus describe`](manpage/magus-describe.md) - inspect projects, targets, and the dependency graph.
+- [`magus watch`](manpage/magus-watch.md) and [`magus x`](manpage/magus-x.md) - re-run on change, and the interactive target picker.
 
 The magusfile API and diagnostics:
 

@@ -15,7 +15,7 @@ Magus core primitives.
 
 ### cmd
 
-Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists — magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.
+Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.
 
 **Signature:** `magus.cmd(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L138)
 
@@ -80,7 +80,7 @@ Run `magus doctor <args>` in the target's project directory and capture its outp
 
 ### bust_cache
 
-Invalidate the build cache. Escape hatch — prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.
+Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.
 
 **Signature:** `magus.bustCache([project_path])` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L114)
 

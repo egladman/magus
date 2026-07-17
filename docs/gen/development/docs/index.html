@@ -6,14 +6,14 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
-  <title>website targets — magus</title>
-  <meta name="description" content="Target catalog and run-order graph for the website project, generated from its magusfile.">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/development/website/">
+  <title>docs targets — magus</title>
+  <meta name="description" content="Target catalog and run-order graph for the docs project, generated from its magusfile.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/development/docs/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
-  <meta property="og:title" content="website targets — magus">
-  <meta property="og:description" content="Target catalog and run-order graph for the website project, generated from its magusfile.">
-  <meta property="og:url" content="https://eli.gladman.cc/magus/development/website/">
+  <meta property="og:title" content="docs targets — magus">
+  <meta property="og:description" content="Target catalog and run-order graph for the docs project, generated from its magusfile.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/development/docs/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../public/atom/releases.atom.xml">
@@ -53,7 +53,7 @@
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
-        <li><a href="../../console/dashboard/">Console</a></li>
+        <li><a href="../../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -67,7 +67,7 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../development/">Development</a></li><li aria-current="page">website targets</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../development/">Development</a></li><li aria-current="page">docs targets</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#format" title="format">format</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-mermaid" title="build-mermaid">build-mermaid</a></li><li><a href="#build-hljs" title="build-hljs">build-hljs</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#changelog-generate" title="changelog-generate">changelog-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li></ul>
+        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -83,15 +83,48 @@
     <article>
 <h1 id="targets">Targets</h1>
 <!-- Generated by `magus describe graph -o markdown`. Do not edit by hand. -->
-<p>A <strong>target</strong> is a named operation (build, test, lint, …) declared as an <code>export fun</code> in a project's magusfile. This cheat sheet (the per-target catalog and run-order graph below) is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.</p>
+<p>Generated by <code>magus describe graph -o markdown</code> via the generate target. If the counts here look stale, trust the live tools (<code>magus query</code>) over this file.</p>
+<p>A <strong>target</strong> is a named operation (build, test, lint, …) declared as an <code>export fun</code> in a project's magusfile. This is a routing index: every target with a one-line summary, plus the commands that expand any one of them. It is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.</p>
+<h2 id="route-by-question">Route by question</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>To find out</th>
+<th>Run</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>what exists / what relates</td>
+<td><code>magus query &quot;&lt;terms&gt;&quot;</code></td>
+</tr>
+<tr>
+<td>is this file generated</td>
+<td><code>magus describe file &lt;path&gt;</code></td>
+</tr>
+<tr>
+<td>what a target runs</td>
+<td><code>magus describe target &lt;name&gt;</code></td>
+</tr>
+<tr>
+<td>what my change affected</td>
+<td><code>magus affected ci</code></td>
+</tr>
+<tr>
+<td>a failing run's output</td>
+<td><code>magus query output &lt;ref&gt;</code></td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="quick-start">Quick start</h2>
 <pre><code class="language-sh">magus run &lt;target&gt;          # from inside the project directory
 magus run &lt;target&gt; &lt;path&gt;   # from anywhere in the workspace
 magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
+<p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>530 nodes</strong> and <strong>688 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>679 nodes</strong> and <strong>1743 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -112,25 +145,31 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>project</td>
 <td style="text-align:right">1</td>
 <td><code>magus query kind:project</code></td>
-<td><code>website</code></td>
+<td><code>docs</code></td>
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">14</td>
+<td style="text-align:right">15</td>
 <td><code>magus query kind:target</code></td>
-<td><code>generate</code>, <code>ci</code>, <code>preflight</code></td>
+<td><code>content-generate</code>, <code>generate</code>, <code>ci</code></td>
 </tr>
 <tr>
 <td>spell</td>
 <td style="text-align:right">11</td>
 <td><code>magus query kind:spell</code></td>
-<td><code>go</code>, <code>py</code>, <code>rs</code></td>
+<td><code>go</code>, <code>ts</code>, <code>docker</code></td>
 </tr>
 <tr>
 <td>op</td>
-<td style="text-align:right">47</td>
+<td style="text-align:right">52</td>
 <td><code>magus query kind:op</code></td>
 <td><code>shellcheck</code>, <code>buf-breaking</code>, <code>buf-build</code></td>
+</tr>
+<tr>
+<td>tool</td>
+<td style="text-align:right">13</td>
+<td><code>magus query kind:tool</code></td>
+<td><code>sh</code>, <code>pnpm</code>, <code>go</code></td>
 </tr>
 <tr>
 <td>charm</td>
@@ -152,19 +191,25 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>diagnostic</td>
-<td style="text-align:right">26</td>
+<td style="text-align:right">29</td>
 <td><code>magus query kind:diagnostic</code></td>
-<td><code>MGS1001</code>, <code>MGS1002</code>, <code>MGS2001</code></td>
+<td><code>MGS5002</code>, <code>MGS4001</code>, <code>MGS5003</code></td>
+</tr>
+<tr>
+<td>doc</td>
+<td style="text-align:right">128</td>
+<td><code>magus query kind:doc</code></td>
+<td><code>documentation.md</code>, <code>spells.md</code>, <code>manpage/magus-affected.md</code></td>
 </tr>
 <tr>
 <td>file</td>
 <td style="text-align:right">23</td>
 <td><code>magus query kind:file</code></td>
-<td><code>scribe.buzz</code>, <code>magusfile.buzz</code>, <code>scribe_html.buzz</code></td>
+<td><code>render.buzz</code>, <code>magusfile.buzz</code>, <code>render_html.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">212</td>
+<td style="text-align:right">211</td>
 <td><code>magus query kind:function</code></td>
 <td><code>site_render</code>, <code>renderPage</code>, <code>strLess</code></td>
 </tr>
@@ -188,203 +233,83 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>.</td>
-<td style="text-align:right">14</td>
+<td style="text-align:right">15</td>
 <td><code>magus query project:.</code></td>
-<td><code>generate</code>, <code>ci</code>, <code>preflight</code></td>
+<td><code>content-generate</code>, <code>generate</code>, <code>ci</code></td>
 </tr>
 </tbody>
 </table></figure>
-<h2 id="reading-the-graphs">Reading the graphs</h2>
-<div class="mermaid-src"><pre><code class="language-mermaid">graph LR
-  subgraph legend[&quot;Legend&quot;]
-    lg_anchor(&quot;Top-level target&quot;)
-    lg_target(&quot;Target&quot;)
-    lg_ext[[&quot;Other project&quot;]]
-    lg_spell{{&quot;Spell&quot;}}
-  end
-  %% no dependency edges
-  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
-  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
-  class lg_anchor anchor
-  class lg_target target
-  class lg_ext external
-  class lg_spell spell
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<ul>
-<li>Every rounded box is a <strong>target</strong> you can <code>magus run</code>. <strong>Blue</strong> is a top-level target (nothing else depends on it — a typical entry point); <strong>gray</strong> ones are pulled in as dependencies.</li>
-<li>Arrows show <strong>run order</strong>: a target's dependencies run before it, so the graph flows left -&gt; right (e.g. <code>preflight</code> runs first, <code>ci</code> last).</li>
-<li>A dotted arrow marks a <strong>cross-project dependency</strong> (the other project's target runs first).</li>
-<li>Each project's <strong>Toolchain</strong> graph (top-down) shows which <strong>spell</strong> each target drives.</li>
-</ul>
-<h2 id="project-website">Project: website</h2>
-<details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
-<pre><code class="language-text">sources  **/*.js, **/*.json, **/*.jsx, **/*.ts, **/*.tsx, .npmrc, magusfile.buzz, magusfiles/**/*.buzz, npm-shrinkwrap.json, package-lock.json, package.json, pnpm-lock.yaml
-outputs  gen/**, MAGUS.md, src/gen/**
-spells   magusfile, ts (claims: **/*.ts, **/*.tsx, **/*.mts, **/*.cts, **/*.js, **/*.mjs, **/*.cjs, **/*.jsx, **/*.json, **/*.jsonc, **/*.md, **/*.mdx, **/*.yaml, **/*.yml, **/*.css, **/*.scss, **/*.html)
-</code></pre>
-</details>
-<p><strong>Run order</strong></p>
-<div class="mermaid-src"><pre><code class="language-mermaid">---
-config:
-  flowchart:
-    nodeSpacing: 50
-    rankSpacing: 80
----
-graph LR
-  subgraph stage_generate[&quot;generate&quot;]
-    md_generate(&quot;md-generate&quot;)
-    changelog_generate(&quot;changelog-generate&quot;)
-  end
-  subgraph entry_cluster[&quot; &quot;]
-    ci(&quot;ci&quot;)
-    build_playground(&quot;build-playground&quot;)
-    build_mermaid(&quot;build-mermaid&quot;)
-    build_hljs(&quot;build-hljs&quot;)
-    serve(&quot;serve&quot;)
-  end
-  preflight(&quot;preflight&quot;)
-  generate(&quot;generate&quot;)
-  format(&quot;format&quot;)
-  lint(&quot;lint&quot;)
-  build(&quot;build&quot;)
-  buzz_test(&quot;buzz-test&quot;)
-  test(&quot;test&quot;)
-  preflight --&gt; generate
-  stage_generate --&gt; generate
-  generate --&gt; format
-  format --&gt; lint
-  generate --&gt; build
-  format --&gt; test
-  buzz_test --&gt; test
-  generate --&gt; ci
-  lint --&gt; ci
-  build --&gt; ci
-  test --&gt; ci
-  preflight --&gt; build_playground
-  preflight --&gt; build_mermaid
-  preflight --&gt; build_hljs
-  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class build_hljs,build_mermaid,build_playground,ci,serve anchor
-  class build,buzz_test,changelog_generate,format,generate,lint,md_generate,preflight,test target
-  style entry_cluster fill:transparent,stroke:transparent
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<h3 id="generate"><code>generate</code></h3>
-<p>generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run generate  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run generate:rw  # mutate in place instead of checking
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-<li><a href="#md-generate"><code>md-generate</code></a></li>
-<li><a href="#changelog-generate"><code>changelog-generate</code></a></li>
-</ul>
-<p><strong>Details:</strong> uncached (always runs) · exclusive (runs alone, no concurrent targets)</p>
-<h3 id="format"><code>format</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run format  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-</ul>
-<h3 id="lint"><code>lint</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run lint  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="build"><code>build</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-</ul>
-<h3 id="test"><code>test</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run test  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-<li><a href="#buzz-test"><code>buzz-test</code></a></li>
-</ul>
-<h3 id="ci"><code>ci</code></h3>
-<p>'ci' is the anchor <code>magus affected ci</code> keys off.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run ci  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-<li><a href="#lint"><code>lint</code></a></li>
-<li><a href="#build"><code>build</code></a></li>
-<li><a href="#test"><code>test</code></a></li>
-</ul>
-<h3 id="build-playground"><code>build-playground</code></h3>
-<p>build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build-playground  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-</ul>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="build-mermaid"><code>build-mermaid</code></h3>
-<p>build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -&gt; mermaid@11) into the committed gen/assets/mermaid.js.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build-mermaid  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-</ul>
-<h3 id="build-hljs"><code>build-hljs</code></h3>
-<p>build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -&gt; highlight.js@11) into the committed gen/assets/hljs.js.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build-hljs  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-</ul>
-<h3 id="serve"><code>serve</code></h3>
-<p>serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change - handy for local docs work.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run serve  # from the workspace root
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="preflight"><code>preflight</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run preflight  # from the workspace root
-</code></pre>
-<h3 id="md-generate"><code>md-generate</code></h3>
-<p>md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run md-generate  # from the workspace root
-</code></pre>
-<h3 id="changelog-generate"><code>changelog-generate</code></h3>
-<p>changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run changelog-generate  # from the workspace root
-</code></pre>
-<h3 id="buzz-test"><code>buzz-test</code></h3>
-<p>buzz-test runs scribe's in-file <code>test &quot;...&quot; {}</code> blocks through <code>magus buzz</code>, in --embedded mode so scribe's markdown/encoding imports resolve.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run buzz-test  # from the workspace root
-</code></pre>
+<h2 id="project-docs">Project: docs</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>generate</code></td>
+<td>generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>'ci' is the anchor <code>magus affected ci</code> keys off.</td>
+</tr>
+<tr>
+<td><code>build-playground</code></td>
+<td>build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.</td>
+</tr>
+<tr>
+<td><code>build-mermaid</code></td>
+<td>build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -&gt; mermaid@11) into the committed gen/assets/mermaid.js.</td>
+</tr>
+<tr>
+<td><code>build-hljs</code></td>
+<td>build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -&gt; highlight.js@11) into the committed gen/assets/hljs.js.</td>
+</tr>
+<tr>
+<td><code>render</code></td>
+<td>render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate).</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>md-generate</code></td>
+<td>md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.</td>
+</tr>
+<tr>
+<td><code>changelog-generate</code></td>
+<td>changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.</td>
+</tr>
+<tr>
+<td><code>content-generate</code></td>
+<td>content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).</td>
+</tr>
+<tr>
+<td><code>buzz-test</code></td>
+<td>buzz-test runs render's in-file <code>test &quot;...&quot; {}</code> blocks through <code>magus buzz</code>, in --embedded mode so render's markdown/encoding imports resolve.</td>
+</tr>
+</tbody>
+</table></figure>
     </article>
     </div>
     </div>
@@ -449,8 +374,11 @@ one-shot target. See <a href="../../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -604,8 +532,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -639,7 +567,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
-    <small class="footer-group"><a href="../../console/dashboard/">Dashboard</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../../console/">Console</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>

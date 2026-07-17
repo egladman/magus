@@ -29,78 +29,15 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 **Command:** `docker build`
 
-### Example
-
-<!-- run-recorder -->
-```buzz
-// docker-build's base command is just `docker build`, so pass the image tag and
-// build context: `magus run image` forks `docker build -t app:latest .`.
-import "magus";
-import "magus/spell/docker";
-
-magus.project({ "spells": [docker] });
-
-export fun image(args: [str]) > void {
-    docker["docker-build"]({ "args": ["-t", "app:latest", "."] });
-}
-```
-
 ## docker-build-check
 
 **Command:** `docker build --check`
-
-### Example
-
-<!-- run-recorder -->
-```buzz
-// docker-build-check runs the builder `--check` preflight over a context without
-// producing an image; pass the build context (`.`).
-import "magus";
-import "magus/spell/docker";
-
-magus.project({ "spells": [docker] });
-
-export fun image_check(args: [str]) > void {
-    docker["docker-build-check"]({ "args": ["."] });
-}
-```
 
 ## docker-buildx
 
 **Command:** `docker buildx build`
 
-### Example
-
-<!-- run-recorder -->
-```buzz
-// docker-buildx builds with BuildKit; pass the tag and context. Add
-// "--platform", "linux/amd64,linux/arm64" to the args for a multi-platform build.
-import "magus";
-import "magus/spell/docker";
-
-magus.project({ "spells": [docker] });
-
-export fun image_buildx(args: [str]) > void {
-    docker["docker-buildx"]({ "args": ["-t", "app:latest", "."] });
-}
-```
-
 ## hadolint
 
 **Command:** `hadolint Dockerfile`
-
-### Example
-
-<!-- run-recorder -->
-```buzz
-// hadolint lints the Dockerfile for common mistakes.
-import "magus";
-import "magus/spell/docker";
-
-magus.project({ "spells": [docker] });
-
-export fun lint(args: [str]) > void {
-    docker["hadolint"]();
-}
-```
 

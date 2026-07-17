@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,34 +76,15 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#bridge" title="bridge">bridge</a></li><li><a href="#cache" title="cache">cache</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#daemon" title="daemon">daemon</a></li><li><a href="#general" title="general">general</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#hints" title="hints">hints</a></li><li><a href="#knowledge" title="knowledge">knowledge</a></li><li><a href="#log" title="log">log</a></li><li><a href="#mcp" title="mcp">mcp</a></li><li><a href="#report" title="report">report</a></li><li><a href="#sandbox" title="sandbox">sandbox</a></li><li><a href="#telemetry" title="telemetry">telemetry</a></li><li><a href="#vcs" title="vcs">vcs</a></li><li><a href="#volatility" title="volatility">volatility</a></li></ul>
+        <ul><li><a href="#cache" title="cache">cache</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#console" title="console">console</a></li><li><a href="#daemon" title="daemon">daemon</a></li><li><a href="#general" title="general">general</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#hints" title="hints">hints</a></li><li><a href="#knowledge" title="knowledge">knowledge</a></li><li><a href="#log" title="log">log</a></li><li><a href="#mcp" title="mcp">mcp</a></li><li><a href="#report" title="report">report</a></li><li><a href="#sandbox" title="sandbox">sandbox</a></li><li><a href="#telemetry" title="telemetry">telemetry</a></li><li><a href="#vcs" title="vcs">vcs</a></li><li><a href="#volatility" title="volatility">volatility</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="configuration">Configuration</h1>
 <p>magus resolves configuration from three layers, highest precedence first: a CLI flag, a <code>MAGUS_*</code> environment variable, then the <code>magus.yaml</code> file at the workspace root. This page is the complete inventory of config keys, each with its <code>magus.yaml</code> path, environment variable, CLI flag, and value type.</p>
-<h2 id="bridge">bridge</h2>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>Config key</th>
-<th>Environment variable</th>
-<th>Flag</th>
-<th>Type</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>bridge.enabled</code></td>
-<td><code>MAGUS_BRIDGE_ENABLED</code></td>
-<td><em>(env only)</em></td>
-<td>bool <em>(env only)</em></td>
-</tr>
-</tbody>
-</table></figure>
 <h2 id="cache">cache</h2>
 <figure class="table-scroll"><table>
 <thead>
@@ -172,6 +153,31 @@
 </tr>
 </tbody>
 </table></figure>
+<h2 id="console">console</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Environment variable</th>
+<th>Flag</th>
+<th>Type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>console.enabled</code></td>
+<td><code>MAGUS_CONSOLE_ENABLED</code></td>
+<td><em>(env only)</em></td>
+<td>bool <em>(env only)</em></td>
+</tr>
+<tr>
+<td><code>console.url</code></td>
+<td><code>MAGUS_CONSOLE_URL</code></td>
+<td><code>--console-url</code></td>
+<td>string</td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="daemon">daemon</h2>
 <figure class="table-scroll"><table>
 <thead>
@@ -188,6 +194,12 @@
 <td><code>MAGUS_DAEMON_ADDRESS</code></td>
 <td><code>--daemon-address</code></td>
 <td>string</td>
+</tr>
+<tr>
+<td><code>daemon.enabled</code></td>
+<td><code>MAGUS_DAEMON_ENABLED</code></td>
+<td><code>--daemon-enabled</code></td>
+<td>bool</td>
 </tr>
 <tr>
 <td><code>daemon.idle_ttl</code></td>
@@ -342,6 +354,12 @@
 <td><code>MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS</code></td>
 <td><code>--knowledge-symbol-indexing-quiet-seconds</code></td>
 <td>int</td>
+</tr>
+<tr>
+<td><code>knowledge.vcs.authorship</code></td>
+<td><code>MAGUS_KNOWLEDGE_VCS_AUTHORSHIP</code></td>
+<td><em>(env only)</em></td>
+<td>bool <em>(env only)</em></td>
 </tr>
 <tr>
 <td><code>knowledge.vcs.enabled</code></td>
@@ -591,7 +609,7 @@
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../charms/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Charms</span></a>
-      <a class="page-nav-next" href="../console/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Console</span></a>
+      <a class="page-nav-next" href="../conventions/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Documentation conventions</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -605,7 +623,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../search/?q=tag%3A%22config%22">config</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22configuration%22">configuration</a><a class="tag" href="../search/?q=tag%3A%22environment+variables%22">environment variables</a><a class="tag" href="../search/?q=tag%3A%22flags%22">flags</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a></div>
-    <small>Last updated <time datetime="2026-07-11T04:22:33Z">July 11, 2026, 4:22 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92" data-tooltip="0fb66e198d5ab94e4758c01d4ea7a590ba05bd92" title="0fb66e198d5ab94e4758c01d4ea7a590ba05bd92">0fb66e19</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018"><code>b95401fb</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li><li><a href="https://github.com/egladman/magus/commit/17da04414fea2f059ffd41b43c09929c4a6685e0"><code>17da0441</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - Merge branch &#39;main&#39; into pwa-graph-explorer</li><li><a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3"><code>c7924b64</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - regenerate MAGUS.md, manpages, config docs, and site manifests for the knowledge-graph surface; refresh the coverage badge</li><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/config.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/config.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-17T00:01:29Z">July 17, 2026, 12:01 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/6bbd98afdfcd91f5539b05db8c525a767deb96b6" data-tooltip="6bbd98afdfcd91f5539b05db8c525a767deb96b6" title="6bbd98afdfcd91f5539b05db8c525a767deb96b6">6bbd98af</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7c97d6496df5cd231d97ca6999bc79b30be0424f"><code>7c97d649</code></a> <small><time datetime="2026-07-16T04:25:32Z">Jul 16, 2026</time></small> - add knowledge.vcs.authorship toggle (default on) to include or omit the author node/edge layer</li><li><a href="https://github.com/egladman/magus/commit/a12dbee7c2b0b50faa5e204a7070d677982fbfdb"><code>a12dbee7</code></a> <small><time datetime="2026-07-15T18:03:42Z">Jul 15, 2026</time></small> - add output field discovery and a generated output-type schema, and reduce daemon/worktree friction; render -o template over the -o json shape so template field names are the json keys; make bare -o template list an output&#39;s fields; generate schema/gen/outputs.go from the types/*Output structs via a new magus-utils output subcommand; classify a differently-built daemon&#39;s refusal as not-adopted (proc.NotAdopted, carried on the error) so forwarding to it runs locally quietly instead of warning; add daemon.enabled (--daemon-enabled, MAGUS_DAEMON_ENABLED, default true) to opt an invocation out of the shared daemon while keeping per-process recursion; consolidate proc&#39;s error vocabulary into errors.go and rename version/protocol skew to mismatch and remapWireError to decodeWireError; drop hardcoded drift/mirror tests (TestOutputsNotDrifted, TestSchemaNotDrifted, and TestKnownKeys&#39;s hardcoded key list) for the generate drift gate and property checks</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92"><code>0fb66e19</code></a> <small><time datetime="2026-07-11T04:22:33Z">Jul 11, 2026</time></small> - rename the flake and flaky vocabulary to volatile</li><li><a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018"><code>b95401fb</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li><li><a href="https://github.com/egladman/magus/commit/17da04414fea2f059ffd41b43c09929c4a6685e0"><code>17da0441</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - Merge branch &#39;main&#39; into pwa-graph-explorer</li><li><a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3"><code>c7924b64</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - regenerate MAGUS.md, manpages, config docs, and site manifests for the knowledge-graph surface; refresh the coverage badge</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/config.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/config.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -667,8 +685,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -822,8 +843,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -857,7 +878,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

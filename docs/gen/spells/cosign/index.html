@@ -53,7 +53,7 @@
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
-        <li><a href="../../console/dashboard/">Console</a></li>
+        <li><a href="../../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,12 +76,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#cosign-attest" title="cosign-attest">cosign-attest</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#cosign-sign" title="cosign-sign">cosign-sign</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#cosign-verify" title="cosign-verify">cosign-verify</a><ul><li><a href="#example-2" title="Example">Example</a></li></ul></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#cosign-attest" title="cosign-attest">cosign-attest</a></li><li><a href="#cosign-sign" title="cosign-sign">cosign-sign</a></li><li><a href="#cosign-verify" title="cosign-verify">cosign-verify</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="cosign">cosign</h1>
 <p>The <code>cosign</code> spell forks the Sigstore <code>cosign</code> CLI to sign, attest, and verify artifacts. Signing and attestation pass <code>--yes</code> for non-interactive (CI) use.</p>
@@ -128,50 +128,10 @@
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="cosign-attest">cosign-attest</h2>
 <p><strong>Command:</strong> <code>cosign attest --yes</code></p>
-<h3 id="example">Example</h3>
-
-<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// cosign-attest attaches a signed attestation; pass the predicate file, its type,
-// and the image reference.
-import &quot;magus&quot;;
-import &quot;magus/spell/cosign&quot;;
-
-magus.project({ &quot;spells&quot;: [cosign] });
-
-export fun attest(args: [str]) &gt; void {
-    cosign[&quot;cosign-attest&quot;]({ &quot;args&quot;: [&quot;--predicate&quot;, &quot;sbom.json&quot;, &quot;--type&quot;, &quot;cyclonedx&quot;, &quot;app:latest&quot;] });
-}
-</code></pre>
 <h2 id="cosign-sign">cosign-sign</h2>
-<p>--yes skips the interactive transparency-log confirmation so signing/attesting runs unattended; the caller appends the target reference and flags.</p>
 <p><strong>Command:</strong> <code>cosign sign --yes</code></p>
-<h3 id="example-1">Example</h3>
-
-<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// cosign-sign signs an artifact keyless (--yes for CI); pass the image reference
-// to sign, so `magus run sign` forks `cosign sign --yes app:latest`.
-import &quot;magus&quot;;
-import &quot;magus/spell/cosign&quot;;
-
-magus.project({ &quot;spells&quot;: [cosign] });
-
-export fun sign(args: [str]) &gt; void {
-    cosign[&quot;cosign-sign&quot;]({ &quot;args&quot;: [&quot;app:latest&quot;] });
-}
-</code></pre>
 <h2 id="cosign-verify">cosign-verify</h2>
 <p><strong>Command:</strong> <code>cosign verify</code></p>
-<h3 id="example-2">Example</h3>
-
-<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// cosign-verify checks an image's signature; pass the image reference (add
-// --certificate-identity / --certificate-oidc-issuer for keyless verification).
-import &quot;magus&quot;;
-import &quot;magus/spell/cosign&quot;;
-
-magus.project({ &quot;spells&quot;: [cosign] });
-
-export fun verify(args: [str]) &gt; void {
-    cosign[&quot;cosign-verify&quot;]({ &quot;args&quot;: [&quot;app:latest&quot;] });
-}
-</code></pre>
     </article>
     </div>
     </div>
@@ -191,7 +151,7 @@ export fun verify(args: [str]) &gt; void {
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cosign%22">cosign</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22sigstore%22">sigstore</a><a class="tag" href="../../search/?q=tag%3A%22signing%22">signing</a><a class="tag" href="../../search/?q=tag%3A%22supply-chain%22">supply-chain</a><a class="tag" href="../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-03T13:14:39Z">July 3, 2026, 1:14 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2" data-tooltip="3aebfbb216c4726a88921d2db2180609da7b3ca2" title="3aebfbb216c4726a88921d2db2180609da7b3ca2">3aebfbb2</a>)</small>
+    <small>Last updated <time datetime="2026-07-14T13:35:53Z">July 14, 2026, 1:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de" data-tooltip="5e827efbc37c66ec5dc18cd27076fc5208b052de" title="5e827efbc37c66ec5dc18cd27076fc5208b052de">5e827efb</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/spells/cosign.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/spells/cosign.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -253,8 +213,11 @@ one-shot target. See <a href="../../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -408,8 +371,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -443,7 +406,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
-    <small class="footer-group"><a href="../../console/dashboard/">Dashboard</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../../console/">Console</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>

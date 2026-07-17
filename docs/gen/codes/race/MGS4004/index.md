@@ -21,7 +21,7 @@ today because of accidental ordering, but a future parallelism increase or
 scheduling reorder could expose a real race.
 
 ```text
-[MGS4004] potential undeclared dependency (see …/MGS4004.md)
+[MGS4004] potential undeclared dependency (see .../MGS4004.md)
   consumer=worker producer=api path=api/dist/schema.json target=build
 ```
 

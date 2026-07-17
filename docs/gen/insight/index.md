@@ -9,7 +9,7 @@ tags: [insight, vcs, history, hotspots, coupling, ownership, churn, analysis]
 `magus insight <lens>` reads version-control history to show where a codebase's
 attention and risk actually concentrate. Static structure tells you how the code is
 organized; history tells you how it is _used_ - which files churn, which projects
-change together, who owns what. The [man page](manpage/gen/magus-insight.md) lists
+change together, who owns what. The [man page](manpage/magus-insight.md) lists
 the flags; this page is the intent.
 
 ## Design intent
@@ -40,7 +40,7 @@ The first argument selects a lens:
 - **trend** - the recent half of the window against the earlier half. A positive
   delta is a rising hotspot; a negative one is cooling.
 - **report** - every lens, plus the knowledge graph's shape from
-  [`magus graph stats`](manpage/gen/magus-graph.md), as one whole-workspace
+  [`magus graph stats`](manpage/magus-graph.md), as one whole-workspace
   Markdown document. The magusfile's postflight target writes it to the GitHub
   Actions step summary.
 

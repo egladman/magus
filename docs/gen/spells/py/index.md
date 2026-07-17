@@ -48,23 +48,6 @@ Appends `-v`.
 
 </details>
 
-### Example
-
-<!-- run-recorder -->
-```buzz
-// pytest runs the suite via `uv run`; here filtered to tests matching a keyword,
-// so `magus run test` forks `uv run pytest -k integration`. The debug charm
-// (`magus run test:debug`) adds -v.
-import "magus";
-import "magus/spell/py";
-
-magus.project({ "spells": [py] });
-
-export fun test(args: [str]) > void {
-    py["pytest"]({ "args": ["-k", "integration"] });
-}
-```
-
 ## ruff-check
 
 **Command:** `uv run ruff check .`
@@ -126,21 +109,6 @@ Inserts `--fix`.
 
 </details>
 
-### Example
-
-<!-- run-recorder -->
-```buzz
-// ruff-check lints via uv run ruff; the rw charm autofixes, gha annotates in CI.
-import "magus";
-import "magus/spell/py";
-
-magus.project({ "spells": [py] });
-
-export fun lint(args: [str]) > void {
-    py["ruff-check"]();
-}
-```
-
 ## ruff-format
 
 **Command:** `uv run ruff format --check .`
@@ -163,64 +131,15 @@ Drops `--check`.
 
 </details>
 
-### Example
-
-<!-- run-recorder -->
-```buzz
-// ruff-format checks formatting; the rw charm (magus run format:rw) rewrites in place.
-import "magus";
-import "magus/spell/py";
-
-magus.project({ "spells": [py] });
-
-export fun format(args: [str]) > void {
-    py["ruff-format"]();
-}
-```
-
 ## scip
-
-scip is the reserved op that runs the Python SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-python writes there via --output. Run through sh so the env var expands.
 
 **Command:** `sh -c scip-python index . --output "$MAGUS_SYMBOL_INDEX"`
 
 ## uv-build
 
-build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs, so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.
-
 **Command:** `uv build`
-
-### Example
-
-<!-- run-recorder -->
-```buzz
-// Wire uv-build into a build target: magus run build forks uv build.
-import "magus";
-import "magus/spell/py";
-
-magus.project({ "spells": [py] });
-
-export fun build(args: [str]) > void {
-    py["uv-build"]();
-}
-```
 
 ## uv-clean
 
 **Command:** `uv clean`
-
-### Example
-
-<!-- run-recorder -->
-```buzz
-// Wire uv-clean into a clean target: magus run clean forks uv clean.
-import "magus";
-import "magus/spell/py";
-
-magus.project({ "spells": [py] });
-
-export fun clean(args: [str]) > void {
-    py["uv-clean"]();
-}
-```
 

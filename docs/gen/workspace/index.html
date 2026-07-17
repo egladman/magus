@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -81,9 +81,9 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">9 min read</small>
+    <small class="reading-time" title="Estimated reading time">10 min read</small>
     <article>
-<h1 id="anatomy-of-a-magus-workspace">Anatomy of a magus Workspace</h1>
+<h1 id="workspace-and-projects">Workspace and projects</h1>
 <p>A <strong>workspace</strong> is the whole tree magus operates on: a single root directory, its <code>magus.yaml</code>, and the set of projects discovered beneath it. A <strong>project</strong> is one directory inside that tree whose presence of a magusfile registers it, together with the targets it declares. Every target you run (see <a href="../targets/">targets</a>) is addressed by a project <code>Path</code> plus an operation <code>Name</code>; the workspace is the space those paths live in.</p>
 <p>The split is deliberate. The workspace is the unit of <em>discovery, caching, and affected-set computation</em> - it is opened once and shared. A project is the unit of <em>work</em> - it owns a magusfile, binds spells, and declares its dependencies. magus never operates outside the one workspace it discovered.</p>
 <h2 id="design-intent">Design intent</h2>
@@ -153,7 +153,7 @@ export fun test(args: [str]) &gt; void {}
 
 // 'ci' is the conventional anchor `magus affected ci` keys off.
 export fun ci(args: [str]) &gt; void {
-    magus.needs(magus.target.literal(&quot;build&quot;), magus.target.literal(&quot;test&quot;));
+    magus.needs(build, test);
 }
 </code></pre>
 <h3 id="magusproject-layering-policy"><code>magus.project({...})</code>: layering policy</h3>
@@ -179,6 +179,10 @@ export fun ci(args: [str]) &gt; void {
 <td>declares the project-relative file globs this project produces</td>
 </tr>
 <tr>
+<td><code>sources</code></td>
+<td>declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads)</td>
+</tr>
+<tr>
 <td><code>exclusive</code></td>
 <td>marks the project as must-not-run-alongside-peers in a batch</td>
 </tr>
@@ -192,6 +196,10 @@ export fun ci(args: [str]) &gt; void {
 </tr>
 </tbody>
 </table></figure>
+<p>Unknown keys in either map (a typo like <code>depend_on</code>, or a per-target policy key
+other than <code>skip_cache</code>/<code>exclusive</code>/<code>slots</code>) are a magusfile load error, not a
+silently dropped option - the error names the offending key and suggests the
+nearest known one.</p>
 <p>The <code>targets</code> sub-map keys a target name to a policy table:</p>
 <figure class="table-scroll"><table>
 <thead>
@@ -202,7 +210,7 @@ export fun ci(args: [str]) &gt; void {
 </thead>
 <tbody>
 <tr>
-<td><code>skipCache</code></td>
+<td><code>skip_cache</code></td>
 <td>opts the target out of the cache; magus always runs it and never replays it</td>
 </tr>
 <tr>
@@ -222,7 +230,7 @@ export fun ci(args: [str]) &gt; void {
     &quot;watch_ignore&quot;: { &quot;glob&quot;: [&quot;**/*.snap&quot;] },
     &quot;targets&quot;: {
         &quot;test&quot;: { &quot;slots&quot;: 4 },
-        &quot;build&quot;: { &quot;skipCache&quot;: true },
+        &quot;build&quot;: { &quot;skip_cache&quot;: true },
     },
 });
 </code></pre>
@@ -334,6 +342,7 @@ magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] })
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../targets/">targets</a>: the addressable unit of work, project-path resolution, and the CLI grammar.</li>
+<li><a href="../dependencies/">dependencies</a>: <code>depends_on</code> versus <code>magus.needs</code>, the fold between them, and how they feed the cache and the affected set.</li>
 <li><a href="../operations/">operations</a>: the Spell to Operation to Target hierarchy and where affected computation sits.</li>
 <li><a href="../spells/">spells</a>: the tool libraries a project binds and composes into targets.</li>
 <li><a href="../cache/">cache</a>: the content-addressed cache key, including the <code>dep:</code> lines that propagate cross-project changes.</li>
@@ -357,7 +366,7 @@ magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] })
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22workspace%22">workspace</a><a class="tag" href="../search/?q=tag%3A%22projects%22">projects</a><a class="tag" href="../search/?q=tag%3A%22discovery%22">discovery</a><a class="tag" href="../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../search/?q=tag%3A%22depends-on%22">depends-on</a><a class="tag" href="../search/?q=tag%3A%22monorepo%22">monorepo</a></div>
-    <small>Last updated <time datetime="2026-07-08T00:31:16Z">July 8, 2026, 12:31 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8" data-tooltip="75524b9605fe902c79b478e4a7cad1ffceb74ac8" title="75524b9605fe902c79b478e4a7cad1ffceb74ac8">75524b96</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a5c858b3c9c1fcc6dd38eabe930a792a3efbd845"><code>a5c858b3</code></a> <small><time datetime="2026-07-07T15:40:59Z">Jul 7, 2026</time></small> - add the spell authoring kit (magus init spell scaffold, buzz -t test harness, buzz lsp stdio language server); resolve spell imports root-wins up the project tree with a shadow ward (MGS1002, per-shadow acknowledgment with required reason); surface previously-silent diagnostics (charm-apply MGS6001, has_charm typos, zero-op bound spells, unknown-project did-you-mean); add describe target --explain charm traces; add cache/sandbox/workspace/getting-started/editor concept docs; rename finishConstruction to load</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/workspace.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/workspace.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-16T04:52:34Z">July 16, 2026, 4:52 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433" data-tooltip="2f02f9d747507eb280fce3393074953ffb06d433" title="2f02f9d747507eb280fce3393074953ffb06d433">2f02f9d7</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (6)</summary><ul><li><a href="https://github.com/egladman/magus/commit/f1a0709330b3da935e0b763359c35a99d89900d1"><code>f1a07093</code></a> <small><time datetime="2026-07-15T23:53:15Z">Jul 15, 2026</time></small> - give the docs plain page titles: drop the &#34;Anatomy of a magus X&#34; framing (charms, targets, spells, workspace) and the descriptive H1 subtitles (cache, sandbox, engines, mcp, operations) so each page&#39;s H1 is just its basic technical name, matching its frontmatter title</li><li><a href="https://github.com/egladman/magus/commit/956d1d0658d84b87c71d2e36c46ef5c8c56c676c"><code>956d1d06</code></a> <small><time datetime="2026-07-15T03:39:56Z">Jul 15, 2026</time></small> - add docs/dependencies.md: the needs vs depends_on model, end to end</li><li><a href="https://github.com/egladman/magus/commit/20896a133b7e5e639bc8507de6fcbc2f7207288d"><code>20896a13</code></a> <small><time datetime="2026-07-15T02:37:36Z">Jul 15, 2026</time></small> - rename skipCache to skip_cache; no legacy alias</li><li><a href="https://github.com/egladman/magus/commit/8561ca5b4efde6f0df96a33e117ba959f574334f"><code>8561ca5b</code></a> <small><time datetime="2026-07-15T01:29:46Z">Jul 15, 2026</time></small> - reject unknown keys and bad values in magus.project options</li><li><a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8"><code>75524b96</code></a> <small><time datetime="2026-07-08T00:31:16Z">Jul 8, 2026</time></small> - reformat hand-written docs under prettier 3.9.4, the version mise.toml already pins; the committed bytes had drifted from whatever prettier last touched them, de-indenting wrapped list continuations and padding table columns</li><li><a href="https://github.com/egladman/magus/commit/a5c858b3c9c1fcc6dd38eabe930a792a3efbd845"><code>a5c858b3</code></a> <small><time datetime="2026-07-07T15:40:59Z">Jul 7, 2026</time></small> - add the spell authoring kit (magus init spell scaffold, buzz -t test harness, buzz lsp stdio language server); resolve spell imports root-wins up the project tree with a shadow ward (MGS1002, per-shadow acknowledgment with required reason); surface previously-silent diagnostics (charm-apply MGS6001, has_charm typos, zero-op bound spells, unknown-project did-you-mean); add describe target --explain charm traces; add cache/sandbox/workspace/getting-started/editor concept docs; rename finishConstruction to load</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/workspace.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/workspace.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -419,8 +428,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -574,8 +586,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -609,7 +621,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

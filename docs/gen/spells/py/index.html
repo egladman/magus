@@ -53,7 +53,7 @@
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
-        <li><a href="../../console/dashboard/">Console</a></li>
+        <li><a href="../../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,12 +76,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#pytest" title="pytest">pytest</a><ul><li><a href="#debug" title="debug">debug</a></li><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#ruff-check" title="ruff-check">ruff-check</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#gha" title="gha">gha</a></li><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#ruff-format" title="ruff-format">ruff-format</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li><li><a href="#uv-build" title="uv-build">uv-build</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#uv-clean" title="uv-clean">uv-clean</a><ul><li><a href="#example-4" title="Example">Example</a></li></ul></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#pytest" title="pytest">pytest</a><ul><li><a href="#debug" title="debug">debug</a></li></ul></li><li><a href="#ruff-check" title="ruff-check">ruff-check</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#gha" title="gha">gha</a></li><li><a href="#rw" title="rw">rw</a></li></ul></li><li><a href="#ruff-format" title="ruff-format">ruff-format</a><ul><li><a href="#rw-1" title="rw">rw</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li><li><a href="#uv-build" title="uv-build">uv-build</a></li><li><a href="#uv-clean" title="uv-clean">uv-clean</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="py">py</h1>
 <p>The <code>py</code> spell wires a Python project's tooling into a magusfile through <code>uv</code>. Tests, linting (ruff), and formatting run as <code>uv run</code> subcommands so they resolve from the project's locked environment.</p>
@@ -141,20 +141,6 @@
 ]
 </code></pre>
 </details>
-<h3 id="example">Example</h3>
-
-<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// pytest runs the suite via `uv run`; here filtered to tests matching a keyword,
-// so `magus run test` forks `uv run pytest -k integration`. The debug charm
-// (`magus run test:debug`) adds -v.
-import &quot;magus&quot;;
-import &quot;magus/spell/py&quot;;
-
-magus.project({ &quot;spells&quot;: [py] });
-
-export fun test(args: [str]) &gt; void {
-    py[&quot;pytest&quot;]({ &quot;args&quot;: [&quot;-k&quot;, &quot;integration&quot;] });
-}
-</code></pre>
 <h2 id="ruff-check">ruff-check</h2>
 <p><strong>Command:</strong> <code>uv run ruff check .</code></p>
 <h3 id="debug-1">debug</h3>
@@ -196,18 +182,6 @@ export fun test(args: [str]) &gt; void {
 ]
 </code></pre>
 </details>
-<h3 id="example-1">Example</h3>
-
-<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// ruff-check lints via uv run ruff; the rw charm autofixes, gha annotates in CI.
-import &quot;magus&quot;;
-import &quot;magus/spell/py&quot;;
-
-magus.project({ &quot;spells&quot;: [py] });
-
-export fun lint(args: [str]) &gt; void {
-    py[&quot;ruff-check&quot;]();
-}
-</code></pre>
 <h2 id="ruff-format">ruff-format</h2>
 <p><strong>Command:</strong> <code>uv run ruff format --check .</code></p>
 <h3 id="rw-1">rw</h3>
@@ -222,50 +196,12 @@ export fun lint(args: [str]) &gt; void {
 ]
 </code></pre>
 </details>
-<h3 id="example-2">Example</h3>
-
-<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// ruff-format checks formatting; the rw charm (magus run format:rw) rewrites in place.
-import &quot;magus&quot;;
-import &quot;magus/spell/py&quot;;
-
-magus.project({ &quot;spells&quot;: [py] });
-
-export fun format(args: [str]) &gt; void {
-    py[&quot;ruff-format&quot;]();
-}
-</code></pre>
 <h2 id="scip">scip</h2>
-<p>scip is the reserved op that runs the Python SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-python writes there via --output. Run through sh so the env var expands.</p>
 <p><strong>Command:</strong> <code>sh -c scip-python index . --output &quot;$MAGUS_SYMBOL_INDEX&quot;</code></p>
 <h2 id="uv-build">uv-build</h2>
-<p>build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs, so they are named after the tool (pytest, ruff-check), not the <code>uv run</code> wrapper.</p>
 <p><strong>Command:</strong> <code>uv build</code></p>
-<h3 id="example-3">Example</h3>
-
-<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// Wire uv-build into a build target: magus run build forks uv build.
-import &quot;magus&quot;;
-import &quot;magus/spell/py&quot;;
-
-magus.project({ &quot;spells&quot;: [py] });
-
-export fun build(args: [str]) &gt; void {
-    py[&quot;uv-build&quot;]();
-}
-</code></pre>
 <h2 id="uv-clean">uv-clean</h2>
 <p><strong>Command:</strong> <code>uv clean</code></p>
-<h3 id="example-4">Example</h3>
-
-<pre data-runnable="true" data-recorder="true"><code class="language-buzz">// Wire uv-clean into a clean target: magus run clean forks uv clean.
-import &quot;magus&quot;;
-import &quot;magus/spell/py&quot;;
-
-magus.project({ &quot;spells&quot;: [py] });
-
-export fun clean(args: [str]) &gt; void {
-    py[&quot;uv-clean&quot;]();
-}
-</code></pre>
     </article>
     </div>
     </div>
@@ -285,7 +221,7 @@ export fun clean(args: [str]) &gt; void {
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22py%22">py</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22python%22">python</a><a class="tag" href="../../search/?q=tag%3A%22uv%22">uv</a><a class="tag" href="../../search/?q=tag%3A%22pytest%22">pytest</a><a class="tag" href="../../search/?q=tag%3A%22ruff%22">ruff</a><a class="tag" href="../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-03T13:14:39Z">July 3, 2026, 1:14 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2" data-tooltip="3aebfbb216c4726a88921d2db2180609da7b3ca2" title="3aebfbb216c4726a88921d2db2180609da7b3ca2">3aebfbb2</a>)</small>
+    <small>Last updated <time datetime="2026-07-14T13:35:53Z">July 14, 2026, 1:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de" data-tooltip="5e827efbc37c66ec5dc18cd27076fc5208b052de" title="5e827efbc37c66ec5dc18cd27076fc5208b052de">5e827efb</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/spells/py.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/spells/py.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -347,8 +283,11 @@ one-shot target. See <a href="../../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -502,8 +441,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -537,7 +476,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
-    <small class="footer-group"><a href="../../console/dashboard/">Dashboard</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../../console/">Console</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>

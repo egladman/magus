@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,7 +76,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#what-is-the-difference-between-a-spell-a-target-and-a-charm" title="What is the difference between a spell, a target, and a charm?">What is the difference between a spell, a target, and a charm?</a></li><li><a href="#why-is-my-format-run-read-only-how-do-i-make-it-write" title="Why is my format run read-only? How do I make it write?">Why is my format run read-only? How do I make it write?</a></li><li><a href="#how-does-magus-decide-whether-to-rerun-a-target-or-use-the-cache" title="How does magus decide whether to rerun a target or use the cache?">How does magus decide whether to rerun a target or use the cache?</a></li><li><a href="#how-do-i-build-only-what-changed" title="How do I build only what changed?">How do I build only what changed?</a></li><li><a href="#do-i-have-to-run-the-daemon" title="Do I have to run the daemon?">Do I have to run the daemon?</a></li><li><a href="#how-do-i-add-support-for-a-tool-magus-does-not-know" title="How do I add support for a tool magus does not know?">How do I add support for a tool magus does not know?</a></li><li><a href="#why-did-two-charms-give-me-a-warning-about-one-being-overridden" title="Why did two charms give me a warning about one being &quot;overridden&quot;?">Why did two charms give me a warning about one being &quot;overridden&quot;?</a></li><li><a href="#can-i-run-a-single-spell-operation-directly-bypassing-targets" title="Can I run a single spell operation directly, bypassing targets?">Can I run a single spell operation directly, bypassing targets?</a></li><li><a href="#is-my-telemetry-or-cache-sent-anywhere" title="Is my telemetry or cache sent anywhere?">Is my telemetry or cache sent anywhere?</a></li><li><a href="#how-do-i-see-what-a-target-will-actually-run-before-running-it" title="How do I see what a target will actually run before running it?">How do I see what a target will actually run before running it?</a></li><li><a href="#where-do-i-configure-magus" title="Where do I configure magus?">Where do I configure magus?</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#what-is-the-difference-between-a-spell-a-target-and-a-charm" title="What is the difference between a spell, a target, and a charm?">What is the difference between a spell, a target, and a charm?</a></li><li><a href="#why-did-magus-run-gobuild-work-when-my-target-is-go-build" title="Why did magus run goBuild work when my target is go_build?">Why did magus run goBuild work when my target is go_build?</a></li><li><a href="#why-is-my-format-run-read-only-how-do-i-make-it-write" title="Why is my format run read-only? How do I make it write?">Why is my format run read-only? How do I make it write?</a></li><li><a href="#how-does-magus-decide-whether-to-rerun-a-target-or-use-the-cache" title="How does magus decide whether to rerun a target or use the cache?">How does magus decide whether to rerun a target or use the cache?</a></li><li><a href="#how-do-i-build-only-what-changed" title="How do I build only what changed?">How do I build only what changed?</a></li><li><a href="#do-i-have-to-run-the-daemon" title="Do I have to run the daemon?">Do I have to run the daemon?</a></li><li><a href="#how-do-i-add-support-for-a-tool-magus-does-not-know" title="How do I add support for a tool magus does not know?">How do I add support for a tool magus does not know?</a></li><li><a href="#why-did-two-charms-give-me-a-warning-about-one-being-overridden" title="Why did two charms give me a warning about one being &quot;overridden&quot;?">Why did two charms give me a warning about one being &quot;overridden&quot;?</a></li><li><a href="#can-i-run-a-single-spell-operation-directly-bypassing-targets" title="Can I run a single spell operation directly, bypassing targets?">Can I run a single spell operation directly, bypassing targets?</a></li><li><a href="#is-my-telemetry-or-cache-sent-anywhere" title="Is my telemetry or cache sent anywhere?">Is my telemetry or cache sent anywhere?</a></li><li><a href="#how-do-i-see-what-a-target-will-actually-run-before-running-it" title="How do I see what a target will actually run before running it?">How do I see what a target will actually run before running it?</a></li><li><a href="#where-do-i-configure-magus" title="Where do I configure magus?">Where do I configure magus?</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -92,6 +92,15 @@
 which target (<code>rw</code> to write in place, <code>gha</code> for GitHub Actions output). Target =
 what, spell = how, charm = in what manner. See <a href="../targets/">targets</a>,
 <a href="../spells/">spells</a>, <a href="../charms/">charms</a>.</p>
+<h2 id="why-did-magus-run-gobuild-work-when-my-target-is-go-build">Why did <code>magus run goBuild</code> work when my target is <code>go_build</code>?</h2>
+<p>magus normalizes every target name to canonical kebab-case on both sides: when
+a magusfile declares a target and when you reference one, whether on the CLI,
+in a <code>magus.needs</code> literal, or in a per-target policy key. <code>go_build</code>,
+<code>goBuild</code>, and <code>go-build</code> all normalize to the same registered target, so any
+spelling reaches it - there is exactly one target, not a table of aliases.
+This does not apply to a spell op after <code>::</code> (<code>go::golangci-lint</code> matches
+verbatim) or to a Buzz map subscript like <code>ts[&quot;tsc&quot;]</code>. See
+<a href="../targets/#name-normalization-casing--delimiters">targets</a>.</p>
 <h2 id="why-is-my-format-run-read-only-how-do-i-make-it-write">Why is my <code>format</code> run read-only? How do I make it write?</h2>
 <p>Every run is read-only by default, so a check never surprises you by rewriting
 files. Ask for writes with the <code>rw</code> charm: <code>magus run format:rw</code>. There is no
@@ -146,7 +155,7 @@ configuration; every key is documented in the <a href="../config/">config refere
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../engines/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Engines</span></a>
-      <a class="page-nav-next" href="../getting-started/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Getting started</span></a>
+      <a class="page-nav-next" href="../from-nx/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Coming from Nx</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -160,7 +169,7 @@ configuration; every key is documented in the <a href="../config/">config refere
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22faq%22">faq</a><a class="tag" href="../search/?q=tag%3A%22questions%22">questions</a><a class="tag" href="../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../search/?q=tag%3A%22charms%22">charms</a><a class="tag" href="../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../search/?q=tag%3A%22daemon%22">daemon</a></div>
-    <small>Last updated <time datetime="2026-07-08T00:31:16Z">July 8, 2026, 12:31 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8" data-tooltip="75524b9605fe902c79b478e4a7cad1ffceb74ac8" title="75524b9605fe902c79b478e4a7cad1ffceb74ac8">75524b96</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/d639fb8ffb26f9a231ce14739f9948c94b1e4f50"><code>d639fb8f</code></a> <small><time datetime="2026-07-07T19:04:22Z">Jul 7, 2026</time></small> - add a FAQ answering the questions that come up first: spell vs target vs charm, read-only runs, the cache, affected, the daemon, adding a tool</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/faq.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/faq.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-15T03:32:14Z">July 15, 2026, 3:32 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/84c261008aa7bcad485d57357f767b80c2df1512" data-tooltip="84c261008aa7bcad485d57357f767b80c2df1512" title="84c261008aa7bcad485d57357f767b80c2df1512">84c26100</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8"><code>75524b96</code></a> <small><time datetime="2026-07-08T00:31:16Z">Jul 8, 2026</time></small> - reformat hand-written docs under prettier 3.9.4, the version mise.toml already pins; the committed bytes had drifted from whatever prettier last touched them, de-indenting wrapped list continuations and padding table columns</li><li><a href="https://github.com/egladman/magus/commit/d639fb8ffb26f9a231ce14739f9948c94b1e4f50"><code>d639fb8f</code></a> <small><time datetime="2026-07-07T19:04:22Z">Jul 7, 2026</time></small> - add a FAQ answering the questions that come up first: spell vs target vs charm, read-only runs, the cache, affected, the daemon, adding a tool</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/faq.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/faq.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -222,8 +231,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -377,8 +389,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -412,7 +424,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

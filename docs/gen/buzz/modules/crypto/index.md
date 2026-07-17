@@ -63,7 +63,7 @@ Return the lowercase hex SHA-512 digest of the file at path.
 
 ### sha1_hex
 
-Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.
+Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.
 
 **Signature:** `crypto.sha1Hex(data) → string`[^buzz-stdlib-crypto-sha1_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L141)
 
@@ -75,7 +75,7 @@ Return the lowercase hex SHA-1 digest of data. For interop with legacy/git check
 
 ### sha1_file
 
-Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only — SHA-1 is not collision-resistant; use sha256 for anything security-relevant.
+Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.
 
 **Signature:** `crypto.sha1File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L146)
 
@@ -87,7 +87,7 @@ Return the lowercase hex SHA-1 digest of the file at path. For interop with lega
 
 ### md5_hex
 
-Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.
+Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.
 
 **Signature:** `crypto.md5Hex(data) → string`[^buzz-stdlib-crypto-md5_hex] · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L151)
 
@@ -99,7 +99,7 @@ Return the lowercase hex MD5 digest of data. For interop with legacy checksum ma
 
 ### md5_file
 
-Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only — MD5 is broken; use sha256 for anything security-relevant.
+Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.
 
 **Signature:** `crypto.md5File(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L156)
 

@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,14 +76,14 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-struct" title="The struct">The struct</a></li><li><a href="#cli-grammar" title="CLI grammar">CLI grammar</a></li><li><a href="#path-resolution-on-the-cli" title="Path resolution on the CLI">Path resolution on the CLI</a><ul><li><a href="#symlinks" title="Symlinks">Symlinks</a></li></ul></li><li><a href="#the-target-name" title="The target name">The target name</a><ul><li><a href="#name-normalization-casing--delimiters" title="Name normalization (casing &amp; delimiters)">Name normalization (casing &amp; delimiters)</a></li></ul></li><li><a href="#cli-extension-spell-qualified-targets" title="CLI extension: spell-qualified targets">CLI extension: spell-qualified targets</a></li><li><a href="#what-is-not-part-of-a-targets-identity" title="What is not part of a Target's identity">What is not part of a Target's identity</a></li><li><a href="#lifecycle-parse--expand--run" title="Lifecycle: parse → expand → run">Lifecycle: parse → expand → run</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#the-struct" title="The struct">The struct</a></li><li><a href="#cli-grammar" title="CLI grammar">CLI grammar</a></li><li><a href="#path-resolution-on-the-cli" title="Path resolution on the CLI">Path resolution on the CLI</a><ul><li><a href="#symlinks" title="Symlinks">Symlinks</a></li></ul></li><li><a href="#the-target-name" title="The target name">The target name</a><ul><li><a href="#when-does-a-name-earn-canonical-status" title="When does a name earn canonical status?">When does a name earn canonical status?</a></li></ul></li><li><a href="#name-normalization-casing--delimiters" title="Name normalization (casing &amp; delimiters)">Name normalization (casing &amp; delimiters)</a><ul><li><a href="#the-contract" title="The contract">The contract</a></li><li><a href="#where-it-applies" title="Where it applies">Where it applies</a></li><li><a href="#where-it-deliberately-does-not-apply" title="Where it deliberately does not apply">Where it deliberately does not apply</a></li><li><a href="#worked-example" title="Worked example">Worked example</a></li></ul></li><li><a href="#cli-extension-spell-qualified-targets" title="CLI extension: spell-qualified targets">CLI extension: spell-qualified targets</a></li><li><a href="#what-is-not-part-of-a-targets-identity" title="What is not part of a Target's identity">What is not part of a Target's identity</a></li><li><a href="#lifecycle-parse--expand--run" title="Lifecycle: parse → expand → run">Lifecycle: parse → expand → run</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">8 min read</small>
+    <small class="reading-time" title="Estimated reading time">11 min read</small>
     <article>
-<h1 id="anatomy-of-a-magus-target">Anatomy of a magus Target</h1>
+<h1 id="targets">Targets</h1>
 <p>A <strong>Target</strong> is the addressable unit of work in magus: <em>what project</em> (Path) and <em>what operation</em> (Name). Everything else (shards, spell filters, charms) is configuration layered on top, not part of the Target's identity.</p>
 <p>A target is <em>what</em> you run (<code>magus run lint</code>); a spell is <em>how</em> a tool does it. See <a href="../spells/#spells-vs-targets">Spells vs Targets</a>.</p>
 <h2 id="the-struct">The struct</h2>
@@ -224,7 +224,7 @@
 <li><strong>Workspace-escaping symlinks are a hard error.</strong> <code>magus doctor</code> fails if it finds a symlink whose resolved target lands outside the workspace root. On platforms without landlock (macOS, Windows, kernels &lt; 5.13) such a link is the only path by which a spell subprocess could reach outside the tree, so it is treated as a <code>fail</code>, not a warning.</li>
 </ul>
 <h2 id="the-target-name">The target name</h2>
-<p>A target name is one of the seven canonical operations. The type is <code>project.Target</code> (a <code>string</code> alias).</p>
+<p>A target name is typically one of the seven canonical operations (see below); custom names are allowed for work with no canonical home. The type is <code>project.Target</code> (a <code>string</code> alias).</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -263,21 +263,121 @@
 </tr>
 </tbody>
 </table></figure>
-<p>There is also <code>ci</code>: a composite pipeline (preflight → generate → format → lint → build → test) handled specially by <code>Magus.RunCI</code>. It is not in the <code>project.Targets</code> list and is not a valid name for <code>ParseTarget</code>.</p>
+<p>There is also <code>ci</code>: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with <code>magus.needs</code>. <code>Magus.RunCI</code> treats it specially in exactly three ways: it strips the <code>rw</code> charm (ci always runs read-only), it is the anchor <code>magus affected ci</code> and <code>magus affected --plan</code> key off, and it must not silently no-op - a selected scope with no project declaring <code>ci</code> is a load error (see <a href="../dependencies/">dependencies</a>), not a quiet success.</p>
 <p>Tool operations compose <strong>into</strong> these targets; they are not targets of their own. All static analysis - <code>go-vet</code>, <code>golangci-lint</code>, <code>cargo-clippy</code>, type-checks - and security scanning (<code>govulncheck</code>) belong under <code>lint</code> (its definition is &quot;static analysis, type-check&quot;), not a bespoke <code>vet</code>, <code>audit</code>, or <code>security</code> target. A slow security scan can instead be gated in <code>ci</code>. Reserve custom target names for genuinely distinct work with no canonical home (a <code>deploy</code> or <code>release</code>), not for fragmenting a canonical phase.</p>
 <p>Custom target names must use the target-name charset: letters, digits, <code>-</code>, <code>_</code> (<code>types.ValidateTargetName</code>). <code>:</code>, <code>@</code>, and <code>/</code> are reserved for the grammar above.</p>
-<h3 id="name-normalization-casing--delimiters">Name normalization (casing &amp; delimiters)</h3>
-<p>Target names are matched <strong>case- and delimiter-insensitively</strong>. magus normalizes every name to canonical kebab-case (<code>lo.KebabCase</code>, via <code>types.DefaultTargetNameNormalizer</code>) on <strong>both</strong> sides: when a magusfile <em>declares</em> a target and when you <em>reference</em> one on the CLI or in <code>depends_on</code>. A target declared as <code>go_build</code> is reachable by any spelling that normalizes to <code>go-build</code>:</p>
+<h3 id="when-does-a-name-earn-canonical-status">When does a name earn canonical status?</h3>
+<p>The seven names above are a closed, deliberate set, not a starting point. A new
+name earns a place in it only if it passes all four:</p>
+<ol>
+<li><strong>Universality</strong> - the phase must mean something in every toolchain magus
+adapts. A phase that only makes sense for one language fails this test:
+<code>typecheck</code> is universal-sounding but Go and Rust type-check as part of
+<code>build</code>, not as a separate phase, so it does not earn a canonical slot.</li>
+<li><strong>Distinctness</strong> - it must be a genuine phase, not a subset of an existing
+one. <code>vet</code>, <code>audit</code>, <code>security</code>, and <code>typecheck</code> are all static analysis or
+formatting fragments of <code>lint</code>/<code>format</code> (see <a href="../codes/magusfile/MGS1003/">MGS1003</a>),
+not phases of their own.</li>
+<li><strong>Pipeline membership</strong> - <code>ci</code> must need to order it against the other
+phases. A step nobody's <code>ci</code> ever sequences against <code>build</code>/<code>test</code>/<code>lint</code>
+has no claim on the canonical vocabulary.</li>
+<li><strong>Tooling weight</strong> - a canonical name can carry engine semantics beyond
+&quot;a bucket of ops&quot;: <code>preflight</code>/<code>generate</code> get drift-gating (see
+<a href="../operations/">operations</a>) precisely because they are canonical, not
+custom.</li>
+</ol>
+<p>The v1 decision: this set is frozen at the seven above plus <code>ci</code>. <code>deploy</code>,
+<code>release</code>, and <code>serve</code> stay custom by design - they are real, common phases,
+but they are workspace-specific enough (which environment, which registry,
+which port) that forcing one shape on them would be more prescriptive than
+useful.</p>
+<h2 id="name-normalization-casing--delimiters">Name normalization (casing &amp; delimiters)</h2>
+<p>Target names are matched <strong>case- and delimiter-insensitively</strong>. magus normalizes
+every name to canonical kebab-case (<code>types.DefaultTargetNameNormalizer</code>, a small
+hand-rolled kebab-caser matching <code>samber/lo</code>'s <code>KebabCase</code> output without the
+dependency) on <strong>both</strong> sides: when a magusfile <em>declares</em> a target and when you
+<em>reference</em> one anywhere magus reads a target name. A target declared as
+<code>go_build</code> is reachable by any spelling that normalizes to <code>go-build</code>:</p>
 <pre><code class="language-sh">magus run go-build      # kebab
 magus run go_build      # snake
 magus run goBuild       # camel
 magus run GoBuild       # pascal
 </code></pre>
-<p>This is <em>normalize-both-sides</em>, not an alias table: there is exactly one registered target (<code>go-build</code>), and the same normalizer runs over your input before lookup.</p>
+<p>This is <strong>normalize-both-sides</strong>, not an alias table: there is exactly one
+registered target (<code>go-build</code>), and the same normalizer runs over your input
+before lookup, wherever that input enters.</p>
+<h3 id="the-contract">The contract</h3>
 <ul>
-<li><strong>Collisions are a hard error.</strong> Two declarations that collapse to the same canonical name (e.g. <code>fooBar</code> and <code>foo_bar</code>, both normalizing to <code>foo-bar</code>) cause magus to refuse the magusfile, naming the offending pair.</li>
-<li><strong>Convention drift is a <code>doctor</code> warning.</strong> Mixed conventions still resolve, but <code>magus doctor</code> warns when a workspace uses more than one naming convention, since call sites across CI YAML, scripts, and docs can drift.</li>
+<li><strong>Declare in any convention, call in any convention.</strong> The declaration side
+(an <code>export fun</code> name in a magusfile) and the reference side (everywhere
+else) each run through the same normalizer, independently, before either is
+compared or stored.</li>
+<li><strong>Exactly one registered target.</strong> Normalization is not a lookup table with
+multiple aliases resolving to one entry; there is one canonical key, and
+every spelling that normalizes to it reaches the same target.</li>
+<li><strong>Collisions are a hard load error.</strong> Two declarations that collapse to the
+same canonical name (e.g. <code>fooBar</code> and <code>foo_bar</code>, both normalizing to
+<code>foo-bar</code>) make magus refuse the magusfile, naming the offending pair.</li>
+<li><strong>Convention drift is a <code>doctor</code> warning, not an error.</strong> Mixed conventions
+across a workspace still resolve correctly, but <code>magus doctor</code> warns when it
+sees more than one naming convention, since call sites across CI YAML,
+scripts, and docs can drift out of sync with whichever one you typed.</li>
 </ul>
+<h3 id="where-it-applies">Where it applies</h3>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Magusfile declarations (<code>export fun</code>)</td>
+<td><code>export fun go_build(...)</code> registers as <code>go-build</code>.</td>
+</tr>
+<tr>
+<td>CLI <code>run</code> / <code>affected</code> arguments</td>
+<td><code>magus run goBuild</code> reaches the target declared <code>go_build</code>.</td>
+</tr>
+<tr>
+<td><code>magus.needs</code> target handles</td>
+<td><code>magus.needs(goBuild)</code> resolves the target declared <code>go_build</code> (the handle's declared name is normalized).</td>
+</tr>
+<tr>
+<td>The per-target policy map (<code>magus.project</code>'s <code>targets</code>)</td>
+<td>A policy keyed <code>&quot;goBuild&quot;</code> applies to a target declared <code>go_build</code>, and vice versa.</td>
+</tr>
+<tr>
+<td>Charm names (<code>NormalizeCharmName</code>)</td>
+<td><code>target:NoCache</code> and <code>target:no-cache</code> are the same charm.</td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="where-it-deliberately-does-not-apply">Where it deliberately does not apply</h3>
+<ul>
+<li><strong>Spell op keys after <code>::</code>.</strong> <code>go::golangci-lint</code> matches the spell's op key
+<strong>verbatim</strong> - no kebab/case normalization. <code>go::lint</code> is a graceful no-op
+(the go spell has no op literally named <code>lint</code>; its linter op is
+<code>golangci-lint</code>), not a normalized match. See
+<a href="#cli-extension-spell-qualified-targets">spell-qualified targets</a>.</li>
+<li><strong>Spell op subscripts in Buzz.</strong> <code>ts[&quot;tsc&quot;]</code> is an ordinary map-key lookup
+into the value <code>import &quot;magus/spell/ts&quot;</code> binds; <code>ts[&quot;Tsc&quot;]</code> is simply a
+different (missing) key, not a normalized alias.</li>
+<li><strong>Project paths.</strong> <code>Path</code> is never normalized; <code>api</code> and <code>Api</code> are different
+(and, in practice, one of them just won't exist).</li>
+</ul>
+<h3 id="worked-example">Worked example</h3>
+<p>Given a magusfile declaring:</p>
+<pre><code class="language-buzz">export fun go_build(args: [str]) &gt; void { go[&quot;go-build&quot;](); }
+</code></pre>
+<p>all four of these resolve to the <strong>one</strong> registered target <code>go-build</code>, and thus
+the <strong>one</strong> cache entry:</p>
+<pre><code class="language-sh">magus run go-build   # kebab: exact match
+magus run go_build    # snake: normalizes to go-build
+magus run goBuild     # camel: normalizes to go-build
+magus run GoBuild     # pascal: normalizes to go-build
+</code></pre>
 <p><strong>Terminology note:</strong> Target is magus's own term, distinct from Mage's vocabulary. In Mage, <code>extensions:build</code> is a single function name. In magus, <code>extensions</code> is a project Path and <code>build</code> is the target name: two orthogonal axes. Do not substitute Action, Operation, Task, Command, or Verb for Target in code, comments, or documentation.</p>
 <h2 id="cli-extension-spell-qualified-targets">CLI extension: spell-qualified targets</h2>
 <p>On the command line only, a double-colon prefix invokes one spell's op <strong>directly</strong>, bypassing your composed targets. The token after <code>::</code> is a spell <strong>op</strong> (its CLI-command name), not a lifecycle target name:</p>
@@ -373,12 +473,13 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
 </tr>
 <tr>
 <td><strong><code>ci</code></strong></td>
-<td>The composite CI pipeline. Not a target name; handled by <code>Magus.RunCI</code>.</td>
+<td>An ordinary target you compose with <code>magus.needs</code>; <code>Magus.RunCI</code> only strips <code>rw</code>, anchors <code>affected</code>, and must-not-no-op.</td>
 </tr>
 </tbody>
 </table></figure>
 <h2 id="see-also">See also</h2>
 <ul>
+<li><a href="../dependencies/">dependencies</a>: <code>magus.needs</code> versus <code>depends_on</code>, and how a cross-project <code>needs</code> folds into the affected set and the cache key.</li>
 <li><a href="../operations/">operations</a>: the formal Operation definition and the work hierarchy (Spell → Operation → Target).</li>
 <li><a href="../spells/">spells</a>: the operations a target composes, and <a href="../spells/#spells-vs-targets">Spells vs Targets</a>.</li>
 <li><a href="../charms/">charms</a>: the execution modifiers attached after <code>:</code>.</li>
@@ -403,7 +504,7 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../search/?q=tag%3A%22build%22">build</a><a class="tag" href="../search/?q=tag%3A%22projects%22">projects</a><a class="tag" href="../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../search/?q=tag%3A%22grammar%22">grammar</a><a class="tag" href="../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../search/?q=tag%3A%22charms%22">charms</a><a class="tag" href="../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-05T02:24:52Z">July 5, 2026, 2:24 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733" data-tooltip="66e4aa40fa8388abc0f2f7024ef843424e893733" title="66e4aa40fa8388abc0f2f7024ef843424e893733">66e4aa40</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514d</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb476</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a45196</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li><li><a href="https://github.com/egladman/magus/commit/8b19368e64e9efb550bdefc5374423420bfa4ece"><code>8b19368e</code></a> <small><time datetime="2026-06-23T02:31:00Z">Jun 23, 2026</time></small> - rehome to github.com/egladman/magus; self-update + doc links point here; drop stray agent files; regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/1a9364b98b4048048dd819a99b9acab0d922048c"><code>1a9364b9</code></a> <small><time datetime="2026-06-18T23:20:00Z">Jun 18, 2026</time></small> - formalize the spell op model (descriptor); foreignprocess -&gt; opaque; charm becomes a pure-buzz inlinable module</li><li><a href="https://github.com/egladman/magus/commit/b60e99be994b0857b8d59a87bfe8220fb128e72f"><code>b60e99be</code></a> <small><time datetime="2026-05-22T01:07:00Z">May 22, 2026</time></small> - drop the lua/teal interpreter; buzz is the only magusfile language now</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b7839</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/targets.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/targets.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-16T04:52:34Z">July 16, 2026, 4:52 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433" data-tooltip="2f02f9d747507eb280fce3393074953ffb06d433" title="2f02f9d747507eb280fce3393074953ffb06d433">2f02f9d7</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/f1a0709330b3da935e0b763359c35a99d89900d1"><code>f1a07093</code></a> <small><time datetime="2026-07-15T23:53:15Z">Jul 15, 2026</time></small> - give the docs plain page titles: drop the &#34;Anatomy of a magus X&#34; framing (charms, targets, spells, workspace) and the descriptive H1 subtitles (cache, sandbox, engines, mcp, operations) so each page&#39;s H1 is just its basic technical name, matching its frontmatter title</li><li><a href="https://github.com/egladman/magus/commit/956d1d0658d84b87c71d2e36c46ef5c8c56c676c"><code>956d1d06</code></a> <small><time datetime="2026-07-15T03:39:56Z">Jul 15, 2026</time></small> - add docs/dependencies.md: the needs vs depends_on model, end to end</li><li><a href="https://github.com/egladman/magus/commit/84c261008aa7bcad485d57357f767b80c2df1512"><code>84c26100</code></a> <small><time datetime="2026-07-15T03:32:14Z">Jul 15, 2026</time></small> - promote target-name normalization to its own targets.md section</li><li><a href="https://github.com/egladman/magus/commit/05fca46b3022a76991924400d4222d3a33c30f89"><code>05fca46b</code></a> <small><time datetime="2026-07-15T03:30:18Z">Jul 15, 2026</time></small> - add the canonical-name litmus test to targets.md</li><li><a href="https://github.com/egladman/magus/commit/109842745f294e0dae5497d5d596d20d7d338079"><code>10984274</code></a> <small><time datetime="2026-07-15T03:29:22Z">Jul 15, 2026</time></small> - fix ci pipeline doc drift: an ordinary target, not a hardcoded chain</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514d</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/targets.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/targets.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -465,8 +566,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -620,8 +724,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -655,7 +759,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

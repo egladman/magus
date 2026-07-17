@@ -12,7 +12,7 @@ landlock LSM. Magus continues with interpreter-level enforcement only.
 
 ```text
 [MGS2005] kernel landlock unavailable; sandbox running with interpreter-level checks only
-  reason=sandbox: kernel sandbox unsupported on this host: …
+  reason=sandbox: kernel sandbox unsupported on this host: ...
 ```
 
 ## Why

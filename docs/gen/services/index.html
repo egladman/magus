@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,12 +76,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#directly-run-vs-as-a-dependency" title="Directly run vs. as a dependency">Directly run vs. as a dependency</a></li><li><a href="#shared-instances" title="Shared instances">Shared instances</a><ul><li><a href="#readiness" title="Readiness">Readiness</a></li><li><a href="#idle-and-teardown" title="Idle and teardown">Idle and teardown</a></li></ul></li><li><a href="#guarding-against-foot-guns" title="Guarding against foot-guns">Guarding against foot-guns</a><ul><li><a href="#near-duplicate-services-mgs5001codesservicesmgs5001md" title="Near-duplicate services (MGS5001)">Near-duplicate services (MGS5001)</a></li><li><a href="#kind-coherence-wards-mgs5002codesservicesmgs5002md-mgs5003codesservicesmgs5003md" title="Kind-coherence wards (MGS5002, MGS5003)">Kind-coherence wards (MGS5002, MGS5003)</a></li></ul></li></ul>
+        <ul><li><a href="#directly-run-vs-as-a-dependency" title="Directly run vs. as a dependency">Directly run vs. as a dependency</a></li><li><a href="#caching" title="Caching">Caching</a></li><li><a href="#shared-instances" title="Shared instances">Shared instances</a><ul><li><a href="#readiness" title="Readiness">Readiness</a></li><li><a href="#idle-and-teardown" title="Idle and teardown">Idle and teardown</a></li></ul></li><li><a href="#guarding-against-foot-guns" title="Guarding against foot-guns">Guarding against foot-guns</a><ul><li><a href="#near-duplicate-services-mgs5001codesservicesmgs5001md" title="Near-duplicate services (MGS5001)">Near-duplicate services (MGS5001)</a></li><li><a href="#kind-coherence-wards-mgs5002codesservicesmgs5002md-mgs5003codesservicesmgs5003md" title="Kind-coherence wards (MGS5002, MGS5003)">Kind-coherence wards (MGS5002, MGS5003)</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="services">Services</h1>
 <p>A <strong>service op</strong> returns a <code>Service</code>, a long-running process such as a dev server,
@@ -107,6 +107,17 @@ long-running processes: accidental sprawl and misuse.</p>
 pass, then lets the dependent run against it. It does not block. The service stops
 when the run ends (or stays warm on the daemon, below).</li>
 </ul>
+<h2 id="caching">Caching</h2>
+<p>A service op's target is <strong>inherently uncached</strong> (see
+<a href="../spells/#an-operation-is-a-command-or-a-service">Spells vs Targets</a>): <code>servesTarget</code>
+in the run engine detects that the target is backed by a service op and
+forces <code>NoCache</code> on its step, regardless of any <code>skip_cache</code> declaration. This
+is not an author opt-in - there is no way to make a service op cacheable,
+because caching would mean replaying a &quot;success&quot; result without ever
+starting the process, which defeats the point of a long-running service. See
+<a href="../cache/#opting-out-and-busting">Opting out and busting</a> for the
+author-facing no-cache controls that apply to the rest of a target's
+non-service work.</p>
 <h2 id="shared-instances">Shared instances</h2>
 <p>Services are deduplicated by a <strong>configuration fingerprint</strong>: a content hash of the
 resolved command (image, ports, volumes, environment). Several targets that need the
@@ -172,15 +183,15 @@ the check.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
         <a class="related-card" href="../codes/services/"><span class="related-card-title">services diagnostics</span><span class="related-card-desc">Landing page for MGS5xxx diagnostics that flag problems with long-running service ops, such as near-duplicate services that should be shared instead of run as separate processes.</span></a>
         <a class="related-card" href="../codes/services/MGS5001/"><span class="related-card-title">MGS5001: near-duplicate services</span><span class="related-card-desc">Fires when two or more service ops in a run look like copies of the same service (same image and container port) but differ subtly, so they will run as separate processes instead of one shared instance.</span></a>
         <a class="related-card" href="../codes/services/MGS5002/"><span class="related-card-title">MGS5002: service op detaches</span><span class="related-card-desc">Fires when a service op&#39;s process command detaches (docker run -d), which forks the process away from magus and breaks foreground supervision, stdout capture, readiness probing, and graceful stop.</span></a>
-        <a class="related-card" href="../daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22services%22">services</a><a class="tag" href="../search/?q=tag%3A%22service+op%22">service op</a><a class="tag" href="../search/?q=tag%3A%22shared+services%22">shared services</a><a class="tag" href="../search/?q=tag%3A%22readiness%22">readiness</a><a class="tag" href="../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../search/?q=tag%3A%22keep-warm%22">keep-warm</a><a class="tag" href="../search/?q=tag%3A%22MGS5001%22">MGS5001</a><a class="tag" href="../search/?q=tag%3A%22MGS5002%22">MGS5002</a></div>
-    <small>Last updated <time datetime="2026-07-08T00:31:16Z">July 8, 2026, 12:31 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8" data-tooltip="75524b9605fe902c79b478e4a7cad1ffceb74ac8" title="75524b9605fe902c79b478e4a7cad1ffceb74ac8">75524b96</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284d</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/services.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/services.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-15T03:35:42Z">July 15, 2026, 3:35 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/0efda157f439f839e2b655e78ded17c5db3b3e69" data-tooltip="0efda157f439f839e2b655e78ded17c5db3b3e69" title="0efda157f439f839e2b655e78ded17c5db3b3e69">0efda157</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8"><code>75524b96</code></a> <small><time datetime="2026-07-08T00:31:16Z">Jul 8, 2026</time></small> - reformat hand-written docs under prettier 3.9.4, the version mise.toml already pins; the committed bytes had drifted from whatever prettier last touched them, de-indenting wrapped list continuations and padding table columns</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284d</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/services.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/services.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -242,8 +253,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -397,8 +411,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -432,7 +446,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

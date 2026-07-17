@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,16 +76,17 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#starting-the-daemon-starts-mcp" title="Starting the daemon starts MCP">Starting the daemon starts MCP</a></li><li><a href="#available-tools" title="Available tools">Available tools</a></li><li><a href="#enabling-and-disabling" title="Enabling and disabling">Enabling and disabling</a></li><li><a href="#security-keep-this-local" title="Security: keep this local">Security: keep this local</a></li></ul>
+        <ul><li><a href="#starting-the-daemon-starts-mcp" title="Starting the daemon starts MCP">Starting the daemon starts MCP</a></li><li><a href="#is-mcp-actually-reachable" title="Is MCP actually reachable?">Is MCP actually reachable?</a></li><li><a href="#available-tools" title="Available tools">Available tools</a></li><li><a href="#enabling-and-disabling" title="Enabling and disabling">Enabling and disabling</a></li><li><a href="#security-keep-this-local" title="Security: keep this local">Security: keep this local</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
-<h1 id="mcp-driving-magus-from-agents">MCP: driving magus from agents</h1>
+<h1 id="mcp">MCP</h1>
 <p>When the daemon is running, it also exposes an <strong>MCP (Model Context Protocol) server</strong> over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.</p>
-<p>Magus targets humans first. MCP is an optional layer you can omit from the binary with the <code>!mcp</code> build tag.</p>
+<p>Magus targets humans first. MCP is always compiled in; it is a runtime layer you turn off with <code>mcp.enabled=false</code> (see <a href="#enabling-and-disabling">Enabling and disabling</a>) when you do not want it.</p>
+<p>For the full agent surface built on top of MCP - the installable skills, <code>MAGUS.md</code> routing, durable memory, and the drift check - see <a href="../agents/">Agents</a>.</p>
 <h2 id="starting-the-daemon-starts-mcp">Starting the daemon starts MCP</h2>
 <p>You don't need a separate process. Start the daemon as usual:</p>
 <pre><code class="language-sh">magus server start
@@ -94,7 +95,57 @@
 <pre><code class="language-text">http://127.0.0.1:7391/mcp
 </code></pre>
 <p><code>magus doctor</code> reports whether MCP is reachable and prints the endpoint URL.</p>
+<h2 id="is-mcp-actually-reachable">Is MCP actually reachable?</h2>
+<p>An agent host connects to the MCP endpoint over HTTP; nothing starts that endpoint on
+its own, so if the daemon is not running the tools silently disappear from the host.
+<code>magus status</code> reports the endpoint's live health as its own block, checked independently
+of the daemon's job socket:</p>
+<pre><code class="language-text">mcp endpoint
+  url    http://127.0.0.1:7391/mcp
+  state  serving
+</code></pre>
+<p>The <code>state</code> is one of:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>state</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>serving</code></td>
+<td>listening and a workspace is loaded - the tools are reachable</td>
+</tr>
+<tr>
+<td><code>not-ready</code></td>
+<td>listening, but no workspace is loaded yet</td>
+</tr>
+<tr>
+<td><code>unreachable</code></td>
+<td>nothing is listening; start the daemon with <code>magus server start</code></td>
+</tr>
+<tr>
+<td><code>disabled</code></td>
+<td>turned off by <code>mcp.enabled=false</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>For scripts and container probes, <code>magus status --probe=&lt;kind&gt;</code> exits <code>0</code> healthy / <code>1</code>
+unhealthy. The kinds are <code>liveness</code> (the daemon answers), <code>readiness</code> (a workspace is
+loaded), and <code>mcp</code> (this endpoint is reachable) - and they are comma-combinable, failing
+if any listed check does:</p>
+<pre><code class="language-sh">magus status --probe=mcp             # fail if the tools are unreachable
+magus status --probe=liveness,mcp    # fail if the daemon OR the endpoint is down
+</code></pre>
+<p>The daemon also serves <code>/livez</code>, <code>/readyz</code>, and <code>/healthz</code> on the same port. If <code>state</code> is
+<code>unreachable</code> even though you expect a daemon, see
+<a href="../daemon/#keeping-the-daemon-running">Keeping the daemon running</a>.</p>
 <h2 id="available-tools">Available tools</h2>
+<p>The daemon exposes 20 tools. This list is authoritative at the time of writing;
+<code>magus describe mcp-tools</code> (or the <code>magus_describe</code> tool with <code>kind: mcp_tools</code>) prints
+the live set with full parameters, so trust that over this table if they ever differ.</p>
+<p>Discover:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -104,48 +155,124 @@
 </thead>
 <tbody>
 <tr>
-<td><code>magus_list_projects</code></td>
-<td>List all projects discovered in the workspace</td>
+<td><code>magus_describe</code></td>
+<td>Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools (pass <code>name</code> for one entity's detail)</td>
 </tr>
 <tr>
-<td><code>magus_list_targets</code></td>
-<td>List registered build targets for a project</td>
+<td><code>magus_describe_file</code></td>
+<td>Classify paths against declared globs: owning project, and output (generated) vs source</td>
 </tr>
 <tr>
 <td><code>magus_where</code></td>
 <td>Resolve a fuzzy project name to its absolute path</td>
 </tr>
 <tr>
-<td><code>magus_describe_project</code></td>
-<td>Explain why a project is in the affected set</td>
-</tr>
-<tr>
-<td><code>magus_run_target</code></td>
-<td>Run a target (<code>build</code>, <code>test</code>, <code>lint</code>, ...) for one or more projects</td>
-</tr>
-<tr>
-<td><code>magus_run_affected</code></td>
-<td>Run a target for all VCS-changed projects</td>
-</tr>
-<tr>
-<td><code>magus_doctor</code></td>
-<td>Validate workspace health</td>
-</tr>
-<tr>
-<td><code>magus_status</code></td>
-<td>Inspect the live concurrency pool</td>
-</tr>
-<tr>
-<td><code>magus_affected_plan</code></td>
-<td>Emit a CI shard plan for the affected set</td>
-</tr>
-<tr>
 <td><code>magus_config_get</code></td>
 <td>Read the resolved workspace config (read-only)</td>
 </tr>
+</tbody>
+</table></figure>
+<p>Run:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus_run_target</code></td>
+<td>Run a target (<code>build</code>, <code>test</code>, <code>lint</code>, <code>ci</code>, ...) for one or more projects</td>
+</tr>
+<tr>
+<td><code>magus_run_affected</code></td>
+<td>Run a target on only the VCS-affected projects</td>
+</tr>
+<tr>
+<td><code>magus_affected_plan</code></td>
+<td>Emit a provider-neutral CI shard plan for the affected set</td>
+</tr>
+<tr>
+<td><code>magus_affected_explain</code></td>
+<td>Explain why a project is in the affected set</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Inspect:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus_doctor</code></td>
+<td>Validate workspace health (config, cache, cycles, tool availability)</td>
+</tr>
+<tr>
+<td><code>magus_status</code></td>
+<td>Report telemetry/cache settings and the live proc-server pool state</td>
+</tr>
 <tr>
 <td><code>magus_tail_log</code></td>
-<td>Retrieve the captured build log for a project</td>
+<td>Return the most recent captured build log for a project</td>
+</tr>
+<tr>
+<td><code>magus_output</code></td>
+<td>Fetch one target execution's exact captured output by its <code>out...</code> ref</td>
+</tr>
+<tr>
+<td><code>magus_insight</code></td>
+<td>VCS-history lenses: hotspots, files, affinity, ownership, trend</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Knowledge graph:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus_query</code></td>
+<td>Search the graph and return ranked matches plus their neighborhood</td>
+</tr>
+<tr>
+<td><code>magus_explain</code></td>
+<td>Show one node's data, edges with provenance, and how many nodes reach it</td>
+</tr>
+<tr>
+<td><code>magus_path</code></td>
+<td>Shortest path between two nodes: how two entities relate</td>
+</tr>
+<tr>
+<td><code>magus_refs</code></td>
+<td>Where a code symbol is defined and every file that references it (SCIP)</td>
+</tr>
+<tr>
+<td><code>magus_stats</code></td>
+<td>Graph shape: god nodes, orphans, doc coverage</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Memory and scratch:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>magus_memory</code></td>
+<td>Durable per-repo <code>status</code> / <code>progress</code> / <code>decisions</code> files, shared across sessions</td>
 </tr>
 <tr>
 <td><code>magus_scratchpad</code></td>
@@ -155,7 +282,7 @@
 </table></figure>
 <p>Config mutation is not exposed over MCP. Use the CLI for <code>magus config set</code> and related commands.</p>
 <h2 id="enabling-and-disabling">Enabling and disabling</h2>
-<p>MCP is on by default when the binary is built with <code>-tags mcp</code> (the default). To disable it without rebuilding:</p>
+<p>MCP is on by default. To disable it:</p>
 <pre><code class="language-yaml"># magus.yaml
 mcp:
   enabled: false
@@ -191,10 +318,18 @@ does not accept a token in the URL query string (RFC 6750 keeps secrets out of
 logs and history). How you connect depends on the client:</p>
 <ul>
 <li>
-<p><strong>Claude Code</strong> connects to the loopback endpoint directly with a header:</p>
-<pre><code class="language-text">claude mcp add --transport http magus http://127.0.0.1:7391/mcp \
+<p><strong>Claude Code</strong> connects to the loopback endpoint directly with a header. Mint
+a connector token, then register the server at <code>user</code> scope so every workspace
+the daemon serves shares one connection (the daemon binds one loopback port for
+all of them):</p>
+<pre><code class="language-text">magus config mcp connector create --name claude-code --expires never
+claude mcp add --transport http --scope user magus http://127.0.0.1:7391/mcp \
   --header &quot;Authorization: Bearer &lt;token&gt;&quot;
 </code></pre>
+<p><code>claude mcp list</code> should then report <code>magus ... - Connected</code>. <strong>Restart the
+Claude Code session</strong> afterward: a session only discovers MCP tools (and skills
+installed by <code>magus agent install claude</code>) at launch, so an already-open session
+will not see them until it is restarted.</p>
 </li>
 <li>
 <p><strong>Claude Desktop / other IDE plugins</strong> that take a Streamable-HTTP URL plus
@@ -236,15 +371,15 @@ daemon with a TLS tunnel first if you need that path.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../agents/"><span class="related-card-title">Agents</span><span class="related-card-desc">How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.</span></a>
         <a class="related-card" href="../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../buzz/modules/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
         <a class="related-card" href="../codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
-        <a class="related-card" href="../codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22mcp%22">mcp</a><a class="tag" href="../search/?q=tag%3A%22model-context-protocol%22">model-context-protocol</a><a class="tag" href="../search/?q=tag%3A%22ai%22">ai</a><a class="tag" href="../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../search/?q=tag%3A%22claude%22">claude</a><a class="tag" href="../search/?q=tag%3A%22cursor%22">cursor</a><a class="tag" href="../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../search/?q=tag%3A%22ide%22">ide</a></div>
-    <small>Last updated <time datetime="2026-07-11T13:21:06Z">July 11, 2026, 1:21 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/bde4304001b4a1b3f0bdeded83e2a8c07416b68d" data-tooltip="bde4304001b4a1b3f0bdeded83e2a8c07416b68d" title="bde4304001b4a1b3f0bdeded83e2a8c07416b68d">bde43040</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/8b9cf5c88abdf3225897283c44bb796191fd938f"><code>8b9cf5c8</code></a> <small><time datetime="2026-07-10T22:04:19Z">Jul 10, 2026</time></small> - harden the MCP server exposure to best-practice</li><li><a href="https://github.com/egladman/magus/commit/644a4f2d0f3ef4d54f82c7247a8ccac541f96b33"><code>644a4f2d</code></a> <small><time datetime="2026-07-10T21:44:24Z">Jul 10, 2026</time></small> - add a two-tier MCP daemon auth model</li><li><a href="https://github.com/egladman/magus/commit/25ee8df8d85f2d08fa54fdd674ef0bcd6f634a98"><code>25ee8df8</code></a> <small><time datetime="2026-07-10T20:35:50Z">Jul 10, 2026</time></small> - add a magus_scratchpad MCP tool giving an agent</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de"><code>5d9e514d</code></a> <small><time datetime="2026-07-02T17:35:39Z">Jul 2, 2026</time></small> - docs: frontmatter; short titles</li><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb476</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/83a45196049a89f605a278cded1183df6572320e"><code>83a45196</code></a> <small><time datetime="2026-06-23T03:19:36Z">Jun 23, 2026</time></small> - tidy docs; fix stale internal/util doc ref</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/mcp.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/mcp.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-15T23:53:15Z">July 15, 2026, 11:53 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/f1a0709330b3da935e0b763359c35a99d89900d1" data-tooltip="f1a0709330b3da935e0b763359c35a99d89900d1" title="f1a0709330b3da935e0b763359c35a99d89900d1">f1a07093</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/98fe9fc074ce959329a032dd7814db647cdd2f8c"><code>98fe9fc0</code></a> <small><time datetime="2026-07-14T23:40:14Z">Jul 14, 2026</time></small> - document daemon transports, health surface, and k8s probes; add readme architecture diagram; refresh mcp docs</li><li><a href="https://github.com/egladman/magus/commit/e116cfcbb5c8796f1d07a01e1b6b8329c4c5a30f"><code>e116cfcb</code></a> <small><time datetime="2026-07-14T17:41:01Z">Jul 14, 2026</time></small> - document connecting the magus mcp to claude code; scope user and session restart to pick up tools and freshly installed skills</li><li><a href="https://github.com/egladman/magus/commit/3246c2fe81e5f0afa5e4b271fb93b8ff5030f55b"><code>3246c2fe</code></a> <small><time datetime="2026-07-14T17:28:06Z">Jul 14, 2026</time></small> - Merge remote-tracking branch &#39;origin/main&#39; into feat/native-console-desktop-f023ba</li><li><a href="https://github.com/egladman/magus/commit/bde4304001b4a1b3f0bdeded83e2a8c07416b68d"><code>bde43040</code></a> <small><time datetime="2026-07-11T13:21:06Z">Jul 11, 2026</time></small> - format five markdown files with prettier</li><li><a href="https://github.com/egladman/magus/commit/8b9cf5c88abdf3225897283c44bb796191fd938f"><code>8b9cf5c8</code></a> <small><time datetime="2026-07-10T22:04:19Z">Jul 10, 2026</time></small> - harden the MCP server exposure to best-practice</li><li><a href="https://github.com/egladman/magus/commit/644a4f2d0f3ef4d54f82c7247a8ccac541f96b33"><code>644a4f2d</code></a> <small><time datetime="2026-07-10T21:44:24Z">Jul 10, 2026</time></small> - add a two-tier MCP daemon auth model</li><li><a href="https://github.com/egladman/magus/commit/25ee8df8d85f2d08fa54fdd674ef0bcd6f634a98"><code>25ee8df8</code></a> <small><time datetime="2026-07-10T20:35:50Z">Jul 10, 2026</time></small> - add a magus_scratchpad MCP tool giving an agent</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/mcp.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/mcp.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -306,8 +441,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -461,8 +599,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -496,7 +634,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

@@ -12,7 +12,7 @@ runs of the same dispatch. The same inputs should yield the same outputs; magus
 treats determinism as a build-system invariant.
 
 ```text
-[MGS4003] non-deterministic output (see …/MGS4003.md)
+[MGS4003] non-deterministic output (see .../MGS4003.md)
   project=api target=build differing_paths=[api/dist/bundle.js api/dist/manifest.json]
 ```
 

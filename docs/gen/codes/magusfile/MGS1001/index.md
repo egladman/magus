@@ -12,7 +12,7 @@ asked to run the `ci` target, but no project in the selected scope declares one.
 ```text
 [MGS1001] no "ci" target defined in the selected project(s); it is the anchor
 "magus affected ci" and "magus affected --plan" key off, so this run would do nothing
-  see: …/MGS1001.md
+  see: .../MGS1001.md
 ```
 
 ## Why
@@ -44,7 +44,7 @@ Define a `ci` target in your magusfile and compose the stages with
 
 ```buzz
 export fun ci(_a: [str]) > void {
-    magus.needs(magus.target.literal("build"), magus.target.literal("test"), magus.target.literal("lint"));
+    magus.needs(build, test, lint);
 }
 ```
 

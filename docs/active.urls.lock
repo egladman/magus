@@ -1,4 +1,5 @@
 affected/
+agents/
 blog/
 blog/2026/07/01/hello-blog/
 breaking-changes/
@@ -37,6 +38,9 @@ codes/knowledge/MGS7002/
 codes/magusfile/
 codes/magusfile/MGS1001/
 codes/magusfile/MGS1002/
+codes/magusfile/MGS1003/
+codes/magusfile/MGS1004/
+codes/magusfile/MGS1005/
 codes/outputref/
 codes/outputref/MGS8001/
 codes/outputref/MGS8002/
@@ -67,8 +71,10 @@ console/
 conventions/
 daemon/
 debugging/
+dependencies/
 development/
 development/contributing/
+development/docs/
 development/gopherbuzz/
 development/magus/
 development/projects/
@@ -86,6 +92,7 @@ editor/
 engines/
 faq/
 flaky-builds/
+from-nx/
 getting-started/
 glossary/
 index.html
@@ -139,6 +146,7 @@ public/atom/
 public/release/
 public/release/index.json
 public/release/v0.1.0/
+reference/console/
 remote-cache/
 sandbox/
 services/

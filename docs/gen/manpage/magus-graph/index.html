@@ -53,7 +53,7 @@
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
-        <li><a href="../../console/dashboard/">Console</a></li>
+        <li><a href="../../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -71,7 +71,7 @@
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/manpage/gen/magus-graph.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/manpage/magus-graph.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -199,7 +199,7 @@ hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
 <pre><code class="language-sh">magus graph open --targets
 </code></pre>
 <p><em>Scope target graph to one project</em></p>
-<pre><code class="language-sh">magus graph open --targets website
+<pre><code class="language-sh">magus graph open --targets docs
 </code></pre>
 <p><em>Print the URL instead of opening</em></p>
 <pre><code class="language-sh">magus graph open --targets --print
@@ -225,7 +225,7 @@ hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22magus+graph%22">magus graph</a><a class="tag" href="../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../search/?q=tag%3A%22dependency+graph%22">dependency graph</a><a class="tag" href="../../search/?q=tag%3A%22export%22">export</a><a class="tag" href="../../search/?q=tag%3A%22graphml%22">graphml</a></div>
-    <small>Last updated <time datetime="2026-07-12T03:12:57Z">July 12, 2026, 3:12 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/594636ac8fdf14607837b28b9f1bec9a2266a8a9" data-tooltip="594636ac8fdf14607837b28b9f1bec9a2266a8a9" title="594636ac8fdf14607837b28b9f1bec9a2266a8a9">594636ac</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/9187ea11938bd5a6d8fc55f58d62bcb183d9a5ef"><code>9187ea11</code></a> <small><time datetime="2026-07-09T06:41:44Z">Jul 9, 2026</time></small> - fix double-fragment URLs in per-project and query deep links; add graph open to manpage registry with --targets; document --targets in docs/knowledge.md; regenerate manpages and MAGUS.md</li><li><a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3"><code>c7924b64</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - regenerate MAGUS.md, manpages, config docs, and site manifests for the knowledge-graph surface; refresh the coverage badge</li><li><a href="https://github.com/egladman/magus/commit/b79201db380e5cd1ae586860878dce3571cddaac"><code>b79201db</code></a> <small><time datetime="2026-07-07T23:47:57Z">Jul 7, 2026</time></small> - consolidate the knowledge-graph surface under a new magus graph verb: graph deps (standalone project DAG; run/affected --graph remain), graph export (was describe knowledge; adds -o graphml), graph stats (was insight structure; insight report still embeds it as graph_stats); hard-break the old spellings with pointers to the new home; rename KnowledgeStructure to KnowledgeStats; add a typed markdown builder (internal/render/md) and rewrite the MAGUS.md and insight-report renderers on it; ignore .claude/ in prettier; regenerate MAGUS.md, manpages, api.lock, and the website, sweeping in stale buf-spell docs and site drift from earlier commits</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/manpage/gen/magus-graph.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/manpage/gen/magus-graph.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-15T23:00:02Z">July 15, 2026, 11:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/40867b28aeae537f8e3e807343175138f173cc64" data-tooltip="40867b28aeae537f8e3e807343175138f173cc64" title="40867b28aeae537f8e3e807343175138f173cc64">40867b28</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -287,8 +287,11 @@ one-shot target. See <a href="../../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -442,8 +445,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -477,7 +480,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
-    <small class="footer-group"><a href="../../console/dashboard/">Dashboard</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../../console/">Console</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>

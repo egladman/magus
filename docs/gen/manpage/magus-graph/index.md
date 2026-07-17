@@ -173,7 +173,7 @@ magus graph open --targets
 *Scope target graph to one project*
 
 ```sh
-magus graph open --targets website
+magus graph open --targets docs
 ```
 
 *Print the URL instead of opening*

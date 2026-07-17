@@ -22,7 +22,7 @@ cd "$(magus where api)"
 
 Filters are AND-combined substrings. On a unique top score the path is
 printed and the command exits 0. On ambiguity, candidates are listed on
-stderr and the command exits 2. No interactive picker — use magus x for
+stderr and the command exits 2. No interactive picker - use magus x for
 that.
 
 ## Examples

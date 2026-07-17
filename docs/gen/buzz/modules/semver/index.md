@@ -15,7 +15,7 @@ Semantic version parsing and comparison (SemVer 2.0.0).
 
 ### compare
 
-Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" — true when the relation holds.
+Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true when the relation holds.
 
 **Signature:** `semver.compare(a, op, b) → bool` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L43)
 

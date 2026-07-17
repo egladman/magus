@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -90,7 +90,7 @@ construct. magus adds two small libraries that make those blocks easier to write
 both as extensions alongside Buzz's standard library.</p>
 <h2 id="what-to-test-and-what-not-to">What to test, and what not to</h2>
 <p>Test the code that carries logic: standalone spells, and Buzz modules imported into a
-magusfile. The website's magusfile imports <code>website/scribe.buzz</code>, a static-site
+magusfile. The docs project's magusfile imports <code>docs/render.buzz</code>, a static-site
 generator, and that generator earns its tests.</p>
 <p>Do not write tests for the magusfile itself.</p>
 <p>A magusfile is declarative build configuration. Keep it thin: wire targets together
@@ -112,7 +112,7 @@ test &quot;collectAlias trims slashes and records every alias&quot; {
 }
 </code></pre>
 <p>Run the tests:</p>
-<pre><code class="language-bash">magus buzz -t --embedded scribe.buzz   # a single file
+<pre><code class="language-bash">magus buzz -t --embedded render.buzz   # a single file
 magus run buzz-test                    # the project's test target
 </code></pre>
 <h2 id="the-assert-module">The <code>assert</code> module</h2>
@@ -279,7 +279,7 @@ per-test controls, callable from inside an <code>it</code> body:</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22testing%22">testing</a><a class="tag" href="../search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="../search/?q=tag%3A%22assert%22">assert</a><a class="tag" href="../search/?q=tag%3A%22suite%22">suite</a><a class="tag" href="../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../search/?q=tag%3A%22conventions%22">conventions</a></div>
-    <small>Last updated <time datetime="2026-07-08T00:31:16Z">July 8, 2026, 12:31 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8" data-tooltip="75524b9605fe902c79b478e4a7cad1ffceb74ac8" title="75524b9605fe902c79b478e4a7cad1ffceb74ac8">75524b96</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/0235b1a9f7c3c7273024df8f60d0de672fe2397e"><code>0235b1a9</code></a> <small><time datetime="2026-07-05T20:50:14Z">Jul 5, 2026</time></small> - Merge branch &#39;main&#39; into claude/nifty-burnell-7f0e31</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/testing.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/testing.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-15T23:00:02Z">July 15, 2026, 11:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/7a0656aac56a92eb2e0d0e8b4dbf36e3e8436d8c" data-tooltip="7a0656aac56a92eb2e0d0e8b4dbf36e3e8436d8c" title="7a0656aac56a92eb2e0d0e8b4dbf36e3e8436d8c">7a0656aa</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8"><code>75524b96</code></a> <small><time datetime="2026-07-08T00:31:16Z">Jul 8, 2026</time></small> - reformat hand-written docs under prettier 3.9.4, the version mise.toml already pins; the committed bytes had drifted from whatever prettier last touched them, de-indenting wrapped list continuations and padding table columns</li><li><a href="https://github.com/egladman/magus/commit/0235b1a9f7c3c7273024df8f60d0de672fe2397e"><code>0235b1a9</code></a> <small><time datetime="2026-07-05T20:50:14Z">Jul 5, 2026</time></small> - Merge branch &#39;main&#39; into claude/nifty-burnell-7f0e31</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/testing.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/testing.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -341,8 +341,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -496,8 +499,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -531,7 +534,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

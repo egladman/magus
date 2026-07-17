@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
+  <title>MGS1005: redundant footprint glob — magus</title>
+  <meta name="description" content="Fires when a per-target magus.inputs or magus.outputs glob is already declared project-wide, making it a no-op under the additive footprint model.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/magusfile/MGS1005/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="MGS1005: redundant footprint glob — magus">
+  <meta property="og:description" content="Fires when a per-target magus.inputs or magus.outputs glob is already declared project-wide, making it a no-op under the additive footprint model.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/codes/magusfile/MGS1005/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../../../assets/pico.min.css">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="../../../ui-panels.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.1.0">
+    <div class="container">
+      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../download/">Download</a></li>
+        <li><a href="../../../tour/">Tour</a></li>
+        <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../console/">Console</a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
+          <h2 class="settings-title">Settings</h2>
+          <p class="settings-note">Saved locally.</p>
+          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/magusfile/">magusfile diagnostics</a></li><li aria-current="page">MGS1005: redundant footprint glob</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/magusfile/MGS1005.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <article>
+<h1 id="mgs1005-redundant-footprint-glob">MGS1005: redundant footprint glob</h1>
+<p><code>magus doctor</code> found a per-target <code>magus.inputs(...)</code> or <code>magus.outputs(...)</code>
+glob that is already declared project-wide - either in the project's <code>sources</code>
+/<code>outputs</code> options or contributed by a bound spell. Under the additive footprint
+model, the per-target copy adds nothing.</p>
+<pre><code class="language-text">[MGS1005] 1 per-target magus.inputs/outputs glob(s) duplicate a project-wide
+declaration (a no-op under the additive model); drop the duplicate (see
+.../MGS1005.md)
+  build: magus.inputs(&quot;src/**&quot;) already in project sources
+</code></pre>
+<h2 id="why">Why</h2>
+<p>A target's cache footprint is the <strong>union</strong> of three layers: the globs a bound
+spell contributes, the project-wide <code>sources</code>/<code>outputs</code>, and the per-target
+<code>magus.inputs</code>/<code>magus.outputs</code>. Per-target declarations only ever <em>add</em> to the
+footprint - they never shrink the project-wide baseline.</p>
+<p>So a per-target glob that repeats one already present project-wide changes
+nothing about the cache key or the snapshot set. It is harmless, but it reads as
+if it narrowed or specialized the target's footprint when it did not - a
+misleading no-op worth removing.</p>
+<p>This most often happens by copy-paste: the same glob declared both in
+<code>magus.project({sources = [...]})</code> and in a target body, or a <code>magus.inputs</code>
+glob that a bound spell's <code>needs</code> already covers.</p>
+<p>This is a <strong>warning</strong>, not a load error: a duplicate is a no-op, not a fault.</p>
+<h2 id="resolution">Resolution</h2>
+<p>Keep the declaration in exactly one place, chosen by scope:</p>
+<ul>
+<li>if the glob is relevant to <strong>every</strong> target, keep the project-wide
+<code>sources</code>/<code>outputs</code> and drop the per-target copy;</li>
+<li>if it is relevant to <strong>one</strong> target, drop the project-wide declaration and keep
+the <code>magus.inputs</code>/<code>magus.outputs</code> in that target's body.</li>
+</ul>
+<pre><code class="language-buzz">// Before: &quot;src/**&quot; declared twice - the per-target copy is a no-op.
+magus.project({sources = [&quot;src/**&quot;]});
+export fun build(args: [str]) &gt; void {
+    magus.inputs(&quot;src/**&quot;);
+    go[&quot;go-build&quot;]();
+}
+
+// After: one home. Here it affects every target, so keep it project-wide.
+magus.project({sources = [&quot;src/**&quot;]});
+export fun build(args: [str]) &gt; void { go[&quot;go-build&quot;](); }
+</code></pre>
+<h2 id="what-this-is-not">What this is NOT</h2>
+<ul>
+<li><strong>Not a hard error.</strong> The duplicate is a no-op; nothing blocks the build.</li>
+<li><strong>Not subsumption-aware.</strong> This check matches globs exactly. A per-target glob
+that is <em>subsumed</em> by a broader project-wide pattern (<code>src/config.go</code> under
+<code>**/*.go</code>) is also redundant but is not flagged here.</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../../../cache/#per-target-inputs-and-outputs">cache</a>: the three footprint
+layers and the union model.</li>
+<li><a href="../../../cache/#granularity-project-wide-vs-per-target">cache</a>: choosing
+project-wide vs per-target declarations.</li>
+</ul>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../MGS1004/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS1004: unreached footprint declaration</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../../codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../../../codes/magusfile/MGS1004/"><span class="related-card-title">MGS1004: unreached footprint declaration</span><span class="related-card-desc">Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.</span></a>
+        <a class="related-card" href="../../../codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
+        <a class="related-card" href="../../../codes/magusfile/MGS1003/"><span class="related-card-title">MGS1003: bespoke phase-fragment target name</span><span class="related-card-desc">Fires when a magusfile declares a target named after a static-analysis or formatting subset (typecheck, vet, audit, security, style, prettify) instead of composing it into lint or format.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS1005%22">MGS1005</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../search/?q=tag%3A%22inputs%22">inputs</a><a class="tag" href="../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
+    <small>Last updated <time datetime="2026-07-15T23:58:51Z">July 15, 2026, 11:58 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9" data-tooltip="dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9" title="dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9">dbe1d1fe</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/fe5ff5c08a7f744c30b06d6c654e989c2a391b66"><code>fe5ff5c0</code></a> <small><time datetime="2026-07-15T05:06:26Z">Jul 15, 2026</time></small> - add per-target magus.inputs/outputs cache footprint; add MGS1004/1005 footprint-hygiene checks; make per-target outputs first-class in clean and merge</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/magusfile/MGS1005.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/magusfile/MGS1005.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+  </div>
+  <details class="ref-section" open>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed"><h1 id="glossary">Glossary</h1>
+<p>The vocabulary that runs through the rest of the docs. Each entry is a short
+definition; follow the link for the page that covers the term in depth. Every
+term has its own anchor, so you can deep-link a single definition (for example
+<code>glossary/#output-reference</code>).</p>
+<h2 id="core-model">Core model</h2>
+<h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../../workspace/">workspace</a>.</p>
+<h3 id="project">Project</h3>
+<p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
+caching, scheduling, and dependency tracking. See <a href="../../../workspace/">workspace</a>.</p>
+<h3 id="magusfile">Magusfile</h3>
+<p>The <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and
+binds its spells. See <a href="../../../targets/">targets</a>.</p>
+<h3 id="target">Target</h3>
+<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
+may compose a spell's tool-native operations and depend on other targets. See
+<a href="../../../targets/">targets</a>.</p>
+<h3 id="operation">Operation</h3>
+<p>A single tool-native command a target composes; the middle of the work hierarchy
+(Spell to Operation to Target). See <a href="../../../operations/">operations</a>.</p>
+<h3 id="spell">Spell</h3>
+<p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
+toolchain's real commands. See <a href="../../../spells/">spells</a>.</p>
+<h3 id="charm">Charm</h3>
+<p>An execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target
+runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in
+place, and <code>ci</code> always strips it. See <a href="../../../charms/">charms</a>.</p>
+<h3 id="ward">Ward</h3>
+<p>A coded diagnostic that inspects a resolved op and nudges or blocks an
+anti-pattern before it runs. See <a href="../../../wards/">wards</a>.</p>
+<h3 id="module">Module</h3>
+<p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
+exec, vcs, and more. See <a href="../../../buzz/modules/">the module reference</a>.</p>
+<h3 id="buzz">Buzz</h3>
+<p>The language magusfiles are written in (the <code>.buzz</code> engine). See
+<a href="../../../engines/">engines</a>.</p>
+<h3 id="engine">Engine</h3>
+<p>The interpreter a magusfile runs on; magus embeds the Buzz engine. See
+<a href="../../../engines/">engines</a>.</p>
+<h2 id="execution-and-caching">Execution and caching</h2>
+<h3 id="cache">Cache</h3>
+<p>The content-addressed store magus consults before running a target, so unchanged
+work is skipped. See <a href="../../../cache/">cache</a>.</p>
+<h3 id="affected">Affected</h3>
+<p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
+only over them. See <a href="../../../affected/">affected</a>.</p>
+<h3 id="sandbox">Sandbox</h3>
+<p>The restricted filesystem and environment a target runs in, so builds stay
+reproducible and side-effect-free. See <a href="../../../sandbox/">sandbox</a>.</p>
+<h3 id="service">Service</h3>
+<p>A long-running or shared process magus manages across runs, distinct from a
+one-shot target. See <a href="../../../services/">services</a>.</p>
+<h3 id="daemon">Daemon</h3>
+<p>The background magus host that owns shared state such as services and the warm
+knowledge graph. See <a href="../../../daemon/">daemon</a>.</p>
+<h3 id="ci">CI</h3>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../../targets/#the-target-name">targets</a>.</p>
+<h3 id="output-reference">Output reference</h3>
+<p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
+captured output; it appears on each target's line, and
+<code>magus query output ref1a2b3c</code> prints those exact bytes. In OpenTelemetry terms
+it corresponds to a <strong>span</strong> (one target execution) within its <strong>trace</strong> (the
+whole <code>magus</code> invocation). See <a href="../../../output-refs/">output-refs</a>.</p>
+<h3 id="trace">Trace</h3>
+<p>OpenTelemetry's name for one whole <code>magus</code> invocation; every target it runs is a
+span beneath it. See <a href="../../../telemetry/">telemetry</a>.</p>
+<h3 id="span">Span</h3>
+<p>OpenTelemetry's name for one unit of work under a trace - a target execution,
+whose sub-operations are child spans. An output reference points at a span's
+captured output. See <a href="../../../telemetry/">telemetry</a>.</p>
+<h3 id="pool">Pool</h3>
+<p>The concurrency pool: the shared set of slots that caps how many targets run in
+parallel on one machine. Its capacity defaults to <code>MAGUS_CONCURRENCY</code>, then 4 on
+GitHub-hosted runners, then <code>min(NumCPU, 8)</code>; <code>magus status</code> and the
+<a href="../../../daemon/">dashboard</a> report it live. See <a href="../../../daemon/">daemon</a>.</p>
+<h3 id="slot">Slot</h3>
+<p>One unit of the pool's capacity. A target acquires the slots it needs to run
+(most take one) and releases them when it finishes; the pool tracks capacity
+(total slots), running (acquired), and queued (blocked). See
+<a href="../../../daemon/">daemon</a>.</p>
+<h3 id="concurrency">Concurrency</h3>
+<p>How many targets run at once. It is bounded by the pool's capacity and set with
+<code>--concurrency</code>, <code>MAGUS_CONCURRENCY</code>, or the <code>concurrency</code> config key. See
+<a href="../../../daemon/">daemon</a>.</p>
+<h3 id="queued">Queued</h3>
+<p>A target that wants a slot while the pool is full; it blocks first-in-first-out
+until a slot frees. The dashboard colors a sample with queued &gt; 0 accordingly.
+See <a href="../../../daemon/">daemon</a>.</p>
+<h3 id="pool-mode">Pool mode</h3>
+<p>Which pool a run uses: <strong>daemon</strong> (one shared pool the background daemon owns
+across every workspace and client) or <strong>proc</strong> (a per-process pool for a single
+one-off invocation). See <a href="../../../daemon/">daemon</a>.</p>
+<h3 id="one-off">One-off</h3>
+<p>A single <code>magus</code> invocation that runs a target and exits, using a per-process
+pool; the opposite of the long-lived daemon or a service. See
+<a href="../../../daemon/">daemon</a>.</p>
+<h3 id="remote-cache">Remote cache</h3>
+<p>A CI-only backend that shares content-addressed artifacts across runners: a cold
+machine replays a build another runner already did instead of rebuilding. Every
+remote artifact must be signed by a trusted key. See
+<a href="../../../remote-cache/">remote-cache</a>.</p>
+<h3 id="snapshot">Snapshot</h3>
+<p>A point-in-time view of live state - the pool's occupancy or a tick of exported
+metrics - as opposed to accumulated history. See <a href="../../../daemon/">daemon</a>.</p>
+<h3 id="backfill">Backfill</h3>
+<p>The recent history the daemon replays to a dashboard on connect, so its charts
+start populated instead of empty. It is served from a bounded ring buffer of the
+last few hundred samples. See <a href="../../../daemon/">daemon</a>.</p>
+<h2 id="telemetry-and-health">Telemetry and health</h2>
+<h3 id="latency">Latency</h3>
+<p>How long an operation takes. magus records latency as OpenTelemetry histograms
+per family - target execution, cache op, pool wait, and graph query - and reports
+each as a count, sum, and percentiles. See <a href="../../../telemetry/">telemetry</a>.</p>
+<h3 id="percentile">Percentile</h3>
+<p>A latency value at a given rank, interpolated from a histogram's buckets: <strong>p50</strong>
+is the median, <strong>p95</strong> and <strong>p99</strong> are the tail that most latency budgets care
+about. See <a href="../../../telemetry/">telemetry</a>.</p>
+<h3 id="health">Health</h3>
+<p>The at-a-glance daemon state derived from the pool: <strong>healthy</strong> when the pool is
+reporting, <strong>degraded</strong> when it reports an error, <strong>down</strong> when there is no pool.
+The dashboard color-codes each state. See <a href="../../../daemon/">daemon</a>.</p>
+<h3 id="volatility">Volatility</h3>
+<p>A target that fails once and passes on rerun is <strong>volatile</strong>, as opposed to a
+regression that started failing and stays failing. magus keeps per-target
+pass/fail history and a Wilson-score volatility rate to tell them apart and
+auto-retry the noise. See <a href="../../../volatility/">volatility</a>.</p>
+<h2 id="insight-and-knowledge">Insight and knowledge</h2>
+<h3 id="knowledge-graph">Knowledge graph</h3>
+<p>The queryable graph of a workspace's spells, targets, docs, and code
+relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
+<a href="../../../knowledge/">knowledge</a>.</p>
+<h3 id="insight">Insight</h3>
+<p>The reports magus derives over the graph and history (hotspots, affinity,
+ownership, trend). See <a href="../../../insight/">insight</a>.</p>
+<h3 id="hotspot">Hotspot</h3>
+<p>An insight lens: edit frequency times complexity, the prime refactoring targets.
+The project view heat-colours the dependency graph by churn; <code>--files</code> ranks
+individual files. See <a href="../../../insight/">insight</a>.</p>
+<h3 id="affinity">Affinity</h3>
+<p>An insight lens: projects that change together (temporal coupling). A pair that
+co-changes without either declaring a dependency on the other is a candidate
+architectural smell. See <a href="../../../insight/">insight</a>.</p>
+<h3 id="ownership">Ownership</h3>
+<p>An insight lens: author concentration - the primary author and their share, the
+distinct-author count (the bus factor), and abandonment. See
+<a href="../../../insight/">insight</a>.</p>
+<h3 id="trend">Trend</h3>
+<p>An insight lens: the recent half of the window against the earlier half. A
+positive delta is a rising hotspot; a negative one is cooling. See
+<a href="../../../insight/">insight</a>.</p>
+<h3 id="diagnostic-code">Diagnostic code</h3>
+<p>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be
+referenced and looked up; some are guardrails (see <a href="../../../wards/">wards</a>), others hard
+errors.</p>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../../../conventions/">Documentation conventions</a> - how to read the placeholders,
+shell commands, and admonitions used across these pages.</li>
+<li><a href="../../../targets/">Targets</a> - the fuller Target-struct glossary (Path, Name, Files)
+for magusfile authors.
+</content></li>
+</ul>
+</invoke>
+</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed"><h1 id="documentation-conventions">Documentation conventions</h1>
+<p>A few conventions run through every page on this site. This page is the key.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Angle brackets mark a value you replace with your own - never type the brackets:</p>
+<pre><code class="language-sh">magus run &lt;target&gt;
+magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
+</code></pre>
+<p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="shell-commands">Shell commands</h2>
+<p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
+<code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>
+<pre><code class="language-sh">magus version
+# magus 0.4.2
+</code></pre>
+<p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="runnable-examples">Runnable examples</h2>
+<p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
+the snippet in the in-browser <a href="../../../playground/">playground</a> via WebAssembly - no
+install needed. Blocks without the button are illustrative only. (With JavaScript
+off, every block is plain, copyable text.)</p>
+<h2 id="admonitions">Admonitions</h2>
+<p>Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent
+per type:</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note</p>
+<p>Context worth knowing, but not a warning.</p>
+</div>
+<!-- -->
+<div class="admonition admonition-warning"><p class="admonition-title">Warning</p>
+<p>Something that can bite you if ignored.</p>
+</div>
+<p>The types are <code>NOTE</code>, <code>TIP</code>, <code>IMPORTANT</code>, <code>WARNING</code>, and <code>CAUTION</code>.</p>
+<h2 id="footnotes">Footnotes</h2>
+<p>An aside that would break the flow inline is written as a footnote: a bracketed
+superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
+links back. The generated module reference uses them to flag methods that also exist
+in Buzz's own standard library without cluttering each signature.</p>
+<h2 id="code-block-titles">Code-block titles</h2>
+<p>A fenced block can carry a filename or label in a small caption bar above it, so you
+know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
+<h2 id="diffs">Diffs</h2>
+<p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
+removed lines (leading <code>-</code>) as a red one.</p>
+<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
+-    magus.needs(lint);
++    magus.needs(lint, test);
+ }
+</code></pre>
+<h2 id="auto-generated-pages">Auto-generated pages</h2>
+<p>Pages built from source - the <a href="../../../buzz/modules/">module reference</a>, the
+<a href="../../../spells/">spell reference</a>, the <a href="../../../manpage/magus/">man pages</a>, and the
+<a href="../../../config/">configuration reference</a> - carry an <strong>auto-generated</strong> chip. Edit the
+generator, not the page; a hand edit is overwritten on the next build.</p>
+<h2 id="reading-time">Reading time</h2>
+<p>Longer pages show an estimated reading time near the top. It is a word count of the
+source, not a tracker - nothing is measured about you.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>Authored as <code>text[^label]</code> in the prose, with a matching <code>[^label]: note</code>
+line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+</div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="../../../console/">Console</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

@@ -13,7 +13,7 @@ waiting for it. magus rejects it at resolution.
 
 ```text
 [MGS5003] command op "typecheck" runs a watcher with "--watch": a command op runs to completion, so a never-exiting watch process hangs the run. Make this a service op instead.
-  see: …/MGS5003.md
+  see: .../MGS5003.md
 ```
 
 ## Why

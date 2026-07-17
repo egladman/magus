@@ -12,6 +12,8 @@ The `ts` spell wires a TypeScript project's tooling into a magusfile, forking ea
 
 **Version probe:** `node --version`
 
+**Provides:** `dist/**`
+
 **Opaque:** yes (its outputs are not enumerable, so magus treats the whole workspace as the cache input).
 
 ## Passing arguments to ops
@@ -27,45 +29,120 @@ Every op is invoked as `ts["<op>"](opts?)`, where the optional options map accep
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
+## biome-check
+
+**Command:** `pnpm exec biome check .`
+
+### gha
+
+Inserts `--reporter=github`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/3",
+    "value": "--reporter=github"
+  }
+]
+```
+
+</details>
+
+### rw
+
+Inserts `--write`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/3",
+    "value": "--write"
+  }
+]
+```
+
+</details>
+
+## biome-format
+
+**Command:** `pnpm exec biome format .`
+
+### rw
+
+Inserts `--write`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/3",
+    "value": "--write"
+  }
+]
+```
+
+</details>
+
+## dev-server
+
+**Command:** `pnpm run dev`
+
 ## eslint
 
 **Command:** `pnpm exec eslint .`
 
-### Example
+### gha
 
-<!-- run-recorder -->
-```buzz
-// eslint lints the project through the package manager (pnpm exec eslint).
-import "magus";
-import "magus/spell/ts";
+Inserts `--format=unix`.
 
-magus.project({ "spells": [ts] });
+<details class="charm-patch">
+<summary>JSON Patch</summary>
 
-export fun lint(args: [str]) > void {
-    ts["eslint"]();
-}
+```json
+[
+  {
+    "op": "add",
+    "path": "/2",
+    "value": "--format=unix"
+  }
+]
 ```
+
+</details>
+
+### rw
+
+Inserts `--fix`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/2",
+    "value": "--fix"
+  }
+]
+```
+
+</details>
 
 ## preflight
 
-preflight is a no-op marker op (no command).
-
 **Command:** none; this op composes the spell's other ops (see the intro).
-
-### Example
-
-<!-- run-recorder -->
-```buzz
-// preflight composes the tsc/eslint/prettier/vitest checks into one opaque target.
-import "magus";
-import "magus/spell/ts";
-
-magus.project({ "spells": [ts] });
-
-export fun preflight(args: [str]) > void {
-    ts["preflight"]();
-}
-```
 
 ## prettier
 
@@ -90,24 +167,7 @@ Replaces `--check` with `--write`.
 
 </details>
 
-### Example
-
-<!-- run-recorder -->
-```buzz
-// prettier checks formatting; the rw charm (magus run format:rw) rewrites in place.
-import "magus";
-import "magus/spell/ts";
-
-magus.project({ "spells": [ts] });
-
-export fun format(args: [str]) > void {
-    ts["prettier"]();
-}
-```
-
 ## scip
-
-scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. Run through sh so the env var expands.
 
 **Command:** `sh -c scip-typescript index --output "$MAGUS_SYMBOL_INDEX"`
 
@@ -115,20 +175,13 @@ scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge 
 
 **Command:** `pnpm exec tsc`
 
-### Example
+## tsc-build
 
-<!-- run-recorder -->
-```buzz
-// tsc type-checks the project through the package manager (pnpm exec tsc).
-import "magus";
-import "magus/spell/ts";
+**Command:** `pnpm exec tsc --build`
 
-magus.project({ "spells": [ts] });
+## tsc-clean
 
-export fun typecheck(args: [str]) > void {
-    ts["tsc"]();
-}
-```
+**Command:** `pnpm exec tsc --build --clean`
 
 ## vitest
 
@@ -152,19 +205,4 @@ Appends `--reporter=github-actions`.
 ```
 
 </details>
-
-### Example
-
-<!-- run-recorder -->
-```buzz
-// vitest runs the test suite; the gha charm annotates failures in GitHub Actions.
-import "magus";
-import "magus/spell/ts";
-
-magus.project({ "spells": [ts] });
-
-export fun test(args: [str]) > void {
-    ts["vitest"]();
-}
-```
 

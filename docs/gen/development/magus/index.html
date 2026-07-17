@@ -53,7 +53,7 @@
         <li><a href="../../download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
-        <li><a href="../../console/dashboard/">Console</a></li>
+        <li><a href="../../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#reading-the-graphs" title="Reading the graphs">Reading the graphs</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a><ul><li><a href="#image-scan" title="image-scan">image-scan</a></li><li><a href="#postflight" title="postflight">postflight</a></li><li><a href="#generate" title="generate">generate</a></li><li><a href="#release-build" title="release-build">release-build</a></li><li><a href="#release-sign" title="release-sign">release-sign</a></li><li><a href="#watch" title="watch">watch</a></li><li><a href="#buzz-check" title="buzz-check">buzz-check</a></li><li><a href="#buzz-run" title="buzz-run">buzz-run</a></li><li><a href="#build" title="build">build</a></li><li><a href="#test" title="test">test</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#format" title="format">format</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#ci-shard" title="ci-shard">ci-shard</a></li><li><a href="#go-build" title="go-build">go-build</a></li><li><a href="#image-build" title="image-build">image-build</a></li><li><a href="#man-generate" title="man-generate">man-generate</a></li><li><a href="#bindings-generate" title="bindings-generate">bindings-generate</a></li><li><a href="#spells-generate" title="spells-generate">spells-generate</a></li><li><a href="#config-generate" title="config-generate">config-generate</a></li><li><a href="#docs-generate" title="docs-generate">docs-generate</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#coverage" title="coverage">coverage</a></li><li><a href="#preflight" title="preflight">preflight</a></li></ul></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a><ul><li><a href="#generate-1" title="generate">generate</a></li><li><a href="#format-1" title="format">format</a></li><li><a href="#lint-1" title="lint">lint</a></li><li><a href="#build-1" title="build">build</a></li><li><a href="#test-1" title="test">test</a></li><li><a href="#ci-1" title="ci">ci</a></li><li><a href="#preflight-1" title="preflight">preflight</a></li></ul></li><li><a href="#project-gopherbuzz" title="Project: gopherbuzz">Project: gopherbuzz</a><ul><li><a href="#generate-2" title="generate">generate</a></li><li><a href="#format-2" title="format">format</a></li><li><a href="#lint-2" title="lint">lint</a></li><li><a href="#build-2" title="build">build</a></li><li><a href="#test-2" title="test">test</a></li><li><a href="#ci-2" title="ci">ci</a></li><li><a href="#pgo-generate" title="pgo-generate">pgo-generate</a></li><li><a href="#preflight-2" title="preflight">preflight</a></li><li><a href="#md-generate-1" title="md-generate">md-generate</a></li></ul></li><li><a href="#project-proto" title="Project: proto">Project: proto</a><ul><li><a href="#ci-3" title="ci">ci</a></li><li><a href="#lint-3" title="lint">lint</a></li></ul></li><li><a href="#project-website" title="Project: website">Project: website</a><ul><li><a href="#generate-3" title="generate">generate</a></li><li><a href="#format-3" title="format">format</a></li><li><a href="#lint-4" title="lint">lint</a></li><li><a href="#build-3" title="build">build</a></li><li><a href="#test-3" title="test">test</a></li><li><a href="#ci-4" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-mermaid" title="build-mermaid">build-mermaid</a></li><li><a href="#build-hljs" title="build-hljs">build-hljs</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#preflight-3" title="preflight">preflight</a></li><li><a href="#md-generate-2" title="md-generate">md-generate</a></li><li><a href="#changelog-generate" title="changelog-generate">changelog-generate</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li></ul></li></ul>
+        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-gopherbuzz" title="Project: gopherbuzz">Project: gopherbuzz</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -83,16 +83,50 @@
     <article>
 <h1 id="targets">Targets</h1>
 <!-- Generated by `magus describe graph -o markdown`. Do not edit by hand. -->
-<p>A <strong>target</strong> is a named operation (build, test, lint, …) declared as an <code>export fun</code> in a project's magusfile. This cheat sheet (the per-target catalog and run-order graph below) is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.</p>
+<p>Generated by <code>magus describe graph -o markdown</code> via the generate target. If the counts here look stale, trust the live tools (<code>magus query</code>) over this file.</p>
+<p>Default charms: rw (local runs write; CI strips them with <code>--no-default-charms</code>).</p>
+<p>A <strong>target</strong> is a named operation (build, test, lint, …) declared as an <code>export fun</code> in a project's magusfile. This is a routing index: every target with a one-line summary, plus the commands that expand any one of them. It is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.</p>
+<h2 id="route-by-question">Route by question</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>To find out</th>
+<th>Run</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>what exists / what relates</td>
+<td><code>magus query &quot;&lt;terms&gt;&quot;</code></td>
+</tr>
+<tr>
+<td>is this file generated</td>
+<td><code>magus describe file &lt;path&gt;</code></td>
+</tr>
+<tr>
+<td>what a target runs</td>
+<td><code>magus describe target &lt;name&gt;</code></td>
+</tr>
+<tr>
+<td>what my change affected</td>
+<td><code>magus affected ci</code></td>
+</tr>
+<tr>
+<td>a failing run's output</td>
+<td><code>magus query output &lt;ref&gt;</code></td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="quick-start">Quick start</h2>
 <pre><code class="language-sh">magus run &lt;target&gt;          # from inside the project directory
 magus run &lt;target&gt; &lt;path&gt;   # from anywhere in the workspace
 magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
+<p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <p>Prefer a picture? Explore this graph in the <a href="https://eli.gladman.cc/magus/console/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>1708 nodes</strong> and <strong>3191 edges</strong> (schema v1). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>1818 nodes</strong> and <strong>3970 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -111,27 +145,33 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>project</td>
-<td style="text-align:right">5</td>
+<td style="text-align:right">6</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:project</code></a></td>
-<td><code>magus</code>, <code>gopherbuzz</code>, <code>website</code></td>
+<td><code>docs</code>, <code>magus</code>, <code>gopherbuzz</code></td>
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">56</td>
+<td style="text-align:right">63</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:target</code></a></td>
-<td><code>generate</code>, <code>format</code>, <code>generate</code></td>
+<td><code>content-generate</code>, <code>generate</code>, <code>generate</code></td>
 </tr>
 <tr>
 <td>spell</td>
 <td style="text-align:right">12</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:spell" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:spell</code></a></td>
-<td><code>go</code>, <code>buf</code>, <code>docker</code></td>
+<td><code>go</code>, <code>ts</code>, <code>docker</code></td>
 </tr>
 <tr>
 <td>op</td>
-<td style="text-align:right">47</td>
+<td style="text-align:right">52</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:op</code></a></td>
 <td><code>go-build</code>, <code>go-test</code>, <code>go-fmt</code></td>
+</tr>
+<tr>
+<td>tool</td>
+<td style="text-align:right">13</td>
+<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:tool" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:tool</code></a></td>
+<td><code>sh</code>, <code>pnpm</code>, <code>go</code></td>
 </tr>
 <tr>
 <td>charm</td>
@@ -153,25 +193,25 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>diagnostic</td>
-<td style="text-align:right">26</td>
+<td style="text-align:right">29</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:diagnostic</code></a></td>
-<td><code>MGS5002</code>, <code>MGS4001</code>, <code>MGS5003</code></td>
+<td><code>MGS5002</code>, <code>MGS2001</code>, <code>MGS4001</code></td>
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">104</td>
+<td style="text-align:right">161</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:doc</code></a></td>
-<td><code>docs/spells.md</code>, <code>docs/documentation.md</code>, <code>docs/sandbox.md</code></td>
+<td><code>docs/spells.md</code>, <code>docs/documentation.md</code>, <code>docs/manpage/magus.md</code></td>
 </tr>
 <tr>
 <td>file</td>
-<td style="text-align:right">196</td>
+<td style="text-align:right">201</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:file</code></a></td>
-<td><code>website/scribe.buzz</code>, <code>gopherbuzz/examples/bubblegum/config.buzz</code>, <code>gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code></td>
+<td><code>docs/render.buzz</code>, <code>gopherbuzz/examples/bubblegum/config.buzz</code>, <code>gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">992</td>
+<td style="text-align:right">1011</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:function</code></a></td>
 <td><code>sel</code>, <code>site_render</code>, <code>sendObject</code></td>
 </tr>
@@ -212,6 +252,18 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td><code>format</code>, <code>ci</code>, <code>build</code></td>
 </tr>
 <tr>
+<td>console</td>
+<td style="text-align:right">5</td>
+<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:console" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:console</code></a></td>
+<td><code>build</code>, <code>ci</code>, <code>preflight</code></td>
+</tr>
+<tr>
+<td>docs</td>
+<td style="text-align:right">15</td>
+<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:docs" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:docs</code></a></td>
+<td><code>content-generate</code>, <code>generate</code>, <code>ci</code></td>
+</tr>
+<tr>
 <td>gopherbuzz</td>
 <td style="text-align:right">9</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:gopherbuzz" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:gopherbuzz</code></a></td>
@@ -219,785 +271,330 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>proto</td>
-<td style="text-align:right">2</td>
+<td style="text-align:right">3</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:proto" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:proto</code></a></td>
-<td><code>ci</code>, <code>lint</code></td>
-</tr>
-<tr>
-<td>website</td>
-<td style="text-align:right">14</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:website" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:website</code></a></td>
-<td><code>generate</code>, <code>ci</code>, <code>preflight</code></td>
+<td><code>ci</code>, <code>generate</code>, <code>lint</code></td>
 </tr>
 </tbody>
 </table></figure>
-<h2 id="reading-the-graphs">Reading the graphs</h2>
-<div class="mermaid-src"><pre><code class="language-mermaid">graph LR
-  subgraph legend[&quot;Legend&quot;]
-    lg_anchor(&quot;Top-level target&quot;)
-    lg_target(&quot;Target&quot;)
-    lg_ext[[&quot;Other project&quot;]]
-    lg_spell{{&quot;Spell&quot;}}
-  end
-  %% no dependency edges
-  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
-  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
-  class lg_anchor anchor
-  class lg_target target
-  class lg_ext external
-  class lg_spell spell
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<ul>
-<li>Every rounded box is a <strong>target</strong> you can <code>magus run</code>. <strong>Blue</strong> is a top-level target (nothing else depends on it — a typical entry point); <strong>gray</strong> ones are pulled in as dependencies.</li>
-<li>Arrows show <strong>run order</strong>: a target's dependencies run before it, so the graph flows left -&gt; right (e.g. <code>preflight</code> runs first, <code>ci</code> last).</li>
-<li>A dotted arrow marks a <strong>cross-project dependency</strong> (the other project's target runs first).</li>
-<li>Each project's <strong>Toolchain</strong> graph (top-down) shows which <strong>spell</strong> each target drives.</li>
-</ul>
 <h2 id="project-magus">Project: magus</h2>
-<details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>magus</code></summary>
-<pre><code class="language-text">sources  **/*.MD, **/*.buzz, **/*.go, **/*.markdown, **/*.md, .markdownlint.json, .markdownlint.yaml, go.mod, go.sum, go.work, go.work.sum, magusfile.buzz, magusfiles/**/*.buzz
-outputs  host/gen/*.go, docs/buzz/modules/*.md, docs/spells/*.md, docs/spells.md, docs/manpage/gen/*.md, manpage/gen/*.1, MAGUS.md, dist/*
-spells   magusfile, go, buzz, md (claims: **/*.md, **/*.mdx)
-</code></pre>
-</details>
-<p><strong>Run order</strong></p>
-<div class="mermaid-src"><pre><code class="language-mermaid">---
-config:
-  flowchart:
-    nodeSpacing: 50
-    rankSpacing: 80
----
-graph LR
-  subgraph stage_build[&quot;build&quot;]
-    go_build(&quot;go-build&quot;)
-    image_build(&quot;image-build&quot;)
-  end
-  subgraph stage_generate[&quot;generate&quot;]
-    man_generate(&quot;man-generate&quot;)
-    bindings_generate(&quot;bindings-generate&quot;)
-    spells_generate(&quot;spells-generate&quot;)
-    config_generate(&quot;config-generate&quot;)
-    docs_generate(&quot;docs-generate&quot;)
-    md_generate(&quot;md-generate&quot;)
-  end
-  subgraph entry_cluster[&quot; &quot;]
-    image_scan(&quot;image-scan&quot;)
-    postflight(&quot;postflight&quot;)
-    release_build(&quot;release-build&quot;)
-    release_sign(&quot;release-sign&quot;)
-    watch(&quot;watch&quot;)
-    buzz_check(&quot;buzz-check&quot;)
-    buzz_run(&quot;buzz-run&quot;)
-    ci(&quot;ci&quot;)
-    ci_shard(&quot;ci-shard&quot;)
-  end
-  generate(&quot;generate&quot;)
-  coverage(&quot;coverage&quot;)
-  preflight(&quot;preflight&quot;)
-  build(&quot;build&quot;)
-  test(&quot;test&quot;)
-  lint(&quot;lint&quot;)
-  format(&quot;format&quot;)
-  xt_gopherbuzz_build[[&quot;gopherbuzz:build&quot;]]
-  stage_build --&gt; image_scan
-  preflight --&gt; generate
-  stage_generate --&gt; generate
-  format --&gt; build
-  stage_build --&gt; build
-  format --&gt; test
-  format --&gt; lint
-  generate --&gt; format
-  generate --&gt; ci
-  lint --&gt; ci
-  build --&gt; ci
-  test --&gt; ci
-  coverage --&gt; ci
-  xt_gopherbuzz_build -.-&gt; stage_build
-  xt_gopherbuzz_build -.-&gt; watch
-  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
-  class buzz_check,buzz_run,ci,ci_shard,image_scan,postflight,release_build,release_sign,watch anchor
-  class bindings_generate,build,config_generate,coverage,docs_generate,format,generate,go_build,image_build,lint,man_generate,md_generate,preflight,spells_generate,test target
-  class xt_gopherbuzz_build external
-  style entry_cluster fill:transparent,stroke:transparent
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p><strong>Toolchain</strong></p>
-<p>Which spell each target drives; edge labels are the tool-native operations.</p>
-<div class="mermaid-src"><pre><code class="language-mermaid">graph TB
-  t_go_build(&quot;go-build&quot;)
-  sp_go{{&quot;go&quot;}}
-  t_image_build(&quot;image-build&quot;)
-  sp_docker{{&quot;docker&quot;}}
-  sp_cosign{{&quot;cosign&quot;}}
-  t_release_build(&quot;release-build&quot;)
-  t_watch(&quot;watch&quot;)
-  t_coverage(&quot;coverage&quot;)
-  t_buzz_check(&quot;buzz-check&quot;)
-  sp_buzz{{&quot;buzz&quot;}}
-  t_buzz_run(&quot;buzz-run&quot;)
-  t_test(&quot;test&quot;)
-  t_lint(&quot;lint&quot;)
-  sp_md{{&quot;md&quot;}}
-  t_format(&quot;format&quot;)
-  t_go_build --&gt;|&quot;go-build&quot;| sp_go
-  t_image_build --&gt;|&quot;docker-buildx&quot;| sp_docker
-  t_image_build --&gt;|&quot;cosign-sign&quot;| sp_cosign
-  t_release_build --&gt;|&quot;go-build&quot;| sp_go
-  t_watch --&gt;|&quot;go-build&quot;| sp_go
-  t_coverage --&gt;|&quot;go-test&quot;| sp_go
-  t_buzz_check --&gt;|&quot;buzz-check&quot;| sp_buzz
-  t_buzz_run --&gt;|&quot;magus-buzz&quot;| sp_buzz
-  t_test --&gt;|&quot;go-test&quot;| sp_go
-  t_lint --&gt;|&quot;go-vet&quot;| sp_go
-  t_lint --&gt;|&quot;markdownlint&quot;| sp_md
-  t_format --&gt;|&quot;go-fmt, go-mod-tidy&quot;| sp_go
-  t_format --&gt;|&quot;prettier&quot;| sp_md
-  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
-  class sp_buzz,sp_cosign,sp_docker,sp_go,sp_md spell
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p><a href="https://eli.gladman.cc/magus/console/graph/#data=H4sIAAAAAAAC_8RX4W7juBF-lYFwwNpdyblesQWa-5VN75zgdm-LTfKjaIOEJkcSLxIpzFB2vIcF-hB9wj5JMaQsWzknu21_9Fdicjj8hvN9M6NfM4OldTZY77LT7LpGCIoqDGCwQ2fQ6S1UpLoaLEOoEVpV9bxwiIbhz2dL8CUo6Mj_gjq84rRd2gZPAZWuwXmDclTt_M6UA3zsPAU0UPZOy9XzPFmjqRDU4d02gPZt5xl5AZdBXOFjIKXlOAcVrFZNs4WSfLvHJwCAfU8ac2AvXrj2GwZcI23TNf_6xz_BOt30xroKVj7UoKjlFBD1LtgWYUXK6TraKmegbFTFoNz2EKLe6gZhtqmtriME6h10KtRAKK_CYHqSO4zlTgVdzxdZng1Pxtnp337NxDo7zWQdXWUdZqfZqv_0KcszecBk5FQr65UvVr1tTJZnxuvsNDv3bWcbTOlZI7H1ruCg2g5Neg5YWadoK-65w6ZJ_uK_0WGWZ76Txb3z28-3eabJM9-NodoByAA9Hu1qpAFpSnBELh4-337OR9C2VRU-wX3jDFIErQ3oWlGbQ7R43fVcv2ZbuZSWlOaYgPPlB4i-GHqnvTORucIACS46iXFouSady26PRm28fkDaR55-J4iPWcS-M9VesOxN0-8iLt4eCZO1cmOUV1q5lJq4CRsbaghk19vvE1k2KXbYkA3IcHX28fLHGGul5Ld3cHG5vDg5_3h5fXl-9k7ifJKRyeveHj4DbbJDeK1yRYUOSQUcAX4UV7QTtzBXXndGviznYF3wsiqLJxW6RXbgbmWdaIeP-dwtJb9LD7XnALsTMONgoPh7_-23f8C4Jc7nScUczOK9N32DYFA3ipTkmCdXp4R--WKdtGEisUJhHcSTsNoG1FKaZtYFJKeak7gRYUxu0t6VtvryTefvLmGwlSoBXdO3K1H9TLfmJMrwIMbx1nRk-LOo_ORu4_XXxdjaIPVQ7OG9ogfjNw5mbXpEwhIJnUZ4vU_wNMjWPM-L92fLm6tFa2BtFdynemKQNdkVptZwP_HVeQ5lY6s6HKWYdSx7QCg9AGa1D9z5wDmoMnaibQ5-45C4tl0OgdCZOQQvtPB9EGXkYB0sbbjoV3AW-4ec7kQTLKU--HjTL34FHLAD7ts2lr8DlC--auoSvxvfBNiuGuuqXPy6vTAN2TLADB9107NdS6_RXqpu8KA3Zn5Mqx3h-DpP9HhMT78l-lFCTiwOs_lSOSBsUPHTsvxWfkl4wpxoMLQPKD3F5a5RofTUTkvui9X2uR5zBM1Qa4fqaSvH0jjDydXF2Xdv_nh18_5qqKE1wg_muzdvfv8neMCtcEKWIl3vri6XP1_-vLz76Ye_AqMmGTwYEUYtFn2wDZ_IZYvKz4fMMjZlsUaypR3EJQYq9ISgKmUdh7iK7QqNQTO-UNevBMO-mgwbD7idwwpLT5iq_WBfeWFQH9JkAbpG1QFhRcjSvqHqFZkcWJUoZJKJokZCmPWusQ8IjKHvihhJDmny0Mq92o1tQs5xGBoGIZGSxCOFwMqoRtizVMYtKFrZQJJifEz4ozyfFImNzC4HelntiDLoxeDK905jbOauQpAZqkmljvouoPkeSl5EN_D23Yfzn65E39sTHVceELsoX9XYNf4fZxXt10iq2peG3YKkYWBFb8PQyjukolP6QfZHQ2nfhENHlwOKGQOf7AwWvK5gpUyFUw2JQL8m7oAcnshHAit0jfphxH297TAtDaiDckY1IuG3_adPexn1HQdC1cK9eLmH4H2ja2UdzIrkYP5MPobnHJAdYDgCjnr3n0GL7H3F0g72ikvzMcy-iUIH8fx14JLs49oU3GFFTuiWY2-N9BCKbzw9cKc0Qo2qCbXIhnrnpMPvmqLXwdO0GT4zqUucioItlQ6n8aLdeKRI-t8wFnsXlHVIw-jYjwPz_bh1n6bHY51GSrSSoKbD9142k4F553DSISLPduh_jP4YSkschoI5KmLpQYyTMl5A89_Su7HuZSSVb5SrtC3EMofKwxrj33XfuMi0HNphNBKT_xXjGsP0K6E1h1zbX_QkkDErvxk7hkDKIbilzyFYI43ovvKL1pv7PBaWjjCEfYeS7n8smMMR4MvhlG1I3Gi9KYI12-eDS_dHpkzKpt0HJawYh6dZGpNkaprnkNITGZhHyqSgEt9TdSxiZYSSkGuHzPFo-lpSZYny6X_S2Q4bKQTyfe4JiqgpGYWTNyV9hD3E3hK_Fml8aSOdt-vDi6-W7yi3082ghbE7TGMvuFa0V_o1KcdNLCPj0LzDDkXRNcrdw4xQxeLCwVg3fGxN51qIbotWBbKPA2xOT1HVavrl-M3y8vri5u3dh5vrv9xc5-BDjbSxjMMoEF1YKT7NVki0trhBM21AVa1SO03vwnfeJYKMvVOS_u8AAAD__xi4a7M2EgAA" rel="noopener noreferrer" target="_blank" data-external>Explore this project's graph interactively</a></p>
-<h3 id="image-scan"><code>image-scan</code></h3>
-<p>Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run image-scan  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run image-scan:rw  # mutate in place instead of checking
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#image-build"><code>image-build</code></a></li>
-</ul>
-<h3 id="postflight"><code>postflight</code></h3>
-<p>Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run postflight  # from the workspace root
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="generate"><code>generate</code></h3>
-<p>Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run generate  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run generate:rw  # mutate in place instead of checking
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-<li><a href="#man-generate"><code>man-generate</code></a></li>
-<li><a href="#bindings-generate"><code>bindings-generate</code></a></li>
-<li><a href="#spells-generate"><code>spells-generate</code></a></li>
-<li><a href="#config-generate"><code>config-generate</code></a></li>
-<li><a href="#docs-generate"><code>docs-generate</code></a></li>
-<li><a href="#md-generate"><code>md-generate</code></a></li>
-</ul>
-<p><strong>Details:</strong> uncached (always runs) · exclusive (runs alone, no concurrent targets)</p>
-<h3 id="release-build"><code>release-build</code></h3>
-<p>Builds one release binary for one platform.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run release-build  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run release-build:static  # apply the static charm
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="release-sign"><code>release-sign</code></h3>
-<p>Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run release-sign  # from the workspace root
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="watch"><code>watch</code></h3>
-<p>Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run watch  # from the workspace root
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="buzz-check"><code>buzz-check</code></h3>
-<p>Type-checks the standalone Buzz with the upstream <code>buzz</code> toolchain (--check).</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run buzz-check  # from the workspace root
-</code></pre>
-<p><strong>Executes</strong></p>
-<pre><code class="language-sh">sh -c find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check
-</code></pre>
-<h3 id="buzz-run"><code>buzz-run</code></h3>
-<p>Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run buzz-run  # from the workspace root
-</code></pre>
-<h3 id="build"><code>build</code></h3>
-<p>Compiles one artifact: the host binary, or the container image under the <code>container</code> charm.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run build:container  # build the container image instead of the host binary
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-<li><a href="#image-build"><code>image-build</code></a></li>
-<li><a href="#go-build"><code>go-build</code></a></li>
-</ul>
-<h3 id="test"><code>test</code></h3>
-<p>Formats first, then runs the Go test suite.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run test  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="lint"><code>lint</code></h3>
-<p>Formats first, then golangci-lint, go vet, govulncheck, markdownlint.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run lint  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="format"><code>format</code></h3>
-<p>Regenerates, then formats Go, tidies <code>go.mod</code>, and prettifies the docs.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run format  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-</ul>
-<h3 id="ci"><code>ci</code></h3>
-<p>Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run ci  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-<li><a href="#lint"><code>lint</code></a></li>
-<li><a href="#build"><code>build</code></a></li>
-<li><a href="#test"><code>test</code></a></li>
-<li><a href="#coverage"><code>coverage</code></a></li>
-</ul>
-<h3 id="ci-shard"><code>ci-shard</code></h3>
-<p>Translates a <code>magus affected --plan</code> (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run ci-shard  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run ci-shard:gha  # apply the gha charm
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="go-build"><code>go-build</code></h3>
-<p>Compiles the version-stamped magus binary.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run go-build  # from the workspace root
-</code></pre>
-<p><strong>Executes</strong></p>
-<pre><code class="language-sh">go build
-</code></pre>
-<h3 id="image-build"><code>image-build</code></h3>
-<p>Under the cd charm, build+push+sign both static and CGO images unconditionally.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run image-build  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run image-build:cd      # apply the cd charm
-magus run image-build:static  # apply the static charm
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="man-generate"><code>man-generate</code></h3>
-<p>Renders the man pages (roff) into manpage/gen.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run man-generate  # from the workspace root
-</code></pre>
-<h3 id="bindings-generate"><code>bindings-generate</code></h3>
-<p>Regenerates the Go host bindings (std -&gt; host/gen) from std.Module declarations.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run bindings-generate  # from the workspace root
-</code></pre>
-<h3 id="spells-generate"><code>spells-generate</code></h3>
-<p>Regenerates the compiled built-in spell bytecode (internal/spell/gen).</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run spells-generate  # from the workspace root
-</code></pre>
-<h3 id="config-generate"><code>config-generate</code></h3>
-<p>Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run config-generate  # from the workspace root
-</code></pre>
-<h3 id="docs-generate"><code>docs-generate</code></h3>
-<p>Regenerates the committed docs Markdown (module reference + man pages).</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run docs-generate  # from the workspace root
-</code></pre>
-<h3 id="md-generate"><code>md-generate</code></h3>
-<p>Renders MAGUS.md via <code>magus describe graph</code>.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run md-generate  # from the workspace root
-</code></pre>
-<h3 id="coverage"><code>coverage</code></h3>
-<p>coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run coverage  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run coverage:rw  # mutate in place instead of checking
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="preflight"><code>preflight</code></h3>
-<p>Gates the build on workspace health by running <code>magus doctor</code>.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run preflight  # from the workspace root
-</code></pre>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>image-scan</code></td>
+<td>Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.</td>
+</tr>
+<tr>
+<td><code>postflight</code></td>
+<td>Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary.</td>
+</tr>
+<tr>
+<td><code>generate</code></td>
+<td>Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).</td>
+</tr>
+<tr>
+<td><code>release-build</code></td>
+<td>Builds one release binary for one platform.</td>
+</tr>
+<tr>
+<td><code>release-sign</code></td>
+<td>Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).</td>
+</tr>
+<tr>
+<td><code>watch</code></td>
+<td>Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.</td>
+</tr>
+<tr>
+<td><code>buzz-check</code></td>
+<td>Type-checks the standalone Buzz with the upstream <code>buzz</code> toolchain (--check).</td>
+</tr>
+<tr>
+<td><code>buzz-run</code></td>
+<td>Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td>Gates the build on workspace health by running <code>magus doctor</code>.</td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td>Compiles one artifact: the host binary, or the container image under the <code>container</code> charm.</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>Formats first, then runs the Go test suite.</td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td>Formats first, then golangci-lint, go vet, govulncheck, markdownlint.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>Regenerates, then formats Go, tidies <code>go.mod</code>, and prettifies the docs.</td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.</td>
+</tr>
+<tr>
+<td><code>ci-shard</code></td>
+<td>Translates a <code>magus affected --plan</code> (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.</td>
+</tr>
+<tr>
+<td><code>serve</code></td>
+<td>serve is the workspace-root dev loop for BOTH deployables.</td>
+</tr>
+<tr>
+<td><code>go-build</code></td>
+<td>Compiles the version-stamped magus binary.</td>
+</tr>
+<tr>
+<td><code>image-build</code></td>
+<td>Under the cd charm, build+push+sign both static and CGO images unconditionally.</td>
+</tr>
+<tr>
+<td><code>man-generate</code></td>
+<td>Renders the roff man pages into manpage/ (repo root).</td>
+</tr>
+<tr>
+<td><code>bindings-generate</code></td>
+<td>Regenerates the Go host bindings (std -&gt; host/gen) from std.Module declarations.</td>
+</tr>
+<tr>
+<td><code>spells-generate</code></td>
+<td>Regenerates the compiled built-in spell bytecode (internal/spell/gen).</td>
+</tr>
+<tr>
+<td><code>config-generate</code></td>
+<td>Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.</td>
+</tr>
+<tr>
+<td><code>md-generate</code></td>
+<td>Renders MAGUS.md via <code>magus describe graph</code>.</td>
+</tr>
+<tr>
+<td><code>coverage</code></td>
+<td>coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.</td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="project-cmdmagusstarter">Project: cmd/magus/starter</h2>
-<details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>cmd/magus/starter</code></summary>
-<pre><code class="language-text">sources  cmd/magus/starter/magusfile.buzz, cmd/magus/starter/magusfiles/**/*.buzz, magusfile.buzz, magusfiles/**/*.buzz
-spells   magusfile
-</code></pre>
-</details>
-<p><strong>Run order</strong></p>
-<div class="mermaid-src"><pre><code class="language-mermaid">---
-config:
-  flowchart:
-    nodeSpacing: 50
-    rankSpacing: 80
----
-graph LR
-  preflight(&quot;preflight&quot;)
-  generate(&quot;generate&quot;)
-  format(&quot;format&quot;)
-  lint(&quot;lint&quot;)
-  build(&quot;build&quot;)
-  test(&quot;test&quot;)
-  ci(&quot;ci&quot;)
-  preflight --&gt; generate
-  generate --&gt; format
-  format --&gt; lint
-  format --&gt; build
-  format --&gt; test
-  lint --&gt; ci
-  build --&gt; ci
-  test --&gt; ci
-  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class ci anchor
-  class build,format,generate,lint,preflight,test target
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p><a href="https://eli.gladman.cc/magus/console/graph/#data=H4sIAAAAAAAC_4ySz2rcPhDHX2XQZRMwm7tvP_hB6b23EsisNLKmlUdmNE7ihEAfok_YJymyd7c-7CH4Jn--fzSadxcosrBxEde7b4nAUAcyCDSRBBK_wKA4JeAKlghGHOZ6FKJQ4f__vkCJgDBp-UHeDnX7HTlTD4Q-gZRATYoX3zsUoNepqFGAOItv0ffdRlMYCHCfzQa-jFOpVI_w1ZoVvZqib_JqaOwx5wWilvFfv1YAapnVUwe1NJeayksFeiZdtpg_v34Di89zYBngVCwB6li3C-ksxiPBSVF8WlmUADHjUAFl2Vf0i88Edy-JfVor6CwwoSVQalOpEGZtGYHrhObT_dF17jyy6vrv767Rrnd-DA9r_4dqqEbqOkcysJDr3Wl-e3OdawPdRIJjO5-UYuYhmfvorocDCSkauc5dm_Kq2_GPO0EsOqLdwK9Oezqz3GLPJnvyNHMOn0ON6idNPTeueNe7g-fDZTV9kWeStk-Yob1bUbCEBk_rUAFjpHVvPD_BT1raW8fjjcjz9S7d12KPH-37GwAA__9JWf9TMAMAAA" rel="noopener noreferrer" target="_blank" data-external>Explore this project's graph interactively</a></p>
-<h3 id="generate-1"><code>generate</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run generate cmd/magus/starter  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-</ul>
-<h3 id="format-1"><code>format</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run format cmd/magus/starter  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-</ul>
-<h3 id="lint-1"><code>lint</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run lint cmd/magus/starter  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="build-1"><code>build</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build cmd/magus/starter  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="test-1"><code>test</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run test cmd/magus/starter  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="ci-1"><code>ci</code></h3>
-<p>'ci' is the conventional anchor that <code>magus affected ci</code> keys off.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run ci cmd/magus/starter  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#lint"><code>lint</code></a></li>
-<li><a href="#build"><code>build</code></a></li>
-<li><a href="#test"><code>test</code></a></li>
-</ul>
-<h3 id="preflight-1"><code>preflight</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run preflight cmd/magus/starter  # from the workspace root
-</code></pre>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>generate</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>'ci' is the conventional anchor that <code>magus affected ci</code> keys off.</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="project-console">Project: console</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test</code></td>
+<td>test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).</td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td>build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.</td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td>lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the same way a Go project's lint runs <code>go vet</code>.</td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>'ci' is the anchor <code>magus affected ci</code> keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="project-docs">Project: docs</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>generate</code></td>
+<td>generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>'ci' is the anchor <code>magus affected ci</code> keys off.</td>
+</tr>
+<tr>
+<td><code>build-playground</code></td>
+<td>build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.</td>
+</tr>
+<tr>
+<td><code>build-mermaid</code></td>
+<td>build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -&gt; mermaid@11) into the committed gen/assets/mermaid.js.</td>
+</tr>
+<tr>
+<td><code>build-hljs</code></td>
+<td>build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -&gt; highlight.js@11) into the committed gen/assets/hljs.js.</td>
+</tr>
+<tr>
+<td><code>render</code></td>
+<td>render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate).</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>md-generate</code></td>
+<td>md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.</td>
+</tr>
+<tr>
+<td><code>changelog-generate</code></td>
+<td>changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.</td>
+</tr>
+<tr>
+<td><code>content-generate</code></td>
+<td>content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).</td>
+</tr>
+<tr>
+<td><code>buzz-test</code></td>
+<td>buzz-test runs render's in-file <code>test &quot;...&quot; {}</code> blocks through <code>magus buzz</code>, in --embedded mode so render's markdown/encoding imports resolve.</td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="project-gopherbuzz">Project: gopherbuzz</h2>
-<details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>gopherbuzz</code></summary>
-<pre><code class="language-text">sources  gopherbuzz/**/*.go, gopherbuzz/go.mod, gopherbuzz/go.sum, gopherbuzz/go.work, gopherbuzz/go.work.sum, gopherbuzz/magusfile.buzz, gopherbuzz/magusfiles/**/*.buzz, magusfile.buzz, magusfiles/**/*.buzz
-outputs  gopherbuzz/MAGUS.md
-spells   magusfile, go
-</code></pre>
-</details>
-<p><strong>Run order</strong></p>
-<div class="mermaid-src"><pre><code class="language-mermaid">---
-config:
-  flowchart:
-    nodeSpacing: 50
-    rankSpacing: 80
----
-graph LR
-  subgraph entry_cluster[&quot; &quot;]
-    ci(&quot;ci&quot;)
-    pgo_generate(&quot;pgo-generate&quot;)
-  end
-  preflight(&quot;preflight&quot;)
-  generate(&quot;generate&quot;)
-  md_generate(&quot;md-generate&quot;)
-  format(&quot;format&quot;)
-  lint(&quot;lint&quot;)
-  build(&quot;build&quot;)
-  test(&quot;test&quot;)
-  preflight --&gt; generate
-  md_generate --&gt; generate
-  generate --&gt; format
-  format --&gt; lint
-  format --&gt; build
-  format --&gt; test
-  lint --&gt; ci
-  build --&gt; ci
-  test --&gt; ci
-  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class ci,pgo_generate anchor
-  class build,format,generate,lint,md_generate,preflight,test target
-  style entry_cluster fill:transparent,stroke:transparent
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p><strong>Toolchain</strong></p>
-<p>Which spell each target drives; edge labels are the tool-native operations.</p>
-<div class="mermaid-src"><pre><code class="language-mermaid">graph TB
-  t_format(&quot;format&quot;)
-  sp_go{{&quot;go&quot;}}
-  t_lint(&quot;lint&quot;)
-  t_build(&quot;build&quot;)
-  t_test(&quot;test&quot;)
-  t_format --&gt;|&quot;go-fmt, go-mod-tidy&quot;| sp_go
-  t_lint --&gt;|&quot;go-vet&quot;| sp_go
-  t_build --&gt;|&quot;go-build&quot;| sp_go
-  t_test --&gt;|&quot;go-test&quot;| sp_go
-  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
-  class sp_go spell
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p><a href="https://eli.gladman.cc/magus/console/graph/#data=H4sIAAAAAAAC_6RUzWocPRB8lUYX2zC7vs938kfA5GAS8ncJBvdKrZ9EIwmpZXvWGPIQecI8SdDM7HocTAj4tqspVVVXd-tBKNIuOHYxiF58sgSM2RCDokRBUZAjmIzJgivAlmBAU8s2EKkCby4uIWpASDl-I8knZf6snaceCKWFEBW1q3jgPcUAdJ9iZlKga5BN-qyb0aQMAa61HYOMQ4qFyhbecqOie84o2_XCyE6i9yPoHIcnf80AlFizpA5KbCzFxrsCdEt5nGV-_fgJLkhflQsGdpEtYB7KXFCugd1AsMsYpJ2wGBRoj6YAhnFtUY7SE5zeWSftZCHXAAnZQqaWSgFVc9NQriRkac-2ohNLZEX0Xx9EQ4temJgs5V3d70UnKBgXSPRi-d-SnNEBh3aeMmnvjGXx2B0PDQXKyCQ6oaIUvfhAh6MCVxeXnz9uBzXXgs4XiAFUdpqbpWNNbhJaCXRiUJsj9XUnpG1ZNVC-E9cr_TXuyUJQlFfyp8ssSGT00UDytcxTdnZopFuN0nZdoI55QH7B7dpeSeT9HNb0c8pWdCKmGRo3emgcJm6GqDbs1CiuH9d1eBdeElnU_0nilvgP0l11Xr2SdeZ4zstUXmt2onjOKt2xg-1daIsQM9xMbQHUmqYdlO4GvtPY9kb_BxpDgVgZWn7nk9fzRg2omTLMjl6atSXvQ0KLnSczycTNX2dbkcbqeZtM7KYt_L_u9_Dl6qTA-8t37YVaRqkV-TsAAP__emIa3vcEAAA" rel="noopener noreferrer" target="_blank" data-external>Explore this project's graph interactively</a></p>
-<h3 id="generate-2"><code>generate</code></h3>
-<p>Regenerates MAGUS.md and fails on drift.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run generate gopherbuzz  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run generate:rw  # mutate in place instead of checking
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-<li><a href="#md-generate"><code>md-generate</code></a></li>
-</ul>
-<p><strong>Details:</strong> uncached (always runs) · exclusive (runs alone, no concurrent targets)</p>
-<h3 id="format-2"><code>format</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run format gopherbuzz  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-</ul>
-<h3 id="lint-2"><code>lint</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run lint gopherbuzz  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="build-2"><code>build</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build gopherbuzz  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="test-2"><code>test</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run test gopherbuzz  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="ci-2"><code>ci</code></h3>
-<p>The anchor <code>magus affected ci</code> keys off; fans out lint/build/test after format.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run ci gopherbuzz  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#lint"><code>lint</code></a></li>
-<li><a href="#build"><code>build</code></a></li>
-<li><a href="#test"><code>test</code></a></li>
-</ul>
-<h3 id="pgo-generate"><code>pgo-generate</code></h3>
-<p>Regenerates default.pgo, the Buzz VM's PGO profile.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run pgo-generate gopherbuzz  # from the workspace root
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="preflight-2"><code>preflight</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run preflight gopherbuzz  # from the workspace root
-</code></pre>
-<h3 id="md-generate-1"><code>md-generate</code></h3>
-<p>Renders MAGUS.md (target catalog plus graph) from this magusfile.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run md-generate gopherbuzz  # from the workspace root
-</code></pre>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>generate</code></td>
+<td>Regenerates MAGUS.md and fails on drift.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>The anchor <code>magus affected ci</code> keys off; fans out lint/build/test after format.</td>
+</tr>
+<tr>
+<td><code>pgo-generate</code></td>
+<td>Regenerates default.pgo, the Buzz VM's PGO profile.</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>md-generate</code></td>
+<td>Renders MAGUS.md (target catalog plus graph) from this magusfile.</td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="project-proto">Project: proto</h2>
-<details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>proto</code></summary>
-<pre><code class="language-text">sources  magusfile.buzz, magusfiles/**/*.buzz, proto/**/*.proto, proto/buf.gen.yaml, proto/buf.lock, proto/buf.work.yaml, proto/buf.yaml, proto/magusfile.buzz, proto/magusfiles/**/*.buzz
-outputs  proto/gen/**, proto/gen/**
-spells   buf
-</code></pre>
-</details>
-<p><strong>Run order</strong></p>
-<div class="mermaid-src"><pre><code class="language-mermaid">---
-config:
-  flowchart:
-    nodeSpacing: 50
-    rankSpacing: 80
----
-graph LR
-  lint(&quot;lint&quot;)
-  ci(&quot;ci&quot;)
-  buf_generate --&gt; ci
-  lint --&gt; ci
-  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  class ci anchor
-  class lint target
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p><strong>Toolchain</strong></p>
-<p>Which spell each target drives; edge labels are the tool-native operations.</p>
-<div class="mermaid-src"><pre><code class="language-mermaid">graph TB
-  t_lint(&quot;lint&quot;)
-  sp_buf{{&quot;buf&quot;}}
-  t_lint --&gt;|&quot;buf-lint&quot;| sp_buf
-  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa
-  class sp_buf spell
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p><a href="https://eli.gladman.cc/magus/console/graph/#data=H4sIAAAAAAAC_0yRQW7cMAxFr0Jw0wTwzAG8K1Cg6LrdFQOEI31bKmzKkOhOnGCAHqIn7EkKyZlJdjb1Sf7_-MoeQ9RoMSn3_COATPIII48F6qFuozHLEigWsgCaZVzLUQFf6Mvnr5QGElpy-gVnn8r-PMQJPUFcIE0etVVucx9ECc9LygZPw6qurn7sdjX8CJKPu6ORS_OSCsqRvlkdhWfL4mp7MbHoZJo2GnKa3_1VA1TSmh06KqlOKSFdCuE38rav-ffnL0V10-qjjnROFkjyXPZAeVWLM-icRV1oWlFPwyRjIdHto0W3uQn0cAnRhWYhr0qLWKCMSqWQX3Pd4WNZxFx4PHLHb8gK9z9fuaq5rzVL3DF0jAru-by-vHDHFeIuVJlrfYpq3LFPjnv-jmk4uKQmUeFvt3jjXVr-p0aFZBjQwLn4RKMY9pPW3kqULgHaKs0IuSA6otCBNFGygHwfnuu5UChqzVIWTNNusH025wN3nJZarT-HZvl0PV27ewoXa4YbyIi7doQii4E7vredrv8DAAD__716IfKsAgAA" rel="noopener noreferrer" target="_blank" data-external>Explore this project's graph interactively</a></p>
-<h3 id="ci-3"><code>ci</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run ci proto  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#buf-generate"><code>buf-generate</code></a></li>
-<li><a href="#lint"><code>lint</code></a></li>
-</ul>
-<h3 id="lint-3"><code>lint</code></h3>
-<p>Self-contained project targets, so <code>magus affected ci</code> gates the contract when the proto changes - no other project reaches in.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run lint proto  # from the workspace root
-</code></pre>
-<h2 id="project-website">Project: website</h2>
-<details>
-<summary><b>Shared defaults</b>: inputs, outputs &amp; spells shared by every target in <code>website</code></summary>
-<pre><code class="language-text">sources  magusfile.buzz, magusfiles/**/*.buzz, website/**/*.js, website/**/*.json, website/**/*.jsx, website/**/*.ts, website/**/*.tsx, website/.npmrc, website/magusfile.buzz, website/magusfiles/**/*.buzz, website/npm-shrinkwrap.json, website/package-lock.json, website/package.json, website/pnpm-lock.yaml
-outputs  website/gen/**, website/MAGUS.md, website/src/gen/**
-spells   magusfile, ts (claims: **/*.ts, **/*.tsx, **/*.mts, **/*.cts, **/*.js, **/*.mjs, **/*.cjs, **/*.jsx, **/*.json, **/*.jsonc, **/*.md, **/*.mdx, **/*.yaml, **/*.yml, **/*.css, **/*.scss, **/*.html)
-</code></pre>
-</details>
-<p><strong>Run order</strong></p>
-<div class="mermaid-src"><pre><code class="language-mermaid">---
-config:
-  flowchart:
-    nodeSpacing: 50
-    rankSpacing: 80
----
-graph LR
-  subgraph stage_generate[&quot;generate&quot;]
-    md_generate(&quot;md-generate&quot;)
-    changelog_generate(&quot;changelog-generate&quot;)
-  end
-  subgraph entry_cluster[&quot; &quot;]
-    ci(&quot;ci&quot;)
-    build_playground(&quot;build-playground&quot;)
-    build_mermaid(&quot;build-mermaid&quot;)
-    build_hljs(&quot;build-hljs&quot;)
-    serve(&quot;serve&quot;)
-  end
-  preflight(&quot;preflight&quot;)
-  generate(&quot;generate&quot;)
-  format(&quot;format&quot;)
-  lint(&quot;lint&quot;)
-  build(&quot;build&quot;)
-  buzz_test(&quot;buzz-test&quot;)
-  test(&quot;test&quot;)
-  xt_gopherbuzz_build[[&quot;gopherbuzz:build&quot;]]
-  preflight --&gt; generate
-  stage_generate --&gt; generate
-  generate --&gt; format
-  format --&gt; lint
-  generate --&gt; build
-  format --&gt; test
-  buzz_test --&gt; test
-  generate --&gt; ci
-  lint --&gt; ci
-  build --&gt; ci
-  test --&gt; ci
-  preflight --&gt; build_playground
-  preflight --&gt; build_mermaid
-  preflight --&gt; build_hljs
-  xt_gopherbuzz_build -.-&gt; build_playground
-  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px
-  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8
-  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3
-  class build_hljs,build_mermaid,build_playground,ci,serve anchor
-  class build,buzz_test,changelog_generate,format,generate,lint,md_generate,preflight,test target
-  class xt_gopherbuzz_build external
-  style entry_cluster fill:transparent,stroke:transparent
-</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p><a href="https://eli.gladman.cc/magus/console/graph/#data=H4sIAAAAAAAC_4xW227jNhN-lYFukvy_LO-id75q0BbZAj0BzaIXu0ZCkSORCQ_CDGVHGxjoQ_QJ-yQFKctWYnebO3uO33wznNFzobAx3kQTfLEqbjVCFNRiBIUdeoVeDtCS6DQYhqgRnGh7rjyiYvj--gZCAwI6Cg8o4wWP6sZYXAEKqcEHhclVTHEvhQd86gJFVND0XqbUV-VojapFEPPcJoIMrguMXMGPMYXCp0hCJneOIhoprB2goeCO-BIA4NCTxBI4pCisw5YBN0jDmObvP_8C46XtlfEt1CFqEOR4LIh6H41DqEl4qbOt8AoaK1oG4Yc5RDlIi3C51UbqDIF6D52IGggTKwyqp5RDGe5ElPqqKspiTxkXq0_PRbIuVsUWazYRi7JA3xqPxaqo-y9firJINI6mXrgk7wgba1odi115EDq1aNEjiRxDBflSBoQNIWtk-Pn65uPvlVNwGY8tlyIKG1r4_0nzryZ-zazDB2ajGBiMBxvkI0fsYGviyMQYmKs5SKmFb9GG9hTrqQoIp58M3324_uXmh59-vUnAMyBCi4KRl_-rBuFsCR0hI20S2yn_p49-b6LWwJhnDTZItYjGvUB1gmWGwCukcfhTd8ozNJb_jjMTPIGYMPBVmeeJsO6NVWNwaQ36CHXvlUUuk8xDmyMGD4pME1cgQFoUHqRG-Rj6CMHbAdqADMpQHGCbvMR--AGVibAV7C8iEC7GWlAtx8Qxg5DBORMjqjSWh86bPG-zOStfjdeZPq6zlFz2pG2xnhHcBHIinslw9J5ZW-PP2e6DzC0zgW8Nm17TIiLHQ5sPkvRqGViSqfEijfMiL5H7rPtcVFX1uYDn3T3Uecwhagp9q-E-vwdIce7L9AoWC3Q1KoUKXFp-HI5RnaBHFbZ-iV6GvHeMS6uQgZCD3eCLmZyAniehnFUzr1GaQ3EX0lxMezvtsUATXNE0mFeoNPfwiENae031NRrLqScT4SeJs2LRWTG0FHqvZhy_VLwc-z-wvmZGV9sBjI9IHWFEyrqZjw1C8QpujR9uQr4JxiJDVS2lU8tMxcyaI4k0tSligBb98qjMxtVWsBsf4Xg1otSpH0l8h08oqweG1vb5eMnQGVRQI5t0zeLXH0p6BRSY716ZPE87P22X0Gmk_XIft-RhlnenpDokJ8xrRvfSaWPkQjboVaA0e3ulNTUJGuCSSS5H7XKvSyUuPvfv3n2Dk_m3799fjZzljTRthsygYMbIM-f_oOGkCm0f-FUJSXQevzatzoESynNFJNd5BXOHN5Sxd397DemuHM9D_ne4DcHnD40k45wEwgYJPtze_jYt-sXRNn3hBMnLOh3bcY3CArTwaoAmULqjwmYT2AZ6rIrdegLJd-k77dN8fta79e6fAAAA__-wp1wbxwkAAA" rel="noopener noreferrer" target="_blank" data-external>Explore this project's graph interactively</a></p>
-<h3 id="generate-3"><code>generate</code></h3>
-<p>generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run generate website  # from the workspace root
-</code></pre>
-<p><strong>Charms</strong></p>
-<pre><code class="language-sh">magus run generate:rw  # mutate in place instead of checking
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-<li><a href="#md-generate"><code>md-generate</code></a></li>
-<li><a href="#changelog-generate"><code>changelog-generate</code></a></li>
-</ul>
-<p><strong>Details:</strong> uncached (always runs) · exclusive (runs alone, no concurrent targets)</p>
-<h3 id="format-3"><code>format</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run format website  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-</ul>
-<h3 id="lint-4"><code>lint</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run lint website  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-</ul>
-<h3 id="build-3"><code>build</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build website  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-</ul>
-<h3 id="test-3"><code>test</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run test website  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#format"><code>format</code></a></li>
-<li><a href="#buzz-test"><code>buzz-test</code></a></li>
-</ul>
-<h3 id="ci-4"><code>ci</code></h3>
-<p>'ci' is the anchor <code>magus affected ci</code> keys off.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run ci website  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#generate"><code>generate</code></a></li>
-<li><a href="#lint"><code>lint</code></a></li>
-<li><a href="#build"><code>build</code></a></li>
-<li><a href="#test"><code>test</code></a></li>
-</ul>
-<h3 id="build-playground"><code>build-playground</code></h3>
-<p>build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build-playground website  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-</ul>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="build-mermaid"><code>build-mermaid</code></h3>
-<p>build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -&gt; mermaid@11) into the committed gen/assets/mermaid.js.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build-mermaid website  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-</ul>
-<h3 id="build-hljs"><code>build-hljs</code></h3>
-<p>build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -&gt; highlight.js@11) into the committed gen/assets/hljs.js.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run build-hljs website  # from the workspace root
-</code></pre>
-<p><strong>Depends on:</strong></p>
-<ul>
-<li><a href="#preflight"><code>preflight</code></a></li>
-</ul>
-<h3 id="serve"><code>serve</code></h3>
-<p>serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change - handy for local docs work.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run serve website  # from the workspace root
-</code></pre>
-<p><strong>Details:</strong> uncached (always runs)</p>
-<h3 id="preflight-3"><code>preflight</code></h3>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run preflight website  # from the workspace root
-</code></pre>
-<h3 id="md-generate-2"><code>md-generate</code></h3>
-<p>md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run md-generate website  # from the workspace root
-</code></pre>
-<h3 id="changelog-generate"><code>changelog-generate</code></h3>
-<p>changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run changelog-generate website  # from the workspace root
-</code></pre>
-<h3 id="buzz-test"><code>buzz-test</code></h3>
-<p>buzz-test runs scribe's in-file <code>test &quot;...&quot; {}</code> blocks through <code>magus buzz</code>, in --embedded mode so scribe's markdown/encoding imports resolve.</p>
-<p><strong>Defaults</strong></p>
-<pre><code class="language-sh">magus run buzz-test website  # from the workspace root
-</code></pre>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ci</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>generate</code></td>
+<td>Self-contained project targets, so <code>magus affected ci</code> gates the contract when the proto changes - no other project reaches in.</td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
     </article>
     </div>
     </div>
@@ -1062,8 +659,11 @@ one-shot target. See <a href="../../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -1217,8 +817,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -1252,7 +852,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
-    <small class="footer-group"><a href="../../console/dashboard/">Dashboard</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../../console/">Console</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../main.js"></script>

@@ -11,7 +11,7 @@ Because both projects produce the same file, the build outcome depends on which
 project ran last.
 
 ```text
-[MGS4002] declared output overlap (see …/MGS4002.md)
+[MGS4002] declared output overlap (see .../MGS4002.md)
   projects=[api,worker] target=build overlapping=[shared/types/generated.go]
 ```
 
@@ -42,11 +42,11 @@ The most common cause is using a workspace-relative glob that two projects
 share. Use the project-relative convention instead:
 
 ```yaml
-# Before (workspace-relative — both projects claim shared/types/**)
+# Before (workspace-relative - both projects claim shared/types/**)
 outputs:
   - shared/types/**
 
-# After (project-relative — each project claims only its own tree)
+# After (project-relative - each project claims only its own tree)
 outputs:
   - "**/*.gen.go"
 ```
@@ -63,7 +63,7 @@ consumed by another, declare the output only on the producer:
 outputs:
   - ../shared/types/generated.go
 
-# consumer: worker — no matching output declaration
+# consumer: worker - no matching output declaration
 ```
 
 Then express the ordering dependency so the consumer always runs after the

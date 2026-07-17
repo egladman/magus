@@ -14,7 +14,7 @@ both as extensions alongside Buzz's standard library.
 ## What to test, and what not to
 
 Test the code that carries logic: standalone spells, and Buzz modules imported into a
-magusfile. The website's magusfile imports `website/scribe.buzz`, a static-site
+magusfile. The docs project's magusfile imports `docs/render.buzz`, a static-site
 generator, and that generator earns its tests.
 
 Do not write tests for the magusfile itself.
@@ -45,7 +45,7 @@ test "collectAlias trims slashes and records every alias" {
 Run the tests:
 
 ```bash
-magus buzz -t --embedded scribe.buzz   # a single file
+magus buzz -t --embedded render.buzz   # a single file
 magus run buzz-test                    # the project's test target
 ```
 

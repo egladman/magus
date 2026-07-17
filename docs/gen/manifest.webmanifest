@@ -18,13 +18,9 @@
     { "src": "/magus/assets/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Graph", "url": "/magus/console/graph/" },
-    { "name": "Dashboard", "url": "/magus/console/dashboard/" },
+    { "name": "Console", "url": "/magus/console/" },
     { "name": "Playground", "url": "/magus/playground/" },
     { "name": "Getting started", "url": "/magus/getting-started/" }
   ],
-  "launch_handler": { "client_mode": "focus-existing" },
-  "file_handlers": [
-    { "action": "/magus/console/graph/", "accept": { "application/json": [".json"] } }
-  ]
+  "launch_handler": { "client_mode": "focus-existing" }
 }

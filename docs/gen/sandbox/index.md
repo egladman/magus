@@ -14,7 +14,7 @@ tags:
   ]
 ---
 
-# The magus sandbox model
+# Sandbox model
 
 The **sandbox** confines every magus subprocess and every in-process spell to a bounded filesystem and a bounded environment. Where a Target answers "what operation, on what project" (see [targets.md](targets.md)) and a Spell answers "how a tool performs an operation" (see [spells.md](spells.md)), the sandbox answers a different question entirely: **"what may that tool touch while it runs."**
 

@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,12 +76,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#concurrency" title="Concurrency">Concurrency</a></li><li><a href="#daemon" title="Daemon">Daemon</a></li><li><a href="#hosting-shared-services" title="Hosting shared services">Hosting shared services</a></li><li><a href="#configuring-the-socket-address" title="Configuring the socket address">Configuring the socket address</a></li></ul>
+        <ul><li><a href="#concurrency" title="Concurrency">Concurrency</a></li><li><a href="#daemon" title="Daemon">Daemon</a></li><li><a href="#two-transports" title="Two transports">Two transports</a></li><li><a href="#health-what-magus-status-reports" title="Health: what magus status reports">Health: what magus status reports</a></li><li><a href="#kubernetes-and-container-probes" title="Kubernetes and container probes">Kubernetes and container probes</a></li><li><a href="#keeping-the-daemon-running" title="Keeping the daemon running">Keeping the daemon running</a></li><li><a href="#hosting-shared-services" title="Hosting shared services">Hosting shared services</a></li><li><a href="#configuring-the-socket-address" title="Configuring the socket address">Configuring the socket address</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="daemon-and-concurrency">Daemon and concurrency</h1>
 <h2 id="concurrency">Concurrency</h2>
@@ -97,9 +97,166 @@ MAGUS_CONCURRENCY=4 magus run build
 <pre><code class="language-sh">magus server start &amp;        # foreground process; &amp; or a supervisor backgrounds it
 magus server stop           # graceful shutdown; waits for in-flight work
 magus server stop --services # stop the daemon's hosted services, leave the daemon up
-magus status                # live pool + reachability check (reports the reason when down)
+magus status                # live pool + MCP endpoint health (reports the reason when down)
 magus status -W 1s          # poll and reprint every second
 </code></pre>
+<p><code>magus server start</code> runs in the <strong>foreground</strong> and blocks. It does not daemonize itself;
+you background it with <code>&amp;</code>, <code>nohup</code>, or - better - a process supervisor so it stays up
+across shells and reboots (see <a href="#keeping-the-daemon-running">Keeping the daemon running</a>).</p>
+<h2 id="two-transports">Two transports</h2>
+<p>The daemon is a single process with two listeners, one per audience. A <strong>Unix domain
+socket</strong> is the local control plane (the proc RPC that dispatches jobs, answers status,
+and adopts nested calls into one concurrency pool); it is fast and private (<code>0700</code>), and
+the local CLI - including the <code>--probe=liveness</code> and <code>--probe=readiness</code> checks - uses it.
+An <strong>HTTP server</strong> on <code>mcp.address</code> serves the clients that cannot reach a Unix socket:
+agents over <a href="../mcp/">MCP</a> at <code>/mcp</code>, and orchestrators or scripts at the <code>/livez</code>,
+<code>/readyz</code>, and <code>/healthz</code> probe routes.</p>
+<div class="mermaid-src"><pre><code class="language-mermaid">flowchart LR
+    cli[&quot;Local CLI and shell&lt;br/&gt;magus status&lt;br/&gt;--probe=liveness / readiness&quot;]
+    agent[&quot;AI agents (MCP)&lt;br/&gt;Claude Code, IDE plugins&quot;]
+    ext[&quot;kubelet and scripts&lt;br/&gt;httpGet probes&lt;br/&gt;--probe=mcp&quot;]
+
+    subgraph daemon[&quot;magus daemon - one process&quot;]
+        sock[&quot;Unix socket&lt;br/&gt;proc RPC: dispatch, status, adopt&quot;]
+        http[&quot;HTTP server on mcp.address&lt;br/&gt;/mcp + /livez /readyz /healthz&quot;]
+        state[&quot;workspace state + concurrency pool&quot;]
+        sock --&gt; state
+        http --&gt; state
+        http -.-&gt;|health routes read status via| sock
+    end
+
+    cli --&gt;|Unix socket| sock
+    agent --&gt;|HTTP| http
+    ext --&gt;|HTTP| http
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
+<p>The Unix socket is the source of truth for daemon state; the HTTP health routes are a thin
+wrapper that answers by querying that same socket. But only an actual HTTP request proves
+the agent-facing endpoint is bound and serving - a socket check cannot detect an HTTP bind
+failure - so the two listeners can diverge, which is why <code>magus status</code> reports each
+separately.</p>
+<p>This page zooms in on the two transports; the HTTP server also carries the agent-facing
+<a href="../mcp/">MCP tools</a> and the read-only <a href="../reference/console/">console routes</a> the browser apps use,
+all reading the same warm <a href="../knowledge/">knowledge graph</a>. The full-system view - clients,
+guards, shared state, and the progressive web app - is the architecture diagram in the
+<a href="https://github.com/egladman/magus#architecture" rel="noopener noreferrer" target="_blank" data-external>README</a>.</p>
+<h2 id="health-what-magus-status-reports">Health: what <code>magus status</code> reports</h2>
+<p><code>magus status</code> is the health surface. It reports two listeners separately, because they
+can diverge:</p>
+<ul>
+<li>the <strong>daemon</strong> (<code>daemon pid ...</code> with the live pool, or <code>daemon: off</code>) - the socket the
+daemon dispatches build jobs on;</li>
+<li>the <strong>MCP endpoint</strong> (<code>mcp endpoint</code> block with <code>state: serving | not-ready | unreachable | disabled</code>) - the HTTP endpoint agent hosts connect to. Nothing starts this on its own,
+so an <code>unreachable</code> MCP endpoint is the usual reason &quot;the magus tools disappeared&quot; from an
+agent. See <a href="../mcp/#is-mcp-actually-reachable">MCP</a>.</li>
+</ul>
+<p>For scripts and Kubernetes probes, <code>magus status --probe=&lt;kind&gt;</code> exits <code>0</code> healthy / <code>1</code>
+unhealthy. The kinds are <code>liveness</code> (the daemon answers), <code>readiness</code> (a workspace is
+loaded), and <code>mcp</code> (the MCP endpoint is reachable), and they are comma-combinable -
+<code>--probe=liveness,mcp</code> fails if either the daemon or the endpoint is down. The daemon also
+serves <code>/livez</code>, <code>/readyz</code>, and <code>/healthz</code> over HTTP on the MCP port.</p>
+<h2 id="kubernetes-and-container-probes">Kubernetes and container probes</h2>
+<p>The daemon exposes both HTTP endpoints (for <code>httpGet</code> probes) and an exec form (for <code>exec</code>
+probes), split along the standard liveness/readiness lines:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>K8s probe</th>
+<th>endpoint</th>
+<th>passes when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>liveness</code></td>
+<td><code>GET /livez</code> (alias <code>/healthz</code>)</td>
+<td>the daemon answers - independent of warm-up</td>
+</tr>
+<tr>
+<td><code>readiness</code></td>
+<td><code>GET /readyz</code></td>
+<td>the daemon answers AND a workspace is loaded</td>
+</tr>
+<tr>
+<td><code>startup</code></td>
+<td><code>GET /livez</code></td>
+<td>the daemon has come up (reuse the liveness URL)</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Liveness is deliberately <strong>independent of warm-up state</strong>: it returns <code>200</code> as soon as the
+daemon answers, even before any workspace is loaded, so a slow first index never crash-loops
+the pod. Readiness gates on a loaded workspace, and <code>GET /readyz?workspace=&lt;root&gt;</code> pins it to
+one specific workspace (returns <code>503</code> with a reason until that workspace is warm). Because
+these endpoints are served by the MCP HTTP server itself, a successful probe also proves the
+MCP endpoint is listening.</p>
+<p>The endpoints bind to <code>127.0.0.1</code> by default, which the kubelet cannot reach; set
+<code>MAGUS_MCP_ADDRESS=0.0.0.0:7391</code> (or <code>mcp.address</code>) so probes can hit the pod IP.</p>
+<pre><code class="language-yaml"># pod spec
+env:
+  - { name: MAGUS_MCP_ADDRESS, value: &quot;0.0.0.0:7391&quot; }
+startupProbe:
+  httpGet: { path: /livez, port: 7391 }
+  failureThreshold: 30
+  periodSeconds: 2
+livenessProbe:
+  httpGet: { path: /livez, port: 7391 }
+  periodSeconds: 10
+readinessProbe:
+  httpGet: { path: /readyz, port: 7391 }
+  periodSeconds: 10
+</code></pre>
+<p>The endpoint requires no auth token (health routes are exempt); keep the port on the pod
+network, not the public internet - see <a href="../mcp/#security-keep-this-local">MCP security</a>.</p>
+<h2 id="keeping-the-daemon-running">Keeping the daemon running</h2>
+<p>The daemon is a local process, and the MCP endpoint is only up while it runs. Pick one way
+to keep it alive:</p>
+<p><strong>A shell profile (simplest, good while iterating on magus itself).</strong> Ensure a daemon is up
+whenever you open a shell by adding this to <code>~/.zprofile</code>, <code>~/.bashrc</code>, or equivalent:</p>
+<pre><code class="language-sh">magus status --probe=liveness &gt;/dev/null 2&gt;&amp;1 || (magus server start &amp;)
+</code></pre>
+<p>It is a no-op when a daemon is already running. This is the least durable option - the
+daemon dies when the last shell that started it exits - but it needs no system integration
+and always runs whatever <code>magus</code> is on your <code>PATH</code>, which is convenient when you rebuild
+magus often.</p>
+<p><strong>A systemd user service (Linux).</strong> Supervised, survives logout and reboot:</p>
+<pre><code class="language-ini"># ~/.config/systemd/user/magus.service
+[Unit]
+Description=magus daemon
+
+[Service]
+ExecStart=%h/.local/bin/magus server start
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+</code></pre>
+<pre><code class="language-sh">systemctl --user daemon-reload
+systemctl --user enable --now magus
+loginctl enable-linger &quot;$USER&quot;   # keep it running when you are not logged in
+</code></pre>
+<p><strong>A launchd LaunchAgent (macOS).</strong> The launchd equivalent, loaded at login and kept alive:</p>
+<pre><code class="language-xml">&lt;!-- ~/Library/LaunchAgents/com.magus.daemon.plist --&gt;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;
+&lt;plist version=&quot;1.0&quot;&gt;
+  &lt;dict&gt;
+    &lt;key&gt;Label&lt;/key&gt;&lt;string&gt;com.magus.daemon&lt;/string&gt;
+    &lt;key&gt;ProgramArguments&lt;/key&gt;
+    &lt;array&gt;
+      &lt;string&gt;/usr/local/bin/magus&lt;/string&gt;
+      &lt;string&gt;server&lt;/string&gt;
+      &lt;string&gt;start&lt;/string&gt;
+    &lt;/array&gt;
+    &lt;key&gt;RunAtLoad&lt;/key&gt;&lt;true/&gt;
+    &lt;key&gt;KeepAlive&lt;/key&gt;&lt;true/&gt;
+  &lt;/dict&gt;
+&lt;/plist&gt;
+</code></pre>
+<pre><code class="language-sh">launchctl load ~/Library/LaunchAgents/com.magus.daemon.plist
+</code></pre>
+<p>Point <code>ProgramArguments</code> at your actual <code>magus</code> path (<code>which magus</code>). With a supervised
+service, restart it after upgrading magus (<code>systemctl --user restart magus</code> /
+<code>launchctl kickstart -k gui/$UID/com.magus.daemon</code>) so it runs the new binary.</p>
 <h2 id="hosting-shared-services">Hosting shared services</h2>
 <p>The daemon is also the host for <strong>shared services</strong> (see <a href="../services/">services</a>).
 When a <code>magus run</code> needs a <a href="../operations/">service op</a> as a dependency and a daemon is
@@ -140,14 +297,14 @@ down.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../manpage/magus-status/"><span class="related-card-title">magus status</span><span class="related-card-desc">Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.</span></a>
-        <a class="related-card" href="../manpage/magus-server/"><span class="related-card-title">magus server</span><span class="related-card-desc">Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.</span></a>
         <a class="related-card" href="../services/"><span class="related-card-title">Services</span><span class="related-card-desc">How magus runs long-running service ops, shares one instance across dependents and invocations, and guards against the sprawl and misuse foot-guns.</span></a>
+        <a class="related-card" href="../manpage/magus-server/"><span class="related-card-title">magus server</span><span class="related-card-desc">Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.</span></a>
         <a class="related-card" href="../codes/race/"><span class="related-card-title">race diagnostics</span><span class="related-card-desc">Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../search/?q=tag%3A%22concurrency%22">concurrency</a><a class="tag" href="../search/?q=tag%3A%22magus+server%22">magus server</a><a class="tag" href="../search/?q=tag%3A%22magus+status%22">magus status</a><a class="tag" href="../search/?q=tag%3A%22socket%22">socket</a><a class="tag" href="../search/?q=tag%3A%22pool%22">pool</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22shared+services%22">shared services</a><a class="tag" href="../search/?q=tag%3A%22keep-warm%22">keep-warm</a></div>
-    <small>Last updated <time datetime="2026-07-08T00:31:16Z">July 8, 2026, 12:31 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8" data-tooltip="75524b9605fe902c79b478e4a7cad1ffceb74ac8" title="75524b9605fe902c79b478e4a7cad1ffceb74ac8">75524b96</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284d</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b3</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/daemon.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/daemon.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../search/?q=tag%3A%22concurrency%22">concurrency</a><a class="tag" href="../search/?q=tag%3A%22magus+server%22">magus server</a><a class="tag" href="../search/?q=tag%3A%22magus+status%22">magus status</a><a class="tag" href="../search/?q=tag%3A%22socket%22">socket</a><a class="tag" href="../search/?q=tag%3A%22pool%22">pool</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22shared+services%22">shared services</a><a class="tag" href="../search/?q=tag%3A%22keep-warm%22">keep-warm</a><a class="tag" href="../search/?q=tag%3A%22health%22">health</a><a class="tag" href="../search/?q=tag%3A%22liveness%22">liveness</a><a class="tag" href="../search/?q=tag%3A%22readiness%22">readiness</a><a class="tag" href="../search/?q=tag%3A%22probes%22">probes</a><a class="tag" href="../search/?q=tag%3A%22kubernetes%22">kubernetes</a></div>
+    <small>Last updated <time datetime="2026-07-15T23:00:01Z">July 15, 2026, 11:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c57f2a26b471759a38b9ed100d5464a61c3f12f7" data-tooltip="c57f2a26b471759a38b9ed100d5464a61c3f12f7" title="c57f2a26b471759a38b9ed100d5464a61c3f12f7">c57f2a26</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/98fe9fc074ce959329a032dd7814db647cdd2f8c"><code>98fe9fc0</code></a> <small><time datetime="2026-07-14T23:40:14Z">Jul 14, 2026</time></small> - document daemon transports, health surface, and k8s probes; add readme architecture diagram; refresh mcp docs</li><li><a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8"><code>75524b96</code></a> <small><time datetime="2026-07-08T00:31:16Z">Jul 8, 2026</time></small> - reformat hand-written docs under prettier 3.9.4, the version mise.toml already pins; the committed bytes had drifted from whatever prettier last touched them, de-indenting wrapped list continuations and padding table columns</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284d</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b3</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/daemon.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/daemon.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -209,8 +366,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -364,8 +524,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -399,7 +559,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

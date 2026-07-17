@@ -196,7 +196,7 @@ exactly this overlap.
 ### Set the signing secret in CI
 
 ```yaml
-# in your trusted-push workflow only (e.g. push to main) — never exposed to fork PRs
+# in your trusted-push workflow only (e.g. push to main) - never exposed to fork PRs
 env:
   MAGUS_CACHE_SIGNING_KEY: ${{ secrets.MAGUS_CACHE_SIGNING_KEY }}
 ```

@@ -14,7 +14,7 @@ tags:
   ]
 ---
 
-# The magus cache model
+# Cache model
 
 magus's build cache is **content-addressed**: a target's outputs are keyed by the
 SHA-256 of its inputs, so an unchanged target replays its previous outputs instead
@@ -75,6 +75,42 @@ The output tree is never treated as an input: source expansion excludes the
 `provides` globs and prunes their static directory prefixes, so a generated file
 can't feed back into its own key.
 
+### Per-target inputs and outputs
+
+A spell contributes its globs to *every* target on the project. To attach a glob
+to *one* target, declare it in that target's body with `magus.inputs(...)` /
+`magus.outputs(...)`:
+
+```buzz
+export fun build(args: [str]) > void {
+    magus.inputs("schema/**", "codegen.config.json");
+    magus.outputs("dist/**");
+    go["go-build"]();
+}
+```
+
+`magus.inputs` adds source globs to that target's cache key; `magus.outputs` adds
+output globs to its snapshot/replay set. So a target's footprint is the **union**
+of three layers: the bound spells' globs, the project-wide `sources`/`outputs`,
+and the target's own `magus.inputs`/`magus.outputs`. Per-target declarations only
+ever *add* - they never shrink the project-wide baseline (see
+[Granularity](#granularity-project-wide-vs-per-target)).
+
+The globs are read **statically**, before the target runs - a cache hit skips the
+body, so the run can't be the source of truth. magus recovers them from the
+source: it walks each target body and the helpers it calls by name, collecting the
+**string-literal** globs. Two disciplines follow, both enforced:
+
+- A **non-literal argument** (`magus.inputs(someVar)`) is a magusfile load error -
+  a computed glob is invisible to the static read, and silently dropping it would
+  risk a stale hit.
+- A call the walk **can't reach** (in an unreferenced helper, or the identifier
+  used as a value) never enters a key; `magus doctor` flags it as
+  [MGS1004](codes/magusfile/MGS1004.md).
+
+This shares the literal-first discipline of [`magus.needs`](dependencies.md):
+declare the footprint at the target, in literals magus can see.
+
 ## The cache key
 
 The key is the hex SHA-256 of a deterministic, newline-delimited serialization of
@@ -125,17 +161,65 @@ hashed line above yields a new key, and thus a new (empty) slot:
 - renaming the project or target.
 
 What does **not** invalidate: a file's mtime alone (content is what's hashed), a
-`claims`-only file, an `After` ordering edge (ordering is not hashed), or anything
-outside the declared `needs`.
+`claims`-only file, or anything outside the declared `needs`.
 
 Old keys are never mutated - a miss writes a _new_ entry beside the old one - so
 invalidation is additive. Reverting a change restores the earlier key and replays
 its still-present entry. Disk is reclaimed separately by eviction and pruning (see
 [On disk](#on-disk-just-files)).
 
-For targets that must never cache - a long-running `fs.watch` loop, a service op -
-the step is marked no-cache: magus skips the replay path so they always run, and
-skips the snapshot so a re-run re-executes instead of replaying a stale success.
+### Opting out and busting
+
+Four controls, at four different scopes:
+
+| Control                         | Scope                       | Semantics                                                                                     |
+| -------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
+| `skip_cache` target policy        | one target, every run         | Always runs; never replays **or** snapshots (a long-running `fs.watch` loop, a service op).      |
+| `magus run <target> --no-cache`  | one target, one invocation    | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`. |
+| `magus.bust_cache(path?)`        | runtime, one magusfile call   | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
+| `magus clean --cache`           | CLI, whole cache               | Wipes the on-disk store from outside any run.                                                  |
+| `cache.immutable` (`MAGUS_CACHE_IMMUTABLE`) | whole cache, whole run | Read-only mode: replays hits, but a miss runs the target and does **not** write a new manifest.  |
+
+`skip_cache` and `--no-cache` both force a genuine re-execution; the difference
+is entirely about what happens to the cache entry afterward (never snapshot vs.
+snapshot-and-refresh). `bust_cache` and `clean --cache` both delete entries, at
+different granularities and from different sides of a run. `cache.immutable` is
+the odd one out: it does not force anything to re-run, it just stops the cache
+from ever writing - the common case is a read-only CI runner or a shared cache
+mirror that must not accumulate local entries.
+
+### Granularity: project-wide vs per-target
+
+A project's `Step.Sources` is not built per-target from scratch: `baseStep`
+seeds it with **every bound spell's `needs` globs, unioned, plus the
+magusfile itself**, and only then does the target-specific step add that
+target's own extra sources on top. So a project binding both `go` and
+`docker` has every one of its targets - `build`, `test`, `lint`, even a custom
+one - keying on the union of both spells' `needs`, not just the ones relevant
+to that particular target: a `Dockerfile` edit invalidates `magus run build`
+even though `build` only cares about `.go` files. This is deliberately coarse
+(it is a safety margin against under-declared inputs, not a bug), but it means
+`magus run ci` and `magus run build` on the same project invalidate together
+far more often than their names alone would suggest.
+
+Per-target [`magus.inputs`/`magus.outputs`](#per-target-inputs-and-outputs) does
+**not** undo this. It *adds* to a target's footprint; it cannot remove the
+project-wide baseline. Declaring `magus.inputs("src/**")` on `build` does not stop
+a `Dockerfile` edit from busting it, because the `docker` spell's globs are still
+in the baseline. Per-target inputs are for attaching an input a target needs that
+nothing else declares - not for narrowing below the spell baseline.
+
+That gives a clean rule for **where to declare a glob**:
+
+- **affects every target** (a shared schema, a project-wide config) -> project-wide
+  `magus.project({sources = [...]})`, declared once;
+- **affects one target** -> `magus.inputs`/`magus.outputs` in that target's body.
+
+Declaring the same glob in both layers is a no-op (the union already has it) and
+`magus doctor` flags it as [MGS1005](codes/magusfile/MGS1005.md). Outputs are
+almost always target-specific (`build` -> `dist/`, `test` -> `coverage/`), so a
+project-wide `outputs` - which makes *every* target snapshot it - is usually the
+wrong tool; prefer per-target `magus.outputs`.
 
 ## Replay: a hit restores outputs, not execution
 
@@ -166,6 +250,42 @@ the run hierarchy.
 A run that "wins the race" against a cancellation is neither snapshotted nor
 published: its outputs may be incomplete, so magus surfaces the cancellation
 instead of recording a poisoned entry.
+
+## The two roles of an output (maintainer note)
+
+An output glob answers two different questions, and magus keeps them on two
+different code paths. Confusing them is the easiest way to introduce a stale-hit
+or a broken `magus clean`, so the model is worth stating once.
+
+| Role | Question it answers | Scope | Where it lives |
+| ---- | ------------------- | ----- | -------------- |
+| **Cache footprint** | "what does *this target* snapshot and replay?" | one target | `cache.Step.Outputs`, assembled per-target in `buildStep`: the project-wide `Outputs` plus that target's `magus.outputs`. |
+| **Generated-files manifest** | "what files does *this project* generate?" | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with *every* target's `magus.outputs`. |
+
+The cache role is per-target on purpose. A miss snapshots exactly the outputs in
+that target's `Step`, and a hit replays exactly those - so an output must be
+declared on the target that **produces** it. This is the **producer-ownership
+rule**, and violating it is a real bug, not a style nit: a glob declared
+project-wide is in *every* cacheable target's `Step.Outputs`, including targets
+that never write it. When one of those unrelated targets gets a cache hit, its
+replay restores the file to whatever it was when *that* target last ran - so a
+`go-build` hit can silently **revert** a freshly regenerated `MAGUS.md`. Scoping
+the output to its producer with `magus.outputs` means only the producer's hit
+replays it. Project-wide `outputs` is correct only when every target genuinely
+produces the glob, which is rare - most outputs belong to one generator.
+
+The generated-files role is the union, because "clean everything this project
+generates" and "which project owns this path?" don't care which target produced
+what. A consumer that asks a generated-files question goes through `AllOutputs()`,
+never raw `p.Outputs`, or it silently misses per-target declarations. Today that
+means `magus clean --outputs` (`CleanOutputs`), output-ownership
+(`FindOutputOwner`), and the git merge driver (`workspaceOutputGlobs`). The cache
+path is the one place that stays per-target.
+
+Inputs have just the one role (the cache key), so there is no `AllInputs`: a
+source glob that isn't in a given target's `Step.Sources` simply doesn't key that
+target, which is a footprint question, never a "what does the project consume"
+one.
 
 ## On disk: just files
 
@@ -256,6 +376,7 @@ on.
 ## See also
 
 - [spells.md](spells.md): where `needs`/`provides`/`claims` are declared, and what a bound spell contributes.
+- [dependencies.md](dependencies.md): how `depends_on`'s `dep:` propagation and a `magus.needs` call each interact with this cache key.
 - [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
 - [charms.md](charms.md): the execution modifiers that key into the cache as `charm:` lines.

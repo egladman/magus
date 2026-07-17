@@ -14,8 +14,8 @@ Inspect concurrency pool and configuration
 
 ## Description
 
-Show the magus configuration that affects this process — telemetry, cache
-settings — and, when a parent magus process is running, the live state of its
+Show the magus configuration that affects this process - telemetry, cache
+settings - and, when a parent magus process is running, the live state of its
 concurrency pool (current slot usage, queued waiters).
 
 When --watch is non-zero, status polls and reprints at that interval. On a

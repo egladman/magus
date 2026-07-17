@@ -4,7 +4,7 @@ description: Learn how magus charms replace one-off tool flags with shared, comp
 tags: [charms, targets, argv, json-patch, rfc-6902, modifiers, cli]
 ---
 
-# Anatomy of a magus Charm
+# Charms
 
 A **charm** is a named modifier that changes _how_ a target runs, not _which_ target or project. Where a Target answers "what operation, on what project" (see [targets.md](targets.md)) and a Spell answers "how a tool performs an operation" (see [spells.md](spells.md)), a charm answers **"in what manner."**
 
@@ -180,7 +180,7 @@ import "magus/charm";
 fun lint(target: Target) > Command {
     final args = ["tool", "golangci-lint", "run", "./..."];
     return Command{bin = "go", args = args, charms = {
-        "rw":    after(args, "run", ["--fix"]),  // insert after "run" — index-proof
+        "rw":    after(args, "run", ["--fix"]),  // insert after "run" - index-proof
         "debug": append(["-v"]),                 // append
     }};
 }
@@ -235,8 +235,8 @@ A function target reads the active charm set directly with **`magus.has_charm(na
 
 ```buzz
 export fun build(args: [str]) > void {
-    if (magus.has_charm("container")) { magus.needs(magus.target.literal("image-build")); }
-    else { magus.needs(magus.target.literal("go-build")); }
+    if (magus.has_charm("container")) { magus.needs(image_build); }
+    else { magus.needs(go_build); }
 }
 ```
 

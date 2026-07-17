@@ -27,22 +27,5 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## shellcheck
 
-One shellcheck invocation over every shell source: find feeds xargs with NUL separators, and -r skips running shellcheck on an empty set.
-
 **Command:** `sh -c find . \( -name '*.sh' -o -name '*.bash' \) -print0 | xargs -0 -r shellcheck`
-
-### Example
-
-<!-- run-recorder -->
-```buzz
-// shellcheck lints every .sh/.bash script found under the project.
-import "magus";
-import "magus/spell/bash";
-
-magus.project({ "spells": [bash] });
-
-export fun lint(args: [str]) > void {
-    bash["shellcheck"]();
-}
-```
 

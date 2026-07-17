@@ -8,12 +8,6 @@ tags: [config, magus.yaml, configuration, environment variables, flags, referenc
 
 magus resolves configuration from three layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, then the `magus.yaml` file at the workspace root. This page is the complete inventory of config keys, each with its `magus.yaml` path, environment variable, CLI flag, and value type.
 
-## bridge
-
-| Config key | Environment variable | Flag | Type |
-|------------|----------------------|------|------|
-| `bridge.enabled` | `MAGUS_BRIDGE_ENABLED` | _(env only)_ | bool _(env only)_ |
-
 ## cache
 
 | Config key | Environment variable | Flag | Type |
@@ -31,11 +25,19 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `ci.max_shards` | `MAGUS_CI_MAX_SHARDS` | `--ci-max-shards` | int |
 | `ci.runner_pool_budget` | `MAGUS_CI_RUNNER_POOL_BUDGET` | `--ci-runner-pool-budget` | int |
 
+## console
+
+| Config key | Environment variable | Flag | Type |
+|------------|----------------------|------|------|
+| `console.enabled` | `MAGUS_CONSOLE_ENABLED` | _(env only)_ | bool _(env only)_ |
+| `console.url` | `MAGUS_CONSOLE_URL` | `--console-url` | string |
+
 ## daemon
 
 | Config key | Environment variable | Flag | Type |
 |------------|----------------------|------|------|
 | `daemon.address` | `MAGUS_DAEMON_ADDRESS` | `--daemon-address` | string |
+| `daemon.enabled` | `MAGUS_DAEMON_ENABLED` | `--daemon-enabled` | bool |
 | `daemon.idle_ttl` | `MAGUS_DAEMON_IDLE_TTL` | `--daemon-idle-ttl` | duration |
 | `daemon.socket` | `MAGUS_DAEMON_SOCKET` | `--daemon-socket` | string |
 | `daemon.workspaces` | `MAGUS_DAEMON_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |
@@ -73,6 +75,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `knowledge.symbol_indexing.disabled` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED` | `--knowledge-symbol-indexing-disabled` | bool |
 | `knowledge.symbol_indexing.min_interval_seconds` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS` | `--knowledge-symbol-indexing-min-interval-seconds` | int |
 | `knowledge.symbol_indexing.quiet_seconds` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS` | `--knowledge-symbol-indexing-quiet-seconds` | int |
+| `knowledge.vcs.authorship` | `MAGUS_KNOWLEDGE_VCS_AUTHORSHIP` | _(env only)_ | bool _(env only)_ |
 | `knowledge.vcs.enabled` | `MAGUS_KNOWLEDGE_VCS_ENABLED` | `--knowledge-vcs-enabled` | bool |
 | `knowledge.vcs.max_commits` | `MAGUS_KNOWLEDGE_VCS_MAX_COMMITS` | `--knowledge-vcs-max-commits` | int |
 | `knowledge.workspaces` | `MAGUS_KNOWLEDGE_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |

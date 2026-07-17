@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>Tips and tricks — magus</title>
-  <meta name="description" content="Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, and recursive invocation.">
+  <meta name="description" content="Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, output field discovery, and recursive invocation.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/tips/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="Tips and tricks — magus">
-  <meta property="og:description" content="Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, and recursive invocation.">
+  <meta property="og:description" content="Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, output field discovery, and recursive invocation.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/tips/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -76,12 +76,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#live-pool-snapshot-in-a-multiplexer-sidebar" title="Live pool snapshot in a multiplexer sidebar">Live pool snapshot in a multiplexer sidebar</a></li><li><a href="#step-through-a-target-to-diagnose-a-volatile-build" title="Step through a target to diagnose a volatile build">Step through a target to diagnose a volatile build</a></li><li><a href="#re-run-only-affected-projects-on-each-save" title="Re-run only affected projects on each save">Re-run only affected projects on each save</a></li><li><a href="#one-shot-daemon-health-probe" title="One-shot daemon health probe">One-shot daemon health probe</a></li><li><a href="#interactive-debugging-entry-points" title="Interactive debugging entry points">Interactive debugging entry points</a></li><li><a href="#recursive-invocation" title="Recursive invocation">Recursive invocation</a></li></ul>
+        <ul><li><a href="#live-pool-snapshot-in-a-multiplexer-sidebar" title="Live pool snapshot in a multiplexer sidebar">Live pool snapshot in a multiplexer sidebar</a></li><li><a href="#step-through-a-target-to-diagnose-a-volatile-build" title="Step through a target to diagnose a volatile build">Step through a target to diagnose a volatile build</a></li><li><a href="#re-run-only-affected-projects-on-each-save" title="Re-run only affected projects on each save">Re-run only affected projects on each save</a></li><li><a href="#one-shot-daemon-health-probe" title="One-shot daemon health probe">One-shot daemon health probe</a></li><li><a href="#discover-an-outputs-fields-for--o-json-and--o-template" title="Discover an output's fields for -o json and -o template">Discover an output's fields for -o json and -o template</a></li><li><a href="#interactive-debugging-entry-points" title="Interactive debugging entry points">Interactive debugging entry points</a></li><li><a href="#recursive-invocation" title="Recursive invocation">Recursive invocation</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="tips-and-tricks">Tips and tricks</h1>
 <p>Non-obvious ways to combine magus subcommands.</p>
@@ -110,6 +110,27 @@ done
 <pre><code class="language-sh">magus status
 magus status -o json   # machine-readable output
 </code></pre>
+<h2 id="discover-an-outputs-fields-for--o-json-and--o-template">Discover an output's fields for -o json and -o template</h2>
+<p>Any command that emits structured data documents its own shape. Run it with a bare <code>-o template</code> (no template body) and it prints the fields instead of rendering - the json keys usable in both <code>-o json</code> and <code>-o template</code>, with each field's type and doc. Referenced output types are listed too, so you can drill into a <code>[]ProjectEntry</code> without reading source:</p>
+<pre><code class="language-sh">magus describe projects -o template
+</code></pre>
+<p>Sample output:</p>
+<pre><code class="language-text"># fields for -o json / -o template (bare -o template lists these):
+
+ProjectsOutput:
+  definition  string
+  count       int
+  projects    []ProjectEntry
+
+ProjectEntry:
+  path        string
+  spell       string
+  depends_on  []string
+</code></pre>
+<p>Then write the template (or <code>jq</code> filter) against those keys:</p>
+<pre><code class="language-sh">magus describe projects -o template='{{range .projects}}{{.path}}{{&quot;\n&quot;}}{{end}}'
+</code></pre>
+<p>The field names are always the json keys - <code>-o json</code> and <code>-o template</code> share one vocabulary - so <code>-o json</code> output doubles as the field reference.</p>
 <h2 id="interactive-debugging-entry-points">Interactive debugging entry points</h2>
 <p>Two entry points into an interactive Buzz REPL, sharing one evaluator:</p>
 <ul>
@@ -147,8 +168,8 @@ magus status -o json   # machine-readable output
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22tips%22">tips</a><a class="tag" href="../search/?q=tag%3A%22status%22">status</a><a class="tag" href="../search/?q=tag%3A%22step%22">step</a><a class="tag" href="../search/?q=tag%3A%22watch%22">watch</a><a class="tag" href="../search/?q=tag%3A%22repl%22">repl</a><a class="tag" href="../search/?q=tag%3A%22recursion%22">recursion</a><a class="tag" href="../search/?q=tag%3A%22magus.cmd%22">magus.cmd</a><a class="tag" href="../search/?q=tag%3A%22magus+status%22">magus status</a></div>
-    <small>Last updated <time datetime="2026-07-11T04:22:33Z">July 11, 2026, 4:22 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92" data-tooltip="0fb66e198d5ab94e4758c01d4ea7a590ba05bd92" title="0fb66e198d5ab94e4758c01d4ea7a590ba05bd92">0fb66e19</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a8035bd7681363aedf5847d5d2fb5a6e67e2f11c"><code>a8035bd7</code></a> <small><time datetime="2026-07-08T00:52:01Z">Jul 8, 2026</time></small> - fix golangci-lint findings across cmd/magus, std, internal/knowledge, internal/serviceident, internal/spell, project, and run.go; fix markdownlint (MD025 frontmatter-title collision, adjacent-blockquote merging, fenced-code language, code-span spacing, bare $ prompts) and regenerate downstream docs, website, and coverage badge</li><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b3</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/tips.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/tips.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22tips%22">tips</a><a class="tag" href="../search/?q=tag%3A%22status%22">status</a><a class="tag" href="../search/?q=tag%3A%22step%22">step</a><a class="tag" href="../search/?q=tag%3A%22watch%22">watch</a><a class="tag" href="../search/?q=tag%3A%22repl%22">repl</a><a class="tag" href="../search/?q=tag%3A%22recursion%22">recursion</a><a class="tag" href="../search/?q=tag%3A%22magus.cmd%22">magus.cmd</a><a class="tag" href="../search/?q=tag%3A%22magus+status%22">magus status</a><a class="tag" href="../search/?q=tag%3A%22output%22">output</a><a class="tag" href="../search/?q=tag%3A%22template%22">template</a><a class="tag" href="../search/?q=tag%3A%22fields%22">fields</a></div>
+    <small>Last updated <time datetime="2026-07-15T18:03:42Z">July 15, 2026, 6:03 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a12dbee7c2b0b50faa5e204a7070d677982fbfdb" data-tooltip="a12dbee7c2b0b50faa5e204a7070d677982fbfdb" title="a12dbee7c2b0b50faa5e204a7070d677982fbfdb">a12dbee7</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92"><code>0fb66e19</code></a> <small><time datetime="2026-07-11T04:22:33Z">Jul 11, 2026</time></small> - rename the flake and flaky vocabulary to volatile</li><li><a href="https://github.com/egladman/magus/commit/a8035bd7681363aedf5847d5d2fb5a6e67e2f11c"><code>a8035bd7</code></a> <small><time datetime="2026-07-08T00:52:01Z">Jul 8, 2026</time></small> - fix golangci-lint findings across cmd/magus, std, internal/knowledge, internal/serviceident, internal/spell, project, and run.go; fix markdownlint (MD025 frontmatter-title collision, adjacent-blockquote merging, fenced-code language, code-span spacing, bare $ prompts) and regenerate downstream docs, website, and coverage badge</li><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b3</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/tips.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/tips.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -210,8 +231,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -365,8 +389,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -400,7 +424,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

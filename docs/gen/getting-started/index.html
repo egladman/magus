@@ -53,7 +53,7 @@
         <li><a href="../download/">Download</a></li>
         <li><a href="../tour/">Tour</a></li>
         <li><a href="../playground/">Playground</a></li>
-        <li><a href="../console/dashboard/">Console</a></li>
+        <li><a href="../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -113,21 +113,21 @@ import &quot;os&quot;;
 // Each exported function is a runnable target. Leave a stage as a no-op
 // until you wire it.
 export fun preflight(args: [str]) &gt; void {}
-export fun generate(args: [str]) &gt; void { magus.needs(magus.target.literal(&quot;preflight&quot;)); }
-export fun format(args: [str]) &gt; void { magus.needs(magus.target.literal(&quot;generate&quot;)); }
-export fun lint(args: [str]) &gt; void { magus.needs(magus.target.literal(&quot;format&quot;)); }
-export fun build(args: [str]) &gt; void { magus.needs(magus.target.literal(&quot;format&quot;)); os.exec(&quot;echo&quot;, [&quot;Hello from magus&quot;]); }
-export fun test(args: [str]) &gt; void { magus.needs(magus.target.literal(&quot;format&quot;)); }
+export fun generate(args: [str]) &gt; void { magus.needs(preflight); }
+export fun format(args: [str]) &gt; void { magus.needs(generate); }
+export fun lint(args: [str]) &gt; void { magus.needs(format); }
+export fun build(args: [str]) &gt; void { magus.needs(format); os.exec(&quot;echo&quot;, [&quot;Hello from magus&quot;]); }
+export fun test(args: [str]) &gt; void { magus.needs(format); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off.
 export fun ci(args: [str]) &gt; void {
-    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;build&quot;), magus.target.literal(&quot;test&quot;));
+    magus.needs(lint, build, test);
 }
 </code></pre>
 <p>Three ideas carry the whole model:</p>
 <ul>
 <li><strong>Targets are exported functions.</strong> There is no registration call for a target: export a <code>fun</code>, and its name becomes a runnable target. See <a href="../targets/">targets</a> for the full model and the CLI grammar.</li>
-<li><strong><code>magus.needs</code> declares prerequisites.</strong> <code>magus.needs(magus.target.literal(&quot;format&quot;))</code> says &quot;run <code>format</code> first.&quot; magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.</li>
+<li><strong><code>magus.needs</code> declares prerequisites.</strong> <code>magus.needs(format)</code> says &quot;run <code>format</code> first&quot; - you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.</li>
 <li><strong><code>ci</code> is the anchor.</strong> It is an ordinary target you compose with <code>magus.needs</code>. magus does not hardcode its steps, but it is the target <code>magus affected</code> keys off, and it always runs read-only.</li>
 </ul>
 <p>List what magus discovered, then run the starter <code>build</code>:</p>
@@ -145,7 +145,7 @@ magus.project({ &quot;spells&quot;: [go] });
 
 // Each exported function is a runnable target; its body calls the spell's ops.
 export fun build(args: [str]) &gt; void {
-    magus.needs(magus.target.literal(&quot;format&quot;));
+    magus.needs(format);
     go[&quot;go-build&quot;]();
 }
 
@@ -160,7 +160,7 @@ export fun lint(args: [str]) &gt; void {
 }
 
 export fun test(args: [str]) &gt; void {
-    magus.needs(magus.target.literal(&quot;format&quot;));
+    magus.needs(format);
     go[&quot;go-test&quot;]();
 }
 </code></pre>
@@ -178,11 +178,7 @@ magus run lint:rw     # golangci-lint --fix (apply autofixes)
 <h2 id="5-compose-a-ci-target-and-run-only-what-changed">5. Compose a <code>ci</code> target and run only what changed</h2>
 <p><code>ci</code> is where the pieces come together. Compose it from your other targets with <code>magus.needs</code>; magus fans them out in parallel where the DAG allows and runs shared prerequisites once:</p>
 <pre><code class="language-buzz">export fun ci(args: [str]) &gt; void {
-    magus.needs(
-        magus.target.literal(&quot;lint&quot;),
-        magus.target.literal(&quot;build&quot;),
-        magus.target.literal(&quot;test&quot;),
-    );
+    magus.needs(lint, build, test);
 }
 </code></pre>
 <p>Run the whole pipeline locally:</p>
@@ -225,7 +221,7 @@ magus affected ci --base main # compare against a specific base ref
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../faq/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">FAQ</span></a>
+      <a class="page-nav-prev" href="../from-nx/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Coming from Nx</span></a>
       <a class="page-nav-next" href="../glossary/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Glossary</span></a>
     </nav>
   </main>
@@ -240,7 +236,7 @@ magus affected ci --base main # compare against a specific base ref
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22getting-started%22">getting-started</a><a class="tag" href="../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../search/?q=tag%3A%22init%22">init</a><a class="tag" href="../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../search/?q=tag%3A%22tutorial%22">tutorial</a><a class="tag" href="../search/?q=tag%3A%22cli%22">cli</a></div>
-    <small>Last updated <time datetime="2026-07-07T15:40:59Z">July 7, 2026, 3:40 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a5c858b3c9c1fcc6dd38eabe930a792a3efbd845" data-tooltip="a5c858b3c9c1fcc6dd38eabe930a792a3efbd845" title="a5c858b3c9c1fcc6dd38eabe930a792a3efbd845">a5c858b3</a>)</small>
+    <small>Last updated <time datetime="2026-07-16T04:52:34Z">July 16, 2026, 4:52 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433" data-tooltip="2f02f9d747507eb280fce3393074953ffb06d433" title="2f02f9d747507eb280fce3393074953ffb06d433">2f02f9d7</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/40867b28aeae537f8e3e807343175138f173cc64"><code>40867b28</code></a> <small><time datetime="2026-07-15T23:00:02Z">Jul 15, 2026</time></small> - make the generated docs-markdown story cohesive: de-collide the manpage &#34;gen&#34; dirs, move docs-content generation into the docs project, and give the manpage roff/md an owned split</li><li><a href="https://github.com/egladman/magus/commit/a5c858b3c9c1fcc6dd38eabe930a792a3efbd845"><code>a5c858b3</code></a> <small><time datetime="2026-07-07T15:40:59Z">Jul 7, 2026</time></small> - add the spell authoring kit (magus init spell scaffold, buzz -t test harness, buzz lsp stdio language server); resolve spell imports root-wins up the project tree with a shadow ward (MGS1002, per-shadow acknowledgment with required reason); surface previously-silent diagnostics (charm-apply MGS6001, has_charm typos, zero-op bound spells, unknown-project did-you-mean); add describe target --explain charm traces; add cache/sandbox/workspace/getting-started/editor concept docs; rename finishConstruction to load</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/getting-started.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/getting-started.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -302,8 +298,11 @@ one-shot target. See <a href="../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -457,8 +456,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -492,7 +491,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../search/">Search</a> &middot; <a href="../public/">Files</a></small>
-    <small class="footer-group"><a href="../console/dashboard/">Dashboard</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../console/">Console</a> &middot; <a href="../playground/">Playground</a> &middot; <a href="../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../main.js"></script>

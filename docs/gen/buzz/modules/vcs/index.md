@@ -74,7 +74,7 @@ Commit date string, or empty on error.
 
 ### is_dirty
 
-True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty(["MAGUS.md"]) — the right way to gate generated outputs without shelling out to git or parsing porcelain.
+True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty(["MAGUS.md"]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.
 
 **Signature:** `vcs.isDirty([paths]) → bool` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L248)
 
@@ -94,7 +94,7 @@ Full metadata table: short_hash, hash, branch, commit_date, is_dirty.
 
 ### commit
 
-Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up — test a field (e.g. c.date == "") rather than for null.
+Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == "") rather than for null.
 
 **Signature:** `vcs.commit([rev]) → any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L296)
 
@@ -126,7 +126,7 @@ Absolute path to the active VCS executable (git/hg/jj), or "" if unresolved. Let
 
 ### describe
 
-Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). "" when no VCS is resolved, or for a backend without a tag-describe concept (jj) — so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.
+Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). "" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.
 
 **Signature:** `vcs.describe() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L326)
 

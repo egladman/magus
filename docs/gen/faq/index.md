@@ -17,6 +17,17 @@ which target (`rw` to write in place, `gha` for GitHub Actions output). Target =
 what, spell = how, charm = in what manner. See [targets.md](targets.md),
 [spells.md](spells.md), [charms.md](charms.md).
 
+## Why did `magus run goBuild` work when my target is `go_build`?
+
+magus normalizes every target name to canonical kebab-case on both sides: when
+a magusfile declares a target and when you reference one, whether on the CLI,
+in a `magus.needs` literal, or in a per-target policy key. `go_build`,
+`goBuild`, and `go-build` all normalize to the same registered target, so any
+spelling reaches it - there is exactly one target, not a table of aliases.
+This does not apply to a spell op after `::` (`go::golangci-lint` matches
+verbatim) or to a Buzz map subscript like `ts["tsc"]`. See
+[targets.md](targets.md#name-normalization-casing--delimiters).
+
 ## Why is my `format` run read-only? How do I make it write?
 
 Every run is read-only by default, so a check never surprises you by rewriting

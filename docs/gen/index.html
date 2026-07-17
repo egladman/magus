@@ -55,7 +55,7 @@
         <li><a href="download/">Download</a></li>
         <li><a href="tour/">Tour</a></li>
         <li><a href="playground/">Playground</a></li>
-        <li><a href="console/dashboard/">Console</a></li>
+        <li><a href="console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -75,12 +75,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#install" title="Install">Install</a></li><li><a href="#optional-browser-ui" title="Optional browser UI">Optional browser UI</a></li><li><a href="#development" title="Development">Development</a><ul><li><a href="#project-layout" title="Project layout">Project layout</a></li></ul></li></ul>
+        <ul><li><a href="#why-magus-exists" title="Why magus exists">Why magus exists</a></li><li><a href="#how-it-works" title="How it works">How it works</a><ul><li><a href="#affected-sets" title="Affected sets">Affected sets</a></li><li><a href="#content-addressed-caching" title="Content-addressed caching">Content-addressed caching</a></li><li><a href="#the-knowledge-graph" title="The knowledge graph">The knowledge graph</a></li><li><a href="#one-vocabulary" title="One vocabulary">One vocabulary</a></li></ul></li><li><a href="#getting-started" title="Getting started">Getting started</a><ul><li><a href="#install" title="Install">Install</a></li><li><a href="#a-first-look" title="A first look">A first look</a></li></ul></li><li><a href="#architecture" title="Architecture">Architecture</a></li><li><a href="#the-browser-console" title="The browser console">The browser console</a><ul><li><a href="#the-four-surfaces" title="The four surfaces">The four surfaces</a></li><li><a href="#how-it-stays-on-your-machine" title="How it stays on your machine">How it stays on your machine</a></li></ul></li><li><a href="#working-with-ai-agents" title="Working with AI agents">Working with AI agents</a></li><li><a href="#documentation" title="Documentation">Documentation</a></li><li><a href="#contributing" title="Contributing">Contributing</a><ul><li><a href="#building-from-source" title="Building from source">Building from source</a></li><li><a href="#running-the-tests" title="Running the tests">Running the tests</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">13 min read</small>
     <article>
 <h1 id="magus">magus</h1>
 <p align="center">
@@ -94,78 +94,272 @@
 <p>A fast cross-platform task orchestrator for polyglot (mono)repos.</p>
 <p>Magus computes affected projects from your changes, caches the results, and runs the minimum rebuild set after a change.</p>
 <p>It is a single statically typed binary that takes its configuration as code, with no second toolchain to install.</p>
-<hr>
+<h2 id="why-magus-exists">Why magus exists</h2>
+<p>Monorepos outgrow the people and tools reading them. Humans grep; AI agents
+grep faster and guess more confidently; both drown in generated files, legacy
+patterns, and dependency chains nobody holds in their head. magus takes the
+opposite bet: the build tool already has to know the repo precisely - every
+project, every target's inputs and declared outputs, what a diff reaches - so
+it should hand that knowledge over as answers instead of leaving everyone to
+rediscover it.</p>
+<p>That is the design rule for the whole surface: every verb answers a question,
+deterministically, from declared sources - which projects does this change
+affect, is this file generated and by what, where is this symbol used, how do
+these two things relate. Nothing in magus decides for you, plans for you, or
+injects itself into your workflow. Answering is the tool's job; deciding is
+yours (or your agent's). Verbs and data, never ceremony.</p>
+<p>The same discipline serves both audiences. A teammate on day one and an AI
+agent in a fresh session have the same problem: a repo they cannot yet trust
+their guesses about. magus gives them the same fix: query the
+<a href="knowledge/">knowledge graph</a> instead of grepping, run
+<a href="targets/">targets</a> instead of raw tools, and let
+<code>magus affected ci</code> prove what a change touched. For agents specifically, see
+<a href="agents/">Agents</a>.</p>
+<h2 id="how-it-works">How it works</h2>
+<p>Four ideas carry most of the tool. Each has a deeper page; this is the short version.</p>
+<h3 id="affected-sets">Affected sets</h3>
+<p>magus keeps a dependency graph of your projects and knows which files each
+target reads. Change a file and <code>magus affected &lt;target&gt;</code> runs only the
+projects that change can reach, in dependency order. <code>magus affected ci</code> runs
+the full pipeline over that set, so CI does the least work a change requires
+and still catches breakage in a project you never opened. See <a href="targets/ci/">CI</a>.</p>
+<h3 id="content-addressed-caching">Content-addressed caching</h3>
+<p>Every target declares its inputs and outputs. magus hashes the inputs, and if
+it has already seen that hash it replays the stored output instead of running
+the work again. The cache is a plain content-addressed store on disk (SHA-256),
+and a team can share it through a <a href="remote-cache/">remote cache</a> so a
+result built once on CI is reused on everyone's laptop.</p>
+<h3 id="the-knowledge-graph">The knowledge graph</h3>
+<p>Because magus already knows every project, target, spell, and how they relate,
+it exposes that as a graph you can query. <code>magus query &quot;kind:target lint&quot;</code> finds
+nodes, <code>magus explain &lt;node&gt;</code> shows a node's edges and what reaches it, and
+<code>magus refs &lt;symbol&gt;</code> lists where a symbol is defined and used from a SCIP
+index. The same graph answers &quot;is this file generated,&quot; &quot;what does my diff
+touch,&quot; and &quot;how do these two things relate&quot; without grepping. See the
+<a href="knowledge/">knowledge graph</a>.</p>
+<h3 id="one-vocabulary">One vocabulary</h3>
+<p>magus names a thing once and reuses the name everywhere, in the CLI, the config,
+and the graph. A <a href="targets/">target</a> is a unit of work such as build,
+test, or lint. A <a href="spells/">spell</a> is a language adapter that supplies a
+target's operations (the <code>go</code> spell provides <code>go-test</code>; the <code>buf</code> spell provides
+<code>buf-lint</code>). A <a href="charms/">charm</a> is a modifier applied to a run, like <code>rw</code>
+for read-write or <code>cd</code> for a working directory. An <a href="operations/">op</a> is a
+single tool invocation. Learn the four words and the rest of the surface reads
+the same way.</p>
+<h2 id="getting-started">Getting started</h2>
+<h3 id="install">Install</h3>
+<p>magus ships as a single self-contained binary, so there is no second toolchain
+to install. See the <a href="download/">Download guide</a>.</p>
+<h3 id="a-first-look">A first look</h3>
+<p>Point magus at a repo that has a <code>magusfile.buzz</code> at its root, and each command
+returns an answer and stops:</p>
+<pre><code class="language-sh">magus ls                                  # which projects exist
+magus run test                            # run a target, cache the result
+magus affected ci                         # the pipeline, over only what your diff reaches
+magus query &quot;kind:spell&quot;                  # what the graph knows
+magus describe file docs/gen/index.html   # is this file generated, and by what
+</code></pre>
+<p>Nothing here plans a workflow or decides for you. <code>describe file</code> tells you a
+path is a generated output so you skip its diff; <code>affected ci</code> tells you which
+projects a change reaches so you run no more than that.</p>
+<h2 id="architecture">Architecture</h2>
+<p>One process (<code>magus server start</code>) exposes the workspace through <strong>two listeners</strong>, one per audience, and every browser page is a <strong>separate static asset</strong> - the binary serves no HTML. The diagram below is the whole system: the clients, the two transports and their guards, the shared in-memory state, the background jobs and knowledge-graph pipeline that keep it warm, and how the progressive web app reaches (or does without) the daemon.</p>
+<div class="mermaid-src"><pre><code class="language-mermaid">flowchart LR
+    cli([&quot;Local CLI and shell&lt;br/&gt;magus run, status, query&quot;])
+    agent([&quot;AI agents&lt;br/&gt;Claude Code, Desktop, IDE&quot;])
+    probe([&quot;kubelet and scripts&quot;])
+    vcs([&quot;git hook / magus server sync&quot;])
+
+    subgraph pwa[&quot;Progressive web app - project: docs/ (static assets, loopback-locked, binary serves NO HTML)&lt;br/&gt;eli.gladman.cc/magus or self-hosted&quot;]
+        dash[&quot;Dashboard&quot;]
+        gexp[&quot;Graph Explorer&quot;]
+        logs[&quot;Log Viewer&quot;]
+        actv[&quot;Activity Trail&quot;]
+    end
+    serve[&quot;Ephemeral loopback server&lt;br/&gt;graph open --serve (Safari fallback)&quot;]
+
+    sources[&quot;Declared sources&lt;br/&gt;magusfiles, docs, buzz,&lt;br/&gt;SCIP index, git history, CODEOWNERS&quot;]
+    gjson[&quot;Graph export -o json&lt;br/&gt;docs/graph.json (offline PWA)&lt;br/&gt;MAGUS.md (routing index)&quot;]
+
+    subgraph daemon[&quot;magus daemon - one process, magus server start (project: root Go module, cmd/magus + internal/*)&quot;]
+        sock[&quot;Unix domain socket&lt;br/&gt;proc RPC, private 0700&lt;br/&gt;internal/proc&quot;]
+
+        subgraph http[&quot;HTTP server on mcp.address, 127.0.0.1:7391&lt;br/&gt;internal/daemon, internal/handler/*, internal/httpx&quot;]
+            guards{{&quot;DNS-rebind + Bearer token + CORS&lt;br/&gt;internal/httpx, internal/auth&quot;}}
+            mcpr[&quot;/mcp&lt;br/&gt;MCP Streamable HTTP + SSE&lt;br/&gt;internal/handler/mcp&quot;]
+            apir[&quot;/api/v1&lt;br/&gt;graph, status, events, insight&lt;br/&gt;internal/handler/{graph,status}&quot;]
+            conn[&quot;/magus.metrics.v1&lt;br/&gt;/magus.activity.v1 (Connect)&lt;br/&gt;internal/handler/{metrics,activity}&quot;]
+            health[&quot;/livez /readyz /healthz&lt;br/&gt;UNGUARDED&quot;]
+        end
+
+        subgraph jobs[&quot;Background jobs&lt;br/&gt;internal/file/watch, internal/proc&quot;]
+            watch[&quot;File watchers&lt;br/&gt;graph invalidate + SSE&quot;]
+            idx[&quot;SCIP auto-indexer&quot;]
+            job[&quot;Graph-build job&lt;br/&gt;fire-and-forget, coalesced&quot;]
+        end
+
+        subgraph st[&quot;Shared daemon state&lt;br/&gt;internal/knowledge, cache, service, trail&quot;]
+            pool[(&quot;Concurrency pool&quot;)]
+            ws[(&quot;Workspace registry&lt;br/&gt;warm knowledge graph, SCIP, cache&quot;)]
+            runs[(&quot;Run registry&quot;)]
+            svc[(&quot;Service registry&quot;)]
+            trail[(&quot;Activity trail&quot;)]
+            otel[(&quot;OTel provider&quot;)]
+        end
+    end
+
+    cli --&gt;|&quot;Unix socket: adopt run/affected, status&quot;| sock
+    cli --&gt;|spawns| serve
+    agent --&gt;|&quot;MCP over HTTP, bearer token&quot;| guards
+    probe --&gt;|httpGet| health
+
+    dash --&gt;|&quot;status + events (SSE), metrics + activity, bearer&quot;| guards
+    gexp --&gt;|&quot;graph + events (SSE), bearer&quot;| guards
+    logs --&gt;|&quot;activity (Connect), bearer&quot;| guards
+    actv --&gt;|&quot;activity (Connect), bearer&quot;| guards
+
+    cli -.-&gt;|&quot;snapshot: graph / output via URL fragment&quot;| pwa
+    serve -.-&gt;|&quot;graph blob (#src)&quot;| gexp
+
+    guards --&gt; mcpr
+    guards --&gt; apir
+    guards --&gt; conn
+    health -.-&gt;|&quot;reads status via&quot;| sock
+
+    sock --&gt;|&quot;dispatch, concurrency&quot;| pool
+    sock --&gt;|&quot;loaded workspaces&quot;| ws
+    sock --&gt;|&quot;host shared services&quot;| svc
+    mcpr --&gt;|&quot;query, describe, run&quot;| ws
+    apir --&gt;|&quot;graph, events, insight&quot;| ws
+    apir --&gt;|&quot;status: live runs&quot;| runs
+    conn --&gt;|&quot;derived metrics&quot;| otel
+    conn --&gt;|&quot;agent activity&quot;| trail
+
+    vcs --&gt;|&quot;submit job, Unix socket&quot;| sock
+    sock --&gt;|&quot;run background job&quot;| job
+    job --&gt;|&quot;rebuild + reindex&quot;| ws
+    watch --&gt;|&quot;invalidate warm graph&quot;| ws
+    watch --&gt;|&quot;SSE graph event&quot;| apir
+    idx --&gt;|&quot;refresh SCIP index&quot;| ws
+    sources --&gt;|&quot;extract shards&quot;| ws
+    ws --&gt;|&quot;graph export -o json&quot;| gjson
+    gjson -.-&gt;|&quot;offline graph (site default)&quot;| gexp
+
+    classDef client fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;
+    classDef site fill:#ccfbf1,stroke:#14b8a6,color:#134e4a;
+    classDef unix fill:#dcfce7,stroke:#22c55e,color:#14532d;
+    classDef httproute fill:#ffedd5,stroke:#f97316,color:#7c2d12;
+    classDef guard fill:#fee2e2,stroke:#ef4444,color:#7f1d1d;
+    classDef health fill:#fef9c3,stroke:#ca8a04,color:#713f12;
+    classDef store fill:#ede9fe,stroke:#8b5cf6,color:#4c1d95;
+    classDef job fill:#e0e7ff,stroke:#6366f1,color:#312e81;
+
+    class cli,agent,probe,vcs client;
+    class dash,gexp,logs,serve site;
+    class sock unix;
+    class mcpr,apir,conn httproute;
+    class guards guard;
+    class health health;
+    class pool,ws,runs,svc,trail,otel store;
+    class sources,gjson store;
+    class watch,idx,job job;
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
+<p><strong>How to read it, and where each part is documented:</strong></p>
+<ul>
+<li>
+<p><strong>Green - the Unix domain socket</strong> is the local control plane: it dispatches <code>run</code>/<code>affected</code> into one shared <a href="daemon/#concurrency">concurrency pool</a>, answers <code>magus status</code>, and adopts nested <code>magus</code> calls. Fast and private (<code>0700</code>); the local CLI and the <code>--probe=liveness</code>/<code>--probe=readiness</code> checks use it.</p>
+</li>
+<li>
+<p><strong>Orange - the HTTP server</strong> on <code>mcp.address</code> is the plane for clients that cannot reach a Unix socket. It carries <a href="mcp/">MCP</a> for agents at <code>/mcp</code>, the read-only <a href="reference/console/#what-the-console-serves"><code>/api/v1</code> console routes</a>, and Connect services for the dashboard's metrics and <a href="output-refs/">activity trail</a>. Its request/response types are protobuf-defined under <a href="https://github.com/egladman/magus/tree/main/proto/magus" rel="noopener noreferrer" target="_blank" data-external><code>proto/magus</code></a> - <a href="https://github.com/egladman/magus/blob/main/proto/magus/status/v1/status.proto" rel="noopener noreferrer" target="_blank" data-external>status</a>, <a href="https://github.com/egladman/magus/blob/main/proto/magus/graph/v1/graph.proto" rel="noopener noreferrer" target="_blank" data-external>graph</a>, <a href="https://github.com/egladman/magus/blob/main/proto/magus/query/v1/query.proto" rel="noopener noreferrer" target="_blank" data-external>query</a>, <a href="https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1/metrics.proto" rel="noopener noreferrer" target="_blank" data-external>metrics</a>, <a href="https://github.com/egladman/magus/blob/main/proto/magus/activity/v1/activity.proto" rel="noopener noreferrer" target="_blank" data-external>activity</a>, and <a href="https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1/viewer.proto" rel="noopener noreferrer" target="_blank" data-external>viewer</a> (the log viewer) - generated by <code>buf</code> and served over Connect/JSON.</p>
+</li>
+<li>
+<p><strong>Red - every HTTP route except health passes one guard chain</strong>: a <a href="reference/console/#how-it-is-secured">DNS-rebind</a> host check, a <a href="mcp/#security-keep-this-local">bearer token</a> (the cli token plus named connector tokens), and CORS scoped to the site and loopback origins.</p>
+</li>
+<li>
+<p><strong>Yellow - the health routes are deliberately unguarded</strong> so a kubelet can probe them; they answer by querying the same Unix socket. See <a href="daemon/#kubernetes-and-container-probes">Kubernetes and container probes</a>.</p>
+</li>
+<li>
+<p><strong>Purple - shared state is daemon-wide and warm</strong>: the <a href="knowledge/">knowledge graph</a> and SCIP index live in the workspace registry; runs, services, metrics, and the trail are daemon-wide registries. The same purple marks the graph's inputs and outputs - the declared sources it is extracted from, and the exports it produces.</p>
+</li>
+<li>
+<p><strong>Indigo - background jobs keep that state fresh</strong> without a foreground command. File watchers invalidate the warm graph (and push an SSE <code>event: graph</code> to the console) and a throttled SCIP auto-indexer keeps symbols current; a branch switch fires the git hook, which calls <a href="daemon/"><code>magus server sync</code></a> to submit one fire-and-forget, coalesced graph-build job over the socket.</p>
+</li>
+<li>
+<p><strong>The graph pipeline (purple + indigo).</strong> magus assembles the <a href="knowledge/">knowledge graph</a> from declared sources as shards (the magusfile registry, docs, <code>@symbols</code> from SCIP, <code>@vcs</code> from git history, <code>CODEOWNERS</code>). <code>magus graph export -o json</code> serializes it to the committed <code>docs/graph.json</code> that the offline Graph Explorer loads, and <code>magus describe graph -o markdown</code> writes the <code>MAGUS.md</code> routing index. Live, the same graph is served byte-identical at <a href="reference/console/#what-the-console-serves"><code>/api/v1/graph</code></a>.</p>
+</li>
+<li>
+<p><strong>Teal - the PWA is four static apps</strong>, each hitting only the endpoints it needs (all through the same guard chain, bearer header, loopback-locked):</p>
+<ul>
+<li><strong><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Dashboard</a></strong> - <code>/api/v1/status</code> + the <code>/api/v1/events</code> SSE stream, plus the metrics and activity Connect services.</li>
+<li><strong><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a></strong> - <code>/api/v1/graph</code> (and its <code>flavor</code>/<code>level</code>/<code>select</code> variants) + the SSE stream for change events.</li>
+<li><strong><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Log Viewer</a></strong> - the activity Connect service for recent runs and their <a href="output-refs/">output refs</a>.</li>
+<li><strong><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Activity Trail</a></strong> - the activity Connect service for the daemon's recent actions (MCP calls, background jobs, config changes).</li>
+</ul>
+<p>That is <strong>live</strong> mode. In <strong>snapshot</strong> mode an app needs no daemon at all: the graph (<code>docs/graph.json</code>) or a run's output arrives inline through a URL fragment, or from the ephemeral <code>graph open --serve</code> loopback server (the Safari fallback). Nothing is ever uploaded. Full detail in the <a href="reference/console/">Console reference</a>.</p>
+</li>
+<li>
+<p><strong>Boundaries.</strong> Each region is tagged with the Go package or project that owns it, so the diagram doubles as a code map: the runtime is the root module (<code>cmd/magus</code> plus <code>internal/*</code>), the browser apps are the <a href="https://github.com/egladman/magus/tree/main/docs" rel="noopener noreferrer" target="_blank" data-external><code>docs/</code></a> project, and the wire contracts are the <a href="https://github.com/egladman/magus/tree/main/proto/magus" rel="noopener noreferrer" target="_blank" data-external><code>proto/magus</code></a> protobufs.</p>
+</li>
+</ul>
+<p>Because the two listeners are separate, they can diverge - the proc socket can be healthy while the HTTP/MCP endpoint failed to bind - which is exactly why <code>magus status</code> reports each one on its own line.</p>
+<h2 id="the-browser-console">The browser console</h2>
+<p>magus is fully featured from the terminal, so everything here is optional. Alongside the CLI, the daemon can drive four read-only browser surfaces.</p>
+<blockquote>
+<p><strong>See it first:</strong> <a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>open the live demo</a> - no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all four apps in demo mode. Everything below runs against your own daemon instead.</p>
+</blockquote>
+<h3 id="the-four-surfaces">The four surfaces</h3>
+<ul>
+<li><strong><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Dashboard</a></strong> - live daemon health, the concurrency pool, running targets, and cache activity.</li>
+<li><strong><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a></strong> - navigate targets, spells, and their dependency graph (<code>magus graph open</code>).</li>
+<li><strong><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Log Viewer</a></strong> - read or stream any past run's captured output (<code>magus query output &lt;ref&gt; --open</code>).</li>
+<li><strong><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Activity Trail</a></strong> - the daemon's recent actions: MCP calls, background jobs, and config changes.</li>
+</ul>
+<h3 id="how-it-stays-on-your-machine">How it stays on your machine</h3>
+<p>These are add-ons, not a runtime you depend on. Two decisions keep them that way.</p>
+<h4 id="the-binary-serves-no-html">The binary serves no HTML</h4>
+<p>magus never embeds a web server that ships a UI. The pages are a separate static site (built under <a href="https://github.com/egladman/magus/tree/main/docs/gen" rel="noopener noreferrer" target="_blank" data-external><code>docs/gen/</code></a>, hosted at <a href="https://eli.gladman.cc/magus/" rel="noopener noreferrer" target="_blank" data-external>eli.gladman.cc/magus</a>, or self-hosted from any file server). All the daemon exposes is a small read-only API over loopback (<code>/api/v1/...</code>) plus the MCP endpoint. There is no page serving and there are no write routes.</p>
+<h4 id="your-data-never-leaves-the-loopback">Your data never leaves the loopback</h4>
+<p>The hosted page talks only to <code>127.0.0.1</code>/<code>[::1]</code>, a loopback lock it enforces before any request, or it receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: the daemon runs fine without it (<code>console.enabled: false</code>), and a binary built without <code>-tags mcp</code> has no browser API at all. See the <a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Console reference</a>.</p>
+<h2 id="working-with-ai-agents">Working with AI agents</h2>
+<p>magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships an agent surface built on the knowledge graph, so an agent asks magus instead of grepping and guessing.</p>
+<ul>
+<li><strong>Installable skills</strong> teach an agent to query the graph, run work through targets, and triage generated files. Install them with <code>magus agent install claude</code> (or <code>codex</code>, <code>opencode</code>).</li>
+<li><strong>The committed <code>MAGUS.md</code></strong> is a routing index, regenerated from the graph, that points an agent at the exact query for a given question.</li>
+<li><strong>The MCP server</strong> the daemon exposes lets an agent call magus tools directly over the protocol rather than shelling out.</li>
+</ul>
+<p>Full detail, including which tools exist and how to connect, is on the <a href="agents/">Agents</a> page.</p>
 <h2 id="documentation">Documentation</h2>
 <p>Full docs live at <strong><a href="https://eli.gladman.cc/magus/" rel="noopener noreferrer" target="_blank" data-external>eli.gladman.cc/magus</a></strong>.<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> The major sections:</p>
 <ul>
 <li><strong>Core concepts</strong> - <a href="targets/">Targets</a>, <a href="spells/">Spells</a>, <a href="charms/">Charms</a>, <a href="operations/">Operations</a>, <a href="services/">Services</a></li>
-<li><strong>Running at scale</strong> - <a href="ci/">CI</a>, <a href="daemon/">Daemon</a>, <a href="remote-cache/">Remote caching</a>, <a href="mcp/">MCP</a>, <a href="telemetry/">Telemetry</a></li>
+<li><strong>Running at scale</strong> - <a href="targets/ci/">CI</a>, <a href="daemon/">Daemon</a>, <a href="remote-cache/">Remote caching</a>, <a href="mcp/">MCP</a>, <a href="telemetry/">Telemetry</a></li>
 <li><strong>Reference</strong> - <a href="manpage/magus/">Man pages</a>, <a href="buzz/modules/">Standard library modules</a>, <a href="debugging/">Debugging</a>, <a href="output-refs/">Output references</a>, <a href="tips/">Tips and tricks</a></li>
 </ul>
-<h2 id="install">Install</h2>
-<p>magus ships as a single self-contained binary. See the <a href="download/">Download guide</a>.</p>
-<h2 id="optional-browser-ui">Optional browser UI</h2>
-<p>magus is fully featured from the terminal - everything here is optional. Alongside the CLI, it can drive three read-only browser surfaces:</p>
-<blockquote>
-<p><strong>See it first:</strong> <a href="https://eli.gladman.cc/magus/console/dashboard/#demo" rel="noopener noreferrer" target="_blank" data-external>open the live demo</a> - no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all three apps in demo mode. Everything below runs against your own daemon instead.</p>
-</blockquote>
-<ul>
-<li><strong><a href="https://eli.gladman.cc/magus/console/dashboard/" rel="noopener noreferrer" target="_blank" data-external>Dashboard</a></strong> - live daemon health, the concurrency pool, running targets, and cache activity.</li>
-<li><strong><a href="https://eli.gladman.cc/magus/console/graph/" rel="noopener noreferrer" target="_blank" data-external>Graph explorer</a></strong> - navigate targets, spells, and their dependency graph (<code>magus graph open</code>).</li>
-<li><strong><a href="https://eli.gladman.cc/magus/console/logs/" rel="noopener noreferrer" target="_blank" data-external>Log viewer</a></strong> - read or stream any past run's captured output (<code>magus query output &lt;ref&gt; --open</code>).</li>
-</ul>
-<p>These are complementary add-ons, not a runtime you depend on. Two things set them apart architecturally:</p>
-<ul>
-<li><strong>The binary serves no HTML.</strong> magus never embeds a web server that ships a UI. The pages are a separate static site (built under <a href="https://github.com/egladman/magus/tree/main/website/gen" rel="noopener noreferrer" target="_blank" data-external><code>website/gen/</code></a>, hosted at <a href="https://eli.gladman.cc/magus/" rel="noopener noreferrer" target="_blank" data-external>eli.gladman.cc/magus</a>, or self-hosted from any file server). All the daemon exposes is a small read-only API over loopback (<code>/api/v1/...</code>) plus the MCP endpoint - no page serving, no write routes.</li>
-<li><strong>Your data never leaves your machine.</strong> The hosted page talks only to <code>127.0.0.1</code>/<code>[::1]</code> - a loopback lock the page enforces before any request - or receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: the daemon runs fine without it (<code>bridge.enabled: false</code>), and a binary built without <code>-tags mcp</code> has no browser API at all. See the <a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Console reference</a>.</li>
-</ul>
-<hr>
-<h2 id="development">Development</h2>
-<p>For the full contributor reference - the <a href="https://eli.gladman.cc/magus/development/contributing/" rel="noopener noreferrer" target="_blank" data-external>Contributing guide</a>, per-project target catalogs (run order + dependency graphs), and the config reference - see the <a href="https://eli.gladman.cc/magus/development/" rel="noopener noreferrer" target="_blank" data-external>Development page</a>.</p>
+<p>Inside a workspace, the entry point is the committed <a href="https://github.com/egladman/magus/blob/main/MAGUS.md" rel="noopener noreferrer" target="_blank" data-external><code>MAGUS.md</code></a>: a
+generated routing index of the workspace's projects, targets, and the exact
+knowledge-graph queries that answer questions about them. Projects can carry
+their own (this repo commits one for <code>gopherbuzz/</code> and <code>docs/</code>), scoped to
+that project. They are generated by <code>magus describe graph -o markdown</code> via the
+<code>generate</code> target - regenerate them, never hand-edit.</p>
+<h2 id="contributing">Contributing</h2>
+<p>For the full contributor reference - the <a href="https://eli.gladman.cc/magus/development/contributing/" rel="noopener noreferrer" target="_blank" data-external>Contributing guide</a>, per-project target catalogs (run order and dependency graphs), and the config reference - see the <a href="https://eli.gladman.cc/magus/development/" rel="noopener noreferrer" target="_blank" data-external>Development page</a>. The architecture diagram above tags each runtime component with the package it lives in, which is the quickest map of where code goes.</p>
+<h3 id="building-from-source">Building from source</h3>
 <p>Building magus needs Go. The full toolchain - Go itself, plus Node and esbuild for the docs site and TinyGo for the WebAssembly playground - is pinned in <a href="https://github.com/egladman/magus/blob/main/mise.toml" rel="noopener noreferrer" target="_blank" data-external><code>mise.toml</code></a>; <a href="https://mise.jdx.dev/" rel="noopener noreferrer" target="_blank" data-external>mise</a> installs it in one step. From a fresh clone:</p>
 <pre><code class="language-sh">git clone https://github.com/egladman/magus
 cd magus
 mise install           # installs the pinned Go, Node, esbuild, and TinyGo
 go build -o magus ./cmd/magus
 </code></pre>
-<p>Only building the <code>magus</code> binary? Go alone is enough and you can skip <code>mise install</code>; you need it for the docs site (<code>magus run generate website</code>) and the playground.</p>
-<p>Run the tests through magus itself - the whole point is that magus builds and tests magus:</p>
+<p>Only building the <code>magus</code> binary? Go alone is enough and you can skip <code>mise install</code>; you need it for the docs site (<code>magus run generate docs</code>) and the playground.</p>
+<h3 id="running-the-tests">Running the tests</h3>
+<p>Run the tests through magus itself, since the whole point is that magus builds and tests magus:</p>
 <pre><code class="language-sh">magus run ci
-</code></pre>
-<h3 id="project-layout">Project layout</h3>
-<pre><code class="language-text">magus/
-├── cmd/
-│   ├── magus/            CLI entry point
-│   ├── magus-utils/      release signing + config-doc generators
-│   ├── magus-docs/       stdlib module doc generator
-│   └── magus-manpage/    man-page generator
-├── internal/             core engine (~30 packages), the notable ones:
-│   ├── depgraph/         affected-set computation over the project graph
-│   ├── cache/            content-addressed build cache
-│   ├── run/              target scheduling and the run hierarchy
-│   ├── sandbox/          filesystem + exec isolation for target runs
-│   ├── ward/             coded op diagnostics (the MGSxxxx wards)
-│   ├── workspace/        project + magusfile discovery
-│   ├── observability/    OpenTelemetry traces and metrics
-│   ├── httpx/            loopback HTTP transport + composable middleware/guards
-│   ├── handler/          domain&lt;-&gt;proto wire mapping + HTTP route handlers (mirrors proto);
-│   │                     includes handler/mcp (the Model Context Protocol server)
-│   ├── service/          application logic: shared-service ops, and service/console (web UI)
-│   ├── daemon/           assembles the daemon HTTP server (MCP + /api) from the above
-│   ├── auth/             the daemon's bearer-token store
-│   └── ...               (cache, proc, retry, selfupdate, render, report, doctor, describe, ...)
-├── gopherbuzz/           the embedded Buzz interpreter
-├── std/                  magusfile stdlib (fs, os, http, json, crypto, ...)
-├── spells/               built-in language spells (go, rust, typescript, ...)
-├── schema/               generated magus.yaml / MAGUS_* config inventory
-├── docs/                 documentation source (rendered by `magus run generate website`)
-└── website/              docs-site generator (Buzz-based static site)
 </code></pre>
 <div class="footnotes" role="doc-endnotes">
 <hr>
 <ol>
 <li id="fn:1">
-<p>Source: <a href="https://github.com/egladman/magus/tree/main/website" rel="noopener noreferrer" target="_blank" data-external>website/</a>.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p>Source: <a href="https://github.com/egladman/magus/tree/main/docs" rel="noopener noreferrer" target="_blank" data-external>docs/</a>.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </div>
@@ -175,7 +369,7 @@ go build -o magus ./cmd/magus
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="search/?q=tag%3A%22readme%22">readme</a></div>
-    <small>Last updated <time datetime="2026-07-12T03:12:57Z">July 12, 2026, 3:12 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/594636ac8fdf14607837b28b9f1bec9a2266a8a9" data-tooltip="594636ac8fdf14607837b28b9f1bec9a2266a8a9" title="594636ac8fdf14607837b28b9f1bec9a2266a8a9">594636ac</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/48cf3120a11c7fd10f439d99437b7ec2f856bd08"><code>48cf3120</code></a> <small><time datetime="2026-07-12T00:13:48Z">Jul 12, 2026</time></small> - remove the dev-oriented &#34;web and daemon stack&#34; architecture</li><li><a href="https://github.com/egladman/magus/commit/032c2874b514ca804e094cb09411fc35a7a97969"><code>032c2874</code></a> <small><time datetime="2026-07-11T15:25:36Z">Jul 11, 2026</time></small> - make the Dashboard the single app entry point</li><li><a href="https://github.com/egladman/magus/commit/f65344e74ab6613c0b858dcc1ea5ed1921049367"><code>f65344e7</code></a> <small><time datetime="2026-07-11T13:05:07Z">Jul 11, 2026</time></small> - regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/33e07095cea5de7b2d4781ab54cd7393156bd467"><code>33e07095</code></a> <small><time datetime="2026-07-10T20:21:08Z">Jul 10, 2026</time></small> - document the web/daemon architecture in README.md and refresh</li><li><a href="https://github.com/egladman/magus/commit/e59f5200cda35d3a094fae01ffba6687f77701be"><code>e59f5200</code></a> <small><time datetime="2026-07-10T04:19:03Z">Jul 10, 2026</time></small> - document output refs; regenerate site and catalog</li><li><a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8"><code>75524b96</code></a> <small><time datetime="2026-07-08T00:31:16Z">Jul 8, 2026</time></small> - reformat hand-written docs under prettier 3.9.4, the version mise.toml already pins; the committed bytes had drifted from whatever prettier last touched them, de-indenting wrapped list continuations and padding table columns</li><li><a href="https://github.com/egladman/magus/commit/56da9eb24539b16285577deebd51c1e03194459e"><code>56da9eb2</code></a> <small><time datetime="2026-07-06T11:03:00Z">Jul 6, 2026</time></small> - fix playground button visited-purple and glyph/alignment, align concept arrows; replace gen/&#39;s wipe-and-rebuild with tracked pruning and build playground assets straight into gen/; add scrollbar-gutter and overflow-x:clip against phantom horizontal scroll; strip README frontmatter, synthesize tags at build</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-17T00:01:29Z">July 17, 2026, 12:01 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/6bbd98afdfcd91f5539b05db8c525a767deb96b6" data-tooltip="6bbd98afdfcd91f5539b05db8c525a767deb96b6" title="6bbd98afdfcd91f5539b05db8c525a767deb96b6">6bbd98af</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/89e89a26208b16cf889255a73c297f133c7ea547"><code>89e89a26</code></a> <small><time datetime="2026-07-16T18:32:32Z">Jul 16, 2026</time></small> - add the Activity Trail app to the README and architecture diagram; standardize the four console app names to Title Case (Dashboard, Graph Explorer, Log Viewer, Activity Trail) across the console and README; point the README&#39;s repo-source links (proto/magus, MAGUS.md) at GitHub URLs so they resolve off the rendered site</li><li><a href="https://github.com/egladman/magus/commit/40867b28aeae537f8e3e807343175138f173cc64"><code>40867b28</code></a> <small><time datetime="2026-07-15T23:00:02Z">Jul 15, 2026</time></small> - make the generated docs-markdown story cohesive: de-collide the manpage &#34;gen&#34; dirs, move docs-content generation into the docs project, and give the manpage roff/md an owned split</li><li><a href="https://github.com/egladman/magus/commit/7a0656aac56a92eb2e0d0e8b4dbf36e3e8436d8c"><code>7a0656aa</code></a> <small><time datetime="2026-07-15T23:00:02Z">Jul 15, 2026</time></small> - consolidate the static-site generator from website/ into docs/ and drop the scribe name; website/ stops existing - its SSG, templates, assets, package.json, and gen/ move INTO the top-level docs/ dir so docs/ is the ONE documentation project holding BOTH the markdown AND the renderer that emits it, co-located. Rename the generator off scribe: scribe.buzz -&gt; docs/render.buzz, scribe_{dom,html,text,url,date,feed}.buzz -&gt; docs/render_*.buzz, and every import/call site (magusfile import scribe -&gt; render; render.site_render/writeSiteManifest/updateUrlLock). Fix the path model: from docs/ the ROOT/DOCS args still resolve (../docs == docs), OUT is now docs/gen; the magus.project sources watch the local markdown corpus + SSG inputs instead of ../docs. Guard the content walk + collectDocPages with a root-only generator-dir skip-set (node_modules/gen/src/tour) + a MAGUS.md file skip, so the walk never ingests the SSG&#39;s own subdirs as pages while nested content dirs named gen (docs/manpage/gen) still render. Sweep every remaining website/scribe reference across the repo: Go runtime paths (cmd/magus-utils/release.go served dir, magusfile build-playground wasm output, the mermaid-drift + tour test fixtures) and comments, the Pages workflow (docs/gen), README/CONTRIBUTING/CLAUDE/testing prose, the magus-vcs skill (source + re-stamped install), and retire the old /development/website/ catalog URLs. Verified: docs/render.buzz parses + its 40 in-file tests pass; describe lists a docs project (no website); a scratch render emits 175 pages with the exclusions holding (no node_modules/MAGUS/src/tour leakage, manpage pages intact); go build clean, go test 81 ok, graph verify up to date</li><li><a href="https://github.com/egladman/magus/commit/c57f2a26b471759a38b9ed100d5464a61c3f12f7"><code>c57f2a26</code></a> <small><time datetime="2026-07-15T23:00:01Z">Jul 15, 2026</time></small> - stop the docs site rendering the console; the four surfaces (graph/logs/dashboard/activity) and the SPA moved to the standalone console/ project, so rip the moved-source references out of the docs generator. scribe.buzz: drop renderConsole/renderGraph/renderLogs/renderDashboard/renderConsoleShell/consoleRefLinks and their site_render calls + the per-surface CSS esbuild steps; the docs no longer emit /console/*. Delete website/{console,dashboard,graph,logs}.html and the build-{console,graph-explorer,log-viewer,dashboard,activity} pnpm scripts; drop the console-surface precache from sw.js.tmpl (keep console.css - the docs + playground still load it) and the console/* entries from pruneStaleOutputs&#39; alwaysKeep. Point the nav + footer Console link and the PWA manifest Console shortcut at the SPA (/console/), and reduce the offline page to the playground. Move the loopback-API reference doc docs/console.md -&gt; docs/reference/console.md (title Console API, aliases the old /console/ so a redirect stub keeps internal links resolving; the console project&#39;s deploy copy overwrites /console/ with the SPA); fix the README/knowledge/daemon/output-refs links that pointed at the old standalone surface URLs. Verified: scribe parses + its 40 in-file tests pass; a scratch-dir render emits the /console/ alias stub, the moved page at /reference/console/, and resolves every nav/footer/offline console link</li><li><a href="https://github.com/egladman/magus/commit/bf2372633e63c4edc7311a4b0a7b4be57d60d746"><code>bf237263</code></a> <small><time datetime="2026-07-14T23:48:49Z">Jul 14, 2026</time></small> - rework readme home page: drop stale layout tree; add how-it-works, getting-started, and agents sections; deepen header hierarchy for the site toc; fix broken ci doc link</li><li><a href="https://github.com/egladman/magus/commit/98fe9fc074ce959329a032dd7814db647cdd2f8c"><code>98fe9fc0</code></a> <small><time datetime="2026-07-14T23:40:14Z">Jul 14, 2026</time></small> - document daemon transports, health surface, and k8s probes; add readme architecture diagram; refresh mcp docs</li><li><a href="https://github.com/egladman/magus/commit/3246c2fe81e5f0afa5e4b271fb93b8ff5030f55b"><code>3246c2fe</code></a> <small><time datetime="2026-07-14T17:28:06Z">Jul 14, 2026</time></small> - Merge remote-tracking branch &#39;origin/main&#39; into feat/native-console-desktop-f023ba</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -237,8 +431,11 @@ one-shot target. See <a href="services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -392,8 +589,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -427,7 +624,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="search/">Search</a> &middot; <a href="public/">Files</a></small>
-    <small class="footer-group"><a href="console/dashboard/">Dashboard</a> &middot; <a href="playground/">Playground</a> &middot; <a href="tour/">Tour</a></small>
+    <small class="footer-group"><a href="console/">Console</a> &middot; <a href="playground/">Playground</a> &middot; <a href="tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="main.js"></script>

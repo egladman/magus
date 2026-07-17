@@ -18,7 +18,7 @@ processes.
   search/pg   (tag=16, POSTGRES_DB=search)
   web/api-db  (tag=15, POSTGRES_DB=api)
 if these are meant to be one shared service, extract a shared target both need; otherwise mark them distinct with a reason.
-  see: …/MGS5001.md
+  see: .../MGS5001.md
 ```
 
 ## Why

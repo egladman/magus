@@ -4,7 +4,7 @@ description: A workspace is the discovered root; a project is a directory whose 
 tags: [workspace, projects, discovery, magusfile, depends-on, monorepo]
 ---
 
-# Anatomy of a magus Workspace
+# Workspace and projects
 
 A **workspace** is the whole tree magus operates on: a single root directory, its `magus.yaml`, and the set of projects discovered beneath it. A **project** is one directory inside that tree whose presence of a magusfile registers it, together with the targets it declares. Every target you run (see [targets.md](targets.md)) is addressed by a project `Path` plus an operation `Name`; the workspace is the space those paths live in.
 
@@ -69,7 +69,7 @@ export fun test(args: [str]) > void {}
 
 // 'ci' is the conventional anchor `magus affected ci` keys off.
 export fun ci(args: [str]) > void {
-    magus.needs(magus.target.literal("build"), magus.target.literal("test"));
+    magus.needs(build, test);
 }
 ```
 
@@ -82,15 +82,21 @@ export fun ci(args: [str]) > void {
 | `spells`       | binds spell handles to the project, contributing their ops, sources, and outputs            |
 | `depends_on`   | declares upstream project paths this project depends on (repo-relative or project-relative) |
 | `outputs`      | declares the project-relative file globs this project produces                              |
+| `sources`      | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
 | `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                |
 | `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list            |
 | `targets`      | a per-target policy table (see below)                                                       |
+
+Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
+other than `skip_cache`/`exclusive`/`slots`) are a magusfile load error, not a
+silently dropped option - the error names the offending key and suggests the
+nearest known one.
 
 The `targets` sub-map keys a target name to a policy table:
 
 | Policy      | Effect                                                                       |
 | ----------- | ---------------------------------------------------------------------------- |
-| `skipCache` | opts the target out of the cache; magus always runs it and never replays it  |
+| `skip_cache` | opts the target out of the cache; magus always runs it and never replays it  |
 | `exclusive` | runs the target alone - no peer target runs concurrently while it does       |
 | `slots`     | the target holds N concurrency slots while it runs, throttling parallel work |
 
@@ -102,7 +108,7 @@ magus.project({
     "watch_ignore": { "glob": ["**/*.snap"] },
     "targets": {
         "test": { "slots": 4 },
-        "build": { "skipCache": true },
+        "build": { "skip_cache": true },
     },
 });
 ```
@@ -182,6 +188,7 @@ Together, discovery gives magus the set of projects, `depends_on` gives it the e
 ## See also
 
 - [targets.md](targets.md): the addressable unit of work, project-path resolution, and the CLI grammar.
+- [dependencies.md](dependencies.md): `depends_on` versus `magus.needs`, the fold between them, and how they feed the cache and the affected set.
 - [operations.md](operations.md): the Spell to Operation to Target hierarchy and where affected computation sits.
 - [spells.md](spells.md): the tool libraries a project binds and composes into targets.
 - [cache.md](cache.md): the content-addressed cache key, including the `dep:` lines that propagate cross-project changes.

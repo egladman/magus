@@ -61,8 +61,11 @@ bisects the target across commits until it isolates the break. See
 
 When a failure is real but only sometimes, narrow the cause:
 
-- **Data races** - `magus run test --race` turns on the toolchain race detector for
-  the run. A race is the most common source of "passes locally, fails in CI."
+- **Data races** - `magus run test --race` enables magus's own race diagnostics
+  (MGS4001-4004), not the language toolchain's race detector. It always runs the
+  target fresh (never a cache replay) and watches for concurrent-write conflicts
+  and non-deterministic output. A race is the most common source of "passes
+  locally, fails in CI."
 - **Order and isolation** - run the single target alone (`magus run test api`) and
   compare to the full run. A difference points to shared state or test ordering.
 - **Under-declared inputs** - if a target passes fresh but fails from cache (or the

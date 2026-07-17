@@ -53,7 +53,7 @@
         <li><a href="../../../download/">Download</a></li>
         <li><a href="../../../tour/">Tour</a></li>
         <li><a href="../../../playground/">Playground</a></li>
-        <li><a href="../../../console/dashboard/">Console</a></li>
+        <li><a href="../../../console/">Console</a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
         <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -79,7 +79,7 @@
 detaches - <code>docker run -d</code> / <code>--detach</code> (or a combined short-flag block like
 <code>-itd</code>). magus rejects it at resolution, before anything forks.</p>
 <pre><code class="language-text">[MGS5002] service op &quot;db&quot; detaches with &quot;-d&quot;: magus forks a service in the foreground and supervises it, so detaching breaks stdout capture, readiness, and stop. Drop the detach flag, or make this a command op if you really want it detached.
-  see: …/MGS5002.md
+  see: .../MGS5002.md
 </code></pre>
 <h2 id="why">Why</h2>
 <p>magus runs a service in the <strong>foreground</strong> and supervises it: it blocks on the
@@ -120,7 +120,7 @@ can no longer see or cleanly tear down.</li>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS5002%22">MGS5002</a><a class="tag" href="../../../search/?q=tag%3A%22services%22">services</a><a class="tag" href="../../../search/?q=tag%3A%22service+op%22">service op</a><a class="tag" href="../../../search/?q=tag%3A%22docker%22">docker</a><a class="tag" href="../../../search/?q=tag%3A%22detach%22">detach</a><a class="tag" href="../../../search/?q=tag%3A%22supervision%22">supervision</a><a class="tag" href="../../../search/?q=tag%3A%22ward%22">ward</a></div>
-    <small>Last updated <time datetime="2026-07-03T20:52:02Z">July 3, 2026, 8:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c" data-tooltip="66ee284db618102c31676a883f2c1f4b2b6d6f0c" title="66ee284db618102c31676a883f2c1f4b2b6d6f0c">66ee284d</a>)</small>
+    <small>Last updated <time datetime="2026-07-15T23:58:51Z">July 15, 2026, 11:58 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9" data-tooltip="dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9" title="dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9">dbe1d1fe</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284d</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/services/MGS5002.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/services/MGS5002.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -182,8 +182,11 @@ one-shot target. See <a href="../../../services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>The composite pipeline (lint, build, test, coverage); run with
-<code>magus affected ci</code>, handled internally by <code>Magus.RunCI</code>.</p>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../../targets/#the-target-name">targets</a>.</p>
 <h3 id="output-reference">Output reference</h3>
 <p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
 captured output; it appears on each target's line, and
@@ -337,8 +340,8 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
 <pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(magus.target.literal(&quot;lint&quot;));
-+    magus.needs(magus.target.literal(&quot;lint&quot;), magus.target.literal(&quot;test&quot;));
+-    magus.needs(lint);
++    magus.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
@@ -372,7 +375,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   </aside>
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
-    <small class="footer-group"><a href="../../../console/dashboard/">Dashboard</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="../../../console/">Console</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>
     <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../../main.js"></script>

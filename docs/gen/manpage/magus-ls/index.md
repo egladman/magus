@@ -20,7 +20,7 @@ pack, source files, outputs, dependencies, and tool requirements.
 Output defaults to a human-readable text format. Use the global -o flag with
 json or yaml for structured output suitable for scripting. -o name prints one
 project path per line. -o template accepts a Go text/template evaluated
-against the same struct that -o json emits.
+against the value -o json emits, so its field names are the json keys.
 
 ## Examples
 
@@ -45,7 +45,7 @@ magus ls -o json
 *Custom Go template*
 
 ```sh
-magus ls -o template='{{range .Projects}}{{.Path}}{{"\n"}}{{end}}'
+magus ls -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'
 ```
 
 ## See Also

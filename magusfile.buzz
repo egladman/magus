@@ -215,7 +215,6 @@ export fun postflight(args: [str]) > void {
 // only a regeneration that changes a clean file fails (a generator input changed
 // but its output was not re-run and committed).
 export fun generate(args: [str]) > void {
-    magus.needs(preflight);
     final clean_before = vcs.isDirty() == false;
     magus.needsGlob("*-generate");
     if (magus.has_charm("rw")) { return; }

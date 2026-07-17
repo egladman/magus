@@ -4,7 +4,7 @@ description: Defines an Operation, its place in the Spell to Target to Process h
 tags: [operations, ops, hierarchy, spells, targets, ci, work-model, execution]
 ---
 
-# Operations and the magus work hierarchy
+# Operations
 
 This document defines an **Operation**, magus's smallest named unit of
 tool work, and fixes its place in the hierarchy between [Spells](spells.md),
@@ -129,12 +129,12 @@ The serializable Buzz value types model the _nouns_ around this hierarchy:
 
 | Value type        | Models                                                                                                                    | Layer it touches            |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| **`Target`**      | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skipCache`, `exclusive`, `slots`, ...) | Target                      |
-| **`TargetQuery`** | an unresolved dependency edge (a query → 0..N Targets)                                                                    | Target (`magus.needs` edge) |
+| **`Target`**      | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skip_cache`, `exclusive`, `slots`, ...) | Target                      |
 | **`ExecResult`**  | the `{stdout, stderr, code, ok}` outcome of one process                                                                   | Process                     |
 
-`TargetQuery` _produces_ `Target`s; a `Target` is run as a set of `Operation`s;
-each `Operation` yields an `ExecResult`.
+A `Target` is run as a set of `Operation`s; each `Operation` yields an
+`ExecResult`. A `magus.needs` edge points straight at another `Target`'s
+function - there is no intermediate query value.
 
 ## Glossary
 
