@@ -1,10 +1,10 @@
 // keybindings.ts - the keybinding editor: a table of the console's commands, each with its current
 // chord and controls to rebind, disable, or reset it. It edits the ONE persisted "keymap" cell that
 // installKeybindings and the command bar read live, so a rebind takes effect immediately - no save step.
-// It is an integrated modal OVERLAY (a sibling of the command bar), not a page/tab: a keybinding
-// editor is a quick, transient dialog you summon over your work, not a lens you keep parked in a tab.
-// The row model (keybindingRows) is pure and unit-tested; the capture/DOM below is a thin layer over
-// the commands.ts chord helpers.
+// The row model (keybindingRows) is pure and unit-tested; createKeybindingsEditor is the reusable
+// table + capture core (a thin layer over the commands.ts chord helpers), and createKeybindingsOverlay
+// wraps it in a modal shell. The SAME editor core is embedded read-write in the Preferences surface's
+// Keybindings section, so the two never fork - both drive the one shared keymap cell.
 //
 // Scope: it edits the CONSOLE's own commands (the ones with a known default in CONSOLE_KEYMAP - tabs,
 // panes, the command bar). Surface-level bindings (a log viewer's own keys) live in their bundles and are
@@ -98,10 +98,12 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   // setChord writes one command's override into the shared keymap cell (immediate effect). A null
   // value RESETS (drops the override, back to the default); "" DISABLES; a chord CUSTOMIZES.
   function setChord(id: string, chord: string | null): void {
-    const next = { ...deps.keymap.get() };
-    if (chord === null) delete next[id];
-    else next[id] = chord;
-    deps.keymap.set(next);
+    deps.keymap.update((prev) => {
+      const next = { ...prev };
+      if (chord === null) delete next[id];
+      else next[id] = chord;
+      return next;
+    });
   }
 
   function stopCapture(): void {
