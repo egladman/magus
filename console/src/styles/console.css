@@ -411,21 +411,6 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-launcher-card .pf-v6-c-card__title-text { font-size: 1rem; font-weight: 600; }
 .console-launcher-card .pf-v6-c-card__body { color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
 
-/* Per-card kebab: a quiet corner affordance that brightens on hover/focus (or while its menu is open).
-   Its menu is a PF Menu anchored under it, above sibling cards. */
-.console-launcher-card__kebab {
-  position: absolute; top: 0.4rem; right: 0.4rem;
-  color: var(--pf-t--global--text--color--subtle);
-  opacity: 0; transition: opacity 0.12s ease;
-}
-.console-launcher-card:hover .console-launcher-card__kebab,
-.console-launcher-card:focus-within .console-launcher-card__kebab,
-.console-launcher-card__kebab[aria-expanded="true"] { opacity: 1; }
-.console-launcher-card__menu {
-  position: absolute; top: 2.4rem; right: 0.4rem; z-index: var(--pf-t--global--z-index--200);
-  min-width: 12rem;
-}
-
 /* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay
    (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives
    ID-scoped in overrides.css alongside the kbd keycap styling.

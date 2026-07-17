@@ -1,11 +1,10 @@
-// app-menu.ts - the title-bar Applications menu: the console's app drawer. Each row carries the same two
-// actions the launcher cards do - the row opens the surface as a TAB (console.open.*, single-instance, so
-// it focuses an existing tab rather than duplicating it), and the trailing icon opens it in its own window
-// (index.html?app=<id>, which an installed PWA reads as a native app window). New-window used to be the
-// row's default, which surprised people into stray OS windows. It also links back to the documentation
-// site. Mirrors the settings gear's popover wiring (open/close, aria-expanded, click-outside, Escape,
-// focus return) so the two title-bar popovers behave identically. No-ops without the markup.
-import { openSurfaceWindow } from "../lib/appwindow";
+// app-menu.ts - the title-bar Applications menu: the console's app drawer. Picking an app ALWAYS lands in
+// this window - it opens a tab, or focuses that app's tab if one is already open (console.open.* is
+// single-instance). It never spawns an OS window: the console has exactly one route to a new window,
+// moving an EXISTING tab out (the tab context menu, tabBar.ts), so picking an app can never strand you
+// somewhere you did not ask to go. It also links back to the documentation site. Mirrors the settings
+// gear's popover wiring (open/close, aria-expanded, click-outside, Escape, focus return) so the two
+// title-bar popovers behave identically. No-ops without the markup.
 import { dispatchCommand } from "../console/commands";
 
 export function initAppMenu(): void {
@@ -35,21 +34,6 @@ export function initAppMenu(): void {
       if (!id) return;
       setOpen(false);
       dispatchCommand("console.open." + id);
-    });
-  }
-
-  // The trailing icon opens that surface in its own window instead. "popup" strips the tab/URL chrome in
-  // a browser; an installed PWA promotes it to a standalone app window. A stable per-surface window name
-  // means re-picking the same app focuses its existing window instead of stacking duplicates.
-  // stopPropagation so the trailing click never also triggers the row's open-as-tab.
-  for (const item of panel.querySelectorAll<HTMLElement>("[data-app-window]")) {
-    item.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const id = item.dataset.appWindow;
-      if (!id) return;
-      openSurfaceWindow(id);
-      setOpen(false, true);
     });
   }
 
