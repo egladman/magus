@@ -104,14 +104,16 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, agentFn
 		mcpserver.WithRecovery(),
 	)
 	// The activity trail is an append-only JSONL sidecar under the cache dir (next to the
-	// journal run logs). Writes are stateless (open/append/close per event), so the handler
-	// only prunes it once here at construction; wrap appends per tool call. An empty cacheDir
-	// makes every trail call a no-op, so a read-only or dirless workspace never blocks serving.
+	// journal run logs). Writes are stateless (open/append/close per event). Rotate here trims
+	// it once at construction; wrap then appends per tool call and drives a periodic rotate off
+	// the append count (trail.RotateEvery) so a long-lived daemon's trail stays bounded rather
+	// than only at boot. An empty cacheDir makes every trail call a no-op, so a read-only or
+	// dirless workspace never blocks serving.
 	var cacheDir string
 	if opts.Magus != nil {
 		cacheDir = opts.Magus.CacheDir()
 	}
-	trail.Prune(cacheDir)
+	trail.Rotate(cacheDir)
 	registerTools(srv, opts, log, agentFn, cacheDir)
 	return srv
 }

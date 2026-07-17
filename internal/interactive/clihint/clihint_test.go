@@ -31,7 +31,7 @@ func TestCommandRender(t *testing.T) {
 func TestAllRegistered(t *testing.T) {
 	declared := []Command{
 		Run, QueryOutput, GraphOpen, GraphExport, GraphStats, GraphBuild,
-		ServerStart, ServerStop, Status, Watch, Affected,
+		ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
 		DescribeTargets, MCPTokenGenerate,
 	}
 	if len(All) != len(declared) {

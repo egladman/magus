@@ -22,12 +22,14 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
+	jobhandler "github.com/egladman/magus/internal/handler/job"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
 	"github.com/egladman/magus/types"
 )
@@ -236,6 +238,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 			httpServer.Handle(activityPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, activityHandler))))
 			log.Info("[BRIDGE] activity service mounted", slog.String("path", activityPath))
+
+			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
+			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
+			// cross-origin allowance as the read services - never unauthenticated - so a browser
+			// client can trigger maintenance without the daemon exposing an open action endpoint.
+			jobPath, jobHandler := jobv1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version))
+			httpServer.Handle(jobPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, jobHandler))))
+			log.Info("[BRIDGE] job service mounted", slog.String("path", jobPath))
 
 			log.Info("[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}

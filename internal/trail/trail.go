@@ -41,10 +41,20 @@ const (
 // against content collisions among one machine's payloads while staying short in a ref.
 const refHexLen = 16
 
-// maxEvents caps the trail: Prune keeps the most recent maxEvents events and garbage-collects
-// blobs no kept event references. Prune is called at daemon start (and, later, by a periodic
-// prune job) - not on every append - so growth is bounded without a rewrite per write.
+// maxEvents caps the trail: Rotate keeps the most recent maxEvents events and garbage-collects
+// blobs no kept event references. Rotate runs at daemon start and thereafter every rotateEvery
+// appends (via RotateOnCount) - not on every append - so a long-lived daemon's trail stays
+// bounded without a rewrite per write.
 const maxEvents = 10000
+
+// rotateEvery is how many recorded events trigger the next Rotate. The trail is stateless and
+// lock-free by design (append is a bare POSIX append; there is no long-lived handle to hang a
+// count on), so the write-triggered rotate cannot count inside Append without re-scanning the
+// whole file per write. Instead RotateOnCount lets the caller - which already increments a counter
+// per append - drive the rotate, keeping the policy and its maxEvents sibling in one place. This
+// bounds the trail at roughly maxEvents + rotateEvery events between rotates; 512 keeps the rewrite
+// rare relative to tool-call traffic.
+const rotateEvery = 512
 
 // Kind values name an action's source; they map to the magus.activity.v1 Kind enum at the wire.
 // Readable strings on disk, like the journal's status strings. MCP tool calls and jobs have
@@ -158,6 +168,52 @@ func ReadBlob(base, ref string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(blobsPath(base), ref))
 }
 
+// LastRun returns the most recent KIND_JOB event whose Action equals action - the space-joined
+// worker argv recorded for a background job (e.g. "graph build") - and whether one was found.
+// It is how a caller shows a job's last outcome. Scans the retained trail newest-first; a job
+// that has not run within it is (zero, false).
+func LastRun(base, action string) (Event, bool) {
+	events, _ := ReadRecent(base, maxEvents)
+	for _, e := range events { // newest-first
+		if e.Kind == KindJob && e.Action == action {
+			return e, true
+		}
+	}
+	return Event{}, false
+}
+
+// Stat reports the trail's current on-disk footprint under base: total bytes (the events file
+// plus every payload blob) and the number of recorded events. It is what a caller shows to
+// judge whether a rotate is worth running. Best-effort and read-only: a missing or empty trail
+// is (0, 0), and an unreadable directory is skipped rather than erroring - a size readout is
+// never a precondition for anything.
+func Stat(base string) (bytes int64, count int64) {
+	if base == "" {
+		return 0, 0
+	}
+	if f, err := os.Open(eventsPath(base)); err == nil {
+		if fi, err := f.Stat(); err == nil {
+			bytes += fi.Size()
+		}
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		for sc.Scan() {
+			if len(sc.Bytes()) > 0 {
+				count++
+			}
+		}
+		f.Close()
+	}
+	if entries, err := os.ReadDir(blobsPath(base)); err == nil {
+		for _, ent := range entries {
+			if info, err := ent.Info(); err == nil && !ent.IsDir() {
+				bytes += info.Size()
+			}
+		}
+	}
+	return bytes, count
+}
+
 // ReadRecent returns up to limit events from the tail of the trail, newest first. A missing or
 // empty trail yields no events and no error. The file is opened read-only, so it is safe to call
 // while a producer appends. A corrupt line is skipped, not fatal.
@@ -209,12 +265,25 @@ func ReadRecent(base string, limit int) ([]Event, error) {
 	return out, nil
 }
 
-// Prune keeps the last maxEvents events and deletes blobs that no kept event references. Called
-// at daemon start (and, later, a periodic job). Best-effort: any error leaves the trail as-is,
-// and it only rewrites when the file exceeds the cap.
-func Prune(base string) { prune(base, maxEvents) }
+// Rotate keeps the last maxEvents events and deletes blobs that no kept event references. Called
+// at daemon start and, thereafter, by RotateOnCount. Best-effort: any error leaves the trail
+// as-is, and it only rewrites when the file exceeds the cap. It takes no lock, so a concurrent
+// Append racing the read-rewrite window can be dropped - acceptable for a best-effort governance
+// trail, and the price of keeping the trail lock-free.
+func Rotate(base string) { rotate(base, maxEvents) }
 
-func prune(base string, max int) {
+// RotateOnCount rotates iff n - the caller's running append count (the value returned by its
+// atomic increment) - lands on a rotateEvery boundary. Passing the count keeps the trail itself
+// stateless: the counter lives with the producer, not here. n == 0 never rotates, so a stray zero
+// cannot force a rewrite before the first real append. It is the write-triggered rotate, distinct
+// from the boot-time Rotate.
+func RotateOnCount(base string, n uint64) {
+	if n != 0 && n%rotateEvery == 0 {
+		Rotate(base)
+	}
+}
+
+func rotate(base string, max int) {
 	if base == "" {
 		return
 	}

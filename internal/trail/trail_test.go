@@ -1,10 +1,31 @@
 package trail
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
+
+// seedEvents writes n events (Ts 1..n) straight into the trail file, bypassing Append so a
+// large fixture is one write, not n opens. Returns the events in append order (oldest first).
+func seedEvents(t *testing.T, base string, n int) []Event {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Join(base, dir), 0o755))
+	events := make([]Event, 0, n)
+	var buf []byte
+	for i := 1; i <= n; i++ {
+		e := Event{Ts: int64(i), Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK}
+		events = append(events, e)
+		line, err := json.Marshal(e)
+		require.NoError(t, err)
+		buf = append(append(buf, line...), '\n')
+	}
+	require.NoError(t, os.WriteFile(eventsPath(base), buf, 0o644))
+	return events
+}
 
 func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	dir := t.TempDir()
@@ -96,7 +117,7 @@ func TestReadBlob_RejectsUnsafeRefs(t *testing.T) {
 	}
 }
 
-func TestPrune_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
+func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	dir := t.TempDir()
 	refs := make([]string, 0, 5)
 	for i := 1; i <= 5; i++ {
@@ -105,11 +126,11 @@ func TestPrune_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 		Append(dir, Event{Ts: int64(i), Kind: KindMCPToolCall, Action: string(rune('a' + i - 1)), ResponseRef: ref})
 	}
 
-	prune(dir, 2) // keep the last 2 events
+	rotate(dir, 2) // keep the last 2 events
 
 	events, _ := ReadRecent(dir, 10)
 	if len(events) != 2 {
-		t.Fatalf("after prune got %d events, want 2", len(events))
+		t.Fatalf("after rotate got %d events, want 2", len(events))
 	}
 	if _, err := ReadBlob(dir, refs[4]); err != nil { // newest kept event's blob survives
 		t.Errorf("kept event's blob was GC'd: %v", err)
@@ -129,25 +150,51 @@ func TestPrune_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 	}
 }
 
-func TestPrune_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
+func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {
 	dir := t.TempDir()
 	Append(dir, Event{Ts: 1, Action: "a"})
-	prune(dir, 10) // under cap: no rewrite
+	rotate(dir, 10) // under cap: no rewrite
 	if evs, _ := ReadRecent(dir, 10); len(evs) != 1 {
-		t.Errorf("under-cap prune changed the trail: %d events", len(evs))
+		t.Errorf("under-cap rotate changed the trail: %d events", len(evs))
 	}
-	prune("", 2) // must not panic
+	rotate("", 2) // must not panic
 }
 
-func TestPrune_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
+func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 	dir := t.TempDir()
 	for i := 1; i <= 3; i++ {
 		Append(dir, Event{Ts: int64(i), Kind: KindJob, Action: "x"})
 	}
-	Prune(dir) // maxEvents is 10000, so this is a no-op that must not lose events
+	Rotate(dir) // maxEvents is 10000, so this is a no-op that must not lose events
 	if evs, _ := ReadRecent(dir, 10); len(evs) != 3 {
-		t.Errorf("Prune under cap changed the trail: got %d events, want 3", len(evs))
+		t.Errorf("Rotate under cap changed the trail: got %d events, want 3", len(evs))
 	}
+}
+
+func TestRotateOnCount_RotatesOnlyOnBoundary(t *testing.T) {
+	dir := t.TempDir()
+	seeded := seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
+
+	// A zero count and any non-boundary count leave the over-cap trail untouched: no rotate fired.
+	for _, n := range []uint64{0, 1, rotateEvery - 1, rotateEvery + 1} {
+		RotateOnCount(dir, n)
+		got, err := ReadRecent(dir, maxEvents+100)
+		require.NoError(t, err)
+		require.Len(t, got, len(seeded), "RotateOnCount(%d) must not rotate off a boundary", n)
+	}
+
+	// A boundary count fires the rotate, trimming to the newest maxEvents events.
+	RotateOnCount(dir, rotateEvery)
+	got, err := ReadRecent(dir, maxEvents+100)
+	require.NoError(t, err)
+	require.Len(t, got, maxEvents)
+	// Whole-struct assertions on the window edges (ReadRecent is newest-first).
+	require.Equal(t, Event{Ts: int64(maxEvents + 5), Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK}, got[0])
+	require.Equal(t, Event{Ts: 6, Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK}, got[len(got)-1])
+}
+
+func TestRotateOnCount_EmptyBaseIsNoop(t *testing.T) {
+	RotateOnCount("", rotateEvery) // must not panic
 }
 
 func TestReadRecent_SkipsCorruptLines(t *testing.T) {

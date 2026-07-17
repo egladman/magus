@@ -38,6 +38,7 @@ type contextKey int
 const (
 	rootCtxKey contextKey = iota
 	cwdCtxKey
+	jobCtxKey
 )
 
 // WithRoot returns ctx carrying the client-sent workspace root, readable via RootFromContext.
@@ -64,6 +65,20 @@ func CwdFromContext(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+// withJob marks ctx as a background job invocation (submitJob), distinct from an adopted run.
+// The daemon's handler reads it via IsJob to route jobs through the full command set while a
+// plain adopted run stays limited to run/affected.
+func withJob(ctx context.Context) context.Context {
+	return context.WithValue(ctx, jobCtxKey, true)
+}
+
+// IsJob reports whether ctx belongs to a background job (submitted via SubmitJob) rather than
+// an adopted run. The daemon's dispatch handler branches on it.
+func IsJob(ctx context.Context) bool {
+	v, _ := ctx.Value(jobCtxKey).(bool)
+	return v
 }
 
 // Options configures the proc server created by New.
@@ -520,6 +535,7 @@ func (s *service) submitJob(req JobRequest, reply *JobReply) error {
 		ctx = WithCwd(ctx, req.Cwd)
 		ctx = journal.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
+		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist
 
 		if err := s.lim.Acquire(ctx); err != nil {
 			return

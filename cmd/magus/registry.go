@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
@@ -244,15 +244,21 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 	}
 }
 
-// dispatch acquires the workspace for root, injects it into ctx, and
-// forwards the adopted command to dispatchAdopted.
+// dispatch acquires the workspace for root, injects it into ctx, and forwards the work. An
+// adopted run (run/affected) goes to dispatchAdopted; a background job (proc.SubmitJob, marked
+// on ctx) goes to dispatchJob, which admits the wider maintenance command set. Both reuse the
+// warm workspace via withMagus.
 func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, args []string) error {
 	e, err := r.acquire(ctx, root)
 	if err != nil {
 		return err
 	}
 	defer r.release(e) // hold the lease for the whole build
-	return dispatchAdopted(withMagus(ctx, e.m), root, rc, args)
+	ctx = withMagus(ctx, e.m)
+	if proc.IsJob(ctx) {
+		return dispatchJob(ctx, root, rc, args)
+	}
+	return dispatchAdopted(ctx, root, rc, args)
 }
 
 // recordJobActivity appends a KIND_JOB event to the daemon-wide activity trail after a background
@@ -279,7 +285,7 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 		Kind:      trail.KindJob,
 		Actor:     "daemon",
 		Workspace: root,
-		Action:    strings.Join(args, " "),
+		Action:    jobs.ActionString(args),
 		Outcome:   trail.OutcomeOK,
 		DurMs:     dur.Milliseconds(),
 	}

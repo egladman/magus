@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/journal"
 	runPkg "github.com/egladman/magus/internal/proc/run"
@@ -37,6 +38,73 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 		Ref: ref, Project: "svc/api", Target: "test",
 		Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200,
 	}, desc)
+}
+
+// TestRotateRunsKeepsNewestAndReportsFreed writes several invocation journals with staggered
+// modtimes, then prunes to a cap and checks the newest survive, the oldest are gone, and the
+// removed count and freed bytes are reported.
+func TestRotateRunsKeepsNewestAndReportsFreed(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+
+	base := time.Unix(1_700_000_000, 0)
+	body := []byte("{}\n") // 3 bytes each
+	for i := 0; i < 5; i++ {
+		p := filepath.Join(runs, fmt.Sprintf("inv%d.jsonl", i))
+		require.NoError(t, os.WriteFile(p, body, 0o644))
+		// inv0 oldest .. inv4 newest.
+		require.NoError(t, os.Chtimes(p, base.Add(time.Duration(i)*time.Minute), base.Add(time.Duration(i)*time.Minute)))
+	}
+
+	removed, freed := s.RotateRuns(2) // keep inv4, inv3
+	require.Equal(t, 3, removed)
+	require.Equal(t, int64(3*len(body)), freed)
+
+	got, err := os.ReadDir(runs)
+	require.NoError(t, err)
+	names := make([]string, 0, len(got))
+	for _, e := range got {
+		names = append(names, e.Name())
+	}
+	require.ElementsMatch(t, []string{"inv3.jsonl", "inv4.jsonl"}, names)
+}
+
+func TestRotateRunsUnderCapAndZeroAreNoops(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(runs, "inv0.jsonl"), []byte("x\n"), 0o644))
+
+	removed, freed := s.RotateRuns(10) // under cap
+	require.Equal(t, 0, removed)
+	require.Zero(t, freed)
+
+	removed, _ = s.RotateRuns(0) // never wipe the whole dir
+	require.Equal(t, 0, removed)
+
+	got, _ := os.ReadDir(runs)
+	require.Len(t, got, 1)
+}
+
+func TestRunsStatCountsJournals(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	bytes, count := s.RunsStat()
+	require.Zero(t, bytes) // missing runs dir is (0, 0)
+	require.Zero(t, count)
+
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(runs, "inv0.jsonl"), []byte("abc\n"), 0o644)) // 4 bytes
+	require.NoError(t, os.WriteFile(filepath.Join(runs, "inv1.jsonl"), []byte("de\n"), 0o644))  // 3 bytes
+	require.NoError(t, os.WriteFile(filepath.Join(runs, "notes.txt"), []byte("ignored"), 0o644))
+
+	bytes, count = s.RunsStat()
+	require.Equal(t, int64(2), count) // only .jsonl journals counted
+	require.Equal(t, int64(7), bytes)
 }
 
 // TestOutputStoreVerbatimFidelity pins the reason for the blob store: `magus query ref` returns

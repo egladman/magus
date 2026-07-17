@@ -64,6 +64,7 @@ var (
 	GraphBuild       = cmd("graph", "build")
 	ServerStart      = cmd("server", "start")
 	ServerStop       = cmd("server", "stop")
+	ServerJob        = cmd("server", "job")
 	Status           = cmd("status")
 	Watch            = cmd("watch")
 	Affected         = cmd("affected")
@@ -75,6 +76,6 @@ var (
 // walk. Keep new Command values registered here.
 var All = []Command{
 	Run, QueryOutput, GraphOpen, GraphExport, GraphStats, GraphBuild,
-	ServerStart, ServerStop, Status, Watch, Affected,
+	ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
 	DescribeTargets, MCPTokenGenerate,
 }

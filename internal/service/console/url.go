@@ -27,3 +27,13 @@ func LogViewerURL(base, ref string, events []journal.Event, inv journal.Invocati
 	}
 	return strings.TrimRight(base, "/") + "/#ref=" + url.QueryEscape(ref) + "&data=" + encoded, nil
 }
+
+// LiveURL assembles a console page's LIVE deep link: the daemon's loopback host and bearer token
+// ride the URL fragment (#live=host&token=...), which the browser never transmits to a server, so
+// the page connects back to this daemon over loopback. base is the full console surface URL (e.g.
+// .../console/dashboard/ or .../console/graph/). Callers hold the token, so - unlike the read
+// links - this one carries a secret and must only be surfaced to an interactive user, never
+// written to a log.
+func LiveURL(base, hostPort, token string) string {
+	return strings.TrimRight(base, "/") + "/#live=" + hostPort + "&token=" + url.PathEscape(token)
+}

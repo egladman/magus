@@ -12,6 +12,9 @@ config console.url
 config daemon.address
 config daemon.enabled
 config daemon.idle_ttl
+config daemon.maintenance.rotate_activities
+config daemon.maintenance.rotate_logs
+config daemon.maintenance.sync_graph
 config daemon.socket
 config daemon.workspaces
 config default_charms

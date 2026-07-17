@@ -43,15 +43,15 @@ func TestClihintGraphLeavesAreRealSubcommands(t *testing.T) {
 // TestClihintServerLeavesAreRealSubcommands ties the server-family hints to the
 // tokens serverCmd routes on. serverCmd switches directly on clihint.*.Leaf(), so
 // the accepted form and the hint already share one source of truth; this asserts
-// they remain the exact pair start/stop, catching a stray edit that renames one
+// they remain the exact set start/stop/job, catching a stray edit that renames one
 // side only.
 func TestClihintServerLeavesAreRealSubcommands(t *testing.T) {
-	got := []string{clihint.ServerStart.Leaf(), clihint.ServerStop.Leaf()}
-	want := []string{"start", "stop"}
+	got := []string{clihint.ServerStart.Leaf(), clihint.ServerStop.Leaf(), clihint.ServerJob.Leaf()}
+	want := []string{"start", "stop", "job"}
 	if !slices.Equal(got, want) {
 		t.Errorf("server leaves = %v, want %v", got, want)
 	}
-	for _, c := range []clihint.Command{clihint.ServerStart, clihint.ServerStop} {
+	for _, c := range []clihint.Command{clihint.ServerStart, clihint.ServerStop, clihint.ServerJob} {
 		if c.Head() != "server" {
 			t.Errorf("clihint %q is not a server-family command", c)
 		}

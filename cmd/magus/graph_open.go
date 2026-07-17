@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -391,7 +392,7 @@ func graphOpenLive(ctx context.Context, base string, printOnly, useTargets bool)
 		return errSilent{exitCode: 1}
 	}
 
-	openURL := strings.TrimRight(base, "/") + "/#live=" + hostPort + "&token=" + url.PathEscape(token)
+	openURL := console.LiveURL(base, hostPort, token)
 	if useTargets {
 		openURL += "&flavor=targets"
 	}

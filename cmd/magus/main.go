@@ -58,6 +58,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
@@ -509,7 +510,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "repl":
 		return replCmd(ctx, root, subArgs)
 	case "server":
-		return serverCmd(ctx, subArgs)
+		return serverCmd(ctx, root, subArgs)
 	case "mcp":
 		return mcpCmd(ctx, subArgs)
 	case "completion":
@@ -632,6 +633,20 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 	default:
 		return fmt.Errorf("%w: %q (only run, affected)", proc.ErrNotAdoptable, sub)
 	}
+}
+
+// dispatchJob routes a background job submitted through proc.SubmitJob. Unlike an adopted run
+// (dispatchAdopted, limited to run/affected), a job runs a maintenance command - but only one
+// whose worker argv the jobs registry recognizes, so the fire-and-forget job RPC can never be
+// used to run an arbitrary command. A recognized worker routes through the full dispatchSub
+// command set and reuses the daemon's warm workspace (withMagus is already on ctx). This is the
+// dispatch half that makes `graph build`, `clean --cache`, and the rotate workers actually run
+// as jobs; without it they returned ErrNotAdoptable and the submitted job was a silent no-op.
+func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) error {
+	if !jobs.IsWorkerArgv(args) {
+		return fmt.Errorf("%w: %q is not a registered job worker", proc.ErrNotAdoptable, strings.Join(args, " "))
+	}
+	return dispatchSub(ctx, root, rc, args[0], args[1:])
 }
 
 // daemonProvider is the single observability provider the daemon shares between its

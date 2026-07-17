@@ -128,6 +128,21 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		}
 		cfg.Daemon.Workspaces = out
 	}
+	if v := getenv("MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Daemon.Maintenance.RotateActivities = d
+		}
+	}
+	if v := getenv("MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Daemon.Maintenance.RotateLogs = d
+		}
+	}
+	if v := getenv("MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Daemon.Maintenance.SyncGraph = d
+		}
+	}
 	if v := getenv("MAGUS_VCS_ENABLED"); v != "" {
 		b := parseBoolEnv(v, cfg.VCS.Enabled != nil && *cfg.VCS.Enabled)
 		cfg.VCS.Enabled = &b

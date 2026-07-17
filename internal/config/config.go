@@ -183,11 +183,14 @@ type MCP struct {
 	Address string `yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
 }
 
-// Console controls the read-only console service.
-// The console mounts three GET-only endpoints on the MCP HTTP server
-// (/api/v1/graph, /api/v1/status, /api/v1/events) so a browser running the
-// hosted Graph Explorer can read the current workspace. Loopback only; bearer
-// auth; no mutation ever.
+// DefaultConsoleURL is the hosted console base URL, used as the Console.URL default and as the
+// fallback wherever a console page URL is built. One definition so the literal is not re-typed.
+const DefaultConsoleURL = "https://eli.gladman.cc/magus/console/"
+
+// Console controls the console service. The console mounts read-only GET endpoints on the MCP
+// HTTP server (/api/v1/graph, /api/v1/status, /api/v1/events) so a browser running the hosted
+// Graph Explorer can read the current workspace, plus the bearer-gated magus.job.v1 JobService
+// for triggering maintenance jobs (the daemon's one mutating surface). Loopback only; bearer auth.
 type Console struct {
 	Enabled *bool `yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
 	// URL is the base URL of the hosted console (with a trailing slash, without
@@ -214,6 +217,21 @@ type Daemon struct {
 	// Workspaces is the explicit list of workspace roots to serve; non-empty enables eager union of sandbox
 	// policies and rejects out-of-list workspaces (MGS2010).
 	Workspaces []string `yaml:"workspaces"`
+	// Maintenance configures the daemon's built-in background maintenance scheduler.
+	Maintenance Maintenance `yaml:"maintenance"`
+}
+
+// Maintenance sets how often the daemon runs each low-key background maintenance job on its own.
+// Each field is the MINIMUM interval since that job last ran before the daemon runs it again;
+// the run is idle-gated (only when the pool is quiet) and submitted through the same coalescing
+// path as a manual run, so the two never double-run. "Last run" is read from the activity trail,
+// so a manual trigger through any path (CLI or RPC) resets the countdown, and the schedule
+// survives a daemon restart. A zero (or negative) interval disables that job's scheduling.
+// clear-cache is intentionally absent: wiping the cache is user-triggered only, never scheduled.
+type Maintenance struct {
+	RotateActivities time.Duration `yaml:"rotate_activities"` // trim the activity trail; default 30d (a slow safety net; the trail is already write-bounded)
+	RotateLogs       time.Duration `yaml:"rotate_logs"`       // trim the run-log journals; default 7d (their only bound, so weekly)
+	SyncGraph        time.Duration `yaml:"sync_graph"`        // reconcile the graph; default 6h (a safety net behind the VCS hook)
 }
 
 // VCS controls VCS-driven affected detection.
@@ -387,8 +405,15 @@ func EnvVarDocs() []EnvVarDoc {
 // Defaults returns a Config populated with the magus built-in defaults.
 func Defaults() Config {
 	return Config{
-		CI:          CI{MaxShards: 8},
-		Daemon:      Daemon{Enabled: true},
+		CI: CI{MaxShards: 8},
+		Daemon: Daemon{
+			Enabled: true,
+			Maintenance: Maintenance{
+				RotateActivities: 30 * 24 * time.Hour, // trail is already write-bounded; this is a slow safety net
+				RotateLogs:       7 * 24 * time.Hour,  // run-logs have no other bound, so trim weekly
+				SyncGraph:        6 * time.Hour,       // safety net behind the VCS refresh hook
+			},
+		},
 		HistoryPath: DefaultHistoryPath(),
 		Volatility: Volatility{
 			Enabled:          true,
@@ -398,7 +423,7 @@ func Defaults() Config {
 			AnnotateGHA:      true,
 		},
 		Hints:     Hints{Enabled: boolPtr(true)},
-		Console:   Console{URL: "https://eli.gladman.cc/magus/console/"},
+		Console:   Console{URL: DefaultConsoleURL},
 		Knowledge: Knowledge{VCS: VCSConfig{Authorship: boolPtr(true)}},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",

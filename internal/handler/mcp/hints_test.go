@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
@@ -111,7 +112,7 @@ func TestWrapAppliesHintsAndCountsTheirBytes(t *testing.T) {
 		tel := &fakeTel{}
 		// adapt turns an Invoke error into an IsError text result with a nil Go
 		// error, mirroring the real dispatch path.
-		h := wrap(quietLogger(), agentFn, "", tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), agentFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultError("mcp: no node matches foo"), nil
 		})
 		result, err := h(context.Background(), callRequest("magus_explain", map[string]any{"node": "foo"}))
@@ -124,7 +125,7 @@ func TestWrapAppliesHintsAndCountsTheirBytes(t *testing.T) {
 
 	t.Run("plain success is not decorated", func(t *testing.T) {
 		tel := &fakeTel{}
-		h := wrap(quietLogger(), agentFn, "", tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), agentFn, "", tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText(`{"ok":true}`), nil
 		})
 		result, err := h(context.Background(), callRequest("magus_query", map[string]any{"query": "kind:target"}))

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +32,14 @@ const RefPrefix = "out"
 // (<cacheDir>/runs/<inv>.jsonl). Shared by the writer (magus.BeginInvocation) and the reader
 // (InvocationByID) so the two never drift on the path.
 const RunsDir = "runs"
+
+// runExt is the extension of an invocation journal file (runs/<inv>.jsonl).
+const runExt = ".jsonl"
+
+// DefaultMaxRuns bounds how many invocation journals the runs dir retains, so a long-lived
+// daemon's run-log dir stays bounded. Coarser than the per-key output cap (defaultOutputKeepLast):
+// one file per invocation, kept newest-first by modtime. The RotateLogs job trims to this.
+const DefaultMaxRuns = 500
 
 // refHexLen is the hex-digit count after the prefix. 8 hex = 32 bits, matched to
 // shortHash; ample for a local, keep-last-K, age-bounded store, and prefix-matchable
@@ -367,6 +376,72 @@ func (s *OutputStore) pruneKey(dir string, keepLast int) {
 		_ = os.Remove(e.path)
 		_ = os.Remove(descriptorPath(e.path))
 	}
+}
+
+// runsDir is <cacheDir>/runs, the flat directory of invocation journals.
+func (s *OutputStore) runsDir() string { return filepath.Join(s.cacheDir, RunsDir) }
+
+// RotateRuns keeps the keepLast newest invocation journals (runs/<inv>.jsonl, by modtime) and
+// removes the rest, returning how many it deleted and the bytes that freed. The runs dir is flat
+// (one file per invocation, not keyed like outputs/), so this is a single keep-last-K over the
+// whole directory - the run-log analogue of pruneKey, and the worker behind the rotate-logs job.
+// Best-effort: an unreadable dir or a failed remove is skipped, never fatal. keepLast <= 0 is a
+// no-op (never wipe the whole dir by accident).
+func (s *OutputStore) RotateRuns(keepLast int) (removed int, bytesFreed int64) {
+	if keepLast <= 0 {
+		return 0, 0
+	}
+	files, err := os.ReadDir(s.runsDir())
+	if err != nil {
+		return 0, 0
+	}
+	type entry struct {
+		path string
+		mod  time.Time
+		size int64
+	}
+	var entries []entry
+	for _, f := range files {
+		if f.IsDir() || !strings.HasSuffix(f.Name(), runExt) {
+			continue
+		}
+		info, err := f.Info()
+		if err != nil {
+			continue
+		}
+		entries = append(entries, entry{path: filepath.Join(s.runsDir(), f.Name()), mod: info.ModTime(), size: info.Size()})
+	}
+	if len(entries) <= keepLast {
+		return 0, 0
+	}
+	slices.SortFunc(entries, func(a, b entry) int { return b.mod.Compare(a.mod) }) // newest first
+	for _, e := range entries[keepLast:] {
+		if os.Remove(e.path) == nil {
+			removed++
+			bytesFreed += e.size
+		}
+	}
+	return removed, bytesFreed
+}
+
+// RunsStat reports the invocation-journal directory's current footprint: total bytes across every
+// runs/<inv>.jsonl and the number of such files. Best-effort and read-only; a missing dir is
+// (0, 0). It is what the RotateLogs job reports as its target size.
+func (s *OutputStore) RunsStat() (bytes int64, count int64) {
+	files, err := os.ReadDir(s.runsDir())
+	if err != nil {
+		return 0, 0
+	}
+	for _, f := range files {
+		if f.IsDir() || !strings.HasSuffix(f.Name(), runExt) {
+			continue
+		}
+		if info, err := f.Info(); err == nil {
+			bytes += info.Size()
+			count++
+		}
+	}
+	return bytes, count
 }
 
 // removeForProject deletes every stored execution whose descriptor names project (blob +
