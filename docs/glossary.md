@@ -259,8 +259,9 @@ console's UI, so they are defined here rather than left to be inferred from it.
 
 The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon only exposes a
-read-only loopback API it calls. See [reference/console.md](reference/console.md).
+static app, not something the daemon serves - the daemon exposes a loopback API
+it calls: read-only views plus one bearer-gated job-control service for
+maintenance jobs. See [reference/console.md](reference/console.md).
 
 ### Surface
 

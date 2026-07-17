@@ -1,6 +1,6 @@
 ---
 title: Console API
-description: Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.
+description: Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.
 tags: [console, graph, privacy]
 aliases: [console, browser-bridge]
 ---
@@ -11,10 +11,16 @@ The console is three frozen, read-only GET routes that the magus daemon
 exposes over loopback so the hosted [console](https://eli.gladman.cc/magus/console/)
 (its Graph Explorer surface) can display your current workspace.
 
-**Nothing in the browser can make the daemon do anything.** The console has no
+**These read routes cannot change your workspace.** The console's GET API has no
 write surface, no POST routes, and no way to trigger a build, run a target, or
-change configuration. This is a design decision, not just a security posture
-(see section 0.3 of the PWA plan).
+change configuration - it only reads. This is a design decision, not just a
+security posture (see section 0.3 of the PWA plan).
+
+The daemon does expose one mutating surface, separate from these read routes: an
+authenticated [job-control service](#job-control) that triggers maintenance jobs
+(reconcile the graph, rotate the activity trail or run-logs, clear the cache).
+It is gated behind the same loopback bind and bearer token, and it cannot run an
+arbitrary command - only a fixed set of maintenance jobs.
 
 ## What the console serves
 
@@ -46,6 +52,28 @@ symbol data stays opt-in.
 reparse the workspace target graph on every request (they call `DescribeGraph`
 which reads the cached in-memory target graph but does not cache the variant
 serialization). This is a known limitation; memoization per variant is deferred.
+
+## Job control
+
+Separate from the read routes above, the daemon hosts a **mutating** Connect
+service, `magus.job.v1.JobService`, so a browser client (or the CLI) can trigger
+background maintenance without an open action endpoint. It is the daemon's only
+write surface, and it is bounded: it submits a fixed set of named jobs, never an
+arbitrary command.
+
+| RPC              | Effect                                                        |
+| ---------------- | ------------------------------------------------------------- |
+| `SyncGraph`      | Reconcile the knowledge graph to current source               |
+| `RotateActivities` | Trim the activity trail to its cap                            |
+| `RotateLogs`     | Trim the invocation run-log journals to their cap             |
+| `ClearCache`     | Invalidate cached build entries                               |
+| `ListJobs`       | Report every job's running state, last run, and target size   |
+
+Each submit is fire-and-forget and coalesced (an identical in-flight job is not
+started twice) and returns a metadata snapshot - the job's last run and the
+current size of what it maintains. The same jobs are reachable from the CLI with
+`magus server job <name>`. The service is mounted behind the same loopback bind
+and bearer token as everything else here; it is never served unauthenticated.
 
 ## How it is secured
 
@@ -329,4 +357,4 @@ If your threat model excludes our hosting altogether: clone the repo, run
 network. Every page here is origin-agnostic and works identically. (magus
 ships no general-purpose static file server for hosting this site; the only
 servers it binds are the ephemeral loopback `--serve` graph server and the
-read-only loopback daemon console documented above.)
+loopback daemon console documented above.)
