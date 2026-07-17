@@ -55,6 +55,9 @@ export interface TileView {
   snapshot(): { tree: Pane; focusId: string }; // read-only tree + focus for a renderer (the panes map)
   focusLeaf(id: string): void; // focus a specific pane by id; no-op for an unknown id
   swap(idA: string, idB: string): void; // exchange two leaves' tree positions (drag-to-move)
+  leafPageId(id: string): string | null; // the pageId a leaf holds, or null for an unknown id (drag-to-adopt's read side)
+  adopt(pageId: string, dir?: Split["dir"]): void; // bring a surface INTO this tile as a new pane (drag-to-adopt's write side)
+  closeLeaf(id: string): boolean; // close a specific pane by id; returns true when it was the LAST pane (tab empties)
   setVisible(visible: boolean): void; // the tab became active (true) or was hidden by another (false)
   deactivate(): void; // tear down every mounted surface
 }
@@ -372,6 +375,49 @@ export function createTileView(deps: TileDeps): TileView {
     render();
   }
 
+  // leafPageId looks up a leaf's surface without touching focus - moveSurfaceToTab (main.ts) reads
+  // this to find out what a drag is carrying, since a drag can originate from ANY pane in the source
+  // tab, not just its currently focused one.
+  function leafPageId(id: string): string | null {
+    return leaves(tree).find((l) => l.id === id)?.pageId ?? null;
+  }
+
+  // adopt is drag-to-adopt's drop side: bring a surface INTO this tile as a new pane. A surface
+  // already open here just takes focus (single-instance, the same guard the launcher applies) rather
+  // than opening a second copy; otherwise the focused leaf splits and the new leaf is seeded with
+  // pageId directly, skipping the launcher's empty-pane step since the surface is already chosen. The
+  // surface RE-MOUNTS fresh here - tileView never migrates a live DOM node across tiles, only tree
+  // positions within one - which is fine: the caller is moving it FROM another tile entirely.
+  function adopt(pageId: string, dir?: Split["dir"]): void {
+    if (treeHasSurface(pageId)) {
+      const existing = leaves(tree).find((l) => l.pageId === pageId);
+      if (existing) setFocus(existing.id);
+      render();
+      return;
+    }
+    const p = panes.get(focusId);
+    if (!p) return;
+    const axis = dir ?? pickAxis(p.host.getBoundingClientRect());
+    const newLeafId = newId("p");
+    tree = splitLeaf(tree, focusId, axis, newId("s"), { id: newLeafId, pageId });
+    focusId = newLeafId; // focus the newly adopted pane
+    commit();
+    render();
+  }
+
+  // closeLeaf is drag-to-adopt's source-side teardown: close a specific pane by id, which may not be
+  // the one currently focused (a drag can carry a background pane). Mirrors closeFocused's semantics
+  // exactly - see there for why a null result means "the tab is now empty".
+  function closeLeaf(id: string): boolean {
+    const next = closePane(tree, id);
+    if (next === null) return true; // last pane: the console closes the whole tab
+    tree = next;
+    focusId = leaves(tree)[0]?.id ?? "";
+    commit();
+    render();
+    return false;
+  }
+
   function setVisible(visible: boolean): void {
     tabVisible = visible;
     applyVisibility();
@@ -385,5 +431,8 @@ export function createTileView(deps: TileDeps): TileView {
   }
 
   render();
-  return { el, split, closeFocused, focus, move, focusParent, snapshot, focusLeaf, swap, setVisible, deactivate };
+  return {
+    el, split, closeFocused, focus, move, focusParent, snapshot, focusLeaf, swap,
+    leafPageId, adopt, closeLeaf, setVisible, deactivate,
+  };
 }

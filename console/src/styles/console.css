@@ -19,7 +19,7 @@
      breakpoint below). Anything positioning itself under the chrome reads THIS, not the row height, or
      it lands a row out on mobile. */
   --console-topchrome-h: var(--console-titlebar-h);
-  --console-statusbar-h: 1.75rem;
+  --console-statusbar-h: 2.2rem;
   --console-refdrawer-w: 22rem;
   /* The chart/accent palette that used to live here (the aliased --c-* slots) moved to
      tokens.css as the console's PF-native --console-* / --console-status-* slots; the charts
@@ -35,7 +35,9 @@
    loaded last was silently styling the other surface's empty state anyway. */
 [data-empty-ways] {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem;
-  margin-top: 1.4rem; text-align: left; width: 100%; max-width: 40rem;
+  /* auto side margins CENTER the capped-width grid in its block parent - without them it sat flush-left
+     with dead space on the right, so the ways read as left-weighted under a centered heading. */
+  margin: 1.4rem auto 0; text-align: left; width: 100%; max-width: 40rem;
 }
 [data-empty-way] {
   display: flex; flex-direction: column; gap: 0.35rem;
@@ -227,34 +229,78 @@ body[data-console-fill] > main > .console-render-panel {
 #console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pf-t--global--text--color--subtle); text-align: center; }
 #console-outlet [data-pane-launcher] + .pf-v6-l-gallery { width: 100%; max-width: 26rem; padding: 0 1rem; }
 
-/* The Panes tray popup (main.ts, #console-panespopup): a small floating control panel opened by the
-   status-bar Panes button - a live, Moom-style spatial MAP of the active tab's pane tree, replacing
-   the old d-pad of anonymous Split/Focus/Move chevrons (unintuitive - "like a cheap remote"). Point at
-   a pane to focus it, drag one pane onto another to swap them, split the pane you are pointing at.
-   ONE shared element, so it is class-free save for the console-shell-panespopup*/console-shell-panesmap*
-   formula names; position:fixed + JS-clamped coordinates, opening UPWARD from its anchor (main.ts's
-   placePanesPopup) since the tray sits on the bottom status bar. Mirrors .console-help-popover's card
-   treatment below. */
+/* The Panes tray popup (main.ts, #console-panespopup): a square control panel DOCKED to the
+   bottom-right corner, opened by the status-bar Panes button - a live, Moom-style spatial MAP of the
+   active tab's pane tree, replacing the old d-pad of anonymous Split/Focus/Move chevrons (unintuitive -
+   "like a cheap remote"). Point at a pane to focus it, drag one pane onto another to swap them, split
+   the pane you are pointing at. ONE shared element, so it is class-free save for the
+   console-shell-panespopup and console-shell-panesmap formula names; position:fixed pinned flush to the
+   corner (right:0; bottom:0) rather than floated off its anchor with JS coordinates, since the tray
+   sits on the bottom status bar and the panel's own footer (closebtn below) is what covers that bar
+   while open. Only the top-left corner is rounded - the other three sides read as flush-docked, not
+   floating. Mirrors .console-help-popover's card treatment below. */
 .console-shell-panespopup {
   position: fixed;
-  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
-  max-width: calc(100vw - 1rem);
-  padding: 0.6rem;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200), and the status bar */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* the map panel docks to the right; the close bar spans full width below it */
+  color: var(--pf-t--global--text--color--regular);
+  /* A transparent, full-screen-width layout shell: it lets the Close-pane bar run the ENTIRE screen
+     width while the map stays a small right-docked card. pointer-events:none so a click in the empty
+     band beside the map falls through to the page; the interactive children (map panel, close bar) opt
+     back in. The panel and the bar carry their own background/border, not this shell. */
+  pointer-events: none;
+  background: none;
+  border: none;
+}
+.console-shell-panespopup > * { pointer-events: auto; }
+/* The map/hint area carries the panel's padding; the close footer below is a SIBLING (not nested
+   inside __body) so it can bleed edge-to-edge instead of inheriting this inset. */
+.console-shell-panespopup__body {
+  display: flex; flex-direction: column; gap: 0.5rem; align-items: center;
+  padding: 0.6rem 0.6rem 0.5rem;
+  /* The map card carries its own chrome now that the shell is transparent. Floated OFF the screen edge
+     (margin) and lifted clear of the full-width close bar so it reads as a card hovering over the content
+     with a shadow on ALL sides - rounded all corners - rather than docked flush into the corner. */
+  margin: 0 0.6rem 0.6rem 0;
+  background: var(--pf-t--global--background--color--primary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--primary--default);
   box-shadow: var(--pf-t--global--box-shadow--md);
-  color: var(--pf-t--global--text--color--regular);
 }
-.console-shell-panespopup__body { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
-.console-shell-panespopup__closebtn { width: 100%; }
+/* The close footer: a full-width bar flush to the panel's bottom edge (no radius, no side padding) so
+   it reads as a status-bar takeover, not just another button inside the card. Taller than a normal
+   button for a prominent tap target while the popup covers the tray beneath it. */
+.console-shell-panespopup__closebtn {
+  width: 100%;
+  /* Matches the status bar it covers (both are --console-statusbar-h, sized UP to the button's natural
+     height rather than squeezing the button down - that broke the label's vertical centering). PF's own
+     padding stays, so the label still centers; the taller box just gives it more room. */
+  height: var(--console-statusbar-h);
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 0;
+  font-weight: 700;
+  /* Opaque (PF secondary buttons are transparent) so the bar actually COVERS the status strip - the
+     connection dot, tray, and keyboard button - beneath it while the popup is open, instead of letting
+     them read through. Closing the popup uncovers them again. */
+  background: var(--pf-t--global--background--color--primary--default);
+}
+.console-shell-panespopup__closebtn:hover {
+  background: var(--pf-t--global--background--color--secondary--default);
+}
 
 /* The map itself: a fixed-size miniature of the active tab's pane tree (main.ts's buildPaneMapNode),
    nesting flex boxes that mirror tileView's own row/col split semantics - row splits side by side, col
-   stacks. Fixed size (not "flex to fill the popup") keeps it reading as a small MAP, not a real layout. */
+   stacks. Fixed size (not "flex to fill the popup") keeps it reading as a small MAP, not a real layout.
+   Its width/height are set inline by main.ts's sizePanesMap to the WINDOW's aspect ratio (a wide window
+   gives a wide map, a phone a tall one), capped on the long edge - a true scale model of the screen. */
 .console-shell-panesmap {
-  width: 260px;
-  height: 150px;
   display: flex;
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
@@ -324,7 +370,7 @@ body[data-console-fill] > main > .console-render-panel {
 /* The keycap hint line below the map: folds the split/focus/move chords into one teaching row, reusing
    the cheat sheet's kbd chip styling (.console-cheatsheet-kbd) - the map has no buttons for focus/move
    to hang a tooltip off (that is now pointer + drag), so this line is where that teaching lives. */
-.console-shell-panesmap__hinthost { max-width: 260px; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); overflow-x: auto; }
+.console-shell-panesmap__hinthost { max-width: 220px; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); overflow-x: auto; }
 .console-shell-panesmap__hint { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
 .console-shell-panesmap__hintgroup { display: inline-flex; align-items: center; gap: 0.2rem; }
 
@@ -517,6 +563,16 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--subtle); }
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current):hover { background: var(--pf-t--global--background--color--secondary--hover, rgba(127, 127, 127, 0.12)); }
 
+/* Drag-to-adopt (tabBar.ts's wireTabDrag, and a Panes-map cell dropped onto the strip - see
+   wirePaneCellDrag in main.ts): the tab being dragged lifts with reduced opacity so the gesture reads
+   as "picked up", and whichever tab is under the pointer gets an accent outline - the same "drop here"
+   language as the Panes map's own drag-to-swap target (.console-shell-panesmap__cell[data-drop]). */
+#console-tabs .pf-v6-c-tabs__link[data-dragging] { opacity: 0.5; }
+#console-tabs .pf-v6-c-tabs__link[data-tab-drop] {
+  outline: 2px solid var(--console-accent);
+  outline-offset: -2px;
+}
+
 /* DEFERRED: tab overflow scroll chevrons + a custom overflow-scroller lived here; reverted to keep
    the change focused. Revisit tab overflow scrolling as its own task (see tabBar.ts). */
 
@@ -689,13 +745,17 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   flex: 1 1 auto; min-width: 0;
   display: flex; align-items: stretch;
   overflow: hidden; /* dmenu: extra matches truncate off the end of the bar */
-  /* Slide-in: at rest (empty input, placeholder showing) the token run sits shifted right, leaving a
-     visible gap after the prompt; the first keystroke sets data-typed and it slides left into its
-     tight position - a swift, carriage-like motion (ease-out, ~180ms). */
-  transform: translateX(1.75rem);
-  transition: transform 0.18s var(--pf-t--global--motion--timing-function--decelerate, ease-out);
+  /* Right-edge fade so overflowing tokens DISSOLVE at the end of the bar instead of hard-clipping
+     mid-word straight into the preview divider - that collision read as garbled, overlapping text. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
+  /* Slide-in: at rest (placeholder showing) the token run sits shifted right, leaving breathing room
+     after the prompt; the first keystroke sets data-typed and it eases left - but never fully flush, so
+     the first token always keeps clearance from the run box. ~280ms (calmer than the old 180ms whip). */
+  transform: translateX(2.6rem);
+  transition: transform 0.28s var(--pf-t--global--motion--timing-function--decelerate, ease-out);
 }
-.console-shell-commandbar__items[data-typed] { transform: translateX(0); }
+.console-shell-commandbar__items[data-typed] { transform: translateX(0.75rem); }
 @media (prefers-reduced-motion: reduce) {
   .console-shell-commandbar__items { transform: none; transition: none; }
 }

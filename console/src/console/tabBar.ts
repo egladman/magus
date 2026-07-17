@@ -29,13 +29,16 @@ export function tabViews(ws: Workspace): TabView[] {
 }
 
 // Callbacks the console supplies: a tab became active (mount/show it), a tab closed (unmount it), a
-// tab's tile should split (a new pane appears beside/below its currently focused one), or a tab should
-// move out into its own OS window (the console opens the app window and closes the tab).
+// tab's tile should split (a new pane appears beside/below its currently focused one), a tab should
+// move out into its own OS window (the console opens the app window and closes the tab), or a tab was
+// dropped onto another tab (drag-to-adopt: the source tab's focused pane moves into the target as a
+// new split pane).
 export interface TabBarCallbacks {
   onSelect(id: string): void;
   onClose(id: string): void;
   onSplit(id: string, dir: "row" | "col"): void;
   onMoveToWindow(id: string): void;
+  onAdoptTab(sourceId: string, targetId: string): void;
 }
 
 export interface TabBar {
@@ -160,10 +163,56 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       label.className = "pf-v6-c-tabs__item-text";
       label.textContent = v.title;
       link.append(label);
-      link.addEventListener("click", () => select(v.id));
       link.addEventListener("contextmenu", (ev) => {
         ev.preventDefault();
         openCtx(v.id, v.title, ev.clientX, ev.clientY);
+      });
+
+      // Drag-to-adopt: dropping this tab onto another moves its currently-focused pane into that tab
+      // as a new split pane (main.ts's moveSurfaceToTab, via onAdoptTab). Pointer-based, mirroring the
+      // Panes tray's own drag-to-swap (wirePaneCellDrag in main.ts) - setPointerCapture pins move/up to
+      // the link the drag STARTED on regardless of where the pointer travels, so elementFromPoint (not
+      // event.target) is what finds whichever tab is currently under it. Only the primary button starts
+      // a drag, so right-click still reaches the contextmenu handler above undisturbed.
+      let dragMoved = false;
+      let dropTarget: HTMLElement | null = null;
+      const clearTabDrop = (): void => { dropTarget?.removeAttribute("data-tab-drop"); dropTarget = null; };
+      let startX = 0, startY = 0;
+      link.addEventListener("pointerdown", (ev) => {
+        if (ev.button !== 0) return;
+        startX = ev.clientX; startY = ev.clientY; dragMoved = false;
+        link.setPointerCapture(ev.pointerId);
+      });
+      link.addEventListener("pointermove", (ev) => {
+        if (!link.hasPointerCapture(ev.pointerId)) return;
+        if (!dragMoved && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 5) {
+          dragMoved = true;
+          link.setAttribute("data-dragging", "");
+        }
+        if (!dragMoved) return;
+        const under = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>("[data-tab-id]") ?? null;
+        const next = under && under !== link ? under : null;
+        if (next !== dropTarget) { clearTabDrop(); dropTarget = next; dropTarget?.setAttribute("data-tab-drop", ""); }
+      });
+      link.addEventListener("pointerup", (ev) => {
+        link.releasePointerCapture(ev.pointerId);
+        const target = dropTarget;
+        clearTabDrop();
+        link.removeAttribute("data-dragging");
+        const targetId = target?.dataset.tabId;
+        if (dragMoved && targetId) cb.onAdoptTab(v.id, targetId);
+      });
+      link.addEventListener("pointercancel", () => {
+        clearTabDrop();
+        link.removeAttribute("data-dragging");
+        dragMoved = false;
+      });
+      // A real drag must not ALSO select the source tab - the click that follows pointerup is
+      // suppressed once (dragMoved reset here, not in pointerup, so the flag survives to be read here).
+      // A plain click (no movement) still selects, unchanged.
+      link.addEventListener("click", (ev) => {
+        if (dragMoved) { dragMoved = false; ev.preventDefault(); ev.stopPropagation(); return; }
+        select(v.id);
       });
       // Roving keyboard (WAI-ARIA tablist): Enter/Space activate; Left/Right move focus between
       // tabs, Home/End jump to the ends. Focus follows the arrow but activation stays on

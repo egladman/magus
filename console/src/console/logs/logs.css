@@ -136,7 +136,14 @@
 /* Zoom control in the status bar's right cluster (by the event count): a compact -/readout/+ that
    scales the viewer body. Real <button>s (keyboard + focus for free), reset to plain status-bar
    chrome rather than PF button styling since they are a bespoke shell affordance. */
-.console-log-zoom { display: inline-flex; align-items: center; gap: 0.1rem; margin: 0; }
+.console-log-zoom {
+  display: inline-flex; align-items: center; gap: 0.1rem; margin: 0;
+  /* Set the zoom cluster apart from the shell's status-bar icon buttons that follow it - flush together
+     they are easy to misclick. A hairline divider plus trailing space (the cluster's own gap adds the
+     rest) gives it clearance. */
+  padding-right: 0.7rem;
+  border-right: 1px solid var(--pf-t--global--border--color--default);
+}
 .console-log-zoom .console-log-zoom__btn, .console-log-zoom .console-log-zoom__readout {
   appearance: none; border: 0; background: none; margin: 0; font-family: inherit;
   cursor: pointer; color: var(--pf-t--global--text--color--subtle); user-select: none;

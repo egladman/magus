@@ -478,6 +478,26 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     activateTab(cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length].id);
   }
 
+  // moveSurfaceToTab is drag-to-adopt's shared orchestration, called from both a tab-on-tab drag
+  // (tabBar.ts's onAdoptTab, below) and a Panes-map-cell-on-tab drag (wirePaneCellDrag, further down).
+  // It MOVES one leaf's surface: adopt it into the target tab as a new pane, then remove it from the
+  // source - closing the source tab outright if that was its only pane. The surface RE-MOUNTS fresh in
+  // the target (tileView never migrates a live DOM node across tiles), which is expected: adopt/closeLeaf
+  // are pure tree ops, only the pageId travels.
+  function moveSurfaceToTab(sourceTabId: string, sourceLeafId: string, targetTabId: string): void {
+    if (sourceTabId === targetTabId) return; // dropping a tab/pane onto itself: intra-tab moves are the map's own swap
+    const src = mounts.get(sourceTabId);
+    const tgt = mounts.get(targetTabId);
+    if (!src || !tgt) return;
+    const pageId = src.tile.leafPageId(sourceLeafId);
+    if (!pageId) return; // an empty pane has nothing to adopt
+    tgt.tile.adopt(pageId);
+    const wasLast = src.tile.closeLeaf(sourceLeafId);
+    if (wasLast) closeTabById(sourceTabId); // the source tab emptied out - close it like any other empty tab
+    activateTab(targetTabId); // reveal where the surface landed
+    if (!panesPopup.hidden) renderPanesMap(); // keep an open Panes map in sync with the tree it just changed
+  }
+
   const bar = createTabBar(ws, {
     onSelect: (id) => activateTab(id),
     onClose: (id) => closeTabById(id),
@@ -492,6 +512,13 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
       if (!t) return;
       openSurfaceWindow(t.pageId);
       closeTabById(id);
+    },
+    // Dragging a whole TAB moves its currently-focused pane (a tab has no single "the" surface once
+    // tiled, so the focused one is the least surprising pick - the same pane Split/onSplit above would
+    // act on if you split it in place instead of dragging it).
+    onAdoptTab: (sourceId, targetId) => {
+      const focusId = mounts.get(sourceId)?.tile.snapshot().focusId ?? "";
+      moveSurfaceToTab(sourceId, focusId, targetId);
     },
   });
   tabBarHost.append(bar.el);
@@ -578,10 +605,11 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     if (chord) commandBarBtn.title = "Action bar (" + chord + ")";
   }
 
-  // The Panes tray: a small floating control panel opened from the status-bar Panes button, so tiling
-  // is reachable without a keyboard - what the old title-bar Panes dropdown covered, plus move and
-  // focus-parent, which a two-item menu never could. ONE shared element (appended to document.body,
-  // reused by whichever tab's tray button opened it) rather than one per tab. Built AFTER the pane
+  // The Panes tray: a small square control panel, docked to the bottom-right corner, opened from the
+  // status-bar Panes button, so tiling is reachable without a keyboard - what the old title-bar Panes
+  // dropdown covered, plus move and focus-parent, which a two-item menu never could. ONE shared element
+  // (appended to document.body, reused by whichever tab's tray button opened it) rather than one per
+  // tab. Built AFTER the pane
   // commands above so every id it dispatches exists. chordFor mirrors the commandBarBtn tooltip's
   // chord lookup, stamped into each control's title so the tray also teaches its keyboard equivalent.
   const chordFor = (id: string): string => formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac());
@@ -604,12 +632,13 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     return SURFACES.find((s) => s.pageId === pageId)?.label ?? pageId;
   }
 
-  // wirePaneCellDrag turns a map cell into both a tap target (focus) and a drag source/target (swap) -
-  // one pointer stream serves both, matching how a real spatial map is operated: point to focus, drag
-  // to move. setPointerCapture pins move/up events to the ORIGIN cell regardless of where the pointer
-  // travels, so elementFromPoint (not event.target) is what finds the cell currently under the
-  // pointer - the standard technique for a custom drag between sibling elements. A short pointer
-  // path (under 4px) is a tap, not a drag, so a plain click still just focuses.
+  // wirePaneCellDrag turns a map cell into both a tap target (focus) and a drag source/target (swap
+  // within the map, adopt when dropped on the tab strip) - one pointer stream serves all three,
+  // matching how a real spatial map is operated: point to focus, drag to move. setPointerCapture pins
+  // move/up events to the ORIGIN cell regardless of where the pointer travels, so elementFromPoint (not
+  // event.target) is what finds the cell (or tab) currently under the pointer - the standard technique
+  // for a custom drag between sibling elements. A short pointer path (under 4px) is a tap, not a drag,
+  // so a plain click still just focuses.
   function wirePaneCellDrag(cell: HTMLElement, id: string, onTap: () => void): void {
     let startX = 0, startY = 0, moved = false;
     let dropTarget: HTMLElement | null = null;
@@ -630,10 +659,22 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
       cell.releasePointerCapture(ev.pointerId);
       const target = dropTarget;
       clearDrop();
-      if (moved && target) {
-        const dropId = target.dataset.paneCell;
-        if (dropId) { activeTile()?.swap(id, dropId); renderPanesMap(); }
-      } else if (!moved) {
+      if (moved) {
+        // A cell dropped onto the tab strip ADOPTS into that tab (moveSurfaceToTab) instead of
+        // swapping within the map - the strip sits outside the popup entirely, so this is the one
+        // place a map drag reaches past its own tree. Checked before the swap; a drop elsewhere on
+        // the same tab (or nowhere) falls through to the ordinary in-map behavior below.
+        const tabId = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>("[data-tab-id]")?.dataset.tabId;
+        const activeTabId = ws.get().activeId;
+        if (tabId && activeTabId && tabId !== activeTabId) {
+          moveSurfaceToTab(activeTabId, id, tabId);
+          return;
+        }
+        if (target) {
+          const dropId = target.dataset.paneCell;
+          if (dropId) { activeTile()?.swap(id, dropId); renderPanesMap(); }
+        }
+      } else {
         onTap();
       }
     });
@@ -773,8 +814,11 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // for repeated use (closing several panes in one popup session) without reopening the tray each time.
   closePaneBtn.addEventListener("click", () => { dispatchCommand("console.tab.close"); renderPanesMap(); });
 
-  panesBody.append(panesMap, panesHintHost, closePaneBtn);
-  panesPopup.append(panesBody);
+  // closePaneBtn is a SIBLING of panesBody, not nested inside it, so it can bleed edge-to-edge as the
+  // panel's own footer bar (CSS: .console-shell-panespopup__closebtn) instead of inheriting the body's
+  // padding - see .console-shell-panespopup in console.css.
+  panesBody.append(panesMap, panesHintHost);
+  panesPopup.append(panesBody, closePaneBtn);
 
   // renderPanesMap (re)paints the live spatial map from the active tab's tile - rebuilt on open and
   // after every map action (tap-focus, split, drag-swap, close) so the highlighted cell and layout
@@ -786,6 +830,21 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     if (snap) panesMap.append(buildPaneMapNode(snap.tree, snap.focusId));
     panesHintHost.replaceChildren(buildPanesHint());
   }
+
+  // sizePanesMap scales the map box to the browser WINDOW's own aspect ratio, so the miniature reads as
+  // a true scale model of the screen it maps - a wide window yields a wide map, a phone a tall one -
+  // rather than a fixed square that lies about the shape the panes actually tile into. Capped on its long
+  // edge so it stays a small tray control. Recomputed on open and on resize while the popup is open.
+  const PANES_MAP_CAP = 220;
+  function sizePanesMap(): void {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    if (vw <= 0 || vh <= 0) return;
+    const w = vw >= vh ? PANES_MAP_CAP : Math.round(PANES_MAP_CAP * (vw / vh));
+    const h = vw >= vh ? Math.round(PANES_MAP_CAP * (vh / vw)) : PANES_MAP_CAP;
+    panesMap.style.width = w + "px";
+    panesMap.style.height = h + "px";
+  }
+  window.addEventListener("resize", () => { if (!panesPopup.hidden) sizePanesMap(); });
 
   // refreshPanesTray repaints every MOUNTED tab's tray icon (not just the docked one - a hidden tab's
   // status bar is still a live element, just detached, so its icon would go stale until that tab is
@@ -800,31 +859,18 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   }
   refreshPanesTray(); // sync every tray icon with whatever mode was persisted
 
-  // placePanesPopup opens the popup UPWARD from its anchor (the tray button sits on the bottom status
-  // bar, so placing it below would run the popup off the bottom of the screen) and clamps it into the
-  // viewport horizontally - the same clamped-fixed-position idiom as help-popover.ts, flipped vertically
-  // for a bottom-docked trigger. Measured after unhiding so offsetWidth/Height are real.
+  // The popup is DOCKED to the bottom-right corner by CSS (position:fixed; right:0; bottom:0 on
+  // .console-shell-panespopup) rather than floated off its anchor with JS-computed coordinates - no
+  // placement math needed here, just open/close. Its own footer (closePaneBtn) covers the status-bar
+  // tray beneath it while open.
   let panesAnchor: HTMLElement | null = null;
-  function placePanesPopup(anchor: HTMLElement): void {
-    const r = anchor.getBoundingClientRect();
-    const margin = 8;
-    const pw = panesPopup.offsetWidth;
-    const ph = panesPopup.offsetHeight;
-    let left = r.right - pw;
-    if (left < margin) left = margin;
-    if (left + pw > window.innerWidth - margin) left = window.innerWidth - margin - pw;
-    let top = r.top - ph - 6;
-    if (top < margin) top = margin;
-    panesPopup.style.left = left + "px";
-    panesPopup.style.top = top + "px";
-  }
   function openPanesPopup(anchor: HTMLElement): void {
     refreshPanesTray(); // the tray icon must reflect the CURRENT mode the instant it becomes visible
     renderPanesMap(); // rebuild the live map from the active tab's tree fresh on every open
+    sizePanesMap(); // match the map to the current window shape
     panesAnchor = anchor;
     panesPopup.hidden = false;
     anchor.setAttribute("aria-expanded", "true");
-    placePanesPopup(anchor);
   }
   function closePanesPopup(restoreFocus = false): void {
     if (panesPopup.hidden) return;
