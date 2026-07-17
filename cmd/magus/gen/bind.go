@@ -44,6 +44,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.VCS.Name, "vcs-name", cfg.VCS.Name, "MAGUS_VCS_NAME")
 	fs.StringVar(&cfg.VCS.BaseRef, "vcs-base-ref", cfg.VCS.BaseRef, "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).")
 	fs.StringVar(&cfg.MCP.Address, "mcp-address", cfg.MCP.Address, "MAGUS_MCP_ADDRESS")
+	fs.StringVar(&cfg.Console.URL, "console-url", cfg.Console.URL, "MAGUS_CONSOLE_URL: URL is the base URL of the hosted console (with a trailing slash, without")
 	fs.StringVar(&cfg.Log.Format, "log-format", cfg.Log.Format, "MAGUS_LOG_FORMAT")
 	fs.StringVar(&cfg.Log.Level, "log-level", cfg.Log.Level, "MAGUS_LOG_LEVEL: Level is the minimum log level; 'trace' also enables the startup timing table.")
 	fs.IntVar(&cfg.Knowledge.MaxSizeMB, "knowledge-max-size-mb", cfg.Knowledge.MaxSizeMB, "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When")

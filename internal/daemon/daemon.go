@@ -128,16 +128,16 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 	// Console: three frozen GET routes for the browser Graph Explorer.
 	// Mounted only when:
-	//   1. bridge.enabled is unset or true (opt-out via bridge.enabled: false)
+	//   1. console.enabled is unset or true (opt-out via console.enabled: false)
 	//   2. The bind address is loopback (non-loopback binding refuses the mount)
 	//
 	// addr is always a numeric IP:port here because the mcp_address config
 	// validator calls netip.ParseAddrPort, which rejects hostnames. IsLoopback
 	// therefore always compares against a resolved IP, never a hostname, so
 	// the loopback gate is sound: addr.Addr().IsLoopback() is exact.
-	if opts.Config.Bridge.Enabled == nil || *opts.Config.Bridge.Enabled {
+	if opts.Config.Console.Enabled == nil || *opts.Config.Console.Enabled {
 		if !addr.Addr().IsLoopback() {
-			log.Warn("[BRIDGE] refusing to mount console on non-loopback address; set bridge.enabled: false to suppress this warning",
+			log.Warn("[BRIDGE] refusing to mount console on non-loopback address; set console.enabled: false to suppress this warning",
 				slog.String("addr", addr.String()))
 		} else {
 			// Start a file watcher for SSE graph-invalidation events. Non-fatal:

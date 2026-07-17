@@ -79,7 +79,7 @@ func probeBridgeReachability(d *DaemonInfo) Check {
 		return Check{Name: name, Status: StatusOK, Message: "daemon info unavailable; bridge check skipped"}
 	}
 	if !d.BridgeEnabled {
-		return Check{Name: name, Status: StatusOK, Message: "bridge disabled via bridge.enabled: false"}
+		return Check{Name: name, Status: StatusOK, Message: "bridge disabled via console.enabled: false"}
 	}
 	if d.MCPAddr == "" {
 		// Belt-and-suspenders: mcpAddrString normally falls back to the default

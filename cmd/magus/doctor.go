@@ -119,7 +119,7 @@ func buildDaemonInfo(ctx context.Context, _ types.WorkspaceRepository) doctor.Da
 	// Populate bridge fields from resolved config. BridgeEnabled is true unless
 	// explicitly set to false (mirrors how MCP.Enabled works).
 	di.MCPAddr = mcpAddrString()
-	di.BridgeEnabled = globalCfg.Bridge.Enabled == nil || *globalCfg.Bridge.Enabled
+	di.BridgeEnabled = globalCfg.Console.Enabled == nil || *globalCfg.Console.Enabled
 
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil {

@@ -22,7 +22,7 @@ type Config struct {
 	Daemon     Daemon     `yaml:"daemon"`
 	VCS        VCS        `yaml:"vcs"`
 	MCP        MCP        `yaml:"mcp"`
-	Bridge     Bridge     `yaml:"bridge"`
+	Console    Console    `yaml:"console"`
 	Report     Report     `yaml:"report"`
 	Log        Log        `yaml:"log"`
 	Hints      Hints      `yaml:"hints"`
@@ -183,13 +183,18 @@ type MCP struct {
 	Address string `yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
 }
 
-// Bridge controls the read-only console.
-// The bridge mounts three GET-only endpoints on the MCP HTTP server
+// Console controls the read-only console service.
+// The console mounts three GET-only endpoints on the MCP HTTP server
 // (/api/v1/graph, /api/v1/status, /api/v1/events) so a browser running the
 // hosted Graph Explorer can read the current workspace. Loopback only; bearer
 // auth; no mutation ever.
-type Bridge struct {
+type Console struct {
 	Enabled *bool `yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
+	// URL is the base URL of the hosted console (with a trailing slash, without
+	// a trailing "graph/"). Deep-link helpers append their sub-path to it, e.g.
+	// the Graph Explorer base is this value + "graph/". Defaults to the canonical
+	// hosted console at https://eli.gladman.cc/magus/console/.
+	URL string `yaml:"url"`
 }
 
 // Daemon controls the proc server's listen address and multi-workspace behaviour.
@@ -393,6 +398,7 @@ func Defaults() Config {
 			AnnotateGHA:      true,
 		},
 		Hints:     Hints{Enabled: boolPtr(true)},
+		Console:   Console{URL: "https://eli.gladman.cc/magus/console/"},
 		Knowledge: Knowledge{VCS: VCSConfig{Authorship: boolPtr(true)}},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",

@@ -95,11 +95,11 @@ that is served directly.
 Disable the console in `magus.yaml`:
 
 ```yaml
-bridge:
+console:
   enabled: false
 ```
 
-Or via environment variable: `MAGUS_BRIDGE_ENABLED=false`.
+Or via environment variable: `MAGUS_CONSOLE_ENABLED=false`.
 
 The console only exists when the daemon binary is compiled with `-tags mcp`.
 A binary built without that tag has no console and no `/api/v1/` routes.
@@ -129,7 +129,7 @@ log in the address bar).
 ```
 
 When the daemon is not running, the check is skipped (not a failure).
-When `bridge.enabled: false` is set, the check reports that the console is
+When `console.enabled: false` is set, the check reports that the console is
 disabled.
 
 ## Live mode pairing
