@@ -10,6 +10,11 @@
 :root {
   --console-gap: 0.6rem;
   --console-pad: clamp(0.6rem, 1.6vw, 1rem);
+  /* The title bar's height, and with it the command bar that descends over it and the top of the
+     mobile reference overlay - they were three copies of one magic number that had to agree. 2.75rem
+     is 44px: the touch-target floor, because every control the console has that is not a tab lives on
+     this bar. The status bar opposite it stays slim on purpose - nothing there is a tap target. */
+  --console-titlebar-h: 2.75rem;
   --console-statusbar-h: 1.75rem;
   --console-refdrawer-w: 22rem;
   /* The chart/accent palette that used to live here (the aliased --c-* slots) moved to
@@ -235,7 +240,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-titlebar {
   flex: 0 0 auto;
   display: flex; align-items: stretch;
-  height: 2.35rem;
+  height: var(--console-titlebar-h);
   /* Pico gives a semantic <header> generous block padding and a bottom margin; the title bar is
      chrome, not a page section, so zero both. Without this the border-box height collapses the
      content area to a ~2px sliver and the tabs render as a clipped, unreadable strip. */
@@ -262,6 +267,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    button centre, most visible on mobile. Centre the icon so the three chrome buttons sit dead-centre. */
 #console-actions > .pf-v6-c-button { align-items: center; }
 #console-actions > .pf-v6-c-button > .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
+/* Each chrome button is the tap target, not the bar behind it: stretch it to the bar's full height and
+   give it a square-ish min width, so the hit area is ~44px on a phone instead of the glyph's own ~16px.
+   PF's plain button is sized for a mouse; this is the only place the console asks a finger to hit one. */
+#console-actions > .pf-v6-c-button {
+  align-self: stretch; min-width: 2.5rem; justify-content: center; padding-inline: 0.5rem;
+}
 
 /* W0 SPIKE: the old hand-rolled tab visuals ([role=tablist]/[role=tab]/[data-close]/[data-new],
    ~30 lines) were removed here so the rebuilt PatternFly Tabs (.pf-v6-c-tabs*) render from PF's
@@ -418,7 +429,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    The command bar (#command-bar, commandBar.ts) is NOT a modal: it is a dmenu-style bar - the
    console's one sanctioned fully-custom component (PatternFly has no dmenu analog), classed per the
    PATTERNFLY.md formula (console-shell-commandbar). ONE bar pinned over the title bar at its exact
-   height (2.35rem), reading as a soft sheet that descends from the top: rounded bottom corners and a
+   height (--console-titlebar-h), reading as a soft sheet that descends from the top: rounded bottom corners and a
    drop shadow, no hard rule. A faint accent "run" prompt cap, an inline borderless input, then the
    matching command TOKENS (monospace, fuzzy-matched chars highlighted) run HORIZONTALLY to its right,
    clipped at the bar's end (dmenu truncation; arrowing past the edge scrolls the run), with the
@@ -431,9 +442,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      using PF's own z-index scale so the chrome layers stay consistent with the framework. */
   position: fixed; top: 0; left: 0; right: 0; z-index: var(--pf-t--global--z-index--400);
   display: flex; align-items: stretch;
-  /* Match the title bar it drops over exactly (#console-titlebar is 2.35rem) so the descending sheet
-     covers it cleanly rather than leaving a sliver. */
-  height: 2.35rem;
+  /* Match the title bar it drops over exactly - same token, so they cannot drift apart and leave a
+     sliver of title bar showing under the sheet. */
+  height: var(--console-titlebar-h);
   font-size: 0.82rem;
   background: var(--pf-t--global--background--color--secondary--default);
   /* Square and flush to the top/side edges - rounding the bottom corners exposed the title bar
@@ -563,11 +574,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    dock the expanded panel as a full-screen overlay over the content region (__main). Justified custom
    CSS: it makes the PF Drawer usable on mobile, which its inline flex model does not. */
 @media (max-width: 47.999rem) {
-  /* A clean fixed full-screen overlay covering the content region (below the 2.35rem title bar, above
+  /* A clean fixed full-screen overlay covering the content region (below the title bar, above
      the fixed status bar). Neutralize PF's inline flex sizing (flex-basis), its collapse margin, and
      its slide transform so the panel is not pushed off-screen. */
   #console-refdrawer.pf-m-expanded > .pf-v6-c-drawer__main > #console-refpanel {
-    position: fixed; inset: 2.35rem 0 var(--console-statusbar-h) 0;
+    position: fixed; inset: var(--console-titlebar-h) 0 var(--console-statusbar-h) 0;
     width: auto; max-width: none; min-width: 0; flex-basis: auto;
     margin: 0; transform: none;
     z-index: var(--pf-t--global--z-index--200);
