@@ -105,16 +105,12 @@
 
     <section class="console-graph-app">
       <aside class="console-graph-sidebar">
-        <!-- Query bar: a PF input-group so the prompt/input/controls stay contained in the
-             sidebar (the old terminal-prompt row overflowed its "?" help and copy glyphs onto
-             the canvas, landing in the legend's corner). The "magus query" prompt is a text
-             addon, the field fills, and the syntax help + copy-as-command are attached control
-             buttons. Keeps #node-search and #search-copy-btn (main.ts wires them by id). -->
+        <!-- Query bar: a labelled PF input-group. The "magus query" prompt is a LABEL above the field,
+             not an inline addon - as an addon it ate a third of the 18rem sidebar and truncated the
+             field to "kind:...". Keeps #node-search and #search-copy-btn (main.ts wires them by id). -->
         <div class="console-graph-sidebar__search">
+          <p class="console-graph-querybar__prompt" id="query-prompt">magus query</p>
           <div class="pf-v6-c-input-group console-graph-querybar">
-            <div class="pf-v6-c-input-group__item">
-              <span class="pf-v6-c-input-group__text console-graph-querybar__prompt" id="query-prompt" aria-hidden="true">magus query</span>
-            </div>
             <div class="pf-v6-c-input-group__item pf-m-fill">
               <span class="pf-v6-c-form-control">
                 <input id="node-search" type="text" placeholder="kind:spell project:web" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" disabled>

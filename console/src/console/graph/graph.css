@@ -62,7 +62,7 @@
    card that appears on selection. Regions are set apart by borders, not custom color. */
 .console-graph-app {
   display: grid;
-  grid-template-columns: 18rem 1fr;
+  grid-template-columns: 20rem 1fr;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
   /* Same height as the log viewer's .panel (logs.css) so the two app panes match. */
@@ -75,7 +75,7 @@
 }
 /* When an explain card is present the app becomes three columns (data-has-card is
    toggled by the explorer on selection). */
-body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem; }
+body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem; }
 
 .console-graph-sidebar {
   display: flex; flex-direction: column; min-height: 0;
@@ -510,14 +510,15 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 }
 .console-graph-views__copy:hover { color: var(--console-accent); }
 
-/* Query bar: a PF input-group scoped to the sidebar. The "magus query" prompt is a subtle
-   monospace text addon, the field fills, and the "?" help + copy-as-command are attached
-   control buttons. Dense so it fits the 18rem sidebar without the field truncating. */
+/* Query bar: a PF input-group scoped to the sidebar. The field fills the row; only the "?" help and
+   copy-as-command hang off it. The "magus query" prompt sits ABOVE as a label - inline it consumed a
+   third of the sidebar and squeezed the field down to "kind:...". Left lowercase + mono because it is a
+   literal command (the field reads as its argument), not a section heading. */
 .console-graph-querybar { font-size: 0.76rem; }
 .console-graph-querybar__prompt {
-  font-family: var(--pf-t--global--font--family--mono); font-weight: 500;
-  color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
-  padding-inline: 0.4rem;
+  margin: 0 0 0.3rem; padding: 0;
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.68rem;
+  color: var(--pf-t--global--text--color--subtle);
 }
 .console-graph-querybar .pf-v6-c-form-control { font-family: var(--pf-t--global--font--family--mono); }
 .console-graph-querybar .pf-v6-c-button.pf-m-control { padding-inline: 0.45rem; align-self: stretch; }

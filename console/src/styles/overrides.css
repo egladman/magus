@@ -10,6 +10,13 @@
  * Loaded AFTER patternfly.css/tokens.css so these ID rules win. Colors come from the console's
  * PF-native tokens (--console-* in tokens.css, --pf-t-* directly) - never the --pico or --c palettes. */
 
+/* --- The hidden attribute must actually hide ----------------------------------------------------
+ * PF components and our own ID-scoped rules set `display`, which outranks the UA's
+ * [hidden] { display: none }. So `el.hidden = true` silently did nothing on the graph's node cloud,
+ * the dashboard tiles, the activity toolbar, and the empty states - each shipped a bespoke
+ * `X[hidden] { display: none }` patch. One !important here ends that whack-a-mole for good. */
+[hidden] { display: none !important; }
+
 /* --- Status bar ---------------------------------------------------------------------------------
  * A slim fixed bottom rail (IDE-style liveness strip). PF has no status-bar component, so the frame
  * is here. The console swaps ONE tab's status bar into #console-statusbar at a time (main.ts), and

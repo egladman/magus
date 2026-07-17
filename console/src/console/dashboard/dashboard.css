@@ -37,12 +37,6 @@ body[data-dash-native] { margin: 0; }
   #dash-panels { grid-template-columns: minmax(0, 1fr); }
   #dash-panels > [data-half] { grid-column: 1 / -1; }
 }
-/* Honor the hidden attribute on the two mutually-exclusive front-of-house elements. #dash-panels sets
-   display:grid and #dash-connect is a PF EmptyState (display:flex); both beat the UA [hidden] rule, so
-   without these the unpopulated tiles stayed on screen UNDER the "No daemon connected" front door - both
-   showing at once. main.ts toggles hidden to pick one; these make hidden actually hide. */
-#dash-panels[hidden] { display: none; }
-#dash-connect[hidden] { display: none; }
 
 /* --- Tile shell adjustments over PatternFly Card --------------------------------------------
    The card frame (border, radius, background, body padding) is PatternFly's. Here: the collapse
