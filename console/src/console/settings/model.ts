@@ -144,6 +144,43 @@ export function computePendingChanges(committed: Settings, draft: Settings, ctx:
   return changes;
 }
 
+// --- Raw JSON diff (the "Raw" view of the pending changes) -----------------------------------------
+// The pending block can show the raw settings envelope as a git-style line diff (removed red, added
+// green) instead of the readable field list. diffLines is the pure LCS line diff behind it.
+export type DiffLineKind = "same" | "del" | "add";
+export interface DiffLine {
+  kind: DiffLineKind;
+  text: string;
+}
+
+// diffLines computes a minimal line-based diff (longest-common-subsequence) between two texts: shared
+// lines are "same", lines only in `before` are "del", lines only in `after` are "add". Pure. The inputs
+// are the pretty-printed settings envelope (tens of lines), so the O(n*m) table is inconsequential.
+export function diffLines(before: string, after: string): DiffLine[] {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  const n = a.length;
+  const m = b.length;
+  // lcs[i][j] = length of the LCS of a[i:] and b[j:], filled from the bottom-right corner.
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const out: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ kind: "same", text: a[i] }); i++; j++; }
+    else if (lcs[i + 1][j] >= lcs[i][j + 1]) { out.push({ kind: "del", text: a[i] }); i++; }
+    else { out.push({ kind: "add", text: b[j] }); j++; }
+  }
+  while (i < n) { out.push({ kind: "del", text: a[i] }); i++; }
+  while (j < m) { out.push({ kind: "add", text: b[j] }); j++; }
+  return out;
+}
+
 // createDraftCell adapts an in-memory value to the Persisted<T> interface so a component built to drive a
 // durable cell (the keybindings editor) can instead stage into the draft: get/set/update mutate the
 // in-memory value and notify local subscribers (so the editor re-renders live), and onChange fires so the

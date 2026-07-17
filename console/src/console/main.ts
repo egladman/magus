@@ -139,10 +139,10 @@ function keyboardIcon(): SVGElement {
   return svg;
 }
 
-// commandsIcon returns the status-bar "all commands" glyph as an inline SVG: a command-prompt ">_"
-// (a chevron over an underscore caret), distinct from the keyboard glyph beside it so the two footer
-// toggles read apart. Built via createElementNS to match the console's icon convention (no innerHTML,
-// themes on currentColor).
+// commandsIcon returns the status-bar "all commands" glyph as an inline SVG: a bulleted list (three
+// rows, each a leading dot over a line) reading as the command catalogue, distinct from the keyboard
+// glyph beside it so the two footer toggles read apart. Built via createElementNS to match the console's
+// icon convention (no innerHTML, themes on currentColor).
 function commandsIcon(): SVGElement {
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg");
@@ -155,9 +155,10 @@ function commandsIcon(): SVGElement {
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");
-  const prompt = document.createElementNS(NS, "path");
-  prompt.setAttribute("d", "M5 8l4 4-4 4M12 16h7");
-  svg.append(prompt);
+  // Each "h.01" is a zero-length round-capped segment: it renders as a dot bullet ahead of its line.
+  const list = document.createElementNS(NS, "path");
+  list.setAttribute("d", "M4 6h.01M4 12h.01M4 18h.01M9 6h11M9 12h11M9 18h11");
+  svg.append(list);
   return svg;
 }
 

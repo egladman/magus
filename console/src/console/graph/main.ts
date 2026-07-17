@@ -1314,15 +1314,49 @@ function syncLayoutToggle() {
   if (forceControls) forceControls.hidden = (layoutMode === "layered");
 }
 
-// loadDemoGraph reloads into the demo via the shared bare `#demo` fragment (the same one
-// the dashboard and log viewer use). The reload (rather than an in-place swap) re-enters
-// boot, whose pipeline renders the demo exactly like a real graph - default projection,
-// fit-to-view, wired interactions - so there is no partial/unframed render. The demo
-// graph.json is fetched by loadGraph ONLY when this flag is present (see there), so a cold
-// visit still pays no graph download; it also makes /graph/#demo a shareable demo link.
-function loadDemoGraph() {
-  location.hash = "demo";
-  location.reload();
+// loadDemoGraph loads the committed demo graph IN PLACE: it fetches graph.json and rebuilds through
+// replaceGraph (the same pipeline drag-drop and file-open use - flavor detect, projection, layout, draw),
+// then dismisses the empty state. An in-place swap, NOT a page reload: inside the console SPA a full
+// reload reboots the shell and the shell's router clobbers the `#demo` fragment before this surface ever
+// reads it, so the old reload-into-boot path never actually reached the demo (the graph stayed empty).
+// The fetch stays lazy - it only runs when the button is clicked, so a cold visit pays no graph download.
+async function loadDemoGraph() {
+  setStatus("Loading the magus demo graph...");
+  try {
+    // Resolve graph.json relative to THIS bundle (gen/graph/), not the document: the console mounts this
+    // surface into a page at a different path, where a document-relative "./graph.json" would miss.
+    const r = await fetch(new URL("./graph.json", import.meta.url));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    const empty = el("graph-empty-state");
+    if (empty) empty.hidden = true;
+    // While the empty state showed, a :has() rule collapsed the app and hid the canvas (display:none), so
+    // the canvas is 0-wide right now; un-hiding relays out on a later frame, not synchronously. Wait for
+    // the canvas to gain real width before rendering, otherwise the force sim seeds its center on a
+    // zero-size viewport and the graph lands cramped in a corner that even Fit can't recover.
+    await waitForCanvasWidth();
+    // Render through boot's own pipeline (renderLoadedGraph), NOT replaceGraph: replaceGraph force-projects
+    // to projects-only and skips the fit-to-view reveal, so the nodes landed off-frame on this in-place
+    // swap. renderLoadedGraph reproduces the cold-boot render exactly (full graph, framed), which is what
+    // the old reload-into-boot achieved before the SPA started clobbering the #demo fragment on reload.
+    renderLoadedGraph({ data, source: "demo" });
+  } catch (e: any) {
+    setStatus("Could not load the demo graph (" + e.message + ").", true);
+  }
+}
+
+// waitForCanvasWidth resolves once the canvas has a non-zero client width (the pending relayout from
+// un-hiding the empty state has landed), or after ~1s as a safety cap so a hidden pane can never hang the
+// load. Frame-paced so it costs nothing and yields as soon as the box is real.
+function waitForCanvasWidth(): Promise<void> {
+  return new Promise((resolve) => {
+    let tries = 0;
+    const check = () => {
+      if (canvas.clientWidth > 0 || ++tries > 60) resolve();
+      else requestAnimationFrame(check);
+    };
+    check();
+  });
 }
 
 async function readGraphFile(file: any) {
@@ -2293,6 +2327,71 @@ function finishInteractiveSetup() {
 // a host; the standalone page auto-boots below. Chrome (nav/search/drawer/settings) comes from the
 // shared main.js on the standalone page, which the console does not load, so there is no self-wired
 // chrome to guard (unlike the dashboard).
+// renderLoadedGraph runs boot's data-to-view pipeline for a freshly loaded graph result: flavor detect,
+// prepare, the default projection (with its >2500-node perf guard), the status/legend/list, layout +
+// simulation, off-canvas parking, and the fit-to-view reveal. It deliberately EXCLUDES the one-time
+// interaction wiring (finishInteractiveSetup / bootWireEvents), so it is safe to run AGAIN for an in-place
+// swap: the demo button (loadDemoGraph) reuses it, which is why the demo now renders identically to a cold
+// boot - full graph, framed by the reveal - instead of the mis-framed projection the old path produced.
+function renderLoadedGraph(loaded: { data: any; source: string }) {
+  const flavor = detectFlavor(loaded.data);
+  graphFlavor = flavor;
+  let rawForPrepare = loaded.data;
+  let cycleWarnings: string[] = [];
+  if (flavor === "targets") {
+    const nl = targetGraphToNodeLink(loaded.data);
+    rawForPrepare = { nodes: nl.nodes, links: nl.links };
+    cycleWarnings = nl.cycleWarnings;
+  }
+  graph = prepareGraph(rawForPrepare);
+
+  // #data=/#src= (and #view/#q/#node) mean a specific graph or view was requested: show its full detail,
+  // not the projects-only projection. computeDefaultProjection otherwise keeps the full graph unless it
+  // trips the large-graph perf guard.
+  const bootParams = hashParams();
+  const hasFragmentDirective = !!(bootParams.view || bootParams.q || bootParams.node || bootParams.data || bootParams.src);
+  computeDefaultProjection(hasFragmentDirective);
+
+  const unfoldBtn = el("projection-unfold-btn");
+  if (unfoldBtn) unfoldBtn.hidden = projectionUnfolded;
+
+  updateSnapshotBadge(loaded.source);
+  // Shared demo indicator in the app bar: unhide it when the loaded graph is the synthesized demo.
+  const demoPill = el("console-demo");
+  if (demoPill) demoPill.hidden = loaded.source !== "demo";
+
+  // Status line: targets flavor shows a summary; knowledge/demo shows a brief confirmation or nothing.
+  if (flavor === "targets") {
+    const nProjects = (loaded.data.projects || []).length;
+    const nTargets = rawForPrepare.nodes.filter((n: any) => n.kind === "target").length;
+    const base = "target graph - " + nProjects + " project" + (nProjects === 1 ? "" : "s") +
+      " - " + nTargets + " target" + (nTargets === 1 ? "" : "s");
+    if (!projectionUnfolded) updateProjectionStatus();
+    else setStatus(cycleWarnings.length ? base + "; " + cycleWarnings.join("; ") : base);
+  } else {
+    if (!projectionUnfolded) updateProjectionStatus();
+    else setStatus(loaded.source === "local"
+      ? "Your workspace graph - it never left your machine."
+      : loaded.source === "loopback"
+      ? "Your workspace graph, served over loopback - it never left your network."
+      : "");
+  }
+
+  renderLegend();
+  renderList();
+
+  const initialParams = hashParams();
+  applyLayoutAndSimulation(initialParams.layout, flavor);
+  parkHiddenNodes();
+
+  // Wow reveal: once the cold force layout has spread out, frame the whole graph so it lands centered and
+  // fully in view instead of cropped to a corner. Only for the default full-graph view - a deep link or
+  // the perf-guard projection already frames its own subset, and layered layout is framed by applyLayeredMode.
+  if (projectionUnfolded && !hasFragmentDirective && layoutMode !== "layered" && graph.nodes.length) {
+    setTimeout(() => fitView(null), 700);
+  }
+}
+
 export async function activate() {
   resolveDom();
   readTheme();
@@ -2344,90 +2443,10 @@ export async function activate() {
   }
   if (!loaded) { document.body.classList.add("graph-empty"); return; }
 
-  // Detect graph flavor at the top of the pipeline, before prepareGraph.
-  // The knowledge path is byte-identical to before; the targets path is
-  // converted client-side. See detectFlavor + targetGraphToNodeLink for the
-  // wire-type details (types/describe.go vs types/knowledge.go).
-  const flavor = detectFlavor(loaded.data);
-  graphFlavor = flavor;
-  let rawForPrepare = loaded.data;
-  let cycleWarnings: string[] = [];
-
-  if (flavor === "targets") {
-    const nl = targetGraphToNodeLink(loaded.data);
-    rawForPrepare = { nodes: nl.nodes, links: nl.links };
-    cycleWarnings = nl.cycleWarnings;
-  }
-
-  graph = prepareGraph(rawForPrepare);
-
-  // Phase 5: determine whether the default projection applies.
-  // A projection is shown when no fragment directives are present (no view/q/node)
-  // and the graph has project nodes whose count is <= 50.
-  const bootParams = hashParams();
-  // #data= and #src= mean the user (or `magus graph open`) loaded a specific graph:
-  // show its full detail, not the collapsed projects-only projection.
-  const hasFragmentDirective = !!(bootParams.view || bootParams.q || bootParams.node || bootParams.data || bootParams.src);
-  computeDefaultProjection(hasFragmentDirective);
-
-  // Show the unfold button when the projection is active.
-  const unfoldBtn = el("projection-unfold-btn");
-  if (unfoldBtn) unfoldBtn.hidden = projectionUnfolded;
-
-  // Snapshot-mode badge: shown whenever the graph came privately from this
-  // machine (a #data= fragment or a --serve loopback fetch) but is NOT live -
-  // the counterpart to the live-badge, so it is always clear whether the view
-  // updates automatically or is a point-in-time snapshot.
-  updateSnapshotBadge(loaded.source);
-
-  // Shared demo indicator in the app bar: unhide it when the loaded graph is the synthesized
-  // demo, so the graph explorer calls out demo data the same way the dashboard and log viewer do.
-  const demoPill = el("console-demo");
-  if (demoPill) demoPill.hidden = loaded.source !== "demo";
-
-  // Status line: targets flavor shows a summary; knowledge/demo shows the
-  // existing brief confirmation or nothing (demo remains statusless).
-  if (flavor === "targets") {
-    const nProjects = (loaded.data.projects || []).length;
-    const nTargets = rawForPrepare.nodes.filter((n: any) => n.kind === "target").length;
-    const base = "target graph - " + nProjects + " project" + (nProjects === 1 ? "" : "s") +
-      " - " + nTargets + " target" + (nTargets === 1 ? "" : "s");
-    if (!projectionUnfolded) {
-      updateProjectionStatus(); // shows projection message instead
-    } else {
-      setStatus(cycleWarnings.length ? base + "; " + cycleWarnings.join("; ") : base);
-    }
-  } else {
-    // Only the private modes get a brief confirmation; the demo shows nothing (the
-    // status box hides when empty) rather than a persistent overlay on the graph.
-    if (!projectionUnfolded) {
-      updateProjectionStatus();
-    } else {
-      setStatus(loaded.source === "local"
-        ? "Your workspace graph - it never left your machine."
-        : loaded.source === "loopback"
-        ? "Your workspace graph, served over loopback - it never left your network."
-        : "");
-    }
-  }
-
-  renderLegend();
-  renderList();
-
-  // Determine layout mode: fragment overrides flavor default.
-  // targets -> layered; knowledge -> force.
-  const initialParams = hashParams();
-  applyLayoutAndSimulation(initialParams.layout, flavor);
-  parkHiddenNodes();
+  // Run boot's data-to-view pipeline, then the one-time interaction wiring. Splitting the two lets the
+  // demo button re-run just the render (renderLoadedGraph) in place, without re-wiring listeners.
+  renderLoadedGraph(loaded);
   finishInteractiveSetup();
-
-  // Wow reveal: once the cold force layout has spread out, frame the whole graph so it
-  // lands centered and fully in view instead of cropped to a corner. Only for the
-  // default full-graph view - a deep link (#node/#view/#q) or the perf-guard projection
-  // already frames its own subset, and layered layout is framed by applyLayeredMode.
-  if (projectionUnfolded && !hasFragmentDirective && layoutMode !== "layered" && graph.nodes.length) {
-    setTimeout(() => fitView(null), 700);
-  }
 
   // Empty state: nothing was loaded (no #data/#src/#live), so instead of a graph we show an
   // intuitive prompt - the command to open your own workspace, plus a button to try the demo.

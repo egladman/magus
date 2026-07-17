@@ -24,6 +24,7 @@ const PAGE_SIZE = 100;
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
 
 interface Refs {
+  bar: HTMLElement;
   body: HTMLElement;
   empty: HTMLElement;
   emptyTitle: HTMLElement;
@@ -83,12 +84,35 @@ function buildScaffold(host: HTMLElement): Refs {
   const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "No daemon connected");
   const emptyBody = h("div", "pf-v6-c-empty-state__body");
   const emptySub = h("p");
-  emptySub.textContent = "The activity trail records what the daemon did - MCP calls, jobs, config changes. Start the daemon and open the live link, or see the demo.";
+  emptySub.textContent = "The activity trail records what the daemon did: MCP calls, jobs, config changes.";
+  // Two "ways" mirroring the log viewer / graph empty state - a command to go live, or the demo button.
+  // The data-empty-* hooks pick up the shared grid + mobile stacking from logs.css, so it matches logs.
   const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  const demoBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small") as HTMLButtonElement;
+  emptyActions.dataset.emptyWays = "";
+
+  const wayLive = h("div");
+  wayLive.dataset.emptyWay = "";
+  const liveLabel = h("span", undefined, "Connect a daemon");
+  liveLabel.dataset.emptyWayLabel = "";
+  const liveCmd = h("pre");
+  liveCmd.dataset.emptyCmd = "";
+  liveCmd.append(h("code", undefined, "magus server start"));
+  const liveHint = h("span", undefined, "Then open the live link it prints.");
+  liveHint.dataset.emptyHint = "";
+  wayLive.append(liveLabel, liveCmd, liveHint);
+
+  const wayDemo = h("div");
+  wayDemo.dataset.emptyWay = "";
+  const demoLabel = h("span", undefined, "Try the demo");
+  demoLabel.dataset.emptyWayLabel = "";
+  const demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
   demoBtn.type = "button";
-  demoBtn.append(h("span", "pf-v6-c-button__text console-render-btn__label", "See the demo"));
-  emptyActions.append(demoBtn);
+  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
+  const demoHint = h("span", undefined, "A synthesized trail, no daemon needed.");
+  demoHint.dataset.emptyHint = "";
+  wayDemo.append(demoLabel, demoBtn, demoHint);
+
+  emptyActions.append(wayLive, wayDemo);
   emptyBody.append(emptySub, emptyActions);
   emptyContent.append(emptyIcon, emptyTitle, emptyBody);
   empty.append(emptyContent);
@@ -96,7 +120,7 @@ function buildScaffold(host: HTMLElement): Refs {
   scroll.append(body, empty);
   panel.append(bar, scroll);
   host.append(panel);
-  return { body, empty, emptyTitle, emptySub, demoBtn, conn, refresh };
+  return { bar, body, empty, emptyTitle, emptySub, demoBtn, conn, refresh };
 }
 
 // activate builds the surface into host, loads once, and returns a teardown. Every async load checks
@@ -111,7 +135,11 @@ export function activate(host: HTMLElement): () => void {
     // The adapter puts the ok/error accent in meta.status; buildSection defaults its accent from a
     // "[status]" title token (which the trail deliberately omits), so pass it through explicitly.
     for (const sec of model.sections) refs.body.append(buildSection(sec, { status: sec.meta?.status }));
-    refs.empty.hidden = events.length > 0;
+    const has = events.length > 0;
+    refs.empty.hidden = has;
+    // The toolbar (title, count, Refresh) belongs with the populated trail; in the empty state it read as
+    // a floating heading over a "not connected" note, so hide it and let the golden empty card stand alone.
+    refs.bar.hidden = !has;
     const n = events.length;
     refs.conn.textContent = demo ? "demo data" : n + (n === 1 ? " event" : " events");
   }
@@ -119,6 +147,7 @@ export function activate(host: HTMLElement): () => void {
   function showEmpty(title: string, sub: string, conn: string): void {
     refs.body.replaceChildren();
     refs.empty.hidden = false;
+    refs.bar.hidden = true;
     refs.emptyTitle.textContent = title;
     refs.emptySub.textContent = sub;
     refs.conn.textContent = conn;
@@ -151,7 +180,7 @@ export function activate(host: HTMLElement): () => void {
     const remembered = daemonCell.get();
     const daemonHost = linked ?? (remembered ? validateLiveHost(remembered) : null);
     if (daemonHost) { void loadLive(daemonHost); return; }
-    showEmpty("No daemon connected", "The activity trail records what the daemon did - MCP calls, jobs, config changes. Start the daemon and open the live link, or see the demo.", "not connected");
+    showEmpty("No daemon connected", "The activity trail records what the daemon did: MCP calls, jobs, config changes.", "not connected");
   }
 
   refs.refresh.addEventListener("click", load);

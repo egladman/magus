@@ -14,10 +14,10 @@ import { formatChord, isMac, mergeKeymap, type Keymap } from "../commands";
 import {
   getPollMs, setPollMs, savePollMs, getDefaultHost, setDefaultHost, saveDefaultHost,
 } from "../../lib/settings";
-import { showRefreshToast } from "../../lib/refresh-toast";
+import { showRefreshToast, showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 import {
-  buildSettingsEnvelope, computePendingChanges, createDraftCell, importSettings,
+  buildSettingsEnvelope, computePendingChanges, createDraftCell, diffLines, importSettings,
   type DiffContext, type PendingChange, type Settings, type ThemePref,
 } from "./model";
 
@@ -120,11 +120,11 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   const bar = h("div", "console-settings-actionbar");
   const count = h("span", "console-settings-actionbar__count");
   const actions = h("div", "console-settings-actionbar__actions");
-  // Save & Apply = primary blue (persist + hot-reload now), Save = green (persist for the next load),
-  // Reset = danger red (discard the draft). The green is a custom success-token outline; PF has no green.
+  // Standard PatternFly button hierarchy, no custom accent colors: Save & Apply = primary (persist +
+  // hot-reload now), Save = secondary (persist for the next load), Reset = a quiet link (discard the draft).
   const applyBtn = h("button", "pf-v6-c-button pf-m-primary", "Save & Apply") as HTMLButtonElement;
-  const saveBtn = h("button", "pf-v6-c-button console-settings-actionbar__save", "Save") as HTMLButtonElement;
-  const resetBtn = h("button", "pf-v6-c-button pf-m-danger", "Reset") as HTMLButtonElement;
+  const saveBtn = h("button", "pf-v6-c-button pf-m-secondary", "Save") as HTMLButtonElement;
+  const resetBtn = h("button", "pf-v6-c-button pf-m-link", "Reset") as HTMLButtonElement;
   for (const b of [applyBtn, saveBtn, resetBtn]) b.type = "button";
   applyBtn.title = "Persist and apply changes to this session now";
   saveBtn.title = "Persist changes for the next load, without applying them now";
@@ -137,11 +137,60 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   status.setAttribute("aria-live", "polite");
   const setStatus = (msg: string, kind: "ok" | "error"): void => { status.textContent = msg; status.dataset.kind = kind; };
 
-  // The pending diff list, hidden when the draft matches the baseline.
+  // The pending diff, hidden when the draft matches the baseline. A header carries the title and a
+  // Pretty|Raw view toggle (a PF ToggleGroup, matching the log viewer's Pretty|Raw switch): Pretty is
+  // the readable field list, Raw is the settings envelope as a git-style line diff (removed red, added
+  // green).
+  let diffView: "pretty" | "raw" = "pretty";
   const diffWrap = h("section", "console-settings-diff");
-  diffWrap.append(h("h2", "console-settings-diff__title", "Pending changes"));
+  const diffHead = h("div", "console-settings-diff__head");
+  diffHead.append(h("h2", "console-settings-diff__title", "Pending changes"));
+
+  const viewToggle = h("div", "pf-v6-c-toggle-group console-settings-diff__view");
+  viewToggle.setAttribute("role", "group");
+  viewToggle.setAttribute("aria-label", "Pending changes view");
+  const viewButtons: [("pretty" | "raw"), HTMLButtonElement][] = [];
+  for (const [mode, labelText] of [["pretty", "Pretty"], ["raw", "Raw"]] as const) {
+    const item = h("div", "pf-v6-c-toggle-group__item");
+    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
+    btn.type = "button";
+    btn.append(h("span", "pf-v6-c-toggle-group__text", labelText));
+    btn.addEventListener("click", () => { diffView = mode; paintDiffView(); });
+    item.append(btn);
+    viewToggle.append(item);
+    viewButtons.push([mode, btn]);
+  }
+  diffHead.append(viewToggle);
+  diffWrap.append(diffHead);
+
   const diffList = h("ul", "console-settings-diff__list");
-  diffWrap.append(diffList);
+  const rawPre = h("pre", "console-settings-diff__raw");
+  diffWrap.append(diffList, rawPre);
+
+  // paintDiffView reflects the selected mode on the toggle and shows the matching body.
+  function paintDiffView(): void {
+    for (const [mode, btn] of viewButtons) {
+      const on = diffView === mode;
+      btn.classList.toggle("pf-m-selected", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+    diffList.hidden = diffView !== "pretty";
+    rawPre.hidden = diffView !== "raw";
+  }
+
+  // renderRaw rebuilds the raw view: a line diff of the committed vs draft settings envelope, one span
+  // per line tagged with its diff kind (styled red/green/muted in settings.css).
+  function renderRaw(): void {
+    const before = JSON.stringify(buildSettingsEnvelope(committed), null, 2);
+    const after = JSON.stringify(buildSettingsEnvelope(draftPrefs()), null, 2);
+    rawPre.replaceChildren();
+    for (const line of diffLines(before, after)) {
+      const sign = line.kind === "del" ? "-" : line.kind === "add" ? "+" : " ";
+      const el = h("span", "console-settings-diff__rawline", sign + " " + line.text);
+      el.dataset.diff = line.kind;
+      rawPre.append(el);
+    }
+  }
 
   function renderPending(changes: PendingChange[]): void {
     count.textContent = changes.length === 0
@@ -160,6 +209,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       item.append(change);
       diffList.append(item);
     }
+    renderRaw();
+    paintDiffView();
     diffWrap.hidden = changes.length === 0;
   }
 
@@ -243,21 +294,14 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   downloadBtn.type = "button";
   ioActions.append(copyBtn, downloadBtn);
 
-  const importArea = h("textarea", "pf-v6-c-form-control console-settings-io__paste") as HTMLTextAreaElement;
-  importArea.id = "console-settings-import";
-  importArea.rows = 4;
-  importArea.spellcheck = false;
-  importArea.placeholder = "Paste exported settings JSON here, then Import from text.";
   const importActions = h("div", "console-settings-io__actions");
-  const importTextBtn = h("button", "pf-v6-c-button pf-m-secondary", "Import from text");
-  importTextBtn.type = "button";
   const fileLabel = h("label", "pf-v6-c-button pf-m-secondary console-settings-io__file");
   fileLabel.append(h("span", "pf-v6-c-button__text", "Import from file"));
   const fileInput = h("input") as HTMLInputElement;
   fileInput.type = "file";
   fileInput.accept = "application/json,.json";
   fileLabel.append(fileInput);
-  importActions.append(importTextBtn, fileLabel);
+  importActions.append(fileLabel);
 
   const exportJson = (): string => JSON.stringify(buildSettingsEnvelope(draftPrefs()), null, 2);
 
@@ -294,25 +338,19 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     setStatus("Staged import: " + res.applied.join(", ") + ". Review, then Save or Save & Apply.", "ok");
   };
 
-  importTextBtn.addEventListener("click", () => {
-    const text = importArea.value.trim();
-    if (!text) { setStatus("Paste some JSON first, or import from a file.", "error"); return; }
-    applyImport(text);
-  });
   fileInput.addEventListener("change", () => {
     const file = fileInput.files?.[0];
     if (!file) return;
     file.text().then(
-      (text) => { applyImport(text); importArea.value = text; },
+      (text) => applyImport(text),
       () => setStatus("Could not read that file.", "error"),
     );
     fileInput.value = ""; // allow re-picking the same file
   });
 
   io.append(
-    h("p", "console-settings-io__lede", "Settings live in this browser. Copy or download the current draft to move it to another machine, or import a saved set to stage it."),
+    h("p", "console-settings-io__lede", "Settings live in this browser. Copy or download the current draft to move it to another machine, or import a saved file to stage it."),
     ioActions,
-    importArea,
     importActions,
   );
 
@@ -352,10 +390,15 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     }
     committed = { ...d, keymap: { ...d.keymap } };
     recompute();
+    const msg = applyLive ? "Applied changes to this session." : "Saved. Takes effect on the next load.";
+    setStatus(msg, "ok");
+    // Confirm every commit with a toast: the reload prompt when a live change needs a reload to take
+    // effect (poll/host), otherwise a transient success toast so a save is never silent.
     if (applyLive && (keys.has("poll") || keys.has("host"))) {
       showRefreshToast("Console settings changed. Reload to apply.");
+    } else {
+      showToast(msg);
     }
-    setStatus(applyLive ? "Applied changes to this session." : "Saved. Takes effect on the next load.", "ok");
   }
 
   saveBtn.addEventListener("click", () => commitDraft(false));

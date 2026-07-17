@@ -254,6 +254,15 @@ body[data-has-card] .console-graph-app { grid-template-columns: 18rem 1fr 21rem;
 [data-empty-cmd] { margin: 0; }
 [data-empty-cmd] code { font-size: 0.8em; font-family: var(--pf-t--global--font--family--mono); }
 [data-empty-hint] { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+/* Stack the two "ways" on a narrow viewport instead of leaving them side by side - the same collapse
+   the log viewer's empty state does (logs.css). Without this, graph's copy of the grid stayed 2-up on
+   mobile. */
+@media (max-width: 40rem) {
+  [data-empty-ways] { grid-template-columns: 1fr; }
+}
+/* The demo label ("Explore the magus graph") is long; let it wrap inside its card rather than overrun
+   the button, which PF's default white-space:nowrap would force onto one clipped line. */
+#demo-explore-btn { white-space: normal; }
 
 /* Cold state (nothing loaded): collapse the app to just the empty-state prompt at its NATURAL
    height, instead of a full-viewport-tall empty panel. :has() detects the visible empty state

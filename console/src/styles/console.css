@@ -331,12 +331,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    radius) lets the rounded corners read, so the panel presents as a distinct, inviting rounded
    surface floating in the outlet rather than a flush square fill. The radius is built from the large
    token (device-aware via the tokens.css platform gate), doubled so the curve is unmistakable. */
-#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; margin: 0.6rem; padding: 2rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); border-radius: calc(var(--pf-t--global--border--radius--large) * 2); }
+#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0.6rem; padding: 2rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); border-radius: calc(var(--pf-t--global--border--radius--large) * 2); }
 
-/* Launch-the-demo affordance: a quiet icon pill in the launcher's bottom-right that expands to show its
-   label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. */
+/* Launch-the-demo affordance: a quiet icon pill below the cards, right-aligned, that expands to show its
+   label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. It
+   flows as the launcher column's last child: margin-top:auto floats it to the bottom when the grid is
+   short, and it drops just below the grid (scrolling with the page) when the grid is tall - so it always
+   keeps its own space and never lands on top of a card, whatever the card count. */
 .console-launcher-demo {
-  position: absolute; bottom: 1.25rem; right: 1.25rem;
+  margin-top: auto; align-self: flex-end; flex: 0 0 auto;
   display: inline-flex; align-items: center; gap: 0.4rem;
   padding: 0.4rem; border-radius: 999px;
   border: 1px solid var(--pf-t--global--border--color--default);
@@ -589,6 +592,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* Skip the slide/flex-basis transition while applying the persisted (pinned) state on load. */
 .console-shell-refdrawer--instant .pf-v6-c-drawer__panel { transition: none !important; }
 .console-shell-refdrawer__title { align-self: center; font-size: 0.85rem; font-weight: 600; }
+
+/* Center the drawer-head glyphs. PF buttons default to align-items:baseline, so the inline pin/close
+   SVG sat on the text baseline and read high and off-center in its square; center the button box and
+   zero the icon line-height so the glyph is optically centered (same fix as the settings + keybindings
+   icons). */
+#console-refpin, #console-refclose { align-items: center; }
+#console-refpin .pf-v6-c-button__icon,
+#console-refclose .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
 
 /* The cloned help + search sit in the panel's scrolling body; keep it dense and legible. */
 #console-refpanel .console-shell-refdrawer__body { font-size: 0.8rem; line-height: 1.5; }

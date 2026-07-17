@@ -121,6 +121,15 @@
  * revert without competing with the surface's Reset button; it dims when there is nothing to restore. */
 [data-kbeditor] [data-kactions] .pf-v6-c-button[data-role="reset"] { color: var(--pf-t--global--text--color--status--danger--default); }
 [data-kbeditor] [data-kactions] .pf-v6-c-button[data-role="reset"]:disabled { color: var(--pf-t--global--text--color--subtle); opacity: 0.5; }
+/* Phone width: the row cannot hold a long label (e.g. "Close pane or tab"), the chord chip, and the
+ * controls on one line, so the label's grown-but-min-width:0 box collapsed and the chord kbd rode over
+ * the label text. Wrap instead: the label takes the whole first line, and the chord, conflict note, and
+ * controls flow onto the next line(s). */
+@media (max-width: 47.999rem) {
+  [data-kbeditor] [data-krow] { flex-wrap: wrap; column-gap: 0.5rem; row-gap: 0.35rem; }
+  [data-kbeditor] [data-krow] > span:first-child { flex: 1 1 100%; }
+  [data-kbeditor] [data-kactions] { margin-left: 0; flex-wrap: wrap; }
+}
 
 /* --- Reference-block source hide -----------------------------------------------------------------
  * The graph and log scaffolds carry a few <details data-legacy-ref> blocks - inline reference/help
@@ -158,3 +167,8 @@
   color: var(--pf-t--global--text--color--regular);
   cursor: pointer;
 }
+/* The transient confirmation toast (a settings save/apply) carries no action button; a success-tinted
+   left edge marks it as a positive confirmation, and it fades up on entry before auto-dismissing. */
+.console-shell-toast--transient { border-left: 3px solid var(--console-status-ok); animation: console-toast-in 0.16s ease-out; }
+@keyframes console-toast-in { from { opacity: 0; transform: translateY(0.4rem); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .console-shell-toast--transient { animation: none; } }

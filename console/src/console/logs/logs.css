@@ -368,3 +368,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-activity-conn {
   font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
 }
+/* The trail toolbar belongs with the POPULATED trail; in the empty state it read as a floating heading
+   over a "not connected" note. main.ts hides it via the hidden attribute, but PF's .pf-v6-c-toolbar sets
+   display, which beats the UA [hidden] rule - so honor hidden explicitly (same fix as .console-render-empty). */
+.console-render-panel > .pf-v6-c-toolbar[hidden] { display: none; }

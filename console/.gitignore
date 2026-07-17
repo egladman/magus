@@ -8,7 +8,10 @@ node_modules/
 # there). A build artifact, not committed.
 .testcache/
 
-# Local dev data blobs (not committed): the graph export and the docs search index the
-# standalone dev console fetches. In production these are served from the site, not console/gen.
-gen/graph/graph.json
+# Local dev data blob (not committed): the docs search index the standalone dev console fetches.
 gen/search-index.json
+
+# NOTE: gen/graph/graph.json IS committed. GitHub Pages publishes the committed console/gen/ bytes
+# verbatim (no build step at deploy), so the demo graph the Graph Explorer fetches must ship in gen/.
+# copy-static (package.json) refreshes it from ../docs/graph.json on every build; the build drift gate
+# keeps it in sync.

@@ -29,7 +29,11 @@
 .console-settings-actionbar {
   position: sticky;
   top: 0;
-  z-index: 1;
+  /* Sit above the page content while it scrolls under the bar. A PF ToggleGroup's selected button
+     (the Appearance theme toggle) is position:relative with z-index 100, so a plain z-index:1 here
+     let the scrolling "System" button paint over the pending-changes bar; clear that, staying below
+     the reference overlay (z-index 200). */
+  z-index: calc(var(--pf-t--global--z-index--xs) + 1);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -50,24 +54,6 @@
   flex-wrap: wrap;
   gap: var(--pf-t--global--spacer--sm);
 }
-
-/* Save = green. PatternFly has no green button variant, so this is a success-token outline (border +
- * text from the success status ramp) that reads clearly green for the Save action, filling on hover. */
-.console-settings-actionbar__save {
-  color: var(--pf-t--global--text--color--status--success--default);
-  background: transparent;
-  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--status--success--default);
-}
-.console-settings-actionbar__save:hover:not(:disabled) {
-  color: var(--pf-t--global--text--color--status--success--hover);
-  border-color: var(--pf-t--global--border--color--status--success--hover);
-  background: var(--pf-t--global--color--status--success--100);
-}
-.console-settings-actionbar__save:active:not(:disabled) {
-  color: var(--pf-t--global--text--color--status--success--clicked);
-  border-color: var(--pf-t--global--border--color--status--success--clicked);
-}
-.console-settings-actionbar__save:disabled { opacity: 0.5; }
 
 /* The status line: neutral by default, tinted by outcome via data-kind. */
 .console-settings-actionbar__status {
@@ -93,11 +79,25 @@
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-settings-diff[hidden] { display: none; }
+/* Header: the title with the Pretty|Raw view toggle pushed to the right, wrapping on a narrow pane. */
+.console-settings-diff__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+}
 .console-settings-diff__title {
   margin: 0;
   font-size: var(--pf-t--global--font--size--heading--h4);
   font-weight: var(--pf-t--global--font--weight--heading--bold);
   color: var(--pf-t--global--text--color--regular);
+}
+/* The view toggle sits quietly at the end of the header; compact so it does not tower over the heading. */
+.console-settings-diff__view { margin-left: auto; }
+.console-settings-diff__view .pf-v6-c-toggle-group__button {
+  padding-block: 0.15rem;
+  padding-inline: 0.5rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
 }
 .console-settings-diff__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.25rem; }
 .console-settings-diff__item {
@@ -112,6 +112,31 @@
 .console-settings-diff__before { color: var(--pf-t--global--text--color--subtle); text-decoration: line-through; }
 .console-settings-diff__arrow { color: var(--pf-t--global--text--color--subtle); }
 .console-settings-diff__after { color: var(--console-status-ok); }
+
+/* Raw view: the settings envelope as a git-style line diff. Removed lines red, added lines green,
+   context lines muted; the block scrolls (it never wraps a JSON line) and is capped so a large keymap
+   does not run the page long. Pretty and Raw are mutually exclusive - the [hidden] rules beat the
+   list's own display:flex / the pre's block. */
+.console-settings-diff__list[hidden],
+.console-settings-diff__raw[hidden] { display: none; }
+.console-settings-diff__raw {
+  margin: 0;
+  max-height: 22rem;
+  overflow: auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1.5;
+}
+.console-settings-diff__rawline { display: block; white-space: pre; }
+.console-settings-diff__rawline[data-diff="del"] {
+  color: var(--pf-t--global--text--color--status--danger--default);
+  background: color-mix(in srgb, var(--pf-t--global--color--status--danger--100) 45%, transparent);
+}
+.console-settings-diff__rawline[data-diff="add"] {
+  color: var(--console-status-ok);
+  background: color-mix(in srgb, var(--console-status-ok) 12%, transparent);
+}
+.console-settings-diff__rawline[data-diff="same"] { color: var(--pf-t--global--text--color--subtle); }
 
 /* A titled section: a heading with a small accent marker, an optional lede, and its body. Sections
  * stack with a hairline rule between them so the surface reads as grouped settings, not one long form. */
@@ -171,7 +196,6 @@
 /* Backup: the export/import controls stack, with the action rows wrapping on a narrow pane. */
 .console-settings-io { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
 .console-settings-io__actions { display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--sm); }
-.console-settings-io__paste { width: 100%; resize: vertical; font-family: var(--pf-t--global--font--family--mono); }
 
 /* The file picker is a styled PF Button label wrapping a visually-hidden <input type=file>. */
 .console-settings-io__file { position: relative; overflow: hidden; cursor: pointer; }

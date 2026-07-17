@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildSettingsEnvelope, computePendingChanges, importSettings, SETTINGS_SCHEMA_VERSION,
+  buildSettingsEnvelope, computePendingChanges, diffLines, importSettings, SETTINGS_SCHEMA_VERSION,
   type DiffContext, type Settings,
 } from "./model";
 
@@ -176,4 +176,47 @@ test("computePendingChanges: disabling a binding reads as None", () => {
   assert.deepEqual(changes, [
     { key: "keymap:console.tab.close", label: "Keybinding Close pane or tab", before: "mod+w", after: "None" },
   ]);
+});
+
+// --- diffLines (the Raw view's line diff) ---
+test("diffLines: identical text is all context (same)", () => {
+  const t = "a\nb\nc";
+  assert.deepEqual(diffLines(t, t), [
+    { kind: "same", text: "a" },
+    { kind: "same", text: "b" },
+    { kind: "same", text: "c" },
+  ]);
+});
+
+test("diffLines: a changed line becomes a del then an add, context preserved", () => {
+  const before = "a\nb\nc";
+  const after = "a\nB\nc";
+  assert.deepEqual(diffLines(before, after), [
+    { kind: "same", text: "a" },
+    { kind: "del", text: "b" },
+    { kind: "add", text: "B" },
+    { kind: "same", text: "c" },
+  ]);
+});
+
+test("diffLines: a pure insertion is add-only, a pure deletion is del-only", () => {
+  assert.deepEqual(diffLines("a\nc", "a\nb\nc"), [
+    { kind: "same", text: "a" },
+    { kind: "add", text: "b" },
+    { kind: "same", text: "c" },
+  ]);
+  assert.deepEqual(diffLines("a\nb\nc", "a\nc"), [
+    { kind: "same", text: "a" },
+    { kind: "del", text: "b" },
+    { kind: "same", text: "c" },
+  ]);
+});
+
+test("diffLines: reflects a real settings envelope value change", () => {
+  const before = JSON.stringify(buildSettingsEnvelope(base), null, 2);
+  const after = JSON.stringify(buildSettingsEnvelope({ ...base, theme: "light" }), null, 2);
+  const diff = diffLines(before, after);
+  // exactly the theme line flips: one del carrying "dark", one add carrying "light", nothing else changes.
+  assert.deepEqual(diff.filter((l) => l.kind === "del").map((l) => l.text.trim()), ['"theme": "dark",']);
+  assert.deepEqual(diff.filter((l) => l.kind === "add").map((l) => l.text.trim()), ['"theme": "light",']);
 });
