@@ -15,6 +15,10 @@
      is 44px: the touch-target floor, because every control the console has that is not a tab lives on
      this bar. The status bar opposite it stays slim on purpose - nothing there is a tap target. */
   --console-titlebar-h: 2.75rem;
+  /* How tall the top chrome actually IS: one row here, two on a phone (the title bar stacks - see the
+     breakpoint below). Anything positioning itself under the chrome reads THIS, not the row height, or
+     it lands a row out on mobile. */
+  --console-topchrome-h: var(--console-titlebar-h);
   --console-statusbar-h: 1.75rem;
   --console-refdrawer-w: 22rem;
   /* The chart/accent palette that used to live here (the aliased --c-* slots) moved to
@@ -240,7 +244,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-titlebar {
   flex: 0 0 auto;
   display: flex; align-items: stretch;
-  height: var(--console-titlebar-h);
+  height: var(--console-topchrome-h);
   /* Pico gives a semantic <header> generous block padding and a bottom margin; the title bar is
      chrome, not a page section, so zero both. Without this the border-box height collapses the
      content area to a ~2px sliver and the tabs render as a clipped, unreadable strip. */
@@ -272,6 +276,46 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    PF's plain button is sized for a mouse; this is the only place the console asks a finger to hit one. */
 #console-actions > .pf-v6-c-button {
   align-self: stretch; min-width: 2.5rem; justify-content: center; padding-inline: 0.5rem;
+}
+
+/* Phone: stack the title bar into two rows - the chrome buttons on top, the tabs on a full-width row of
+   their own beneath, against the content they switch. Side by side, the five chrome buttons take ~200px
+   of a 375px bar and leave the tabs a ~175px sliver: barely one tab, clipped and hard to hit. A tab is
+   the most-tapped control here, so it gets the width and the other row pays for it. Costs one bar of
+   height, which --console-topchrome-h carries to everything that sits under the chrome. */
+@media (max-width: 47.999rem) {
+  :root { --console-topchrome-h: calc(var(--console-titlebar-h) * 2); }
+  #console-titlebar { flex-direction: column; }
+  /* A hairline between the two rows, the same one the status bar uses to part itself from the content.
+     Stacked, the rows share a background and read as one tall smear without it. The border sits INSIDE
+     the row's height (border-box), so the pair still totals --console-topchrome-h and nothing beneath
+     the chrome shifts by a pixel. */
+  #console-actions {
+    order: -1; height: var(--console-titlebar-h); justify-content: flex-end;
+    border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  }
+  /* Past a few tabs even a full-width row runs out, and the overflow is otherwise clipped and
+     unreachable (no scroll buttons here - see tabBar.ts). On touch the row just scrolls: swiping a tab
+     strip is the native gesture, so it needs no chrome. The tabs keep their intrinsic width instead of
+     being squeezed to fit, which is the point of giving them the row. */
+  #console-tabs {
+    height: var(--console-titlebar-h);
+    overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; /* the strip is swiped, not scrollbar-dragged */
+  }
+  #console-tabs::-webkit-scrollbar { display: none; }
+  #console-tabs .pf-v6-c-tabs__list { flex-wrap: nowrap; }
+  #console-tabs .pf-v6-c-tabs__item { flex: 0 0 auto; }
+  /* Squish the inactive tabs. The active one keeps its whole label - it names what you are looking at -
+     while the rest cap and ellipsize, so the common two-or-three-tab case fits the row outright and the
+     scroll above is the fallback rather than the everyday gesture. Each stays wide enough to read a word
+     of and to hit. */
+  #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__item-text {
+    display: block; max-width: 5rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* The command bar descends over the CONTROLS row it replaces; the tabs stay visible below it. */
+  .console-shell-commandbar { height: var(--console-titlebar-h); }
 }
 
 /* W0 SPIKE: the old hand-rolled tab visuals ([role=tablist]/[role=tab]/[data-close]/[data-new],
@@ -578,7 +622,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      the fixed status bar). Neutralize PF's inline flex sizing (flex-basis), its collapse margin, and
      its slide transform so the panel is not pushed off-screen. */
   #console-refdrawer.pf-m-expanded > .pf-v6-c-drawer__main > #console-refpanel {
-    position: fixed; inset: var(--console-titlebar-h) 0 var(--console-statusbar-h) 0;
+    position: fixed; inset: var(--console-topchrome-h) 0 var(--console-statusbar-h) 0;
     width: auto; max-width: none; min-width: 0; flex-basis: auto;
     margin: 0; transform: none;
     z-index: var(--pf-t--global--z-index--200);
