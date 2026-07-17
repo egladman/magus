@@ -1314,40 +1314,27 @@ function syncLayoutToggle() {
   if (forceControls) forceControls.hidden = (layoutMode === "layered");
 }
 
-// loadDemoGraph loads the committed demo graph IN PLACE: it fetches graph.json and rebuilds through
-// replaceGraph (the same pipeline drag-drop and file-open use - flavor detect, projection, layout, draw),
-// then dismisses the empty state. An in-place swap, NOT a page reload: inside the console SPA a full
-// reload reboots the shell and the shell's router clobbers the `#demo` fragment before this surface ever
-// reads it, so the old reload-into-boot path never actually reached the demo (the graph stayed empty).
-// The fetch stays lazy - it only runs when the button is clicked, so a cold visit pays no graph download.
-async function loadDemoGraph() {
+// loadDemoGraph swaps the committed demo graph in place via renderLoadedGraph. NOT a page reload: the SPA
+// router clobbers #demo on reboot, so the old reload path never reached the demo. Fetch stays click-lazy.
+async function loadDemoGraph(): Promise<void> {
   setStatus("Loading the magus demo graph...");
   try {
-    // Resolve graph.json relative to THIS bundle (gen/graph/), not the document: the console mounts this
-    // surface into a page at a different path, where a document-relative "./graph.json" would miss.
+    // Relative to THIS bundle (gen/graph/), not the document - the console mounts the surface elsewhere.
     const r = await fetch(new URL("./graph.json", import.meta.url));
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();
     const empty = el("graph-empty-state");
     if (empty) empty.hidden = true;
-    // While the empty state showed, a :has() rule collapsed the app and hid the canvas (display:none), so
-    // the canvas is 0-wide right now; un-hiding relays out on a later frame, not synchronously. Wait for
-    // the canvas to gain real width before rendering, otherwise the force sim seeds its center on a
-    // zero-size viewport and the graph lands cramped in a corner that even Fit can't recover.
+    // Un-hiding un-collapses the canvas on a later frame; wait for real width or the sim centers on a
+    // zero viewport and the graph lands cramped in a corner.
     await waitForCanvasWidth();
-    // Render through boot's own pipeline (renderLoadedGraph), NOT replaceGraph: replaceGraph force-projects
-    // to projects-only and skips the fit-to-view reveal, so the nodes landed off-frame on this in-place
-    // swap. renderLoadedGraph reproduces the cold-boot render exactly (full graph, framed), which is what
-    // the old reload-into-boot achieved before the SPA started clobbering the #demo fragment on reload.
     renderLoadedGraph({ data, source: "demo" });
   } catch (e: any) {
     setStatus("Could not load the demo graph (" + e.message + ").", true);
   }
 }
 
-// waitForCanvasWidth resolves once the canvas has a non-zero client width (the pending relayout from
-// un-hiding the empty state has landed), or after ~1s as a safety cap so a hidden pane can never hang the
-// load. Frame-paced so it costs nothing and yields as soon as the box is real.
+// waitForCanvasWidth resolves once the canvas has real width (its relayout landed), or after ~1s as a cap.
 function waitForCanvasWidth(): Promise<void> {
   return new Promise((resolve) => {
     let tries = 0;
@@ -2321,19 +2308,9 @@ function finishInteractiveSetup() {
   syncConditionalViews();
 }
 
-// activate boots the graph explorer against the scaffold already in the document. el() resolves DOM
-// handles at call time via getElementById, so it needs no separate resolve step - just the scaffold
-// present. Exported so the console's graph PageModule can drive it after injecting the scaffold into
-// a host; the standalone page auto-boots below. Chrome (nav/search/drawer/settings) comes from the
-// shared main.js on the standalone page, which the console does not load, so there is no self-wired
-// chrome to guard (unlike the dashboard).
-// renderLoadedGraph runs boot's data-to-view pipeline for a freshly loaded graph result: flavor detect,
-// prepare, the default projection (with its >2500-node perf guard), the status/legend/list, layout +
-// simulation, off-canvas parking, and the fit-to-view reveal. It deliberately EXCLUDES the one-time
-// interaction wiring (finishInteractiveSetup / bootWireEvents), so it is safe to run AGAIN for an in-place
-// swap: the demo button (loadDemoGraph) reuses it, which is why the demo now renders identically to a cold
-// boot - full graph, framed by the reveal - instead of the mis-framed projection the old path produced.
-function renderLoadedGraph(loaded: { data: any; source: string }) {
+// renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
+// excluding the one-time interaction wiring, so the demo button can re-run it in place.
+function renderLoadedGraph(loaded: { data: any; source: string }): void {
   const flavor = detectFlavor(loaded.data);
   graphFlavor = flavor;
   let rawForPrepare = loaded.data;
@@ -2356,9 +2333,6 @@ function renderLoadedGraph(loaded: { data: any; source: string }) {
   if (unfoldBtn) unfoldBtn.hidden = projectionUnfolded;
 
   updateSnapshotBadge(loaded.source);
-  // Shared demo indicator in the app bar: unhide it when the loaded graph is the synthesized demo.
-  const demoPill = el("console-demo");
-  if (demoPill) demoPill.hidden = loaded.source !== "demo";
 
   // Status line: targets flavor shows a summary; knowledge/demo shows a brief confirmation or nothing.
   if (flavor === "targets") {
@@ -2392,6 +2366,12 @@ function renderLoadedGraph(loaded: { data: any; source: string }) {
   }
 }
 
+// activate boots the graph explorer against the scaffold already in the document. el() resolves DOM
+// handles at call time via getElementById, so it needs no separate resolve step - just the scaffold
+// present. Exported so the console's graph PageModule can drive it after injecting the scaffold into
+// a host; the standalone page auto-boots below. Chrome (nav/search/drawer/settings) comes from the
+// shared main.js on the standalone page, which the console does not load, so there is no self-wired
+// chrome to guard (unlike the dashboard).
 export async function activate() {
   resolveDom();
   readTheme();
@@ -2448,10 +2428,9 @@ export async function activate() {
   renderLoadedGraph(loaded);
   finishInteractiveSetup();
 
-  // Empty state: nothing was loaded (no #data/#src/#live), so instead of a graph we show an
-  // intuitive prompt - the command to open your own workspace, plus a button to try the demo.
-  // The full pipeline above ran on an empty graph, so interactions are wired; the demo (or a
-  // dropped file) loads via replaceGraph and dismisses this. See loadGraph / loadDemoGraph.
+  // Empty state: nothing loaded (no #data/#src/#live), so show the prompt instead. The pipeline ran on
+  // an empty graph, so interactions are wired; the demo loads via loadDemoGraph, a dropped file via
+  // replaceGraph, both dismissing this.
   if (loaded.source === "empty") {
     const empty = el("graph-empty-state");
     if (empty) empty.hidden = false;
@@ -2616,9 +2595,8 @@ function bootWireEvents() {
   if (openBtn && fileInput) openBtn.addEventListener("click", () => fileInput.click());
   if (fileInput) fileInput.addEventListener("change", () => readGraphFile(fileInput.files![0]));
 
-  // Empty state: "Explore the magus graph" fetches the committed demo graph.json ON DEMAND
-  // (not at boot) and renders it via replaceGraph, then dismisses the empty state. A dropped
-  // file or `magus graph open` link dismisses it the same way (loadDemoGraph / readGraphFile).
+  // "Explore the magus graph" fetches the committed demo graph.json on demand and renders it in place
+  // (loadDemoGraph), dismissing the empty state.
   const demoExplore = el("demo-explore-btn");
   if (demoExplore) demoExplore.addEventListener("click", () => loadDemoGraph());
 

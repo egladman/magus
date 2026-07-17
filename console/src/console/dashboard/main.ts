@@ -85,13 +85,9 @@ export function setVisible(visible: boolean): void {
 function renderStatusBar(s: DashboardState): void {
   lastState = s;
 
-  // Panel reveal is the dashboard's OWN per-pane DOM (one #dash-connect/#dash-panels), so it is safe
-  // to update even while backgrounded - no shared-id collision. Drive BOTH every render so the live
-  // tiles and the "No daemon connected" front door are strictly mutually exclusive: the old latch only
-  // ever revealed the tiles and never hid them again, so a dropped or never-live daemon left the stale,
-  // unpopulated tiles up alongside the disconnected message. Show the tiles only while a status frame is
-  // in hand AND the link is live (connected/demo) or a brief reconnect blip (keep the last data on
-  // screen while retrying); otherwise fall back to the front door.
+  // Drive both every render so the tiles and the "No daemon connected" front door stay mutually exclusive
+  // (the old latch only ever revealed, leaving stale tiles up when the daemon dropped). Show tiles only
+  // with a status frame in hand AND a live link (connected/demo) or a brief reconnect blip; else the door.
   const reconnecting = s.conn.state === "disconnected" && s.conn.detail === "reconnecting";
   const showPanels = !!s.status && (s.conn.state === "connected" || s.conn.state === "demo" || reconnecting);
   el("dash-connect").hidden = showPanels;
@@ -122,9 +118,6 @@ function renderStatusBar(s: DashboardState): void {
     if (s.conn.state === "connected" && s.status) { c.dataset.health = s.status.health.cls; } else { delete c.dataset.health; }
   }
 
-  // Demo-data flag: the daemon-free showcase, called out by the shared #console-demo pill in the
-  // app bar (the one demo affordance every console app shares), not a dashboard-only corner chip.
-  el("console-demo").hidden = !demoing;
 
   // Observing-since: a brief note of when the daemon began collecting these counters, so it is
   // clear the numbers are cumulative from then and are NOT persisted across daemon restarts.

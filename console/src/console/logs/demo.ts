@@ -110,11 +110,6 @@ export function startDemo(): void {
 
   stopDemo();
   state.demoActive = true;
-  // Reveal the shared demo indicator in the app bar (the one affordance every console app shares).
-  // The log viewer only enters demo via the #demo fragment and never leaves it without a reload,
-  // so it is shown once here; stopDemo (stream completion) leaves it up - the data is still demo.
-  const demoPill = document.getElementById("console-demo");
-  if (demoPill) demoPill.hidden = false;
   state.liveEvents = [];
   state.liveInvocation = journal.invocation ?? null; // frames the axis (start/end) and the command preamble
   state.livePaused = false;

@@ -61,26 +61,6 @@ const SURFACES: Launchable[] = [
 
 interface Mounted { host: HTMLElement; status: HTMLElement; tile: TileView; }
 
-// pfLabel builds a PatternFly Label chip carrying the given id, color modifier, and text. The id
-// sits on the OUTER .pf-v6-c-label span so a surface toggling `.hidden` hides the whole chip; the
-// text lives in the nested __content/__text (a surface never rewrites these chips' text, only shows/
-// hides them). Compact + outline reads as a quiet status pill, not a loud filled badge.
-function pfLabel(id: string, colorMod: string, text: string): HTMLElement {
-  const label = document.createElement("span");
-  label.id = id;
-  label.className = ("pf-v6-c-label pf-m-compact pf-m-outline " + colorMod).trim();
-  label.hidden = true;
-  label.setAttribute("aria-live", "polite");
-  const content = document.createElement("span");
-  content.className = "pf-v6-c-label__content";
-  const txt = document.createElement("span");
-  txt.className = "pf-v6-c-label__text";
-  txt.textContent = text;
-  content.append(txt);
-  label.append(content);
-  return label;
-}
-
 // The status bar shows the connected daemon's build: its version inline, the full fingerprint on
 // hover. Read from GET /api/v1/status (build_info) - the running binary reports its own identity, so
 // the bar reflects the daemon you are talking to. In the daemon-free demo it shows a demo value; with
@@ -163,19 +143,14 @@ function commandsIcon(): SVGElement {
 }
 
 // makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
-// (#console-conn, #console-demo, #console-observing, #console-count) and the
-// .console-shell-statusbar__right slot the log viewer injects its zoom control into. It is a real element (not an
-// innerHTML snapshot) so the surface's live handles + listeners survive tab switches. Only the ACTIVE
-// tab's status bar is attached to the footer, so getElementById resolves to the active surface's
-// status - the bottom bar is per-tab. (A surface streaming while its tab is hidden would still write
-// through getElementById to the active bar; no surface does that today except a live dashboard/log,
-// a known edge.)
+// (#console-conn, #console-observing, #console-count) and the .console-shell-statusbar__right slot the
+// log viewer injects its zoom control into. It is a real element (not an innerHTML snapshot) so the
+// surface's live handles + listeners survive tab switches. Only the ACTIVE tab's status bar is attached
+// to the footer, so getElementById resolves to the active surface's status - the bottom bar is per-tab.
 //
-// PatternFly (W2 shell rebuild): the #console-demo chip is a PF Label; the text items (#console-conn
-// with its liveness dot, #console-count, #console-observing) are plain
-// spans the surfaces write via textContent + [data-state]/[data-health], styled ID-scoped in
-// overrides.css (PF has no status-bar component). The wrapper + clusters are class-free (data hooks);
-// only .console-shell-statusbar__right stays a class because the log viewer queries it to inject its zoom control.
+// The text items (#console-conn with its liveness dot, #console-count, #console-observing) are plain
+// spans the surfaces write via textContent + [data-state]/[data-health], styled ID-scoped in overrides.css.
+// Only .console-shell-statusbar__right stays a class - the log viewer queries it to inject its zoom control.
 function makeStatusBar(): HTMLElement {
   const bar = document.createElement("div");
   const left = document.createElement("div");
@@ -183,7 +158,7 @@ function makeStatusBar(): HTMLElement {
   const conn = document.createElement("span");
   conn.id = "console-conn"; conn.setAttribute("aria-live", "polite");
   conn.textContent = "not connected";
-  left.append(conn, pfLabel("console-demo", "", "demo"));
+  left.append(conn);
   const right = document.createElement("div");
   right.dataset.cluster = ""; right.className = "console-shell-statusbar__right";
   for (const id of ["console-count", "console-observing"] as const) {

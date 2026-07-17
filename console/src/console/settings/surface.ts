@@ -186,9 +186,9 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     rawPre.replaceChildren();
     for (const line of diffLines(before, after)) {
       const sign = line.kind === "del" ? "-" : line.kind === "add" ? "+" : " ";
-      const el = h("span", "console-settings-diff__rawline", sign + " " + line.text);
-      el.dataset.diff = line.kind;
-      rawPre.append(el);
+      const row = h("span", "console-settings-diff__rawline", sign + " " + line.text);
+      row.dataset.diff = line.kind;
+      rawPre.append(row);
     }
   }
 
