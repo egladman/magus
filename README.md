@@ -298,7 +298,7 @@ magus never embeds a web server that ships a UI. The pages are a separate static
 
 #### Your data never leaves the loopback
 
-The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces before any request, or it receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: the daemon runs fine without it (`console.enabled: false`), and a binary built without `-tags mcp` has no browser API at all. See the [Console reference](https://eli.gladman.cc/magus/console/).
+The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces before any request, or it receives your graph inline through a URL fragment. Nothing is uploaded. You can drop the UI entirely: set `console.enabled: false` and the daemon runs fine without it, serving no browser API at all. See the [Console reference](https://eli.gladman.cc/magus/console/).
 
 ## Working with AI agents
 
