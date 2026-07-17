@@ -17,11 +17,29 @@
           </svg>
         </div>
         <h1 class="pf-v6-c-empty-state__title-text" id="dash-connect-title">No daemon connected</h1>
+        <!-- The same two "ways" out of the cold state every other surface offers (the log viewer is the
+             pattern): a command to go live, or the demo. A real BUTTON for the demo, not a sentence with
+             a link buried in it - it is one of the two things to do here, so it looks like the other one.
+             The loopback/privacy note that used to sit here now lives in the Reference panel: it is true
+             of the whole console, not of this screen, and it was the last thing anyone needed while
+             staring at "no daemon". -->
         <div class="pf-v6-c-empty-state__body">
           <p id="dash-connect-sub">Connect a running daemon to stream this dashboard's pool, cache, and health.</p>
+          <div class="pf-v6-c-empty-state__actions" data-empty-ways>
+            <div data-empty-way>
+              <span data-empty-way-label>Connect a daemon</span>
+              <pre data-empty-cmd><code>magus server start</code></pre>
+              <span data-empty-hint>Then open the live link it prints.</span>
+            </div>
+            <div data-empty-way>
+              <span data-empty-way-label>Try the demo</span>
+              <button type="button" id="dash-demo-btn" class="pf-v6-c-button pf-m-primary"><span class="pf-v6-c-button__text">See the demo</span></button>
+              <span data-empty-hint>Sample data, no daemon needed.</span>
+            </div>
+          </div>
         </div>
 
-        <!-- Connect panel: how to go live. Resume form appears when a host is remembered. -->
+        <!-- Resume: only appears once a host is remembered, so it stays out of the first-run screen. -->
         <div class="pf-v6-c-empty-state__footer">
           <div data-connect-panel>
             <form id="dash-resume" hidden data-resume>
@@ -33,12 +51,6 @@
               </div>
               <button type="button" class="pf-v6-c-button pf-m-link pf-m-inline" id="dash-resume-forget"><span class="pf-v6-c-button__text">Forget this daemon</span></button>
             </form>
-            <p data-connect-lead>Start the daemon, then open the live link it prints:</p>
-            <pre data-connect-cmd><code>magus server start</code></pre>
-            <p data-connect-demo>Just looking around? <button type="button" id="dash-demo-btn" class="pf-v6-c-button pf-m-link pf-m-inline"><span class="pf-v6-c-button__text">See a demo with sample data</span></button></p>
-            <!-- Privacy note: the dashboard only ever talks to a loopback daemon in the browser; nothing
-                 is sent anywhere. Stated here because it is not disclosed anywhere else in the UI. -->
-            <p data-connect-note>The dashboard talks to your daemon over loopback (127.0.0.1) in your browser - no data ever leaves your machine.</p>
           </div>
         </div>
       </div>

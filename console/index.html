@@ -202,6 +202,11 @@
       <p>Rebind any of them under <b>Settings &gt; Keybindings</b>: Record a new chord, Clear to disable one, or revert to the default.</p>
     </details>
     <details data-ref-section>
+      <summary>Where your data goes</summary>
+      <p>Nowhere. The console is a static page: it talks only to a daemon on <code>127.0.0.1</code>, in your browser, and there is no server to send anything to. The address is checked against loopback before any request - a hostname is refused outright.</p>
+      <p>Without a daemon it reads only what rides in the link you opened: a run's output or a graph travels in the URL's fragment, which a browser never sends to a server. Nothing is uploaded, and nothing is stored beyond this browser.</p>
+    </details>
+    <details data-ref-section>
       <summary>Tabs and panes</summary>
       <p>Each app opens as a <b>tab</b>. Opening one you already have focuses its tab instead of a second copy - every surface is single-instance.</p>
       <p>A tab splits into <b>panes</b>. A split divides the focused pane along its longer side, so the same action tiles side-by-side on a desktop and stacks on a phone. Tap or click a pane to focus it; drag the divider to re-weight the split.</p>

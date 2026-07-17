@@ -333,21 +333,11 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 [data-app-current] { --pf-v6-c-card--BorderStyle: dashed; cursor: default; }
 [data-app-current] svg { color: var(--pf-t--global--text--color--subtle); }
 
-/* Connect panel: how to go live, stacked and centered in the EmptyState footer. */
+/* Connect panel: it now holds only the resume form, centered in the EmptyState footer. The lead, the
+   command block, the demo link and the privacy note it used to style are gone - going live is one of the
+   shared [data-empty-ways] cards (console.css) like every other surface, and the privacy note moved to
+   the Reference panel. */
 [data-connect-panel] { max-width: 32rem; margin: 0 auto; text-align: center; }
-[data-connect-lead] { font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); margin: 0 0 0.5rem; }
-[data-connect-cmd] {
-  display: inline-block; margin: 0 auto 0.75rem; padding: 0.5rem 0.9rem;
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--secondary--default);
-}
-[data-connect-cmd] code { font-size: 0.85rem; font-family: var(--pf-t--global--font--family--mono); }
-[data-connect-demo] { margin: 0 auto; font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
-/* Privacy note under the connect panel: the local-only reassurance, quieter than the lead. */
-[data-connect-note] {
-  margin: 1rem 0 0; padding-top: 0.75rem; border-top: 1px solid var(--pf-t--global--border--color--default);
-  font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle);
-}
 /* Resume form: reconnect to a remembered daemon host. Input is a PF FormControl; buttons are PF. */
 [data-resume] { max-width: 30rem; margin: 0 auto 1.25rem; }
 [data-resume-row] { display: flex; gap: 0.4rem; align-items: stretch; }

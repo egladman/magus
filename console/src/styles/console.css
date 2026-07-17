@@ -26,6 +26,34 @@
      read those at runtime. Nothing consumes a --c-* name any more. */
 }
 
+/* --- The shared empty state ---------------------------------------------------------------------
+   Every surface's cold state is the same shape: a PF EmptyState over a row of "ways" out of it - each a
+   bordered card with a label, a command to run (or a button), and a hint. It lives HERE, in the sheet
+   every surface loads, because it belongs to all four. It used to be copy-pasted into logs.css and
+   graph.css, where the copies drifted: only one of them stacked on mobile, so the graph's prompt stayed
+   two-up and unreadable on a phone. Worse, both sheets are global and never unloaded, so whichever
+   loaded last was silently styling the other surface's empty state anyway. */
+[data-empty-ways] {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem;
+  margin-top: 1.4rem; text-align: left; width: 100%; max-width: 40rem;
+}
+[data-empty-way] {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+[data-empty-way-label] { color: var(--pf-t--global--text--color--regular); font-weight: 600; font-size: 0.85rem; }
+[data-empty-cmd] { margin: 0; }
+[data-empty-cmd] code { font-size: 0.8em; font-family: var(--pf-t--global--font--family--mono); }
+[data-empty-hint] { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+/* Stack the ways on a narrow viewport - side by side they are unreadable on a phone. */
+@media (max-width: 40rem) {
+  [data-empty-ways] { grid-template-columns: 1fr; }
+}
+/* A way's button (the demo) wraps rather than overrunning its card: PF buttons are white-space:nowrap. */
+[data-empty-way] .pf-v6-c-button { white-space: normal; }
+
 /* --- Console apps only: button contrast (body[data-console-app]; the docs site + playground are
    left with their lighter treatment). The acute accessibility problem was that a disabled
    button was just a faint, low-opacity ghost of the enabled one, so an unavailable control

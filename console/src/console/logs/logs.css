@@ -295,20 +295,6 @@
    loaders; the explicit rule wins over PF's display:flex. The two "ways" carry data-* hooks. */
 #log-empty { min-height: 100%; }
 #log-empty[hidden] { display: none; }
-[data-empty-ways] {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem;
-  margin-top: 1.4rem; text-align: left; width: 100%; max-width: 40rem;
-}
-[data-empty-way] {
-  display: flex; flex-direction: column; gap: 0.35rem;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--secondary--default);
-}
-[data-empty-way-label] { color: var(--pf-t--global--text--color--regular); font-weight: 600; font-size: 0.85rem; }
-[data-empty-cmd] { margin: 0; }
-[data-empty-cmd] code { font-size: 0.8em; font-family: var(--pf-t--global--font--family--mono); }
-[data-empty-hint] { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
 
 /* Empty state (shared: activity's Pico .console-render-empty). Fills + centers within the scroll area. */
 .console-render-empty {
@@ -352,10 +338,6 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 #log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-divider.pf-m-vertical { display: none; }
 #log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-button { justify-content: center; }
 
-/* Stack the two empty-state cards on a narrow viewport (content layout, not the toolbar). */
-@media (max-width: 40rem) {
-  [data-empty-ways] { grid-template-columns: 1fr; }
-}
 
 /* Activity surface (loads this shared render sheet, main.ts:288). The trail header is a PF
    Toolbar: the title left, the connection note + Refresh aligned end on ONE dense row. These
