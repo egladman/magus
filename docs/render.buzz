@@ -1543,7 +1543,7 @@ fun cspForRedirectStub(script: str) > str {
 
 // writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers
 // (mostly on Android and Windows) read to allow "install this site". Icons
-// reuse the hat mark (WS A/V); scope/start_url match the deploy base so a
+// use the gopher-magus mark; scope/start_url match the deploy base so a
 // nested install stays inside /magus/. Gated on SITE_URL so a same-origin
 // scope is well-defined; without it we'd default to "/" and mis-scope.
 fun writeManifest(site: Site) > void {
@@ -1553,7 +1553,16 @@ fun writeManifest(site: Site) > void {
     // (see gopherbuzz/testdata/54_raw_string.buzz).
     // Icons: favicon-32 and apple-touch-icon are the legacy set; icon-192/512 target
     // Android/Windows install prompts; icon-512-maskable carries a solid #13171f
-    // background so the hat mark stays centered in the safe zone for circular crops.
+    // background so the gopher-magus mark stays centered in the safe zone for
+    // circular crops.
+    //
+    // background_color is the PWA splash-screen fill shown while the app boots.
+    // The manifest spec has no light/dark media-query variant (unlike theme-color
+    // below in the HTML head), so it must be one value that reads fine in both
+    // schemes. #13171f matches the docs site's own dark background and the
+    // gopher-magus icon's canvas, so dark-mode users get a seamless splash and
+    // light-mode users get a brief on-brand dark flash instead of a blinding
+    // white one.
     final body = "\{\n"
         + "  \"name\": \"magus\",\n"
         + "  \"short_name\": \"magus\",\n"
@@ -1564,7 +1573,7 @@ fun writeManifest(site: Site) > void {
         + "  \"scope\": \"" + basePath + "\",\n"
         + "  \"display\": \"standalone\",\n"
         + "  \"categories\": [\"developer\", \"utilities\"],\n"
-        + "  \"background_color\": \"#ffffff\",\n"
+        + "  \"background_color\": \"#13171f\",\n"
         + "  \"theme_color\": \"#3178c6\",\n"
         + "  \"icons\": [\n"
         + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
