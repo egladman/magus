@@ -71,7 +71,7 @@ Because magus already knows every project, target, spell, and how they relate,
 it exposes that as a graph you can query. `magus query "kind:target lint"` finds
 nodes, `magus explain <node>` shows a node's edges and what reaches it, and
 `magus refs <symbol>` lists where a symbol is defined and used from a SCIP
-index. The same graph answers "is this file generated," "what does my diff
+index.[^scip] The same graph answers "is this file generated," "what does my diff
 touch," and "how do these two things relate" without grepping. See the
 [knowledge graph](docs/knowledge.md).
 
@@ -95,7 +95,7 @@ to install. See the [Download guide](docs/download.md).
 
 ### A first look
 
-Point magus at a repo that has a `magusfile.buzz` at its root, and each command
+Point magus at a repo that has a `magusfile.buzz` at its root,[^playground] and each command
 returns an answer and stops:
 
 ```sh
@@ -283,10 +283,10 @@ magus is fully featured from the terminal, so everything here is optional. Along
 The four surfaces ship as one console app; each link below opens it on the
 matching surface.
 
-- [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, and cache activity.
-- [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph open`).
-- [Log Viewer](https://eli.gladman.cc/magus/console/) reads or streams any past run's captured output (`magus query output <ref> --open`).
-- [Activity Trail](https://eli.gladman.cc/magus/console/) shows the daemon's recent actions: MCP calls, background jobs, and config changes.
+- [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, and cache activity.[^app-dashboard]
+- [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph open`).[^app-graph]
+- [Log Viewer](https://eli.gladman.cc/magus/console/) reads or streams any past run's captured output (`magus query output <ref> --open`).[^app-logs]
+- [Activity Trail](https://eli.gladman.cc/magus/console/) shows the daemon's recent actions: MCP calls, background jobs, and config changes.[^app-activity]
 
 ### How it stays on your machine
 
@@ -306,7 +306,7 @@ magus treats an AI agent and a new teammate as the same kind of user: someone wh
 
 - **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. Install them with `magus agent install claude` (or `codex`, `opencode`).
 - **The committed `MAGUS.md`** is a routing index, regenerated from the graph, that points an agent at the exact query for a given question.
-- **The MCP server** the daemon exposes lets an agent call magus tools directly over the protocol rather than shelling out.
+- **The MCP server** the daemon exposes lets an agent call magus tools directly over the protocol rather than shelling out.[^mcp]
 
 Full detail, including which tools exist and how to connect, is on the [Agents](docs/agents.md) page.
 
@@ -349,3 +349,17 @@ magus run ci
 ```
 
 [^docs-source]: Source: [docs/](https://github.com/egladman/magus/tree/main/docs).
+
+[^playground]: Magusfiles are written in Buzz. You can run it in your browser, no install, at the [Playground](https://eli.gladman.cc/magus/playground/); the [standard library modules](docs/buzz/modules/index.md) are the API reference.
+
+[^scip]: [SCIP](https://sourcegraph.com/docs/code-search/code-navigation/writing_an_indexer) is Sourcegraph's code-index format. magus indexes on its own once a project uses the `scip` op, stores the index in the cache, and refreshes it in the background; the [knowledge graph](docs/knowledge.md) page covers the symbol layer and the `@symbols` shard.
+
+[^app-dashboard]: What the tiles mean, and the metrics behind them: [Telemetry](docs/telemetry.md) and the [daemon](docs/daemon.md) page.
+
+[^app-graph]: The same graph the CLI queries, drawn. See [`magus graph`](docs/manpage/magus-graph.md) for the verbs and [knowledge graph](docs/knowledge.md) for the schema.
+
+[^app-logs]: A run's output is addressed by a short reference ID, which is what `<ref>` is above. See [output references](docs/output-refs.md).
+
+[^mcp]: Tool list, transport, and how to connect an agent: [MCP](docs/mcp.md).
+
+[^app-activity]: The trail is the daemon's own record, kept in memory per workspace. See the [daemon](docs/daemon.md) page.
