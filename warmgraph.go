@@ -81,6 +81,16 @@ func (w *warmGraph) Get(ctx context.Context, refresh bool) (*knowledge.Graph, er
 	return g, nil
 }
 
+// Healthy reports the warm graph's watcher state for the daemon's /readyz readiness
+// surface: watching is true once a file watcher is invalidating the cache on source
+// changes, valid is true when the cache currently holds a fresh graph (so the next Get
+// answers from memory instead of rebuilding). Guarded by the same mutex as Get/cached.
+func (w *warmGraph) Healthy() (watching, valid bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.watching, w.valid
+}
+
 // cached returns the warm graph if it is populated and known-fresh, else nil.
 func (w *warmGraph) cached() *knowledge.Graph {
 	w.mu.RLock()
@@ -156,6 +166,15 @@ func (w *warmGraph) stopWatching() {
 	w.mu.Lock()
 	w.watching, w.valid, w.graph = false, false, nil
 	w.mu.Unlock()
+}
+
+// KnowledgeGraphHealthy reports the daemon's warm-knowledge-graph watcher state, for the
+// /readyz readiness surface's "knowledge_graph" component. It goes through
+// warmKnowledgeGraph (the same lazily-created holder KnowledgeGraph reads), so calling it
+// before WatchKnowledgeGraph has ever run reports watching=false rather than panicking on
+// a nil holder, and calling it after does not create a second holder (sync.Once).
+func (m *Magus) KnowledgeGraphHealthy() (watching, valid bool) {
+	return m.warmKnowledgeGraph().Healthy()
 }
 
 // graphRelevant reports whether any changed path feeds the knowledge graph: a buzz

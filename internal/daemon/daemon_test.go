@@ -156,3 +156,84 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 		t.Fatal("daemon did not shut down")
 	}
 }
+
+// TestServeHealthRoutesCORS proves the health routes (a browser console PWA needs to read
+// /readyz cross-origin) carry the same CORSAllow allow-list the /api bridge uses, while
+// staying otherwise unguarded: no bearer token is required, and no rebind check blocks a
+// same-origin request. An allow-listed loopback Origin gets its Access-Control-Allow-Origin
+// reflected back; an origin that is not on the list gets no CORS header at all (an allow-list
+// reflect, never "*").
+func TestServeHealthRoutesCORS(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := fixtureWorkspace(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m, err := magus.Open(ctx, root)
+	require.NoError(t, err)
+
+	port := freePort(t)
+	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
+
+	d := New(mcp.Options{
+		Magus:    m,
+		Version:  "test",
+		HTTPAddr: addr,
+		HealthRoutes: map[string]http.Handler{
+			"/livez":  http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+			"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		},
+	})
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+
+	loopbackOrigin := fmt.Sprintf("http://127.0.0.1:%d", port)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// An allow-listed loopback origin, no bearer token: health routes stay tokenless even
+	// with CORS added, and the origin is reflected back.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/readyz", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", loopbackOrigin)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "health routes must stay reachable without a bearer token")
+	assert.Equal(t, loopbackOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "Origin", resp.Header.Get("Vary"))
+
+	// An origin NOT on the allow-list gets no CORS header at all: CORSAllow only ever
+	// reflects a matched Origin, never advertises "*".
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, base+"/livez", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", "http://evil.example")
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"), "an unlisted origin must not be reflected")
+
+	// The OPTIONS preflight a browser sends ahead of the cross-origin GET is answered here,
+	// not proxied to the underlying handler.
+	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/readyz", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", loopbackOrigin)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, loopbackOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("daemon did not shut down")
+	}
+}

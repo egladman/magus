@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -263,6 +264,9 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 // probeMCPReadiness GETs the endpoint's /readyz and returns the HTTP status, or 0 when
 // nothing answered (connection refused/timeout). 200 = ready, 503 = listening but no
 // workspace loaded; any other answered status is treated by the caller as reachable.
+// /readyz's body is now a JSON types.ReadinessReport (readinessHTTPHandler), but this
+// probe keys on the status code alone and never reads the body, so it needs no change:
+// the code is the same 200/503 gate it always was, just with a richer body alongside it.
 func probeMCPReadiness(ctx context.Context, addr string) int {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/readyz", nil)
 	if err != nil {
@@ -284,7 +288,9 @@ func probeMCPReadiness(ctx context.Context, addr string) int {
 }
 
 // healthHTTPHandler returns an http.HandlerFunc that writes 200 when healthy or 503 with a reason line.
-// Accepts ?workspace= to pin readiness to a specific workspace root.
+// Accepts ?workspace= to pin readiness to a specific workspace root. Used for /livez and
+// /healthz, whose plain-text body predates readinessHTTPHandler's JSON body and must not
+// change: a liveness probe must not depend on warm-up state, so it stays on this simple path.
 func healthHTTPHandler(kind probeKind, status statusFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		snapshot, err := status(r.Context())
@@ -296,4 +302,158 @@ func healthHTTPHandler(kind probeKind, status statusFunc) http.HandlerFunc {
 		}
 		fmt.Fprintln(w, reason)
 	}
+}
+
+// readinessExtras supplies the additional data sources for /readyz's JSON body: SCIP
+// symbol-index freshness, hosted-service state, and the warm-knowledge-graph watcher
+// state. None of these influence the pass/fail gate (still evaluateHealth's
+// workspace-loaded check below) - they only enrich the body so a browser client (the
+// console PWA) can render real per-subsystem health instead of a bare text line. A nil
+// func degrades its component to "disabled" rather than panicking, so a caller that only
+// has some of the sources wired (or a test) can pass a partial value.
+type readinessExtras struct {
+	symbolIndexes  func(ctx context.Context) []types.SymbolIndexStatus
+	services       func() []types.StatusService
+	knowledgeGraph func() (watching, valid bool)
+}
+
+// readinessHTTPHandler is /readyz's handler. It keeps the EXACT pass/fail gate and status
+// codes healthHTTPHandler(probeReadiness, ...) used to serve - a kubelet reads only the
+// code, and that contract does not change here - but writes a JSON types.ReadinessReport
+// body instead of a plain reason line, so a browser client can read component-level detail
+// via CORS (which a plain 503 line does not give it any structure to parse). Accepts
+// ?workspace= exactly like healthHTTPHandler, pinning the gate to one root.
+func readinessHTTPHandler(status statusFunc, extra readinessExtras) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		snapshot, err := status(ctx)
+		ok, _ := evaluateHealth(snapshot, err, probeReadiness, r.URL.Query().Get("workspace"))
+		report := buildReadinessReport(ctx, ok, snapshot, extra)
+		w.Header().Set("Content-Type", "application/json")
+		if ok {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		_ = json.NewEncoder(w).Encode(report)
+	}
+}
+
+// buildReadinessReport assembles the /readyz JSON body. Ready mirrors the gate the caller
+// already evaluated with evaluateHealth (unchanged by this function); Components are
+// purely informational - a kubelet ignores them, but the console dashboard renders them
+// as per-subsystem health. Each component degrades independently of the others: a nil
+// source in extra (e.g. no hosted-services registry on this daemon) reads as "disabled",
+// never an error, and a nil snapshot (daemon unreachable) is handled the same way.
+func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.StatusOutput, extra readinessExtras) types.ReadinessReport {
+	report := types.ReadinessReport{Ready: ready}
+	report.Components = append(report.Components, workspacesComponent(snapshot))
+
+	var indexes []types.SymbolIndexStatus
+	if extra.symbolIndexes != nil {
+		indexes = extra.symbolIndexes(ctx)
+	}
+	report.Components = append(report.Components, symbolIndexComponent(indexes))
+
+	var services []types.StatusService
+	if extra.services != nil {
+		services = extra.services()
+	}
+	report.Components = append(report.Components, servicesComponent(services))
+
+	var watching, valid bool
+	if extra.knowledgeGraph != nil {
+		watching, valid = extra.knowledgeGraph()
+	}
+	report.Components = append(report.Components, knowledgeGraphComponent(watching, valid))
+
+	return report
+}
+
+// workspacesComponent reports the same workspace-loaded fact the readiness gate itself
+// checks (evaluateHealth), restated as a component so the JSON body is self-describing
+// without a client having to re-derive it from Ready alone.
+func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent {
+	c := types.ReadinessComponent{Name: "workspaces"}
+	switch {
+	case snapshot == nil:
+		c.Status, c.Detail = "down", "daemon unreachable"
+	case snapshot.Mode == "proc":
+		c.Status, c.Detail = "down", "daemon is in per-process mode"
+	case len(snapshot.Workspaces) == 0:
+		c.Status, c.Detail = "down", "no workspaces loaded"
+	default:
+		c.Status, c.Detail = "ok", fmt.Sprintf("%d loaded", len(snapshot.Workspaces))
+	}
+	return c
+}
+
+// symbolIndexComponent summarizes SCIP index freshness across every symbol-capable
+// project: ok when all are up to date, degraded when any are out of date or not yet
+// built, disabled when there is no symbol-capable project to report on.
+func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComponent {
+	c := types.ReadinessComponent{Name: "symbol_index"}
+	if len(indexes) == 0 {
+		c.Status, c.Detail = "disabled", "no symbol-capable project"
+		return c
+	}
+	fresh := 0
+	for _, idx := range indexes {
+		if idx.Freshness == types.SymbolIndexFresh {
+			fresh++
+		}
+	}
+	if fresh == len(indexes) {
+		c.Status = "ok"
+	} else {
+		c.Status = "degraded"
+	}
+	c.Detail = fmt.Sprintf("%d of %d up to date", fresh, len(indexes))
+	return c
+}
+
+// servicesComponent summarizes hosted long-running services: ok when none have failed,
+// degraded when some have failed but others are still up, down when every service has
+// failed, disabled when the daemon hosts no services at all.
+func servicesComponent(services []types.StatusService) types.ReadinessComponent {
+	c := types.ReadinessComponent{Name: "services"}
+	if len(services) == 0 {
+		c.Status, c.Detail = "disabled", "no hosted services"
+		return c
+	}
+	var running, failed int
+	for _, s := range services {
+		if s.State == "failed" {
+			failed++
+		} else {
+			running++
+		}
+	}
+	switch {
+	case failed == 0:
+		c.Status = "ok"
+	case running > 0:
+		c.Status = "degraded"
+	default:
+		c.Status = "down"
+	}
+	c.Detail = fmt.Sprintf("%d running, %d failed", running, failed)
+	return c
+}
+
+// knowledgeGraphComponent reports the warm-knowledge-graph watcher state: ok when a
+// watcher is active and the cache is currently fresh, degraded when a watcher is active
+// but the cache is mid-rebuild (a query still answers, just not from memory), down when
+// no watcher is running at all (every query falls back to a cache-first rebuild).
+func knowledgeGraphComponent(watching, valid bool) types.ReadinessComponent {
+	c := types.ReadinessComponent{Name: "knowledge_graph"}
+	switch {
+	case watching && valid:
+		c.Status, c.Detail = "ok", "watcher active, graph fresh"
+	case watching:
+		c.Status, c.Detail = "degraded", "watcher active, graph rebuilding"
+	default:
+		c.Status, c.Detail = "down", "no watcher; falling back to cache-first rebuild per query"
+	}
+	return c
 }

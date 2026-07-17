@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -104,6 +105,182 @@ func TestHealthHTTPHandlerUnreachable(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h(rec, req)
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestWorkspacesComponent(t *testing.T) {
+	cases := []struct {
+		name     string
+		snapshot *types.StatusOutput
+		want     types.ReadinessComponent
+	}{
+		{"nil-snapshot", nil, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "daemon unreachable"}},
+		{"proc-mode", &types.StatusOutput{Mode: "proc"}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "daemon is in per-process mode"}},
+		{"no-workspaces", &types.StatusOutput{Mode: "daemon"}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
+		{"two-workspaces", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, workspacesComponent(c.snapshot))
+		})
+	}
+}
+
+func TestSymbolIndexComponent(t *testing.T) {
+	cases := []struct {
+		name    string
+		indexes []types.SymbolIndexStatus
+		want    types.ReadinessComponent
+	}{
+		{"none", nil, types.ReadinessComponent{Name: "symbol_index", Status: "disabled", Detail: "no symbol-capable project"}},
+		{"all-fresh", []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}, {Freshness: types.SymbolIndexFresh}}, types.ReadinessComponent{Name: "symbol_index", Status: "ok", Detail: "2 of 2 up to date"}},
+		{"one-stale-one-not-built", []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}, {Freshness: types.SymbolIndexStale}, {Freshness: types.SymbolIndexNotBuilt}}, types.ReadinessComponent{Name: "symbol_index", Status: "degraded", Detail: "1 of 3 up to date"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, symbolIndexComponent(c.indexes))
+		})
+	}
+}
+
+func TestServicesComponent(t *testing.T) {
+	cases := []struct {
+		name     string
+		services []types.StatusService
+		want     types.ReadinessComponent
+	}{
+		{"none", nil, types.ReadinessComponent{Name: "services", Status: "disabled", Detail: "no hosted services"}},
+		{"all-running", []types.StatusService{{State: "running"}, {State: "idle"}}, types.ReadinessComponent{Name: "services", Status: "ok", Detail: "2 running, 0 failed"}},
+		{"some-failed", []types.StatusService{{State: "running"}, {State: "failed"}}, types.ReadinessComponent{Name: "services", Status: "degraded", Detail: "1 running, 1 failed"}},
+		{"all-failed", []types.StatusService{{State: "failed"}, {State: "failed"}}, types.ReadinessComponent{Name: "services", Status: "down", Detail: "0 running, 2 failed"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, servicesComponent(c.services))
+		})
+	}
+}
+
+func TestKnowledgeGraphComponent(t *testing.T) {
+	cases := []struct {
+		name     string
+		watching bool
+		valid    bool
+		want     types.ReadinessComponent
+	}{
+		{"watching-and-valid", true, true, types.ReadinessComponent{Name: "knowledge_graph", Status: "ok", Detail: "watcher active, graph fresh"}},
+		{"watching-not-valid", true, false, types.ReadinessComponent{Name: "knowledge_graph", Status: "degraded", Detail: "watcher active, graph rebuilding"}},
+		{"not-watching", false, false, types.ReadinessComponent{Name: "knowledge_graph", Status: "down", Detail: "no watcher; falling back to cache-first rebuild per query"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, knowledgeGraphComponent(c.watching, c.valid))
+		})
+	}
+}
+
+// TestReadinessHTTPHandler verifies /readyz's JSON body: the whole types.ReadinessReport
+// (Ready plus every component) for a healthy snapshot with all extras wired, for an
+// unhealthy one, and for the nil-extras case (no source wired degrades every extra
+// component to disabled/down rather than erroring).
+func TestReadinessHTTPHandler(t *testing.T) {
+	statusOf := func(workspaces ...string) statusFunc {
+		reply := makeReply(1, workspaces...)
+		return func(context.Context) (*types.StatusOutput, error) {
+			return statusOutputFromReply(reply), nil
+		}
+	}
+	do := func(h http.HandlerFunc) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		return rec
+	}
+
+	t.Run("ready-with-all-extras-healthy", func(t *testing.T) {
+		extra := readinessExtras{
+			symbolIndexes: func(context.Context) []types.SymbolIndexStatus {
+				return []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}}
+			},
+			services: func() []types.StatusService {
+				return []types.StatusService{{State: "running"}}
+			},
+			knowledgeGraph: func() (bool, bool) { return true, true },
+		}
+		rec := do(readinessHTTPHandler(statusOf("/ws"), extra))
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+		var report types.ReadinessReport
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.Equal(t, types.ReadinessReport{
+			Ready: true,
+			Components: []types.ReadinessComponent{
+				{Name: "workspaces", Status: "ok", Detail: "1 loaded"},
+				{Name: "symbol_index", Status: "ok", Detail: "1 of 1 up to date"},
+				{Name: "services", Status: "ok", Detail: "1 running, 0 failed"},
+				{Name: "knowledge_graph", Status: "ok", Detail: "watcher active, graph fresh"},
+			},
+		}, report)
+	})
+
+	t.Run("not-ready-despite-healthy-extras", func(t *testing.T) {
+		// No workspaces loaded fails the gate even though every extra component
+		// reports healthy - the gate is workspace-loaded alone, unchanged by this body.
+		extra := readinessExtras{knowledgeGraph: func() (bool, bool) { return true, true }}
+		rec := do(readinessHTTPHandler(statusOf(), extra))
+		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+
+		var report types.ReadinessReport
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.False(t, report.Ready)
+	})
+
+	t.Run("nil-extras-degrade-not-error", func(t *testing.T) {
+		rec := do(readinessHTTPHandler(statusOf("/ws"), readinessExtras{}))
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var report types.ReadinessReport
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &report))
+		require.Equal(t, types.ReadinessReport{
+			Ready: true,
+			Components: []types.ReadinessComponent{
+				{Name: "workspaces", Status: "ok", Detail: "1 loaded"},
+				{Name: "symbol_index", Status: "disabled", Detail: "no symbol-capable project"},
+				{Name: "services", Status: "disabled", Detail: "no hosted services"},
+				{Name: "knowledge_graph", Status: "down", Detail: "no watcher; falling back to cache-first rebuild per query"},
+			},
+		}, report)
+	})
+}
+
+// TestReadinessHTTPHandlerMatchesHealthHTTPHandlerGate is the hard-constraint check: the
+// JSON body must ride ALONGSIDE the existing pass/fail gate, never change it. It runs the
+// old plain-text handler and the new JSON handler against identical snapshots and asserts
+// their status codes never diverge, across both the ready and not-ready cases.
+func TestReadinessHTTPHandlerMatchesHealthHTTPHandlerGate(t *testing.T) {
+	scenarios := []struct {
+		name       string
+		workspaces []string
+	}{
+		{"no-workspaces", nil},
+		{"one-workspace", []string{"/ws"}},
+		{"two-workspaces", []string{"/ws", "/ws2"}},
+	}
+	for _, s := range scenarios {
+		t.Run(s.name, func(t *testing.T) {
+			statusFn := func(context.Context) (*types.StatusOutput, error) {
+				return statusOutputFromReply(makeReply(1, s.workspaces...)), nil
+			}
+
+			oldRec := httptest.NewRecorder()
+			healthHTTPHandler(probeReadiness, statusFn)(oldRec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+			newRec := httptest.NewRecorder()
+			readinessHTTPHandler(statusFn, readinessExtras{})(newRec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+			require.Equal(t, oldRec.Code, newRec.Code, "the /readyz JSON body must not change the pass/fail gate")
+		})
+	}
 }
 
 // TestResolveDeclaredWorkspacesMergesAndDedupes verifies that cfg and env

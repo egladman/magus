@@ -139,8 +139,22 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 		// depend on warm-up state, or it would crash-loop pods. Use
 		// /readyz for the workspace-loaded readiness gate.
 		HealthRoutes: map[string]http.Handler{
-			"/livez":   healthHTTPHandler(probeLiveness, status),
-			"/readyz":  healthHTTPHandler(probeReadiness, status),
+			"/livez": healthHTTPHandler(probeLiveness, status),
+			// /readyz carries component-level detail (symbol-index freshness, hosted
+			// services, the warm knowledge-graph watcher) alongside the same pass/fail
+			// gate, so the console dashboard can render real per-subsystem health
+			// instead of a bare text line. m, daemonServices, and the warm graph are
+			// all in scope right here, so the wiring stays local to this call.
+			"/readyz": readinessHTTPHandler(status, readinessExtras{
+				symbolIndexes: m.SymbolIndexStatus,
+				services: func() []types.StatusService {
+					if daemonServices == nil {
+						return nil
+					}
+					return serviceStatuses(daemonServices)
+				},
+				knowledgeGraph: m.KnowledgeGraphHealthy,
+			}),
 			"/healthz": healthHTTPHandler(probeLiveness, status),
 		},
 	}, daemonOpts...))

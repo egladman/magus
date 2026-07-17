@@ -124,8 +124,23 @@ func (s *Daemon) Serve(ctx context.Context) error {
 		return err
 	}
 	httpServer.Handle("/mcp", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, mcpHandler)))
+
+	// CORS allows the hosted explorer origin plus the two loopback origins derived from
+	// the server port. Built here (not only inside the console block below) so /livez and
+	// /readyz get the same allow-list even when the console mount is disabled: a browser
+	// client (the console PWA) needs to read them cross-origin, but they stay otherwise
+	// unguarded - no rebind check, no bearer token - so an orchestrator can still probe them
+	// freely. CORSAllow itself only ever reflects an allow-listed Origin, never "*", so this
+	// widens readability, not who may write.
+	siteOrigin, _ := opts.SiteOrigin()
+	port := addr.Port()
+	cors := httpx.CORSAllow(
+		siteOrigin,
+		fmt.Sprintf("http://localhost:%d", port),
+		fmt.Sprintf("http://127.0.0.1:%d", port),
+	)
 	for path, h := range opts.HealthRoutes {
-		httpServer.Handle(path, h)
+		httpServer.Handle(path, cors(h))
 	}
 
 	// Console: three frozen GET routes for the browser Graph Explorer.
@@ -172,15 +187,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 			svc := console.NewService(opts.Magus, opts.Config, opts.StatusBase, opts.Version, svcOpts...)
 
-			// CORS allows the hosted explorer origin plus the two loopback origins derived
-			// from the server port. Metrics streaming is off in production (no snapshot fn).
-			siteOrigin, _ := opts.SiteOrigin()
-			port := addr.Port()
-			cors := httpx.CORSAllow(
-				siteOrigin,
-				fmt.Sprintf("http://localhost:%d", port),
-				fmt.Sprintf("http://127.0.0.1:%d", port),
-			)
+			// cors (siteOrigin + the two loopback origins for this port) was built above,
+			// before the health-route loop, so it is shared rather than rebuilt here.
 
 			// The bridge routes share the same auth and DNS-rebind middleware as
 			// /mcp, header-only included: the explorer authenticates every /api

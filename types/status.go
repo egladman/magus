@@ -71,6 +71,25 @@ type StatusReport struct {
 	MCPEndpoint *MCPEndpointStatus `json:"mcp_endpoint,omitempty" yaml:"mcp_endpoint,omitempty"`
 }
 
+// ReadinessReport is the JSON body of GET /readyz: Ready mirrors the pass/fail gate a
+// kubelet's status-code check already enforces (200 iff Ready), and Components adds
+// component-level detail an orchestrator ignores but a browser client (the console PWA)
+// can render as per-subsystem daemon health. Adding this body does not change the gate -
+// it is purely additive alongside the existing 200/503 status code.
+type ReadinessReport struct {
+	Ready      bool                 `json:"ready"`
+	Components []ReadinessComponent `json:"components"`
+}
+
+// ReadinessComponent is one subsystem's readiness within a ReadinessReport. Status is one
+// of: ok, degraded, down, idle, disabled. Detail is a short plain-ASCII human-readable line
+// (e.g. "2 of 3 up to date"), never the sole signal - a client should key off Status.
+type ReadinessComponent struct {
+	Name   string `json:"name"`   // "workspaces" | "symbol_index" | "services" | "knowledge_graph"
+	Status string `json:"status"` // "ok" | "degraded" | "down" | "idle" | "disabled"
+	Detail string `json:"detail"`
+}
+
 // MCPEndpointStatus is the runtime health of the MCP HTTP endpoint agent hosts connect
 // to. State is one of: serving (listening and a workspace is loaded), not-ready
 // (listening but no workspace yet), unreachable (nothing is listening), or disabled
