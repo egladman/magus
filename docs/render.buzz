@@ -1972,7 +1972,7 @@ fun renderSiteNav(root: str, active: str, withRef: bool) > str {
 {{/withRef}}        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
           <li class="nav-menu-label" aria-hidden="true">Menu</li>
-{{#links}}        <li><a href="{{href}}"{{#current}} aria-current="page"{{/current}}>{{label}}</a></li>
+{{#links}}        <li><a href="{{href}}"{{#current}} aria-current="page"{{/current}}{{#blank}} target="_blank" rel="noopener" title="Opens in a new tab"{{/blank}}>{{label}}{{#blank}} <span class="ext-arrow" aria-hidden="true">&#x2197;</span>{{/blank}}</a></li>
 {{/links}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
 {{{settings}}}
@@ -1987,7 +1987,10 @@ fun renderSiteNav(root: str, active: str, withRef: bool) > str {
     links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
     links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
     links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
-    links.append({"href": root + "console/", "label": "Console", "current": active == "console"});
+    // Console opens in a NEW TAB (blank), flagged with the north-east "opens elsewhere" arrow: it is an
+    // app, not a docs page - it holds tabs, panes, and a live daemon link, so navigating the docs away
+    // into it (and back) would throw that state out. The only nav link that leaves the site.
+    links.append({"href": root + "console/", "label": "Console", "current": active == "console", "blank": true});
     // The console SPA (a separate top-level project, copied to /console/ at deploy) is the single
     // public entry point to magus's browser apps: it hosts the dashboard, graph explorer, log viewer,
     // and activity trail as tabs, so none of them get their own top-nav item. The docs site no longer

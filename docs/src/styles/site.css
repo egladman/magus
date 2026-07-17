@@ -1147,6 +1147,16 @@ article li {
   font-size: 0.95em;
   vertical-align: -0.02em;
 }
+/* Leaves-the-site arrow (nearr), the counterpart to .xref-arrow above: north-east means "opens
+   elsewhere", the same glyph Open-in-Playground uses, so the two arrows stay readable as one system -
+   right means "another page here", up-right means "a new tab". Muted, since it annotates the label
+   rather than competing with it. */
+.ext-arrow {
+  display: inline-block;
+  font-size: 0.85em;
+  vertical-align: 0.05em;
+  opacity: 0.7;
+}
 
 /* Persistent header-dropdown footer: a compact syntax hint plus the explicit door to
    the full /search/ page for the current query. This is what makes "dropdown = quick
