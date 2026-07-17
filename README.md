@@ -62,8 +62,7 @@ and still catches breakage in a project you never opened. See [CI](docs/targets/
 Every target declares its inputs and outputs. magus hashes the inputs, and if
 it has already seen that hash it replays the stored output instead of running
 the work again. The cache is a plain content-addressed store on disk (SHA-256),
-and a team can share it through a [remote cache](docs/remote-cache.md) so a
-result built once on CI is reused on everyone's laptop.
+and entries are signed, so a replayed result is one magus can prove it produced.
 
 ### The knowledge graph
 
