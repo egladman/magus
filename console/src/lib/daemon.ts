@@ -89,7 +89,7 @@ export function validateLiveHost(hostPort: string): string | null {
 
 // ---- reachability probe ----------------------------------------------------
 
-export type ProbeResult = { ok: true } | { ok: false; reason: string };
+export type ProbeResult = { ok: true; url: string } | { ok: false; reason: string };
 
 // probeDaemon answers "is anything listening at this host:port?" for the Settings test-connection
 // control. /livez is the daemon's only tokenless route (health checks are mounted unguarded so a kubelet
@@ -103,14 +103,18 @@ export async function probeDaemon(hostPort: string, timeoutMs = 3000): Promise<P
   if (!host) {
     return { ok: false, reason: "Not a loopback address. Use 127.0.0.1 or [::1] with a port - hostnames (including localhost) are not accepted." };
   }
+  const url = "http://" + host + "/livez";
   try {
-    await fetch("http://" + host + "/livez", { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
-    return { ok: true };
+    await fetch(url, { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
+    return { ok: true, url };
   } catch (e: any) {
     if (e && (e.name === "TimeoutError" || e.name === "AbortError")) {
-      return { ok: false, reason: "No response from " + host + " within " + Math.round(timeoutMs / 1000) + "s. Check the port, or something is dropping the connection." };
+      return { ok: false, reason: "No response from " + url + " within " + Math.round(timeoutMs / 1000) + "s. Check the port, or something is dropping the connection." };
     }
-    return { ok: false, reason: "Could not reach " + host + ". Is the daemon running? Start it with: magus server start" };
+    // Deliberately no status code or errno: an opaque request surfaces one bare TypeError for every
+    // network-layer failure (refused, CORS-blocked, mixed content). The browser withholds the detail, so
+    // naming a cause here would be a guess.
+    return { ok: false, reason: "Could not reach " + url + ". Is the daemon running? Start it with: magus server start" };
   }
 }
 

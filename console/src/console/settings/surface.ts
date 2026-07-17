@@ -264,9 +264,9 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     testBtn.disabled = true;
     void probeDaemon(raw).then((res) => {
       testBtn.disabled = false;
-      // "Reachable", not "connected": /livez answers opaquely cross-origin, so this proves a server
-      // answered at that address, not that it is a healthy magus daemon.
-      if (res.ok) showToast("Reachable: a server answered at " + raw + ".");
+      // "Answered", not "connected" or "200": the response is opaque cross-origin, so the status code
+      // and body are unreadable - this proves a server answered at that address, nothing more.
+      if (res.ok) showToast("Answered: " + res.url + " (status not readable cross-origin).");
       else showToast(res.reason, "error");
     });
   });

@@ -23,6 +23,7 @@ import { leaves, type Pane } from "./tiling";
 import { initRefDrawer } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { initPaneMenu } from "../ui/pane-menu";
+import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
 import { parseHash, wantsDemo, validateLiveHost, getLiveToken, authHeaders } from "../lib/daemon";
 import type { PageController, PageModule } from "./page";
@@ -329,6 +330,15 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   const bar = createTabBar(ws, {
     onSelect: (id) => activateTab(id),
     onClose: (id) => closeTabById(id),
+    // Move a tab out into its own OS window: open the app window, then drop the tab. The window boots
+    // the surface fresh (app mode mounts one surface and skips the workspace), so a tiled tab's other
+    // panes do not travel with it - the same thing closing the tab would have discarded.
+    onMoveToWindow: (id) => {
+      const t = ws.get().tabs.find((x) => x.id === id);
+      if (!t) return;
+      openSurfaceWindow(t.pageId);
+      closeTabById(id);
+    },
   });
   tabBarHost.append(bar.el);
 

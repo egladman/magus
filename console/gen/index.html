@@ -72,29 +72,42 @@
         </ul>
       </div>
     </div>
-    <!-- Applications menu: a PatternFly Menu popover (like the settings gear) that links back to the
-         documentation site. console.js's initAppMenu() wires #console-appmenu-btn/#console-appmenu
-         (open/close, aria-expanded, Escape, click-outside, focus return). The item is a plain link;
-         clicking it navigates to the docs. (No Playground link - it lives under the docs site.) -->
+    <!-- Applications menu: a PatternFly Menu popover (like the settings gear). Each row is TWO actions,
+         the same split the launcher cards use: clicking the row opens the app as a TAB (single-instance -
+         it focuses the tab if already open), and the trailing icon opens it in its own window. Opening a
+         new OS window was the row's default before, which surprised people into stray windows. Wired by
+         console.js's initAppMenu() (open/close, aria-expanded, Escape, click-outside, focus return). -->
     <button id="console-appmenu-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="console-appmenu" aria-expanded="false" aria-haspopup="true" aria-label="Applications" title="Applications">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg></span>
     </button>
     <div class="pf-v6-c-menu" id="console-appmenu" hidden aria-label="Applications">
       <div class="pf-v6-c-menu__content">
         <section class="pf-v6-c-menu__group">
-          <h3 class="pf-v6-c-menu__group-title console-appmenu__group-title" aria-hidden="true">Open in new window</h3>
+          <h3 class="pf-v6-c-menu__group-title console-appmenu__group-title" aria-hidden="true">Applications</h3>
           <ul class="pf-v6-c-menu__list" role="menu">
             <li class="pf-v6-c-menu__list-item" role="none">
-              <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-app-window="logs"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Log Viewer</span></span></button>
+              <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-app-open="logs"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Log Viewer</span></span></button>
+              <span class="pf-v6-c-menu__item-action">
+                <button class="pf-v6-c-button pf-m-plain" type="button" data-app-window="logs" aria-label="Open Log Viewer in a new window" title="Open in a new window"><span class="pf-v6-c-menu__item-action-icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></span></button>
+              </span>
             </li>
             <li class="pf-v6-c-menu__list-item" role="none">
-              <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-app-window="graph"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Graph Explorer</span></span></button>
+              <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-app-open="graph"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Graph Explorer</span></span></button>
+              <span class="pf-v6-c-menu__item-action">
+                <button class="pf-v6-c-button pf-m-plain" type="button" data-app-window="graph" aria-label="Open Graph Explorer in a new window" title="Open in a new window"><span class="pf-v6-c-menu__item-action-icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></span></button>
+              </span>
             </li>
             <li class="pf-v6-c-menu__list-item" role="none">
-              <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-app-window="dashboard"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Dashboard</span></span></button>
+              <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-app-open="dashboard"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Dashboard</span></span></button>
+              <span class="pf-v6-c-menu__item-action">
+                <button class="pf-v6-c-button pf-m-plain" type="button" data-app-window="dashboard" aria-label="Open Dashboard in a new window" title="Open in a new window"><span class="pf-v6-c-menu__item-action-icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></span></button>
+              </span>
             </li>
             <li class="pf-v6-c-menu__list-item" role="none">
-              <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-app-window="activity"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Activity Trail</span></span></button>
+              <button class="pf-v6-c-menu__item" role="menuitem" type="button" data-app-open="activity"><span class="pf-v6-c-menu__item-main"><span class="pf-v6-c-menu__item-text">Activity Trail</span></span></button>
+              <span class="pf-v6-c-menu__item-action">
+                <button class="pf-v6-c-button pf-m-plain" type="button" data-app-window="activity" aria-label="Open Activity Trail in a new window" title="Open in a new window"><span class="pf-v6-c-menu__item-action-icon"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></span></button>
+              </span>
             </li>
           </ul>
         </section>

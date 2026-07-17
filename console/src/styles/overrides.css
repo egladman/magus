@@ -78,12 +78,21 @@
  * right-aligned so it stays inside the viewport. Only the POSITION is here; the menu chrome is
  * PatternFly. (The old settings popover, #settings-panel, was retired when Settings became a real
  * surface/tab - the gear now opens that tab. The theme cycle moved into the surface too.) */
+/* The tab context menu (right-click / long-press a tab) is positioned at the pointer by tabBar.ts, so it
+   is fixed and body-mounted rather than anchored to a control like the two title-bar popovers. */
+.console-tabbar__ctx {
+  position: fixed; min-width: 12rem; max-width: calc(100vw - 1rem);
+  z-index: var(--pf-t--global--z-index--400); /* over the title bar and the two title-bar popovers (300) */
+}
 #console-appmenu,
 #console-panesmenu {
   position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
   min-width: 11rem; max-width: calc(100vw - 1rem);
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
+/* Wider than the panes menu: PF reserves inline-end space on any row carrying an __item-action, and at
+   11rem that squeezed the longest app name to "Graph Expl...". */
+#console-appmenu { min-width: 15rem; }
 /* The Panes menu stamps each item's chord after the label - the menu is the discoverable route, the
    chord is the fast one, so showing both teaches the shortcut instead of hiding it. Blank on a binding
    the user cleared. The label opts out of PF's ellipsis truncation: it is short and fixed, and the chord

@@ -360,7 +360,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-launcher-demo:focus-visible .console-launcher-demo__label { max-width: 9rem; opacity: 1; }
 #console-outlet [data-surface="home"] h1 { max-width: 44rem; margin: 0 0 0.2rem; font-size: 1.4rem; }
 #console-outlet [data-surface="home"] > p { max-width: 44rem; margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
-#console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 52rem; }
+/* The gallery owns the gap to the demo pill below it. It has to live HERE, not on the pill's margin-top:
+   that margin is `auto` (it floats the pill to the bottom of a short column) and collapses to nothing the
+   moment the cards overflow - which is exactly the mobile case, leaving the pill flush against the last
+   card. A margin-bottom here cannot collapse, so the pill keeps its own space at every card count. */
+#console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 52rem; margin-bottom: 2.5rem; }
 
 /* App-drawer section label: distinguish the "Open in new window" group heading from the app entries
    below it - smaller, uppercase, muted, and non-interactive-looking, so it reads as a divider label. */

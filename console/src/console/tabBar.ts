@@ -28,10 +28,12 @@ export function tabViews(ws: Workspace): TabView[] {
   return ws.tabs.map((t) => ({ id: t.id, title: t.title, active: t.id === ws.activeId }));
 }
 
-// Callbacks the console supplies: a tab became active (mount/show it), or a tab closed (unmount it).
+// Callbacks the console supplies: a tab became active (mount/show it), a tab closed (unmount it), or a
+// tab should move out into its own OS window (the console opens the app window and closes the tab).
 export interface TabBarCallbacks {
   onSelect(id: string): void;
   onClose(id: string): void;
+  onMoveToWindow(id: string): void;
 }
 
 export interface TabBar {
@@ -73,6 +75,63 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
   const select = (id: string): void => cb.onSelect(id);
   const close = (id: string): void => cb.onClose(id);
 
+  // Right-click (or long-press on touch) a tab for its actions - the browser-tab idiom. It carries the
+  // things the always-visible close X cannot afford the width for. Built once and moved to the pointer,
+  // rather than one menu per tab, so re-rendering the bar cannot orphan an open menu.
+  const ctx = document.createElement("div");
+  ctx.className = "pf-v6-c-menu console-tabbar__ctx";
+  ctx.hidden = true;
+  const ctxList = document.createElement("ul");
+  ctxList.className = "pf-v6-c-menu__list";
+  ctxList.setAttribute("role", "menu");
+  const ctxContent = document.createElement("div");
+  ctxContent.className = "pf-v6-c-menu__content";
+  ctxContent.append(ctxList);
+  ctx.append(ctxContent);
+
+  const closeCtx = (): void => { ctx.hidden = true; };
+  const ctxItem = (label: string, run: () => void): HTMLLIElement => {
+    const li = document.createElement("li");
+    li.className = "pf-v6-c-menu__list-item";
+    li.setAttribute("role", "none");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pf-v6-c-menu__item";
+    b.setAttribute("role", "menuitem");
+    const main = document.createElement("span");
+    main.className = "pf-v6-c-menu__item-main";
+    const text = document.createElement("span");
+    text.className = "pf-v6-c-menu__item-text";
+    text.textContent = label;
+    main.append(text);
+    b.append(main);
+    b.addEventListener("click", () => { closeCtx(); run(); });
+    li.append(b);
+    return li;
+  };
+
+  const openCtx = (id: string, title: string, x: number, y: number): void => {
+    ctxList.replaceChildren(
+      ctxItem("Move to new window", () => cb.onMoveToWindow(id)),
+      ctxItem("Close " + title, () => close(id)),
+    );
+    ctx.hidden = false;
+    // Place at the pointer, then pull back inside the viewport (a tab near the right edge would
+    // otherwise open its menu off-screen). Measured after unhiding so the box has a real size.
+    const r = ctx.getBoundingClientRect();
+    ctx.style.left = Math.min(x, window.innerWidth - r.width - 4) + "px";
+    ctx.style.top = Math.min(y, window.innerHeight - r.height - 4) + "px";
+    ctx.querySelector<HTMLElement>("button")?.focus();
+  };
+
+  // Lives on <body>, not in the bar: render() replaceChildren()s the bar, which would tear an open menu
+  // out from under the pointer. Its document listeners ride destroy()'s AbortSignal so a rebuilt bar
+  // cannot stack duplicates.
+  document.body.append(ctx);
+  const ac = new AbortController();
+  document.addEventListener("click", (e) => { if (!ctx.hidden && !ctx.contains(e.target as Node)) closeCtx(); }, { signal: ac.signal });
+  document.addEventListener("keydown", (e: KeyboardEvent) => { if (e.key === "Escape") closeCtx(); }, { signal: ac.signal });
+
   function render(): void {
     bar.replaceChildren();
 
@@ -98,6 +157,10 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       label.textContent = v.title;
       link.append(label);
       link.addEventListener("click", () => select(v.id));
+      link.addEventListener("contextmenu", (ev) => {
+        ev.preventDefault();
+        openCtx(v.id, v.title, ev.clientX, ev.clientY);
+      });
       // Roving keyboard (WAI-ARIA tablist): Enter/Space activate; Left/Right move focus between
       // tabs, Home/End jump to the ends. Focus follows the arrow but activation stays on
       // Enter/Space/click, so arrowing past tabs does not thrash the outlet.
@@ -148,5 +211,5 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
   // subscription so destroy() drops it cleanly (the reference use of the console/view primitives).
   const sc = scope();
   sc.add(bind(ws, render));
-  return { el: bar, destroy: () => sc.dispose() };
+  return { el: bar, destroy: () => { sc.dispose(); ac.abort(); ctx.remove(); } };
 }
