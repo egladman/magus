@@ -334,8 +334,6 @@ For the full contributor reference, see the [Development page](https://eli.gladm
 Building magus needs Go. The full toolchain (Go itself, plus Node and esbuild for the docs site and TinyGo for the WebAssembly playground) is pinned in [`mise.toml`](https://github.com/egladman/magus/blob/main/mise.toml); [mise](https://mise.jdx.dev/) installs it in one step. From a fresh clone:
 
 ```sh
-git clone https://github.com/egladman/magus
-cd magus
 mise install           # installs the pinned Go, Node, esbuild, and TinyGo
 go build -o magus ./cmd/magus
 ```
