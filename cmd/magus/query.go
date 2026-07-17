@@ -10,9 +10,10 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	graphurl "github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
@@ -295,6 +296,17 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	fmt.Print(render.ExplainText(out))
+
+	// Complementary deep-link: focus this node in the live Graph Explorer with a
+	// blast view (the console's own analogue of `magus explain`). Symbol nodes are
+	// excluded from the live full graph the explorer loads, so a link to one would
+	// open to an empty focus - omit it. The link is always printed for other kinds;
+	// the daemon may not be up when the browser opens it, hence the hint.
+	if out.Node.Kind != types.KindSymbol {
+		link := liveExplorerLink(graphurl.GraphLinkOpts{View: "blast", Node: out.Node.ID})
+		fmt.Printf("\nView in Graph Explorer: %s\n", link)
+		fmt.Printf("(start the magus daemon if the graph does not load)\n")
+	}
 	return nil
 }
 

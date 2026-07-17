@@ -97,13 +97,14 @@ func TestGraphLink(t *testing.T) {
 			err: ErrNoDaemon,
 		},
 		{
-			name: "no daemon: empty token yields sentinel",
+			name: "empty token omits the token directive",
 			opts: GraphLinkOpts{
 				ExplorerBase: injectedBase,
 				Host:         loopHost,
 				Token:        "",
+				View:         "blast",
 			},
-			err: ErrNoDaemon,
+			want: "http://127.0.0.1:7391/console/graph/#live=127.0.0.1:7391&view=blast",
 		},
 	}
 

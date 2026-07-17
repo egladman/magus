@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
+	graphurl "github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/service/console"
@@ -570,7 +571,7 @@ func printImpactText(out *impact.Result) error {
 	// through the dependency closure. Counting seeds here also yields the number of
 	// changed files that landed inside a project, for an outside-any-project note.
 	seeded := 0
-	fmt.Printf("\nAffected projects (%d, %d with tests):\n", len(out.AffectedProjects), out.TestProjectCount)
+	fmt.Printf("\nAffected projects (%d):\n", len(out.AffectedProjects))
 	for _, p := range out.AffectedProjects {
 		if !p.Seed {
 			continue
@@ -609,6 +610,22 @@ func printImpactText(out *impact.Result) error {
 
 	for _, n := range out.Notes {
 		fmt.Printf("\nnote: %s\n", n)
+	}
+
+	// Complementary deep-link into the live Graph Explorer, focused on a single
+	// representative seed with a blast view (what depends on it - the closure the
+	// change ripples out to). The query grammar ANDs its terms with no OR, so the
+	// full affected set cannot be selected in one query. Always printed; the daemon
+	// may not be up when the browser opens it, hence the hint.
+	if len(out.SeedProjects) > 0 {
+		seed := out.SeedProjects[0]
+		label := seed
+		if len(out.SeedProjects) > 1 {
+			label = fmt.Sprintf("%s (1 of %d seeds)", seed, len(out.SeedProjects))
+		}
+		link := liveExplorerLink(graphurl.GraphLinkOpts{View: "blast", Node: types.KindProject + ":" + seed})
+		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
+		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
 
 	fmt.Printf("\nRun the full pipeline over this set with: magus affected ci\n")

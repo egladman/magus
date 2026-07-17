@@ -75,17 +75,15 @@ func TestCompute(t *testing.T) {
 				Base:             "origin/main",
 				ChangedFileCount: 3,
 				// Changed is sorted and includes files outside any project.
-				ChangedFiles:     []string{"api/main.go", "api/util.go", "docs/README.md"},
-				SeedProjects:     []string{"api"},
-				TestProjectCount: 1,
+				ChangedFiles: []string{"api/main.go", "api/util.go", "docs/README.md"},
+				SeedProjects: []string{"api"},
 				AffectedProjects: []AffectedProject{
 					{
-						Path:        "api",
-						Seed:        true,
-						Files:       []string{"api/main.go", "api/util.go"},
-						Spells:      []string{"go"},
-						Targets:     []string{"build", "go-build", "go-test", "go-vet", "test"},
-						TestTargets: []string{"go-test", "test"},
+						Path:    "api",
+						Seed:    true,
+						Files:   []string{"api/main.go", "api/util.go"},
+						Spells:  []string{"go"},
+						Targets: []string{"build", "go-build", "go-test", "go-vet", "test"},
 					},
 					{
 						Path:    "web",
@@ -234,17 +232,4 @@ func TestEnrichNilInputs(t *testing.T) {
 	Enrich(res, nil)
 	require.Equal(t, &Result{ChangedFiles: []string{"a.go"}}, res)
 	Enrich(nil, &fakeSymbolStore{hasSymbols: true})
-}
-
-func TestIsTestTarget(t *testing.T) {
-	for name, want := range map[string]bool{
-		"test":             true,
-		"go-test":          true,
-		"integration-test": true,
-		"build":            false,
-		"go-vet":           false,
-		"biome-check":      false,
-	} {
-		require.Equal(t, want, isTestTarget(name), name)
-	}
 }

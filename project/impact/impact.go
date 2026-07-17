@@ -14,7 +14,6 @@ import (
 	"cmp"
 	"context"
 	"slices"
-	"strings"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
@@ -37,8 +36,6 @@ type Result struct {
 	// included), sorted by path. Each carries its target vocabulary and whether a
 	// changed file lands in it directly.
 	AffectedProjects []AffectedProject `json:"affected_projects,omitempty" yaml:"affected_projects,omitempty"`
-	// TestProjectCount is how many affected projects expose at least one test target.
-	TestProjectCount int `json:"test_project_count" yaml:"test_project_count"`
 	// ChangedSymbols is the changed-symbol caller overlay: every symbol defined in a
 	// changed source file, with how widely it is referenced repo-wide. It is what a
 	// plain difftool structurally cannot show - the reach of an edited definition.
@@ -83,11 +80,8 @@ type Coverage struct {
 }
 
 // SymbolStore is the narrow knowledge-graph surface the caller and coverage overlays
-// read: whether any symbol index is loaded at all, and the per-file overlay facts. The
-// concrete *knowledge.Graph satisfies it; a test supplies a fake. Keeping it an
-// interface (rather than taking *knowledge.Graph directly) mirrors how Compute is framed
-// against a narrow handle, so a future console or HTTP caller can enrich from its own
-// store without pulling in the CLI's graph loader.
+// read. The concrete *knowledge.Graph satisfies it; a future console or HTTP caller can
+// enrich from its own store, and tests supply a fake.
 type SymbolStore interface {
 	// HasSymbols reports whether the graph holds any ingested code symbol. False means
 	// no SCIP index was ever built, so both overlays are unavailable (not merely empty).
@@ -98,15 +92,11 @@ type SymbolStore interface {
 	FileFacts(relPath string) knowledge.FileFacts
 }
 
-// Enrich folds the changed-symbol caller and coverage overlays onto res, reading the
-// loaded knowledge graph. It is the ENRICHMENT step the plan keeps out of the lean
-// Compute: Compute runs against the workspace repository handle, while these overlays
-// need the heavier knowledge store (a prior symbol index and/or `magus run coverage`),
-// which the caller loads and passes here.
-//
-// It is deliberately additive and never fails: the blast radius Compute produced is left
-// untouched, overlays are appended, and absent data degrades to a Note rather than an
-// error. A nil store (the caller could not load a graph) or nil res is a no-op.
+// Enrich folds the changed-symbol caller and coverage overlays onto res from the loaded
+// knowledge graph (a symbol index, and for coverage a prior `magus run coverage`), which
+// Compute does not read. It is additive and never fails: the blast radius is untouched,
+// overlays are appended, and absent data degrades to a Note. A nil store or nil res is a
+// no-op.
 func Enrich(res *Result, store SymbolStore) {
 	if res == nil || store == nil {
 		return
@@ -185,8 +175,6 @@ type AffectedProject struct {
 	// Targets is the project's target vocabulary: the spell-contributed ops plus any
 	// custom magusfile targets that name it, sorted and deduplicated.
 	Targets []string `json:"targets,omitempty" yaml:"targets,omitempty"`
-	// TestTargets is the subset of Targets that look like test targets.
-	TestTargets []string `json:"test_targets,omitempty" yaml:"test_targets,omitempty"`
 }
 
 // Compute derives the impact report from a VCS diff against base (empty base uses
@@ -249,14 +237,6 @@ func build(ws types.WorkspaceRepository, r *types.AffectedResult) *Result {
 		if p := ws.Get(path); p != nil {
 			ap.Spells = slices.Clone(p.Spells)
 		}
-		for _, t := range ap.Targets {
-			if isTestTarget(t) {
-				ap.TestTargets = append(ap.TestTargets, t)
-			}
-		}
-		if len(ap.TestTargets) > 0 {
-			res.TestProjectCount++
-		}
 		res.AffectedProjects = append(res.AffectedProjects, ap)
 	}
 	return res
@@ -302,12 +282,4 @@ func projectTargets(ws types.WorkspaceRepository, path string, customByProject m
 	}
 	slices.Sort(out)
 	return out
-}
-
-// isTestTarget reports whether a target name reads as a test target: the canonical
-// "test", any "<tool>-test" op (go-test), or a name that otherwise carries "test".
-// A heuristic on purpose - target names are workspace-defined, so there is no
-// authoritative "this is the test target" flag to key on.
-func isTestTarget(name string) bool {
-	return strings.Contains(strings.ToLower(name), "test")
 }
