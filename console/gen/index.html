@@ -42,13 +42,16 @@
          surface as a tab; console.js's startConsole() wires it. -->
     <div id="console-actions">
     <!-- Command bar trigger: opens the dmenu-style runner (also mod+k). A plain icon button, so the
-         command bar is discoverable without knowing the chord. console.js's startConsole() wires it to
+         command bar is discoverable without knowing the chord. The prompt is drawn INSIDE a terminal
+         frame on purpose: a bare chevron inks only the middle of the viewBox, so next to the framed
+         Panes and Apps glyphs it read as half their size and gave a thumb less to aim at. Same 24-box
+         bounds as its neighbours = same apparent weight. console.js's startConsole() wires it to
          commandBar.open() and stamps the effective chord into the tooltip.
          A ">_" prompt, NOT a magnifier: this runs commands, and the magnifier in this window already
          means search - the Reference panel's docs search. Two magnifiers doing different jobs read as
          one broken one. -->
     <button id="console-commandbar-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-haspopup="dialog" aria-controls="command-bar" aria-label="Command bar" title="Command bar">
-      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8l4 4-4 4M12 16h7"/></svg></span>
+      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 10l3 3-3 3M13 16h4"/></svg></span>
     </button>
     <!-- Panes menu: split and close the tiled panes from the UI. Tiling used to be chord-only, which made
          it unreachable on a phone; every item here dispatches the SAME command id its keybinding does, and
