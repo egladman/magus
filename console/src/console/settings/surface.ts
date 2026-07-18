@@ -109,8 +109,9 @@ function externalLink(href: string, text: string): HTMLAnchorElement {
 function buildAbout(): HTMLElement {
   const body = h("div", "console-settings-about");
 
-  // A short link list: source, then the two feedback destinations. Kept as a plain description-free row
-  // set - version info already lives in the status bar, so this stays quiet.
+  // A short link list: source, then the issue tracker. Kept as a plain description-free row set -
+  // version info already lives in the status bar, so this stays quiet. (Discussions/feature-request
+  // link dropped: the repo does not enable Discussions; the issue tracker covers both.)
   const links = h("ul", "console-settings-about__links");
   const linkRow = (label: string, link: HTMLAnchorElement): HTMLElement => {
     const li = h("li", "console-settings-about__row");
@@ -120,9 +121,6 @@ function buildAbout(): HTMLElement {
   links.append(
     linkRow("Source code", externalLink(REPO_URL, REPO_URL)),
     linkRow("Report a bug", externalLink(REPO_URL + "/issues", "Open an issue")),
-    // Discussions must be ENABLED in the GitHub repo settings (Settings > General > Features) for this
-    // link to resolve; until then GitHub redirects it to the repo home. Eli is aware.
-    linkRow("Request a feature", externalLink(REPO_URL + "/discussions", "Start a discussion")),
   );
   body.append(links);
 
@@ -609,7 +607,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     buildSection("Appearance", themeBody),
     buildSection("Keybindings", keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply."),
     buildSection("Backup", io, "Export the current draft, or import a saved set to stage it."),
-    buildSection("About", buildAbout(), "Source, license, and where to report bugs or request features."),
+    buildSection("About", buildAbout(), "Source, license, and where to report bugs."),
   );
   host.append(page);
 
