@@ -5,6 +5,14 @@ on:
     tags:
       - 'v*'
 
+# One live CD run per tag. Re-pushing a tag (e.g. to pick up a CD fix before the
+# release publishes) cancels the previous run so duplicate release jobs never race
+# for runners or the publish step. Keyed on the ref, so different tags still run
+# independently.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read  # default; publish overrides to write
 
