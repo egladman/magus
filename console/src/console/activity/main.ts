@@ -9,8 +9,9 @@
 // long-lived stream yet).
 
 import { createClient } from "@connectrpc/connect";
-import { ActivityService, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
+import { ActivityService, Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
 import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
+import { notify } from "../../lib/notifications";
 import { buildSection } from "../render/sections";
 import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "../logs/runtree";
 import { parseHash, wantsDemo, validateLiveHost, consumeLiveToken, createDaemonTransport } from "../../lib/daemon";
@@ -92,6 +93,21 @@ function buildScaffold(host: HTMLElement): Refs {
   panel.append(scroll);
   host.append(panel);
   return { scroll, body, empty, emptyTitle, emptySub, demoBtn };
+}
+
+// notifyDenials raises a bell-tier notification for each sandbox denial in a freshly loaded page of
+// events. A denial is a trust-changing event a human should see: something a target did was blocked, and
+// the build may be wrong as a result. Called ONLY from the live load path, so the demo (which never
+// calls it) cannot light the bell. Deduped per event (kind + time + action) so re-loading the trail does
+// not re-fire; there is no in-app URL that addresses a single trail entry, so it carries no deep link -
+// the activity surface the reader is already on IS the destination.
+function notifyDenials(events: ActivityEvent[]): void {
+  for (const ev of events) {
+    if (ev.kind !== Kind.SANDBOX_DENIAL) continue;
+    const ms = tsMillis(ev.time);
+    const action = ev.action || "a sandboxed operation";
+    notify({ source: "Activity Trail", kind: "error", key: "sandbox:" + (ms ?? 0) + ":" + action, message: "Sandbox denied " + action + "." });
+  }
 }
 
 // leafLabel is a tree leaf's text: the action (or the kind tag as a fallback) plus how long ago it
@@ -246,6 +262,7 @@ export function activate(host: HTMLElement): () => void {
       const resp = await client.listActivity({ pageSize: PAGE_SIZE });
       if (stale) return;
       render(resp.events);
+      notifyDenials(resp.events);
       if (resp.events.length === 0) {
         showEmpty("No activity yet", "The daemon is connected but has not recorded any actions in this session.", "0 events");
       }

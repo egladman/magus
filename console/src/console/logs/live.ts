@@ -6,8 +6,9 @@
 // the #demo reveal, so scheduleLiveRender is the shared "one re-render per frame" path.
 
 import { fromBinary } from "@bufbuild/protobuf";
-import { EventSchema, Kind } from "../../gen/magus/viewer/v1/viewer_pb";
+import { EventSchema, Kind, Status } from "../../gen/magus/viewer/v1/viewer_pb";
 import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE } from "../../lib/daemon";
+import { notify } from "../../lib/notifications";
 import type { ViewerParams } from "./fragment";
 import { base64ToBytes } from "./fragment";
 import { state, waterfallSource } from "./state";
@@ -15,12 +16,17 @@ import { el, emptyEl, scrollEl, setBtnLabel, setRefIdentity, setStatus } from ".
 import { buildModelMulti } from "./model";
 import { render, updateTimelineControl } from "./render";
 
+// The loopback host of the current live stream, stashed so a FAIL notification can deep-link back to the
+// failing ref. Only ever a validated loopback host (or null before any live connect).
+let liveNotifyHost: string | null = null;
+
 export function connectLive(params: ViewerParams): void {
   const host = validateLiveHost(params.live);
   if (!host) {
     setStatus("refusing a non-loopback live host", true);
     return;
   }
+  liveNotifyHost = host;
   consumeLiveToken(params); // stash the token, strip it from the URL so it never persists
   const token = getLiveToken();
   state.liveEvents = [];
@@ -62,6 +68,18 @@ function onLiveEvent(type: string, data: string): void {
     return; // ignore an undecodable frame rather than tearing down the stream
   }
   if (ev.kind === Kind.STARTED && ev.command) state.liveInvocation = { command: ev.command };
+  // A target that FAILED in the live stream is a bell-tier event: keyed on its output ref and shared
+  // with the dashboard's failure detection (both use "fail:<ref>"), so a failure observed by either
+  // surface records exactly ONE notification. This path is live-only (the #demo reveal does not run
+  // onLiveEvent), so the demo never lights the bell. The failing output is right here in the stream, so
+  // it deep-links back to that ref for when the reader had this tab backgrounded.
+  if (ev.kind === Kind.RESULT && ev.status === Status.FAIL && ev.ref) {
+    const label = ev.target || ev.ref;
+    const link = liveNotifyHost
+      ? { label: "Open in log viewer", href: "../logs/#live=" + encodeURIComponent(liveNotifyHost) + "&ref=" + encodeURIComponent(ev.ref) }
+      : undefined;
+    notify({ source: "Log Viewer", kind: "error", key: "fail:" + ev.ref, message: label + " failed.", link });
+  }
   state.liveEvents.push(ev);
   scheduleLiveRender();
 }

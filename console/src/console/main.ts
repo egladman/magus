@@ -22,6 +22,7 @@ import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
+import { mountNotificationCenter } from "../lib/notifications";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
 import { parseHash, wantsDemo, validateLiveHost, getLiveToken, authHeaders, fetchReadiness, isSharedMode, enterSharedModeIfNeeded, type ReadinessReport, type ReadinessComponent } from "../lib/daemon";
@@ -492,6 +493,7 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     history.replaceState(null, "", location.pathname + location.search + "#demo");
     for (const t of [...ws.get().tabs]) closeTabById(t.id);
     for (const id of ["logs", "graph", "activity", "dashboard"]) open(id);
+    notifications.seedDemo(); // populate the history panel for the offline demo (history tier only)
   };
   const launcher = buildLauncher(SURFACES, open, launchDemo);
   launcher.hidden = true;
@@ -655,6 +657,13 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // markup. It reads the active surface's [data-ref-section] help blocks (refreshed on tab change).
   initRefDrawer();
 
+  // The notification center: the title-bar bell + its pop-out history panel. It builds its own bell into
+  // #console-actions, installs the one document listener that records notifications raised from any
+  // bundle (surfaces + toasts), and owns the in-memory per-session store. A #demo boot seeds a few
+  // history-tier entries so the panel is not empty offline (demo data never lights the bell).
+  const notifications = mountNotificationCenter();
+  if (wantsDemo(parseHash())) notifications.seedDemo();
+
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
   // The listener skips while typing in a field (see commands.ts), so it never eats filter input.
   // Opening a surface is a command per surface (group "Open"): the launcher's cards cover the empty
@@ -713,6 +722,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   });
   document.body.append(commandBar.el);
   registerCommand({ id: "console.actionBar.open", label: "Action bar", group: "General", run: () => commandBar.open() });
+
+  // Mirror the title-bar bell as a palette command, so the notification history is reachable by keyboard
+  // like every other action.
+  registerCommand({ id: "console.notifications.open", label: "Notifications", group: "General", run: () => notifications.toggle() });
 
   // Share to phone: a loopback-console affordance only. Registered (palette command
   // + app-menu button) solely when NOT in shared mode - a phone viewing over the LAN

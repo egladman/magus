@@ -12,6 +12,7 @@ import {
 } from "../../lib/daemon";
 import { createStore } from "../../lib/store";
 import { persisted } from "../../lib/persist";
+import { notify } from "../../lib/notifications";
 import { initialState, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
 import { startDemo, type DemoHandle } from "./demo";
@@ -130,6 +131,38 @@ function renderStatusBar(s: DashboardState): void {
   } else {
     obs.hidden = true;
   }
+}
+
+// ---- notification admission ------------------------------------------------
+// The dashboard's status frames are where the console already learns two bell-tier facts: the daemon's
+// health dropping, and a target turning FAILED. wireNotifications watches for those TRANSITIONS and
+// pushes an error-tier notification (notifications.ts). It notifies ONLY on the transition - a key per
+// health-state and per failing ref means the same event does not re-fire on every ~1s status frame, or
+// when this surface re-mounts in a session. Demo never notifies (s.conn.state === "demo"): synthesized
+// data must not light the bell. A failing target with an output ref deep-links to the log viewer at that
+// ref (the same href the gantt bar uses); without a ref it stays on the dashboard, so no link is set.
+function wireNotifications(): void {
+  let lastHealth = ""; // the health cls last seen ("", "ok", "warn", "fail")
+  store.subscribe((s) => {
+    if (s.conn.state === "demo" || !s.status) return;
+    const cls = s.status.health.cls;
+    if (cls !== lastHealth) {
+      if (cls === "warn") notify({ source: "Dashboard", kind: "error", key: "dash:health:warn", message: "Daemon health degraded. Some components are not fully ready." });
+      else if (cls === "fail") notify({ source: "Dashboard", kind: "error", key: "dash:health:down", message: "Daemon health is down. It is not serving requests." });
+      lastHealth = cls;
+    }
+    for (const run of s.status.runs) {
+      for (const t of run.targets) {
+        if (t.state !== "failed") continue;
+        const ref = t.outputRef;
+        const key = ref ? "fail:" + ref : "dash:fail:" + run.inv + ":" + t.label;
+        const link = ref && s.liveHost
+          ? { label: "Open in log viewer", href: "../logs/#live=" + encodeURIComponent(s.liveHost) + "&ref=" + encodeURIComponent(ref) }
+          : undefined;
+        notify({ source: "Dashboard", kind: "error", key, message: t.label + " failed.", link });
+      }
+    }
+  });
 }
 
 // ---- tiles -----------------------------------------------------------------
@@ -309,10 +342,14 @@ function registerServiceWorker(): void {
 // resolved at call time (el()/opt() are getElementById), so it needs no separate resolve step - it
 // just needs the scaffold present. Exported so the console's dashboard PageModule can drive it after
 // injecting the scaffold into a host; the standalone page auto-boots below.
+let notificationsWired = false;
 export function activate(): void {
   document.documentElement.classList.remove("no-js");
   registerServiceWorker();
   mountTiles();
+  // Subscribe the notification watcher once per page lifetime: the module-scoped store outlives a
+  // console tab close/reopen, so re-subscribing on every activate() would double-fire.
+  if (!notificationsWired) { notificationsWired = true; wireNotifications(); }
   wireResumeForm();
   wireDemoButton();
 

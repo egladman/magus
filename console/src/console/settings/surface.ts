@@ -271,14 +271,14 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   testBtn.title = "Try to reach a daemon at this address";
   testBtn.addEventListener("click", () => {
     const raw = hostInput.value.trim();
-    if (!raw) { showToast("Enter a host to test, for example 127.0.0.1:7391.", "error"); return; }
+    if (!raw) { showToast("Settings", "Enter a host to test, for example 127.0.0.1:7391.", "error"); return; }
     testBtn.disabled = true;
     void probeDaemon(raw).then((res) => {
       testBtn.disabled = false;
       // "Answered", not "connected" or "200": the response is opaque cross-origin, so the status code
       // and body are unreadable - this proves a server answered at that address, nothing more.
-      if (res.ok) showToast("Answered: " + res.url + " (status not readable cross-origin).");
-      else showToast(res.reason, "error");
+      if (res.ok) showToast("Settings", "Answered: " + res.url + " (status not readable cross-origin).");
+      else showToast("Settings", res.reason, "error");
     });
   });
 
@@ -466,7 +466,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     const res = importSettings(text, draftPrefs());
     if (!res.ok) {
       setStatus(res.error, "error"); // aria-live anchor keeps the terse reason
-      showToast(importFailureToast(res.error), "error");
+      showToast("Settings", importFailureToast(res.error), "error");
       return;
     }
     loadDraft(res.next);
@@ -477,7 +477,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     if (res.newerSchema !== undefined) parts.push("File is from a newer console (schemaVersion " + res.newerSchema + "); unknown settings were ignored.");
     if (res.unknown.length > 0) parts.push("Ignored unknown keys: " + joinIgnored(res.unknown) + ".");
     if (res.skipped.length > 0) parts.push("Ignored invalid values for: " + joinIgnored(res.skipped) + ".");
-    if (parts.length > 0) showToast(parts.join(" "), "warn");
+    if (parts.length > 0) showToast("Settings", parts.join(" "), "warn");
   };
 
   fileInput.addEventListener("change", () => {
@@ -542,9 +542,9 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     // silent. Clear any prior inline status so a stale message does not sit under the heading.
     setStatus("", "ok");
     if (applyLive && (keys.has("poll") || keys.has("host"))) {
-      showRefreshToast("Console settings changed. Reload to apply.");
+      showRefreshToast("Settings", "Console settings changed. Reload to apply.");
     } else {
-      showToast(msg);
+      showToast("Settings", msg);
     }
   }
 

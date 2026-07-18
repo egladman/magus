@@ -1,6 +1,75 @@
 import { persisted } from "../lib/persist";
 import { loadDocIndex, runSearch, positiveTerms, snippet, describeQuery, type DocSearchEntry } from "../lib/docsearch";
 
+// DrawerToggle is a minimal open/close controller with the Reference panel's dismissal + focus
+// behaviour. wireDrawerToggle factors that "pop-out" idiom out of initRefDrawer so a second pop-out (the
+// notification center) reuses the SAME mechanics rather than reimplementing them: a trigger toggles a
+// panel; Escape and an outside pointerdown dismiss it (unless canDismiss() vetoes, as the pinned
+// Reference panel does); focus moves into the panel on open and returns to the trigger on close; and
+// aria-expanded (trigger) / aria-hidden (panel) track the state. The panel is shown/hidden with its
+// `hidden` attribute, so the caller owns all visual styling. This is intentionally NARROWER than
+// initRefDrawer's own state machine (which also owns pinning, inline docking, and resize) - it is the
+// shared core, not a replacement for that surface's extra behaviour.
+export interface DrawerToggle {
+  open(): void;
+  close(): void;
+  toggle(): void;
+  isOpen(): boolean;
+}
+
+export function wireDrawerToggle(opts: {
+  trigger: HTMLElement;
+  panel: HTMLElement;
+  onOpen?: () => void;
+  onClose?: () => void;
+  focusTarget?: () => HTMLElement | null;
+  canDismiss?: () => boolean;
+}): DrawerToggle {
+  const { trigger, panel } = opts;
+  let open = false;
+
+  const render = (): void => {
+    panel.hidden = !open;
+    panel.setAttribute("aria-hidden", open ? "false" : "true");
+    trigger.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+
+  const setOpen = (v: boolean): void => {
+    if (v === open) return;
+    open = v;
+    render();
+    if (v) {
+      opts.onOpen?.();
+      requestAnimationFrame(() => (opts.focusTarget?.() ?? panel).focus());
+    } else {
+      opts.onClose?.();
+      // Only pull focus back to the trigger when it currently sits inside the panel, so closing via an
+      // outside click on some other control does not yank focus away from where the user just went.
+      if (document.activeElement instanceof HTMLElement && panel.contains(document.activeElement)) trigger.focus();
+    }
+  };
+
+  trigger.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
+
+  // Outside pointerdown dismisses. A click on the trigger is handled by its own listener, so ignore it
+  // here to avoid a double-toggle.
+  document.addEventListener("pointerdown", (e) => {
+    if (!open) return;
+    if (opts.canDismiss && !opts.canDismiss()) return;
+    const t = e.target;
+    if (!(t instanceof Node)) return;
+    if (panel.contains(t) || trigger.contains(t)) return;
+    setOpen(false);
+  });
+
+  document.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.key === "Escape" && open && (!opts.canDismiss || opts.canDismiss())) setOpen(false);
+  });
+
+  render();
+  return { open: () => setOpen(true), close: () => setOpen(false), toggle: () => setOpen(!open), isOpen: () => open };
+}
+
 // ref-drawer.ts - the console's right-side Reference panel, built on a PatternFly Drawer
 // (index.html: #console-refdrawer is the pf-v6-c-drawer, #console-outlet-content its __content,
 // #console-refpanel its __panel). The drawer is pf-m-inline (PF v6's supported mode: the panel is a

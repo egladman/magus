@@ -123,6 +123,78 @@
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
 
+/* --- Notification center --------------------------------------------------------------------------
+ * The title-bar bell (#console-notifybtn) + its pop-out history panel (#console-notifypanel,
+ * notifications.ts). The bell is a PF plain icon Button like its neighbours; only its unseen-dot and the
+ * panel chrome (which PatternFly has no component for) live here. State is data-* (data-unseen on the
+ * bell and on an unseen item); kind is data-kind (ok/warn/error) driving the left accent. The panel is
+ * anchored in #console-actions and drops under the bell, mirroring the Applications menu. */
+#console-notifybtn { position: relative; }
+/* The unseen-dot: a small danger dot in the bell's top-right corner, shown only when an unread
+ * error-tier notification waits (the bell carries data-unseen). */
+.console-shell-notify__dot { display: none; }
+#console-notifybtn[data-unseen] .console-shell-notify__dot {
+  display: block; position: absolute; top: 0.3rem; right: 0.3rem;
+  width: 0.5rem; height: 0.5rem; border-radius: 50%;
+  background: var(--pf-t--global--color--status--danger--default, #c9190b);
+  box-shadow: 0 0 0 2px var(--pf-t--global--background--color--primary--default);
+}
+.console-shell-notify {
+  position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
+  width: 22rem; max-width: calc(100vw - 1rem); max-height: min(28rem, calc(100vh - 4rem));
+  display: flex; flex-direction: column;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
+}
+.console-shell-notify[hidden] { display: none; }
+.console-shell-notify__head {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-shell-notify__title { font-size: 0.85rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+.console-shell-notify__list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+.console-shell-notify__empty {
+  margin: 0; padding: 1.25rem 0.9rem; font-size: 0.82rem; line-height: 1.4;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-notify__item {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  padding: 0.55rem 0.4rem 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-left: 3px solid transparent;
+}
+.console-shell-notify__item:last-child { border-bottom: none; }
+.console-shell-notify__item[data-unseen] { background: var(--pf-t--global--background--color--secondary--default); }
+/* A small round kind dot leading each row, tinted by outcome (ok/warn/error). */
+.console-shell-notify__item-dot { flex: 0 0 auto; margin-top: 0.35rem; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--pf-t--global--text--color--subtle); }
+.console-shell-notify__item[data-kind="ok"] .console-shell-notify__item-dot { background: var(--console-status-ok); }
+.console-shell-notify__item[data-kind="warn"] .console-shell-notify__item-dot { background: var(--console-status-warn); }
+.console-shell-notify__item[data-kind="error"] .console-shell-notify__item-dot { background: var(--pf-t--global--color--status--danger--default, #c9190b); }
+.console-shell-notify__item[data-kind="error"] { border-left-color: var(--pf-t--global--color--status--danger--default, #c9190b); }
+.console-shell-notify__item-body { flex: 1 1 auto; min-width: 0; }
+.console-shell-notify__item-msg { margin: 0; font-size: 0.82rem; line-height: 1.35; color: var(--pf-t--global--text--color--regular); overflow-wrap: anywhere; }
+.console-shell-notify__item-meta { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.2rem; }
+/* The source chip: a quiet, tag-like label naming the surface that raised this (not all-caps). Shared
+ * look with the toast's source chip below. */
+.console-shell-notify__item-source {
+  font-size: 0.68rem; padding: 0.05rem 0.4rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
+}
+.console-shell-notify__item-time { font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
+.console-shell-notify__item-link { font-size: 0.75rem; --pf-v6-c-button--PaddingBlock: 0; }
+.console-shell-notify__item-dismiss { flex: 0 0 auto; --pf-v6-c-button--PaddingInline: 0.25rem; color: var(--pf-t--global--text--color--subtle); }
+/* On a phone the popover fills nearly the whole width so the rows have room to read. */
+@media (max-width: 30rem) {
+  .console-shell-notify { position: fixed; top: auto; bottom: 0.5rem; right: 0.5rem; left: 0.5rem; width: auto; max-height: 70vh; }
+}
+
 /* --- Keybindings editor --------------------------------------------------------------------------
  * The editor core ([data-kbeditor], keybindings.ts) is a keybinding-table grid PatternFly has no
  * component for (like the status bar), so it stays data-scoped here. It appears in TWO places - the
@@ -206,6 +278,15 @@
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+/* The source chip prefixing a toast: names the surface that raised it, so a toast that pops while a
+ * different tab is active still says where it came from. Quiet, tag-like, not all-caps. */
+.console-shell-toast__source {
+  flex: none; font-size: 0.68rem; padding: 0.05rem 0.4rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
 }
 .console-shell-toast button {
   flex: none; width: auto; margin: 0;

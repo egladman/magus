@@ -33,11 +33,11 @@ function resolveDaemonHost(): string | null {
 export async function openShareDialog(): Promise<void> {
   const host = resolveDaemonHost();
   if (!host) {
-    showToast("No daemon is connected, so there is nothing to share. Set the daemon address in Settings first.", "error");
+    showToast("Share", "No daemon is connected, so there is nothing to share. Set the daemon address in Settings first.", "error");
     return;
   }
   if (!getLiveToken()) {
-    showToast("The daemon needs an auth token to share. Open the console via a live link with a token.", "error");
+    showToast("Share", "The daemon needs an auth token to share. Open the console via a live link with a token.", "error");
     return;
   }
 
@@ -49,7 +49,7 @@ export async function openShareDialog(): Promise<void> {
       cache: "no-store",
     });
   } catch {
-    showToast("Could not reach the daemon to start a share. Is it still running?", "error");
+    showToast("Share", "Could not reach the daemon to start a share. Is it still running?", "error");
     return;
   }
   if (!res.ok) {
@@ -60,7 +60,7 @@ export async function openShareDialog(): Promise<void> {
     } catch {
       /* non-JSON error body: keep the generic message */
     }
-    showToast(msg, "error");
+    showToast("Share", msg, "error");
     return;
   }
 
@@ -68,11 +68,11 @@ export async function openShareDialog(): Promise<void> {
   try {
     data = await res.json();
   } catch {
-    showToast("The daemon returned an unreadable share response.", "error");
+    showToast("Share", "The daemon returned an unreadable share response.", "error");
     return;
   }
   if (!data.url) {
-    showToast("The daemon returned an empty share URL.", "error");
+    showToast("Share", "The daemon returned an empty share URL.", "error");
     return;
   }
   renderShareDialog(data.url, data.expires_at ?? "", data.superseded === true);
@@ -147,8 +147,8 @@ function renderShareDialog(url: string, expiresAt: string, superseded: boolean):
   copyBtn.textContent = "Copy link";
   copyBtn.addEventListener("click", () => {
     navigator.clipboard?.writeText(url).then(
-      () => showToast("Share link copied.", "ok"),
-      () => showToast("Could not copy the link. Select and copy it manually.", "warn"),
+      () => showToast("Share", "Share link copied.", "ok"),
+      () => showToast("Share", "Could not copy the link. Select and copy it manually.", "warn"),
     );
   });
   const closeBtn = document.createElement("button");
