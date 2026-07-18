@@ -16,9 +16,6 @@ hand-edit it.
   is hand-authored - read it before touching the agent surface.
 - Record decisions worth keeping (with the why) via the `magus_memory` MCP
   tool; read its status/decisions files at session start.
-- `.claude/settings.json` + `.claude/hooks/` are committed automation: a
-  SessionStart bootstrap (mise, skill freshness, daemon) and a PreToolUse
-  nudge when a raw build/test tool is about to bypass a magus target.
 
 ## Commands
 
@@ -37,7 +34,7 @@ hand-edit it.
 
 Locally, run HEAD: `go build -o /tmp/magus ./cmd/magus` once per session and
 use that (or `go run ./cmd/magus <cmd>` for a one-off). Do not expect a release
-binary on PATH; the SessionStart hook falls back to `go run` the same way.
+binary on PATH.
 
 The compatibility contract lives in CI: `setup-magus` runs the pinned,
 checksum-verified release against this repo's magusfile. If `magusfile.buzz`
