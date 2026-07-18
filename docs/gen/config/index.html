@@ -208,6 +208,24 @@
 <td>duration</td>
 </tr>
 <tr>
+<td><code>daemon.maintenance.rotate_activities</code></td>
+<td><code>MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES</code></td>
+<td><code>--daemon-maintenance-rotate-activities</code></td>
+<td>duration</td>
+</tr>
+<tr>
+<td><code>daemon.maintenance.rotate_logs</code></td>
+<td><code>MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS</code></td>
+<td><code>--daemon-maintenance-rotate-logs</code></td>
+<td>duration</td>
+</tr>
+<tr>
+<td><code>daemon.maintenance.sync_graph</code></td>
+<td><code>MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH</code></td>
+<td><code>--daemon-maintenance-sync-graph</code></td>
+<td>duration</td>
+</tr>
+<tr>
 <td><code>daemon.socket</code></td>
 <td><code>MAGUS_DAEMON_SOCKET</code></td>
 <td><code>--daemon-socket</code></td>
@@ -623,7 +641,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../search/?q=tag%3A%22config%22">config</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22configuration%22">configuration</a><a class="tag" href="../search/?q=tag%3A%22environment+variables%22">environment variables</a><a class="tag" href="../search/?q=tag%3A%22flags%22">flags</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a></div>
-    <small>Last updated <time datetime="2026-07-17T00:01:29Z">July 17, 2026, 12:01 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/6bbd98afdfcd91f5539b05db8c525a767deb96b6" data-tooltip="6bbd98afdfcd91f5539b05db8c525a767deb96b6" title="6bbd98afdfcd91f5539b05db8c525a767deb96b6">6bbd98af</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7c97d6496df5cd231d97ca6999bc79b30be0424f"><code>7c97d649</code></a> <small><time datetime="2026-07-16T04:25:32Z">Jul 16, 2026</time></small> - add knowledge.vcs.authorship toggle (default on) to include or omit the author node/edge layer</li><li><a href="https://github.com/egladman/magus/commit/a12dbee7c2b0b50faa5e204a7070d677982fbfdb"><code>a12dbee7</code></a> <small><time datetime="2026-07-15T18:03:42Z">Jul 15, 2026</time></small> - add output field discovery and a generated output-type schema, and reduce daemon/worktree friction; render -o template over the -o json shape so template field names are the json keys; make bare -o template list an output&#39;s fields; generate schema/gen/outputs.go from the types/*Output structs via a new magus-utils output subcommand; classify a differently-built daemon&#39;s refusal as not-adopted (proc.NotAdopted, carried on the error) so forwarding to it runs locally quietly instead of warning; add daemon.enabled (--daemon-enabled, MAGUS_DAEMON_ENABLED, default true) to opt an invocation out of the shared daemon while keeping per-process recursion; consolidate proc&#39;s error vocabulary into errors.go and rename version/protocol skew to mismatch and remapWireError to decodeWireError; drop hardcoded drift/mirror tests (TestOutputsNotDrifted, TestSchemaNotDrifted, and TestKnownKeys&#39;s hardcoded key list) for the generate drift gate and property checks</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92"><code>0fb66e19</code></a> <small><time datetime="2026-07-11T04:22:33Z">Jul 11, 2026</time></small> - rename the flake and flaky vocabulary to volatile</li><li><a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018"><code>b95401fb</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li><li><a href="https://github.com/egladman/magus/commit/17da04414fea2f059ffd41b43c09929c4a6685e0"><code>17da0441</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - Merge branch &#39;main&#39; into pwa-graph-explorer</li><li><a href="https://github.com/egladman/magus/commit/c7924b6444a8377571d6ba830de6af74f87b99c3"><code>c7924b64</code></a> <small><time datetime="2026-07-08T06:39:59Z">Jul 8, 2026</time></small> - regenerate MAGUS.md, manpages, config docs, and site manifests for the knowledge-graph surface; refresh the coverage badge</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/config.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/config.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-17T19:53:41Z">July 17, 2026, 7:53 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/39a9ebed65f5ed5944588608d64575076f2b8296" data-tooltip="39a9ebed65f5ed5944588608d64575076f2b8296" title="39a9ebed65f5ed5944588608d64575076f2b8296">39a9ebed</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/6bbd98afdfcd91f5539b05db8c525a767deb96b6"><code>6bbd98af</code></a> <small><time datetime="2026-07-17T00:01:29Z">Jul 17, 2026</time></small> - rename the bridge config namespace to console; add console.url for the hosted console base; regenerate config schema, flags, env and api.lock</li><li><a href="https://github.com/egladman/magus/commit/7c97d6496df5cd231d97ca6999bc79b30be0424f"><code>7c97d649</code></a> <small><time datetime="2026-07-16T04:25:32Z">Jul 16, 2026</time></small> - add knowledge.vcs.authorship toggle (default on) to include or omit the author node/edge layer</li><li><a href="https://github.com/egladman/magus/commit/a12dbee7c2b0b50faa5e204a7070d677982fbfdb"><code>a12dbee7</code></a> <small><time datetime="2026-07-15T18:03:42Z">Jul 15, 2026</time></small> - add output field discovery and a generated output-type schema, and reduce daemon/worktree friction; render -o template over the -o json shape so template field names are the json keys; make bare -o template list an output&#39;s fields; generate schema/gen/outputs.go from the types/*Output structs via a new magus-utils output subcommand; classify a differently-built daemon&#39;s refusal as not-adopted (proc.NotAdopted, carried on the error) so forwarding to it runs locally quietly instead of warning; add daemon.enabled (--daemon-enabled, MAGUS_DAEMON_ENABLED, default true) to opt an invocation out of the shared daemon while keeping per-process recursion; consolidate proc&#39;s error vocabulary into errors.go and rename version/protocol skew to mismatch and remapWireError to decodeWireError; drop hardcoded drift/mirror tests (TestOutputsNotDrifted, TestSchemaNotDrifted, and TestKnownKeys&#39;s hardcoded key list) for the generate drift gate and property checks</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92"><code>0fb66e19</code></a> <small><time datetime="2026-07-11T04:22:33Z">Jul 11, 2026</time></small> - rename the flake and flaky vocabulary to volatile</li><li><a href="https://github.com/egladman/magus/commit/b95401fb48b20305330b7e6f9838dccef89be018"><code>b95401fb</code></a> <small><time datetime="2026-07-09T04:04:05Z">Jul 9, 2026</time></small> - add browser bridge: three frozen read-only GET routes on the MCP daemon for the Graph Explorer; bridge.enabled kill switch; doctor bridge-reachability check; docs/browser-bridge.md</li><li><a href="https://github.com/egladman/magus/commit/17da04414fea2f059ffd41b43c09929c4a6685e0"><code>17da0441</code></a> <small><time datetime="2026-07-09T00:58:32Z">Jul 9, 2026</time></small> - Merge branch &#39;main&#39; into pwa-graph-explorer</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/config.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/config.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -793,8 +811,9 @@ console's UI, so they are defined here rather than left to be inferred from it.<
 <h3 id="console-1">Console</h3>
 <p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon only exposes a
-read-only loopback API it calls. See <a href="../reference/console/">reference/console</a>.</p>
+static app, not something the daemon serves - the daemon exposes a loopback API
+it calls: read-only views plus one bearer-gated job-control service for
+maintenance jobs. See <a href="../reference/console/">reference/console</a>.</p>
 <h3 id="surface">Surface</h3>
 <p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
 Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
@@ -816,11 +835,13 @@ command bar whether or not it has one. See <a href="../reference/console/">refer
 opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
 chords dispatch the same commands it does. See <a href="../reference/console/">reference/console</a>.</p>
 <h3 id="live-link">Live link</h3>
-<p>The URL that points a surface at a running daemon, carrying the loopback address
-and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
-console consumes the token, stores it, and strips it from the URL, so the secret
-never lingers in history or a copied link. The host must be literal loopback -
-<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+<p>The URL that points a surface at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the surface path and
+a bearer token in the fragment (<code>http://127.0.0.1:7391/console/graph/#token=...</code>).
+The daemon prints it; the console consumes the token, stores it, and strips it from
+the URL, so the secret never lingers in history or a copied link. The origin must be
+literal loopback - <code>localhost</code> and hostnames are rejected before any request.
+Without one, a surface
 reads only what rides in the link itself. See <a href="../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>

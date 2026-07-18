@@ -296,8 +296,9 @@ console's UI, so they are defined here rather than left to be inferred from it.<
 <h3 id="console-1">Console</h3>
 <p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon only exposes a
-read-only loopback API it calls. See <a href="../../../reference/console/">reference/console</a>.</p>
+static app, not something the daemon serves - the daemon exposes a loopback API
+it calls: read-only views plus one bearer-gated job-control service for
+maintenance jobs. See <a href="../../../reference/console/">reference/console</a>.</p>
 <h3 id="surface">Surface</h3>
 <p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
 Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
@@ -319,11 +320,13 @@ command bar whether or not it has one. See <a href="../../../reference/console/"
 opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
 chords dispatch the same commands it does. See <a href="../../../reference/console/">reference/console</a>.</p>
 <h3 id="live-link">Live link</h3>
-<p>The URL that points a surface at a running daemon, carrying the loopback address
-and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
-console consumes the token, stores it, and strips it from the URL, so the secret
-never lingers in history or a copied link. The host must be literal loopback -
-<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+<p>The URL that points a surface at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the surface path and
+a bearer token in the fragment (<code>http://127.0.0.1:7391/console/graph/#token=...</code>).
+The daemon prints it; the console consumes the token, stores it, and strips it from
+the URL, so the secret never lingers in history or a copied link. The origin must be
+literal loopback - <code>localhost</code> and hostnames are rejected before any request.
+Without one, a surface
 reads only what rides in the link itself. See <a href="../../../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>

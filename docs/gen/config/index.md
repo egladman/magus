@@ -39,6 +39,9 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `daemon.address` | `MAGUS_DAEMON_ADDRESS` | `--daemon-address` | string |
 | `daemon.enabled` | `MAGUS_DAEMON_ENABLED` | `--daemon-enabled` | bool |
 | `daemon.idle_ttl` | `MAGUS_DAEMON_IDLE_TTL` | `--daemon-idle-ttl` | duration |
+| `daemon.maintenance.rotate_activities` | `MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES` | `--daemon-maintenance-rotate-activities` | duration |
+| `daemon.maintenance.rotate_logs` | `MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS` | `--daemon-maintenance-rotate-logs` | duration |
+| `daemon.maintenance.sync_graph` | `MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH` | `--daemon-maintenance-sync-graph` | duration |
 | `daemon.socket` | `MAGUS_DAEMON_SOCKET` | `--daemon-socket` | string |
 | `daemon.workspaces` | `MAGUS_DAEMON_WORKSPACES` | _(env only)_ | list _(comma-separated, env only)_ |
 

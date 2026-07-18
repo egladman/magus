@@ -34,7 +34,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1818 nodes** and **3970 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **1818 nodes** and **3973 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation

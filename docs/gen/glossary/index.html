@@ -249,8 +249,9 @@ console's UI, so they are defined here rather than left to be inferred from it.<
 <h3 id="console-1">Console</h3>
 <p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon only exposes a
-read-only loopback API it calls. See <a href="../reference/console/">reference/console</a>.</p>
+static app, not something the daemon serves - the daemon exposes a loopback API
+it calls: read-only views plus one bearer-gated job-control service for
+maintenance jobs. See <a href="../reference/console/">reference/console</a>.</p>
 <h3 id="surface">Surface</h3>
 <p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
 Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
@@ -272,11 +273,13 @@ command bar whether or not it has one. See <a href="../reference/console/">refer
 opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
 chords dispatch the same commands it does. See <a href="../reference/console/">reference/console</a>.</p>
 <h3 id="live-link">Live link</h3>
-<p>The URL that points a surface at a running daemon, carrying the loopback address
-and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
-console consumes the token, stores it, and strips it from the URL, so the secret
-never lingers in history or a copied link. The host must be literal loopback -
-<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+<p>The URL that points a surface at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the surface path and
+a bearer token in the fragment (<code>http://127.0.0.1:7391/console/graph/#token=...</code>).
+The daemon prints it; the console consumes the token, stores it, and strips it from
+the URL, so the secret never lingers in history or a copied link. The origin must be
+literal loopback - <code>localhost</code> and hostnames are rejected before any request.
+Without one, a surface
 reads only what rides in the link itself. See <a href="../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>
@@ -306,7 +309,7 @@ for magusfile authors.
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22glossary%22">glossary</a><a class="tag" href="../search/?q=tag%3A%22reference%22">reference</a><a class="tag" href="../search/?q=tag%3A%22terminology%22">terminology</a><a class="tag" href="../search/?q=tag%3A%22concepts%22">concepts</a><a class="tag" href="../search/?q=tag%3A%22console%22">console</a></div>
-    <small>Last updated <time datetime="2026-07-15T03:29:22Z">July 15, 2026, 3:29 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/109842745f294e0dae5497d5d596d20d7d338079" data-tooltip="109842745f294e0dae5497d5d596d20d7d338079" title="109842745f294e0dae5497d5d596d20d7d338079">10984274</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/bde4304001b4a1b3f0bdeded83e2a8c07416b68d"><code>bde43040</code></a> <small><time datetime="2026-07-11T13:21:06Z">Jul 11, 2026</time></small> - format five markdown files with prettier</li><li><a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92"><code>0fb66e19</code></a> <small><time datetime="2026-07-11T04:22:33Z">Jul 11, 2026</time></small> - rename the flake and flaky vocabulary to volatile</li><li><a href="https://github.com/egladman/magus/commit/716014272f69f21e855cf266e2556e714dcff3a5"><code>71601427</code></a> <small><time datetime="2026-07-11T03:44:30Z">Jul 11, 2026</time></small> - unify execution-state terminology to running and queued across</li><li><a href="https://github.com/egladman/magus/commit/4449683ba61a4c56c21a40130fa7c0adee537a1e"><code>4449683b</code></a> <small><time datetime="2026-07-11T00:42:28Z">Jul 11, 2026</time></small> - give every glossary term a stable anchor</li><li><a href="https://github.com/egladman/magus/commit/5e25b1bc7ea89210da788a72f7b89dcfd9821a84"><code>5e25b1bc</code></a> <small><time datetime="2026-07-10T16:46:36Z">Jul 10, 2026</time></small> - sync output-ref docs to `magus query output &lt;ref&gt;`</li><li><a href="https://github.com/egladman/magus/commit/f2cf6ff93ea52db3ab66d0eb5f8fe287eae0109c"><code>f2cf6ff9</code></a> <small><time datetime="2026-07-10T14:36:41Z">Jul 10, 2026</time></small> - adopt &#34;output reference&#34; plus trace and span glossary</li><li><a href="https://github.com/egladman/magus/commit/e59f5200cda35d3a094fae01ffba6687f77701be"><code>e59f5200</code></a> <small><time datetime="2026-07-10T04:19:03Z">Jul 10, 2026</time></small> - document output refs; regenerate site and catalog</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/glossary.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/glossary.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-18T19:44:56Z">July 18, 2026, 7:44 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/091365472c943d57ba1591db48ba6830af303ea0" data-tooltip="091365472c943d57ba1591db48ba6830af303ea0" title="091365472c943d57ba1591db48ba6830af303ea0">09136547</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/de0bf8d1ba7f7ae018b3859d7f422c1993ddd877"><code>de0bf8d1</code></a> <small><time datetime="2026-07-17T19:53:41Z">Jul 17, 2026</time></small> - document the console job control surface; drop the read only framing</li><li><a href="https://github.com/egladman/magus/commit/d933cc26b369ca08bc060c3b482f4be49f7114aa"><code>d933cc26</code></a> <small><time datetime="2026-07-17T12:56:31Z">Jul 17, 2026</time></small> - rename data-legacy-ref to data-ref-section; it was never legacy, it is how a surface marks its reference copy; give the reference panel console-wide chord and pane sections so the launcher is not empty; add the console&#39;s terms to the glossary; the command bar button is a prompt, not a magnifier</li><li><a href="https://github.com/egladman/magus/commit/109842745f294e0dae5497d5d596d20d7d338079"><code>10984274</code></a> <small><time datetime="2026-07-15T03:29:22Z">Jul 15, 2026</time></small> - fix ci pipeline doc drift: an ordinary target, not a hardcoded chain</li><li><a href="https://github.com/egladman/magus/commit/bde4304001b4a1b3f0bdeded83e2a8c07416b68d"><code>bde43040</code></a> <small><time datetime="2026-07-11T13:21:06Z">Jul 11, 2026</time></small> - format five markdown files with prettier</li><li><a href="https://github.com/egladman/magus/commit/0fb66e198d5ab94e4758c01d4ea7a590ba05bd92"><code>0fb66e19</code></a> <small><time datetime="2026-07-11T04:22:33Z">Jul 11, 2026</time></small> - rename the flake and flaky vocabulary to volatile</li><li><a href="https://github.com/egladman/magus/commit/716014272f69f21e855cf266e2556e714dcff3a5"><code>71601427</code></a> <small><time datetime="2026-07-11T03:44:30Z">Jul 11, 2026</time></small> - unify execution-state terminology to running and queued across</li><li><a href="https://github.com/egladman/magus/commit/4449683ba61a4c56c21a40130fa7c0adee537a1e"><code>4449683b</code></a> <small><time datetime="2026-07-11T00:42:28Z">Jul 11, 2026</time></small> - give every glossary term a stable anchor</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/glossary.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/glossary.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -476,8 +479,9 @@ console's UI, so they are defined here rather than left to be inferred from it.<
 <h3 id="console-1">Console</h3>
 <p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon only exposes a
-read-only loopback API it calls. See <a href="../reference/console/">reference/console</a>.</p>
+static app, not something the daemon serves - the daemon exposes a loopback API
+it calls: read-only views plus one bearer-gated job-control service for
+maintenance jobs. See <a href="../reference/console/">reference/console</a>.</p>
 <h3 id="surface">Surface</h3>
 <p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
 Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
@@ -499,11 +503,13 @@ command bar whether or not it has one. See <a href="../reference/console/">refer
 opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
 chords dispatch the same commands it does. See <a href="../reference/console/">reference/console</a>.</p>
 <h3 id="live-link">Live link</h3>
-<p>The URL that points a surface at a running daemon, carrying the loopback address
-and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
-console consumes the token, stores it, and strips it from the URL, so the secret
-never lingers in history or a copied link. The host must be literal loopback -
-<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+<p>The URL that points a surface at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the surface path and
+a bearer token in the fragment (<code>http://127.0.0.1:7391/console/graph/#token=...</code>).
+The daemon prints it; the console consumes the token, stores it, and strips it from
+the URL, so the secret never lingers in history or a copied link. The origin must be
+literal loopback - <code>localhost</code> and hostnames are rejected before any request.
+Without one, a surface
 reads only what rides in the link itself. See <a href="../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>

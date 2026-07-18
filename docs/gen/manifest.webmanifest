@@ -8,8 +8,8 @@
   "scope": "/magus/",
   "display": "standalone",
   "categories": ["developer", "utilities"],
-  "background_color": "#ffffff",
-  "theme_color": "#3178c6",
+  "background_color": "#13171f",
+  "theme_color": "#13171f",
   "icons": [
     { "src": "/magus/assets/favicon-32.png", "sizes": "32x32", "type": "image/png", "purpose": "any" },
     { "src": "/magus/assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },

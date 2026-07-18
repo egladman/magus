@@ -89,10 +89,54 @@ failure - so the two listeners can diverge, which is why `magus status` reports 
 separately.
 
 This page zooms in on the two transports; the HTTP server also carries the agent-facing
-[MCP tools](mcp.md) and the read-only [console routes](reference/console.md) the browser apps use,
-all reading the same warm [knowledge graph](knowledge.md). The full-system view - clients,
+[MCP tools](mcp.md), the read-only [console routes](reference/console.md) the browser apps use
+(all reading the same warm [knowledge graph](knowledge.md)), and one bearer-gated
+[job-control service](reference/console.md#job-control) for maintenance jobs - the daemon's only
+mutating HTTP surface. The full-system view - clients,
 guards, shared state, and the progressive web app - is the architecture diagram in the
 [README](https://github.com/egladman/magus#architecture).
+
+## Sharing the console to a phone
+
+The console can serve a read-only live view to a phone on the same network. The
+"Share to phone" action in the console opens a small dialog with a QR code; a phone
+that scans it loads the console and gets a read-only view of the dashboard, status,
+activity, and logs. It is opt-in and off by default: no listener faces the network
+until you click it.
+
+How it works, and where the guards sit:
+
+- **Loopback-only trigger.** The share button POSTs `/api/v1/share` on the daemon's
+  loopback HTTP server. That route requires the local peer and the existing bearer
+  token (the cli or a connector token), so only the already-authenticated console on
+  your own machine can open a share. A network client cannot reach it.
+- **Ephemeral, time-boxed LAN listener.** On success the daemon picks the machine's
+  private LAN IPv4, binds a NEW listener on an ephemeral port, and serves ONLY the read
+  surface there: the console static assets, the read JSON routes
+  (`status`, `events`, `insight`, `outputs`, `output`), and the read-only Connect
+  services (activity, metrics). It does NOT serve `/mcp`, the share endpoint, or any
+  mutating route. The listener closes automatically after 15 minutes, and on daemon
+  shutdown.
+- **Short-lived, read-scoped token.** Each share mints a fresh token in the `mgs_`
+  family, hashed at rest and stamped with a read-only scope. The listener is bound 1:1
+  to that one token: it accepts nothing else. The cli token, connector tokens, an
+  expired share token, and a share token from any previous share session are all
+  rejected. Every share supersedes the last - a repeat click revokes the old token and
+  closes its listener before returning a new one, so there is only ever one live share.
+- **The daemon verifier never accepts a share token.** The verifier that guards `/mcp`
+  and every mutating console route matches only the cli and connector tiers, so a share
+  token is refused there. The read scope cannot reach a mutating surface.
+- **Same-origin, so CORS never engages.** The phone loads the console FROM the share
+  listener, then its data fetches go back to the same origin. No cross-origin request is
+  made, so the daemon's CORS middleware is never involved and is untouched by this
+  feature. The standing loopback server stays bound to `127.0.0.1` as before.
+
+What a leaked QR or URL is worth: at most a few minutes of read-only visibility into
+one workspace's dashboard, status, activity, and logs, from a device already on your
+LAN, and only until the share expires or you open a new one (which kills the old token).
+It cannot run a build, mutate the cache, reach `/mcp`, or read anything the loopback
+console does not already show. There is no standing exposure: when the timer fires the
+listener is gone and the token validates nowhere.
 
 ## Health: what `magus status` reports
 
@@ -126,9 +170,19 @@ probes), split along the standard liveness/readiness lines:
 Liveness is deliberately **independent of warm-up state**: it returns `200` as soon as the
 daemon answers, even before any workspace is loaded, so a slow first index never crash-loops
 the pod. Readiness gates on a loaded workspace, and `GET /readyz?workspace=<root>` pins it to
-one specific workspace (returns `503` with a reason until that workspace is warm). Because
-these endpoints are served by the MCP HTTP server itself, a successful probe also proves the
-MCP endpoint is listening.
+one specific workspace (returns `503` until that workspace is warm). Because these endpoints
+are served by the MCP HTTP server itself, a successful probe also proves the MCP endpoint is
+listening.
+
+The **status code is the signal** - a kubelet reads only that. Because these routes are
+unguarded, their bodies carry nothing identifying: `/livez` and `/healthz` answer a bare
+`ok` or `unavailable`, and `/readyz` returns a JSON `{"ready": ..., "components": [...]}`
+where each component has a coarse `status` (`ok`, `degraded`, `down`, `disabled`) plus a
+generic, quantitative `detail` such as `1 loaded` or `0 of 4 up to date` - counts and state
+phrases only, never workspace roots, project or service names, filesystem paths, or the
+daemon PID. For the identifying per-subsystem view (workspace roots, per-project
+symbol-index freshness, named service state), read the bearer-authenticated
+`GET /api/v1/status` instead.
 
 The endpoints bind to `127.0.0.1` by default, which the kubelet cannot reach; set
 `MAGUS_MCP_ADDRESS=0.0.0.0:7391` (or `mcp.address`) so probes can hit the pod IP.

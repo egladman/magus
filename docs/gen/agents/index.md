@@ -45,7 +45,7 @@ so an agent working inside one project gets a routing index sized to it.
 
 ## The skills
 
-`magus agent install <platform>` writes four Agent Skills into the platform's
+`magus agent install <platform>` writes five Agent Skills into the platform's
 discovery location. Commit them so every teammate's agent shares the same
 instructions. The skills are one shared source embedded in the binary - the
 Agent Skills format (SKILL.md with name and description frontmatter) is a
@@ -74,12 +74,28 @@ means adding a destination, not writing new instructions.
   `magus affected ci` as the final gate before handing work back; spell-op
   granularity (`go::go-test`) when one op is genuinely needed; fetching a
   failure's captured output by ref.
-- `magus-vcs-hygiene`: triage changed files against declared target outputs -
+- `magus-vcs`: triage changed files against declared target outputs -
   generated files are regenerated, never hand-edited, never worth reading a
   diff of, and committed alongside the sources that produced them.
 - `magus-architecture`: ground refactoring proposals in graph evidence -
   hotspots, affinity (undeclared coupling), blast radius, symbol fan-in,
   CODEOWNERS - and verify impact with `graph diff`.
+- `magus-memory`: durable cross-session project memory over MCP - a status
+  snapshot, a dated progress journal, and a decision log that survive model
+  and session changes.
+
+### Where guidance belongs
+
+The skills teach the magus tool surface and nothing else. Keep each kind of
+guidance at the one layer that owns it, because agents pay for every
+duplicated line in every session:
+
+- Your agent harness already covers generic behavior (when to ask, how to
+  report). Do not restate it anywhere.
+- Your repo's own instruction file (CLAUDE.md, AGENTS.md) carries repo
+  conventions and team working style.
+- The installed skills carry the magus HOW; the committed MAGUS.md carries
+  the workspace WHAT. Both are generated - edit neither by hand.
 
 ## Install and update
 

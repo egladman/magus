@@ -76,12 +76,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#concurrency" title="Concurrency">Concurrency</a></li><li><a href="#daemon" title="Daemon">Daemon</a></li><li><a href="#two-transports" title="Two transports">Two transports</a></li><li><a href="#health-what-magus-status-reports" title="Health: what magus status reports">Health: what magus status reports</a></li><li><a href="#kubernetes-and-container-probes" title="Kubernetes and container probes">Kubernetes and container probes</a></li><li><a href="#keeping-the-daemon-running" title="Keeping the daemon running">Keeping the daemon running</a></li><li><a href="#hosting-shared-services" title="Hosting shared services">Hosting shared services</a></li><li><a href="#configuring-the-socket-address" title="Configuring the socket address">Configuring the socket address</a></li></ul>
+        <ul><li><a href="#concurrency" title="Concurrency">Concurrency</a></li><li><a href="#daemon" title="Daemon">Daemon</a></li><li><a href="#two-transports" title="Two transports">Two transports</a></li><li><a href="#sharing-the-console-to-a-phone" title="Sharing the console to a phone">Sharing the console to a phone</a></li><li><a href="#health-what-magus-status-reports" title="Health: what magus status reports">Health: what magus status reports</a></li><li><a href="#kubernetes-and-container-probes" title="Kubernetes and container probes">Kubernetes and container probes</a></li><li><a href="#keeping-the-daemon-running" title="Keeping the daemon running">Keeping the daemon running</a></li><li><a href="#hosting-shared-services" title="Hosting shared services">Hosting shared services</a></li><li><a href="#configuring-the-socket-address" title="Configuring the socket address">Configuring the socket address</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">7 min read</small>
+    <small class="reading-time" title="Estimated reading time">10 min read</small>
     <article>
 <h1 id="daemon-and-concurrency">Daemon and concurrency</h1>
 <h2 id="concurrency">Concurrency</h2>
@@ -135,10 +135,51 @@ the agent-facing endpoint is bound and serving - a socket check cannot detect an
 failure - so the two listeners can diverge, which is why <code>magus status</code> reports each
 separately.</p>
 <p>This page zooms in on the two transports; the HTTP server also carries the agent-facing
-<a href="../mcp/">MCP tools</a> and the read-only <a href="../reference/console/">console routes</a> the browser apps use,
-all reading the same warm <a href="../knowledge/">knowledge graph</a>. The full-system view - clients,
+<a href="../mcp/">MCP tools</a>, the read-only <a href="../reference/console/">console routes</a> the browser apps use
+(all reading the same warm <a href="../knowledge/">knowledge graph</a>), and one bearer-gated
+<a href="../reference/console/#job-control">job-control service</a> for maintenance jobs - the daemon's only
+mutating HTTP surface. The full-system view - clients,
 guards, shared state, and the progressive web app - is the architecture diagram in the
 <a href="https://github.com/egladman/magus#architecture" rel="noopener noreferrer" target="_blank" data-external>README</a>.</p>
+<h2 id="sharing-the-console-to-a-phone">Sharing the console to a phone</h2>
+<p>The console can serve a read-only live view to a phone on the same network. The
+&quot;Share to phone&quot; action in the console opens a small dialog with a QR code; a phone
+that scans it loads the console and gets a read-only view of the dashboard, status,
+activity, and logs. It is opt-in and off by default: no listener faces the network
+until you click it.</p>
+<p>How it works, and where the guards sit:</p>
+<ul>
+<li><strong>Loopback-only trigger.</strong> The share button POSTs <code>/api/v1/share</code> on the daemon's
+loopback HTTP server. That route requires the local peer and the existing bearer
+token (the cli or a connector token), so only the already-authenticated console on
+your own machine can open a share. A network client cannot reach it.</li>
+<li><strong>Ephemeral, time-boxed LAN listener.</strong> On success the daemon picks the machine's
+private LAN IPv4, binds a NEW listener on an ephemeral port, and serves ONLY the read
+surface there: the console static assets, the read JSON routes
+(<code>status</code>, <code>events</code>, <code>insight</code>, <code>outputs</code>, <code>output</code>), and the read-only Connect
+services (activity, metrics). It does NOT serve <code>/mcp</code>, the share endpoint, or any
+mutating route. The listener closes automatically after 15 minutes, and on daemon
+shutdown.</li>
+<li><strong>Short-lived, read-scoped token.</strong> Each share mints a fresh token in the <code>mgs_</code>
+family, hashed at rest and stamped with a read-only scope. The listener is bound 1:1
+to that one token: it accepts nothing else. The cli token, connector tokens, an
+expired share token, and a share token from any previous share session are all
+rejected. Every share supersedes the last - a repeat click revokes the old token and
+closes its listener before returning a new one, so there is only ever one live share.</li>
+<li><strong>The daemon verifier never accepts a share token.</strong> The verifier that guards <code>/mcp</code>
+and every mutating console route matches only the cli and connector tiers, so a share
+token is refused there. The read scope cannot reach a mutating surface.</li>
+<li><strong>Same-origin, so CORS never engages.</strong> The phone loads the console FROM the share
+listener, then its data fetches go back to the same origin. No cross-origin request is
+made, so the daemon's CORS middleware is never involved and is untouched by this
+feature. The standing loopback server stays bound to <code>127.0.0.1</code> as before.</li>
+</ul>
+<p>What a leaked QR or URL is worth: at most a few minutes of read-only visibility into
+one workspace's dashboard, status, activity, and logs, from a device already on your
+LAN, and only until the share expires or you open a new one (which kills the old token).
+It cannot run a build, mutate the cache, reach <code>/mcp</code>, or read anything the loopback
+console does not already show. There is no standing exposure: when the timer fires the
+listener is gone and the token validates nowhere.</p>
 <h2 id="health-what-magus-status-reports">Health: what <code>magus status</code> reports</h2>
 <p><code>magus status</code> is the health surface. It reports two listeners separately, because they
 can diverge:</p>
@@ -186,9 +227,18 @@ probes), split along the standard liveness/readiness lines:</p>
 <p>Liveness is deliberately <strong>independent of warm-up state</strong>: it returns <code>200</code> as soon as the
 daemon answers, even before any workspace is loaded, so a slow first index never crash-loops
 the pod. Readiness gates on a loaded workspace, and <code>GET /readyz?workspace=&lt;root&gt;</code> pins it to
-one specific workspace (returns <code>503</code> with a reason until that workspace is warm). Because
-these endpoints are served by the MCP HTTP server itself, a successful probe also proves the
-MCP endpoint is listening.</p>
+one specific workspace (returns <code>503</code> until that workspace is warm). Because these endpoints
+are served by the MCP HTTP server itself, a successful probe also proves the MCP endpoint is
+listening.</p>
+<p>The <strong>status code is the signal</strong> - a kubelet reads only that. Because these routes are
+unguarded, their bodies carry nothing identifying: <code>/livez</code> and <code>/healthz</code> answer a bare
+<code>ok</code> or <code>unavailable</code>, and <code>/readyz</code> returns a JSON <code>{&quot;ready&quot;: ..., &quot;components&quot;: [...]}</code>
+where each component has a coarse <code>status</code> (<code>ok</code>, <code>degraded</code>, <code>down</code>, <code>disabled</code>) plus a
+generic, quantitative <code>detail</code> such as <code>1 loaded</code> or <code>0 of 4 up to date</code> - counts and state
+phrases only, never workspace roots, project or service names, filesystem paths, or the
+daemon PID. For the identifying per-subsystem view (workspace roots, per-project
+symbol-index freshness, named service state), read the bearer-authenticated
+<code>GET /api/v1/status</code> instead.</p>
 <p>The endpoints bind to <code>127.0.0.1</code> by default, which the kubelet cannot reach; set
 <code>MAGUS_MCP_ADDRESS=0.0.0.0:7391</code> (or <code>mcp.address</code>) so probes can hit the pod IP.</p>
 <pre><code class="language-yaml"># pod spec
@@ -304,7 +354,7 @@ down.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../search/?q=tag%3A%22concurrency%22">concurrency</a><a class="tag" href="../search/?q=tag%3A%22magus+server%22">magus server</a><a class="tag" href="../search/?q=tag%3A%22magus+status%22">magus status</a><a class="tag" href="../search/?q=tag%3A%22socket%22">socket</a><a class="tag" href="../search/?q=tag%3A%22pool%22">pool</a><a class="tag" href="../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../search/?q=tag%3A%22shared+services%22">shared services</a><a class="tag" href="../search/?q=tag%3A%22keep-warm%22">keep-warm</a><a class="tag" href="../search/?q=tag%3A%22health%22">health</a><a class="tag" href="../search/?q=tag%3A%22liveness%22">liveness</a><a class="tag" href="../search/?q=tag%3A%22readiness%22">readiness</a><a class="tag" href="../search/?q=tag%3A%22probes%22">probes</a><a class="tag" href="../search/?q=tag%3A%22kubernetes%22">kubernetes</a></div>
-    <small>Last updated <time datetime="2026-07-15T23:00:01Z">July 15, 2026, 11:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c57f2a26b471759a38b9ed100d5464a61c3f12f7" data-tooltip="c57f2a26b471759a38b9ed100d5464a61c3f12f7" title="c57f2a26b471759a38b9ed100d5464a61c3f12f7">c57f2a26</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/98fe9fc074ce959329a032dd7814db647cdd2f8c"><code>98fe9fc0</code></a> <small><time datetime="2026-07-14T23:40:14Z">Jul 14, 2026</time></small> - document daemon transports, health surface, and k8s probes; add readme architecture diagram; refresh mcp docs</li><li><a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8"><code>75524b96</code></a> <small><time datetime="2026-07-08T00:31:16Z">Jul 8, 2026</time></small> - reformat hand-written docs under prettier 3.9.4, the version mise.toml already pins; the committed bytes had drifted from whatever prettier last touched them, de-indenting wrapped list continuations and padding table columns</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284d</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li><li><a href="https://github.com/egladman/magus/commit/d8ea25b3453a933c86ace2e52d64111fcf8abf0e"><code>d8ea25b3</code></a> <small><time datetime="2026-07-02T22:09:42Z">Jul 2, 2026</time></small> - docs: extract ci / daemon / tips as dedicated pages; slim README to dev-leaning form</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/daemon.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/daemon.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-18T18:12:38Z">July 18, 2026, 6:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b015ec95eb5dd2a226eac369ca0c6cea29e8c19f" data-tooltip="b015ec95eb5dd2a226eac369ca0c6cea29e8c19f" title="b015ec95eb5dd2a226eac369ca0c6cea29e8c19f">b015ec95</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/6e73e742bf32c82190f50c30ac9617d14fe061ad"><code>6e73e742</code></a> <small><time datetime="2026-07-18T14:43:06Z">Jul 18, 2026</time></small> - share to phone: a time-boxed read-only LAN listener with a single-use token and QR</li><li><a href="https://github.com/egladman/magus/commit/de0bf8d1ba7f7ae018b3859d7f422c1993ddd877"><code>de0bf8d1</code></a> <small><time datetime="2026-07-17T19:53:41Z">Jul 17, 2026</time></small> - document the console job control surface; drop the read only framing</li><li><a href="https://github.com/egladman/magus/commit/c57f2a26b471759a38b9ed100d5464a61c3f12f7"><code>c57f2a26</code></a> <small><time datetime="2026-07-15T23:00:01Z">Jul 15, 2026</time></small> - stop the docs site rendering the console; the four surfaces (graph/logs/dashboard/activity) and the SPA moved to the standalone console/ project, so rip the moved-source references out of the docs generator. scribe.buzz: drop renderConsole/renderGraph/renderLogs/renderDashboard/renderConsoleShell/consoleRefLinks and their site_render calls + the per-surface CSS esbuild steps; the docs no longer emit /console/*. Delete website/{console,dashboard,graph,logs}.html and the build-{console,graph-explorer,log-viewer,dashboard,activity} pnpm scripts; drop the console-surface precache from sw.js.tmpl (keep console.css - the docs + playground still load it) and the console/* entries from pruneStaleOutputs&#39; alwaysKeep. Point the nav + footer Console link and the PWA manifest Console shortcut at the SPA (/console/), and reduce the offline page to the playground. Move the loopback-API reference doc docs/console.md -&gt; docs/reference/console.md (title Console API, aliases the old /console/ so a redirect stub keeps internal links resolving; the console project&#39;s deploy copy overwrites /console/ with the SPA); fix the README/knowledge/daemon/output-refs links that pointed at the old standalone surface URLs. Verified: scribe parses + its 40 in-file tests pass; a scratch-dir render emits the /console/ alias stub, the moved page at /reference/console/, and resolves every nav/footer/offline console link</li><li><a href="https://github.com/egladman/magus/commit/98fe9fc074ce959329a032dd7814db647cdd2f8c"><code>98fe9fc0</code></a> <small><time datetime="2026-07-14T23:40:14Z">Jul 14, 2026</time></small> - document daemon transports, health surface, and k8s probes; add readme architecture diagram; refresh mcp docs</li><li><a href="https://github.com/egladman/magus/commit/75524b9605fe902c79b478e4a7cad1ffceb74ac8"><code>75524b96</code></a> <small><time datetime="2026-07-08T00:31:16Z">Jul 8, 2026</time></small> - reformat hand-written docs under prettier 3.9.4, the version mise.toml already pins; the committed bytes had drifted from whatever prettier last touched them, de-indenting wrapped list continuations and padding table columns</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/66ee284db618102c31676a883f2c1f4b2b6d6f0c"><code>66ee284d</code></a> <small><time datetime="2026-07-03T20:52:02Z">Jul 3, 2026</time></small> - merge: model long-running shared services; daemon keep-warm, diagnostics, reaper</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/daemon.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/daemon.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -474,8 +524,9 @@ console's UI, so they are defined here rather than left to be inferred from it.<
 <h3 id="console-1">Console</h3>
 <p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon only exposes a
-read-only loopback API it calls. See <a href="../reference/console/">reference/console</a>.</p>
+static app, not something the daemon serves - the daemon exposes a loopback API
+it calls: read-only views plus one bearer-gated job-control service for
+maintenance jobs. See <a href="../reference/console/">reference/console</a>.</p>
 <h3 id="surface">Surface</h3>
 <p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
 Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
@@ -497,11 +548,13 @@ command bar whether or not it has one. See <a href="../reference/console/">refer
 opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
 chords dispatch the same commands it does. See <a href="../reference/console/">reference/console</a>.</p>
 <h3 id="live-link">Live link</h3>
-<p>The URL that points a surface at a running daemon, carrying the loopback address
-and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
-console consumes the token, stores it, and strips it from the URL, so the secret
-never lingers in history or a copied link. The host must be literal loopback -
-<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+<p>The URL that points a surface at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the surface path and
+a bearer token in the fragment (<code>http://127.0.0.1:7391/console/graph/#token=...</code>).
+The daemon prints it; the console consumes the token, stores it, and strips it from
+the URL, so the secret never lingers in history or a copied link. The origin must be
+literal loopback - <code>localhost</code> and hostnames are rejected before any request.
+Without one, a surface
 reads only what rides in the link itself. See <a href="../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>

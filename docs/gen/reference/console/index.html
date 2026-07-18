@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>Console API — magus</title>
-  <meta name="description" content="Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.">
+  <meta name="description" content="Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/reference/console/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="Console API — magus">
-  <meta property="og:description" content="Read-only loopback API that lets the Graph Explorer show your live workspace. Loopback only, bearer token, no mutation.">
+  <meta property="og:description" content="Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/reference/console/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -76,21 +76,26 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#what-the-console-serves" title="What the console serves">What the console serves</a></li><li><a href="#how-it-is-secured" title="How it is secured">How it is secured</a></li><li><a href="#safari-limitation" title="Safari limitation">Safari limitation</a></li><li><a href="#kill-switch" title="Kill switch">Kill switch</a></li><li><a href="#privacy-statement" title="Privacy statement">Privacy statement</a></li><li><a href="#magus-doctor-check" title="magus doctor check">magus doctor check</a></li><li><a href="#live-mode-pairing" title="Live mode pairing">Live mode pairing</a><ul><li><a href="#how-to-pair" title="How to pair">How to pair</a></li><li><a href="#two-state-model" title="Two-state model">Two-state model</a></li><li><a href="#safari-limitation-1" title="Safari limitation">Safari limitation</a></li><li><a href="#target-graph-in-live-mode" title="Target graph in live mode">Target graph in live mode</a></li><li><a href="#affected-view" title="Affected view">Affected view</a></li></ul></li><li><a href="#verify-our-claims---dont-take-our-word-for-it" title="Verify our claims - don't take our word for it">Verify our claims - don't take our word for it</a><ul><li><a href="#claim-this-page-cannot-send-your-graph-or-source-code-anywhere" title="Claim: this page cannot send your graph or source code anywhere">Claim: this page cannot send your graph or source code anywhere</a></li><li><a href="#claim-your-graph-never-appears-in-any-network-request" title="Claim: your graph never appears in any network request">Claim: your graph never appears in any network request</a></li><li><a href="#claim-everything-works-with-your-network-unplugged" title="Claim: everything works with your network unplugged">Claim: everything works with your network unplugged</a></li><li><a href="#claim-we-store-nothing-without-asking" title="Claim: we store nothing without asking">Claim: we store nothing without asking</a></li><li><a href="#the-deep-audit-record-every-byte-chrome-sends" title="The deep audit: record every byte Chrome sends">The deep audit: record every byte Chrome sends</a></li><li><a href="#claim-the-code-running-here-is-the-code-in-the-repo" title="Claim: the code running here is the code in the repo">Claim: the code running here is the code in the repo</a></li><li><a href="#the-one-nuance-the-service-worker-is-not-covered-by-this-policy" title="The one nuance: the service worker is not covered by this policy">The one nuance: the service worker is not covered by this policy</a></li><li><a href="#the-opt-out-remove-us-entirely" title="The opt-out: remove us entirely">The opt-out: remove us entirely</a></li></ul></li></ul>
+        <ul><li><a href="#what-the-console-serves" title="What the console serves">What the console serves</a></li><li><a href="#job-control" title="Job control">Job control</a></li><li><a href="#how-it-is-secured" title="How it is secured">How it is secured</a></li><li><a href="#safari-limitation" title="Safari limitation">Safari limitation</a></li><li><a href="#kill-switch" title="Kill switch">Kill switch</a></li><li><a href="#privacy-statement" title="Privacy statement">Privacy statement</a></li><li><a href="#magus-doctor-check" title="magus doctor check">magus doctor check</a></li><li><a href="#live-mode-pairing" title="Live mode pairing">Live mode pairing</a><ul><li><a href="#how-to-pair" title="How to pair">How to pair</a></li><li><a href="#two-state-model" title="Two-state model">Two-state model</a></li><li><a href="#safari-limitation-1" title="Safari limitation">Safari limitation</a></li><li><a href="#target-graph-in-live-mode" title="Target graph in live mode">Target graph in live mode</a></li><li><a href="#affected-view" title="Affected view">Affected view</a></li></ul></li><li><a href="#verify-our-claims---dont-take-our-word-for-it" title="Verify our claims - don't take our word for it">Verify our claims - don't take our word for it</a><ul><li><a href="#claim-this-page-cannot-send-your-graph-or-source-code-anywhere" title="Claim: this page cannot send your graph or source code anywhere">Claim: this page cannot send your graph or source code anywhere</a></li><li><a href="#claim-your-graph-never-appears-in-any-network-request" title="Claim: your graph never appears in any network request">Claim: your graph never appears in any network request</a></li><li><a href="#claim-everything-works-with-your-network-unplugged" title="Claim: everything works with your network unplugged">Claim: everything works with your network unplugged</a></li><li><a href="#claim-we-store-nothing-without-asking" title="Claim: we store nothing without asking">Claim: we store nothing without asking</a></li><li><a href="#the-deep-audit-record-every-byte-chrome-sends" title="The deep audit: record every byte Chrome sends">The deep audit: record every byte Chrome sends</a></li><li><a href="#claim-the-code-running-here-is-the-code-in-the-repo" title="Claim: the code running here is the code in the repo">Claim: the code running here is the code in the repo</a></li><li><a href="#the-one-nuance-the-service-worker-is-not-covered-by-this-policy" title="The one nuance: the service worker is not covered by this policy">The one nuance: the service worker is not covered by this policy</a></li><li><a href="#the-opt-out-remove-us-entirely" title="The opt-out: remove us entirely">The opt-out: remove us entirely</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">11 min read</small>
+    <small class="reading-time" title="Estimated reading time">12 min read</small>
     <article>
 <h1 id="console-api">Console API</h1>
 <p>The console is three frozen, read-only GET routes that the magus daemon
 exposes over loopback so the hosted <a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>console</a>
 (its Graph Explorer surface) can display your current workspace.</p>
-<p><strong>Nothing in the browser can make the daemon do anything.</strong> The console has no
+<p><strong>These read routes cannot change your workspace.</strong> The console's GET API has no
 write surface, no POST routes, and no way to trigger a build, run a target, or
-change configuration. This is a design decision, not just a security posture
-(see section 0.3 of the PWA plan).</p>
+change configuration - it only reads. This is a design decision, not just a
+security posture (see section 0.3 of the PWA plan).</p>
+<p>The daemon does expose one mutating surface, separate from these read routes: an
+authenticated <a href="#job-control">job-control service</a> that triggers maintenance jobs
+(reconcile the graph, rotate the activity trail or run-logs, clear the cache).
+It is gated behind the same loopback bind and bearer token, and it cannot run an
+arbitrary command - only a fixed set of maintenance jobs.</p>
 <h2 id="what-the-console-serves">What the console serves</h2>
 <p>Every byte the console can emit, enumerated:</p>
 <figure class="table-scroll"><table>
@@ -141,6 +146,47 @@ symbol data stays opt-in.</p>
 reparse the workspace target graph on every request (they call <code>DescribeGraph</code>
 which reads the cached in-memory target graph but does not cache the variant
 serialization). This is a known limitation; memoization per variant is deferred.</p>
+<h2 id="job-control">Job control</h2>
+<p>Separate from the read routes above, the daemon hosts a <strong>mutating</strong> Connect
+service, <code>magus.job.v1.JobService</code>, so a browser client (or the CLI) can trigger
+background maintenance without an open action endpoint. It is the daemon's only
+write surface, and it is bounded: it submits a fixed set of named jobs, never an
+arbitrary command.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>RPC</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SyncGraph</code></td>
+<td>Reconcile the knowledge graph to current source</td>
+</tr>
+<tr>
+<td><code>RotateActivities</code></td>
+<td>Trim the activity trail to its cap</td>
+</tr>
+<tr>
+<td><code>RotateLogs</code></td>
+<td>Trim the invocation run-log journals to their cap</td>
+</tr>
+<tr>
+<td><code>ClearCache</code></td>
+<td>Invalidate cached build entries</td>
+</tr>
+<tr>
+<td><code>ListJobs</code></td>
+<td>Report every job's running state, last run, and target size</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Each submit is fire-and-forget and coalesced (an identical in-flight job is not
+started twice) and returns a metadata snapshot - the job's last run and the
+current size of what it maintains. The same jobs are reachable from the CLI with
+<code>magus server job &lt;name&gt;</code>. The service is mounted behind the same loopback bind
+and bearer token as everything else here; it is never served unauthenticated.</p>
 <h2 id="how-it-is-secured">How it is secured</h2>
 <p><strong>Loopback only.</strong> The console refuses to mount on any non-loopback bind
 address. If you set <code>mcp.address</code> to a non-loopback IP (for k8s or LAN use),
@@ -210,9 +256,11 @@ disabled.</p>
 <li>Run <code>magus graph open --live</code> (or <code>--live --print</code> to copy the URL)</li>
 <li>The explorer shows a <code>live: &lt;workspace&gt;</code> badge and updates within seconds of file changes</li>
 </ol>
-<p>The link contains <code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;</code>. The page:</p>
+<p>The link is served from the daemon's own loopback origin, e.g.
+<code>http://127.0.0.1:7391/console/graph/#token=&lt;bearer&gt;</code> (the origin names which daemon;
+the token rides the fragment). The page:</p>
 <ul>
-<li>Validates the host is literally <code>127.0.0.1</code> or <code>[::1]</code> before making any fetch</li>
+<li>Confirms its own origin is literally <code>127.0.0.1</code> or <code>[::1]</code> before making any fetch</li>
 <li>Consumes the token and strips it from the URL via <code>history.replaceState</code></li>
 <li>Stores the token in sessionStorage (tab lifetime) unless you tick &quot;Remember this workspace&quot;, which moves it to localStorage</li>
 </ul>
@@ -245,7 +293,7 @@ disabled.</p>
 <p>Safari blocks fetch requests from an HTTPS page to <code>http://127.0.0.1</code> (mixed content). Live mode cannot connect in Safari. Use <code>magus graph open --serve</code> instead: it runs an ephemeral loopback server and opens the graph via a <code>#src=</code> fragment that is compatible with Safari's same-origin restriction.</p>
 <h3 id="target-graph-in-live-mode">Target graph in live mode</h3>
 <p><code>magus graph open --live --targets</code> opens the live target dependency graph:
-<code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;&amp;flavor=targets</code></p>
+<code>http://127.0.0.1:7391/console/graph/#token=&lt;bearer&gt;&amp;flavor=targets</code></p>
 <h3 id="affected-view">Affected view</h3>
 <p>When the daemon has computed an affected set (from <code>magus affected</code> in a CI context), the <code>/api/v1/status</code> response includes an <code>affected</code> array of node ids. The &quot;What does my diff touch?&quot; view is enabled automatically and paints those nodes.</p>
 <h2 id="verify-our-claims---dont-take-our-word-for-it">Verify our claims - don't take our word for it</h2>
@@ -388,7 +436,7 @@ as a fallback for hosts that cannot set headers.</p>
 network. Every page here is origin-agnostic and works identically. (magus
 ships no general-purpose static file server for hosting this site; the only
 servers it binds are the ephemeral loopback <code>--serve</code> graph server and the
-read-only loopback daemon console documented above.)</p>
+loopback daemon console documented above.)</p>
     </article>
     </div>
     </div>
@@ -404,7 +452,7 @@ read-only loopback daemon console documented above.)</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22console%22">console</a><a class="tag" href="../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../search/?q=tag%3A%22privacy%22">privacy</a></div>
-    <small>Last updated <time datetime="2026-07-17T00:01:29Z">July 17, 2026, 12:01 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/6bbd98afdfcd91f5539b05db8c525a767deb96b6" data-tooltip="6bbd98afdfcd91f5539b05db8c525a767deb96b6" title="6bbd98afdfcd91f5539b05db8c525a767deb96b6">6bbd98af</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7a0656aac56a92eb2e0d0e8b4dbf36e3e8436d8c"><code>7a0656aa</code></a> <small><time datetime="2026-07-15T23:00:02Z">Jul 15, 2026</time></small> - consolidate the static-site generator from website/ into docs/ and drop the scribe name; website/ stops existing - its SSG, templates, assets, package.json, and gen/ move INTO the top-level docs/ dir so docs/ is the ONE documentation project holding BOTH the markdown AND the renderer that emits it, co-located. Rename the generator off scribe: scribe.buzz -&gt; docs/render.buzz, scribe_{dom,html,text,url,date,feed}.buzz -&gt; docs/render_*.buzz, and every import/call site (magusfile import scribe -&gt; render; render.site_render/writeSiteManifest/updateUrlLock). Fix the path model: from docs/ the ROOT/DOCS args still resolve (../docs == docs), OUT is now docs/gen; the magus.project sources watch the local markdown corpus + SSG inputs instead of ../docs. Guard the content walk + collectDocPages with a root-only generator-dir skip-set (node_modules/gen/src/tour) + a MAGUS.md file skip, so the walk never ingests the SSG&#39;s own subdirs as pages while nested content dirs named gen (docs/manpage/gen) still render. Sweep every remaining website/scribe reference across the repo: Go runtime paths (cmd/magus-utils/release.go served dir, magusfile build-playground wasm output, the mermaid-drift + tour test fixtures) and comments, the Pages workflow (docs/gen), README/CONTRIBUTING/CLAUDE/testing prose, the magus-vcs skill (source + re-stamped install), and retire the old /development/website/ catalog URLs. Verified: docs/render.buzz parses + its 40 in-file tests pass; describe lists a docs project (no website); a scratch render emits 175 pages with the exclusions holding (no node_modules/MAGUS/src/tour leakage, manpage pages intact); go build clean, go test 81 ok, graph verify up to date</li><li><a href="https://github.com/egladman/magus/commit/c57f2a26b471759a38b9ed100d5464a61c3f12f7"><code>c57f2a26</code></a> <small><time datetime="2026-07-15T23:00:01Z">Jul 15, 2026</time></small> - stop the docs site rendering the console; the four surfaces (graph/logs/dashboard/activity) and the SPA moved to the standalone console/ project, so rip the moved-source references out of the docs generator. scribe.buzz: drop renderConsole/renderGraph/renderLogs/renderDashboard/renderConsoleShell/consoleRefLinks and their site_render calls + the per-surface CSS esbuild steps; the docs no longer emit /console/*. Delete website/{console,dashboard,graph,logs}.html and the build-{console,graph-explorer,log-viewer,dashboard,activity} pnpm scripts; drop the console-surface precache from sw.js.tmpl (keep console.css - the docs + playground still load it) and the console/* entries from pruneStaleOutputs&#39; alwaysKeep. Point the nav + footer Console link and the PWA manifest Console shortcut at the SPA (/console/), and reduce the offline page to the playground. Move the loopback-API reference doc docs/console.md -&gt; docs/reference/console.md (title Console API, aliases the old /console/ so a redirect stub keeps internal links resolving; the console project&#39;s deploy copy overwrites /console/ with the SPA); fix the README/knowledge/daemon/output-refs links that pointed at the old standalone surface URLs. Verified: scribe parses + its 40 in-file tests pass; a scratch-dir render emits the /console/ alias stub, the moved page at /reference/console/, and resolves every nav/footer/offline console link</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/reference/console.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/reference/console.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-18T19:44:56Z">July 18, 2026, 7:44 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/091365472c943d57ba1591db48ba6830af303ea0" data-tooltip="091365472c943d57ba1591db48ba6830af303ea0" title="091365472c943d57ba1591db48ba6830af303ea0">09136547</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/de0bf8d1ba7f7ae018b3859d7f422c1993ddd877"><code>de0bf8d1</code></a> <small><time datetime="2026-07-17T19:53:41Z">Jul 17, 2026</time></small> - document the console job control surface; drop the read only framing</li><li><a href="https://github.com/egladman/magus/commit/6bbd98afdfcd91f5539b05db8c525a767deb96b6"><code>6bbd98af</code></a> <small><time datetime="2026-07-17T00:01:29Z">Jul 17, 2026</time></small> - rename the bridge config namespace to console; add console.url for the hosted console base; regenerate config schema, flags, env and api.lock</li><li><a href="https://github.com/egladman/magus/commit/7a0656aac56a92eb2e0d0e8b4dbf36e3e8436d8c"><code>7a0656aa</code></a> <small><time datetime="2026-07-15T23:00:02Z">Jul 15, 2026</time></small> - consolidate the static-site generator from website/ into docs/ and drop the scribe name; website/ stops existing - its SSG, templates, assets, package.json, and gen/ move INTO the top-level docs/ dir so docs/ is the ONE documentation project holding BOTH the markdown AND the renderer that emits it, co-located. Rename the generator off scribe: scribe.buzz -&gt; docs/render.buzz, scribe_{dom,html,text,url,date,feed}.buzz -&gt; docs/render_*.buzz, and every import/call site (magusfile import scribe -&gt; render; render.site_render/writeSiteManifest/updateUrlLock). Fix the path model: from docs/ the ROOT/DOCS args still resolve (../docs == docs), OUT is now docs/gen; the magus.project sources watch the local markdown corpus + SSG inputs instead of ../docs. Guard the content walk + collectDocPages with a root-only generator-dir skip-set (node_modules/gen/src/tour) + a MAGUS.md file skip, so the walk never ingests the SSG&#39;s own subdirs as pages while nested content dirs named gen (docs/manpage/gen) still render. Sweep every remaining website/scribe reference across the repo: Go runtime paths (cmd/magus-utils/release.go served dir, magusfile build-playground wasm output, the mermaid-drift + tour test fixtures) and comments, the Pages workflow (docs/gen), README/CONTRIBUTING/CLAUDE/testing prose, the magus-vcs skill (source + re-stamped install), and retire the old /development/website/ catalog URLs. Verified: docs/render.buzz parses + its 40 in-file tests pass; describe lists a docs project (no website); a scratch render emits 175 pages with the exclusions holding (no node_modules/MAGUS/src/tour leakage, manpage pages intact); go build clean, go test 81 ok, graph verify up to date</li><li><a href="https://github.com/egladman/magus/commit/c57f2a26b471759a38b9ed100d5464a61c3f12f7"><code>c57f2a26</code></a> <small><time datetime="2026-07-15T23:00:01Z">Jul 15, 2026</time></small> - stop the docs site rendering the console; the four surfaces (graph/logs/dashboard/activity) and the SPA moved to the standalone console/ project, so rip the moved-source references out of the docs generator. scribe.buzz: drop renderConsole/renderGraph/renderLogs/renderDashboard/renderConsoleShell/consoleRefLinks and their site_render calls + the per-surface CSS esbuild steps; the docs no longer emit /console/*. Delete website/{console,dashboard,graph,logs}.html and the build-{console,graph-explorer,log-viewer,dashboard,activity} pnpm scripts; drop the console-surface precache from sw.js.tmpl (keep console.css - the docs + playground still load it) and the console/* entries from pruneStaleOutputs&#39; alwaysKeep. Point the nav + footer Console link and the PWA manifest Console shortcut at the SPA (/console/), and reduce the offline page to the playground. Move the loopback-API reference doc docs/console.md -&gt; docs/reference/console.md (title Console API, aliases the old /console/ so a redirect stub keeps internal links resolving; the console project&#39;s deploy copy overwrites /console/ with the SPA); fix the README/knowledge/daemon/output-refs links that pointed at the old standalone surface URLs. Verified: scribe parses + its 40 in-file tests pass; a scratch-dir render emits the /console/ alias stub, the moved page at /reference/console/, and resolves every nav/footer/offline console link</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/reference/console.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/reference/console.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -574,8 +622,9 @@ console's UI, so they are defined here rather than left to be inferred from it.<
 <h3 id="console-1">Console</h3>
 <p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon only exposes a
-read-only loopback API it calls. See <a href="../../reference/console/">reference/console</a>.</p>
+static app, not something the daemon serves - the daemon exposes a loopback API
+it calls: read-only views plus one bearer-gated job-control service for
+maintenance jobs. See <a href="../../reference/console/">reference/console</a>.</p>
 <h3 id="surface">Surface</h3>
 <p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
 Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
@@ -597,11 +646,13 @@ command bar whether or not it has one. See <a href="../../reference/console/">re
 opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
 chords dispatch the same commands it does. See <a href="../../reference/console/">reference/console</a>.</p>
 <h3 id="live-link">Live link</h3>
-<p>The URL that points a surface at a running daemon, carrying the loopback address
-and a bearer token (<code>#live=127.0.0.1:7391&amp;token=...</code>). The daemon prints it; the
-console consumes the token, stores it, and strips it from the URL, so the secret
-never lingers in history or a copied link. The host must be literal loopback -
-<code>localhost</code> and hostnames are rejected before any request. Without one, a surface
+<p>The URL that points a surface at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the surface path and
+a bearer token in the fragment (<code>http://127.0.0.1:7391/console/graph/#token=...</code>).
+The daemon prints it; the console consumes the token, stores it, and strips it from
+the URL, so the secret never lingers in history or a copied link. The origin must be
+literal loopback - <code>localhost</code> and hostnames are rejected before any request.
+Without one, a surface
 reads only what rides in the link itself. See <a href="../../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>
