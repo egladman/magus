@@ -56,11 +56,13 @@
 
 /* Keyboard-shortcuts toggle: a quiet icon button matching the version chip's muted-until-hover weight,
  * sized down to sit on the slim rail without inflating it. */
-#console-statusbar .console-shell-statusbar__shortcuts {
+#console-statusbar .console-shell-statusbar__shortcuts,
+#console-statusbar .console-shell-statusbar__share {
   padding: 0 0.15rem; min-height: 0; line-height: 0; border: 0; background: none;
   color: var(--pf-t--global--text--color--subtle); opacity: 0.65;
 }
-#console-statusbar .console-shell-statusbar__shortcuts:hover { opacity: 1; }
+#console-statusbar .console-shell-statusbar__shortcuts:hover,
+#console-statusbar .console-shell-statusbar__share:hover { opacity: 1; }
 
 /* Panes tray toggle (main.ts): the same quiet weight as the shortcuts button, but its glyph is a live
  * readout of the persisted split direction (panesIcon) rather than a static icon, so it stays a touch

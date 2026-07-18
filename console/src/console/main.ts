@@ -253,6 +253,20 @@ function svgIcon(): SVGElement {
   return svg;
 }
 
+// phoneIcon is the status-bar Share-to-phone button's glyph: a phone body with a home indicator.
+function phoneIcon(): SVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = svgIcon();
+  const rect = document.createElementNS(NS, "rect");
+  rect.setAttribute("x", "7"); rect.setAttribute("y", "2");
+  rect.setAttribute("width", "10"); rect.setAttribute("height", "20"); rect.setAttribute("rx", "2");
+  const line = document.createElementNS(NS, "line");
+  line.setAttribute("x1", "11"); line.setAttribute("y1", "18");
+  line.setAttribute("x2", "13"); line.setAttribute("y2", "18");
+  svg.append(rect, line);
+  return svg;
+}
+
 // panesIcon is the tray Panes button's glyph: a framed rect divided by a line whose ORIENTATION
 // mirrors the current split mode - a vertical divider for "row" (a plain split puts panes side by
 // side), a horizontal one for "col" (stacked) - so the icon doubles as an at-a-glance readout of the
@@ -363,6 +377,23 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     panes.append(panesIconSpan);
     right.append(panes);
   }
+  // Share to phone: a quiet phone-glyph button, loopback-console only (a shared read-only viewer can't
+  // trigger sharing, and the daemon rejects the loopback-guarded endpoint anyway). data-share-toggle is
+  // the hook; startConsole's one delegated click opens the share dialog for whichever tab's copy fired.
+  if (!isSharedMode()) {
+    const share = document.createElement("button");
+    share.type = "button";
+    share.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__share";
+    share.dataset.shareToggle = "";
+    share.setAttribute("aria-label", "Share to phone");
+    share.title = "Share to phone (a time-boxed, read-only view for a phone on this network)";
+    const shareIcon = document.createElement("span");
+    shareIcon.className = "pf-v6-c-button__icon";
+    shareIcon.append(phoneIcon());
+    share.append(shareIcon);
+    right.append(share);
+  }
+
   // Keyboard-shortcuts toggle: a quiet icon button that flips the cheat sheet (the same overlay the
   // hold-"?" gesture reveals). data-cheatsheet-toggle is the hook; startConsole wires ONE delegated
   // click on the footer so every tab's button (built here) drives the single shared cheat sheet.
@@ -756,16 +787,11 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // like every other action.
   registerCommand({ id: "console.notifications.open", label: "Notifications", group: "General", run: () => notifications.toggle() });
 
-  // Share to phone: a loopback-console affordance only. Registered (palette command
-  // + app-menu button) solely when NOT in shared mode - a phone viewing over the LAN
-  // is a read-only viewer, and the daemon would reject the loopback-guarded trigger
-  // anyway. Hiding it keeps the shared UI honest about what it can do.
+  // Share to phone: a loopback-console affordance only (the status-bar phone button is likewise gated
+  // out in shared mode). Register the palette mirror only when NOT shared - a phone viewing over the
+  // LAN is a read-only viewer and the daemon rejects the loopback-guarded trigger anyway.
   if (!shared) {
     registerCommand({ id: "console.share", label: "Share to phone", group: "General", run: () => { void openShareDialog(); } });
-  } else {
-    // In shared mode the app-menu's Share button (if present in the markup) is dead
-    // weight; remove it so the read-only viewer offers no action it cannot perform.
-    document.querySelector<HTMLElement>('[data-app-share]')?.closest("li")?.remove();
   }
 
   // The title-bar trigger (index.html #console-commandbar-btn) opens the same action bar, so it is
@@ -1099,6 +1125,7 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   statusHost.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
     if (t.closest("[data-cheatsheet-toggle]")) cheatsheet.toggle();
+    if (t.closest("[data-share-toggle]")) void openShareDialog();
     // Same delegation idiom for the Panes tray button: makeStatusBar rebuilds one per tab, this one
     // listener drives the single shared popup regardless of which tab's copy was clicked.
     const panesBtn = t.closest<HTMLElement>("[data-panes-toggle]");
