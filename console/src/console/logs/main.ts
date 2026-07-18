@@ -14,7 +14,9 @@
 import { fromBinary } from "@bufbuild/protobuf";
 import { JournalSchema } from "../../gen/magus/viewer/v1/viewer_pb";
 import type { Journal } from "../../gen/magus/viewer/v1/viewer_pb";
-import { parseHash, wantsDemo } from "../../lib/daemon";
+import { parseHash, wantsDemo, getLiveToken } from "../../lib/daemon";
+import { getDefaultHost } from "../../lib/settings";
+import { initRunBrowser, fetchRunOutput, type RunSummary } from "./runtree";
 import { decodeFragmentBytes, viewerParams } from "./fragment";
 import { state, waterfallSource } from "./state";
 import {
@@ -29,7 +31,7 @@ import { applyFilterFromInput, renderFilterChips, setFilter } from "./filter";
 import { clearMarks, runSearch, stepActiveMark } from "./search";
 import { graphTarget, openInGraph, shareLink } from "./share";
 import { connectLive } from "./live";
-import { startDemo } from "./demo";
+import { startDemo, stopDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
@@ -45,6 +47,69 @@ function init(): void {
   wireZoom();
   wireInput();
   loadFromURL();
+  wireRunBrowser();
+}
+
+// wireRunBrowser docks the run browser (runtree.ts) to the left of the viewer. It reads the daemon's
+// run list (or, in the #demo showcase, a synthetic set) and, on selection, loads that run's captured
+// output into this same viewer. Purely additive: with no reachable daemon and no demo the tree stays
+// empty/hidden, so the #data/#src/#live load paths above are untouched.
+function wireRunBrowser(): void {
+  const scroll = el("log-scroll");
+  if (!scroll) return;
+  const demo = wantsDemo(parseHash());
+  const host = getDefaultHost();
+  const token = getLiveToken();
+  initRunBrowser({
+    scroll,
+    host,
+    token,
+    demo,
+    nowMs: Date.now(),
+    onOpenRun: (run) => { void openRun(run, demo, host, token); },
+  });
+}
+
+// openRun loads one browsed run's captured output into the viewer. A demo run (or demo mode) renders a
+// synthetic sample so the showcase is self-contained; a real run fetches its verbatim bytes from the
+// daemon. Either way it flows through loadText, so the viewer renders it exactly like a pasted log.
+async function openRun(run: RunSummary, demo: boolean, host: string, token: string | null): Promise<void> {
+  // A browsed run takes over the viewer, so end any in-progress #demo stream first - otherwise its
+  // interval keeps re-rendering the showcase waterfall over the run we just loaded. Drop back to the
+  // log view too: a stored run is verbatim text (no per-step timing to plot), so the timeline the demo
+  // left selected would otherwise render an empty/degenerate waterfall.
+  stopDemo();
+  state.timeline = false;
+  setStatus("loading " + run.ref + "...");
+  if (demo || run.ref.startsWith("outdemo")) {
+    // Defer one frame so any render the #demo stream already scheduled (scheduleLiveRender, rAF) flushes
+    // FIRST - otherwise it would repaint the showcase over the run we just loaded. Real runs skip this
+    // (no demo stream races them).
+    requestAnimationFrame(() => loadText(demoRunText(run), run.ref));
+    return;
+  }
+  const text = await fetchRunOutput(host, token, run.ref);
+  if (text == null) {
+    setStatus("could not load " + run.ref + " (it may have aged out)", true);
+    return;
+  }
+  loadText(text, run.ref);
+}
+
+// demoRunText synthesizes a short, representative captured-output blob for a demo run, so selecting a
+// leaf in the daemon-free showcase shows something plausible (a passing build, a failing test).
+function demoRunText(run: RunSummary): string {
+  const t = run.target.split(":")[0];
+  const head = "$ magus run " + t + " " + run.project + "\n";
+  if (run.failed) {
+    return head +
+      "==> " + run.project + ":" + t + "\n" +
+      (run.error ? run.error + "\n" : "one or more checks failed\n") +
+      "FAIL " + run.project + ":" + t + " (" + Math.round(run.duration_ms) + "ms)\n";
+  }
+  return head +
+    "==> " + run.project + ":" + t + "\n" +
+    "ok  " + run.project + ":" + t + " (" + Math.round(run.duration_ms) + "ms)\n";
 }
 
 // --- Zoom -------------------------------------------------------------------

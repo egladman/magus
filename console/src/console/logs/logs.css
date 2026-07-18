@@ -370,3 +370,38 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 }
 /* The trail toolbar belongs with the POPULATED trail, not floating over the empty card; main.ts hides it
    via the hidden attribute (honored globally in overrides.css). */
+
+/* --- Run browser (the log viewer's left master-detail tree; runtree.ts) --------------------------
+   A collapsible aside down the left of the viewer, below the shared toolbar: a PF TreeView of prior
+   runs (project -> target -> run) read from the daemon's /api/v1/outputs. Selecting a run loads its
+   verbatim output in the scroll box on the right. initRunBrowser reparents .console-render-scroll into
+   .console-log-split so no scaffold markup changed; the split becomes the panel's flex:1 body row. */
+.console-log-split { display: flex; flex: 1 1 auto; min-height: 0; }
+.console-log-split > .console-render-scroll { flex: 1 1 auto; min-width: 0; }
+.console-log-runs {
+  flex: 0 0 15rem; display: flex; flex-direction: column; min-height: 0;
+  border-right: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-log-runs[hidden] { display: none; }
+.console-log-runs__head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
+  padding: 0.4rem 0.35rem 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-log-runs__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+.console-log-runs__tree { flex: 1 1 auto; overflow: auto; padding: 0.35rem 0.2rem 0.6rem; }
+.console-log-runs__empty { margin: 0.5rem 0.7rem; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); line-height: 1.5; }
+/* A run leaf's outcome dot: green pass, red fail (the semantic status hues, reserved for status). */
+.console-log-runs__dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.45rem; border-radius: 50%; flex: 0 0 auto; background: var(--pf-t--global--text--color--subtle); }
+.console-log-runs__dot[data-status="pass"] { background: var(--console-status-ok); }
+.console-log-runs__dot[data-status="fail"] { background: var(--console-status-danger); }
+/* The slim reopen rail, shown only while the aside is hidden but runs exist. */
+.console-log-runs__reopen {
+  flex: 0 0 auto; align-self: stretch; border-right: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 0; padding-inline: 0.15rem;
+}
+.console-log-runs__reopen[hidden] { display: none; }
+/* Keep the tree readable in the dense panel: the run leaves are mono (they read as data/timestamps). */
+.console-log-runs .pf-v6-c-tree-view__node-text { font-size: 0.78rem; }
+.console-log-runs__tree .pf-v6-c-tree-view__list-item:not([aria-expanded]) .pf-v6-c-tree-view__node-text { font-family: var(--pf-t--global--font--family--mono); }
