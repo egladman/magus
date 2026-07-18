@@ -112,7 +112,7 @@ projects a change reaches so you run no more than that.
 
 ## Architecture
 
-One process (`magus server start`) exposes the workspace through two listeners, one per audience, and every browser page is a separate static asset; the binary serves no HTML. The diagram below is the whole system: the clients, the two transports and their guards, the shared in-memory state, the background jobs and knowledge-graph pipeline that keep it warm, and how the browser console reaches (or does without) the daemon.
+One process (`magus server start`) exposes the workspace through two standing listeners, one per audience, and every browser page is a separate static asset; the binary serves no HTML. A third listener is raised only on demand: "share to phone" opens a time-boxed LAN listener that serves the read-only console to a phone on the same network, then tears itself down. The diagram below is the whole system: the clients, the transports and their guards, the shared in-memory state, the background jobs and knowledge-graph pipeline that keep it warm, and how the browser console reaches (or does without) the daemon.
 
 ```mermaid
 flowchart LR
@@ -120,6 +120,7 @@ flowchart LR
     agent(["AI agents<br/>Claude Code, Desktop, IDE"])
     probe(["kubelet and scripts"])
     vcs(["git hook / magus server sync"])
+    phone(["Phone on the LAN<br/>read-only console viewer"])
 
     subgraph pwa["Progressive web app - project: docs/ (static assets, loopback-locked, binary serves NO HTML)<br/>eli.gladman.cc/magus or self-hosted"]
         dash["Dashboard"]
@@ -140,8 +141,11 @@ flowchart LR
             mcpr["/mcp<br/>MCP Streamable HTTP + SSE<br/>internal/handler/mcp"]
             apir["/api/v1<br/>graph, status, events, insight<br/>internal/handler/{graph,status}"]
             conn["/magus.metrics.v1<br/>/magus.activity.v1 (Connect)<br/>internal/handler/{metrics,activity}"]
+            sharep["/api/v1/share (POST)<br/>loopback-only trigger + bearer<br/>internal/daemon, internal/share"]
             health["/livez /readyz /healthz<br/>UNGUARDED"]
         end
+
+        lan["Ephemeral LAN listener - on demand, time-boxed 15m<br/>read-only share token, same-origin console (CORS never engages)<br/>console static + status/events/insight/outputs + activity/metrics<br/>NO /mcp, NO share endpoint, NO mutating routes<br/>internal/share"]
 
         subgraph jobs["Background jobs<br/>internal/file/watch, internal/proc"]
             watch["File watchers<br/>graph invalidate + SSE"]
@@ -175,6 +179,11 @@ flowchart LR
     guards --> mcpr
     guards --> apir
     guards --> conn
+    guards --> sharep
+    dash -->|"share to phone, bearer"| guards
+    sharep -->|"mints read-only token, opens"| lan
+    phone -->|"same-origin, read-only share token"| lan
+    lan -->|"read-only views"| ws
     health -.->|"reads status via"| sock
 
     sock -->|"dispatch, concurrency"| pool
@@ -205,10 +214,10 @@ flowchart LR
     classDef store fill:#ede9fe,stroke:#8b5cf6,color:#4c1d95;
     classDef job fill:#e0e7ff,stroke:#6366f1,color:#312e81;
 
-    class cli,agent,probe,vcs client;
-    class dash,gexp,logs,serve site;
+    class cli,agent,probe,vcs,phone client;
+    class dash,gexp,logs,serve,lan site;
     class sock unix;
-    class mcpr,apir,conn httproute;
+    class mcpr,apir,conn,sharep httproute;
     class guards guard;
     class health health;
     class pool,ws,runs,svc,trail,otel store;

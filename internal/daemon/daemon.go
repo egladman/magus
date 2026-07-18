@@ -30,6 +30,7 @@ import (
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
@@ -198,22 +199,47 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// an EventSource) - with an Authorization header, so the token never
 			// rides in the URL. CORS still advertises the Authorization header for
 			// the cross-origin preflight.
+			// Read handlers are built ONCE and reused for two audiences: the loopback
+			// bridge mux below (behind rebind + cli/connector bearer), and the on-demand
+			// LAN "share to phone" listener (behind a per-session read-only share token,
+			// see shareGuarded). Building them once keeps the two surfaces serving the
+			// identical read logic.
+			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
+			statusH := status.NewStatusHandler(svc, opts.Build, log)
+			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
+			insightH := status.NewInsightHandler(svc, log)
+			outputsH := viewer.NewOutputsHandler(outputStore, log)
+			outputH := viewer.NewOutputHandler(outputStore, log)
+
 			bridgeMux := http.NewServeMux()
-			bridgeMux.Handle("/api/v1/status", cors(status.NewStatusHandler(svc, opts.Build, log)))
-			bridgeMux.Handle("/api/v1/events", cors(status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)))
+			bridgeMux.Handle("/api/v1/status", cors(statusH))
+			bridgeMux.Handle("/api/v1/events", cors(eventsH))
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
 			// In-daemon insight: the four VCS-history lenses (cached scan) plus the folded-in
 			// run-outcome volatility lens, all under the single "volatility" key of InsightView.
 			// Plain JSON over the same /api guards as the rest.
-			bridgeMux.Handle("/api/v1/insight", cors(status.NewInsightHandler(svc, log)))
+			bridgeMux.Handle("/api/v1/insight", cors(insightH))
 			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
 			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
-			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
-			bridgeMux.Handle("/api/v1/outputs", cors(viewer.NewOutputsHandler(outputStore, log)))
-			bridgeMux.Handle("/api/v1/output", cors(viewer.NewOutputHandler(outputStore, log)))
+			bridgeMux.Handle("/api/v1/outputs", cors(outputsH))
+			bridgeMux.Handle("/api/v1/output", cors(outputH))
 			// Wrap every /api/ route with rebind + header-only bearer auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
+
+			// shareGuarded is the exact read surface the LAN share listener exposes,
+			// each entry guarded per-session by the share token (share.Manager wraps
+			// them). It is deliberately a subset of the loopback bridge: NO /api/v1/graph,
+			// NO /mcp, NO mutating JobService - a leaked share link reaches only these
+			// read routes. The two Connect read services (activity, metrics) are added
+			// to this map below, where their handlers are built.
+			shareGuarded := map[string]http.Handler{
+				"/api/v1/status":  statusH,
+				"/api/v1/events":  eventsH,
+				"/api/v1/insight": insightH,
+				"/api/v1/outputs": outputsH,
+				"/api/v1/output":  outputH,
+			}
 
 			// Derived-metrics Connect service for the /dashboard. Mounted only when the
 			// bridge Magus collects metrics locally. The daemon shares one provider across
@@ -238,6 +264,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 					metricsAllowed = allowed.Allow(u.Host)
 				}
 				httpServer.Handle(mPath, httpx.GuardRebind(metricsAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, mHandler))))
+				// MetricsService is a read-only stream, so it joins the share read surface.
+				shareGuarded[mPath] = mHandler
 				log.Info("[BRIDGE] metrics service mounted", slog.String("path", mPath))
 			} else {
 				log.Info("[BRIDGE] metrics service off (workspace not collecting metrics)")
@@ -253,6 +281,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				activityAllowed = allowed.Allow(u.Host)
 			}
 			httpServer.Handle(activityPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, activityHandler))))
+			// ActivityService.ListActivity is read-only, so it joins the share read surface.
+			shareGuarded[activityPath] = activityHandler
 			log.Info("[BRIDGE] activity service mounted", slog.String("path", activityPath))
 
 			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
@@ -262,6 +292,25 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			jobPath, jobHandler := jobv1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version))
 			httpServer.Handle(jobPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, jobHandler))))
 			log.Info("[BRIDGE] job service mounted", slog.String("path", jobPath))
+
+			// Share to phone: POST /api/v1/share opens an on-demand, time-boxed LAN
+			// listener serving shareGuarded (the read surface) under a fresh read-only
+			// token. The trigger is loopback-only (RequireLoopbackPeer, atop the
+			// loopback-bound listener) and requires the existing cli/connector bearer -
+			// only the local, already-authenticated console can open a share. CORS wraps
+			// the bearer so the console's cross-origin POST preflight is answered here.
+			// The manager's parent is ctx, so every open share listener is torn down on
+			// daemon shutdown; Close is a belt-and-suspenders immediate teardown.
+			shareMgr := share.NewManager(ctx, 0, log)
+			defer shareMgr.Close()
+			consoleDir, ok := resolveConsoleDir(opts.Magus.Root())
+			if !ok {
+				log.Warn("[SHARE] built console not found; share to phone will report it needs a console build",
+					slog.String("root", opts.Magus.Root()))
+			}
+			shareH := s.newShareHandler(shareMgr, consoleDir, shareGuarded, log)
+			httpServer.Handle("/api/v1/share", httpx.GuardRebind(allowed, cors(httpx.RequireLoopbackPeer(httpx.BearerGuard(auth.VerifyBearer, shareH)))))
+			log.Info("[SHARE] share endpoint mounted", slog.String("path", "/api/v1/share"), slog.Bool("console_ready", ok))
 
 			log.Info("[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}

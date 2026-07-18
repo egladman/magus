@@ -24,7 +24,8 @@ import { initRefDrawer } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
-import { parseHash, wantsDemo, validateLiveHost, getLiveToken, authHeaders, fetchReadiness, type ReadinessReport, type ReadinessComponent } from "../lib/daemon";
+import { parseHash, wantsDemo, validateLiveHost, getLiveToken, authHeaders, fetchReadiness, isSharedMode, enterSharedModeIfNeeded, type ReadinessReport, type ReadinessComponent } from "../lib/daemon";
+import { openShareDialog } from "./share";
 import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
 import type { PageController, PageModule } from "./page";
 
@@ -457,6 +458,14 @@ function formatReadinessTitle(report: ReadinessReport | null, ageSec: number): s
 }
 
 export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statusHost: HTMLElement): void {
+  // Enter shared ("share to phone") mode BEFORE anything reads the fragment: on a
+  // phone that opened a LAN share link this synthesizes #live=<page origin> and
+  // stashes the token, so the whole shell treats the daemon's own origin as the
+  // live host and every surface connects read-only over same-origin fetches.
+  enterSharedModeIfNeeded();
+  const shared = isSharedMode();
+  document.documentElement.toggleAttribute("data-shared-mode", shared);
+
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders
   const ws = workspaceStore();
@@ -704,6 +713,18 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   });
   document.body.append(commandBar.el);
   registerCommand({ id: "console.actionBar.open", label: "Action bar", group: "General", run: () => commandBar.open() });
+
+  // Share to phone: a loopback-console affordance only. Registered (palette command
+  // + app-menu button) solely when NOT in shared mode - a phone viewing over the LAN
+  // is a read-only viewer, and the daemon would reject the loopback-guarded trigger
+  // anyway. Hiding it keeps the shared UI honest about what it can do.
+  if (!shared) {
+    registerCommand({ id: "console.share", label: "Share to phone", group: "General", run: () => { void openShareDialog(); } });
+  } else {
+    // In shared mode the app-menu's Share button (if present in the markup) is dead
+    // weight; remove it so the read-only viewer offers no action it cannot perform.
+    document.querySelector<HTMLElement>('[data-app-share]')?.closest("li")?.remove();
+  }
 
   // The title-bar trigger (index.html #console-commandbar-btn) opens the same action bar, so it is
   // discoverable without the chord. Stamp the effective chord into the tooltip so it also teaches it.
@@ -1172,7 +1193,11 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount
   // lazily on first selection. Show the launcher empty state if the workspace is empty.
   const saved = ws.get();
-  if (saved.tabs.length === 0) {
+  if (shared && saved.tabs.length === 0) {
+    // A phone that just scanned the QR lands on something live immediately rather
+    // than an empty launcher: open the Dashboard as the read-only view.
+    open("dashboard");
+  } else if (saved.tabs.length === 0) {
     show(null);
   } else {
     const activeId = saved.activeId ?? saved.tabs[0]?.id ?? null;

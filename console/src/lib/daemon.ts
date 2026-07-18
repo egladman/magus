@@ -83,8 +83,59 @@ export function validateLiveHost(hostPort: string): string | null {
   if (u.pathname !== "/" || u.search || u.hash) return null; // no extra segments
   // Per the WHATWG URL spec, an IPv6 hostname serializes WITH brackets ("[::1]"),
   // not without - accept both spellings in case that ever changes.
-  if (u.hostname !== "127.0.0.1" && u.hostname !== "::1" && u.hostname !== "[::1]") return null;
-  return u.host;
+  if (u.hostname === "127.0.0.1" || u.hostname === "::1" || u.hostname === "[::1]") return u.host;
+  // Shared mode ("share to phone"): the phone loads the console FROM the daemon's
+  // own LAN origin, so the PAGE'S OWN host is a legitimate daemon target - fetching
+  // your own origin cannot leak the token to a third party, and the request is
+  // same-origin so CORS never engages. Accept exactly location.host; every OTHER
+  // non-loopback host (a hostname, a foreign IP smuggled in a #live link) stays
+  // rejected, so the loopback lock still holds against third-party targets.
+  if (typeof location !== "undefined" && u.host === location.host) return u.host;
+  return null;
+}
+
+// ---- shared mode (share to phone) ------------------------------------------
+
+let sharedMode = false;
+
+// isSharedMode reports whether the console is running as a read-only phone viewer
+// loaded from the daemon's LAN share origin (see enterSharedModeIfNeeded). The
+// shell uses it to hide loopback-tier actions (Share to phone itself, and any
+// mutating control) - a shared session is a look, not a touch.
+export function isSharedMode(): boolean {
+  return sharedMode;
+}
+
+// enterSharedModeIfNeeded detects a phone that opened a share link: a NON-loopback
+// page origin carrying a #token= fragment (or a token already stashed from one).
+// It synthesizes the #live=<page origin> that every host-resolution path already
+// understands and consumes the token, so the whole app treats the page's own
+// origin as the daemon without any per-page special-casing. On the operator's own
+// loopback console it does nothing. Call it once, before anything reads the hash.
+export function enterSharedModeIfNeeded(): boolean {
+  if (typeof location === "undefined") return false;
+  const hn = location.hostname;
+  // localhost is treated as loopback here too: a page served from localhost is the
+  // operator's own machine, not a shared LAN view.
+  if (hn === "127.0.0.1" || hn === "::1" || hn === "[::1]" || hn === "localhost") return false;
+  const params = parseHash();
+  // A #live pointing at a DIFFERENT host is NOT a share: that is the standing
+  // live-mode flow (the hosted console connecting to a loopback daemon via
+  // #live=127.0.0.1). Shared mode is only when the daemon IS the page's own
+  // origin - no #live at all, or a #live equal to location.host (a reload).
+  if (params.live !== undefined && params.live !== location.host) return false;
+  if (params.token === undefined && getLiveToken() === null) return false; // not our share flow
+  sharedMode = true;
+  if (params.live === undefined) {
+    params.live = location.host;
+    const parts: string[] = [];
+    for (const k of Object.keys(params)) {
+      parts.push(params[k] === "" ? k : k + "=" + encodeURIComponent(params[k]));
+    }
+    location.hash = "#" + parts.join("&");
+  }
+  consumeLiveToken(parseHash()); // stash + strip the token, keeping #live for readers
+  return true;
 }
 
 // ---- reachability probe ----------------------------------------------------
