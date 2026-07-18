@@ -102,6 +102,12 @@
   --console-moss: #667139;   /* olive green          */
   --console-sage: #5c6e4f;   /* grey-green           */
   --console-spruce: #3f6b60; /* muted deep teal-green */
+  /* Cooler earthy hues, held at the same low chroma + mid lightness as the warm set
+     above so the six card accents read as ONE muted system, not a rainbow. */
+  --console-gold: #857032;   /* muted ochre          */
+  --console-slate: #3f5f78;  /* muted steel blue     */
+  --console-indigo: #59547f; /* restrained indigo    */
+  --console-stone: #6b645d;  /* neutral warm gray    */
 
   /* The card hover/entrance easing - a gentle decelerate so the launcher motion feels of a piece. */
   --console-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -169,6 +175,7 @@
   /* The earthy card palette's dark ramp (lighter, so the hues read on the dark card). Plain custom
      properties, not theme-aware PF tokens, so they are restated here. */
   --console-clay: #c08768; --console-rust: #bd6f52; --console-moss: #9ba766; --console-sage: #93a985; --console-spruce: #6f9d92;
+  --console-gold: #bda05a; --console-slate: #7998b0; --console-indigo: #8d89ba; --console-stone: #a49d95;
 
   --console-pin-active: var(--pf-t--global--dark--color--nonstatus--orange--300);
   --console-node-project: var(--pf-t--global--dark--color--nonstatus--teal--300);

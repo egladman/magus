@@ -231,6 +231,17 @@ body[data-console-fill] > main > .console-render-panel {
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
 #console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pf-t--global--text--color--subtle); text-align: center; }
 #console-outlet [data-pane-launcher] + .pf-v6-l-gallery { width: 100%; max-width: 26rem; padding: 0 1rem; }
+/* PF cards ship no border; the home launcher cards add a hairline (console-launcher-card). The compact
+   in-pane picker cards did not, so a split pane's surface picker looked flat and off-language. Match the
+   hairline + hover here so the two launchers read the same. */
+#console-outlet [data-pane-launcher] + .pf-v6-l-gallery .pf-v6-c-card {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  transition: border-color 0.18s var(--console-ease, ease), background 0.18s var(--console-ease, ease);
+}
+#console-outlet [data-pane-launcher] + .pf-v6-l-gallery .pf-v6-c-card:hover {
+  border-color: var(--console-accent);
+  background: var(--pf-t--global--background--color--tertiary--default);
+}
 
 /* The Panes tray popup (main.ts, #console-panespopup): a square control panel DOCKED to the
    bottom-right corner, opened by the status-bar Panes button - a live, Moom-style spatial MAP of the

@@ -19,12 +19,12 @@ export interface Launchable {
 // icon takes it (a pop of color per tool). Decorative only - the functional UI keeps PatternFly's brand
 // accent, and semantic status color stays reserved for health.
 const SURFACE_ACCENTS: Record<string, string> = {
-  logs: "--console-clay",
-  graph: "--console-spruce",
-  dashboard: "--console-moss",
-  activity: "--console-rust",
-  actions: "--console-sage",
-  settings: "--console-spruce",
+  dashboard: "--console-moss", // green: live/healthy status
+  activity: "--console-rust", // terracotta: warm history trail
+  logs: "--console-indigo", // restrained indigo: cool, reading captured output
+  graph: "--console-slate", // steel blue: nodes and connections
+  actions: "--console-gold", // ochre yellow: energy (the lightning bolt)
+  settings: "--console-stone", // neutral gray: utility
 };
 
 // One representative glyph per surface, drawn in the console's shared icon idiom (24x24, stroked
