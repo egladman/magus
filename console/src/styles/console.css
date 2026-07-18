@@ -806,6 +806,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   flex: 1 1 auto; min-width: 0;
   display: flex; align-items: stretch;
   overflow: hidden; /* dmenu: extra matches truncate off the end of the bar */
+  /* Reserve a gap before the preview label. The token run slides in via translateX (up to 2.6rem
+     when empty), which shifts its painted RIGHT edge rightward too - without this gap those shifted
+     tokens paint on top of the preview label at the bar's right end (the overlap bug). Sized past the
+     max shift so the mask fade always lands inside the gap and the label stays clear at every width. */
+  margin-inline-end: 2.75rem;
   /* Right-edge fade so overflowing tokens DISSOLVE at the end of the bar instead of hard-clipping
      mid-word straight into the preview divider - that collision read as garbled, overlapping text. */
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.5rem), transparent);
@@ -853,7 +858,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* Selected-command preview: the plain-language label at the bar's right end, dim and clipped, so the
    terse token row always has a meaning attached without a per-item description crowding it. */
 .console-shell-commandbar__preview {
-  flex: 0 1 auto; min-width: 0; margin-left: auto;
+  /* Reserve the label's own width so it is never crushed to an illegible sliver: the token run
+     (flex 1 1 auto) has a large content basis and used to win the shrink contest, collapsing this
+     label to ~30px. flex-shrink 0 holds its width; max-width caps it so it cannot dominate a narrow
+     bar (40% still fits a whole label at 375px), and anything past the cap ellipsizes. */
+  flex: 0 0 auto; max-width: 40%; min-width: 0; margin-left: auto;
   display: inline-flex; align-items: center;
   padding-inline: 0.7rem;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
