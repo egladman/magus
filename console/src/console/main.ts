@@ -297,20 +297,29 @@ function openDaemonSettings(): void {
 // overlay's own [data-kbeditor] copy, which is present in the DOM (just hidden) the whole session.
 function openKeybindings(cmdId?: string): void {
   dispatchCommand("console.open.settings");
-  const deadline = Date.now() + 800;
+  // Settings activates asynchronously, and a COLD deep-link also pays for the settings bundle's lazy
+  // import, which can take well past the old 800ms budget - so the poll would give up before the row
+  // ever mounted, and the scroll silently no-op. Poll a generous window instead, and once the node
+  // exists defer the scroll/highlight ONE frame so it lands after the surface's mount/enter layout has
+  // settled (scrolling mid-mount left the row off-center or clipped). Give up quietly past the deadline.
+  const deadline = Date.now() + 4000;
+  const reveal = (el: HTMLElement, block: ScrollLogicalPosition, highlightRow?: HTMLElement): void => {
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block });
+      if (highlightRow) {
+        highlightRow.dataset.kbHighlight = "";
+        setTimeout(() => { delete highlightRow.dataset.kbHighlight; }, 1200);
+        highlightRow.querySelector("button")?.focus();
+      }
+    });
+  };
   const tryFocus = (): void => {
     if (cmdId) {
       const row = document.querySelector<HTMLElement>('[data-surface="settings"] [data-kbeditor] [data-command="' + cmdId + '"]');
-      if (row) {
-        row.scrollIntoView({ block: "center" });
-        row.dataset.kbHighlight = "";
-        setTimeout(() => { delete row.dataset.kbHighlight; }, 1200);
-        row.querySelector("button")?.focus();
-        return;
-      }
+      if (row) { reveal(row, "center", row); return; }
     } else {
       const editor = document.querySelector<HTMLElement>('[data-surface="settings"] [data-kbeditor]');
-      if (editor) { editor.scrollIntoView({ block: "start" }); return; }
+      if (editor) { reveal(editor, "start"); return; }
     }
     if (Date.now() < deadline) requestAnimationFrame(tryFocus);
   };
