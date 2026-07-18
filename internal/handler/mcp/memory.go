@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -49,6 +50,14 @@ func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 	}
 	op := paramString(req.Params, "op", "read")
 	content := paramString(req.Params, "content", "")
+	// read_all is the explicit opt-in to the WHOLE journal. The default read op
+	// windows progress/decisions (a table of contents plus the last N entries) to
+	// bound session-start cost as the journals grow; read_all bypasses the window.
+	// It is an ordinary read at the file layer - only the post-read shaping differs.
+	full := op == "read_all"
+	if full {
+		op = "read"
+	}
 
 	dir, err := memoryDir(t.opts.Magus.Root())
 	if err != nil {
@@ -70,12 +79,201 @@ func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 		content = string(b.Bytes())
 	}
 
-	path := filepath.Join(dir, file+".md")
-	res, err := fileOp(path, op, content)
+	// The durable memory files share the scratchpad's exact read/write/append/clear file
+	// semantics, just targeted at file+".md" under the per-repo memory dir.
+	name := file + ".md"
+	path := filepath.Join(dir, name)
+	res, err := scratchpadOpFile(dir, name, op, content)
 	if err != nil {
 		return types.InvokeResponse{}, err
 	}
+	// Windowed read: status is a snapshot and always returns in full, but the dated
+	// journals (progress/decisions) grow unbounded while every session reads them at
+	// ramp. The default read therefore returns a table of contents plus the last
+	// memoryReadWindow entries; read_all opts back into the full file.
+	if op == "read" && !full && (file == "progress" || file == "decisions") {
+		windowed := windowMemory(res.Content, memoryReadWindow)
+		res.Content = windowed
+		res.Bytes = len(windowed)
+	}
 	return types.InvokeResponse{Data: memoryResult{scratchpadResult: res, File: file, Path: path}}, nil
+}
+
+// memoryReadWindow is how many of the most recent journal entries a default read
+// returns in full (older entries collapse into the table of contents). Five is
+// enough to re-establish immediate context without paying for the whole history.
+const memoryReadWindow = 5
+
+// memoryProgressWindow is how many recent progress entries the rotate-memory job
+// keeps in the live journal; anything older moves to the archive sidecar. The
+// decisions log is NEVER compacted (an explicit decision), so this applies to
+// progress only.
+const memoryProgressWindow = 50
+
+// memoryEntry is one dated section of an append-journal: its heading text (the
+// "2026-01-02 - title" the append stamped, without the leading "## ") and the whole
+// verbatim section from the heading line to the blank line before the next. Entries
+// are the unit the windowed read slices and the rotate-memory job compacts.
+type memoryEntry struct {
+	heading string
+	text    string
+}
+
+// entryHeadingRE matches ONLY the stamped entry-heading shape the append op writes:
+// a level-2 ATX heading whose text begins with an ISO date ("## 2026-01-02", with or
+// without a "- title" suffix). It is the entry boundary. A plain "## " line inside an
+// entry body (an agent pasting a markdown subsection into its note) is NOT a boundary,
+// so it stays part of the entry rather than splitting one entry into two.
+var entryHeadingRE = regexp.MustCompile(`^## \d{4}-\d\d-\d\d`)
+
+// parseMemoryEntries splits an append-journal into its dated sections in file order.
+// Appends stamp each entry as a level-2 ATX heading led by an ISO date (md.Builder), so
+// a line matching entryHeadingRE starts a new entry; any other "## " line is ordinary
+// body. Any preamble before the first heading is returned separately so a rewrite can
+// preserve it; a file with no dated headings yields no entries and the whole content as
+// preamble. Each entry's text is right-trimmed of blank lines so callers can rejoin with
+// a uniform "\n\n" separator.
+func parseMemoryEntries(content string) (preamble string, entries []memoryEntry) {
+	var preLines, curLines []string
+	var curHeading string
+	started := false
+	flush := func() {
+		if started {
+			entries = append(entries, memoryEntry{
+				heading: curHeading,
+				text:    strings.TrimRight(strings.Join(curLines, "\n"), "\n"),
+			})
+		}
+	}
+	for _, ln := range strings.Split(content, "\n") {
+		if entryHeadingRE.MatchString(ln) {
+			flush()
+			started = true
+			curHeading = strings.TrimSpace(strings.TrimPrefix(ln, "## "))
+			curLines = []string{ln}
+			continue
+		}
+		if started {
+			curLines = append(curLines, ln)
+		} else {
+			preLines = append(preLines, ln)
+		}
+	}
+	flush()
+	return strings.TrimRight(strings.Join(preLines, "\n"), "\n"), entries
+}
+
+// windowMemory shapes a journal for the default read: a table of contents of every
+// entry heading (oldest to newest, so the full timeline stays visible) followed by
+// the last n entries in full. A journal with n or fewer entries is returned verbatim
+// - there is nothing to collapse, so the reader sees exactly what read_all would.
+func windowMemory(content string, n int) string {
+	preamble, entries := parseMemoryEntries(content)
+	if len(entries) <= n {
+		return content
+	}
+	var b md.Builder
+	if preamble != "" {
+		b.Paragraph(preamble)
+	}
+	b.Heading(2, "Table of contents")
+	var toc strings.Builder
+	for _, e := range entries {
+		toc.WriteString("- ")
+		toc.WriteString(e.heading)
+		toc.WriteByte('\n')
+	}
+	b.Paragraph(strings.TrimRight(toc.String(), "\n"))
+	b.Paragraph(fmt.Sprintf("Showing the last %d of %d entries in full. Read with op=read_all for the complete journal.", n, len(entries)))
+	for _, e := range entries[len(entries)-n:] {
+		b.Paragraph(e.text)
+	}
+	return string(b.Bytes())
+}
+
+// RotateProgress compacts the progress journal under the memory directory for root:
+// it keeps the most recent memoryProgressWindow entries in progress.md and appends
+// everything older to progress.archive.md beside it. The decisions log is never
+// touched. A missing journal or one within the window is left as-is. It returns the
+// counts kept in the live journal and moved to the archive.
+//
+// It is the worker behind the rotate-memory background job. The archive is appended
+// BEFORE the live journal is rewritten so a crash between the two can at worst
+// duplicate an entry into the archive on a later run, never lose one.
+func RotateProgress(root string) (kept, archived int, err error) {
+	dir, err := memoryDir(root)
+	if err != nil {
+		return 0, 0, err
+	}
+	return rotateProgressDir(dir, memoryProgressWindow)
+}
+
+func rotateProgressDir(dir string, window int) (kept, archived int, err error) {
+	path := filepath.Join(dir, "progress.md")
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, 0, nil
+	}
+	if err != nil {
+		return 0, 0, fmt.Errorf("mcp: rotate progress: %w", err)
+	}
+	preamble, entries := parseMemoryEntries(string(b))
+	if len(entries) <= window {
+		return len(entries), 0, nil
+	}
+	split := len(entries) - window
+	old, recent := entries[:split], entries[split:]
+
+	var ab strings.Builder
+	for _, e := range old {
+		ab.WriteString(e.text)
+		ab.WriteString("\n\n")
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "progress.archive.md"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return 0, 0, fmt.Errorf("mcp: rotate progress archive: %w", err)
+	}
+	if _, werr := f.WriteString(ab.String()); werr != nil {
+		f.Close()
+		return 0, 0, fmt.Errorf("mcp: rotate progress archive: %w", werr)
+	}
+	if cerr := f.Close(); cerr != nil {
+		return 0, 0, fmt.Errorf("mcp: rotate progress archive: %w", cerr)
+	}
+
+	var nb strings.Builder
+	if preamble != "" {
+		nb.WriteString(preamble)
+		nb.WriteString("\n\n")
+	}
+	for _, e := range recent {
+		nb.WriteString(e.text)
+		nb.WriteString("\n\n")
+	}
+	// Replace progress.md atomically: write the compacted journal to a temp file in the
+	// SAME directory (so the rename is a same-filesystem metadata swap) and rename it over
+	// the original. A crash mid-write then leaves either the old journal or the new one
+	// whole, never a truncated file - the archive was already appended above, so at worst
+	// a later run re-archives an entry, and at best a compaction is a clean all-or-nothing.
+	tmp, err := os.CreateTemp(dir, "progress-*.md.tmp")
+	if err != nil {
+		return 0, 0, fmt.Errorf("mcp: rotate progress rewrite: %w", err)
+	}
+	tmpName := tmp.Name()
+	if _, werr := tmp.WriteString(nb.String()); werr != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return 0, 0, fmt.Errorf("mcp: rotate progress rewrite: %w", werr)
+	}
+	if cerr := tmp.Close(); cerr != nil {
+		os.Remove(tmpName)
+		return 0, 0, fmt.Errorf("mcp: rotate progress rewrite: %w", cerr)
+	}
+	if rerr := os.Rename(tmpName, path); rerr != nil {
+		os.Remove(tmpName)
+		return 0, 0, fmt.Errorf("mcp: rotate progress rewrite: %w", rerr)
+	}
+	return len(recent), len(old), nil
 }
 
 // memoryDir resolves the per-repository memory directory:
@@ -116,18 +314,6 @@ func repoIdentity(root string) string {
 		return filepath.Clean(gitdir[:i])
 	}
 	return filepath.Clean(gitdir)
-}
-
-// fileOp applies a scratchpad-style op to one file path. It reuses
-// scratchpadOp's semantics but targets an exact file rather than a fixed name
-// under a directory.
-func fileOp(path, op, content string) (scratchpadResult, error) {
-	dir, name := filepath.Split(path)
-	res, err := scratchpadOpFile(dir, name, op, content)
-	if err != nil {
-		return scratchpadResult{}, err
-	}
-	return res, nil
 }
 
 var _ types.SpellDriver = (*memoryTool)(nil)

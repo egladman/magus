@@ -115,10 +115,10 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolMemory),
-		Description: "Durable per-repository memory shared across sessions, models, and agent hosts: three plain-markdown files kept OUTSIDE the repo in the user state directory (worktrees of one repo share them). Files: status (the current snapshot - where work stands, next action, blockers; overwrite with op=write), progress (dated work journal; op=append), decisions (dated log of decisions made and WHY; op=append). Read status and decisions at the start of a session to ramp on what earlier sessions - possibly a different model - established; append as you work. Appends to progress/decisions are date-stamped automatically. For intra-session scratch notes use magus_scratchpad instead.",
+		Description: "Durable per-repository memory shared across sessions, models, and agent hosts: three plain-markdown files kept OUTSIDE the repo in the user state directory (worktrees of one repo share them). Files: status (the current snapshot - where work stands, next action, blockers; overwrite with op=write), progress (dated work journal; op=append), decisions (dated log of decisions made and WHY; op=append). Read status and decisions at the start of a session to ramp on what earlier sessions - possibly a different model - established; append as you work. Appends to progress/decisions are date-stamped automatically. Reads are WINDOWED to keep session-start cheap: status returns in full, but a read of progress or decisions returns a table of contents of all entry headings plus the last 5 entries in full; pass op=read_all to get the entire journal when you need older entries. For intra-session scratch notes use magus_scratchpad instead.",
 		Params: []ParamDescriptor{
 			{Name: "file", Type: "string", Required: true, Description: "One of: status, progress, decisions."},
-			{Name: "op", Type: "string", Description: "One of: read (default), write (overwrite), append, clear."},
+			{Name: "op", Type: "string", Description: "One of: read (default; windows progress/decisions to a table of contents plus the last 5 entries), read_all (the full journal), write (overwrite), append, clear."},
 			{Name: "content", Type: "string", Description: "The text to write or append. Required for write and append."},
 			{Name: "title", Type: "string", Description: "Optional, append only: a few-word summary folded into the entry's dated heading, so scanning the headings reads as a table of contents. Title every decisions entry."},
 		},

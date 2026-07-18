@@ -25,6 +25,7 @@ const (
 	NameSyncGraph        = "sync-graph"
 	NameRotateActivities = "rotate-activities"
 	NameRotateLogs       = "rotate-logs"
+	NameRotateMemory     = "rotate-memory"
 	NameClearCache       = "clear-cache"
 )
 
@@ -55,6 +56,11 @@ var registry = []Job{
 		Name: NameRotateLogs,
 		Desc: "trim the invocation run-log journals back to their cap",
 		Argv: []string{"server", NameRotateLogs},
+	},
+	{
+		Name: NameRotateMemory,
+		Desc: "compact the memory progress journal, archiving older entries beside it (decisions are never pruned)",
+		Argv: []string{"server", NameRotateMemory},
 	},
 	{
 		Name: NameClearCache,

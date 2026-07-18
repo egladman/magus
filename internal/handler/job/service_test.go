@@ -126,5 +126,5 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 	for _, j := range resp.Msg.Jobs {
 		names = append(names, j.Name)
 	}
-	require.Equal(t, []string{"sync-graph", "rotate-activities", "rotate-logs", "clear-cache"}, names)
+	require.Equal(t, []string{"sync-graph", "rotate-activities", "rotate-logs", "rotate-memory", "clear-cache"}, names)
 }
