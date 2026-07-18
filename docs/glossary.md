@@ -293,11 +293,13 @@ chords dispatch the same commands it does. See [reference/console.md](reference/
 
 ### Live link
 
-The URL that points a surface at a running daemon, carrying the loopback address
-and a bearer token (`#live=127.0.0.1:7391&token=...`). The daemon prints it; the
-console consumes the token, stores it, and strips it from the URL, so the secret
-never lingers in history or a copied link. The host must be literal loopback -
-`localhost` and hostnames are rejected before any request. Without one, a surface
+The URL that points a surface at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the surface path and
+a bearer token in the fragment (`http://127.0.0.1:7391/console/graph/#token=...`).
+The daemon prints it; the console consumes the token, stores it, and strips it from
+the URL, so the secret never lingers in history or a copied link. The origin must be
+literal loopback - `localhost` and hostnames are rejected before any request.
+Without one, a surface
 reads only what rides in the link itself. See [reference/console.md](reference/console.md).
 
 ## See also

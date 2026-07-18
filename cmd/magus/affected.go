@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
-	graphurl "github.com/egladman/magus/internal/graph/url"
+	"github.com/egladman/magus/internal/graph/graphurl"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/service/console"

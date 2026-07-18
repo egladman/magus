@@ -145,6 +145,35 @@ const SURFACES: Launchable[] = [
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
 ];
 
+// CLEAN_PATH_SURFACES are the surfaces reachable by the canonical clean path /console/<surface>/,
+// the form magus mints its daemon-origin deep links into. It mirrors the daemon's shared list
+// (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
+// paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
+// lists in step.
+const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity"];
+
+// consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
+// the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
+// the last path segment being a known surface whose parent segment is "console", so it holds at
+// both the daemon origin (/console/graph/) and the hosted origin (/magus/console/graph/).
+function consoleSurfaceFromPath(): string | null {
+  if (typeof location === "undefined") return null;
+  const segs = location.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+  const last = segs[segs.length - 1];
+  const parent = segs[segs.length - 2];
+  if (parent === "console" && last && CLEAN_PATH_SURFACES.includes(last)) return last;
+  return null;
+}
+
+// consoleBasePath is the console root for the current origin: the entry path with its trailing
+// surface segment dropped (/console/graph/ -> /console/, /magus/console/graph/ -> /magus/console/).
+// Used to scrub a consumed entry path back to the base once the surface is open.
+function consoleBasePath(): string {
+  const segs = location.pathname.replace(/\/+$/, "").split("/");
+  segs.pop(); // drop the <surface> segment
+  return segs.join("/") + "/";
+}
+
 
 interface Mounted { host: HTMLElement; status: HTMLElement; tile: TileView; }
 
@@ -1202,20 +1231,38 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     return;
   }
 
+  // A clean surface path (/console/<surface>/, the canonical minted deep-link) is an ENTRY
+  // INSTRUCTION consumed ONCE: open that surface, then scrub the address back to the console base
+  // so the URL never has to track later tab/split changes (a tiling workspace has no single
+  // "current" surface; a mirrored path would lie). This mirrors the #token consume-store-scrub the
+  // share flow uses. It COMPOSES with restore below: it opens the surface INTO the restored
+  // workspace (open() is single-instance - it activates an already-open tab or adds one), never
+  // wiping restored tabs. Refresh, now on the scrubbed base path, restores the workspace as usual.
+  const entrySurface = consoleSurfaceFromPath();
+
   // Restore the persisted workspace: the tab bar already renders every saved tab (it binds to ws);
   // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount
-  // lazily on first selection. Show the launcher empty state if the workspace is empty.
+  // lazily on first selection. Show the launcher empty state if the workspace is empty (unless an
+  // entry surface will open below, which fills the empty workspace itself).
   const saved = ws.get();
-  if (shared && saved.tabs.length === 0) {
-    // A phone that just scanned the QR lands on something live immediately rather
-    // than an empty launcher: open the Dashboard as the read-only view.
-    open("dashboard");
-  } else if (saved.tabs.length === 0) {
-    show(null);
-  } else {
+  if (saved.tabs.length > 0) {
     const activeId = saved.activeId ?? saved.tabs[0]?.id ?? null;
     const tab = saved.tabs.find((t) => t.id === activeId) ?? saved.tabs[0];
     if (tab) mount(tab);
+  } else if (shared) {
+    // A phone that just scanned the QR lands on something live immediately rather
+    // than an empty launcher: open the Dashboard as the read-only view.
+    open("dashboard");
+  } else if (!entrySurface) {
+    show(null);
+  }
+
+  // Consume the entry path: open its surface into the (possibly restored) workspace, then scrub the
+  // path back to the console base. The fragment (a synthesized #live + any content) and query are
+  // preserved; only the surface segment is dropped.
+  if (entrySurface) {
+    if (registry.has(entrySurface)) open(entrySurface);
+    history.replaceState(null, "", consoleBasePath() + location.search + location.hash);
   }
 }
 

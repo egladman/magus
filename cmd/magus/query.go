@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/graph/graphurl"
 	"github.com/egladman/magus/internal/graph/knowledge"
-	graphurl "github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/render"

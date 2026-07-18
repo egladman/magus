@@ -106,26 +106,40 @@ export function isSharedMode(): boolean {
   return sharedMode;
 }
 
-// enterSharedModeIfNeeded detects a phone that opened a share link: a NON-loopback
-// page origin carrying a #token= fragment (or a token already stashed from one).
-// It synthesizes the #live=<page origin> that every host-resolution path already
-// understands and consumes the token, so the whole app treats the page's own
-// origin as the daemon without any per-page special-casing. On the operator's own
-// loopback console it does nothing. Call it once, before anything reads the hash.
+// enterSharedModeIfNeeded detects a page that must adopt its OWN origin as the
+// daemon: a page carrying a #token= fragment (or a token already stashed from one)
+// with no #live pointing elsewhere. Two audiences reach it:
+//   - a phone that opened a LAN share link (NON-loopback page origin): a read-only
+//     "look, not touch" view, so it ALSO enters shared mode and the shell hides
+//     every mutating control.
+//   - the operator's own loopback console, opened by a minted daemon-origin link
+//     served from 127.0.0.1:<port>/console/ (LOOPBACK page origin): it adopts its
+//     origin as the daemon too, but keeps FULL control - it is the operator's own
+//     console, not a shared phone view, so it does NOT enter read-only shared mode.
+// In both cases it synthesizes the #live=<page origin> that every host-resolution
+// path already understands and consumes the token, so the whole app treats the
+// page's own origin as the daemon without any per-page special-casing. On a page
+// with no token at all it does nothing. Call it once, before anything reads the
+// hash. Returns whether READ-ONLY shared mode was entered (false for the operator's
+// own loopback console, even though it did adopt its origin).
 export function enterSharedModeIfNeeded(): boolean {
   if (typeof location === "undefined") return false;
-  const hn = location.hostname;
-  // localhost is treated as loopback here too: a page served from localhost is the
-  // operator's own machine, not a shared LAN view.
-  if (hn === "127.0.0.1" || hn === "::1" || hn === "[::1]" || hn === "localhost") return false;
   const params = parseHash();
-  // A #live pointing at a DIFFERENT host is NOT a share: that is the standing
-  // live-mode flow (the hosted console connecting to a loopback daemon via
-  // #live=127.0.0.1). Shared mode is only when the daemon IS the page's own
+  // A #live pointing at a DIFFERENT host is NOT own-origin adoption: that is the
+  // standing live-mode flow (the hosted console connecting to a loopback daemon via
+  // #live=127.0.0.1). Own-origin adoption is only when the daemon IS the page's own
   // origin - no #live at all, or a #live equal to location.host (a reload).
   if (params.live !== undefined && params.live !== location.host) return false;
-  if (params.token === undefined && getLiveToken() === null) return false; // not our share flow
-  sharedMode = true;
+  if (params.token === undefined && getLiveToken() === null) return false; // not our flow
+
+  // Only a phone on a NON-loopback LAN share origin drops to read-only shared mode;
+  // the operator's own loopback console adopts its origin as the daemon but keeps
+  // full control. localhost counts as loopback here too - a page served from
+  // localhost is the operator's own machine, not a shared LAN view.
+  const hn = location.hostname;
+  const loopback = hn === "127.0.0.1" || hn === "::1" || hn === "[::1]" || hn === "localhost";
+  if (!loopback) sharedMode = true;
+
   if (params.live === undefined) {
     params.live = location.host;
     const parts: string[] = [];
@@ -135,7 +149,7 @@ export function enterSharedModeIfNeeded(): boolean {
     location.hash = "#" + parts.join("&");
   }
   consumeLiveToken(parseHash()); // stash + strip the token, keeping #live for readers
-  return true;
+  return sharedMode;
 }
 
 // ---- reachability probe ----------------------------------------------------

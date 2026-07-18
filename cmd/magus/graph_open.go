@@ -125,7 +125,7 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if useLive {
-		return graphOpenLive(ctx, base, printOnly, useTargets)
+		return graphOpenLive(ctx, printOnly, useTargets)
 	}
 
 	// The explorer shows the domain graph; symbol shards would bloat it, so exclude them.
@@ -259,13 +259,16 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 		fmt.Fprintf(os.Stderr, "magus graph open: could not open a browser (%v). Open this yourself (the server is waiting):\n  %s\n", err, openURL)
 	}
 
-	switch bs.WaitServed(ctx) {
+	switch outcome := bs.WaitServed(ctx); outcome {
 	case httpx.ServeCompleted:
 		fmt.Fprintln(os.Stderr, "graph loaded; loopback server stopped.")
 	case httpx.ServeTimedOut:
 		fmt.Fprintln(os.Stderr, "the page never requested the graph; loopback server stopped. Re-run if your browser did not open.")
 	case httpx.ServeCanceled:
 		fmt.Fprintln(os.Stderr, "\ncanceled; loopback server stopped.")
+	default:
+		// A new ServeOutcome added upstream must not be swallowed as success: name it.
+		return fmt.Errorf("graph open --serve: unexpected serve outcome %v", outcome)
 	}
 	return nil
 }
@@ -363,15 +366,18 @@ func liveBridgeReachable(ctx context.Context) bool {
 	return probeLiveBridge(pctx, mcpAddrString()) == nil
 }
 
-// graphOpenLive opens the Graph Explorer connected to the running daemon via a
-// #live= fragment. The host in the fragment is the daemon's loopback address;
-// the page enforces that the host is literally 127.0.0.1 or [::1] before any
-// network request is made client-side.
+// graphOpenLive opens the Graph Explorer served BY the running daemon from its own
+// loopback origin (http://<host>/console/graph/). Under the daemon-origin grammar the origin
+// names which daemon; the page loads both itself and its graph data from that one loopback
+// origin, so the graph never leaves the machine. The clean /console/graph/ path is canonical -
+// the daemon serves the shell for it and the console's boot router opens the graph surface.
+// There is no #live= host directive and no hosted explorer base - the --url flag governs only
+// the static (--data/--targets/--serve) modes, not --live.
 //
 // The token is loaded from the on-disk token file written by auth.Save/SaveNew.
 // It is embedded in the URL fragment (which browsers do not transmit in HTTP
 // requests) and is stripped from the fragment by the page on first load.
-func graphOpenLive(ctx context.Context, base string, printOnly, useTargets bool) error {
+func graphOpenLive(ctx context.Context, printOnly, useTargets bool) error {
 	hostPort := mcpAddrString()
 
 	// Probe the ACTUAL console (not just the proc socket) so we never emit a
@@ -392,10 +398,11 @@ func graphOpenLive(ctx context.Context, base string, printOnly, useTargets bool)
 		return errSilent{exitCode: 1}
 	}
 
-	openURL := console.LiveURL(base, hostPort, token)
+	linkOpts := console.LinkOpts{Host: hostPort, Surface: "graph", Token: token}
 	if useTargets {
-		openURL += "&flavor=targets"
+		linkOpts.Fragment = append(linkOpts.Fragment, console.FragmentParam{Key: "flavor", Value: "targets"})
 	}
+	openURL := console.Link(linkOpts)
 
 	if printOnly {
 		fmt.Println(openURL)

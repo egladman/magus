@@ -170,9 +170,11 @@ disabled.
 2. Run `magus graph open --live` (or `--live --print` to copy the URL)
 3. The explorer shows a `live: <workspace>` badge and updates within seconds of file changes
 
-The link contains `#live=127.0.0.1:7391&token=<bearer>`. The page:
+The link is served from the daemon's own loopback origin, e.g.
+`http://127.0.0.1:7391/console/graph/#token=<bearer>` (the origin names which daemon;
+the token rides the fragment). The page:
 
-- Validates the host is literally `127.0.0.1` or `[::1]` before making any fetch
+- Confirms its own origin is literally `127.0.0.1` or `[::1]` before making any fetch
 - Consumes the token and strips it from the URL via `history.replaceState`
 - Stores the token in sessionStorage (tab lifetime) unless you tick "Remember this workspace", which moves it to localStorage
 
@@ -196,7 +198,7 @@ Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed con
 ### Target graph in live mode
 
 `magus graph open --live --targets` opens the live target dependency graph:
-`#live=127.0.0.1:7391&token=<bearer>&flavor=targets`
+`http://127.0.0.1:7391/console/graph/#token=<bearer>&flavor=targets`
 
 ### Affected view
 
