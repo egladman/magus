@@ -66,6 +66,11 @@
   function applyPfTheme(t: Theme): void {
     const dark = t === "dark" || (t === "auto" && !!darkMql && darkMql.matches);
     root.classList.toggle("pf-v6-theme-dark", dark);
+    // Pin the browser's own color-scheme to the RESOLVED theme so the page canvas and native controls
+    // follow the chosen theme even when it differs from the OS. The <meta> declares "light dark", so
+    // without this the UA keeps following the OS - picking "light" on a dark OS left the canvas dark
+    // (a dark page behind light elements). In auto this tracks the OS (re-applied on OS change).
+    root.style.colorScheme = dark ? "dark" : "light";
   }
 
   function set(t: Theme): void {

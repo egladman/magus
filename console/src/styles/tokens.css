@@ -90,41 +90,20 @@
      but a distinct semantic name so a chart or tile reads "failure" not "saturation". */
   --console-status-danger: var(--pf-t--global--icon--color--status--danger--default);   /* error      (red)   */
 
-  /* --- 3b. Earthy identity palette + functional primary + paper ground -------------------
-     The console's visual identity: a small set of muted, EARTHY hues used TOGETHER - one per tool
-     surface - so the home reads as deliberate pops of color rather than one flat brand accent. Two
-     roles, kept distinct:
-       - DECORATIVE: each launcher card takes one hue on its icon + corner watermark (--card-accent,
-         set per card in home.ts). clay/rust/moss/sage/spruce.
-       - FUNCTIONAL: ONE muted primary (spruce) drives active buttons, the focus ring, the active tab,
-         and the wordmark. It must read as neither an alert (so never a palette-red) nor success (so
-         never a bright green); the muted, cool spruce is the deliberate choice. Semantic status color
-         (ok/warn/crit) stays separate, reserved for health.
-     These palette hues are plain custom properties (NOT theme-aware PF tokens), so the dark ramp is
-     restated under .pf-v6-theme-dark. Light-ground values here run deeper for contrast on the paper. */
+  /* --- 3b. Earthy card palette -----------------------------------------------------------
+     A small set of muted, EARTHY hues, one per launcher-card surface (--card-accent, set per card in
+     home.ts): each card's small icon takes its hue, so the home reads as deliberate pops of color.
+     These are DECORATIVE only - the functional UI (buttons, inputs, focus, links) keeps PatternFly's
+     own brand accent, and semantic status color (ok/warn/crit) stays reserved for health. Plain custom
+     properties (NOT theme-aware PF tokens), so the dark ramp is restated under .pf-v6-theme-dark; the
+     light values here run deeper for contrast on the light card. */
   --console-clay: #9a5f45;   /* soft terracotta      */
   --console-rust: #9c4f34;   /* deeper red-brown     */
   --console-moss: #667139;   /* olive green          */
   --console-sage: #5c6e4f;   /* grey-green           */
-  --console-spruce: #3f6b60; /* muted deep teal-green - the functional primary */
+  --console-spruce: #3f6b60; /* muted deep teal-green */
 
-  /* Repoint PatternFly's brand token to spruce so PF's OWN components (primary Button, focus ring,
-     active tab, links) follow the functional primary with no per-component CSS. --console-accent
-     already aliases this brand token (above), so it becomes spruce too. */
-  --pf-t--global--color--brand--default: var(--console-spruce);
-  --pf-t--global--color--brand--hover: #345a50;
-  --pf-t--global--color--brand--clicked: #2c4d45;
-
-  /* Paper ground: a warm off-white page, clean white cards, a hair-warm recessed tint, and warm
-     hairlines. Overriding PF's surface + border tokens recolors the whole console at once (page,
-     cards, inputs, popovers) instead of per-component. secondary = the page ground behind primary
-     (white) cards, matching the existing launcher/command-bar usage. Dark ground under .pf-v6-theme-dark. */
-  --pf-t--global--background--color--secondary--default: #fbfbf9;  /* page ground (paper)  */
-  --pf-t--global--background--color--tertiary--default: #f2f1ed;   /* recessed / card hover */
-  --pf-t--global--border--color--default: #e9e6e1;
-
-  /* The identity's shared easing - a gentle decelerate used by the launcher hover, watermark drift,
-     and entrance. One curve so all the home-screen motion feels of a piece. */
+  /* The card hover/entrance easing - a gentle decelerate so the launcher motion feels of a piece. */
   --console-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
   /* --- 4. Chart chrome slots -----------------------------------------------------------
@@ -187,17 +166,9 @@
    .pf-v6-theme-dark class on <html> for both an explicit dark choice and OS-dark). Same 14 kinds,
    same family/shade pairing, sourced from the dark ramp so the fills read on the dark canvas. */
 :root.pf-v6-theme-dark {
-  /* Dark ground + the earthy palette's dark ramp (lighter, so the hues read on the slate ground) +
-     spruce brand. Mirrors the light values in section 3b, restated because the palette hues and the
-     surface/brand overrides are plain custom properties, not theme-aware PF tokens. */
+  /* The earthy card palette's dark ramp (lighter, so the hues read on the dark card). Plain custom
+     properties, not theme-aware PF tokens, so they are restated here. */
   --console-clay: #c08768; --console-rust: #bd6f52; --console-moss: #9ba766; --console-sage: #93a985; --console-spruce: #6f9d92;
-  --pf-t--global--color--brand--default: var(--console-spruce);
-  --pf-t--global--color--brand--hover: #83b0a5;
-  --pf-t--global--color--brand--clicked: #97c1b6;
-  --pf-t--global--background--color--primary--default: #141a22;   /* cards          */
-  --pf-t--global--background--color--secondary--default: #0f1319; /* page ground    */
-  --pf-t--global--background--color--tertiary--default: #1a212b;  /* recessed/hover */
-  --pf-t--global--border--color--default: #222b37;
 
   --console-pin-active: var(--pf-t--global--dark--color--nonstatus--orange--300);
   --console-node-project: var(--pf-t--global--dark--color--nonstatus--teal--300);

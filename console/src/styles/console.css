@@ -89,6 +89,9 @@ body[data-console-app] button[aria-disabled="true"] {
    numbers, which under- or over-shot the chrome and left a gap or a page scrollbar. The dashboard
    opts out (it is console-app but not console-fill) because its connect screen is meant to scroll. */
 body[data-console-fill] {
+  /* An explicit themed page background so the app never relies on the browser's default canvas (which
+     follows the OS, so a "light" choice on a dark OS showed through as a dark page). */
+  background: var(--pf-t--global--background--color--secondary--default);
   /* The flex column is exactly the viewport minus the fixed status bar, so the card region
      ends at the status bar's top edge - no overlap, no reserved-padding guesswork. */
   height: calc(100svh - var(--console-statusbar-h));
@@ -472,11 +475,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    button centre, most visible on mobile. Centre the icon so the three chrome buttons sit dead-centre. */
 #console-actions > .pf-v6-c-button { align-items: center; }
 #console-actions > .pf-v6-c-button > .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
-/* Each chrome button is the tap target, not the bar behind it: stretch it to the bar's full height and
-   give it a square-ish min width, so the hit area is ~44px on a phone instead of the glyph's own ~16px.
-   PF's plain button is sized for a mouse; this is the only place the console asks a finger to hit one. */
+/* Each chrome button reads as a small inset control, NOT a full-height slab: a square-ish min width and
+   its own block padding give it a compact rounded hit area centred in the bar, so the hover/active
+   background is a little rounded square with a gap above and below - not a rectangle spanning the whole
+   bar height. On a phone the mobile block below stretches it to a finger-sized target instead. */
 #console-actions > .pf-v6-c-button {
-  align-self: stretch; min-width: 2.5rem; justify-content: center; padding-inline: 0.5rem;
+  min-width: 2.25rem; justify-content: center; padding: 0.4rem 0.5rem;
+  border-radius: var(--pf-t--global--border--radius--small);
 }
 
 /* Phone: stack the title bar into two rows - the chrome buttons on top, the tabs on a full-width row of
@@ -501,6 +506,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     order: -1; height: var(--console-titlebar-h); justify-content: flex-end;
     border-bottom: 1px solid var(--pf-t--global--border--color--default);
   }
+  /* On a phone the chrome buttons ARE the tap target, so stretch them to the row height for a
+     finger-sized (~44px) hit area (the desktop gap above matters only for the mouse hover). */
+  #console-actions > .pf-v6-c-button { align-self: stretch; }
   /* Past a few tabs even a full-width row runs out, and the overflow is otherwise clipped and
      unreachable (no scroll buttons here - see tabBar.ts). On touch the row just scrolls: swiping a tab
      strip is the native gesture, so it needs no chrome. The tabs keep their intrinsic width instead of
@@ -604,15 +612,6 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    surface floating in the outlet rather than a flush square fill. The radius is built from the large
    token (device-aware via the tokens.css platform gate), doubled so the curve is unmistakable. */
 #console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0.6rem; padding: 2rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); border-radius: calc(var(--pf-t--global--border--radius--large) * 2); }
-/* Blueprint ground: a very faint dot grid across the launcher panel - the recurring build-graph motif.
-   Sits behind everything (z-index 0 with the panel's own children above), pointer-transparent, and
-   clipped to the panel's rounded corners by its overflow. Deliberately near-subliminal (~3.5% alpha). */
-#console-outlet [data-surface="home"]::before {
-  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background-image: radial-gradient(var(--pf-t--global--text--color--regular) 0.6px, transparent 0.6px);
-  background-size: 22px 22px; opacity: 0.035;
-}
-#console-outlet [data-surface="home"] > * { position: relative; z-index: 1; }
 
 /* Launch-the-demo affordance: a quiet icon pill below the cards, right-aligned, that expands to show its
    label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. It
@@ -639,41 +638,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 .console-launcher-demo:hover .console-launcher-demo__label,
 .console-launcher-demo:focus-visible .console-launcher-demo__label { max-width: 9rem; opacity: 1; }
-/* The launcher hero: the identity band above the cards (home.ts buildHero). A node monogram + the
-   "Magus" wordmark + one line of intent on the left, and a daemon health / host / version status cluster
-   on the right, so the empty console opens with what it is and whether it is connected. Wraps to stacked
-   on narrow widths. The monogram + wordmark take the functional spruce accent. */
-.console-launcher-hero {
-  display: flex; align-items: center; gap: 1.1rem; position: relative;
-  max-width: 52rem; margin: 0 0 1.8rem;
-}
-.console-launcher-hero__mark { flex: 0 0 auto; width: 3.1rem; height: 3.1rem; color: var(--console-accent); }
-.console-launcher-hero__mark svg { width: 100%; height: 100%; }
-.console-launcher-hero__name { margin: 0; font-size: 1.5rem; font-weight: 660; letter-spacing: -0.02em; line-height: 1.1; }
-.console-launcher-hero__sub { margin: 0.15rem 0 0; color: var(--pf-t--global--text--color--subtle); font-size: 0.88rem; }
-.console-launcher-hero__status { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-left: auto; }
-@media (max-width: 40rem) {
-  .console-launcher-hero { flex-wrap: wrap; }
-  .console-launcher-hero__status { margin-left: 0; width: 100%; }
-}
-/* Status pills: monospace data chips (host/version read as code), an angular slightly-rounded rectangle,
-   never a capsule. The health pill leads with a liveness dot whose color follows [data-health] (the
-   poller mirrors the docked #console-conn state onto [data-hero-health]); a ready daemon also warms the
-   text and border and rings the dot. */
-.console-launcher-hero__pill {
-  display: inline-flex; align-items: center; gap: 0.4rem;
-  padding: 0.3rem 0.6rem; border-radius: var(--pf-t--global--border--radius--action--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--primary--default);
-  color: var(--pf-t--global--text--color--subtle);
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem;
-}
-.console-launcher-hero__pill[hidden] { display: none; }
-.console-launcher-hero__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pf-t--global--text--color--subtle); }
-.console-launcher-hero__pill[data-hero-health][data-state="connected"] { color: var(--pf-t--global--text--color--regular); }
-.console-launcher-hero__pill[data-health="ok"] .console-launcher-hero__dot { background: var(--console-status-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--console-status-ok) 22%, transparent); }
-.console-launcher-hero__pill[data-health="warn"] .console-launcher-hero__dot { background: var(--console-status-warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--console-status-warn) 22%, transparent); }
-.console-launcher-hero__pill[data-health="fail"] .console-launcher-hero__dot { background: var(--console-status-danger); }
+#console-outlet [data-surface="home"] h1 { max-width: 44rem; margin: 0 0 0.2rem; font-size: 1.4rem; }
+#console-outlet [data-surface="home"] > p { max-width: 44rem; margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 /* The gallery owns the gap to the demo pill below it. It has to live HERE, not on the pill's margin-top:
    that margin is `auto` (it floats the pill to the bottom of a short column) and collapses to nothing the
    moment the cards overflow - which is exactly the mobile case, leaving the pill flush against the last
@@ -706,20 +672,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 :root[data-appmode] #console-actions { margin-inline-start: auto; }
 
 /* Launcher cards - the home screen's identity centerpiece. Each carries its OWN earthy hue via
-   --card-accent (home.ts sets it per card; Settings inherits the shared spruce --console-accent through
-   the fallback): the glyph, the corner watermark, and the hover border all take it, so the home reads
-   as a spread of muted color pops. The card shell stays PF (pf-v6-c-card pf-m-clickable); these rules
-   add the plain colored glyph, the bled-off watermark, and a LAYERED (not shadowed) hover - a small
-   lift, the border tints to the hue, the ground lifts, and the watermark drifts. Depth comes from
-   layers, not material elevation, so there is deliberately no box-shadow. overflow+isolation clip and
-   contain the watermark; the local var makes --card-accent fall back to the functional accent. */
+   --card-accent (home.ts sets it per card): the small glyph sits in a hue-tinted rounded tile (its one
+   pop of color), the same glyph is echoed COLORLESS as a large corner watermark, and the hover border
+   tints to the hue. The card shell stays PF (pf-v6-c-card pf-m-clickable). A LAYERED (not shadowed)
+   hover - a small lift, the border tints, the ground lifts, the watermark drifts. Depth from layers,
+   not material elevation, so no box-shadow. overflow+isolation clip and contain the watermark. */
 .console-launcher-card {
   --card-accent: var(--console-accent);
   position: relative; overflow: hidden; isolation: isolate;
   display: flex; flex-direction: column; gap: 0.15rem;
-  min-height: 7.25rem; padding: 1.1rem 1.2rem 1.25rem;
+  padding: 1.15rem 1.25rem;
   /* An explicit hairline (the PF card ships none), so cards keep a crisp edge on both grounds - it is
-     what reads as separation on the low-contrast dark slate, and the hover tints it to the card's hue. */
+     what reads as separation on the low-contrast dark card, and the hover tints it to the card's hue. */
   border: 1px solid var(--pf-t--global--border--color--default);
   transition: transform 0.18s var(--console-ease, ease), border-color 0.18s var(--console-ease, ease), background 0.18s var(--console-ease, ease);
 }
@@ -730,24 +694,29 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   background: var(--pf-t--global--background--color--tertiary--default);
 }
 .console-launcher-card:focus-visible { outline: 2px solid var(--card-accent); outline-offset: 2px; }
+/* The small icon: the card's colored glyph in a rounded, hue-tinted tile (the "indent box"). */
 .console-launcher-card__icon {
-  display: block; width: 1.6rem; height: 1.6rem; margin-bottom: 0.55rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.5rem; height: 2.5rem; margin-bottom: 0.55rem;
+  border-radius: var(--pf-t--global--border--radius--medium);
   color: var(--card-accent);
+  background: color-mix(in srgb, var(--card-accent) 12%, transparent);
 }
-.console-launcher-card__icon svg { width: 100%; height: 100%; }
-/* The corner watermark: a large domain glyph bled off the bottom-right, in the card's hue at a low
-   opacity so the color reads as a subtle pop. z-index -1 (within the card's own isolation context) keeps
-   it behind the text but above the card ground; it drifts and warms slightly on hover. */
+.console-launcher-card__icon svg { width: 1.5rem; height: 1.5rem; }
+/* The corner watermark: the SAME glyph blown up and bled off the bottom-right, but COLORLESS - a
+   neutral text-toned shape at very low opacity, so it reads as a faint embossed motif, not a second
+   color. z-index -1 (within the card's isolation context) keeps it behind the text but above the card
+   ground; it drifts slightly on hover. */
 .console-launcher-card__watermark {
   position: absolute; right: -1.1rem; bottom: -1.4rem; z-index: -1;
-  width: 8.25rem; height: 8.25rem; color: var(--card-accent); opacity: 0.14;
+  width: 8.25rem; height: 8.25rem; color: var(--pf-t--global--text--color--regular); opacity: 0.05;
   pointer-events: none;
   transition: transform 0.35s var(--console-ease, ease), opacity 0.35s var(--console-ease, ease);
 }
 .console-launcher-card__watermark svg { width: 100%; height: 100%; }
 .console-launcher-card:hover .console-launcher-card__watermark,
 .console-launcher-card:focus-visible .console-launcher-card__watermark {
-  opacity: 0.2; transform: translate(-0.4rem, -0.4rem) scale(1.03);
+  opacity: 0.08; transform: translate(-0.4rem, -0.4rem) scale(1.03);
 }
 /* The card owns its padding (above); neutralize PF's per-slot title/body padding so it does not stack
    into extra whitespace. */
@@ -772,13 +741,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    under 250ms-ish, none loop. Disabled under reduced-motion (below). */
 .console-launcher-card:hover .console-launcher-card__icon[data-motion="gear"] svg { animation: console-launcher-gear 0.6s var(--console-ease, ease); }
 @keyframes console-launcher-gear { from { transform: rotate(0); } to { transform: rotate(30deg); } }
-.console-launcher-card:hover [data-motion="needle"] { animation: console-launcher-sweep 0.7s var(--console-ease, ease); transform-origin: 12px 19px; transform-box: fill-box; }
+.console-launcher-card:hover .console-launcher-card__icon [data-motion="needle"] { animation: console-launcher-sweep 0.7s var(--console-ease, ease); transform-origin: 12px 19px; transform-box: fill-box; }
 @keyframes console-launcher-sweep { from { transform: rotate(-46deg); } 60% { transform: rotate(44deg); } to { transform: rotate(18deg); } }
-.console-launcher-card:hover [data-motion="pulse"] { animation: console-launcher-pulse 0.7s var(--console-ease, ease); transform-origin: center; transform-box: fill-box; }
+.console-launcher-card:hover .console-launcher-card__icon [data-motion="pulse"] { animation: console-launcher-pulse 0.7s var(--console-ease, ease); transform-origin: center; transform-box: fill-box; }
 @keyframes console-launcher-pulse { 40% { transform: scale(1.5); } }
-.console-launcher-card:hover [data-motion="bolt"] { animation: console-launcher-flick 0.45s var(--console-ease, ease); }
+.console-launcher-card:hover .console-launcher-card__icon [data-motion="bolt"] { animation: console-launcher-flick 0.45s var(--console-ease, ease); }
 @keyframes console-launcher-flick { 30% { opacity: 0.35; } 60% { opacity: 1; } }
-.console-launcher-card:hover [data-motion="wave"] { animation: console-launcher-wave 0.7s var(--console-ease, ease); }
+.console-launcher-card:hover .console-launcher-card__icon [data-motion="wave"] { animation: console-launcher-wave 0.7s var(--console-ease, ease); }
 @keyframes console-launcher-wave { 50% { transform: translateY(-1.5px) scaleY(1.2); } }
 
 /* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay

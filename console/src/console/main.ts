@@ -455,12 +455,6 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   const launcher = buildLauncher(SURFACES, open, launchDemo);
   launcher.hidden = true;
   outlet.append(launcher);
-  // The launcher hero's host pill: the configured daemon address (the health pill is driven live by the
-  // readiness poller below; the version pill fills via the shared [data-version-chip] hook). Shown only
-  // when an address is set, so a bare install does not surface an empty chip.
-  const heroHost = launcher.querySelector<HTMLElement>("[data-hero-host]");
-  const heroHostAddr = getDefaultHost();
-  if (heroHost && heroHostAddr) { heroHost.textContent = heroHostAddr; heroHost.hidden = false; }
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
 
   // mountSurface is how a tile mounts one surface into a pane host: resolve the registered module and
@@ -1055,15 +1049,6 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
           : "fail";
         conn.textContent = report ? (report.ready ? "daemon ready" : "daemon not ready") : "not connected";
         conn.dataset.state = report?.ready ? "connected" : "disconnected";
-        // Mirror the same state onto the launcher hero's health pill (the launcher is the only surface at
-        // zero tabs, and this poller is the sole writer of its conn state, so a straight copy stays in sync).
-        const heroHealth = launcher.querySelector<HTMLElement>("[data-hero-health]");
-        if (heroHealth) {
-          heroHealth.dataset.health = conn.dataset.health;
-          heroHealth.dataset.state = conn.dataset.state;
-          const heroHealthText = heroHealth.querySelector("[data-hero-health-text]");
-          if (heroHealthText) heroHealthText.textContent = conn.textContent;
-        }
       }
     });
   }

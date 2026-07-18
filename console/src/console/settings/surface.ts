@@ -226,6 +226,10 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     const changes = computePendingChanges(committed, draftPrefs(), ctx);
     renderPending(changes);
     const none = changes.length === 0;
+    // Hide the whole action bar when the draft matches the saved settings - there is nothing to save,
+    // apply, or reset, so the bar (and its "No pending changes" line) is just noise. It reappears the
+    // moment a control stages a change.
+    bar.hidden = none;
     saveBtn.disabled = none;
     applyBtn.disabled = none;
     resetBtn.disabled = none;
@@ -287,7 +291,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
 
   generalForm.append(
     buildFormGroup("Refresh rate", pollSelect.id, pollControl, "How often the VCS insight lenses re-poll the daemon."),
-    buildFormGroup("Daemon host", hostInput.id, hostGroup, "Default host:port when no live link is present. Blank uses loopback."),
+    buildFormGroup("Daemon host", hostInput.id, hostGroup),
   );
 
   // --- Appearance: a 3-way theme toggle group (staged; applies on Save & Apply) ---
@@ -383,13 +387,13 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       keymapDraft.set({ ...presets[selectedPreset] });
       recompute();
       const label = presetList.find((x) => x.id === selectedPreset)?.label ?? selectedPreset;
-      setStatus("Staged the " + label + " preset - it seeds your keymap. Edit any row, then Save or Save & Apply; applying again resets to the preset.", "ok");
+      setStatus("Staged the " + label + " preset. Edit any row, then Save or Save & Apply. Applying it again resets to the preset.", "ok");
     });
     const controls = h("div", "console-settings-presets__row");
     controls.append(presetGroup, applyBtn);
     const wrap = h("div");
     wrap.append(
-      buildFormGroup("Start from a preset", null, controls, "Applies a full set of bindings you can then edit freely - not a mode, it seeds your keymap. Emacs, Vim, and VS Code use multi-key sequences (like Ctrl+X then O)."),
+      buildFormGroup("Start from a preset", null, controls, "Loads a full set of bindings you can then edit. It seeds your keymap, so any changes you make on top are kept. The Emacs, Vim, and VS Code presets use multi-key sequences like Ctrl+X then O."),
       editor.el,
     );
     keybindingsContent = wrap;

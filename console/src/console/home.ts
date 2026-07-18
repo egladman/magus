@@ -15,25 +15,25 @@ export interface Launchable {
   hint: string;
 }
 
-// Each launcher card carries its OWN earthy palette hue (--card-accent, set per card below) - the
-// icon glyph, the corner watermark, and the hover border all take it, so the home reads as a spread
-// of muted color pops, one per tool. Settings has no entry and falls back to the shared functional
-// spruce accent. Decorative only: semantic color stays reserved for health.
+// Each launcher card carries its OWN earthy palette hue (--card-accent, set per card below): the small
+// icon takes it (a pop of color per tool). Decorative only - the functional UI keeps PatternFly's brand
+// accent, and semantic status color stays reserved for health.
 const SURFACE_ACCENTS: Record<string, string> = {
   logs: "--console-clay",
   graph: "--console-spruce",
   dashboard: "--console-moss",
   activity: "--console-rust",
   actions: "--console-sage",
-  // settings: intentionally none -> --card-accent falls back to --console-accent (spruce)
+  settings: "--console-spruce",
 };
 
 // One representative glyph per surface, drawn in the console's shared icon idiom (24x24, stroked
-// currentColor, round caps). Keyed by pageId; a surface with no entry falls back to a neutral square.
-// A single inner element per animated icon carries data-motion="<kind>": on card hover it plays ONE
-// in-character micro-motion (gear turns, gauge needle sweeps, graph node pulses, waveform breathes,
-// bolt flickers) - see the @keyframes in console.css, all one-shot and reduced-motion gated. The paths
-// are the inner geometry - buildLauncher wraps each in the <svg> shell.
+// currentColor, round caps). It is used for BOTH the small tinted-tile icon and the large corner
+// watermark, so a card's two marks match. Keyed by pageId; a surface with no entry falls back to a
+// neutral square. A single inner element per animated icon carries data-motion="<kind>": on card hover
+// the SMALL icon plays ONE in-character micro-motion (gear turns, gauge needle sweeps, node pulses,
+// waveform breathes, bolt flickers) - see the @keyframes in console.css, all one-shot and reduced-
+// motion gated; the watermark reuses the same markup but never animates (the motion CSS is icon-scoped).
 const SURFACE_ICONS: Record<string, string> = {
   // Log viewer: stacked text lines.
   logs: '<path d="M4 5h16M4 10h10M4 15h13M4 19h7"/>',
@@ -45,20 +45,8 @@ const SURFACE_ICONS: Record<string, string> = {
   activity: '<path data-motion="wave" d="M3 12h3l2-5 3 10 3-8 2 3h5"/>',
   // Actions: a lightning bolt; it flickers on hover.
   actions: '<path data-motion="bolt" d="M13 2L4 14h6l-1 8 9-12h-6z"/>',
-  // Settings: a gear; the whole glyph turns on hover (data-motion on the icon slot, below).
-  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M18.5 5.5l-2 2M7.5 16.5l-2 2"/>',
-};
-
-// A large domain glyph per surface, bled off the card's bottom-right corner as a low-opacity watermark
-// in the card's own hue (the biggest single "pop of color"). 100x100 viewBox; graph runs a thinner
-// stroke so its four nodes do not clot. Keyed by pageId; a surface with no entry shows no watermark.
-const SURFACE_WATERMARKS: Record<string, { svg: string; sw: number }> = {
-  logs: { svg: '<path d="M14 22h72M14 40h48M14 58h60M14 76h34"/>', sw: 3 },
-  graph: { svg: '<circle cx="24" cy="30" r="7"/><circle cx="70" cy="22" r="7"/><circle cx="62" cy="66" r="7"/><circle cx="30" cy="74" r="7"/><path d="M30 33l28 30M31 32l35-6M64 60L36 71"/>', sw: 2.6 },
-  dashboard: { svg: '<path d="M16 66a34 34 0 0 1 68 0"/><path d="M50 66l20-26"/>', sw: 3 },
-  activity: { svg: '<path d="M8 52h12l8-26 12 46 10-34 7 14h27"/>', sw: 3 },
-  actions: { svg: '<path d="M52 8L20 56h24l-4 36 40-52H56z"/>', sw: 3 },
-  settings: { svg: '<circle cx="50" cy="50" r="13"/><path d="M50 20v12M50 68v12M20 50h12M68 50h12M29 29l8 8M63 63l8 8M71 29l-8 8M37 63l-8 8"/>', sw: 3 },
+  // Settings: a proper cog (not the sun-like spoked glyph); the whole icon turns on hover.
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 };
 
 // buildLauncher builds the launcher DOM as the outlet's empty state. `surfaces` is what it offers to
@@ -72,7 +60,10 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   const root = document.createElement("div");
   root.dataset.surface = "home";
 
-  const hero = buildHero();
+  const title = document.createElement("h1");
+  title.textContent = "What do you want to open?";
+  const sub = document.createElement("p");
+  sub.textContent = "Each tool opens in its own tab.";
 
   const gallery = document.createElement("div");
   gallery.className = "pf-v6-l-gallery pf-m-gutter";
@@ -111,15 +102,17 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     body.textContent = s.hint;
 
     card.append(icon, titleEl, body);
-    // The corner watermark: a large domain glyph bled off the bottom-right in the card's hue, drawn
-    // behind the text (z-index in console.css) and drifting on hover. Decorative, aria-hidden.
-    const wm = SURFACE_WATERMARKS[s.pageId];
-    if (wm) {
+    // The corner watermark: the SAME glyph as the small icon, blown up and bled off the bottom-right,
+    // drawn behind the text (z-index in console.css) in a neutral (colorless) tint that drifts on hover.
+    // Decorative, aria-hidden. It reuses the icon markup (motion attrs and all), but the motion CSS is
+    // icon-scoped so the watermark never animates.
+    const glyph = SURFACE_ICONS[s.pageId];
+    if (glyph) {
       const mark = document.createElement("span");
       mark.className = "console-launcher-card__watermark";
       mark.innerHTML =
-        '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="' + wm.sw + '" ' +
-        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + wm.svg + "</svg>";
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + glyph + "</svg>";
       card.append(mark);
     }
     card.addEventListener("click", () => open(s.pageId));
@@ -142,33 +135,6 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     '<span class="console-launcher-demo__label">Launch the demo</span>';
   demo.addEventListener("click", () => launchDemo());
 
-  root.append(hero, gallery, demo);
+  root.append(title, sub, gallery, demo);
   return root;
-}
-
-// buildHero builds the launcher's identity band: the node monogram, the "Magus" wordmark and a line of
-// intent, and a status cluster (daemon health / host / version) on the right - so the first thing on the
-// empty console is what this is and whether it is connected. The status pills carry data hooks the
-// console fills live: [data-hero-health] (the poller mirrors the docked #console-conn state here),
-// [data-hero-host] (set from the daemon-address setting), and [data-version-chip] (the shared build-info
-// fill, same hook the status bar uses). Host and version pills start hidden until there is a value.
-function buildHero(): HTMLElement {
-  const hero = document.createElement("div");
-  hero.className = "console-launcher-hero";
-  hero.innerHTML =
-    '<svg class="console-launcher-hero__mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-    'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<circle cx="6" cy="7" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="15" cy="18" r="2.4"/>' +
-    '<circle cx="5" cy="17" r="2.4"/><path d="M8 8l5 8M8.2 7.2L15.8 6.4M7.3 15.6L12.9 17.4"/></svg>' +
-    '<div class="console-launcher-hero__txt">' +
-    '<h1 class="console-launcher-hero__name">Magus</h1>' +
-    '<p class="console-launcher-hero__sub">Local build daemon. Pick a lens, or open the action bar.</p>' +
-    "</div>" +
-    '<div class="console-launcher-hero__status">' +
-    '<span class="console-launcher-hero__pill" data-hero-health data-state="disconnected">' +
-    '<span class="console-launcher-hero__dot"></span><span data-hero-health-text>not connected</span></span>' +
-    '<span class="console-launcher-hero__pill" data-hero-host hidden></span>' +
-    '<span class="console-launcher-hero__pill console-launcher-hero__pill--ver" data-version-chip hidden></span>' +
-    "</div>";
-  return hero;
 }

@@ -121,7 +121,7 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
   root.dataset.kbeditor = "";
   const desc = h("p");
   desc.dataset.kbdesc = "";
-  desc.textContent = "Rebind a command: Record, then press the keys - a single shortcut or a sequence (like Ctrl+X then O). Pause to save, Esc to cancel. Clear disables a binding; the revert icon restores the default.";
+  desc.textContent = "Rebind a command: Record, then press the keys. It can be a single shortcut or a sequence like Ctrl+X then O. Pause to save, or press Esc to cancel. Clear disables a binding; the revert icon restores the default.";
   const table = h("div");
   table.dataset.rows = "";
   root.append(desc, table);
