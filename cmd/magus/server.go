@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/maintenance"
@@ -43,6 +44,8 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverRotateActivities(ctx, root, rest)
 	case jobs.NameRotateLogs:
 		return serverRotateLogs(ctx, root, rest)
+	case jobs.NameRotateMemory:
+		return serverRotateMemory(ctx, root, rest)
 	default:
 		return fmt.Errorf("magus server: unknown target %q (want start, stop, or job); use `%s` to inspect daemon state", sub, clihint.Status)
 	}
@@ -416,11 +419,12 @@ func printJobWatchHint(w *os.File) {
 	}
 }
 
-// consoleWatchURL builds the live console dashboard URL for watching jobs: the browser connects
-// back to this loopback daemon (host + bearer token in the URL fragment) and shows the running
-// pool, where a submitted job appears and deep-links to its live log. Returns "" when the console
-// is disabled or no token can be loaded. The token rides the fragment, so callers must gate on an
-// interactive terminal (see printJobWatchHint).
+// consoleWatchURL builds the console dashboard URL for watching jobs, served BY this
+// daemon from its own loopback origin (http://<host>/console/dashboard/): the browser
+// loads the page and connects back to this daemon over that one loopback origin and shows
+// the running pool, where a submitted job appears and deep-links to its live log. Returns
+// "" when the console is disabled or no token can be loaded. The token rides the fragment,
+// so callers must gate on an interactive terminal (see printJobWatchHint).
 func consoleWatchURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
@@ -429,11 +433,7 @@ func consoleWatchURL() string {
 	if err != nil || token == "" {
 		return ""
 	}
-	base := globalCfg.Console.URL
-	if base == "" {
-		base = config.DefaultConsoleURL
-	}
-	return console.LiveURL(strings.TrimRight(base, "/")+"/dashboard/", mcpAddrString(), token)
+	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "dashboard", Token: token})
 }
 
 func serverJobUsage() {
@@ -494,6 +494,36 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	}
 	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
+	return nil
+}
+
+// serverRotateMemory is the worker for the rotate-memory job: it compacts the memory
+// PROGRESS journal, keeping a recent window in the live file and archiving the rest
+// to a sidecar beside it. The DECISIONS log is deliberately never pruned - a decision
+// and its why stay durable forever. The memory lives OUTSIDE the repo (the user state
+// dir, keyed by repo identity), so this resolves it from the workspace root the same
+// way the magus_memory MCP tool does. Normally reached via `server job rotate-memory`.
+func serverRotateMemory(ctx context.Context, root string, args []string) error {
+	if _, err := cmdParse("server rotate-memory", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus server rotate-memory")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Compact the memory progress journal, archiving older entries to a sidecar.")
+			fmt.Fprintln(os.Stderr, "The decisions log is never pruned. This is the worker for")
+			fmt.Fprintln(os.Stderr, "`magus server job rotate-memory`; prefer that form.")
+		}
+	}); err != nil {
+		return err
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return fmt.Errorf("server rotate-memory: %w", err)
+	}
+	kept, archived, err := mcp.RotateProgress(m.Root())
+	if err != nil {
+		return fmt.Errorf("server rotate-memory: %w", err)
+	}
+	slog.InfoContext(ctx, "rotated memory progress journal", slog.Int("kept", kept), slog.Int("archived", archived))
 	return nil
 }
 

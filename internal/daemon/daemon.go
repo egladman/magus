@@ -36,6 +36,7 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -318,7 +319,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// the bearer so the console's cross-origin POST preflight is answered here.
 			// The manager's parent is ctx, so every open share listener is torn down on
 			// daemon shutdown; Close is a belt-and-suspenders immediate teardown.
-			shareMgr := share.NewManager(ctx, 0, log)
+			// WithTrailDir records a "share link opened" activity event on the first
+			// request from each remote device, so the console can surface that a phone
+			// connected. The trail is the same workspace cache base the ActivityService reads.
+			shareMgr := share.NewManager(ctx, 0, log, share.WithTrailDir(opts.Magus.CacheDir()))
 			defer shareMgr.Close()
 			consoleDir, ok := resolveConsoleDir(opts.Magus.Root())
 			if !ok {
@@ -328,6 +332,50 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			shareH := s.newShareHandler(shareMgr, consoleDir, shareGuarded, log)
 			httpServer.Handle("/api/v1/share", httpx.GuardRebind(allowed, cors(httpx.RequireLoopbackPeer(httpx.BearerGuard(auth.VerifyBearer, shareH)))))
 			log.Info("[SHARE] share endpoint mounted", slog.String("path", "/api/v1/share"), slog.Bool("console_ready", ok))
+
+			// Static console on loopback: serve the built PWA at /console/ from the SAME
+			// resolved dir the LAN share listener uses (consoleDir), so a minted daemon-origin
+			// link (http://127.0.0.1:<port>/console/<surface>/) loads the app straight off this
+			// daemon. console.StaticHandler is the ONE implementation both listeners share: it
+			// adds the SPA fallback so the clean /console/<surface>/ surface paths resolve to the
+			// shell, and a strict CSP on the HTML. Static serving stays unauthenticated by design
+			// - the app shell is not a secret; it reads the bearer token from the URL fragment and
+			// replays it on the guarded /api and Connect routes above - but it is wrapped in the
+			// same GuardRebind the rest of the loopback surface uses, so a forged cross-origin Host
+			// cannot reach it. Mounted only when a build was found; otherwise the daemon still runs
+			// (MCP + data routes) and /console/ just 404s until a console is built.
+			if ok {
+				httpServer.Handle("/console/", httpx.GuardRebind(allowed, console.StaticHandler(consoleDir)))
+				log.Info("[BRIDGE] static console mounted", slog.String("path", "/console/"), slog.String("dir", consoleDir))
+			}
+
+			// Token management service: the typed surface the console Settings UI uses to LIST and
+			// REVOKE connector tokens and to see/revoke the active share token. It is VIEW-AND-REVOKE
+			// only - it can NEVER mint. Minting stays a CLI-only operation, so a compromised browser
+			// session cannot forge a durable credential (the XSS-to-durable-credential escalation is
+			// closed by construction). It is a second door onto the same connector store the CLI
+			// writes and the same shareMgr the share endpoint drives - never a second store.
+			//
+			// The mount enforces the three-tier credential hierarchy at the GUARD, so the handler
+			// stays dumb:
+			//   - operator token (built-in cli credential): the ONLY accepted bearer here
+			//     (VerifyCLIBearer, not the generic VerifyBearer). Whoever holds it owns the daemon,
+			//     so token ops are operator-tier.
+			//   - connector token (MCP client): valid on /mcp and the console data services, but
+			//     rejected on this mount - a client credential must never revoke credentials
+			//     (privilege self-replication).
+			//   - share token (read-only viewer): only ever valid on the LAN share listener; this
+			//     service is deliberately NOT in shareGuarded, so a shared phone can never reach
+			//     the token-management surface.
+			// It also uses the LOOPBACK accept-list (`allowed`, not the site-widened
+			// `activityAllowed`): token management is sensitive and local-only. The operator/built-in
+			// token is additionally unreachable through the handler itself: it is bootstrap-only,
+			// managed SOLELY by the CLI, and structurally invisible+immutable to this service (it
+			// lives in a store the handler never opens, so it is neither listed nor revocable here),
+			// preventing lockout.
+			tokenPath, tokenHandler := tokenv1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr))
+			httpServer.Handle(tokenPath, httpx.GuardRebind(allowed, cors(httpx.BearerGuard(auth.VerifyCLIBearer, tokenHandler))))
+			log.Info("[BRIDGE] token service mounted", slog.String("path", tokenPath))
 
 			log.Info("[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}
