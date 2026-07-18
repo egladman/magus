@@ -39,8 +39,8 @@ const SURFACE_ICONS: Record<string, string> = {
   logs: '<path d="M4 5h16M4 10h10M4 15h13M4 19h7"/>',
   // Graph explorer: three connected nodes; the lead node pulses on hover.
   graph: '<circle data-motion="pulse" cx="6" cy="7" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="15" cy="18" r="2.2"/><path d="M8 8l6 9M8 7l8-1"/>',
-  // Dashboard: a gauge; the needle sweeps on hover.
-  dashboard: '<path d="M4 13a8 8 0 0 1 16 0"/><path data-motion="needle" d="M12 19l4-6"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/>',
+  // Dashboard: a small bar chart on a baseline (live stats); the tall bar grows on hover.
+  dashboard: '<path d="M3 21h18"/><rect x="5" y="11" width="4" height="8" rx="1"/><rect data-motion="bars" x="10" y="6" width="4" height="13" rx="1"/><rect x="15" y="14" width="4" height="5" rx="1"/>',
   // Activity: a waveform; it breathes on hover.
   activity: '<path data-motion="wave" d="M3 12h3l2-5 3 10 3-8 2 3h5"/>',
   // Actions: a lightning bolt; it flickers on hover.

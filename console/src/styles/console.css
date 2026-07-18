@@ -741,8 +741,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    under 250ms-ish, none loop. Disabled under reduced-motion (below). */
 .console-launcher-card:hover .console-launcher-card__icon[data-motion="gear"] svg { animation: console-launcher-gear 0.6s var(--console-ease, ease); }
 @keyframes console-launcher-gear { from { transform: rotate(0); } to { transform: rotate(30deg); } }
-.console-launcher-card:hover .console-launcher-card__icon [data-motion="needle"] { animation: console-launcher-sweep 0.7s var(--console-ease, ease); transform-origin: 12px 19px; transform-box: fill-box; }
-@keyframes console-launcher-sweep { from { transform: rotate(-46deg); } 60% { transform: rotate(44deg); } to { transform: rotate(18deg); } }
+.console-launcher-card:hover .console-launcher-card__icon [data-motion="bars"] { animation: console-launcher-bars 0.6s var(--console-ease, ease); transform-origin: center bottom; transform-box: fill-box; }
+@keyframes console-launcher-bars { from { transform: scaleY(0.55); } to { transform: scaleY(1); } }
 .console-launcher-card:hover .console-launcher-card__icon [data-motion="pulse"] { animation: console-launcher-pulse 0.7s var(--console-ease, ease); transform-origin: center; transform-box: fill-box; }
 @keyframes console-launcher-pulse { 40% { transform: scale(1.5); } }
 .console-launcher-card:hover .console-launcher-card__icon [data-motion="bolt"] { animation: console-launcher-flick 0.45s var(--console-ease, ease); }
