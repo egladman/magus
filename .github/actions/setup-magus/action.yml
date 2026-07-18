@@ -82,10 +82,15 @@ runs:
         steps.magus-cache.outputs.cache-hit != 'true' &&
         (inputs.version == '' || steps.prebuilt.outcome == 'failure')
       shell: bash
+      # CGO_ENABLED=0: the bootstrap magus only orchestrates builds (it never needs
+      # internal/codec's cgo xz/zstd fast path), so build it pure-Go. This keeps the
+      # bootstrap off pkg-config/liblzma/libzstd entirely - on Windows the default
+      # cgo build otherwise grabs Strawberry Perl's broken pkg-config and fails before
+      # the real release-build (which sets up the mingw toolchain) ever runs.
       run: |
         mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
-        go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
-        echo "magus: built from source" >&2
+        CGO_ENABLED=0 go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
+        echo "magus: built from source (CGO_ENABLED=0 bootstrap)" >&2
 
     - name: Add magus to PATH
       shell: bash
