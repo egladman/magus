@@ -18,10 +18,15 @@ import {
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
 import { probeDaemon } from "../../lib/daemon";
 import { h } from "../view";
+import { LICENSE_TEXT } from "./license";
 import {
   buildSettingsEnvelope, computePendingChanges, createDraftCell, diffLines, importSettings,
   type DiffContext, type PendingChange, type Settings, type ThemePref,
 } from "./model";
+
+// The project's canonical repository, derived from the Go module path (github.com/egladman/magus in
+// ../go.mod). Every About link hangs off it, so it lives in one place.
+const REPO_URL = "https://github.com/egladman/magus";
 
 // What the shell injects: the editable command list, their defaults (CONSOLE_KEYMAP), and the one shared
 // live keymap cell the console reads - so a commit writes the same bindings the console honors. presets
@@ -86,6 +91,50 @@ function buildSection(title: string, body: HTMLElement, lede?: string): HTMLElem
   if (lede) head.append(h("p", "console-settings-section__lede", lede));
   section.append(head, body);
   return section;
+}
+
+// externalLink builds an anchor that opens off-app. The console is an installed PWA, so every outbound
+// link goes to a new tab (target=_blank) with rel=noopener to sever the opener reference.
+function externalLink(href: string, text: string): HTMLAnchorElement {
+  const a = h("a", "console-settings-about__link", text);
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener";
+  return a;
+}
+
+// buildAbout builds the About section body: a source link, the reporting links, and the full license
+// folded into a native <details> disclosure (the codebase's existing fold idiom, no JS needed) so it
+// does not dominate the page. It is static, so it takes no draft/commit wiring.
+function buildAbout(): HTMLElement {
+  const body = h("div", "console-settings-about");
+
+  // A short link list: source, then the two feedback destinations. Kept as a plain description-free row
+  // set - version info already lives in the status bar, so this stays quiet.
+  const links = h("ul", "console-settings-about__links");
+  const linkRow = (label: string, link: HTMLAnchorElement): HTMLElement => {
+    const li = h("li", "console-settings-about__row");
+    li.append(h("span", "console-settings-about__label", label), link);
+    return li;
+  };
+  links.append(
+    linkRow("Source code", externalLink(REPO_URL, REPO_URL)),
+    linkRow("Report a bug", externalLink(REPO_URL + "/issues", "Open an issue")),
+    // Discussions must be ENABLED in the GitHub repo settings (Settings > General > Features) for this
+    // link to resolve; until then GitHub redirects it to the repo home. Eli is aware.
+    linkRow("Request a feature", externalLink(REPO_URL + "/discussions", "Start a discussion")),
+  );
+  body.append(links);
+
+  // The full license, verbatim from license.ts, in a collapsed disclosure. Preformatted + monospace so
+  // the GPL's own layout is preserved, and scrollable within a bounded height so it never runs the page.
+  const details = h("details", "console-settings-about__license");
+  details.append(
+    h("summary", "console-settings-about__licensesummary", "License (GPL-3.0-or-later)"),
+    h("pre", "console-settings-about__licensetext", LICENSE_TEXT),
+  );
+  body.append(details);
+  return body;
 }
 
 // buildSettings assembles the surface into host and returns a teardown. It stages every edit into a draft
@@ -560,6 +609,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     buildSection("Appearance", themeBody),
     buildSection("Keybindings", keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply."),
     buildSection("Backup", io, "Export the current draft, or import a saved set to stage it."),
+    buildSection("About", buildAbout(), "Source, license, and where to report bugs or request features."),
   );
   host.append(page);
 

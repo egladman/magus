@@ -209,3 +209,52 @@
 /* "Start from a preset": the preset segmented control + Apply button sit on one wrapping row above the
    keybindings table. */
 .console-settings-presets__row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+
+/* --- About: source/license/feedback, the quiet section at the foot of the page ----------------------
+ * Deliberately understated: a small link list over a folded, scrollable license. No marketing copy;
+ * version info lives in the status bar, so it is not repeated here. */
+.console-settings-about { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
+.console-settings-about__links { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
+/* Each row is a tight label + link pair, small text so the block reads as a footer note, not a form. */
+.console-settings-about__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+}
+.console-settings-about__label { flex: 0 0 8rem; color: var(--pf-t--global--text--color--subtle); }
+.console-settings-about__link { color: var(--console-accent); text-decoration: none; overflow-wrap: anywhere; }
+.console-settings-about__link:hover,
+.console-settings-about__link:focus-visible { text-decoration: underline; }
+
+/* The license disclosure: a native <details> (the codebase's fold idiom), collapsed by default so the
+   long GPL text does not dominate. The summary is a plain, clickable caption; the marker is left in
+   place as the open/closed affordance. */
+.console-settings-about__license {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-settings-about__licensesummary {
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  cursor: pointer;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+/* Preformatted, monospace, and scrollable within a bounded height so the verbatim license keeps its own
+   layout without ever running the page long. */
+.console-settings-about__licensetext {
+  margin: 0;
+  max-height: 24rem;
+  overflow: auto;
+  padding: var(--pf-t--global--spacer--md);
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1.5;
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
