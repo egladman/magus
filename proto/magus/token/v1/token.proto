@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+// Package magus.token.v1 is the console-facing TokenService: the typed MANAGEMENT
+// surface for the daemon's auth tokens. It is VIEW-AND-REVOKE ONLY - it can list
+// tokens and revoke them, but it can NEVER mint one. Minting stays a CLI-only
+// operation (`magus config mcp connector`); the browser has no path to a durable
+// credential, which closes the XSS-to-durable-credential escalation by construction.
+// It is a SECOND door onto the same on-disk connector store the CLI writes - not a
+// second store - plus a read/revoke view of the daemon's in-memory share token. Two
+// tokens are deliberately out of reach here:
+//   - the OPERATOR token (the built-in cli credential, auto-seeded on first daemon
+//     start): it is bootstrap-only and managed SOLELY by the CLI. It lives in a store
+//     this service never opens, so it is structurally INVISIBLE and IMMUTABLE to the
+//     browser-facing surface - it can be neither enumerated by ListTokens nor targeted
+//     by RevokeToken (a revoke keyed on its fingerprint returns NotFound and leaves it
+//     on disk), so the management UI can never lock the operator out of the daemon it
+//     authenticates against. This is by construction, not by convention: see
+//     TokenScope's TOKEN_SCOPE_OPERATOR and the handler's boundary tests.
+//   - there is NO renew/extend RPC by design: a token is reminted (via the CLI),
+//     never extended, for cryptographic hygiene (a fresh secret on rotation, not a
+//     longer-lived one).
+//
+// Access policy - the three-tier credential model, enforced at the mount:
+//   - cli token (operator): the ONLY credential accepted on ANY TokenService RPC.
+//     Token management is operator-tier because whoever can revoke tokens owns the
+//     daemon.
+//   - connector token (MCP client): valid on the data surfaces (/mcp, the console
+//     read/control services) but REJECTED here - a client credential must never
+//     revoke credentials (privilege self-replication).
+//   - share token (read-only viewer): valid only on the ephemeral LAN share
+//     listener, which never mounts this service; it cannot reach any RPC here.
+//
+// The service is mounted on the loopback listener behind a cli-token-only bearer
+// guard and NEVER on the LAN share listener. buf-breaking gates this file: fields
+// and RPCs may be ADDED (old clients ignore unknown fields), never renumbered or
+// removed.
+package magus.token.v1;
+
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// TokenService is a VIEW-AND-REVOKE surface over the daemon's connector and share
+// tokens: List reveals only fingerprints (never the secret bytes) and Revoke removes
+// a token by its fingerprint or name. There is deliberately no mint RPC - minting is
+// CLI-only, so the browser cannot create a durable credential.
+service TokenService {
+  // ListTokens returns every connector token plus the active share token (if any),
+  // each described by a prefix-only fingerprint - never the secret bytes.
+  rpc ListTokens(ListTokensRequest) returns (ListTokensResponse);
+  // RevokeToken removes a connector token or the share token by identifier.
+  // Revoking the share token also closes its LAN listener. The cli token is not
+  // revocable here.
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
+}
+
+// TokenScope names the CLASS a token belongs to in the three-tier credential model,
+// so a client can group and label listed tokens - and so the full taxonomy is named
+// in one place even for the class this service never lists. A connector token is a
+// full MCP bearer minted for an external client; a share-read token is the short-lived,
+// read-only secret behind "share to phone"; the operator token is the built-in cli
+// credential.
+enum TokenScope {
+  TOKEN_SCOPE_UNSPECIFIED = 0;
+  // TOKEN_SCOPE_OPERATOR is the built-in cli token: auto-seeded on first daemon start,
+  // the bootstrap "god" credential that authenticates the operator to the daemon. It is
+  // managed SOLELY by the CLI and is structurally invisible+immutable to this service -
+  // it lives in a store this handler never opens, so it can be neither listed nor
+  // revoked here and this value therefore NEVER appears in a ListTokensResponse. It
+  // exists in the enum to name the class, not because the wire ever carries it.
+  TOKEN_SCOPE_OPERATOR = 3;
+  TOKEN_SCOPE_CONNECTOR = 1;
+  TOKEN_SCOPE_SHARE_READ = 2;
+}
+
+// TokenInfo describes one manageable token WITHOUT its secret, minimized to exactly
+// what a view+revoke UI needs. A read-only list is still an intelligence surface -
+// names, timing, and expiries let a viewer fingerprint the deployment - so it carries
+// ONLY: a short revoke handle (identifier, the prefix-only fingerprint, never the token
+// bytes or the full hash), the token class (scope), the expiry, and the user-chosen
+// name (the operator needs the name to know which token to revoke). It deliberately
+// omits the raw secret, the full hash, any filesystem path, the creation time, and
+// every other internal storage detail: none is needed to revoke, all would help a
+// viewer map the infrastructure.
+message TokenInfo {
+  // 4 (created) and 6 (last_used) are RESERVED, not deleted: created was creation-time
+  // metadata a view+revoke UI does not need and that leaks timing; last_used has never
+  // been populated (no cheap seam records last use) and its number is held for a
+  // possible future last-use column. Reserving keeps either number from being silently
+  // re-added under a different meaning.
+  reserved 4, 6;
+  reserved "created", "last_used";
+
+  string name = 1;             // connector name, or a label for the share token
+  string identifier = 2;       // prefix-only fingerprint; the Revoke key
+  TokenScope scope = 3;
+  google.protobuf.Timestamp expires = 5;   // unset means the token never expires
+}
+
+message ListTokensRequest {}
+
+message ListTokensResponse {
+  repeated TokenInfo tokens = 1;
+}
+
+message RevokeTokenRequest {
+  // identifier is a token name or fingerprint (as returned in TokenInfo.identifier).
+  string identifier = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message RevokeTokenResponse {
+  TokenInfo token = 1;
+}

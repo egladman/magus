@@ -26,6 +26,8 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/trail"
 )
 
 // DefaultTTL is how long a share stays live before the listener closes and the
@@ -111,12 +113,25 @@ type Session struct {
 	Superseded bool
 }
 
-// active holds the runtime state of one live share: its token, expiry, and the
-// closer that tears the listener down. Exactly one is live at a time.
+// active holds the runtime state of one live share: the closer that tears the
+// listener down plus the token record and mint time. Exactly one is live at a time.
+// It retains the token record (hash + scope + expiry, never the secret) and the mint
+// time so a management surface can list and identify the live share via
+// [Manager.Active] without reaching into the URL for the secret.
 type active struct {
-	url       string
-	expiresAt time.Time
-	cancel    context.CancelFunc
+	cancel  context.CancelFunc
+	tok     auth.ShareToken
+	created time.Time
+}
+
+// TokenInfo is the secret-free description of the active share token, for a management
+// surface (the console Settings token list). Fingerprint is the prefix-only
+// identifier used to revoke it; it never contains the token bytes.
+type TokenInfo struct {
+	Fingerprint string
+	Scope       string
+	Created     time.Time
+	Expires     time.Time
 }
 
 // Manager owns the at-most-one active share. Start opens a fresh listener
@@ -131,20 +146,44 @@ type Manager struct {
 	// a loopback selector so the listener lifecycle can be exercised off a LAN.
 	selectAddr func() (netip.Addr, error)
 
+	// trailDir is the activity-trail base (the workspace cache dir). When set, the
+	// first authenticated request from each remote device in a session records one
+	// "share link opened" event there. Empty disables recording (the trail is never
+	// a precondition for serving a share).
+	trailDir string
+
 	mu  sync.Mutex
 	cur *active
 }
 
+// Option configures a Manager at construction. It is the variadic-options seam so a
+// caller adds behavior (a trail dir today) without a wider NewManager signature or a
+// post-construction setter whose ordering the caller has to get right.
+type Option func(*Manager)
+
+// WithTrailDir points the manager at the activity-trail base directory so that the
+// first request from each remote device on a live share records a "share link opened"
+// event. Empty disables recording (the trail is never a precondition for serving a
+// share). It replaces the old SetTrailDir setter, so the wiring is set once at
+// construction and there is no "call it before Start" ordering trap.
+func WithTrailDir(dir string) Option {
+	return func(m *Manager) { m.trailDir = dir }
+}
+
 // NewManager returns a Manager whose shares live for ttl (<=0 uses DefaultTTL)
 // and whose listeners are torn down when parent is cancelled (daemon shutdown).
-func NewManager(parent context.Context, ttl time.Duration, log *slog.Logger) *Manager {
+func NewManager(parent context.Context, ttl time.Duration, log *slog.Logger, opts ...Option) *Manager {
 	if ttl <= 0 {
 		ttl = DefaultTTL
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Manager{parent: parent, ttl: ttl, log: log, selectAddr: SelectLANIPv4}
+	m := &Manager{parent: parent, ttl: ttl, log: log, selectAddr: SelectLANIPv4}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 // Start mints a fresh read-only token and opens a new LAN listener serving the
@@ -180,9 +219,11 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler) (Ses
 	verify := func(presented string) bool { return tok.Verify(presented, time.Now()) }
 	mux := http.NewServeMux()
 	// Static console: unauthenticated. The app shell is not a secret; it reads the
-	// fragment token and replays it as a bearer on the guarded API routes below.
-	fs := http.StripPrefix("/console/", http.FileServer(http.Dir(consoleDir)))
-	mux.Handle("/console/", fs)
+	// fragment token and replays it as a bearer on the guarded API routes below. It is
+	// the SAME console.StaticHandler the loopback daemon mounts, so a phone reload of a
+	// clean /console/<surface>/ path hits the shell SPA fallback (not a 404) and gets
+	// the same strict CSP.
+	mux.Handle("/console/", console.StaticHandler(consoleDir))
 	// A bare "/" load is a convenience redirect into the app.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
@@ -191,11 +232,17 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler) (Ses
 		}
 		http.NotFound(w, r)
 	})
+	// sg is this share's per-session guard: the first-device binding plus the first-use
+	// trail dedupe, both scoped to a single share. It is built per-Start, so a supersede
+	// (which rebuilds Start) begins unbound with an empty seen-set.
+	sg := newSessionGuard(m)
 	// Every data route requires the session token. Header-only: the console reads
 	// live data over fetch()-based SSE and Connect, both of which set an
-	// Authorization header, so the token never needs to ride a URL here either.
+	// Authorization header, so the token never needs to ride a URL here either. sg.admit
+	// runs after BearerGuard, so it only ever sees requests that already carry a valid
+	// token; it binds the first device and rejects the token replayed from any other.
 	for pattern, h := range guarded {
-		mux.Handle(pattern, httpx.BearerGuard(verify, h))
+		mux.Handle(pattern, httpx.BearerGuard(verify, sg.admit(h)))
 	}
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -204,6 +251,22 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler) (Ses
 	// down. Closing the listener and expiring the token are therefore the same
 	// event - there is never a live listener with a dead token or vice versa.
 	ctx, cancel := context.WithTimeout(m.parent, m.ttl)
+
+	// Supersede any current share and publish this one under the lock BEFORE starting
+	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if
+	// the parent context is already cancelled (daemon shutting down), the watcher below
+	// must find m.cur pointing at THIS session so Close/CloseIf can tear it down - a
+	// listener published only after the goroutines start could serve on an address no
+	// management surface knows to revoke. There is still exactly one live share:
+	// superseding cancels the previous one before this replaces it.
+	m.mu.Lock()
+	superseded := m.cur != nil
+	if m.cur != nil {
+		m.cur.cancel()
+	}
+	m.cur = &active{cancel: cancel, tok: tok, created: time.Now().UTC()}
+	m.mu.Unlock()
+
 	go func() {
 		_ = srv.Serve(ln)
 	}()
@@ -214,16 +277,6 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler) (Ses
 		_ = srv.Shutdown(shutCtx)
 	}()
 
-	// Supersede any current share: revoke its token and close its listener before
-	// this one is published, so only one share is ever live.
-	m.mu.Lock()
-	superseded := m.cur != nil
-	if m.cur != nil {
-		m.cur.cancel()
-	}
-	m.cur = &active{url: url, expiresAt: tok.Expires, cancel: cancel}
-	m.mu.Unlock()
-
 	if superseded {
 		m.log.Info("[SHARE] superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
 	}
@@ -232,6 +285,145 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler) (Ses
 		slog.Time("expires", tok.Expires),
 	)
 	return Session{URL: url, ExpiresAt: tok.Expires, Superseded: superseded}, nil
+}
+
+// Active returns secret-free metadata for the currently live share token, or
+// ok=false when no share is active. A share whose token has already expired (in
+// the brief window before its context fires and clears m.cur) reports ok=false, so
+// a management surface never lists a dead token as if it were revocable.
+func (m *Manager) Active() (TokenInfo, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cur == nil || m.cur.tok.Expired(time.Now()) {
+		return TokenInfo{}, false
+	}
+	return TokenInfo{
+		Fingerprint: m.cur.tok.SHA256[:8],
+		Scope:       m.cur.tok.Scope,
+		Created:     m.cur.created,
+		Expires:     m.cur.tok.Expires,
+	}, true
+}
+
+// shareBoundOtherDeviceMsg is the 403 body a device gets when it presents a valid token
+// but the share is already bound to a DIFFERENT device (a likely token-replay from a
+// LAN sniffer). Plain ASCII, no trailing period, so it reads cleanly as an HTTP body.
+const shareBoundOtherDeviceMsg = "share link is bound to another device"
+
+// sessionGuard is the per-Start post-verification guard for one live share. It runs
+// only after BearerGuard admits a request (so it only ever sees a valid token) and
+// enforces two things that must be scoped to a single share session: it binds the
+// share to the first remote device and rejects the token replayed from any other, and
+// it records the first-use trail event once per device. Both pieces of state are
+// per-Start, so a supersede (which rebuilds Start) begins unbound with an empty
+// seen-set.
+type sessionGuard struct {
+	m *Manager
+
+	bindMu    sync.Mutex
+	boundHost string // the first device's host; empty until the first valid request binds it
+
+	seenMu sync.Mutex
+	seen   map[string]struct{}
+}
+
+// newSessionGuard builds an unbound guard for one share session.
+func newSessionGuard(m *Manager) *sessionGuard {
+	return &sessionGuard{m: m, seen: make(map[string]struct{})}
+}
+
+// admit wraps a guarded handler so device binding and first-use recording run only on
+// an already-verified request (BearerGuard sits in front). A token replayed from a
+// device other than the one that first bound the share is rejected with 403 before the
+// handler runs; the bound device is served, and its first request records one trail
+// event.
+func (g *sessionGuard) admit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !g.bindDevice(remoteHost(r)) {
+			http.Error(w, shareBoundOtherDeviceMsg, http.StatusForbidden)
+			return
+		}
+		g.recordFirstUse(r)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// bindDevice ties the live share to the FIRST remote host that presents a valid token
+// and reports whether host may proceed. The LAN share listener is plain HTTP, so a
+// passive sniffer on the network can capture and replay the token; binding makes a
+// sniffed token useless from any device other than the one that first used it.
+//
+// The whole check-and-set runs under bindMu, so when two devices race the first request
+// exactly one wins the binding (sets boundHost) and the other is measured against it -
+// there is no window where both read an empty boundHost and both bind. boundHost is
+// per-Start state, so a supersede (a fresh sessionGuard) begins unbound; the binding
+// lives exactly as long as this share's listener and token.
+//
+// Caveat: the identity is the source IP, which is NOT stable across a NAT rebind or a
+// Wi-Fi-to-cellular handoff. A legitimate phone that changes IP mid-session is locked
+// out (gets 403) and the operator must re-share. That false-reject is the accepted
+// cost of making a sniffed plaintext token useless from a different device; a rejected
+// device never tears the share down, it just cannot use this link.
+func (g *sessionGuard) bindDevice(host string) bool {
+	g.bindMu.Lock()
+	defer g.bindMu.Unlock()
+	if g.boundHost == "" {
+		g.boundHost = host
+		return true
+	}
+	return g.boundHost == host
+}
+
+// recordFirstUse records one "share link opened" activity event the first time a
+// given remote device presents a valid token on a live share, and nothing on that
+// device's subsequent requests. It dedupes on the remote HOST (not host:port, which
+// varies per TCP connection), so a page's many requests do not spam the trail. The
+// user-agent and remote IP ride the event so the console can attribute the connect.
+// No-op when no trail dir is configured.
+//
+// The dedupe decision runs synchronously under the lock (so "once per host" holds
+// even when several requests race), but the disk write is spawned in a goroutine so
+// recording genuinely never blocks the response the phone is waiting on - the reason
+// the request fields are copied out before the goroutine starts.
+func (g *sessionGuard) recordFirstUse(r *http.Request) {
+	if g.m.trailDir == "" {
+		return
+	}
+	host := remoteHost(r)
+	g.seenMu.Lock()
+	_, dup := g.seen[host]
+	if !dup {
+		g.seen[host] = struct{}{}
+	}
+	g.seenMu.Unlock()
+	if dup {
+		return
+	}
+	ua := r.UserAgent()
+	// KindTokenLifecycle is the closest existing activity kind: a share token being
+	// exercised by a remote device is a lifecycle event of that token. No new proto
+	// kind is added; the console derives the alert from this event frontend-side.
+	go trail.Append(g.m.trailDir, trail.Event{
+		Ts:        time.Now().UnixMilli(),
+		Kind:      trail.KindTokenLifecycle,
+		Actor:     "share-guest",
+		Action:    "share.open",
+		Outcome:   trail.OutcomeOK,
+		UserAgent: ua,
+		Preview:   "share link opened from " + host,
+	})
+}
+
+// remoteHost returns the host portion of r.RemoteAddr, dropping the per-connection
+// port. It is the stable per-device identity used both to dedupe the trail event and
+// to bind the share to one device; a plain RemoteAddr would vary per TCP connection
+// (a new ephemeral port each time) and defeat both.
+func remoteHost(r *http.Request) string {
+	host := r.RemoteAddr
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return host
 }
 
 // Close tears down the active share, if any. Idempotent. Called on daemon
@@ -244,4 +436,25 @@ func (m *Manager) Close() {
 	if cur != nil {
 		cur.cancel()
 	}
+}
+
+// CloseIf tears the active share down only when its token fingerprint (the first 8
+// hex of the SHA-256, as [Manager.Active] reports it) still equals fingerprint, and
+// reports whether it did. It is the atomic check-and-close a revoke needs: a caller
+// that read the active fingerprint via Active and then called Close could, in the
+// window between the two, race a supersede and tear down a DIFFERENT share minted in
+// the meantime. CloseIf re-checks identity while holding the lock, so it revokes
+// exactly the share the caller named or nothing - a lost race leaves the new share
+// alive and returns false (the revoke maps that to NotFound).
+func (m *Manager) CloseIf(fingerprint string) bool {
+	m.mu.Lock()
+	cur := m.cur
+	if cur == nil || cur.tok.SHA256[:8] != fingerprint {
+		m.mu.Unlock()
+		return false
+	}
+	m.cur = nil
+	m.mu.Unlock()
+	cur.cancel()
+	return true
 }
