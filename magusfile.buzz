@@ -278,6 +278,12 @@ fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void
 // on — never a silent "all 5" surprise.
 fun release_target_platform(goos: str, goarch: str) > [str] {
     if (goos != null and goos != "") { return [goos, goarch]; }
+    // GOOS/GOARCH in the environment cross-target this build (the standard Go convention), so CD can
+    // ask one runner for another platform's binary - e.g. the arm64 macOS job cross-builds darwin/amd64
+    // static via `GOOS=darwin GOARCH=amd64 magus run release-build:static`. Empty env falls to native.
+    final envos = os.env("GOOS");
+    final envarch = os.env("GOARCH");
+    if (envos != null and envos != "" and envarch != null and envarch != "") { return [envos, envarch]; }
     final p = os.platform();
     return [p[0], p[1]];
 }

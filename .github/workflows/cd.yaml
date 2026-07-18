@@ -92,7 +92,7 @@ jobs:
         run: |
           magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
-          magus run release-build:static darwin amd64 --no-default-charms
+          GOOS=darwin GOARCH=amd64 magus run release-build:static --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-darwin
