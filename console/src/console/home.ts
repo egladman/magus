@@ -15,24 +15,50 @@ export interface Launchable {
   hint: string;
 }
 
+// Each launcher card carries its OWN earthy palette hue (--card-accent, set per card below) - the
+// icon glyph, the corner watermark, and the hover border all take it, so the home reads as a spread
+// of muted color pops, one per tool. Settings has no entry and falls back to the shared functional
+// spruce accent. Decorative only: semantic color stays reserved for health.
+const SURFACE_ACCENTS: Record<string, string> = {
+  logs: "--console-clay",
+  graph: "--console-spruce",
+  dashboard: "--console-moss",
+  activity: "--console-rust",
+  actions: "--console-sage",
+  // settings: intentionally none -> --card-accent falls back to --console-accent (spruce)
+};
+
 // One representative glyph per surface, drawn in the console's shared icon idiom (24x24, stroked
-// currentColor, round caps) so the launcher matches the title-bar and toolbar iconography. Keyed by
-// pageId; a surface with no entry falls back to a neutral square. The paths are the inner geometry -
-// buildLauncher wraps each in the <svg> shell.
+// currentColor, round caps). Keyed by pageId; a surface with no entry falls back to a neutral square.
+// A single inner element per animated icon carries data-motion="<kind>": on card hover it plays ONE
+// in-character micro-motion (gear turns, gauge needle sweeps, graph node pulses, waveform breathes,
+// bolt flickers) - see the @keyframes in console.css, all one-shot and reduced-motion gated. The paths
+// are the inner geometry - buildLauncher wraps each in the <svg> shell.
 const SURFACE_ICONS: Record<string, string> = {
-  // Log viewer: a document with text lines.
-  logs: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h6"/>',
-  // Graph explorer: three connected nodes.
-  graph: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="9" r="2.5"/><circle cx="9" cy="18" r="2.5"/><path d="M8.3 7.2 15.6 8.4M8.6 16 8.2 8.6"/>',
-  // Dashboard: a gauge/speedometer.
-  dashboard: '<path d="M3.5 18a10 10 0 1 1 17 0"/><path d="M12 14l3.5-3.5"/>',
-  // Activity: a pulse/activity line.
-  activity: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
-  // Actions: a lightning bolt - reads as "run something now", distinct from the log document and the
-  // graph's connected nodes.
-  actions: '<path d="M13 2 4 14h6l-1 8 9-12h-6z"/>',
-  // Settings: a settings gear.
-  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  // Log viewer: stacked text lines.
+  logs: '<path d="M4 5h16M4 10h10M4 15h13M4 19h7"/>',
+  // Graph explorer: three connected nodes; the lead node pulses on hover.
+  graph: '<circle data-motion="pulse" cx="6" cy="7" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="15" cy="18" r="2.2"/><path d="M8 8l6 9M8 7l8-1"/>',
+  // Dashboard: a gauge; the needle sweeps on hover.
+  dashboard: '<path d="M4 13a8 8 0 0 1 16 0"/><path data-motion="needle" d="M12 19l4-6"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/>',
+  // Activity: a waveform; it breathes on hover.
+  activity: '<path data-motion="wave" d="M3 12h3l2-5 3 10 3-8 2 3h5"/>',
+  // Actions: a lightning bolt; it flickers on hover.
+  actions: '<path data-motion="bolt" d="M13 2L4 14h6l-1 8 9-12h-6z"/>',
+  // Settings: a gear; the whole glyph turns on hover (data-motion on the icon slot, below).
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M18.5 5.5l-2 2M7.5 16.5l-2 2"/>',
+};
+
+// A large domain glyph per surface, bled off the card's bottom-right corner as a low-opacity watermark
+// in the card's own hue (the biggest single "pop of color"). 100x100 viewBox; graph runs a thinner
+// stroke so its four nodes do not clot. Keyed by pageId; a surface with no entry shows no watermark.
+const SURFACE_WATERMARKS: Record<string, { svg: string; sw: number }> = {
+  logs: { svg: '<path d="M14 22h72M14 40h48M14 58h60M14 76h34"/>', sw: 3 },
+  graph: { svg: '<circle cx="24" cy="30" r="7"/><circle cx="70" cy="22" r="7"/><circle cx="62" cy="66" r="7"/><circle cx="30" cy="74" r="7"/><path d="M30 33l28 30M31 32l35-6M64 60L36 71"/>', sw: 2.6 },
+  dashboard: { svg: '<path d="M16 66a34 34 0 0 1 68 0"/><path d="M50 66l20-26"/>', sw: 3 },
+  activity: { svg: '<path d="M8 52h12l8-26 12 46 10-34 7 14h27"/>', sw: 3 },
+  actions: { svg: '<path d="M52 8L20 56h24l-4 36 40-52H56z"/>', sw: 3 },
+  settings: { svg: '<circle cx="50" cy="50" r="13"/><path d="M50 20v12M50 68v12M20 50h12M68 50h12M29 29l8 8M63 63l8 8M71 29l-8 8M37 63l-8 8"/>', sw: 3 },
 };
 
 // buildLauncher builds the launcher DOM as the outlet's empty state. `surfaces` is what it offers to
@@ -57,15 +83,21 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     const card = document.createElement("div");
     card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
     card.dataset.open = s.pageId;
+    // This card's palette hue drives its icon, watermark, and hover border. Settings sets none and
+    // inherits the shared spruce accent via the --card-accent fallback in console.css.
+    const accentVar = SURFACE_ACCENTS[s.pageId];
+    if (accentVar) card.style.setProperty("--card-accent", `var(${accentVar})`);
     // A real clickable button: role=button + tabindex make it keyboard-reachable and announce it
     // as a button; the Enter/Space handler below completes the contract.
     card.setAttribute("role", "button");
     card.setAttribute("tabindex", "0");
     card.setAttribute("aria-label", "Open " + s.label);
-    // A representative glyph in an accent-tinted tile, in the console's shared icon style. Decorative
-    // (the accessible name is the card's aria-label), so aria-hidden.
+    // The representative glyph, drawn in the card's hue. Decorative (the accessible name is the card's
+    // aria-label), so aria-hidden. The gear's whole glyph turns on hover, so its motion hook rides the
+    // icon slot; the other surfaces mark a single inner element (data-motion, in SURFACE_ICONS).
     const icon = document.createElement("span");
     icon.className = "console-launcher-card__icon";
+    if (s.pageId === "settings") icon.dataset.motion = "gear";
     icon.innerHTML =
       '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -82,6 +114,17 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     body.textContent = s.hint;
 
     card.append(icon, titleEl, body);
+    // The corner watermark: a large domain glyph bled off the bottom-right in the card's hue, drawn
+    // behind the text (z-index in console.css) and drifting on hover. Decorative, aria-hidden.
+    const wm = SURFACE_WATERMARKS[s.pageId];
+    if (wm) {
+      const mark = document.createElement("span");
+      mark.className = "console-launcher-card__watermark";
+      mark.innerHTML =
+        '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="' + wm.sw + '" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + wm.svg + "</svg>";
+      card.append(mark);
+    }
     card.addEventListener("click", () => open(s.pageId));
     card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(s.pageId); } });
     gallery.append(card);

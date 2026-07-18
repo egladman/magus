@@ -604,6 +604,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    surface floating in the outlet rather than a flush square fill. The radius is built from the large
    token (device-aware via the tokens.css platform gate), doubled so the curve is unmistakable. */
 #console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0.6rem; padding: 2rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); border-radius: calc(var(--pf-t--global--border--radius--large) * 2); }
+/* Blueprint ground: a very faint dot grid across the launcher panel - the recurring build-graph motif.
+   Sits behind everything (z-index 0 with the panel's own children above), pointer-transparent, and
+   clipped to the panel's rounded corners by its overflow. Deliberately near-subliminal (~3.5% alpha). */
+#console-outlet [data-surface="home"]::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(var(--pf-t--global--text--color--regular) 0.6px, transparent 0.6px);
+  background-size: 22px 22px; opacity: 0.035;
+}
+#console-outlet [data-surface="home"] > * { position: relative; z-index: 1; }
 
 /* Launch-the-demo affordance: a quiet icon pill below the cards, right-aligned, that expands to show its
    label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. It
@@ -663,27 +672,49 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    right-aligned - matching the shell and the intent above. */
 :root[data-appmode] #console-actions { margin-inline-start: auto; }
 
-/* Launcher cards: taller than a default PF card, an accent-tinted glyph tile up top, a lift on
-   hover/focus. The card shell stays PF (pf-v6-c-card pf-m-clickable); these rules add the icon slot
-   and the taller, more inviting proportions the compact default did not give. */
+/* Launcher cards - the home screen's identity centerpiece. Each carries its OWN earthy hue via
+   --card-accent (home.ts sets it per card; Settings inherits the shared spruce --console-accent through
+   the fallback): the glyph, the corner watermark, and the hover border all take it, so the home reads
+   as a spread of muted color pops. The card shell stays PF (pf-v6-c-card pf-m-clickable); these rules
+   add the plain colored glyph, the bled-off watermark, and a LAYERED (not shadowed) hover - a small
+   lift, the border tints to the hue, the ground lifts, and the watermark drifts. Depth comes from
+   layers, not material elevation, so there is deliberately no box-shadow. overflow+isolation clip and
+   contain the watermark; the local var makes --card-accent fall back to the functional accent. */
 .console-launcher-card {
-  position: relative; /* anchors the kebab (top-right) and its menu */
+  --card-accent: var(--console-accent);
+  position: relative; overflow: hidden; isolation: isolate;
   display: flex; flex-direction: column; gap: 0.15rem;
-  padding: 1.15rem 1.25rem;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  min-height: 7.25rem; padding: 1.1rem 1.2rem 1.25rem;
+  /* An explicit hairline (the PF card ships none), so cards keep a crisp edge on both grounds - it is
+     what reads as separation on the low-contrast dark slate, and the hover tints it to the card's hue. */
+  border: 1px solid var(--pf-t--global--border--color--default);
+  transition: transform 0.18s var(--console-ease, ease), border-color 0.18s var(--console-ease, ease), background 0.18s var(--console-ease, ease);
 }
 .console-launcher-card:hover,
 .console-launcher-card:focus-visible {
-  transform: translateY(-2px);
-  border-color: var(--console-accent);
-  box-shadow: var(--pf-t--global--box-shadow--md);
+  transform: translateY(-3px);
+  border-color: var(--card-accent);
+  background: var(--pf-t--global--background--color--tertiary--default);
 }
+.console-launcher-card:focus-visible { outline: 2px solid var(--card-accent); outline-offset: 2px; }
 .console-launcher-card__icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 2.5rem; height: 2.5rem; margin-bottom: 0.55rem;
-  border-radius: var(--pf-t--global--border--radius--medium);
-  color: var(--console-accent);
-  background: color-mix(in srgb, var(--console-accent) 12%, transparent);
+  display: block; width: 1.6rem; height: 1.6rem; margin-bottom: 0.55rem;
+  color: var(--card-accent);
+}
+.console-launcher-card__icon svg { width: 100%; height: 100%; }
+/* The corner watermark: a large domain glyph bled off the bottom-right, in the card's hue at a low
+   opacity so the color reads as a subtle pop. z-index -1 (within the card's own isolation context) keeps
+   it behind the text but above the card ground; it drifts and warms slightly on hover. */
+.console-launcher-card__watermark {
+  position: absolute; right: -1.1rem; bottom: -1.4rem; z-index: -1;
+  width: 8.25rem; height: 8.25rem; color: var(--card-accent); opacity: 0.14;
+  pointer-events: none;
+  transition: transform 0.35s var(--console-ease, ease), opacity 0.35s var(--console-ease, ease);
+}
+.console-launcher-card__watermark svg { width: 100%; height: 100%; }
+.console-launcher-card:hover .console-launcher-card__watermark,
+.console-launcher-card:focus-visible .console-launcher-card__watermark {
+  opacity: 0.2; transform: translate(-0.4rem, -0.4rem) scale(1.03);
 }
 /* The card owns its padding (above); neutralize PF's per-slot title/body padding so it does not stack
    into extra whitespace. */
@@ -691,6 +722,31 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-launcher-card .pf-v6-c-card__body { padding: 0; }
 .console-launcher-card .pf-v6-c-card__title-text { font-size: 1rem; font-weight: 600; }
 .console-launcher-card .pf-v6-c-card__body { color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+
+/* Entrance: the cards fade-and-rise once on load, staggered ~50ms apart. One-shot (forwards), and fully
+   disabled under prefers-reduced-motion (below). Kept subtle - a 0.5rem rise over ~0.45s. */
+#console-outlet [data-surface="home"] .console-launcher-card { opacity: 0; animation: console-launcher-rise 0.45s var(--console-ease, ease) forwards; }
+.console-launcher-card:nth-child(1) { animation-delay: 0.02s; }
+.console-launcher-card:nth-child(2) { animation-delay: 0.07s; }
+.console-launcher-card:nth-child(3) { animation-delay: 0.12s; }
+.console-launcher-card:nth-child(4) { animation-delay: 0.17s; }
+.console-launcher-card:nth-child(5) { animation-delay: 0.22s; }
+.console-launcher-card:nth-child(6) { animation-delay: 0.27s; }
+@keyframes console-launcher-rise { from { opacity: 0; transform: translateY(0.6rem); } to { opacity: 1; transform: translateY(0); } }
+
+/* One-shot "living" icon micro-motions on hover - each surface's glyph animates ONCE, in character, and
+   settles. data-motion on a single inner element (or the icon slot, for the gear) picks the motion. All
+   under 250ms-ish, none loop. Disabled under reduced-motion (below). */
+.console-launcher-card:hover .console-launcher-card__icon[data-motion="gear"] svg { animation: console-launcher-gear 0.6s var(--console-ease, ease); }
+@keyframes console-launcher-gear { from { transform: rotate(0); } to { transform: rotate(30deg); } }
+.console-launcher-card:hover [data-motion="needle"] { animation: console-launcher-sweep 0.7s var(--console-ease, ease); transform-origin: 12px 19px; transform-box: fill-box; }
+@keyframes console-launcher-sweep { from { transform: rotate(-46deg); } 60% { transform: rotate(44deg); } to { transform: rotate(18deg); } }
+.console-launcher-card:hover [data-motion="pulse"] { animation: console-launcher-pulse 0.7s var(--console-ease, ease); transform-origin: center; transform-box: fill-box; }
+@keyframes console-launcher-pulse { 40% { transform: scale(1.5); } }
+.console-launcher-card:hover [data-motion="bolt"] { animation: console-launcher-flick 0.45s var(--console-ease, ease); }
+@keyframes console-launcher-flick { 30% { opacity: 0.35; } 60% { opacity: 1; } }
+.console-launcher-card:hover [data-motion="wave"] { animation: console-launcher-wave 0.7s var(--console-ease, ease); }
+@keyframes console-launcher-wave { 50% { transform: translateY(-1.5px) scaleY(1.2); } }
 
 /* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay
    (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives
@@ -758,6 +814,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-commandbar__items[data-typed] { transform: translateX(0.75rem); }
 @media (prefers-reduced-motion: reduce) {
   .console-shell-commandbar__items { transform: none; transition: none; }
+  /* The launcher identity motion is decorative: kill the entrance, the hover lift/drift, and the
+     one-shot icon micro-motions, leaving the cards fully visible and static. */
+  #console-outlet [data-surface="home"] .console-launcher-card { opacity: 1; animation: none; }
+  .console-launcher-card, .console-launcher-card__watermark, .console-launcher-card__icon svg,
+  .console-launcher-card [data-motion] { transition: none !important; animation: none !important; transform: none !important; }
 }
 .console-shell-commandbar__item {
   /* A small block margin insets every token from the bar's top/bottom edges so the selection reads as
