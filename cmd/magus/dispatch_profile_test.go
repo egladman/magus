@@ -10,6 +10,10 @@ import "testing"
 func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 	usageOnly := dispatchProfile{needsConfig: true}
 	full := dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
+	// server subcommands never forward and never host their own proc server: doing so let a
+	// version-mismatched `server stop` shut down its own throwaway server instead of the real
+	// daemon (a silent no-op). Config-only, like a usage-only invocation.
+	serverProfile := dispatchProfile{needsConfig: true}
 
 	cases := []struct {
 		name    string
@@ -27,6 +31,9 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"affected -h", "affected", []string{"-h"}, usageOnly},
 		{"affected --help", "affected", []string{"--help"}, usageOnly},
 		{"affected target still forwards", "affected", []string{"ci"}, full},
+		{"server stop never forwards", "server", []string{"stop"}, serverProfile},
+		{"server start never forwards", "server", []string{"start"}, serverProfile},
+		{"server job never forwards", "server", []string{"job", "sync-graph"}, serverProfile},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

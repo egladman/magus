@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/egladman/magus/internal/proc/endpoint"
 )
 
 // stableSocketName is the well-known socket filename used by `magus server start`.
@@ -13,6 +15,19 @@ const stableSocketName = "magus-daemon.sock"
 
 // StableSocketName returns the file basename of the stable multi-workspace daemon socket.
 func StableSocketName() string { return stableSocketName }
+
+// SocketLive reports whether a daemon is currently accepting on addr, which may be a
+// unix:// URL or a bare socket path. It is the shared liveness probe behind idempotent
+// `server start` (skip when one is already up) and `server stop` verification (confirm
+// the daemon is actually gone after a shutdown request). A malformed address is treated
+// as not-live rather than an error, since callers only care whether a daemon answers.
+func SocketLive(ctx context.Context, addr string) bool {
+	ep, err := endpoint.ParseEndpoint(addr)
+	if err != nil {
+		return false
+	}
+	return isSocketLive(ctx, ep.Addr)
+}
 
 // LookupStableSocket returns the address of the stable daemon socket if alive; bool is false when absent.
 func LookupStableSocket(ctx context.Context) (string, bool) {

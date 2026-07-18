@@ -113,6 +113,13 @@ type Server struct {
 // Addr returns the canonical unix:// URL that children dial. Valid after New.
 func (s *Server) Addr() string { return s.ep.String() }
 
+// Done returns a channel closed when the server has been Closed, whether by an RPC
+// shutdown request or a signal. A blocking daemon loop selects on it so an RPC-driven
+// `magus server stop` unblocks the process the same way a signal does: without it the
+// shutdown handler tears down the listener but the process keeps running, since the
+// listener's context is a sibling of the process context, not its parent.
+func (s *Server) Done() <-chan struct{} { return s.done }
+
 // Close shuts down the listener, removes the socket file, and waits for all in-flight handlers.
 // Safe to call multiple times.
 func (s *Server) Close() {

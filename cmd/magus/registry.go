@@ -296,6 +296,31 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	trail.Append(base, ev)
 }
 
+// adoptBridge registers an already-open Magus (the daemon's bridge workspace, loaded by
+// startMCPWithDaemon for MCP, health, and the warm knowledge graph) as a pinned registry
+// entry for root. Without this the daemon keeps two workspace pools: the bridge that MCP
+// tool calls actually use, and this registry that only adopted run/affected dispatches
+// populate. The WorkspaceLister reads this registry, so /readyz reported "no workspaces
+// loaded" even after a live MCP query. Adopting the bridge here unifies them: there is one
+// instance per root, the lister reports the daemon's own workspace immediately, and a later
+// adopted run of the same root reuses this instance instead of opening a second. The entry
+// is pinned (inflight held, never released) so the idle janitor never evicts the daemon's
+// long-lived MCP workspace.
+func (r *wsRegistry) adoptBridge(root string, m *magus.Magus) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.entries[root]; ok {
+		return // an adopted run already loaded this root; leave its entry in place
+	}
+	e := &wsEntry{root: root, m: m, loadedAt: r.now()}
+	// Consume the once so a later acquire()'s load() is a no-op and returns this m,
+	// rather than re-opening the workspace.
+	e.once.Do(func() {})
+	e.lastAccess.Store(r.now().UnixNano())
+	e.inflight = 1 // pin: the daemon owns this workspace for its whole lifetime
+	r.entries[root] = e
+}
+
 // status returns a snapshot of loaded workspaces for the Status RPC.
 func (r *wsRegistry) status() []proc.Workspace {
 	r.mu.Lock()

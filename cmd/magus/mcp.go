@@ -90,6 +90,13 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	// Publish the daemon-wide activity-trail base so background-job recording lands in the same
 	// trail the MCP handler writes and the ActivityService reads (both off this Magus's cache dir).
 	daemonTrailBase = m.CacheDir()
+	// Register this bridge workspace in the per-workspace registry the WorkspaceLister reports,
+	// so /readyz counts the daemon's own MCP workspace as loaded instead of waiting for an
+	// adopted run to populate the pool. Without this the daemon ran two workspace pools and
+	// readyz reported "no workspaces loaded" even after a live MCP query used this same Magus.
+	if daemonRegistry != nil {
+		daemonRegistry.adoptBridge(m.Root(), m)
+	}
 	// Keep a warm knowledge graph for MCP queries: the watcher invalidates it on
 	// source changes, so query/explain/path/stats answer from memory without
 	// re-parsing every magusfile per call. Non-fatal if it cannot start - the

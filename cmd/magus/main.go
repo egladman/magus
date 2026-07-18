@@ -159,6 +159,15 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
+	case "server":
+		// server subcommands manage the daemon directly and must never forward or host
+		// their own per-process proc server. start IS the daemon (special-cased in startup);
+		// stop and job resolve the real daemon socket explicitly (resolveDaemonAddr). The old
+		// default profile made `server stop` forward, and on a version-mismatched forward
+		// (common across dev worktrees on one shared socket) it fell through to hosting its
+		// own throwaway proc server, then shut THAT down instead of the real daemon - a silent
+		// no-op stop. The rotate-* job workers that need a workspace load one themselves.
+		return dispatchProfile{needsConfig: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
@@ -405,7 +414,20 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	var adoptCloser func()
 	switch {
 	case sub == "server" && len(subArgs) > 0 && subArgs[0] == "start":
-		startMultiWorkspaceDaemon(rootCtx, cfg, rc)
+		// A help request must print usage and build no daemon, so it skips both the
+		// background handoff and the in-process daemon and falls through to normal dispatch
+		// (serverStart's flag parse prints the usage). Without this guard `server start -h`
+		// would hit the idempotency check and report "already running" instead of help.
+		if !isServerStartHelp(subArgs) {
+			// By default `server start` auto-backgrounds: the parent re-execs a detached child
+			// and returns once it is accepting. done==true means we are that parent (or a daemon
+			// was already running, or spawning failed); only the foreground child falls through
+			// to actually build and run the daemon in this process.
+			if code, done := startDaemonBackground(rootCtx, cfg, subArgs); done {
+				return startupResult{cleanup: cleanup}, code
+			}
+			startMultiWorkspaceDaemon(rootCtx, cfg, rc)
+		}
 	case !profile.needsWorkspace:
 		// skip loadMagus + proc server for subcommands that need no workspace
 	default:
@@ -655,6 +677,20 @@ func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) 
 // startMCPWithDaemon. Same process, sequential, so the write happens-before the read.
 var daemonProvider observability.Provider
 
+// daemonRegistry is the daemon's per-workspace registry (the wsRegistry built as reg in
+// startMultiWorkspaceDaemon). It is the single source of truth the WorkspaceLister reports,
+// so startMCPWithDaemon publishes the bridge workspace into it (reg.adoptBridge) and /readyz
+// sees the daemon's own MCP workspace as loaded, not just workspaces populated by adopted
+// runs. Same process, sequential, so the write happens-before the read.
+var daemonRegistry *wsRegistry
+
+// daemonServer is the running proc server for `magus server start`. startMultiWorkspaceDaemon
+// publishes it so serverStart's blocking loop can select on its Done channel: an RPC-driven
+// `server stop` closes the server, and without observing that the daemon process would keep
+// running after its listener was already gone. Same process, sequential, so the write
+// happens-before the read.
+var daemonServer *proc.Server
+
 // daemonRuns is the daemon's live-run registry: a capture handler folded into every adopted
 // dispatch's journal, tracking per-target execution state. startMultiWorkspaceDaemon builds
 // it and threads it onto each dispatch's context; startMCPWithDaemon hands its Snapshot to
@@ -714,6 +750,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	declared := resolveDeclaredWorkspaces(cfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
 	reg := newWSRegistry(ctx, lim, ttl, sharedTel)
 	reg.setDeclared(declared)
+	daemonRegistry = reg // publish so startMCPWithDaemon can adopt the bridge workspace into it
 
 	// The daemon hosts shared services so they stay warm across separate `magus run`
 	// invocations. Only the stable daemon does this (a per-process proc server leaves
@@ -774,10 +811,18 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 		slog.Error("daemon server start failed", slog.String("error", err.Error()))
 		return
 	}
+	daemonServer = srv // publish so serverStart's blocking loop unblocks on an RPC shutdown
 	go func() {
-		<-ctx.Done()
+		// Tear down on either path: a signal (ctx cancelled via NotifyContext) or an RPC
+		// `server stop` (which calls srv.Close, closing srv.Done). Waiting only on ctx.Done
+		// missed the RPC path - srv.Close cancels the listener's own context, not this one -
+		// so a stopped daemon leaked its hosted services and warm workspaces.
+		select {
+		case <-ctx.Done():
+		case <-srv.Done():
+		}
 		// Drain in-flight handlers (srv.Close waits on connWg) before reg.close so a
-		// workspace can't be closed under an in-flight build.
+		// workspace can't be closed under an in-flight build. Close is idempotent.
 		srv.Close()
 		svcReg.Shutdown() // stop every hosted service on daemon teardown
 		reg.close()
