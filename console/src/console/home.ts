@@ -72,10 +72,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   const root = document.createElement("div");
   root.dataset.surface = "home";
 
-  const title = document.createElement("h1");
-  title.textContent = "What do you want to open?";
-  const sub = document.createElement("p");
-  sub.textContent = "Each tool opens in its own tab.";
+  const hero = buildHero();
 
   const gallery = document.createElement("div");
   gallery.className = "pf-v6-l-gallery pf-m-gutter";
@@ -145,6 +142,33 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     '<span class="console-launcher-demo__label">Launch the demo</span>';
   demo.addEventListener("click", () => launchDemo());
 
-  root.append(title, sub, gallery, demo);
+  root.append(hero, gallery, demo);
   return root;
+}
+
+// buildHero builds the launcher's identity band: the node monogram, the "Magus" wordmark and a line of
+// intent, and a status cluster (daemon health / host / version) on the right - so the first thing on the
+// empty console is what this is and whether it is connected. The status pills carry data hooks the
+// console fills live: [data-hero-health] (the poller mirrors the docked #console-conn state here),
+// [data-hero-host] (set from the daemon-address setting), and [data-version-chip] (the shared build-info
+// fill, same hook the status bar uses). Host and version pills start hidden until there is a value.
+function buildHero(): HTMLElement {
+  const hero = document.createElement("div");
+  hero.className = "console-launcher-hero";
+  hero.innerHTML =
+    '<svg class="console-launcher-hero__mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="6" cy="7" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="15" cy="18" r="2.4"/>' +
+    '<circle cx="5" cy="17" r="2.4"/><path d="M8 8l5 8M8.2 7.2L15.8 6.4M7.3 15.6L12.9 17.4"/></svg>' +
+    '<div class="console-launcher-hero__txt">' +
+    '<h1 class="console-launcher-hero__name">Magus</h1>' +
+    '<p class="console-launcher-hero__sub">Local build daemon. Pick a lens, or open the action bar.</p>' +
+    "</div>" +
+    '<div class="console-launcher-hero__status">' +
+    '<span class="console-launcher-hero__pill" data-hero-health data-state="disconnected">' +
+    '<span class="console-launcher-hero__dot"></span><span data-hero-health-text>not connected</span></span>' +
+    '<span class="console-launcher-hero__pill" data-hero-host hidden></span>' +
+    '<span class="console-launcher-hero__pill console-launcher-hero__pill--ver" data-version-chip hidden></span>' +
+    "</div>";
+  return hero;
 }
