@@ -85,6 +85,14 @@ func TestHealthHTTPHandler(t *testing.T) {
 			rec := httptest.NewRecorder()
 			h(rec, req)
 			assert.Equal(t, wantStatus, rec.Code, "body: %q", rec.Body.String())
+			// The body is a fixed generic token, never evaluateHealth's reason (which
+			// embeds the daemon PID). A kubelet reads only the status code, so this
+			// redaction cannot break probe use.
+			wantBody := "ok\n"
+			if wantStatus != http.StatusOK {
+				wantBody = "unavailable\n"
+			}
+			assert.Equal(t, wantBody, rec.Body.String())
 		})
 	}
 
@@ -98,13 +106,76 @@ func TestHealthHTTPHandler(t *testing.T) {
 
 // unreachable querier for testing the error path
 func TestHealthHTTPHandlerUnreachable(t *testing.T) {
+	// A proc-dial error carrying the daemon socket path is exactly the kind of text
+	// evaluateHealth would fold into its reason ("daemon unreachable: ...dial <socket>").
 	h := healthHTTPHandler(probeLiveness, func(context.Context) (*types.StatusOutput, error) {
-		return nil, errors.New("socket not found")
+		return nil, errors.New("proc: query: dial /var/run/magus/daemon.sock: connection refused")
 	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h(rec, req)
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	// The redacted body must not surface the error text (and its socket path).
+	assert.Equal(t, "unavailable\n", rec.Body.String())
+	assert.NotContains(t, rec.Body.String(), "daemon.sock")
+}
+
+// TestHealthEndpointBodiesRedactSensitiveDetail is the regression guard for the security
+// fix: the unguarded /livez, /healthz, and /readyz bodies must never carry the daemon PID,
+// a workspace root, or any filesystem path, even when the underlying snapshot is rich with
+// them. It drives the real handlers with a snapshot whose workspace roots and PID are
+// distinctive sentinels, then asserts none of those sentinels reach any body.
+func TestHealthEndpointBodiesRedactSensitiveDetail(t *testing.T) {
+	const (
+		sentinelPID  = 424242
+		sentinelRoot = "/Users/secret/private-repo"
+	)
+	snapshot := statusOutputFromReply(makeReply(sentinelPID, sentinelRoot, "/srv/another/workspace"))
+	statusFn := func(context.Context) (*types.StatusOutput, error) { return snapshot, nil }
+
+	// leaks lists the sentinels no unguarded health body may echo.
+	leaks := []string{
+		fmt.Sprintf("%d", sentinelPID), // the daemon PID
+		sentinelRoot,                   // a workspace root
+		"/srv/another/workspace",       // a second workspace root
+		"/",                            // any absolute-path fragment at all
+	}
+	assertNoLeak := func(t *testing.T, body string) {
+		for _, s := range leaks {
+			assert.NotContains(t, body, s, "unguarded health body leaked %q", s)
+		}
+	}
+
+	t.Run("livez", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		healthHTTPHandler(probeLiveness, statusFn)(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assertNoLeak(t, rec.Body.String())
+	})
+
+	t.Run("healthz", func(t *testing.T) {
+		// /healthz is wired to the same handler as /livez (probeLiveness).
+		rec := httptest.NewRecorder()
+		healthHTTPHandler(probeLiveness, statusFn)(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assertNoLeak(t, rec.Body.String())
+	})
+
+	t.Run("readyz", func(t *testing.T) {
+		extra := readinessExtras{
+			symbolIndexes: func(context.Context) []types.SymbolIndexStatus {
+				return []types.SymbolIndexStatus{{Freshness: types.SymbolIndexFresh}}
+			},
+			services:       func() []types.StatusService { return []types.StatusService{{State: "running"}} },
+			knowledgeGraph: func() (bool, bool) { return true, true },
+		}
+		rec := httptest.NewRecorder()
+		readinessHTTPHandler(statusFn, extra)(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		// Counts and generic state phrases are wanted in the component details; only
+		// identifying content (the sentinels above, any path fragment) must be absent.
+		assertNoLeak(t, rec.Body.String())
+	})
 }
 
 func TestWorkspacesComponent(t *testing.T) {
@@ -116,6 +187,8 @@ func TestWorkspacesComponent(t *testing.T) {
 		{"nil-snapshot", nil, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "daemon unreachable"}},
 		{"proc-mode", &types.StatusOutput{Mode: "proc"}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "daemon is in per-process mode"}},
 		{"no-workspaces", &types.StatusOutput{Mode: "daemon"}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
+		// Two workspaces with recognizable roots: the count is wanted in Detail, but the
+		// roots themselves must NOT leak into it on this unguarded surface.
 		{"two-workspaces", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
 	}
 	for _, c := range cases {

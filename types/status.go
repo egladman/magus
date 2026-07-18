@@ -83,7 +83,11 @@ type ReadinessReport struct {
 
 // ReadinessComponent is one subsystem's readiness within a ReadinessReport. Status is one
 // of: ok, degraded, down, idle, disabled. Detail is a short plain-ASCII human-readable line
-// (e.g. "2 of 3 up to date"), never the sole signal - a client should key off Status.
+// that stays generic and quantitative (e.g. "2 of 3 up to date") because /readyz is served
+// unguarded: counts inform without identifying, but workspace roots, project or service
+// names, filesystem paths, PIDs, and raw error text must never appear here - that
+// identifying detail lives behind the bearer-guarded /api/v1/status. Never the sole
+// signal - a client should key off Status.
 type ReadinessComponent struct {
 	Name   string `json:"name"`   // "workspaces" | "symbol_index" | "services" | "knowledge_graph"
 	Status string `json:"status"` // "ok" | "degraded" | "down" | "idle" | "disabled"

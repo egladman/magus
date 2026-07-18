@@ -172,6 +172,15 @@ func TestManagerServesGuardedRoutesWithToken(t *testing.T) {
 	if code := get(t, base+"/api/v1/share", token); code != http.StatusNotFound {
 		t.Fatalf("GET /api/v1/share on share listener = %d, want 404", code)
 	}
+	// The unguarded health/probe routes are a loopback-daemon concept and must NOT
+	// exist on the remote LAN listener: it is off-machine, so an UP/DOWN probe there
+	// would both leak the daemon's existence and answer to anyone on the network. The
+	// share mux mounts only the console and the per-session token-guarded read routes.
+	for _, route := range []string{"/livez", "/readyz", "/healthz"} {
+		if code := get(t, base+route, token); code != http.StatusNotFound {
+			t.Fatalf("GET %s on share listener = %d, want 404 (no health routes on the LAN listener)", route, code)
+		}
+	}
 }
 
 func TestManagerSupersedeRevokesOldToken(t *testing.T) {

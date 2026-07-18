@@ -170,9 +170,19 @@ probes), split along the standard liveness/readiness lines:
 Liveness is deliberately **independent of warm-up state**: it returns `200` as soon as the
 daemon answers, even before any workspace is loaded, so a slow first index never crash-loops
 the pod. Readiness gates on a loaded workspace, and `GET /readyz?workspace=<root>` pins it to
-one specific workspace (returns `503` with a reason until that workspace is warm). Because
-these endpoints are served by the MCP HTTP server itself, a successful probe also proves the
-MCP endpoint is listening.
+one specific workspace (returns `503` until that workspace is warm). Because these endpoints
+are served by the MCP HTTP server itself, a successful probe also proves the MCP endpoint is
+listening.
+
+The **status code is the signal** - a kubelet reads only that. Because these routes are
+unguarded, their bodies carry nothing identifying: `/livez` and `/healthz` answer a bare
+`ok` or `unavailable`, and `/readyz` returns a JSON `{"ready": ..., "components": [...]}`
+where each component has a coarse `status` (`ok`, `degraded`, `down`, `disabled`) plus a
+generic, quantitative `detail` such as `1 loaded` or `0 of 4 up to date` - counts and state
+phrases only, never workspace roots, project or service names, filesystem paths, or the
+daemon PID. For the identifying per-subsystem view (workspace roots, per-project
+symbol-index freshness, named service state), read the bearer-authenticated
+`GET /api/v1/status` instead.
 
 The endpoints bind to `127.0.0.1` by default, which the kubelet cannot reach; set
 `MAGUS_MCP_ADDRESS=0.0.0.0:7391` (or `mcp.address`) so probes can hit the pod IP.

@@ -287,20 +287,30 @@ func probeMCPReadiness(ctx context.Context, addr string) int {
 	}
 }
 
-// healthHTTPHandler returns an http.HandlerFunc that writes 200 when healthy or 503 with a reason line.
-// Accepts ?workspace= to pin readiness to a specific workspace root. Used for /livez and
-// /healthz, whose plain-text body predates readinessHTTPHandler's JSON body and must not
-// change: a liveness probe must not depend on warm-up state, so it stays on this simple path.
+// healthHTTPHandler returns an http.HandlerFunc that writes 200 when healthy or 503
+// otherwise. Accepts ?workspace= to pin readiness to a specific workspace root. Used for
+// /livez and /healthz, a liveness probe that must not depend on warm-up state, so it stays
+// on this simple path rather than readinessHTTPHandler's richer JSON body.
+//
+// The body is a fixed generic token ("ok"/"unavailable"), NOT evaluateHealth's reason.
+// These routes are served unguarded (no bearer token, no DNS-rebind check) so a container
+// orchestrator can probe them, which means anyone who can reach the port reads the body -
+// and evaluateHealth's reason embeds the daemon PID on the healthy path and, on the
+// unreachable path, a proc-dial error that carries the daemon socket path. A liveness probe
+// only needs UP/DOWN, which the status code already carries (a kubelet reads only the code),
+// so the body is redacted to leak neither. The CLI probe path (runProbes) keeps the rich
+// reason - it is a local terminal, not this networked surface.
 func healthHTTPHandler(kind probeKind, status statusFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		snapshot, err := status(r.Context())
-		ok, reason := evaluateHealth(snapshot, err, kind, r.URL.Query().Get("workspace"))
+		ok, _ := evaluateHealth(snapshot, err, kind, r.URL.Query().Get("workspace"))
 		if ok {
 			w.WriteHeader(http.StatusOK)
+			fmt.Fprintln(w, "ok")
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprintln(w, "unavailable")
 		}
-		fmt.Fprintln(w, reason)
 	}
 }
 
@@ -370,9 +380,18 @@ func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.Statu
 	return report
 }
 
+// /readyz Detail policy: the route is unguarded (no bearer token, no DNS-rebind check) so
+// anyone who can reach the port reads the body. Detail strings therefore stay GENERIC and
+// QUANTITATIVE only - counts and coarse state phrases ("1 loaded", "0 of 4 up to date",
+// "2 running, 1 failed", "watcher active, graph rebuilding") inform without identifying.
+// Never put a workspace root, project or service name, filesystem path, PID, socket path,
+// or raw error text in a Detail: the identifying per-subsystem view lives behind the
+// bearer-guarded /api/v1/status. TestHealthEndpointBodiesRedactSensitiveDetail enforces this.
+
 // workspacesComponent reports the same workspace-loaded fact the readiness gate itself
 // checks (evaluateHealth), restated as a component so the JSON body is self-describing
-// without a client having to re-derive it from Ready alone.
+// without a client having to re-derive it from Ready alone. Detail carries a count only,
+// never a workspace root (see the Detail policy above).
 func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent {
 	c := types.ReadinessComponent{Name: "workspaces"}
 	switch {
@@ -408,6 +427,7 @@ func symbolIndexComponent(indexes []types.SymbolIndexStatus) types.ReadinessComp
 	} else {
 		c.Status = "degraded"
 	}
+	// Counts only, never project names (see the Detail policy above workspacesComponent).
 	c.Detail = fmt.Sprintf("%d of %d up to date", fresh, len(indexes))
 	return c
 }
@@ -437,6 +457,7 @@ func servicesComponent(services []types.StatusService) types.ReadinessComponent 
 	default:
 		c.Status = "down"
 	}
+	// Counts only, never service names (see the Detail policy above workspacesComponent).
 	c.Detail = fmt.Sprintf("%d running, %d failed", running, failed)
 	return c
 }
