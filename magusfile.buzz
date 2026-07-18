@@ -249,6 +249,10 @@ fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void
         // pkg-config looks by default.
         final cc = os.env("MAGUS_CGO_CC");
         if (cc != null and cc != "") { env["CC"] = cc; }
+        // PKG_CONFIG pins the exact pkg-config binary cgo runs, so it can never fall
+        // back to a broken one earlier on PATH (Strawberry Perl's on the Windows runner).
+        final pkgbin = os.env("MAGUS_CGO_PKG_CONFIG");
+        if (pkgbin != null and pkgbin != "") { env["PKG_CONFIG"] = pkgbin; }
         final pkgcfg = os.env("MAGUS_CGO_PKG_CONFIG_PATH");
         if (pkgcfg != null and pkgcfg != "") { env["PKG_CONFIG_PATH"] = pkgcfg; }
     } else {

@@ -119,20 +119,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      # MSYS2 ships prebuilt mingw-w64 zstd/xz packages, so internal/codec's cgo path
-      # can link without building those C libs from source. UNVERIFIED: whether `go
-      # build`'s cgo pkg-config lookup resolves correctly outside an MSYS2 shell
-      # context — spike this before trusting the release job on it.
+      # MSYS2 ships prebuilt mingw-w64 zstd/xz packages so internal/codec's cgo path
+      # links without building those C libs from source. pkgconf is REQUIRED in the
+      # install set: without a mingw pkg-config, cgo's `pkg-config --cflags` grabs
+      # Strawberry Perl's broken pkg-config.bat off the runner PATH and fails. We also
+      # pin the exact binary via PKG_CONFIG below, so PATH order can never reselect it.
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0
         with:
           msystem: MINGW64
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-zstd mingw-w64-x86_64-xz
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zstd mingw-w64-x86_64-xz
           path-type: inherit
 
       - name: Point go build at the MSYS2 mingw toolchain
         shell: msys2 {0}
         run: |
           echo "MAGUS_CGO_CC=$(cygpath -m /mingw64/bin/gcc.exe)" >> "$GITHUB_ENV"
+          echo "MAGUS_CGO_PKG_CONFIG=$(cygpath -m /mingw64/bin/pkgconf.exe)" >> "$GITHUB_ENV"
           echo "MAGUS_CGO_PKG_CONFIG_PATH=$(cygpath -m /mingw64/lib/pkgconfig)" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/setup-magus
