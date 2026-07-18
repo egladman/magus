@@ -40,7 +40,7 @@ test("round-trip: import(build(p)) restores every value onto a different current
   assert.deepEqual(res.applied.sort(), ["focusRing", "host", "keymap", "poll", "theme"]);
 });
 
-test("import: unknown keys are ignored, known keys still apply", () => {
+test("import: unknown keys are ignored but reported, known keys still apply", () => {
   const raw = JSON.stringify({
     schemaVersion: 1,
     settings: { poll: 60000, somethingNew: { nested: true }, fontSize: 14 },
@@ -50,9 +50,30 @@ test("import: unknown keys are ignored, known keys still apply", () => {
   assert.equal(res.next.poll, 60000);
   assert.equal(res.next.host, base.host); // untouched
   assert.deepEqual(res.applied, ["poll"]);
+  assert.deepEqual(res.unknown.sort(), ["fontSize", "somethingNew"]);
+  assert.deepEqual(res.skipped, []); // an absent known key is not "skipped"
 });
 
-test("import: missing keys keep the current value", () => {
+test("import: a present-but-wrong-typed known key is reported as skipped, valid ones still apply", () => {
+  const raw = JSON.stringify({ schemaVersion: 1, settings: { poll: "fast", host: "10.0.0.2:9000" } });
+  const res = importSettings(raw, base);
+  assert.ok(res.ok);
+  assert.equal(res.next.host, "10.0.0.2:9000");
+  assert.equal(res.next.poll, base.poll); // wrong-typed poll kept the current value
+  assert.deepEqual(res.applied, ["host"]);
+  assert.deepEqual(res.skipped, ["poll"]);
+  assert.deepEqual(res.unknown, []);
+});
+
+test("import: a malformed keymap is reported as skipped, not partially applied", () => {
+  const raw = JSON.stringify({ schemaVersion: 1, settings: { host: "localhost:1", keymap: { a: 3 } } });
+  const res = importSettings(raw, base);
+  assert.ok(res.ok);
+  assert.deepEqual(res.next.keymap, base.keymap); // whole keymap kept, not the half-parsed one
+  assert.deepEqual(res.skipped, ["keymap"]);
+});
+
+test("import: missing keys keep the current value and are not reported as skipped", () => {
   const raw = JSON.stringify({ schemaVersion: 1, settings: { theme: "light" } });
   const res = importSettings(raw, base);
   assert.ok(res.ok);
@@ -61,6 +82,8 @@ test("import: missing keys keep the current value", () => {
   assert.equal(res.next.host, base.host);
   assert.deepEqual(res.next.keymap, base.keymap);
   assert.deepEqual(res.applied, ["theme"]);
+  assert.deepEqual(res.skipped, []); // absent keys are silent, only present-but-invalid ones are skipped
+  assert.deepEqual(res.unknown, []);
 });
 
 test("import: a wrong-typed key is skipped, not applied (keeps current)", () => {
@@ -89,15 +112,24 @@ test("import: an empty host string is valid (clears the override)", () => {
   assert.deepEqual(res.applied, ["host"]);
 });
 
-test("import: forward-compat - a newer schemaVersion still applies its known keys", () => {
+test("import: forward-compat - a newer schemaVersion still applies its known keys and is flagged", () => {
   const raw = JSON.stringify({
     schemaVersion: SETTINGS_SCHEMA_VERSION + 1,
     settings: { host: "localhost:1", futureThing: true },
   });
   const res = importSettings(raw, base);
   assert.ok(res.ok);
-  assert.equal(res.next.host, "localhost:1");
+  assert.equal(res.next.host, "localhost:1"); // never hard-fails on version alone; known keys still land
   assert.deepEqual(res.applied, ["host"]);
+  assert.equal(res.newerSchema, SETTINGS_SCHEMA_VERSION + 1); // surface can say the file is from a newer console
+  assert.deepEqual(res.unknown, ["futureThing"]);
+});
+
+test("import: the current schemaVersion is not flagged as newer", () => {
+  const raw = JSON.stringify({ schemaVersion: SETTINGS_SCHEMA_VERSION, settings: { host: "localhost:1" } });
+  const res = importSettings(raw, base);
+  assert.ok(res.ok);
+  assert.equal(res.newerSchema, undefined);
 });
 
 test("import: invalid JSON is a hard error", () => {

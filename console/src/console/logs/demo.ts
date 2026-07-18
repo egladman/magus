@@ -1,11 +1,15 @@
-// demo.ts - the daemon-free showcase (#demo). Synthesize a realistic single-invocation Journal
-// (a `magus affected ci` run over ~6 targets, one of which fails), then REVEAL its events
-// incrementally so the page feels like a live run streaming in. It reuses the live-stream buffer
-// (state.liveEvents / liveInvocation) and scheduleLiveRender end to end - the synthetic events are
-// the SAME magus.viewer.v1 Event messages the wire carries (built with create(EventSchema, ...)),
-// so buildModelFromEvents (pretty view), buildSpans, renderWaterfall, waterfallSource, and
-// updateTimelineControl all run exactly as they would for a real journal. No new render path,
-// no transport, nothing fetched. It is an easter egg themed as a Linux kernel build.
+// demo.ts - the daemon-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
+// magus.viewer.v1 Journals and REVEAL the primary one incrementally so the page feels like a live run
+// streaming in. The primary (streamed) invocation is the failing svc/api:test run an agent kicked off
+// ~92m ago; the completed sibling shown alongside it is the earlier `magus affected ci` sweep, mostly
+// cache hits. So the viewer shows both a FAIL and cached/passed targets, and - crucially - the SAME
+// runs (out92e1d4, outci7a*) the recent-runs tree, the activity trail, and the dashboard point at.
+//
+// It reuses the live-stream buffer (state.liveEvents / liveInvocation) and scheduleLiveRender end to
+// end - the synthetic events are the SAME Event messages the wire carries (built with
+// create(EventSchema, ...)), so buildModelFromEvents (pretty view), buildSpans, renderWaterfall,
+// waterfallSource, and updateTimelineControl all run exactly as they would for a real journal. No new
+// render path, no transport, nothing fetched.
 
 import { create } from "@bufbuild/protobuf";
 import type { Journal } from "../../gen/magus/viewer/v1/viewer_pb";
@@ -14,17 +18,9 @@ import { state } from "./state";
 import { emptyEl, setRefIdentity } from "./dom";
 import { tsMs } from "./waterfall";
 import { scheduleLiveRender, setLiveStatus } from "./live";
-
-// One planned target in the synthetic run: its (project, target), the kbuild step commands, the
-// outcome, and its start offset + duration (ms) so the windows overlap into a real cascade.
-interface DemoTarget {
-  project: string;
-  target: string;
-  execs: string[];
-  status: Status;
-  start: number;
-  dur: number;
-}
+import {
+  scenarioRuns, INV_TEST_BREAK, INV_CI, type RunState, type ScenarioRun,
+} from "../demo-scenario";
 
 // demoTs / demoDur build protobuf Timestamp / Duration inits ({seconds: bigint, nanos}) from a
 // millisecond value, the shapes tsMs / durMs decode.
@@ -35,78 +31,99 @@ function demoDur(ms: number): { seconds: bigint; nanos: number } {
   return { seconds: BigInt(Math.floor(ms / 1000)), nanos: Math.floor((ms % 1000) * 1e6) };
 }
 
-// demoOutputFor returns a plausible stdout line for a synthesized EXEC command. The demo is
-// an easter egg themed as a Linux kernel build, so these echo authentic kbuild chatter.
-function demoOutputFor(cmd: string): string {
-  if (cmd.startsWith("CC ")) return "  " + cmd;
-  if (cmd.startsWith("AR ")) return "  " + cmd;
-  if (cmd.startsWith("LD ")) return "  " + cmd;
-  if (cmd.startsWith("OBJCOPY")) return "  " + cmd;
-  if (cmd.startsWith("MODPOST")) return "  " + cmd;
-  if (cmd.startsWith("make")) return "  SYNC   include/config/auto.conf";
-  return "  " + cmd;
+const STATUS: Record<RunState, Status> = {
+  passed: Status.PASS,
+  failed: Status.FAIL,
+  cached: Status.CACHED,
+};
+
+// A run laid onto the invocation's internal waterfall timeline: its start offset (ms from the
+// invocation base) so the target windows cascade rather than all beginning at zero.
+interface PlacedRun {
+  run: ScenarioRun;
+  start: number;
 }
 
-// synthDemoJournal builds the showcase Journal: a STARTED/SCOPE preamble, then per target a
-// set of EXEC step markers (each with an output line) staggered across the target's window and
-// a terminal RESULT (status + duration + a synthetic ref), then FINISHED. Start offsets and
-// durations overlap so the waterfall renders a real cascade; the Invocation start/end frame the
-// axis. drivers/net fails with a modpost undefined symbol for the red span; arch/x86 is a fast
-// incremental (cached) hit. Everything is synthesized log TEXT only - no kernel source is copied.
-function synthDemoJournal(): Journal {
+// buildJournal renders one invocation's placed runs into a Journal: a STARTED/SCOPE preamble, then
+// per target its EXEC step markers (each with an OUTPUT line staggered across the target's window)
+// and a terminal RESULT (status + duration + the run's real ref), then FINISHED. Start offsets and
+// the runs' own durations overlap into a real cascade; the Invocation start/end frame the axis. The
+// base is Date.now() so the reveal reads as "now"; the scenario's ref/status/output text carry the
+// story. Events are sorted by time so the pretty view and the waterfall both fill in as they arrive.
+function buildJournal(
+  placed: PlacedRun[],
+  invId: string,
+  command: { verb: string; args: string[]; cwd: string; trigger: Trigger },
+  scopeText: string,
+): Journal {
   const base = Date.now();
-  // [project, target, exec command lines (kbuild steps), status, start offset ms, duration ms]
-  const plan: DemoTarget[] = [
-    { project: "arch/x86", target: "vmlinux", execs: ["SYNC .config", "CC arch/x86/kernel/cpu/common.o"], status: Status.CACHED, start: 0, dur: 60 },
-    { project: "kernel", target: "built-in", execs: ["CC kernel/sched/core.o", "CC kernel/fork.o", "AR kernel/built-in.a"], status: Status.PASS, start: 200, dur: 2600 },
-    { project: "mm", target: "built-in", execs: ["CC mm/page_alloc.o", "CC mm/slub.o", "AR mm/built-in.a"], status: Status.PASS, start: 350, dur: 2200 },
-    { project: "fs", target: "built-in", execs: ["CC fs/namei.o", "CC fs/ext4/inode.o", "AR fs/built-in.a"], status: Status.PASS, start: 600, dur: 3000 },
-    { project: "drivers/net", target: "built-in", execs: ["CC drivers/net/ethernet/intel/e1000/e1000_main.o", "MODPOST modules-only.symvers"], status: Status.FAIL, start: 1100, dur: 2400 },
-    { project: ".", target: "vmlinux", execs: ["LD vmlinux", "OBJCOPY arch/x86/boot/bzImage"], status: Status.PASS, start: 3700, dur: 1600 },
-  ];
-  const command = { verb: "run", args: ["vmlinux", "--", "make", "-j$(nproc)"], cwd: "/usr/src/linux", trigger: Trigger.RUN };
   const events = [];
   events.push(create(EventSchema, { kind: Kind.STARTED, time: demoTs(base), command, magusVersion: "demo" }));
-  events.push(create(EventSchema, { kind: Kind.SCOPE, time: demoTs(base), text: "projects: arch/x86, kernel, mm, fs, drivers/net" }));
+  events.push(create(EventSchema, { kind: Kind.SCOPE, time: demoTs(base), text: scopeText }));
 
   let maxEnd = 0;
-  let n = 0;
-  for (const p of plan) {
-    const start = base + p.start;
-    for (let i = 0; i < p.execs.length; i++) {
-      const at = start + Math.round((p.dur * i) / p.execs.length);
-      events.push(create(EventSchema, { kind: Kind.EXEC, time: demoTs(at), project: p.project, target: p.target, text: p.execs[i] }));
-      const out = demoOutputFor(p.execs[i]);
-      if (out) events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(at + 12), project: p.project, target: p.target, stream: Stream.STDOUT, text: out }));
+  let anyFail = false;
+  for (const { run, start } of placed) {
+    const at0 = base + start;
+    const execs = run.execs ?? [];
+    for (let i = 0; i < execs.length; i++) {
+      const at = at0 + Math.round((run.durationMs * i) / Math.max(1, execs.length));
+      events.push(create(EventSchema, { kind: Kind.EXEC, time: demoTs(at), project: run.project, target: run.target, text: execs[i] }));
     }
-    const end = start + p.dur;
+    const end = at0 + run.durationMs;
     maxEnd = Math.max(maxEnd, end - base);
-    if (p.status === Status.FAIL) {
-      events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 8), project: p.project, target: p.target, stream: Stream.STDERR, text: "ERROR: modpost: \"e1000_probe\" [drivers/net/ethernet/intel/e1000/e1000.ko] undefined!" }));
+    if (run.stdout) {
+      events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 10), project: run.project, target: run.target, stream: Stream.STDOUT, text: run.stdout }));
     }
-    if (p.status === Status.PASS && p.project === "." && p.target === "vmlinux") {
-      events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 8), project: p.project, target: p.target, stream: Stream.STDOUT, text: "Kernel: arch/x86/boot/bzImage is ready  (#1)" }));
+    if (run.stderr) {
+      for (const line of run.stderr.split("\n")) {
+        events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 8), project: run.project, target: run.target, stream: Stream.STDERR, text: line }));
+      }
     }
-    const ref = "outd" + (n++).toString(16).padStart(6, "0");
-    events.push(create(EventSchema, { kind: Kind.RESULT, time: demoTs(end), project: p.project, target: p.target, status: p.status, ref, duration: demoDur(p.dur) }));
+    if (run.state === "failed") anyFail = true;
+    events.push(create(EventSchema, { kind: Kind.RESULT, time: demoTs(end), project: run.project, target: run.target, status: STATUS[run.state], ref: run.ref, duration: demoDur(run.durationMs) }));
   }
-  events.push(create(EventSchema, { kind: Kind.FINISHED, time: demoTs(base + maxEnd), level: "error" }));
-  // Reveal in time order so the pretty view and waterfall both cascade as events arrive.
+  events.push(create(EventSchema, { kind: Kind.FINISHED, time: demoTs(base + maxEnd), level: anyFail ? "error" : "info" }));
   events.sort((a, b) => (tsMs(a.time) || 0) - (tsMs(b.time) || 0));
 
-  const invocation = { id: "invdemo01", command, startTime: demoTs(base), endTime: demoTs(base + maxEnd), magusVersion: "demo" };
+  const invocation = { id: invId, command, startTime: demoTs(base), endTime: demoTs(base + maxEnd), magusVersion: "demo" };
   return create(JournalSchema, { invocation, events });
 }
 
-// startDemo enters the showcase: it frames the axis from the synthetic Invocation, opens the
-// waterfall, and streams the events in over a few seconds via the shared live buffer.
+// brokenTestJournal is the primary streamed invocation: the agent-driven svc/api:test run that FAILs.
+function brokenTestJournal(): Journal {
+  const runs = scenarioRuns(Date.now());
+  const test = runs.find((r) => r.inv === INV_TEST_BREAK)!;
+  return buildJournal(
+    [{ run: test, start: 0 }],
+    INV_TEST_BREAK,
+    { verb: "run", args: ["test", "svc/api"], cwd: "/Users/eli/Repos/acme", trigger: Trigger.RUN },
+    "projects: svc/api",
+  );
+}
+
+// ciSweepJournal is the completed sibling invocation: the earlier `magus affected ci` sweep, mostly
+// cache hits, all green - so the viewer shows cached/passed targets beside the FAIL.
+function ciSweepJournal(): Journal {
+  const runs = scenarioRuns(Date.now()).filter((r) => r.inv === INV_CI);
+  // Stagger the sweep's targets so their windows cascade instead of stacking at zero.
+  const offsets = [0, 250, 400, 700];
+  const placed = runs.map((run, i) => ({ run, start: offsets[i] ?? i * 300 }));
+  return buildJournal(
+    placed,
+    INV_CI,
+    { verb: "affected", args: ["ci"], cwd: "/Users/eli/Repos/acme", trigger: Trigger.CI },
+    "projects: svc/api, web/app, lib/core, .",
+  );
+}
+
+// startDemo enters the showcase: it frames the axis from the failing-test Invocation, opens the
+// waterfall, streams that invocation's events in over a few seconds via the shared live buffer, and
+// renders the completed CI sweep as its own group on the shared axis.
 export function startDemo(): void {
-  const journal = synthDemoJournal();
+  const journal = brokenTestJournal();
   const ordered = journal.events;
-  // A SECOND, already-finished invocation shown alongside the streaming one, so the demo also
-  // showcases multi-invocation (two groups on a shared axis). Relabelled so its header differs.
-  const j2 = synthDemoJournal();
-  if (j2.invocation && j2.invocation.command) { j2.invocation.command.verb = "affected"; j2.invocation.command.args = ["ci"]; }
+  const sibling = ciSweepJournal();
 
   stopDemo();
   state.demoActive = true;
@@ -114,7 +131,7 @@ export function startDemo(): void {
   state.liveInvocation = journal.invocation ?? null; // frames the axis (start/end) and the command preamble
   state.livePaused = false;
   state.currentJournal = null; // waterfallSource then reads the live buffer, as in a real live run
-  state.currentJournals = [j2]; // the completed sibling invocation, rendered as its own group
+  state.currentJournals = [sibling]; // the completed sibling invocation, rendered as its own group
   state.timeline = true;       // open straight into the waterfall so it visibly fills in
   state.currentRef = "";
   if (emptyEl) emptyEl.hidden = true;

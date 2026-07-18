@@ -131,12 +131,14 @@ const splitMode = persisted<"row" | "col">("split-mode", "row");
 const registry = new Map<string, PageModule<any, any>>();
 function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
 
-// The surfaces the home launcher offers (and the console can open).
+// The surfaces the home launcher offers (and the console can open). Ordered to tell the
+// operator's story: what is magus doing now (dashboard), what just happened (activity),
+// drill into one run (logs), then understand the workspace (graph), then the meta surfaces.
 const SURFACES: Launchable[] = [
-  { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
-  { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
   { pageId: "activity", label: "Activity Trail", hint: "A history of recent magus actions" },
+  { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
+  { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
 ];
@@ -244,7 +246,17 @@ function panesIcon(mode: "row" | "col"): SVGElement {
 
 // setPanesIcon repaints an already-built tray button's glyph in place - called once per tray button at
 // creation, and again on every button whenever the split mode changes (refreshPanesTray).
+//
+// Idempotent by design: it only swaps the SVG when the rendered mode actually changed (tracked in
+// data-panes-mode). refreshPanesTray also runs on every popup OPEN, and replaceChildren would otherwise
+// detach the button's current <line> children - including the very node a touch tap landed on. With the
+// tap target gone from the DOM mid-click, the document-level outside-click handler (which tests
+// panesAnchor.contains(target)) then saw an orphaned target and immediately closed the just-opened popup:
+// the "Panes button does nothing on a phone" bug. Skipping the no-op rebuild keeps the tapped node
+// attached, so the popup stays open; the glyph is still repainted whenever the mode genuinely changes.
 function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
+  if (btn.dataset.panesMode === mode) return;
+  btn.dataset.panesMode = mode;
   const iconSpan = btn.querySelector<HTMLElement>(".pf-v6-c-button__icon");
   if (iconSpan) iconSpan.replaceChildren(panesIcon(mode));
 }
@@ -256,10 +268,13 @@ function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
 // to the footer, so getElementById resolves to the active surface's status - the bottom bar is per-tab.
 //
 // The text items (#console-conn with its liveness dot, #console-count, #console-observing) are plain
-// spans the surfaces write via textContent + [data-state]/[data-health], styled ID-scoped in overrides.css.
-// #console-conn also gets a periodic /readyz enrichment (title + data-health) from startConsole's
-// readiness poller below - the surfaces still own textContent/data-state outright, the poller only
-// touches those two when the launcher's default bar is docked (zero tabs open).
+// spans the surfaces write via textContent + [data-state], styled ID-scoped in overrides.css.
+// #console-conn also gets a periodic /readyz enrichment from startConsole's readiness poller below.
+// Ownership split (see enrichConnHealth): the active surface owns textContent + data-state (the link
+// signal); the poller owns title + data-health. The poller writes data-health regardless of tab count
+// but ONLY while data-state is already "connected" (health refines the connected color, never overrides
+// a not-connected dot), and it takes over textContent/data-state only at zero tabs, where the launcher's
+// default bar has no surface behind it.
 // Only .console-shell-statusbar__right stays a class - the log viewer queries it to inject its zoom control.
 //
 // withPanesButton adds the Panes tray toggle (data-panes-toggle) to the right cluster - every TAB's bar
@@ -272,6 +287,10 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   const conn = document.createElement("span");
   conn.id = "console-conn"; conn.setAttribute("aria-live", "polite");
   conn.textContent = "not connected";
+  // Start in the honest not-connected state so the liveness dot reads RED until something proves a link,
+  // rather than the muted default color. A surface overwrites data-state the instant it mounts; the
+  // launcher's own bar (no surface behind it) keeps "none" until the readiness poller resolves a host.
+  conn.dataset.state = "none";
   // Clickable: a disconnected user's fastest fix is the daemon-address field, so the status pill
   // itself is the shortcut there (openDaemonSettings, wired via the delegated listener below). role +
   // tabindex make it a real keyboard-reachable control since a bare <span> is neither by default; the
@@ -307,6 +326,9 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     const panesIconSpan = document.createElement("span");
     panesIconSpan.className = "pf-v6-c-button__icon";
     panesIconSpan.append(panesIcon(splitMode.get()));
+    // Record the rendered mode so setPanesIcon (refreshPanesTray, incl. on every popup open) treats an
+    // unchanged mode as a no-op and never detaches this glyph's nodes out from under a tap in progress.
+    panes.dataset.panesMode = splitMode.get();
     panes.append(panesIconSpan);
     right.append(panes);
   }
@@ -447,9 +469,19 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // hidden Demo chip) so the footer stays populated at zero tabs.
   // launchDemo opens every surface in the daemon-free demo: it sets the shared #demo fragment each
   // surface reads when it activates, then opens them as tabs (Dashboard last so its live-updating demo
-  // is the active tab). The launcher only shows at zero tabs, so all four mount fresh into demo mode.
+  // is the active tab).
+  //
+  // A surface derives its demo mode from the fragment (wantsDemo) exactly ONCE, when it activates -
+  // there is no in-shell hashchange listener that re-reads it, and open() below is single-instance, so
+  // re-opening a surface that is ALREADY mounted just re-focuses its tab (activateTab) and never
+  // re-activates it. So setting #demo and calling open() cannot flip an already-open surface into demo:
+  // it keeps whatever mode it read at mount (its non-demo empty state), the reported bug. Guarantee a
+  // clean slate first - close every open tab - so all four demo surfaces then mount FRESH with #demo in
+  // the fragment, the one path that reliably enters demo mode. In the normal launcher flow the workspace
+  // is already empty (the launcher only shows at zero tabs), so this is a no-op there.
   const launchDemo = (): void => {
     history.replaceState(null, "", location.pathname + location.search + "#demo");
+    for (const t of [...ws.get().tabs]) closeTabById(t.id);
     for (const id of ["logs", "graph", "activity", "dashboard"]) open(id);
   };
   const launcher = buildLauncher(SURFACES, open, launchDemo);
@@ -761,8 +793,11 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // buildSplitControls is the focused cell's H/V buttons - split THIS pane, no direction to decode
   // since the operator already pointed at it. Reuses the same commands (and the same
   // splitMode-asserting behavior) the old d-pad's Split row drove, so the tray icon still tracks
-  // "the last explicit choice". pointerdown stopPropagation keeps a click on these from also
-  // registering as the cell's own tap-to-focus/drag gesture.
+  // "the last explicit choice". These buttons stop propagation on BOTH pointerdown and pointerup so
+  // the tap never reaches the enclosing cell: the cell's pointerup handler (tap-to-focus) re-renders
+  // the whole map via renderPanesMap, which would detach this very button before its own click could
+  // fire - so on a real tap the split silently no-op'd (only a synthetic click, which skips pointerup,
+  // ever worked). Stopping pointerup keeps the button attached through to its click.
   function buildSplitControls(): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "console-shell-panesmap__splitctl";
@@ -777,6 +812,7 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
       const chord = chordFor(commandId);
       b.title = chord ? label + " (" + chord + ")" : label;
       b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+      b.addEventListener("pointerup", (ev) => ev.stopPropagation());
       b.addEventListener("click", (ev) => {
         ev.stopPropagation();
         splitMode.set(dir);
@@ -1024,12 +1060,37 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // there is no console-level teardown to hook into (startConsole runs once for the page's lifetime,
   // like installKeybindings above), so the interval simply runs for as long as the page does.
   const READINESS_POLL_MS = 15000;
+  // enrichConnHealth applies the ONE ownership rule that lets the poller and the surfaces share the dot
+  // without flapping: the active surface owns textContent + data-state (its SSE-derived link signal), the
+  // poller owns data-health + title. Health only means something once the dot already reads "connected",
+  // so the poller writes data-health ONLY while data-state is "connected" (and clears any stale value
+  // otherwise). That holds with tabs open too - so an open tab now shows live degraded/down coloring, not
+  // just text - and it can never green-out a surface (graph snapshot, disconnected log view) that has
+  // declared itself not-connected, nor fight the dashboard which likewise drops data-health when down.
+  function enrichConnHealth(conn: HTMLElement, report: ReadinessReport | null): void {
+    if (conn.dataset.state === "connected" && report) conn.dataset.health = readinessHealth(report);
+    else delete conn.dataset.health;
+  }
   function pollReadiness(): void {
     const params = parseHash();
     const liveHost = params.live ? validateLiveHost(params.live) : null;
     const defaultHost = getDefaultHost();
     const host = liveHost ?? (defaultHost ? validateLiveHost(defaultHost) : null);
-    if (!host) return; // no resolvable daemon address to probe; leave the SSE-derived state alone
+    if (!host) {
+      // No daemon address configured at all: nothing to probe. A surface, if one is docked, owns the text;
+      // but the launcher's own bar (zero tabs) has no surface behind it, so say so plainly - RED, via the
+      // not-connected "none" state - rather than leaving whatever a prior host's probe left.
+      if (ws.get().activeId == null) {
+        const conn = document.getElementById("console-conn");
+        if (conn) {
+          conn.textContent = "not connected";
+          conn.dataset.state = "none";
+          delete conn.dataset.health;
+          conn.title = "No daemon address configured. Click to set the daemon address.";
+        }
+      }
+      return;
+    }
     const startedAt = Date.now();
     fetchReadiness(host).then((report) => {
       const conn = document.getElementById("console-conn");
@@ -1037,19 +1098,14 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
       const ageSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
       // The tooltip is always safe to enrich - no surface writes conn.title, so this never contends.
       conn.title = formatReadinessTitle(report, ageSec);
-      // But the dot (data-health) and the text (textContent/data-state) belong to whichever surface owns
-      // the docked bar (module header's SURFACE contract) - the dashboard drives data-health from its own
-      // cache/pool signal, and stealing it here would make the two fight and flicker. So the poller only
-      // owns the dot + text at ZERO tabs, where the launcher's default bar has no surface behind it.
+      // At ZERO tabs the launcher's default bar has no surface behind it, so the poller owns the text +
+      // state outright (a reachable+ready daemon reads "connected", otherwise "disconnected" = red).
       if (ws.get().activeId == null) {
-        conn.dataset.health = report
-          ? readinessHealth(report)
-          // Old daemon or genuinely unreachable - the browser cannot tell those apart, so do not assert a
-          // health we did not measure; a plain fail reads honestly on the empty launcher.
-          : "fail";
         conn.textContent = report ? (report.ready ? "daemon ready" : "daemon not ready") : "not connected";
         conn.dataset.state = report?.ready ? "connected" : "disconnected";
       }
+      // Health enrichment runs regardless of tab count, gated on the (surface- or poller-set) data-state.
+      enrichConnHealth(conn, report);
     });
   }
   pollReadiness();

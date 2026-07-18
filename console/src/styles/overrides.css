@@ -69,26 +69,32 @@
 #console-statusbar .console-shell-statusbar__panes[aria-expanded="true"] { color: var(--console-accent); opacity: 1; }
 
 /* Connection liveness item: a leading dot whose color IS the link/health state, read from the
- * console status tokens (theme-aware). The dot follows the text color (currentColor), so each state
- * only sets `color`. Surfaces drive [data-state] / [data-health] on #console-conn (their contract). */
+ * console status tokens (theme-aware). Only the DOT carries the status color (via the
+ * --console-conn-dot custom property the state rules set); the text stays in the muted default so
+ * the status reads as a chip, not an error message. Surfaces drive [data-state] / [data-health] on
+ * #console-conn (their contract). */
 #console-conn { white-space: nowrap; line-height: 1.35; color: var(--pf-t--global--text--color--subtle); }
 #console-conn::before {
   content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
-  border-radius: 50%; background: currentColor; vertical-align: middle;
+  border-radius: 50%; background: var(--console-conn-dot, currentColor); vertical-align: middle;
 }
-#console-conn[data-state="connected"] { color: var(--console-status-ok); }
+/* The three tiers, GREEN/GOLD/RED, cover every state - a not-connected dot is never left the muted
+ * default color. connected = green; connecting/reconnecting = gold; and both "disconnected" (a dropped
+ * link) and "none" (no live link at all: a snapshot/demo surface, or no daemon host configured) = red,
+ * because not connected is not connected whatever the reason. (--console-status-queued IS PF danger red;
+ * see tokens.css.) */
+#console-conn[data-state="connected"] { --console-conn-dot: var(--console-status-ok); }
 #console-conn[data-state="connecting"],
-#console-conn[data-state="reconnecting"] { color: var(--console-status-warn); }
-#console-conn[data-state="disconnected"] { color: var(--console-status-queued); }
-/* When connected, the dot takes the daemon's HEALTH color so one indicator carries live + well. */
-#console-conn[data-state="connected"][data-health="warn"] { color: var(--console-status-warn); }
-#console-conn[data-state="connected"][data-health="fail"] { color: var(--console-status-queued); }
-/* At zero tabs (the launcher's default bar) there is no [data-state="connected"] to gate on - the
- * readiness poller (main.ts) writes data-health straight from the daemon's own /readyz report there,
- * so the three tiers need to read on their own too. */
-#console-conn[data-health="ok"] { color: var(--console-status-ok); }
-#console-conn[data-health="warn"] { color: var(--console-status-warn); }
-#console-conn[data-health="fail"] { color: var(--console-status-queued); }
+#console-conn[data-state="reconnecting"] { --console-conn-dot: var(--console-status-warn); }
+#console-conn[data-state="disconnected"],
+#console-conn[data-state="none"] { --console-conn-dot: var(--console-status-queued); }
+/* Health REFINES the connected color: the readiness poller (main.ts) only ever writes data-health while
+ * the dot's own data-state is already "connected" (a not-connected dot has no health to report and the
+ * poller clears any stale value), so a degraded daemon dims green -> gold and a down component -> red
+ * without a separate chip. Gated on [data-state="connected"] so health can never green-out or recolor a
+ * dot the active surface has declared not-connected. */
+#console-conn[data-state="connected"][data-health="warn"] { --console-conn-dot: var(--console-status-warn); }
+#console-conn[data-state="connected"][data-health="fail"] { --console-conn-dot: var(--console-status-queued); }
 
 /* Clickable: #console-conn is a real (if bare) control now - it jumps to the daemon-address setting -
  * so it needs to read as one. cursor + a hover shift toward the console accent teaches "click me"; the
@@ -213,6 +219,7 @@
 /* The transient toast (a settings save/apply, or an error) carries no action button; a tinted left edge
    carries the outcome, and it fades up on entry before auto-dismissing. */
 .console-shell-toast--transient { border-left: 3px solid var(--console-status-ok); animation: console-toast-in 0.16s ease-out; }
+.console-shell-toast--transient[data-kind="warn"] { border-left-color: var(--console-status-warn); }
 .console-shell-toast--transient[data-kind="error"] { border-left-color: var(--pf-t--global--border--color--status--danger--default); }
 @keyframes console-toast-in { from { opacity: 0; transform: translateY(0.4rem); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .console-shell-toast--transient { animation: none; } }

@@ -9,9 +9,10 @@
 // long-lived stream yet).
 
 import { createClient } from "@connectrpc/connect";
-import { ActivityService, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
-import { activityToModel } from "./adapter";
+import { ActivityService, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
+import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
 import { buildSection } from "../render/sections";
+import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "../logs/runtree";
 import { parseHash, wantsDemo, validateLiveHost, consumeLiveToken, createDaemonTransport } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
@@ -24,51 +25,24 @@ const PAGE_SIZE = 100;
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
 
 interface Refs {
-  bar: HTMLElement;
+  scroll: HTMLElement;
   body: HTMLElement;
   empty: HTMLElement;
   emptyTitle: HTMLElement;
   emptySub: HTMLElement;
   demoBtn: HTMLButtonElement;
-  conn: HTMLElement;
-  refresh: HTMLButtonElement;
 }
 
-// buildScaffold assembles the surface DOM on PatternFly - a PF Toolbar for the chrome, PF Buttons, and
-// a PF EmptyState for the cold state - matching the log viewer's migrated surface, so a run's output
-// and the trail read as one design. The trail entries themselves reuse the shared buildSection render
-// model into .console-render-body (kept + token-repointed in logs.css); .console-render-panel /
-// .console-render-scroll / .console-render-body are the shared render-frame classes logs.css provides.
+// buildScaffold assembles the surface DOM on PatternFly - the shared render frame plus a PF EmptyState
+// for the cold state - matching the log viewer's migrated surface, so a run's output and the trail read
+// as one design. The trail entries reuse the shared buildSection render model into .console-render-body.
+// There is deliberately NO toolbar: the reload control and the event count live in the collapsible
+// event-index panel (mounted in activate), so a second floating bar of chrome is not needed.
 // The empty state carries the console-render-empty class alongside the PF class only for logs.css's
 // `.console-render-empty[hidden] { display: none }` toggle rule (PF's EmptyState is display:flex,
 // which would otherwise beat the hidden attribute).
 function buildScaffold(host: HTMLElement): Refs {
   const panel = h("section", "console-render-panel");
-
-  // Toolbar: the connection note + Refresh button, aligned to the right on one dense row. No
-  // in-app title - the tab already names the app, so a second "Activity trail" heading here would
-  // just duplicate it.
-  const bar = h("header", "pf-v6-c-toolbar");
-  const content = h("div", "pf-v6-c-toolbar__content");
-  const section = h("div", "pf-v6-c-toolbar__content-section");
-
-  const actionGroup = h("div", "pf-v6-c-toolbar__group pf-m-action-group pf-m-align-end");
-  const connItem = h("div", "pf-v6-c-toolbar__item");
-  const conn = h("span", "console-activity-conn");
-  connItem.append(conn);
-  const btnItem = h("div", "pf-v6-c-toolbar__item");
-  const refresh = h("button", "pf-v6-c-button pf-m-secondary pf-m-small") as HTMLButtonElement;
-  refresh.type = "button";
-  refresh.title = "Reload the trail";
-  const refreshIcon = h("span", "pf-v6-c-button__icon pf-m-start");
-  refreshIcon.innerHTML = '<svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>';
-  refresh.append(refreshIcon, h("span", "pf-v6-c-button__text console-render-btn__label", "Refresh"));
-  btnItem.append(refresh);
-  actionGroup.append(connItem, btnItem);
-
-  section.append(actionGroup);
-  content.append(section);
-  bar.append(content);
 
   const scroll = h("div", "console-render-scroll");
   const body = h("div", "console-render-body");
@@ -115,9 +89,100 @@ function buildScaffold(host: HTMLElement): Refs {
   empty.append(emptyContent);
 
   scroll.append(body, empty);
-  panel.append(bar, scroll);
+  panel.append(scroll);
   host.append(panel);
-  return { bar, body, empty, emptyTitle, emptySub, demoBtn, conn, refresh };
+  return { scroll, body, empty, emptyTitle, emptySub, demoBtn };
+}
+
+// leafLabel is a tree leaf's text: the action (or the kind tag as a fallback) plus how long ago it
+// happened, so the index reads "what, when" without opening the section.
+function leafLabel(ev: ActivityEvent, now: number): string {
+  const ms = tsMillis(ev.time);
+  const when = ms === null ? "" : relTime(ms, now);
+  const action = ev.action || "event";
+  return when ? action + "  " + when : action;
+}
+
+// renderIndexTree (re)builds the event index into container: a PF TreeView grouping the page's events
+// by kind (a branch per kind with a count badge) over per-event leaves. Selecting a leaf calls
+// onSelect(index) with the event's position in the page, so the caller can reveal that section. The
+// first kind starts expanded so the newest events show without a click.
+function renderIndexTree(container: HTMLElement, events: ActivityEvent[], now: number, onSelect: (index: number) => void): void {
+  container.replaceChildren();
+  const groups = groupEventsByKind(events);
+  if (groups.length === 0) return; // the panel is hidden when empty; no note needed
+
+  const tree = h("div", "pf-v6-c-tree-view pf-m-guides");
+  const list = h("ul", "pf-v6-c-tree-view__list");
+  list.setAttribute("role", "tree");
+
+  groups.forEach((group, gi) => {
+    const branch = h("li", "pf-v6-c-tree-view__list-item");
+    branch.setAttribute("role", "treeitem");
+    const expanded = gi === 0;
+    branch.setAttribute("aria-expanded", String(expanded));
+    if (expanded) branch.classList.add("pf-m-expanded");
+
+    const bContent = h("div", "pf-v6-c-tree-view__content");
+    const bNode = h("button", "pf-v6-c-tree-view__node") as HTMLButtonElement;
+    bNode.type = "button";
+    const toggle = h("span", "pf-v6-c-tree-view__node-toggle");
+    const ticon = h("span", "pf-v6-c-tree-view__node-toggle-icon");
+    ticon.append(chevron());
+    toggle.append(ticon);
+    const bContainer = h("span", "pf-v6-c-tree-view__node-container");
+    const bNodeContent = h("span", "pf-v6-c-tree-view__node-content");
+    bNodeContent.append(h("span", "pf-v6-c-tree-view__node-text", group.label));
+    bContainer.append(bNodeContent);
+    const badge = h("span", "pf-v6-c-tree-view__node-count");
+    badge.append(h("span", "pf-v6-c-badge pf-m-read", String(group.events.length)));
+    bContainer.append(badge);
+    bNode.append(toggle, bContainer);
+    bContent.append(bNode);
+    branch.append(bContent);
+
+    const kids = h("ul", "pf-v6-c-tree-view__list");
+    kids.setAttribute("role", "group");
+    for (const { event, index } of group.events) {
+      const leaf = h("li", "pf-v6-c-tree-view__list-item");
+      leaf.setAttribute("role", "treeitem");
+      const lContent = h("div", "pf-v6-c-tree-view__content");
+      const lNode = h("button", "pf-v6-c-tree-view__node") as HTMLButtonElement;
+      lNode.type = "button";
+      const err = event.outcome === Outcome.ERROR;
+      lNode.title = (err ? "error" : "ok") + " - " + leafLabel(event, now);
+      const lContainer = h("span", "pf-v6-c-tree-view__node-container");
+      const lNodeContent = h("span", "pf-v6-c-tree-view__node-content");
+      if (err) {
+        // Reuse the run browser's outcome dot (styled in logs.css, which this surface loads) to mark a
+        // failed event in the index.
+        const dot = h("span", "console-log-runs__dot");
+        dot.dataset.status = "fail";
+        lNodeContent.append(dot);
+      }
+      lNodeContent.append(h("span", "pf-v6-c-tree-view__node-text", leafLabel(event, now)));
+      lContainer.append(lNodeContent);
+      lNode.append(lContainer);
+      lContent.append(lNode);
+      leaf.append(lContent);
+      lNode.addEventListener("click", () => {
+        const root = leaf.closest(".pf-v6-c-tree-view");
+        root?.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current").forEach((n) => n.classList.remove("pf-m-current"));
+        lNode.classList.add("pf-m-current");
+        onSelect(index);
+      });
+      kids.append(leaf);
+    }
+    branch.append(kids);
+    bNode.addEventListener("click", () => {
+      const open = branch.classList.toggle("pf-m-expanded");
+      branch.setAttribute("aria-expanded", String(open));
+    });
+    list.append(branch);
+  });
+
+  tree.append(list);
+  container.append(tree);
 }
 
 // activate builds the surface into host, loads once, and returns a teardown. Every async load checks
@@ -126,32 +191,56 @@ export function activate(host: HTMLElement): () => void {
   const refs = buildScaffold(host);
   let stale = false;
 
+  // The event index: the collapsible left panel shared with the log viewer's run browser. Its refresh
+  // icon re-runs load(); the "N events" count rides in its header. It starts collapsed on a phone and
+  // hides entirely when the trail is empty (the golden empty-state card carries the cold state alone).
+  const panel: CollapsiblePanel | null = mountCollapsiblePanel({
+    scroll: refs.scroll,
+    title: "Events",
+    label: "Event index",
+    onRefresh: load,
+    hideWhenEmpty: true,
+  });
+  const conn = h("span", "console-activity-conn");
+  if (panel) panel.head.insertBefore(conn, panel.refreshBtn);
+
+  // reveal scrolls a section into view and expands it, so clicking an index leaf lands on that event.
+  function reveal(index: number, sectionEls: HTMLElement[]): void {
+    const el = sectionEls[index];
+    if (!el) return;
+    el.removeAttribute("data-collapsed");
+    el.querySelector(".console-render-section__head")?.setAttribute("aria-expanded", "true");
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   function render(events: ActivityEvent[]): void {
     refs.body.replaceChildren();
     const model = activityToModel(events);
     // The adapter puts the ok/error accent in meta.status; buildSection defaults its accent from a
     // "[status]" title token (which the trail deliberately omits), so pass it through explicitly.
-    for (const sec of model.sections) refs.body.append(buildSection(sec, { status: sec.meta?.status }));
+    const sectionEls: HTMLElement[] = model.sections.map((sec) => buildSection(sec, { status: sec.meta?.status }));
+    for (const el of sectionEls) refs.body.append(el);
     const has = events.length > 0;
     refs.empty.hidden = has;
-    // The toolbar (count, Refresh) belongs with the populated trail; in the empty state it read as
-    // a floating bar over a "not connected" note, so hide it and let the golden empty card stand alone.
-    refs.bar.hidden = !has;
     const n = events.length;
-    refs.conn.textContent = n + (n === 1 ? " event" : " events");
+    conn.textContent = n + (n === 1 ? " event" : " events");
+    if (panel) {
+      renderIndexTree(panel.treeBox, events, Date.now(), (i) => reveal(i, sectionEls));
+      panel.applyDefault(has);
+    }
   }
 
-  function showEmpty(title: string, sub: string, conn: string): void {
+  function showEmpty(title: string, sub: string, connText: string): void {
     refs.body.replaceChildren();
     refs.empty.hidden = false;
-    refs.bar.hidden = true;
     refs.emptyTitle.textContent = title;
     refs.emptySub.textContent = sub;
-    refs.conn.textContent = conn;
+    conn.textContent = connText;
+    if (panel) { renderIndexTree(panel.treeBox, [], Date.now(), () => {}); panel.applyDefault(false); }
   }
 
   async function loadLive(daemonHost: string): Promise<void> {
-    refs.conn.textContent = "connecting...";
+    conn.textContent = "connecting...";
     try {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
       const resp = await client.listActivity({ pageSize: PAGE_SIZE });
@@ -180,7 +269,6 @@ export function activate(host: HTMLElement): () => void {
     showEmpty("No daemon connected", "The activity trail records what the daemon did: MCP calls, jobs, config changes.", "not connected");
   }
 
-  refs.refresh.addEventListener("click", load);
   refs.demoBtn.addEventListener("click", () => render(demoEvents(Date.now())));
   load();
 

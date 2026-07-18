@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
 import {
-  activityToModel, clockTime, durText, eventSection, humanBytes, kindLabel, tsMillis,
+  activityToModel, clockTime, durText, eventSection, groupEventsByKind, humanBytes, kindLabel, tsMillis,
 } from "./adapter";
 
 // ev builds a minimal ActivityEvent for the pure adapter. Casts through unknown because the
@@ -84,6 +84,31 @@ test("a job event with no payload is just its head", () => {
   const sec = eventSection(ev({ kind: Kind.JOB, action: "scip-reindex", actor: "daemon" }));
   assert.equal(sec.meta?.label, "job");
   assert.deepEqual(sec.lines, [sec.title]);
+});
+
+test("groupEventsByKind buckets in fixed order, drops empty kinds, keeps original indices", () => {
+  const events = [
+    ev({ kind: Kind.JOB, action: "j0" }),
+    ev({ kind: Kind.MCP_TOOL_CALL, action: "m1" }),
+    ev({ kind: Kind.JOB, action: "j2" }),
+    ev({ kind: Kind.SANDBOX_DENIAL, action: "s3", outcome: Outcome.ERROR }),
+  ];
+  const groups = groupEventsByKind(events);
+  // MCP leads the fixed order even though a Job appeared first in the page; Config/Token have no
+  // events and are absent.
+  assert.deepEqual(groups.map((g) => g.label), ["MCP tool calls", "Jobs", "Sandbox denials"]);
+  // Jobs bucket keeps page order and original indices (0 then 2).
+  const jobs = groups.find((g) => g.label === "Jobs");
+  assert.deepEqual(jobs?.events.map((e) => e.index), [0, 2]);
+  assert.equal(jobs?.events[0].event.action, "j0");
+  // The sandbox denial keeps its index 3, so the view can reach section 3.
+  assert.equal(groups.find((g) => g.label === "Sandbox denials")?.events[0].index, 3);
+});
+
+test("groupEventsByKind collects an unknown kind under Other", () => {
+  const groups = groupEventsByKind([ev({ kind: Kind.UNSPECIFIED, action: "x" })]);
+  assert.deepEqual(groups.map((g) => g.label), ["Other"]);
+  assert.equal(groups[0].events[0].index, 0);
 });
 
 test("activityToModel titles every section and counts them", () => {

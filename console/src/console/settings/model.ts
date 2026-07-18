@@ -42,10 +42,18 @@ export function buildSettingsEnvelope(p: Settings): SettingsEnvelope {
 }
 
 // The outcome of an import: the merged next snapshot plus which keys the file actually supplied (for the
-// surface's messaging and its reload nudge), or a human error when the envelope is unusable.
+// surface's messaging and its reload nudge), or a human error when the envelope is unusable. `unknown`
+// and `skipped` let the surface warn about what it silently dropped: `unknown` = keys present in the
+// settings object that magus does not know, `skipped` = known keys present but rejected by the type check
+// (a wrong-typed value, or a malformed keymap). `newerSchema` carries the file's schemaVersion when it is
+// ahead of this console's, so the surface can say the file came from a newer build.
 export type ImportResult =
-  | { ok: true; next: Settings; applied: (keyof Settings)[] }
+  | { ok: true; next: Settings; applied: (keyof Settings)[]; unknown: string[]; skipped: string[]; newerSchema?: number }
   | { ok: false; error: string };
+
+// The canonical set of keys importSettings understands. Kept in sync with the Settings interface so a
+// settings-object key outside this set is reported as unknown rather than silently dropped.
+const KNOWN_KEYS: readonly (keyof Settings)[] = ["poll", "host", "theme", "focusRing", "keymap"];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -75,32 +83,44 @@ export function importSettings(raw: string, current: Settings): ImportResult {
   const settings = parsed.settings;
   const next: Settings = { ...current };
   const applied: (keyof Settings)[] = [];
+  // A known key is `skipped` only when it is present but fails its type check; a key that is simply
+  // absent keeps the current value and is not reported. `skip` records the former.
+  const skipped: (keyof Settings)[] = [];
+  const skip = (key: keyof Settings): void => {
+    if (key in settings) skipped.push(key);
+  };
 
   if (typeof settings.poll === "number" && Number.isFinite(settings.poll)) {
     next.poll = settings.poll;
     applied.push("poll");
-  }
+  } else skip("poll");
   if (typeof settings.host === "string") {
     next.host = settings.host.trim();
     applied.push("host");
-  }
+  } else skip("host");
   if (settings.theme === "auto" || settings.theme === "light" || settings.theme === "dark") {
     next.theme = settings.theme;
     applied.push("theme");
-  }
+  } else skip("theme");
   if (typeof settings.focusRing === "boolean") {
     next.focusRing = settings.focusRing;
     applied.push("focusRing");
-  }
+  } else skip("focusRing");
   if (isKeymap(settings.keymap)) {
     next.keymap = settings.keymap;
     applied.push("keymap");
-  }
+  } else skip("keymap");
 
   if (applied.length === 0) {
     return { ok: false, error: "No recognizable settings to import." };
   }
-  return { ok: true, next, applied };
+
+  const unknown = Object.keys(settings).filter((k) => !(KNOWN_KEYS as readonly string[]).includes(k));
+  // Imports stay permissive on version: a newer schemaVersion never hard-fails, it just tells the surface
+  // the file came from a newer console so it can explain why some keys may not have applied.
+  const version = parsed.schemaVersion;
+  const newerSchema = typeof version === "number" && version > SETTINGS_SCHEMA_VERSION ? version : undefined;
+  return { ok: true, next, applied, unknown, skipped, newerSchema };
 }
 
 // --- Pending diff (the transactional model) --------------------------------------------------------

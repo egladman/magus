@@ -7,6 +7,7 @@
 // unaffected. PF owns the tree chrome (pf-v6-c-tree-view); only the panel frame + status dot are ours.
 
 import { authHeaders } from "../../lib/daemon";
+import { scenarioRuns } from "../demo-scenario";
 
 // RunBrowserDeps: what initRunBrowser needs from the log viewer. scroll is the viewer's scroll box
 // (the tree docks to its left, sharing the panel below the toolbar). host/token address the daemon
@@ -92,23 +93,27 @@ export function relTime(ms: number, now: number): string {
   return pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
 }
 
-// demoRuns is a small synthetic run set for the daemon-free showcase (the shared #demo path), so the
-// browser reads as populated without a daemon. Timestamps are relative to `now` so the leaves show
-// plausible "how long ago" labels.
+// demoRuns projects the shared scenario's run history (demo-scenario.ts) into the tree's row shape
+// for the daemon-free showcase (the shared #demo path), so the browser reads as populated without a
+// daemon AND tells the SAME story as the activity trail, the waterfall, and the dashboard - the refs
+// here are the ones a reader meets on those surfaces. Newest first; timestamps relative to `now`.
 export function demoRuns(now: number): RunSummary[] {
-  const min = 60_000;
-  return [
-    { ref: "outdemo001", project: "svc/api", target: "build:rw", failed: false, timestamp_ms: now - 2 * min, duration_ms: 1840 },
-    { ref: "outdemo002", project: "svc/api", target: "test", failed: true, error: "2 assertions failed", timestamp_ms: now - 6 * min, duration_ms: 4200 },
-    { ref: "outdemo003", project: "svc/api", target: "test", failed: false, timestamp_ms: now - 40 * min, duration_ms: 3900 },
-    { ref: "outdemo004", project: "svc/api", target: "lint", failed: false, timestamp_ms: now - 55 * min, duration_ms: 620 },
-    { ref: "outdemo005", project: "web/app", target: "build", failed: false, timestamp_ms: now - 3 * 60 * min, duration_ms: 9100 },
-    { ref: "outdemo006", project: "web/app", target: "typecheck", failed: true, error: "TS2345 in main.ts", timestamp_ms: now - 5 * 60 * min, duration_ms: 2600 },
-  ];
+  return scenarioRuns(now).map((r) => ({
+    ref: r.ref,
+    project: r.project,
+    target: r.target,
+    inv: r.inv,
+    failed: r.state === "failed",
+    error: r.error,
+    timestamp_ms: r.endMs,
+    duration_ms: r.durationMs,
+  }));
 }
 
 const svgNS = "http://www.w3.org/2000/svg";
-function chevron(): SVGElement {
+// chevron is the PF tree-view node-toggle glyph. Exported so the activity index tree (which builds
+// its own PF tree in activity/main.ts) reuses the SAME caret rather than duplicating the SVG.
+export function chevron(): SVGElement {
   const s = document.createElementNS(svgNS, "svg");
   s.setAttribute("viewBox", "0 0 24 24");
   s.setAttribute("fill", "none");
@@ -212,12 +217,14 @@ function makeNode(spec: NodeSpec, onSelect: (run: RunSummary) => void, expanded:
 // renderRunTree (re)builds the tree into container from runs, grouped project -> target -> run. The
 // first project and its first target start expanded so the newest runs are visible without a click.
 // runs arrive newest-first (the daemon sorts them), so each target's leaves keep that order.
-export function renderRunTree(container: HTMLElement, runs: RunSummary[], onSelect: (run: RunSummary) => void, now: number): void {
+export function renderRunTree(container: HTMLElement, runs: RunSummary[], onSelect: (run: RunSummary) => void, now: number, emptyNote?: string): void {
   container.replaceChildren();
   if (runs.length === 0) {
     const empty = document.createElement("p");
     empty.className = "console-log-runs__empty";
-    empty.textContent = "No stored runs. Run a target, then reopen this panel.";
+    // emptyNote lets the caller explain WHY the panel is empty (no daemon vs a daemon with no stored
+    // runs); the plain "no stored runs" wording is the daemon-connected default.
+    empty.textContent = emptyNote ?? "No stored runs. Run a target, then reopen this panel.";
     container.append(empty);
     return;
   }
@@ -274,7 +281,7 @@ export function renderRunTree(container: HTMLElement, runs: RunSummary[], onSele
 // the viewer's icon-button idiom without pulling a component. paths are <path>/<polyline> d-strings.
 function iconButton(id: string, label: string, title: string, paths: string[]): HTMLButtonElement {
   const b = document.createElement("button");
-  b.id = id;
+  if (id) b.id = id;
   b.type = "button";
   b.className = "pf-v6-c-button pf-m-plain pf-m-small";
   b.title = title;
@@ -298,62 +305,109 @@ function iconButton(id: string, label: string, title: string, paths: string[]): 
   return b;
 }
 
-// initRunBrowser docks the run browser to the left of the viewer's scroll box and populates it. It
-// reparents `scroll` into a flex split with a collapsible aside (so no scaffold change is needed),
-// fetches the run list (or the demo set), and renders the tree; selecting a run calls deps.onOpenRun.
-// The aside stays hidden when there are no runs, so a bare viewer is unchanged. Returns a refresh
-// handle the viewer can call (e.g. after a live run finishes) - refetch and re-render in place.
-export function initRunBrowser(deps: RunBrowserDeps): { refresh: () => void } {
-  const parent = deps.scroll.parentElement;
-  if (!parent) return { refresh: () => {} };
+// A collapsible master panel docked down the left of a render surface's scroll box: a titled header
+// (refresh + hide icons) over a caller-filled tree, plus a slim reopen rail. The log viewer's run
+// browser and the activity view's event index are the same frame (both load logs.css, so both reuse
+// the .console-log-runs styles); only what fills treeBox differs.
+export interface CollapsiblePanel {
+  head: HTMLElement;         // the header row, so a caller can inject extra chrome (e.g. a count)
+  treeBox: HTMLElement;      // the caller (re)renders its tree into this
+  refreshBtn: HTMLButtonElement;
+  // applyDefault sets the open state after a (re)load from whether the panel now has content: an
+  // empty panel collapses (to the rail, or fully hidden when hideWhenEmpty), a populated one opens -
+  // except on a phone, where an open aside would crush the content pane, so it starts collapsed to
+  // the rail. A reader who opens it from the rail overrides that, and the choice sticks across loads.
+  applyDefault: (hasContent: boolean) => void;
+}
+
+// mountCollapsiblePanel reparents `scroll` into a flex split and docks the collapsible aside to its
+// left (so no scaffold markup changes). onRefresh fires on the header refresh click. hideWhenEmpty
+// picks the empty behavior: the activity index hides entirely (its own empty-state card explains the
+// cold state), while the run browser keeps the rail so a reader can open it to an honest note.
+export function mountCollapsiblePanel(opts: {
+  scroll: HTMLElement;
+  title: string;
+  label: string;
+  onRefresh: () => void;
+  hideWhenEmpty: boolean;
+}): CollapsiblePanel | null {
+  const parent = opts.scroll.parentElement;
+  if (!parent) return null;
 
   const split = document.createElement("div");
   split.className = "console-log-split";
-  parent.insertBefore(split, deps.scroll);
+  parent.insertBefore(split, opts.scroll);
 
   const aside = document.createElement("aside");
   aside.className = "console-log-runs";
-  aside.id = "log-runs";
   aside.hidden = true;
-  aside.setAttribute("aria-label", "Recent runs");
+  aside.setAttribute("aria-label", opts.label);
 
   const head = document.createElement("div");
   head.className = "console-log-runs__head";
   const title = document.createElement("span");
   title.className = "console-log-runs__title";
-  title.textContent = "Recent runs";
-  const refreshBtn = iconButton("log-runs-refresh", "Refresh runs", "Refresh the run list", ["M21 12a9 9 0 1 1-2.64-6.36", "M21 3v6h-6"]);
-  const hideBtn = iconButton("log-runs-hide", "Hide the run browser", "Hide the run browser", ["M15 18l-6-6 6-6"]);
+  title.textContent = opts.title;
+  const refreshBtn = iconButton("", "Refresh", "Refresh", ["M21 12a9 9 0 1 1-2.64-6.36", "M21 3v6h-6"]);
+  const hideBtn = iconButton("", "Hide the panel", "Hide the panel", ["M15 18l-6-6 6-6"]);
   head.append(title, refreshBtn, hideBtn);
 
   const treeBox = document.createElement("div");
   treeBox.className = "console-log-runs__tree";
   aside.append(head, treeBox);
 
-  // A slim reopen rail, shown only while the aside is hidden BUT runs exist, so the browser can be
-  // brought back without leaving the viewer.
-  const reopen = iconButton("log-runs-show", "Show the run browser", "Show the run browser", ["M9 18l6-6-6-6"]);
+  const reopen = iconButton("", "Show the panel", "Show the panel", ["M9 18l6-6-6-6"]);
   reopen.classList.add("console-log-runs__reopen");
   reopen.hidden = true;
 
-  split.append(aside, reopen, deps.scroll);
+  split.append(aside, reopen, opts.scroll);
 
-  let hasRuns = false;
-  const setAsideOpen = (open: boolean): void => {
-    aside.hidden = !open;
-    reopen.hidden = open || !hasRuns;
+  // The open state is JS-driven (the hidden attribute), so the phone default lives here (matchMedia)
+  // rather than duplicated into logs.css - the same breakpoint the app shell uses (console.css).
+  const narrow = window.matchMedia("(max-width: 47.999rem)");
+  let userOpened = false;
+  const apply = (state: "open" | "closed" | "hidden"): void => {
+    aside.hidden = state !== "open";
+    reopen.hidden = state !== "closed";
   };
-  hideBtn.addEventListener("click", () => setAsideOpen(false));
-  reopen.addEventListener("click", () => setAsideOpen(true));
+  hideBtn.addEventListener("click", () => apply("closed"));
+  reopen.addEventListener("click", () => { userOpened = true; apply("open"); });
+  refreshBtn.addEventListener("click", opts.onRefresh);
 
-  const load = async (): Promise<void> => {
-    const runs = deps.demo || !deps.host ? demoRuns(deps.nowMs) : await fetchRuns(deps.host, deps.token);
-    hasRuns = runs.length > 0;
-    renderRunTree(treeBox, runs, deps.onOpenRun, deps.nowMs);
-    setAsideOpen(hasRuns);
+  return {
+    head, treeBox, refreshBtn,
+    applyDefault: (hasContent: boolean): void => {
+      if (!hasContent) { apply(opts.hideWhenEmpty ? "hidden" : "closed"); return; }
+      apply(userOpened || !narrow.matches ? "open" : "closed");
+    },
   };
-  refreshBtn.addEventListener("click", () => { void load(); });
+}
+
+// initRunBrowser docks the run browser to the left of the viewer's scroll box and populates it: it
+// fetches the run list (or, in #demo, the synthetic set) and renders the tree; selecting a run calls
+// deps.onOpenRun. Demo runs surface ONLY in explicit demo mode - with no daemon and no demo it fetches
+// nothing (a fresh install must not show fabricated runs as if real) and the reopen rail opens to an
+// honest note. Returns a refresh handle the viewer can call (e.g. after a live run finishes).
+export function initRunBrowser(deps: RunBrowserDeps): { refresh: () => void } {
+  const panel = mountCollapsiblePanel({
+    scroll: deps.scroll,
+    title: "Recent runs",
+    label: "Recent runs",
+    onRefresh: () => { void load(); },
+    hideWhenEmpty: false,
+  });
+  if (!panel) return { refresh: () => {} };
+  const runsPanel = panel; // narrowed non-null, so the load() closure below sees a definite panel
+
+  async function load(): Promise<void> {
+    const runs = deps.demo ? demoRuns(deps.nowMs) : deps.host ? await fetchRuns(deps.host, deps.token) : [];
+    const note = !deps.host && !deps.demo
+      ? "No daemon connected. Set a daemon address in Settings, or launch the demo."
+      : undefined;
+    renderRunTree(runsPanel.treeBox, runs, deps.onOpenRun, deps.nowMs, note);
+    runsPanel.applyDefault(runs.length > 0);
+  }
+
   void load();
-
   return { refresh: () => { void load(); } };
 }

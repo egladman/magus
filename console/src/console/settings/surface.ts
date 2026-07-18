@@ -443,13 +443,41 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     setStatus("Downloaded magus-console-settings.json.", "ok");
   });
 
+  // Turn importSettings' terse hard-error into an actionable sentence that points the operator at the
+  // expected format (which they can see by exporting from this very page). The inline status keeps the
+  // raw error as the aria-live anchor; the toast is the primary, glanceable signal.
+  const importFailureToast = (error: string): string => {
+    if (error.includes("valid JSON")) return "Import failed: not valid JSON. Export from this page to see the expected format.";
+    if (error.includes("settings object")) return "Import failed: not a magus console settings file. Export from this page to see the expected format.";
+    return "Import failed: no recognizable settings in that file. Export from this page to see the expected format.";
+  };
+
+  // joinIgnored renders a key list for the partial-import warning, truncating a silly-long list so the
+  // toast stays readable (show the first few, then "and N more").
+  const joinIgnored = (keys: string[]): string => {
+    const max = 5;
+    if (keys.length <= max) return keys.join(", ");
+    return keys.slice(0, max).join(", ") + ", and " + (keys.length - max) + " more";
+  };
+
   // Import stages onto the draft (merged over the current draft), so the operator reviews the pending diff
   // and then Saves or Applies - import never commits on its own.
   const applyImport = (text: string): void => {
     const res = importSettings(text, draftPrefs());
-    if (!res.ok) { setStatus(res.error, "error"); return; }
+    if (!res.ok) {
+      setStatus(res.error, "error"); // aria-live anchor keeps the terse reason
+      showToast(importFailureToast(res.error), "error");
+      return;
+    }
     loadDraft(res.next);
     setStatus("Staged import: " + res.applied.join(", ") + ". Review, then Save or Save & Apply.", "ok");
+    // Partial import: some of the file did not land. One warn toast tells the operator what was dropped so
+    // a typo or a stale file does not silently vanish.
+    const parts: string[] = [];
+    if (res.newerSchema !== undefined) parts.push("File is from a newer console (schemaVersion " + res.newerSchema + "); unknown settings were ignored.");
+    if (res.unknown.length > 0) parts.push("Ignored unknown keys: " + joinIgnored(res.unknown) + ".");
+    if (res.skipped.length > 0) parts.push("Ignored invalid values for: " + joinIgnored(res.skipped) + ".");
+    if (parts.length > 0) showToast(parts.join(" "), "warn");
   };
 
   fileInput.addEventListener("change", () => {

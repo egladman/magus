@@ -87,3 +87,47 @@ export function activityToModel(events: ActivityEvent[]): RenderModel {
   const sections: Section[] = events.map(eventSection);
   return { sections, titled: sections.length };
 }
+
+// KindGroup is one bucket of the activity index tree: a kind, its human heading, and the events of
+// that kind (newest first, the order the service returns them). index is the event's position in the
+// original page, so the view can correlate a tree leaf with its rendered section.
+export interface KindGroup {
+  kind: Kind;
+  label: string;
+  events: { event: ActivityEvent; index: number }[];
+}
+
+// The fixed display order + headings for the activity index tree, so it always lists sources in the
+// same order regardless of what a given page happens to contain.
+const KIND_GROUP_ORDER: ReadonlyArray<{ kind: Kind; label: string }> = [
+  { kind: Kind.MCP_TOOL_CALL, label: "MCP tool calls" },
+  { kind: Kind.JOB, label: "Jobs" },
+  { kind: Kind.CONFIG_CHANGE, label: "Config changes" },
+  { kind: Kind.TOKEN_LIFECYCLE, label: "Token lifecycle" },
+  { kind: Kind.SANDBOX_DENIAL, label: "Sandbox denials" },
+];
+
+// groupEventsByKind buckets a page of events into the fixed kind order, dropping empty groups so the
+// index lists only kinds that actually occurred. Each retained event keeps its original page index.
+// Any unrecognized kind collects under a trailing "Other" so nothing is silently dropped. Pure: it
+// returns data; the view builds the tree DOM.
+export function groupEventsByKind(events: ActivityEvent[]): KindGroup[] {
+  const buckets = new Map<Kind, { event: ActivityEvent; index: number }[]>();
+  events.forEach((event, index) => {
+    const list = buckets.get(event.kind) ?? [];
+    if (list.length === 0) buckets.set(event.kind, list);
+    list.push({ event, index });
+  });
+
+  const groups: KindGroup[] = [];
+  const known = new Set<Kind>();
+  for (const { kind, label } of KIND_GROUP_ORDER) {
+    known.add(kind);
+    const list = buckets.get(kind);
+    if (list && list.length) groups.push({ kind, label, events: list });
+  }
+  const rest: { event: ActivityEvent; index: number }[] = [];
+  for (const [kind, list] of buckets) if (!known.has(kind)) rest.push(...list);
+  if (rest.length) groups.push({ kind: Kind.UNSPECIFIED, label: "Other", events: rest });
+  return groups;
+}

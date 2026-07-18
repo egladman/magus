@@ -18,6 +18,7 @@ import type {
   DashboardState, StatusView, MetricsView, SampleView, InsightView,
   RunView, TargetRunView, TargetState,
 } from "./state";
+import { SCENARIO_CATALOG, WORKSPACE_ROOT, scenarioInsight } from "../demo-scenario";
 
 const CAPACITY = 8;
 const TICK_MS = 1000;
@@ -25,22 +26,23 @@ const LOG_TICK_MS = 500; // faster cadence for the streaming log preview so it r
 const LOG_MAX = 200;     // rolling captured-output buffer kept for the activity preview
 const HISTORY = 200;     // seed samples (~a GitHub-year strip fills fast at ~1/s)
 
-// A rotating catalog of plausible captured-output lines (build / test / lint / cache /
-// sandbox) the demo activity preview streams. Cycled with a touch of jitter so the tail
-// churns without looking scripted. Plain ASCII, no real machine data.
+// A rotating catalog of plausible captured-output lines (build / test / lint / cache / sandbox) the
+// demo activity preview streams. They echo the shared scenario's acme monorepo (svc/api, web/app,
+// lib/core), so the streaming tail reads as the same workspace the tiles above describe. Cycled with
+// a touch of jitter so the tail churns without looking scripted. Plain ASCII, no real machine data.
 const LOG_SNIPPETS: string[] = [
-  "[build] compiling github.com/egladman/magus/internal/cache",
-  "[build] compiling github.com/egladman/magus/internal/interp",
-  "ok  \tgithub.com/egladman/magus/internal/cache\t0.42s",
-  "[test] === RUN   TestCache_WarmHit",
-  "[test] --- PASS: TestCache_WarmHit (0.01s)",
-  "[test] === RUN   TestDepgraph_Cycle",
-  "[test] --- PASS: TestDepgraph_Cycle (0.03s)",
-  "[lint] internal/interp/eval.go: ok",
+  "[build] compiling acme/svc/api/cmd/api",
+  "[build] compiling acme/lib/core/users",
+  "ok  \tacme/svc/api\t2.10s",
+  "[test] === RUN   TestListUsers",
+  "[test] --- PASS: TestListUsers (0.03s)",
+  "[test] === RUN   TestUserPool",
+  "[test] --- PASS: TestUserPool (0.01s)",
+  "[lint] lib/core/users.go: ok",
   "[vet]  no problems found",
-  "[scribe] rendered website/gen/dashboard/index.html",
-  "[cache] hit  spell=go-build target=build",
-  "[cache] miss spell=go-test target=test (running)",
+  "[typecheck] web/app/src/main.ts: ok",
+  "[cache] hit  spell=go-build target=svc/api:build",
+  "[cache] miss spell=go-test target=svc/api:test (running)",
   "[sandbox] apply rules=read:512 write:88 exec:12",
 ];
 
@@ -53,17 +55,10 @@ function makeRng(seed: number): () => number {
   return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x1_0000_0000; };
 }
 
-// One rotating catalog of targets the fake pool "runs". Durations are short (a few
-// seconds) so the gantt visibly churns.
-const CATALOG: { project: string; target: string; durMs: number }[] = [
-  { project: "", target: "build", durMs: 4200 },
-  { project: "", target: "test", durMs: 7300 },
-  { project: "", target: "lint", durMs: 3100 },
-  { project: "", target: "generate", durMs: 5600 },
-  { project: "website", target: "build", durMs: 4800 },
-  { project: "internal/cache", target: "coverage", durMs: 6100 },
-  { project: "gopherbuzz", target: "buzz-test", durMs: 3900 },
-];
+// The dashboard is a LIVE board, so its gantt keeps churning past the scenario's fixed history; it
+// draws that forward motion from the shared scenario catalog, so even the synthesized live run stays
+// inside the same acme monorepo and target vocabulary the rest of the console shows.
+const CATALOG = SCENARIO_CATALOG;
 
 const TRIGGERS = ["cli", "watch", "ci"];
 
@@ -172,15 +167,23 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         hits: 1873, misses: 402, errors: 1, hitRate: 1873 / (1873 + 402),
         durationP50: 0.043, durationP95: 0.21, ioCount: 2276, bytesTotal: 5_912_334_221,
       },
+      // Per-target aggregates over the acme monorepo the scenario describes. svc/api:test carries a
+      // few errors (it flapped) and a lower cache-hit rate; the cached-heavy build/typecheck targets
+      // sit high - reconciling, roughly, with the run history and the volatility lens.
       targetStats: [
-        { project: "", target: "test", spell: "go-test", count: 342, p50: 1.9, p95: 4.2, p99: 6.8, cacheHitRate: 0.71, success: 338, errors: 4 },
-        { project: "", target: "build", spell: "go-build", count: 511, p50: 0.42, p95: 1.1, p99: 2.0, cacheHitRate: 0.88, success: 511, errors: 0 },
-        { project: "website", target: "build", spell: "scribe", count: 96, p50: 0.83, p95: 1.9, p99: 2.7, cacheHitRate: 0.64, success: 95, errors: 1 },
-        { project: "", target: "lint", spell: "golangci", count: 203, p50: 2.7, p95: 5.1, p99: 7.9, cacheHitRate: 0.55, success: 201, errors: 2 },
+        { project: "svc/api", target: "test", spell: "go-test", count: 188, p50: 3.6, p95: 5.4, p99: 7.1, cacheHitRate: 0.41, success: 184, errors: 4 },
+        { project: "svc/api", target: "build", spell: "go-build", count: 342, p50: 0.42, p95: 1.1, p99: 2.0, cacheHitRate: 0.88, success: 342, errors: 0 },
+        { project: "web/app", target: "build", spell: "esbuild", count: 96, p50: 0.83, p95: 1.9, p99: 2.7, cacheHitRate: 0.72, success: 96, errors: 0 },
+        { project: "web/app", target: "typecheck", spell: "tsc", count: 74, p50: 2.3, p95: 3.4, p99: 4.6, cacheHitRate: 0.55, success: 73, errors: 1 },
+        { project: "lib/core", target: "lint", spell: "golangci", count: 129, p50: 0.6, p95: 1.2, p99: 2.1, cacheHitRate: 0.61, success: 129, errors: 0 },
       ],
+      // The MCP tools the scenario's agent actually called (magus_run_target, magus_query,
+      // magus_output), so the metrics tile names the same tools the activity trail records - including
+      // the one magus_output error (the pruned-ref lookup).
       mcpTools: [
-        { tool: "graph_query", calls: 418, errors: 0, inputP50: 74, inputP95: 210, inputTotal: 41_233, outputP50: 1_902, outputP95: 8_140, outputTotal: 2_113_884, durationP50: 0.012, durationP95: 0.058 },
-        { tool: "explain", calls: 152, errors: 1, inputP50: 63, inputP95: 120, inputTotal: 12_004, outputP50: 3_211, outputP95: 9_920, outputTotal: 933_712, durationP50: 0.021, durationP95: 0.09 },
+        { tool: "magus_run_target", calls: 63, errors: 1, inputP50: 205, inputP95: 320, inputTotal: 13_104, outputP50: 4_120, outputP95: 9_800, outputTotal: 271_402, durationP50: 2.1, durationP95: 4.4 },
+        { tool: "magus_query", calls: 214, errors: 0, inputP50: 84, inputP95: 190, inputTotal: 19_006, outputP50: 1_640, outputP95: 6_210, outputTotal: 402_118, durationP50: 0.034, durationP95: 0.09 },
+        { tool: "magus_output", calls: 41, errors: 1, inputP50: 44, inputP95: 60, inputTotal: 1_920, outputP50: 3_200, outputP95: 9_100, outputTotal: 158_400, durationP50: 0.008, durationP95: 0.02 },
       ],
       buzz: {
         execCount: 8123 + j * 2, execP50: 0.0007, execP95: 0.004,
@@ -200,35 +203,30 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     };
   }
 
+  // The VCS lenses come from the shared scenario (demo-scenario.ts), so the hotspots, co-change,
+  // ownership, trend, and volatility all name the acme monorepo's files and reconcile with its run
+  // history: lib/core/users.go leads churn/blast radius (its edit broke svc/api:test), and svc/api:test
+  // leads volatility (it failed, then passed). The scenario carries commit/pass instants as epoch ms so
+  // the dates render relative to `now` instead of the old hard-coded literals.
+  const date = (ms: number): string => new Date(ms).toLocaleDateString();
+  const si = scenarioInsight(t0);
   const insight: InsightView = {
-    commits: 312,
-    hotspots: [
-      { name: "internal/cache/cache.go", churn: 41, authors: 3, blastRadius: 27, lastCommit: "Jul 10, 2026" },
-      { name: "internal/interp/eval.go", churn: 33, authors: 2, blastRadius: 44, lastCommit: "Jul 9, 2026" },
-      { name: "website/scribe.buzz", churn: 28, authors: 1, blastRadius: 12, lastCommit: "Jul 11, 2026" },
-      { name: "cmd/magus/main.go", churn: 22, authors: 4, blastRadius: 51, lastCommit: "Jul 8, 2026" },
-    ],
-    affinity: [
-      { a: "internal/cache/cache.go", b: "internal/cache/output_store.go", count: 14, hidden: false },
-      { a: "types/status.go", b: "internal/proc/server.go", count: 11, hidden: false },
-      { a: "website/dashboard.css", b: "website/js/dashboard/main.ts", count: 9, hidden: true },
-    ],
-    ownership: [
-      { path: "gopherbuzz", primary: "eli", primaryShare: 92, authors: 2, busFactor1: true, stale: false },
-      { path: "internal/sandbox", primary: "eli", primaryShare: 78, authors: 3, busFactor1: false, stale: true },
-      { path: "website", primary: "eli", primaryShare: 85, authors: 2, busFactor1: false, stale: false },
-    ],
-    trend: [
-      { path: "internal/service/console", delta: 18, recent: 24, earlier: 6 },
-      { path: "website/js/dashboard", delta: 12, recent: 15, earlier: 3 },
-      { path: "internal/depgraph", delta: -7, recent: 2, earlier: 9 },
-    ],
+    commits: si.commits,
+    hotspots: si.hotspots.map((n) => ({
+      name: n.name, churn: n.churn, authors: n.authors, blastRadius: n.blastRadius, lastCommit: date(n.lastCommitMs),
+    })),
+    affinity: si.affinity.map((p) => ({ a: p.a, b: p.b, count: p.count, hidden: p.hidden })),
+    ownership: si.ownership.map((o) => ({
+      path: o.path, primary: o.primary, primaryShare: o.primaryShare, authors: o.authors, busFactor1: o.busFactor1, stale: o.stale,
+    })),
+    trend: si.trend.map((t) => ({ path: t.path, delta: t.delta, recent: t.recent, earlier: t.earlier })),
     volatility: {
-      threshold: 0.2,
-      targets: [
-        { label: "internal/proc:test", score: 0.34, volatile: true, pass: 41, fail: 3, volatileCount: 5, samples: 49, lastPass: "Jul 11, 2026" },
-        { label: "website:build", score: 0.08, volatile: false, pass: 61, fail: 0, volatileCount: 1, samples: 62, lastPass: "Jul 11, 2026" },
-      ],
+      threshold: si.volatility.threshold,
+      targets: si.volatility.targets.map((v) => ({
+        label: v.project ? v.project + ":" + v.target : v.target,
+        score: v.score, volatile: v.volatile, pass: v.pass, fail: v.fail,
+        volatileCount: v.volatileCount, samples: v.samples, lastPass: date(v.lastPassMs),
+      })),
     },
   };
 
@@ -268,9 +266,12 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       cache: { hits, misses, errors, hitRate: total > 0 ? hits / total : null, sizeBytes },
       runningTargets,
       runs: runs.map((r) => ({ ...r, targets: r.targets.slice() })),
+      // acme (the scenario's monorepo) is the busy workspace the daemon is serving; magus (the tool
+      // itself) sits idle beside it. So the workspaces tile names the same root the rest of the board
+      // describes.
       workspaces: [
-        { root: "~/Repos/magus", hits: Math.round(hits * 0.82), misses: Math.round(misses * 0.8), errors, lastAccessTime: timestampFromMs(now - 1200) },
-        { root: "~/Repos/acme", hits: Math.round(hits * 0.18), misses: Math.round(misses * 0.2), errors: 0, lastAccessTime: timestampFromMs(now - 38_000) },
+        { root: WORKSPACE_ROOT, hits: Math.round(hits * 0.82), misses: Math.round(misses * 0.8), errors, lastAccessTime: timestampFromMs(now - 1200) },
+        { root: "~/Repos/magus", hits: Math.round(hits * 0.18), misses: Math.round(misses * 0.2), errors: 0, lastAccessTime: timestampFromMs(now - 38_000) },
       ],
       services: [
         { id: "svc9f21", label: "postgres:16", command: "docker run postgres:16", ports: ["5432"], state: "running", dependents: 3, startedAt: timestampFromMs(now - 214_000) },

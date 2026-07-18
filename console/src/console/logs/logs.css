@@ -405,3 +405,18 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 /* Keep the tree readable in the dense panel: the run leaves are mono (they read as data/timestamps). */
 .console-log-runs .pf-v6-c-tree-view__node-text { font-size: 0.78rem; }
 .console-log-runs__tree .pf-v6-c-tree-view__list-item:not([aria-expanded]) .pf-v6-c-tree-view__node-text { font-family: var(--pf-t--global--font--family--mono); }
+
+/* Phone: an OPEN aside would squeeze the content pane to a useless sliver (a fixed 15rem beside a
+   ~375px viewport), so overlay it over the scroll area instead - full height, above the content. The
+   open/close state stays JS-driven (the hidden attribute, set in runtree.ts against this SAME 47.999rem
+   breakpoint); this only changes how an already-open aside lays out at phone width. The reopen rail
+   stays in flow (the aside is hidden when the rail shows), so the content pane keeps its full width
+   when the panel is collapsed. */
+@media (max-width: 47.999rem) {
+  .console-log-split { position: relative; }
+  .console-log-runs:not([hidden]) {
+    position: absolute; inset: 0 auto 0 0; z-index: 5;
+    flex: 0 0 auto; width: min(17rem, 82%);
+    box-shadow: 0 0 0.75rem color-mix(in srgb, var(--pf-t--global--text--color--regular) 22%, transparent);
+  }
+}
