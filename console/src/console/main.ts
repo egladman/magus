@@ -138,7 +138,7 @@ function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
 // drill into one run (logs), then understand the workspace (graph), then the meta surfaces.
 const SURFACES: Launchable[] = [
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
-  { pageId: "activity", label: "Activity Trail", hint: "A history of recent magus actions" },
+  { pageId: "activity", label: "Activity Trail", hint: "A history of magus actions, user-triggered and scheduled" },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
