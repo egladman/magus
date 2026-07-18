@@ -181,6 +181,34 @@ func TestLatestRefsByTargetEmpty(t *testing.T) {
 	assert.Nil(t, NewOutputStore(t.TempDir()).LatestRefsByTarget())
 }
 
+// TestListDescriptors: unlike LatestRefsByTarget, the browser feed keeps EVERY retained execution
+// (not just the newest per target) and includes target-less project-scoped runs, newest first.
+func TestListDescriptors(t *testing.T) {
+	s := NewOutputStore(t.TempDir())
+	// Two executions of the same target under one cache key (both retained by keep-last-K), a second
+	// target, and a target-less project-scoped run - all four must appear.
+	r1, err := s.Persist("k1", []byte("old build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 100})
+	require.NoError(t, err)
+	r2, err := s.Persist("k1", []byte("new build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 300})
+	require.NoError(t, err)
+	r3, err := s.Persist("k2", []byte("test\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 200})
+	require.NoError(t, err)
+	r4, err := s.Persist("k3", []byte("scope\n"), OutputDescriptor{Project: "pkg/b", TimestampMs: 400}) // no target: still listed
+	require.NoError(t, err)
+
+	got := s.ListDescriptors()
+	require.Len(t, got, 4, "every retained execution is listed, including the target-less project-scoped run")
+	// Newest first by timestamp: r4 (400), r2 (300), r3 (200), r1 (100).
+	assert.Equal(t, []string{r4, r2, r3, r1}, []string{got[0].Ref, got[1].Ref, got[2].Ref, got[3].Ref})
+	assert.Equal(t, "build:rw", got[1].Target, "the repro target (charm suffix) is preserved verbatim")
+}
+
+// TestListDescriptorsEmpty: a store with nothing persisted returns nil, so the browser shows an
+// empty tree rather than erroring.
+func TestListDescriptorsEmpty(t *testing.T) {
+	assert.Nil(t, NewOutputStore(t.TempDir()).ListDescriptors())
+}
+
 // TestOutputStoreKeepLastK bounds retention to defaultOutputKeepLast newest executions
 // per cache key; the newest survives.
 func TestOutputStoreKeepLastK(t *testing.T) {

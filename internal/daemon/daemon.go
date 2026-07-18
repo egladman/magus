@@ -19,6 +19,7 @@ import (
 	"net/url"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
@@ -26,6 +27,7 @@ import (
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
+	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
@@ -204,6 +206,12 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// run-outcome volatility lens, all under the single "volatility" key of InsightView.
 			// Plain JSON over the same /api guards as the rest.
 			bridgeMux.Handle("/api/v1/insight", cors(status.NewInsightHandler(svc, log)))
+			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
+			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
+			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
+			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
+			bridgeMux.Handle("/api/v1/outputs", cors(viewer.NewOutputsHandler(outputStore, log)))
+			bridgeMux.Handle("/api/v1/output", cors(viewer.NewOutputHandler(outputStore, log)))
 			// Wrap every /api/ route with rebind + header-only bearer auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
 

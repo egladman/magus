@@ -251,6 +251,46 @@ func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
 	return out
 }
 
+// ListDescriptors returns every stored execution's descriptor, newest run first, across all cache
+// keys - the feed for the console's run browser (the log-viewer tree groups them project -> target ->
+// run so a reader can browse recent runs and open any one's captured output). Unlike
+// LatestRefsByTarget, which collapses to the single newest run per target, this keeps every retained
+// execution (the store holds keep-last-K per cache key), so a target's recent history is browsable.
+// The REPRO target is preserved verbatim (with any charm suffix) so a run's exact invocation stays
+// visible; the caller collapses to the bare name for grouping if it wants. Best-effort: an absent or
+// unreadable store, or an undecodable descriptor, yields fewer entries, never an error.
+func (s *OutputStore) ListDescriptors() []OutputDescriptor {
+	keys, err := os.ReadDir(s.outputsDir())
+	if err != nil {
+		return nil
+	}
+	var out []OutputDescriptor
+	for _, k := range keys {
+		if !k.IsDir() {
+			continue
+		}
+		dir := filepath.Join(s.outputsDir(), k.Name())
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if !strings.HasSuffix(f.Name(), descExt) {
+				continue
+			}
+			d, err := readDescriptor(filepath.Join(dir, f.Name()))
+			if err != nil || d.Ref == "" {
+				continue
+			}
+			out = append(out, d)
+		}
+	}
+	// Newest run first (ties broken by ref id, via newerDescriptor, so the order is stable regardless
+	// of directory-iteration order), so the browser's default top-of-list is the most recent output.
+	sort.Slice(out, func(i, j int) bool { return newerDescriptor(out[i], out[j]) })
+	return out
+}
+
 // bareTarget strips the charm suffix reproTarget appends ("build:rw" -> "build"), so a
 // stored repro target maps back to the declared target name. reproTarget builds
 // "<target>:<charms>", and declared target names carry no colon, so cutting at the first
