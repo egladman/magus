@@ -24,9 +24,13 @@ import {
 } from "./model";
 
 // What the shell injects: the editable command list, their defaults (CONSOLE_KEYMAP), and the one shared
-// live keymap cell the console reads - so a commit writes the same bindings the console honors.
+// live keymap cell the console reads - so a commit writes the same bindings the console honors. presets
+// (optional) are the "start from a preset" seeds: applying one stages that preset's full binding set
+// into the draft, which the operator then edits and Saves like any other change.
 export interface SettingsDeps {
   keybindings: KeybindingsDeps;
+  presets?: Record<string, Keymap>;
+  presetList?: { id: string; label: string }[];
 }
 
 // A config surface has nothing to find in the shared search box, so it opts out.
@@ -342,8 +346,54 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     "Always show the outline on the focused pane. Off shows it only during keyboard navigation.",
   ));
 
-  // --- Keybindings: the shared editor core over the DRAFT keymap ---
+  // --- Keybindings: an optional "start from a preset" seed above the shared editor core over the DRAFT
+  // keymap. Applying a preset stages its whole binding set into the draft (like a bulk edit), which the
+  // editor then reflects and the operator Saves; it is a seed, not a mode. ---
   const editor = createKeybindingsEditor({ commands: kb.commands, defaults: kb.defaults, keymap: keymapDraft });
+  let keybindingsContent: HTMLElement = editor.el;
+  if (deps.presets && deps.presetList && deps.presetList.length) {
+    const presets = deps.presets;
+    const presetList = deps.presetList;
+    let selectedPreset = presetList[0].id;
+    const presetGroup = h("div", "pf-v6-c-toggle-group");
+    presetGroup.setAttribute("role", "group");
+    presetGroup.setAttribute("aria-label", "Keybinding preset");
+    const presetButtons = new Map<string, HTMLButtonElement>();
+    const paintPresetToggle = (): void => {
+      for (const [id, btn] of presetButtons) {
+        const on = id === selectedPreset;
+        btn.classList.toggle("pf-m-selected", on);
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+    };
+    for (const p of presetList) {
+      const item = h("div", "pf-v6-c-toggle-group__item");
+      const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
+      btn.type = "button";
+      btn.append(h("span", "pf-v6-c-toggle-group__text", p.label));
+      btn.addEventListener("click", () => { selectedPreset = p.id; paintPresetToggle(); });
+      item.append(btn);
+      presetGroup.append(item);
+      presetButtons.set(p.id, btn);
+    }
+    paintPresetToggle();
+    const applyBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Apply preset") as HTMLButtonElement;
+    applyBtn.type = "button";
+    applyBtn.addEventListener("click", () => {
+      keymapDraft.set({ ...presets[selectedPreset] });
+      recompute();
+      const label = presetList.find((x) => x.id === selectedPreset)?.label ?? selectedPreset;
+      setStatus("Staged the " + label + " preset - it seeds your keymap. Edit any row, then Save or Save & Apply; applying again resets to the preset.", "ok");
+    });
+    const controls = h("div", "console-settings-presets__row");
+    controls.append(presetGroup, applyBtn);
+    const wrap = h("div");
+    wrap.append(
+      buildFormGroup("Start from a preset", null, controls, "Applies a full set of bindings you can then edit freely - not a mode, it seeds your keymap. Emacs, Vim, and VS Code use multi-key sequences (like Ctrl+X then O)."),
+      editor.el,
+    );
+    keybindingsContent = wrap;
+  }
 
   // --- Backup: export / import (staged into the draft) ---
   const io = h("div", "console-settings-io");
@@ -475,7 +525,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     diffWrap,
     buildSection("General", generalForm),
     buildSection("Appearance", themeBody),
-    buildSection("Keybindings", editor.el, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply."),
+    buildSection("Keybindings", keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply."),
     buildSection("Backup", io, "Export the current draft, or import a saved set to stage it."),
   );
   host.append(page);

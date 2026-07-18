@@ -55,6 +55,74 @@ const CONSOLE_KEYMAP: Keymap = {
   "console.actionBar.open": "mod+k",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
+
+// Keybinding presets: a "start from a preset" SEEDS the editable keymap (keymapCell / the Settings
+// draft) with a full set of bindings you then edit freely - not a persistent mode, just a bulk edit.
+// Each preset is a commandId -> binding map; a binding can be a multi-chord SEQUENCE (Emacs C-x o, Vim
+// C-w h, VS Code C-k C-arrow), which the engine now supports. "mod" is the platform accelerator (Ctrl
+// on Linux/Windows - so the Emacs/Vim Ctrl-prefixes are literal there - Cmd on macOS). The "default"
+// preset is empty: applying it clears overrides back to the console's own CONSOLE_KEYMAP defaults.
+const KEYMAP_PRESETS: Record<string, Keymap> = {
+  default: {},
+  emacs: {
+    "console.actionBar.open": "alt+x", // M-x
+    "console.tab.close": "mod+x 0",    // C-x 0  (delete window)
+    "console.tab.next": "mod+x o",     // C-x o  (other window)
+    "console.tab.prev": "mod+x p",     // C-x p
+    "console.pane.split": "mod+x 2",   // C-x 2  (split)
+    "console.pane.toggleSplitMode": "mod+x 3", // C-x 3
+    "console.pane.focusLeft": "shift+ArrowLeft",   // windmove
+    "console.pane.focusDown": "shift+ArrowDown",
+    "console.pane.focusUp": "shift+ArrowUp",
+    "console.pane.focusRight": "shift+ArrowRight",
+    "console.pane.moveLeft": "mod+x mod+ArrowLeft",
+    "console.pane.moveDown": "mod+x mod+ArrowDown",
+    "console.pane.moveUp": "mod+x mod+ArrowUp",
+    "console.pane.moveRight": "mod+x mod+ArrowRight",
+    "console.pane.focusParent": "mod+x mod+o",
+  },
+  vim: {
+    "console.actionBar.open": "mod+p", // fzf-style palette
+    "console.tab.close": "mod+w c",    // C-w c  (close window)
+    "console.tab.next": "g t",         // gt
+    "console.tab.prev": "g shift+t",   // gT
+    "console.pane.split": "mod+w s",   // C-w s  (split)
+    "console.pane.toggleSplitMode": "mod+w v", // C-w v
+    "console.pane.focusLeft": "mod+w h",  // C-w h
+    "console.pane.focusDown": "mod+w j",
+    "console.pane.focusUp": "mod+w k",
+    "console.pane.focusRight": "mod+w l",
+    "console.pane.moveLeft": "mod+w shift+h", // C-w H
+    "console.pane.moveDown": "mod+w shift+j",
+    "console.pane.moveUp": "mod+w shift+k",
+    "console.pane.moveRight": "mod+w shift+l",
+    "console.pane.focusParent": "mod+w p", // C-w p  (previous window)
+  },
+  vscode: {
+    "console.actionBar.open": "mod+shift+p", // command palette
+    "console.tab.close": "mod+w",
+    "console.tab.next": "mod+alt+ArrowRight",
+    "console.tab.prev": "mod+alt+ArrowLeft",
+    "console.pane.split": "mod+\\",
+    "console.pane.toggleSplitMode": "mod+k mod+\\",
+    "console.pane.focusLeft": "mod+k mod+ArrowLeft",   // C-k C-arrow  (focus group)
+    "console.pane.focusDown": "mod+k mod+ArrowDown",
+    "console.pane.focusUp": "mod+k mod+ArrowUp",
+    "console.pane.focusRight": "mod+k mod+ArrowRight",
+    "console.pane.moveLeft": "mod+k mod+shift+ArrowLeft",
+    "console.pane.moveDown": "mod+k mod+shift+ArrowDown",
+    "console.pane.moveUp": "mod+k mod+shift+ArrowUp",
+    "console.pane.moveRight": "mod+k mod+shift+ArrowRight",
+    "console.pane.focusParent": "mod+k mod+ArrowUp",
+  },
+};
+// A human label + order for the preset picker; keys match KEYMAP_PRESETS.
+const KEYMAP_PRESET_LIST: { id: string; label: string }[] = [
+  { id: "default", label: "Default" },
+  { id: "emacs", label: "Emacs" },
+  { id: "vim", label: "Vim" },
+  { id: "vscode", label: "VS Code" },
+];
 // The default direction a plain split takes (mod+\\, and the Panes tray's Horizontal/Vertical picks
 // below): "row" (side by side) or "col" (stacked). Global and persisted - a choice made once, by the
 // keyboard toggle or an explicit pick, sticks across every tab and reload rather than resetting.
@@ -1043,7 +1111,7 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // Settings is registered from the shell bundle (not a lazy surface bundle) so its Keybindings
   // editor drives the SAME live keymap cell installKeybindings reads - a separate bundle would get its
   // own non-syncing persisted("keymap"). The shell injects the editable command list, defaults, and cell.
-  register(settingsSurface({ keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell } }));
+  register(settingsSurface({ keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell }, presets: KEYMAP_PRESETS, presetList: KEYMAP_PRESET_LIST }));
 
   // App mode: a dedicated single-surface window, opened by the app drawer as index.html?app=<id>. It
   // shows ONE surface with the tab bar hidden (CSS keys on the [data-appmode] root) so an installed
