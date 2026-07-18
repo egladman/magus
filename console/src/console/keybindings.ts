@@ -104,17 +104,24 @@ export interface KeybindingsOverlay {
 
 // createKeybindingsEditor builds the table + capture core into a [data-kbeditor] container, re-rendering
 // on any keymap change so both embeddings stay in lockstep. The row grid is data-scoped in overrides.css.
+// How long the recorder waits after the last chord before it commits the captured sequence. A single
+// chord thus saves after a brief pause; a multi-chord sequence (mod+x o) is typed in order and saved
+// when you stop. Roughly matches the matcher's own sequence timeout so recording feels like using it.
+const CAPTURE_COMMIT_MS = 900;
+
 export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEditor {
   const mac = isMac();
   let capturing: string | null = null; // the command id currently being rebound
+  let captureSeq: string[] = [];        // chords collected so far in the in-progress recording
   let unbind: (() => void) | null = null; // active capture listener teardown
+  let commitTimer: number | null = null; // fires the pending recording after a pause
   let unsub: (() => void) | null = null; // keymap subscription, live for the editor's lifetime
 
   const root = h("div");
   root.dataset.kbeditor = "";
   const desc = h("p");
   desc.dataset.kbdesc = "";
-  desc.textContent = "Rebind a command: Record, then press the keys. Clear disables a binding; the revert icon restores the default.";
+  desc.textContent = "Rebind a command: Record, then press the keys - a single shortcut or a sequence (like Ctrl+X then O). Pause to save, Esc to cancel. Clear disables a binding; the revert icon restores the default.";
   const table = h("div");
   table.dataset.rows = "";
   root.append(desc, table);
@@ -132,24 +139,50 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
 
   function stopCapture(): void {
     if (unbind) { unbind(); unbind = null; }
+    if (commitTimer !== null) { clearTimeout(commitTimer); commitTimer = null; }
     capturing = null;
+    captureSeq = [];
   }
 
-  // beginCapture listens in the CAPTURE phase so it intercepts the keystroke before the global
-  // keybinding listener fires it. Escape cancels; a bare modifier keeps waiting; any real chord records.
+  // paintCapture repaints the CAPTURING row's chord cell in place (not a full re-render, which would run
+  // only on a keymap change) so the sequence fills in live as chords are pressed - "Press keys..." until
+  // the first, then the run so far with a trailing ellipsis ("keep going, or pause to save").
+  function paintCapture(): void {
+    if (capturing === null) return;
+    const cell = table.querySelector<HTMLElement>('[data-command="' + capturing + '"] [data-chord]');
+    if (!cell) return;
+    cell.replaceChildren();
+    cell.dataset.capturing = "";
+    if (captureSeq.length === 0) { cell.textContent = "Press keys..."; return; }
+    const more = h("span", undefined, " ...");
+    more.dataset.kbcapMore = "";
+    cell.append(h("kbd", undefined, formatChord(captureSeq.join(" "), mac)), more);
+  }
+
+  // beginCapture listens in the CAPTURE phase so it intercepts each keystroke before the global
+  // keybinding listener sees it. It ACCUMULATES chords into a sequence: Escape cancels; a bare modifier
+  // keeps waiting; each real chord is appended and the commit timer restarted, so the recording saves
+  // once you pause. A single-chord rebind is just a one-chord sequence.
   function beginCapture(id: string): void {
     stopCapture();
     capturing = id;
+    captureSeq = [];
+    const commit = (): void => {
+      const seq = captureSeq.join(" ");
+      stopCapture();
+      if (seq !== "") setChord(id, seq); // writing re-renders via the subscription; empty just cancels
+      else render();
+    };
     const onKey = (e: KeyboardEvent): void => {
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.key === "Escape") { stopCapture(); render(); return; }
       const chord = chordFromEvent({ metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, key: e.key, code: e.code }, mac);
       if (chord === "") return; // a lone modifier - keep waiting
-      // Clear the capturing flag before writing, so the subscription re-renders the new chord, not the
-      // "Press keys..." state.
-      stopCapture();
-      setChord(id, chord);
+      captureSeq.push(chord);
+      paintCapture();
+      if (commitTimer !== null) clearTimeout(commitTimer);
+      commitTimer = window.setTimeout(commit, CAPTURE_COMMIT_MS);
     };
     document.addEventListener("keydown", onKey, true);
     unbind = () => document.removeEventListener("keydown", onKey, true);

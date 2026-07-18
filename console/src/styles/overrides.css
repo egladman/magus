@@ -150,6 +150,9 @@
 }
 [data-kbeditor] [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
 [data-kbeditor] [data-chord][data-capturing] { color: var(--console-accent); font-weight: 600; }
+/* The trailing "..." while recording a multi-chord sequence: muted, so the captured chords read as the
+   content and the ellipsis as a "keep going / pause to save" hint. */
+[data-kbeditor] [data-kbcap-more] { color: var(--pf-t--global--text--color--subtle); font-weight: 400; }
 [data-kbeditor] [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
 [data-kbeditor] [data-conflict] { color: var(--console-status-queued); font-size: 0.72rem; white-space: nowrap; }
 [data-kbeditor] [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
