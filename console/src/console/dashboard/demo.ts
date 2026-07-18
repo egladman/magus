@@ -277,8 +277,8 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         { id: "svc9f21", label: "postgres:16", command: "docker run postgres:16", ports: ["5432"], state: "running", dependents: 3, startedAt: timestampFromMs(now - 214_000) },
         { id: "svc4c08", label: "redis:7", command: "docker run redis:7-alpine", ports: ["6379"], state: "idle", dependents: 0, startedAt: timestampFromMs(now - 88_000) },
       ],
-      magusVersion: "1.4.2",
-      daemonVersion: "1.4.2",
+      magusVersion: "0.2.0",
+      daemonVersion: "0.2.0",
     };
   }
 

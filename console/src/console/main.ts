@@ -171,7 +171,7 @@ function setBuild(version: string, fingerprint: string): void {
 
 function loadBuildInfo(): void {
   const params = parseHash();
-  if (wantsDemo(params)) { setBuild("v1.4.2", "magus v1.4.2 (a1b2c3d) built 2026-07-16T00:00:00Z"); return; }
+  if (wantsDemo(params)) { setBuild("v0.2.0", "magus v0.2.0 (a1b2c3d) built 2026-07-16T00:00:00Z"); return; }
   const host = params.live ? validateLiveHost(params.live) : null;
   if (!host) return;
   fetch("http://" + host + "/api/v1/status", { headers: authHeaders(getLiveToken()) })
