@@ -69,7 +69,6 @@
  * One row per changed field, hidden entirely when the draft matches the baseline. The before/after
  * values sit in mono so a chord or host:port reads as a literal, with an arrow between them. */
 .console-settings-diff {
-  max-width: 48rem;
   display: flex;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--sm);
@@ -141,7 +140,6 @@
 /* A titled section: a heading with a small accent marker, an optional lede, and its body. Sections
  * stack with a hairline rule between them so the surface reads as grouped settings, not one long form. */
 .console-settings-section {
-  max-width: 48rem;
   display: flex;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--md);
