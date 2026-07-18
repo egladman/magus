@@ -4,8 +4,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  chordFromEvent, conflicts, dispatchCommand, formatChord, listCommands, mergeKeymap, normalizeChord,
-  registerCommand, resolveCommand, unregisterCommand, type KeyChord,
+  advanceSequence, chordFromEvent, conflicts, dispatchCommand, formatChord, hasSequenceWithPrefix,
+  listCommands, mergeKeymap, normalizeChord, normalizeSequence, registerCommand, resolveCommand,
+  unregisterCommand, type Keymap, type KeyChord,
 } from "./commands";
 
 function evt(partial: Partial<KeyChord>): KeyChord {
@@ -97,4 +98,85 @@ test("dispatchCommand forwards its argument", () => {
   dispatchCommand("test.arg", "left");
   assert.equal(seen, "left");
   unregisterCommand("test.arg");
+});
+
+// --- Multi-key chord sequences ----------------------------------------------
+
+test("normalizeSequence canonicalizes each chord and collapses whitespace", () => {
+  assert.equal(normalizeSequence("Ctrl+X o"), "mod+x o");
+  assert.equal(normalizeSequence("Ctrl+X   Ctrl+O"), "mod+x mod+o"); // runs of space collapse to one
+  assert.equal(normalizeSequence("mod+k"), "mod+k");                  // a single chord is unchanged
+  assert.equal(normalizeSequence("  "), "");                          // empty stays the disabled sentinel
+});
+
+test("resolveCommand matches an exact sequence, not a mere prefix", () => {
+  const km = { "pane.next": "mod+x o", "bar.open": "mod+k" };
+  assert.equal(resolveCommand(km, "Ctrl+X o"), "pane.next"); // normalized before comparing
+  assert.equal(resolveCommand(km, "mod+x"), null);            // the prefix alone is not a binding
+  assert.equal(resolveCommand(km, "mod+k"), "bar.open");      // single chords still resolve
+});
+
+test("hasSequenceWithPrefix detects a longer binding sharing the run", () => {
+  const km = { a: "mod+x o", b: "mod+k" };
+  assert.equal(hasSequenceWithPrefix(km, "mod+x"), true);   // "mod+x o" extends "mod+x"
+  assert.equal(hasSequenceWithPrefix(km, "mod+x o"), false); // nothing extends the full binding
+  assert.equal(hasSequenceWithPrefix(km, "mod+k"), false);
+  assert.equal(hasSequenceWithPrefix(km, ""), false);
+});
+
+test("formatChord renders a sequence as its space-joined steps", () => {
+  assert.equal(formatChord("mod+x o", true), "Cmd+X O");
+  assert.equal(formatChord("mod+x mod+o", false), "Ctrl+X Ctrl+O");
+  assert.equal(formatChord("mod+k", true), "Cmd+K"); // a single chord is unchanged
+});
+
+test("conflicts flags an exact duplicate AND a prefix shadow", () => {
+  const km = { a: "mod+x o", b: "mod+x", c: "mod+k" };
+  // b ("mod+x") is a strict prefix of a ("mod+x o"): they shadow each other.
+  assert.deepEqual(conflicts(km, "mod+x", "b").sort(), ["a"]);
+  assert.deepEqual(conflicts(km, "mod+x o", "a").sort(), ["b"]);
+  assert.deepEqual(conflicts(km, "mod+k", "c"), []); // no overlap
+});
+
+test("advanceSequence fires a single chord immediately when nothing extends it", () => {
+  const km: Keymap = { "bar.open": "mod+k" };
+  const out = advanceSequence([], "mod+k", km);
+  assert.equal(out.fire, "bar.open");
+  assert.equal(out.consumed, true);
+  assert.deepEqual(out.pending, []);
+});
+
+test("advanceSequence waits on a prefix, then fires the full sequence", () => {
+  const km: Keymap = { "pane.next": "mod+x o" };
+  const first = advanceSequence([], "mod+x", km);
+  assert.equal(first.fire, null);
+  assert.equal(first.consumed, true);          // the prefix is swallowed (no browser cut)
+  assert.deepEqual(first.pending, ["mod+x"]);
+  assert.equal(first.waitFor, null);           // "mod+x" alone is not a binding
+  const second = advanceSequence(first.pending, "o", km);
+  assert.equal(second.fire, "pane.next");
+  assert.deepEqual(second.pending, []);
+});
+
+test("advanceSequence carries waitFor when the prefix is itself a complete binding", () => {
+  const km: Keymap = { short: "mod+x", long: "mod+x o" };
+  const out = advanceSequence([], "mod+x", km);
+  assert.equal(out.fire, null);        // hold, because a longer binding could still complete
+  assert.deepEqual(out.pending, ["mod+x"]);
+  assert.equal(out.waitFor, "short");  // but on timeout, the short binding fires
+});
+
+test("advanceSequence re-evaluates a chord that breaks a prefix, not swallowing it", () => {
+  const km: Keymap = { "pane.next": "mod+x o", "bar.open": "mod+k" };
+  // Mid-sequence after "mod+x", press "mod+k" (not "o"): the run breaks, but mod+k is its own binding.
+  const out = advanceSequence(["mod+x"], "mod+k", km);
+  assert.equal(out.fire, "bar.open");
+  assert.deepEqual(out.pending, []);
+});
+
+test("advanceSequence passes an unbound idle chord straight through", () => {
+  const km: Keymap = { "bar.open": "mod+k" };
+  const out = advanceSequence([], "mod+z", km);
+  assert.equal(out.consumed, false); // not ours: no preventDefault, browser keeps the key
+  assert.equal(out.fire, null);
 });

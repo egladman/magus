@@ -4,7 +4,7 @@
 // createKeybindingsOverlay wraps it in a modal. Scope: only commands with a CONSOLE_KEYMAP default.
 
 import {
-  chordFromEvent, conflicts, formatChord, isMac, mergeKeymap, normalizeChord,
+  chordFromEvent, conflicts, formatChord, isMac, mergeKeymap, normalizeSequence,
   type Command, type Keymap,
 } from "./commands";
 import type { Persisted } from "../lib/persist";
@@ -74,7 +74,7 @@ export interface KeybindingRow {
 export function keybindingRows(commands: Command[], defaults: Keymap, user: Keymap): KeybindingRow[] {
   return commands.map((c) => {
     const overridden = Object.prototype.hasOwnProperty.call(user, c.id);
-    const chord = normalizeChord((overridden ? user[c.id] : defaults[c.id]) ?? "");
+    const chord = normalizeSequence((overridden ? user[c.id] : defaults[c.id]) ?? "");
     const source: KeybindingRow["source"] = !overridden ? "default" : chord === "" ? "disabled" : "custom";
     return { id: c.id, label: c.label, group: c.group ?? "", chord, source };
   });
