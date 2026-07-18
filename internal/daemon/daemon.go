@@ -27,6 +27,7 @@ import (
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
+	tokenhandler "github.com/egladman/magus/internal/handler/token"
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"
@@ -34,6 +35,7 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -212,6 +214,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			outputH := viewer.NewOutputHandler(outputStore, log)
 
 			bridgeMux := http.NewServeMux()
+			// DEPRECATED: the hand-shaped JSON /api/v1/status route. Superseded by the typed
+			// StatusService Connect route (magus.status.v1.StatusService/GetStatus), mounted
+			// below, which serves the SAME live snapshot on the wire contract. Kept for now
+			// because console/src still fetches this JSON (dashboard transport observingSince);
+			// remove once the frontend migrates to the Connect client. See NewConnectService.
 			bridgeMux.Handle("/api/v1/status", cors(statusH))
 			bridgeMux.Handle("/api/v1/events", cors(eventsH))
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
@@ -284,6 +291,16 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// ActivityService.ListActivity is read-only, so it joins the share read surface.
 			shareGuarded[activityPath] = activityHandler
 			log.Info("[BRIDGE] activity service mounted", slog.String("path", activityPath))
+
+			// Status Connect service: the typed convergence of the JSON /api/v1/status route
+			// onto the wire contract (magus.status.v1.Status). GetStatus is the one-shot the
+			// dashboard reads; StreamStatus is the typed twin of the base64-SSE status frame.
+			// Same cross-origin guards as the other read services (the dashboard is a hosted-site
+			// browser client) and read-only, so it joins the share read surface too.
+			statusPath, statusConnectHandler := statusv1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log))
+			httpServer.Handle(statusPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, statusConnectHandler))))
+			shareGuarded[statusPath] = statusConnectHandler
+			log.Info("[BRIDGE] status service mounted", slog.String("path", statusPath))
 
 			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
 			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
