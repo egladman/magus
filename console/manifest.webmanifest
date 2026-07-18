@@ -1,6 +1,7 @@
 {
   "name": "magus console",
   "short_name": "console",
+  "id": "./",
   "description": "The magus native console: log viewer, graph explorer, dashboard, and activity trail as live lenses on the daemon.",
   "start_url": "./",
   "scope": "./",

@@ -1574,7 +1574,10 @@ fun writeManifest(site: Site) > void {
         + "  \"display\": \"standalone\",\n"
         + "  \"categories\": [\"developer\", \"utilities\"],\n"
         + "  \"background_color\": \"#13171f\",\n"
-        + "  \"theme_color\": \"#3178c6\",\n"
+        // theme_color tints the installed app's title bar / status bar. Match the
+        // dark canvas rather than an accent: the site's identity is earthy, never
+        // blue, and a neutral dark frame reads correctly in both schemes.
+        + "  \"theme_color\": \"#13171f\",\n"
         + "  \"icons\": [\n"
         + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
         + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
