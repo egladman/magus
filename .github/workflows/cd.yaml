@@ -73,30 +73,13 @@ jobs:
             dist/*.sha256
           if-no-files-found: error
 
-  release-darwin-amd64:
-    name: Build release artifacts (darwin/amd64)
-    runs-on: macos-13
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          fetch-depth: 0
-      - uses: ./.github/actions/setup-magus  # brew-installs zstd/xz on macOS
-      - name: Build release artifacts (static + dynamic)
-        run: |
-          magus run release-build:static --no-default-charms
-          magus run release-build --no-default-charms
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dist-darwin-amd64
-          path: |
-            dist/magus_*.tar.gz
-            dist/*.sha256
-          if-no-files-found: error
-
-  release-darwin-arm64:
-    name: Build release artifacts (darwin/arm64)
+  # No separate macos-13 (Intel) job: GitHub's Intel macOS runner pool queues chronically (hours),
+  # blocking the whole release. Instead the arm64 runner below cross-compiles the darwin/amd64 STATIC
+  # binary (CGO_ENABLED=0 pure-Go cross-compiles from any host). Intel Macs ship that static binary; the
+  # darwin/amd64 DYNAMIC variant is dropped because cgo needs x86_64 liblzma/libzstd this arm64 runner
+  # does not have. The cgo fast path is a marginal win and Intel Macs are legacy, so this is the trade.
+  release-darwin:
+    name: Build release artifacts (darwin arm64 + amd64-static)
     runs-on: macos-14
     permissions:
       contents: read
@@ -105,13 +88,14 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-magus
-      - name: Build release artifacts (static + dynamic)
+      - name: Build release artifacts (arm64 static + dynamic, amd64 static)
         run: |
           magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
+          magus run release-build:static darwin amd64 --no-default-charms
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: dist-darwin-arm64
+          name: dist-darwin
           path: |
             dist/magus_*.tar.gz
             dist/*.sha256
@@ -168,8 +152,7 @@ jobs:
     needs:
       - release-linux-amd64
       - release-linux-arm64
-      - release-darwin-amd64
-      - release-darwin-arm64
+      - release-darwin
       - release-windows-amd64
     runs-on: ubuntu-latest
     permissions:
