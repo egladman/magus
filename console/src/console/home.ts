@@ -63,7 +63,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   const title = document.createElement("h1");
   title.textContent = "What do you want to open?";
   const sub = document.createElement("p");
-  sub.textContent = "Each tool opens in its own tab.";
+  sub.textContent = "See what magus is up to.";
 
   const gallery = document.createElement("div");
   gallery.className = "pf-v6-l-gallery pf-m-gutter";

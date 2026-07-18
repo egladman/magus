@@ -266,7 +266,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // Test attaches to the field so a typed host can be checked BEFORE saving it - the draft value is what
   // gets probed. It reports through a toast rather than the pending-changes bar: this is a one-off action,
   // not a staged edit.
-  const testBtn = h("button", "pf-v6-c-button pf-m-control console-settings-host__test", "Test") as HTMLButtonElement;
+  const testBtn = h("button", "pf-v6-c-button pf-m-secondary console-settings-host__test", "Test") as HTMLButtonElement;
   testBtn.type = "button";
   testBtn.title = "Try to reach a daemon at this address";
   testBtn.addEventListener("click", () => {
@@ -509,9 +509,10 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     committed = { ...d, keymap: { ...d.keymap } };
     recompute();
     const msg = applyLive ? "Applied changes to this session." : "Saved. Takes effect on the next load.";
-    setStatus(msg, "ok");
-    // Confirm every commit with a toast: the reload prompt when a live change needs a reload to take
-    // effect (poll/host), otherwise a transient success toast so a save is never silent.
+    // Confirm the commit with a TOAST, not a lingering inline line: the reload prompt when a live change
+    // needs a reload to take effect (poll/host), otherwise a transient success toast so a save is never
+    // silent. Clear any prior inline status so a stale message does not sit under the heading.
+    setStatus("", "ok");
     if (applyLive && (keys.has("poll") || keys.has("host"))) {
       showRefreshToast("Console settings changed. Reload to apply.");
     } else {
