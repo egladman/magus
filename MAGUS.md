@@ -34,7 +34,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1709 nodes** and **3198 edges** (schema v1). Query it instead of grepping:
+This workspace has a knowledge graph of **1818 nodes** and **3970 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -46,17 +46,18 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 5 | [`magus query kind:project`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project) | `magus`, `gopherbuzz`, `website` |
-| target | 56 | [`magus query kind:target`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target) | `generate`, `format`, `generate` |
-| spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:spell) | `go`, `buf`, `docker` |
-| op | 47 | [`magus query kind:op`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
+| project | 6 | [`magus query kind:project`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project) | `docs`, `magus`, `gopherbuzz` |
+| target | 63 | [`magus query kind:target`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target) | `content-generate`, `generate`, `generate` |
+| spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:spell) | `go`, `ts`, `docker` |
+| op | 52 | [`magus query kind:op`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
+| tool | 13 | [`magus query kind:tool`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:tool) | `sh`, `pnpm`, `go` |
 | charm | 5 | [`magus query kind:charm`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:charm) | `rw`, `static`, `cd` |
 | module | 22 | [`magus query kind:module`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `env` |
 | method | 148 | [`magus query kind:method`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 26 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS4001`, `MGS5003` |
-| doc | 105 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/sandbox.md` |
-| file | 196 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `website/scribe.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 992 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
+| diagnostic | 29 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS2001`, `MGS4001` |
+| doc | 161 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/manpage/magus.md` |
+| file | 201 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `docs/render.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1011 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
 | import | 91 | [`magus query kind:import`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
 | rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
 
@@ -64,9 +65,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | . | 24 | [`magus query project:.`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:.) | `generate`, `format`, `image-build` |
 | cmd/magus/starter | 7 | [`magus query project:cmd/magus/starter`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:cmd%2Fmagus%2Fstarter) | `format`, `ci`, `build` |
+| console | 5 | [`magus query project:console`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:console) | `build`, `ci`, `preflight` |
+| docs | 15 | [`magus query project:docs`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:docs) | `content-generate`, `generate`, `ci` |
 | gopherbuzz | 9 | [`magus query project:gopherbuzz`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:gopherbuzz) | `build`, `format`, `generate` |
-| proto | 2 | [`magus query project:proto`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:proto) | `ci`, `lint` |
-| website | 14 | [`magus query project:website`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:website) | `generate`, `ci`, `preflight` |
+| proto | 3 | [`magus query project:proto`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:proto) | `ci`, `generate`, `lint` |
 
 ## Project: magus
 
@@ -80,22 +82,22 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
 | `buzz-check` | Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check). |
 | `buzz-run` | Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz). |
+| `preflight` | Gates the build on workspace health by running `magus doctor`. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
 | `test` | Formats first, then runs the Go test suite. |
 | `lint` | Formats first, then golangci-lint, go vet, govulncheck, markdownlint. |
 | `format` | Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs. |
 | `ci` | Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
+| `serve` | serve is the workspace-root dev loop for BOTH deployables. |
 | `go-build` | Compiles the version-stamped magus binary. |
 | `image-build` | Under the cd charm, build+push+sign both static and CGO images unconditionally. |
-| `man-generate` | Renders the man pages (roff) into manpage/gen. |
+| `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `bindings-generate` | Regenerates the Go host bindings (std -> host/gen) from std.Module declarations. |
 | `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spell/gen). |
 | `config-generate` | Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go. |
-| `docs-generate` | Regenerates the committed docs Markdown (module reference + man pages). |
 | `md-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `coverage` | coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge. |
-| `preflight` | Gates the build on workspace health by running `magus doctor`. |
 
 ## Project: cmd/magus/starter
 
@@ -108,6 +110,36 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` |  |
 | `ci` | 'ci' is the conventional anchor that `magus affected ci` keys off. |
 | `preflight` |  |
+
+## Project: console
+
+| Target | What it does |
+|---|---|
+| `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests). |
+| `build` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
+| `lint` | lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the same way a Go project's lint runs `go vet`. |
+| `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps. |
+| `preflight` |  |
+
+## Project: docs
+
+| Target | What it does |
+|---|---|
+| `generate` | generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed. |
+| `format` |  |
+| `lint` |  |
+| `build` |  |
+| `test` |  |
+| `ci` | 'ci' is the anchor `magus affected ci` keys off. |
+| `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. |
+| `build-mermaid` | build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. |
+| `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. |
+| `render` | render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate). |
+| `preflight` |  |
+| `md-generate` | md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
+| `changelog-generate` | changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. |
+| `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
+| `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
 
 ## Project: gopherbuzz
 
@@ -128,23 +160,5 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `ci` |  |
-| `lint` | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
-
-## Project: website
-
-| Target | What it does |
-|---|---|
-| `generate` | generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed. |
-| `format` |  |
+| `generate` | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
 | `lint` |  |
-| `build` |  |
-| `test` |  |
-| `ci` | 'ci' is the anchor `magus affected ci` keys off. |
-| `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. |
-| `build-mermaid` | build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. |
-| `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. |
-| `serve` | serve renders once, serves gen/ over HTTP, and re-renders on a docs/blog change - handy for local docs work. |
-| `preflight` |  |
-| `md-generate` | md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
-| `changelog-generate` | changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. |
-| `buzz-test` | buzz-test runs scribe's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so scribe's markdown/encoding imports resolve. |
