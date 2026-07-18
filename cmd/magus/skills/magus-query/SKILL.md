@@ -72,6 +72,11 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 
 ## Reading results
 
+- Reading as a machine? Add `-o json`: every verb returns a stable,
+  `schema_version`-stamped OBJECT with a top-level wrapper - key into the
+  plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
+  bare IDs for piping. Do not scrape the human text or trim it with `head`.
+  Over MCP the tools already return structured content; nothing to shape.
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them; a rename
   is a delete plus an add.

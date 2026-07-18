@@ -55,7 +55,10 @@ var agentsSection string
 //	    magus-architecture, magus-memory); multi-platform install (claude/
 //	    opencode/agents skill dirs, AGENTS.md section for codex); query-first
 //	    fast path; describe-file triage; durable magus_memory workflow
-const agentSkillVersion = 7
+//	v8: output-control doctrine (-s/-q silence for runs, -o json as the
+//	    machine-reading default, the JSON envelope shape, MCP-first with quiet
+//	    CLI fallback); magus-vcs frontmatter name aligned with its directory
+const agentSkillVersion = 8
 
 // skillDirPlatforms maps each skill-directory platform to its repo-relative
 // destination. The bytes written are identical across platforms - the Agent

@@ -1,5 +1,5 @@
 ---
-name: magus-vcs-hygiene
+name: magus-vcs
 description: Triage changed files in a magus workspace before reading, editing, or committing them. Use when inspecting a diff or dirty working tree, deciding whether a changed file is worth investigating, resolving conflicts in generated files, or preparing a commit in a repo that has a magusfile.buzz. Keys on the fact that magus declares which files are generated outputs.
 ---
 
