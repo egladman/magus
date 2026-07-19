@@ -349,15 +349,45 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 /* Responsive collapse is PatternFly's own: the secondary controls sit in a pf-m-toggle-group
    pf-m-show-on-2xl (scaffold.html), so below 2xl PF shows the kebab toggle and wireToolbarOverflow()
    (../toolbar.ts) moves them into the #log-bar-controls __expandable-content dropdown; at 2xl+ they
-   sit inline and hug the end (pf-m-align-end-on-2xl). No bespoke label-dropping media queries. The two
-   rules below only tidy the dropdown: a stacked action group has no use for the vertical clipboard/
-   open divider, and PF's own toolbar CSS stretches every item to the row's full width there
-   (.pf-v6-c-toolbar__item > * { flex-basis: 100% }), which combined with PF's OWN button default
-   (--pf-v6-c-button--JustifyContent: center, button.css - buttons are center-justified everywhere,
-   not just here) reads as a stack of centered chips instead of a menu. Left-align the icon+label
-   explicitly so the stacked list reads like one. */
+   sit inline and hug the end (pf-m-align-end-on-2xl). No bespoke label-dropping media queries.
+
+   The dropdown itself needs help. In the collapsed panel PF stacks PLAIN groups (display:grid) but
+   keeps pf-m-action-group-inline groups a CENTER-justified flex ROW (toolbar.css) - a shape meant for
+   a couple of related buttons. This app's dropdown is a dense mix (Pause, two segmented toggle-groups,
+   Collapse all, a select, six action buttons), every one of them inside an inline group, so that
+   centered row renders as ragged, different-width, center-floated chips (PF also sizes each item to its
+   own content via .pf-v6-c-toolbar__item > * { flex-basis:100% }). Make the dropdown a real
+   single-column menu: every group stacks, and every leaf control fills the row and left-aligns. */
+#log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-toolbar__group.pf-m-action-group-inline {
+  display: grid;
+  justify-items: stretch;
+  row-gap: var(--pf-t--global--spacer--sm);
+}
+/* A stacked menu has no use for the vertical divider between the clipboard and open clusters. */
 #log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-divider.pf-m-vertical { display: none; }
+/* Each leaf control fills the row width: the segmented toggle-groups and the time-range select span the
+   menu, and the buttons left-align their icon+label (PF buttons center-justify by default) so the whole
+   list reads as one aligned column instead of centered chips. */
+#log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-toggle-group,
+#log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-form-control { width: 100%; }
 #log-bar-controls .pf-v6-c-toolbar__expandable-content .pf-v6-c-button { justify-content: flex-start; }
+
+/* Keep the floating-dropdown chrome up to the SAME breakpoint the controls collapse at. PF reverts the
+   expandable panel to a static, chrome-less inline block at lg (62rem) - its default collapse stop - but
+   this toolbar collapses at 2xl instead (the dense set needs ~1350px for one inline row). Without this,
+   between 62rem and 2xl the kebab opens an unstyled inline stack with no surface under it. Restore PF's
+   own panel tokens across that window so the dropdown keeps its background, padding, and shadow. */
+@media screen and (min-width: 62rem) and (max-width: 90.624rem) {
+  #log-bar-controls .pf-v6-c-toolbar__expandable-content {
+    position: absolute;
+    padding-block-start: var(--pf-v6-c-toolbar__expandable-content--PaddingBlockStart);
+    padding-block-end: var(--pf-v6-c-toolbar__expandable-content--PaddingBlockEnd);
+    padding-inline-start: var(--pf-v6-c-toolbar__expandable-content--PaddingInlineStart);
+    padding-inline-end: var(--pf-v6-c-toolbar__expandable-content--PaddingInlineEnd);
+    border-block-end: var(--pf-v6-c-toolbar__expandable-content--BorderBlockEndWidth) solid var(--pf-v6-c-toolbar__expandable-content--BorderBlockEndColor);
+    box-shadow: var(--pf-v6-c-toolbar__expandable-content--BoxShadow);
+  }
+}
 
 
 /* Activity surface (loads this shared render sheet - console/main.ts registers it via
