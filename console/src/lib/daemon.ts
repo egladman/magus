@@ -140,8 +140,10 @@ export function normalizeDaemonHost(input: string): string | null {
 function loopbackPort(host: string): string | null {
   const norm = validateLoopbackHost(host);
   if (!norm) return null;
-  const i = norm.lastIndexOf(":");
-  return i >= 0 ? norm.slice(i + 1) : null;
+  // Parse for the port rather than splitting on the last ":" - a bracketed IPv6 host ("[::1]")
+  // with no port would otherwise slice a colon from inside the brackets. URL.port is "" when the
+  // host carries no explicit port.
+  try { return new URL("http://" + norm).port || null; } catch { return null; }
 }
 
 // logsLink builds a log-viewer deep-link ("../logs/#...") for the daemon the console is
@@ -234,7 +236,9 @@ export function resolveDaemonHost(params: HashParams = parseHash()): string | nu
   const attach = daemonAttach(params);
   if (attach) return attach;
   const configured = getDefaultHost();
-  return configured ? validateLoopbackHost(configured) : null;
+  // normalizeDaemonHost (not validateLoopbackHost) so a stored bare port resolves the same way the
+  // Settings field accepts one - "8787" expands to 127.0.0.1:8787 rather than reading as unset.
+  return configured ? normalizeDaemonHost(configured) : null;
 }
 
 // ---- reachability probe ----------------------------------------------------
@@ -292,11 +296,14 @@ export type ReadinessReport = { ready: boolean; components: ReadinessComponent[]
 // spamming the console for anyone still on an older release. 200 and 503 both carry a valid body (503
 // just means "not ready yet"), so both are treated as a successful read.
 export async function fetchReadiness(host: string, timeoutMs = 3000): Promise<ReadinessReport | null> {
-  // The caller passes an already-resolved daemon host (resolveDaemonHost) - loopback, an
-  // expanded #port, or the shared-mode same-origin LAN host - so this trusts it rather than
-  // re-running the loopback lock (which would reject the legitimate LAN origin in shared mode).
   if (!host) return null;
-  const url = "http://" + host + "/readyz";
+  // Defense in depth: the caller passes an already-resolved host (resolveDaemonHost), but re-verify
+  // it is literal loopback OR the page's OWN origin before attaching the bearer token, so a future
+  // caller that ever passes a raw string can never send the token to a third-party host. The
+  // shared-mode LAN host is same-origin, so it passes here where validateLoopbackHost alone would not.
+  const safe = validateLoopbackHost(host) ?? (typeof location !== "undefined" && host === location.host ? host : null);
+  if (!safe) return null;
+  const url = "http://" + safe + "/readyz";
   try {
     const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
     if (res.status !== 200 && res.status !== 503) return null;

@@ -754,16 +754,17 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   if (wantsDemo(parseHash())) notifications.seedDemo();
 
   // Attach visibility: when the console booted attached (an explicit #port=, or a #token= own-origin
-  // adoption), drop a HISTORY-tier note naming the port it connected on. History tier (kind "ok") so it
+  // adoption), drop a HISTORY-tier note naming where it connected. History tier (kind "ok") so it
   // records silently and never lights the bell; keyed so a reload does not re-announce it. A bare #port
   // (loopback attach) reports its own value; a #token adoption has no port in the fragment, so the page's
-  // own origin port is the one it is talking to. No notification without an attach directive (the plain
-  // configured-default boot).
-  const attachPort = bootParams.port !== undefined && bootParams.port !== ""
-    ? bootParams.port
-    : (bootParams.token !== undefined ? location.port : "");
-  if (attachPort) {
-    notify({ source: "Console", kind: "ok", message: "Connected to daemon on port " + attachPort + ".", key: "console:attached:" + attachPort });
+  // own origin is what it is talking to - its port when there is one, else the origin host (a daemon on a
+  // default port has an empty location.port). No notification without an attach directive.
+  const attached = (bootParams.port !== undefined && bootParams.port !== "") || bootParams.token !== undefined;
+  if (attached) {
+    const where = bootParams.port !== undefined && bootParams.port !== ""
+      ? "port " + bootParams.port
+      : (location.port ? "port " + location.port : (location.host || "the daemon origin"));
+    notify({ source: "Console", kind: "ok", message: "Connected to daemon on " + where + ".", key: "console:attached:" + where });
   }
 
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
