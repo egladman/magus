@@ -1,31 +1,29 @@
-// live.ts - live streaming (#live=host:port&token=). A run started with `--live` prints a link
-// to an ephemeral 127.0.0.1 SSE server. The viewer connects (fetch-based SSE + bearer token,
-// mirroring the graph explorer's live client), decodes each frame as a protobuf Event, appends
-// it, re-renders on a frame tick, and auto-scrolls unless the reader pins the view with Pause.
-// Datadog-style live tail. The live buffer (state.liveEvents / liveInvocation) is also reused by
+// live.ts - live streaming (#port=<port>&token=, or the daemon-origin/shared console). A run started
+// with `--live` prints a link to an ephemeral 127.0.0.1 SSE server. The viewer connects (fetch-based
+// SSE + bearer token, mirroring the graph explorer's live client), decodes each frame as a protobuf
+// Event, appends it, re-renders on a frame tick, and auto-scrolls unless the reader pins the view with
+// Pause. Datadog-style live tail. The live buffer (state.liveEvents / liveInvocation) is also reused by
 // the #demo reveal, so scheduleLiveRender is the shared "one re-render per frame" path.
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { EventSchema, Kind, Status } from "../../gen/magus/viewer/v1/viewer_pb";
-import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE } from "../../lib/daemon";
+import { consumeLiveToken, getLiveToken, fetchSSE, logsLink } from "../../lib/daemon";
 import { notify } from "../../lib/notifications";
 import type { ViewerParams } from "./fragment";
 import { base64ToBytes } from "./fragment";
 import { state, waterfallSource } from "./state";
-import { el, emptyEl, scrollEl, setBtnLabel, setRefIdentity, setStatus } from "./dom";
+import { el, emptyEl, scrollEl, setBtnLabel, setRefIdentity } from "./dom";
 import { buildModelMulti } from "./model";
 import { render, updateTimelineControl } from "./render";
 
-// The loopback host of the current live stream, stashed so a FAIL notification can deep-link back to the
-// failing ref. Only ever a validated loopback host (or null before any live connect).
+// The host of the current live stream, stashed so a FAIL notification can deep-link back to the failing
+// ref. A resolved daemon host (loopback, or the shared-mode same-origin LAN host), or null before any
+// live connect.
 let liveNotifyHost: string | null = null;
 
-export function connectLive(params: ViewerParams): void {
-  const host = validateLiveHost(params.live);
-  if (!host) {
-    setStatus("refusing a non-loopback live host", true);
-    return;
-  }
+// connectLive attaches to a resolved daemon host (from daemonAttach - loopback, or the shared/daemon-
+// origin console), never a raw fragment string.
+export function connectLive(host: string, params: ViewerParams): void {
   liveNotifyHost = host;
   consumeLiveToken(params); // stash the token, strip it from the URL so it never persists
   const token = getLiveToken();
@@ -76,7 +74,7 @@ function onLiveEvent(type: string, data: string): void {
   if (ev.kind === Kind.RESULT && ev.status === Status.FAIL && ev.ref) {
     const label = ev.target || ev.ref;
     const link = liveNotifyHost
-      ? { label: "Open in log viewer", href: "../logs/#live=" + encodeURIComponent(liveNotifyHost) + "&ref=" + encodeURIComponent(ev.ref) }
+      ? { label: "Open in log viewer", href: logsLink(liveNotifyHost, { ref: ev.ref }) }
       : undefined;
     notify({ source: "Log Viewer", kind: "error", key: "fail:" + ev.ref, message: label + " failed.", link });
   }

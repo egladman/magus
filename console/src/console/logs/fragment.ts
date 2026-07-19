@@ -1,10 +1,10 @@
 // fragment.ts - URL-fragment codec for the log viewer. Everything the viewer loads rides
 // the #-fragment (never transmitted to a server): a magus.viewer.v1 Journal is gzip+base64url
 // encoded (matches internal/render EncodeFragmentRaw), and the deep-link parameters (ref,
-// data, src, live, token) are parsed out of it here. All local: nothing is fetched, nothing
+// data, src, port, token) are parsed out of it here. All local: nothing is fetched, nothing
 // is sent.
 
-// The parsed #-fragment parameters (ref/data/src/live/token/...).
+// The parsed #-fragment parameters (ref/data/src/port/token/...).
 export type ViewerParams = Record<string, string>;
 
 // --- Fragment decode (matches internal/render EncodeFragmentRaw) --------------
@@ -41,7 +41,7 @@ export async function encodeFragmentBytes(bytes: Uint8Array): Promise<string> {
 }
 
 // viewerParams reads the deep-link parameters from the URL fragment (after #). EVERYTHING -
-// the ref id, the encoded log (data), the live host and bearer token - rides the fragment,
+// the ref id, the encoded log (data), the daemon port and bearer token - rides the fragment,
 // which the browser never transmits to any server, so nothing about the run ever leaves the
 // machine. That absolute guarantee is why no parameter uses the query string.
 export function viewerParams(): ViewerParams {

@@ -211,7 +211,7 @@
           <ul id="graph-legend" aria-label="Node kinds"></ul>
         </div>
         <p id="live-status-strip" class="console-graph-live__strip" hidden aria-live="polite"></p>
-        <!-- Empty state: shown when nothing is loaded (no #data/#src/#live and the demo has
+        <!-- Empty state: shown when nothing is loaded (no #data/#src/#port and the demo has
              not been launched). Mirrors the log viewer's empty state - an intuitive prompt
              with the command to open your own graph plus a button to try the demo. We do NOT
              auto-fetch the demo graph.json on a cold open; it loads only when asked, so a
@@ -273,8 +273,8 @@
         <dd>An inline graph: the node-link JSON, gzipped then base64url-encoded. Decoded in the browser. Bounded by the browser's URL length.</dd>
         <dt><code>#src=&lt;url&gt;</code></dt>
         <dd>A URL-encoded address the page fetches the JSON from - a loopback server (<code>magus graph open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
-        <dt><code>#live=127.0.0.1:7391&amp;token=&lt;bearer&gt;</code></dt>
-        <dd>Connect to a running daemon for a live workspace view. The host must be literally <code>127.0.0.1</code> or <code>[::1]</code> (not <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph open --live</code> to build this link. Not available in Safari (see console docs).</dd>
+        <dt><code>#port=7391&amp;token=&lt;bearer&gt;</code></dt>
+        <dd>Connect to a running daemon for a live workspace view. Loopback-implied: the port expands to literal <code>127.0.0.1</code> (never <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph open --live</code> to build this link. Not available in Safari (see console docs).</dd>
         <dt><code>#node=&lt;id&gt;</code></dt>
         <dd>Select and center a node on load, e.g. <code>#node=spell:go</code>.</dd>
         <dt><code>#q=&lt;query&gt;</code></dt>

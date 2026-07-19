@@ -10,14 +10,20 @@ import (
 
 // consoleCSP is the Content-Security-Policy served with every console HTML document, on BOTH
 // listeners that serve the app (the daemon's loopback /console/ mount and the on-demand LAN
-// "share to phone" listener). It is deliberately strict: the console ORIGIN stores the operator
-// token (in the URL fragment, then in memory) and reaches TokenService, which mints and revokes
-// daemon credentials, so a single injected script would have a large blast radius. Locking
-// script-src to 'self' (no inline, no eval, no CDN - the built console loads only its own bundles)
-// is the primary XSS control; connect-src 'self' keeps any exfiltration channel on the same
-// origin. style-src keeps 'unsafe-inline' because PatternFly and the shell set element styles
+// "share to phone" listener). It is deliberately strict: the console ORIGIN holds the operator
+// token (in the URL fragment, then in memory) and reaches TokenService (list + revoke), and it
+// renders attacker-influenced output - build/test logs, graph labels, activity text - so a single
+// injected script would have a large blast radius. Locking script-src to 'self' (no inline, no
+// eval, no CDN - the built console loads only its own bundles) is the primary XSS control;
+// connect-src 'self' keeps any exfiltration channel on the same origin, and form-action 'self'
+// closes the form-POST exfil channel connect-src does not cover. object-src 'none' bans plugin
+// embeds; frame-ancestors 'none' bans clickjacking frames (the console is a standalone app, never
+// embedded); base-uri 'self' blocks an injected <base> from repointing the relative asset loads to
+// a foreign origin while still allowing serveConsoleShell's same-origin <base href="../">. Neither
+// object-src, frame-ancestors, base-uri, nor form-action inherits from default-src, so each is set
+// explicitly. style-src keeps 'unsafe-inline' because PatternFly and the shell set element styles
 // inline; img-src allows data: for the inline SVG/data-URI icons the bundle embeds.
-const consoleCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+const consoleCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 
 // StaticHandler serves the built console at /console/ for a consoleDir, with an SPA fallback for
 // the clean surface paths and a strict CSP on every HTML document. It is the ONE implementation

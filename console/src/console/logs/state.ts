@@ -96,7 +96,7 @@ export interface ViewerState {
   filterParsed: ParsedQuery;
   // focusWin is the active time-range focus, or null for the full run.
   focusWin: FocusWin | null;
-  // The live-stream buffer (#live=) - also reused by the #demo reveal.
+  // The live-stream buffer (a #port attach or the shared console) - also reused by the #demo reveal.
   liveEvents: Event[];
   liveInvocation: Partial<Invocation> | null;
   livePaused: boolean;

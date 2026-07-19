@@ -4,9 +4,11 @@
 // ("Open ...") is how another surface is launched. This module just builds the launcher DOM - a
 // heading, a lede, and a PatternFly Gallery of clickable Cards - and leaves mounting to the console.
 //
-// A card only ever opens a tab. Reaching a separate OS window is one route and one route only: move an
-// EXISTING tab out (the tab context menu, tabBar.ts). So nothing here can strand you in a window you did
-// not ask for - which is why the cards carry no per-card "open in a new window" kebab any more.
+// A plain click on a card opens that surface as a tab. Each card also carries a top-right kebab menu
+// whose one item, "Open in a new window", spawns a dedicated OS/PWA window for that surface
+// (openSurfaceWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
+// strand you in a window you did not ask for.
+import { openSurfaceWindow } from "../lib/appwindow";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
 export interface Launchable {
@@ -67,6 +69,10 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
 
   const gallery = document.createElement("div");
   gallery.className = "pf-v6-l-gallery pf-m-gutter";
+  // Every card's kebab menu registers its closer here so an outside click / Escape can shut whichever
+  // one is open, and opening one closes the rest.
+  const menuClosers: (() => void)[] = [];
+  const closeAllMenus = (except?: () => void): void => { for (const c of menuClosers) if (c !== except) c(); };
   for (const s of surfaces) {
     const card = document.createElement("div");
     card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
@@ -116,9 +122,59 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
       card.append(mark);
     }
     card.addEventListener("click", () => open(s.pageId));
-    card.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(s.pageId); } });
+    // Enter/Space open the surface only when the CARD itself is focused - a key press on the kebab or a
+    // menu item bubbles here too, so guard on the target to avoid a stray open.
+    card.addEventListener("keydown", (ev) => { if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); open(s.pageId); } });
+
+    // The kebab: a top-right three-dot button opening a one-item menu ("Open in a new window"). It stops
+    // propagation so its click never reaches the card's own open-as-tab handler, and it is a real button
+    // (aria-label, aria-haspopup, aria-expanded) with Escape-to-close and outside-click dismissal below.
+    const kebab = document.createElement("button");
+    kebab.type = "button";
+    kebab.className = "console-launcher-card__kebab";
+    kebab.dataset.cardKebab = "";
+    kebab.setAttribute("aria-label", "More actions for " + s.label);
+    kebab.setAttribute("aria-haspopup", "menu");
+    kebab.setAttribute("aria-expanded", "false");
+    kebab.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
+      '<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
+    const menu = document.createElement("div");
+    menu.className = "console-launcher-card__menu";
+    menu.dataset.cardMenu = "";
+    menu.setAttribute("role", "menu");
+    menu.hidden = true;
+    const openWin = document.createElement("button");
+    openWin.type = "button";
+    openWin.className = "console-launcher-card__menuitem";
+    openWin.setAttribute("role", "menuitem");
+    openWin.textContent = "Open in a new window";
+    menu.append(openWin);
+
+    let menuOpen = false;
+    const setMenu = (v: boolean): void => { menuOpen = v; menu.hidden = !v; kebab.setAttribute("aria-expanded", v ? "true" : "false"); };
+    const closeMenu = (): void => setMenu(false);
+    menuClosers.push(closeMenu);
+    kebab.addEventListener("click", (ev) => { ev.stopPropagation(); const willOpen = !menuOpen; closeAllMenus(); setMenu(willOpen); if (willOpen) openWin.focus(); });
+    kebab.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && menuOpen) { ev.stopPropagation(); closeMenu(); kebab.focus(); } });
+    menu.addEventListener("click", (ev) => ev.stopPropagation());
+    openWin.addEventListener("click", (ev) => { ev.stopPropagation(); closeMenu(); openSurfaceWindow(s.pageId); });
+    card.append(kebab, menu);
+
     gallery.append(card);
   }
+
+  // Dismiss any open kebab menu on an outside tap or Escape. pointerdown (not click) so a TAP outside
+  // reliably closes it on touch, where a synthesized click can be dropped when the tapped node changes;
+  // this mirrors the Panes popup / Reference panel outside-dismiss idiom. A pointerdown on a kebab or
+  // inside its menu is left for that element's own handler (the toggle, or an item), so those never
+  // self-close here.
+  document.addEventListener("pointerdown", (ev) => {
+    const el = ev.target instanceof Element ? ev.target : (ev.target instanceof Node ? ev.target.parentElement : null);
+    if (el?.closest("[data-card-kebab], [data-card-menu]")) return;
+    closeAllMenus();
+  });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeAllMenus(); });
 
   // A quiet corner affordance to launch the full demo: opens every surface with representative,
   // daemon-free demo data (see main.ts's launchDemo). It sits bottom-right of the launcher and reveals

@@ -276,6 +276,13 @@ func rotateProgressDir(dir string, window int) (kept, archived int, err error) {
 	return len(recent), len(old), nil
 }
 
+// MemoryDir is the exported view of memoryDir: the per-repository memory directory
+// holding the durable status/progress/decisions files. The console-facing MemoryService
+// handler (internal/handler/memory) resolves the same directory through this, so the
+// browser edit surface and the magus_memory MCP tool operate on ONE set of files - there
+// is a single definition of where memory lives.
+func MemoryDir(root string) (string, error) { return memoryDir(root) }
+
 // memoryDir resolves the per-repository memory directory:
 // <XDG state>/magus/memory/<repo-basename>-<hash12>. The hash keys on the
 // repository identity, not the checkout path: a linked git worktree's .git FILE

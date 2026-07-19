@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+// Package magus.memory.v1 is the console-facing MemoryService: an observable and
+// EDITABLE view over the durable magus_memory files (status, progress, decisions) the
+// MCP magus_memory tool writes. It is a SECOND door onto the exact on-disk files that
+// tool maintains - the per-repository markdown under the user's XDG state directory -
+// never a second store of its own. Its reason to exist: agent memory is append-heavy
+// and never rotated by default, so it grows unbounded and an agent can silently bloat
+// it; a human editing/deleting surface is the safety valve. So the service is
+// deliberately read AND write: list the files, read one, replace one's content, or
+// delete one.
+//
+// The content it returns is AGENT-WRITTEN and therefore UNTRUSTED: a client must render
+// it as text/markdown, never as trusted HTML.
+//
+// Access policy: every RPC requires the daemon bearer token. The service is mounted on
+// the loopback listener behind the same guard as the other cli-token console services
+// (magus.job.v1, magus.token.v1) and is NEVER served on the LAN share listener - memory
+// is the operator's own working notes, not a read surface for a shared phone view.
+// buf-breaking gates this file: fields and RPCs may be ADDED (old clients ignore unknown
+// fields), never renumbered or removed.
+package magus.memory.v1;
+
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// MemoryService lists, reads, replaces, and deletes the durable memory files. List
+// enumerates the closed set with per-file metadata; Get returns one file's raw markdown;
+// Put replaces one file's whole content; Delete removes one file from disk.
+service MemoryService {
+  // ListMemory returns metadata (never content) for every known memory file, plus the
+  // on-disk directory holding them so the operator can find them outside the console.
+  rpc ListMemory(ListMemoryRequest) returns (ListMemoryResponse);
+  // GetMemory returns one file's raw markdown content and metadata. A file that does
+  // not exist yet returns an empty doc with exists=false, not an error.
+  rpc GetMemory(GetMemoryRequest) returns (GetMemoryResponse);
+  // PutMemory replaces one file's whole content with the supplied markdown, creating it
+  // if absent. It is a full overwrite, not an append.
+  rpc PutMemory(PutMemoryRequest) returns (PutMemoryResponse);
+  // DeleteMemory removes one file from disk. Deleting an already-absent file is a no-op
+  // that succeeds and reports exists=false.
+  rpc DeleteMemory(DeleteMemoryRequest) returns (DeleteMemoryResponse);
+}
+
+// MemoryFile names one file in the closed durable-memory set. status is the current
+// snapshot (overwritten), progress is a dated work journal (appended by agents),
+// decisions is a dated decision log with the why (appended by agents). The set is
+// closed on purpose: adding a value is an API decision every agent host sees.
+enum MemoryFile {
+  MEMORY_FILE_UNSPECIFIED = 0;
+  MEMORY_FILE_STATUS = 1;
+  MEMORY_FILE_PROGRESS = 2;
+  MEMORY_FILE_DECISIONS = 3;
+}
+
+// MemoryDoc describes one memory file. In a List response the content is omitted (only
+// metadata is carried); Get, Put, and Delete return it with content populated (empty for
+// a deleted or never-written file).
+message MemoryDoc {
+  MemoryFile file = 1;
+  string name = 2;                          // on-disk basename, e.g. "status.md"
+  string content = 3;                       // raw markdown; UNTRUSTED (agent-written)
+  int64 size_bytes = 4;                     // current on-disk size
+  google.protobuf.Timestamp modified = 5;   // last-modified time; unset when the file does not exist
+  bool exists = 6;                          // whether the file is present on disk
+}
+
+message ListMemoryRequest {}
+
+message ListMemoryResponse {
+  repeated MemoryDoc docs = 1;   // one per known file, in a stable order; content omitted
+  string dir = 2;                // absolute path of the directory holding the files
+}
+
+message GetMemoryRequest {
+  MemoryFile file = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+}
+
+message GetMemoryResponse {
+  MemoryDoc doc = 1;
+}
+
+message PutMemoryRequest {
+  MemoryFile file = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  string content = 2;  // the file's full new markdown content (overwrite, not append)
+}
+
+message PutMemoryResponse {
+  MemoryDoc doc = 1;
+}
+
+message DeleteMemoryRequest {
+  MemoryFile file = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+}
+
+message DeleteMemoryResponse {
+  MemoryDoc doc = 1;
+}

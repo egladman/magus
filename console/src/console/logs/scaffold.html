@@ -166,7 +166,7 @@
         <div class="console-render-body" id="log-body" aria-label="Captured output"></div>
 
         <!-- Empty state: a PatternFly EmptyState, shown until a log is loaded (no #data / #src /
-             #live). Mirrors the dashboard's connect screen: an icon, a title/body, and the two
+             #port). Mirrors the dashboard's connect screen: an icon, a title/body, and the two
              ways to get a log here (a finished run, a live one). #log-empty is the id dom.ts /
              the loaders toggle `hidden`; the ways carry data-* hooks, no bespoke classes. -->
         <div class="pf-v6-c-empty-state" id="log-empty">
@@ -235,8 +235,8 @@
           <dd>The captured output: the raw bytes, gzipped then base64url-encoded, decoded in the browser. Bounded by the browser's URL length; for a very large log, print it instead with <code>magus query output &lt;ref&gt;</code>.</dd>
           <dt><code>#src=&lt;url&gt;</code></dt>
           <dd>A URL-encoded address the page fetches the log text from (a loopback server or any CORS-enabled address).</dd>
-          <dt><code>#live=&lt;host:port&gt;&amp;token=&lt;t&gt;</code></dt>
-          <dd>A loopback SSE endpoint printed by <code>magus run --live</code>; the run streams in as it happens. The bearer token is stripped from the URL once the page reads it.</dd>
+          <dt><code>#port=&lt;port&gt;&amp;token=&lt;t&gt;</code></dt>
+          <dd>A loopback SSE endpoint printed by <code>magus run --live</code>; the run streams in as it happens. Loopback-implied: the port expands to literal <code>127.0.0.1</code>. The bearer token is stripped from the URL once the page reads it.</dd>
         </dl>
       </div>
     </details>

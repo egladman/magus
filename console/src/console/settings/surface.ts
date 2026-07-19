@@ -16,9 +16,11 @@ import {
   getFocusRing, setFocusRing, saveFocusRing, applyFocusRing,
 } from "../../lib/settings";
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
-import { probeDaemon } from "../../lib/daemon";
+import { probeDaemon, normalizeDaemonHost, resolveDaemonHost } from "../../lib/daemon";
 import { h } from "../view";
 import { LICENSE_TEXT } from "./license";
+import { buildTokensSection } from "./tokens";
+import { buildMemorySection } from "./memory";
 import {
   buildSettingsEnvelope, computePendingChanges, createDraftCell, diffLines, importSettings,
   type DiffContext, type PendingChange, type Settings, type ThemePref,
@@ -152,7 +154,11 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   const draftScalar = { poll: committed.poll, host: committed.host, theme: committed.theme, focusRing: committed.focusRing };
   const keymapDraft = createDraftCell<Keymap>({ ...committed.keymap }, () => recompute());
   const draftPrefs = (): Settings => ({
-    poll: draftScalar.poll, host: draftScalar.host.trim(), theme: draftScalar.theme, focusRing: draftScalar.focusRing,
+    // A bare port in the daemon-host field expands to the literal loopback IP (8787 -> 127.0.0.1:8787),
+    // so the committed/stored value is a canonical host resolveDaemonHost accepts. Empty stays empty
+    // (loopback default); an unparseable value is kept as-typed so the Test button can report on it.
+    poll: draftScalar.poll, host: normalizeDaemonHost(draftScalar.host) ?? draftScalar.host.trim(),
+    theme: draftScalar.theme, focusRing: draftScalar.focusRing,
     keymap: keymapDraft.get(),
   });
 
@@ -336,10 +342,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   testItem.append(testBtn);
   hostGroup.append(hostFill, testItem);
 
-  generalForm.append(
-    buildFormGroup("Refresh rate", pollSelect.id, pollControl, "How often the VCS insight lenses re-poll the daemon."),
-    buildFormGroup("Daemon host", hostInput.id, hostGroup),
-  );
+  generalForm.append(buildFormGroup("Refresh rate", pollSelect.id, pollControl, "How often the VCS insight lenses re-poll the daemon."));
+  generalForm.append(buildFormGroup("Daemon host", hostInput.id, hostGroup, "The loopback daemon to connect to by default. Enter a bare port (for example 8787) and it expands to 127.0.0.1:8787, or give a full 127.0.0.1:port. Leave empty for the default loopback."));
 
   // --- Appearance: a 3-way theme toggle group (staged; applies on Save & Apply) ---
   const themeGroup = h("div", "pf-v6-c-toggle-group console-settings-theme");
@@ -599,20 +603,32 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   applyBtn.addEventListener("click", () => commitDraft(true));
   resetBtn.addEventListener("click", () => { loadDraft(committed); setStatus("Reset pending changes.", "ok"); });
 
-  page.append(
-    bar,
-    status,
-    diffWrap,
-    buildSection("General", generalForm),
-    buildSection("Appearance", themeBody),
-    buildSection("Keybindings", keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply."),
-    buildSection("Backup", io, "Export the current draft, or import a saved set to stage it."),
-    buildSection("About", buildAbout(), "Source, license, and where to report bugs."),
-  );
+  // The two LIVE sections talk to the daemon directly (not the staged-config model): they act on the
+  // daemon's own state - its auth tokens and the durable agent-memory files - so their edits apply
+  // immediately over RPC rather than staging into the draft. Both resolve the same loopback host and
+  // degrade to a clear "connect first" state when none is found.
+  //
+  // The two LIVE sections are gated by the SERVER, not a client-side mode guess: they always build,
+  // and each hides its own section wrapper if the daemon declines the service to this client
+  // (onDenied) - a read-only phone share cannot reach TokenService/MemoryService (not mounted on the
+  // share listener, and guarded by token class), so those RPCs come back denied and the section
+  // vanishes. Enforcement lives at the daemon; this only mirrors what the daemon already refuses.
+  let tokensWrap: HTMLElement | null = null;
+  let memoryWrap: HTMLElement | null = null;
+  const tokensSection = buildTokensSection(resolveDaemonHost(), { onDenied: () => { if (tokensWrap) tokensWrap.hidden = true; } });
+  const memorySection = buildMemorySection(resolveDaemonHost(), { onDenied: () => { if (memoryWrap) memoryWrap.hidden = true; } });
+  tokensWrap = buildSection("Access tokens", tokensSection.el, "List and revoke the daemon's connector tokens and the active phone-share token. Minting stays a CLI-only operation - the console can never create a token.");
+  memoryWrap = buildSection("Agent memory", memorySection.el, "View and edit the durable memory files agents write across sessions. Editing is the safety valve against the store growing unbounded.");
+
+  page.append(bar, status, diffWrap, buildSection("General", generalForm), buildSection("Appearance", themeBody));
+  page.append(buildSection("Keybindings", keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply."));
+  page.append(tokensWrap, memoryWrap);
+  page.append(buildSection("Backup", io, "Export the current draft, or import a saved set to stage it."));
+  page.append(buildSection("About", buildAbout(), "Source, license, and where to report bugs."));
   host.append(page);
 
   recompute();
-  return () => { editor.destroy(); };
+  return () => { editor.destroy(); tokensSection?.destroy(); memorySection?.destroy(); };
 }
 
 // ensureStylesheet adds the surface's page-scoped stylesheet once (idempotent by id).

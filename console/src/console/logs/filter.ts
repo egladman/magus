@@ -57,7 +57,7 @@ export function targetRelevant(q: ParsedQuery, t: TargetSpan): boolean {
 }
 
 // setQueryFragment mirrors the active filter to #q= via replaceState (no history spam),
-// preserving every OTHER fragment part (#ref/#data/#live/#demo, the #L line token). Clearing
+// preserving every OTHER fragment part (#ref/#data/#port/#demo, the #L line token). Clearing
 // the filter drops the q= part entirely.
 export function setQueryFragment(query: string): void {
   const kept: string[] = [];

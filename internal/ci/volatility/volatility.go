@@ -24,7 +24,7 @@ type Config struct {
 	Threshold        float64 // Wilson lower-bound volatility rate above which a target is retried
 }
 
-// DefaultConfig returns sensible defaults matching the plan.
+// DefaultConfig returns sensible defaults.
 func DefaultConfig() Config {
 	return Config{
 		Enabled:          true,

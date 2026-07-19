@@ -14,7 +14,7 @@
 import { fromBinary } from "@bufbuild/protobuf";
 import { JournalSchema } from "../../gen/magus/viewer/v1/viewer_pb";
 import type { Journal } from "../../gen/magus/viewer/v1/viewer_pb";
-import { parseHash, wantsDemo, getLiveToken } from "../../lib/daemon";
+import { parseHash, wantsDemo, getLiveToken, daemonAttach } from "../../lib/daemon";
 import { getDefaultHost } from "../../lib/settings";
 import { initRunBrowser, fetchRunOutput, type RunSummary } from "./runtree";
 import { decodeFragmentBytes, viewerParams } from "./fragment";
@@ -53,7 +53,7 @@ function init(): void {
 // wireRunBrowser docks the run browser (runtree.ts) to the left of the viewer. It reads the daemon's
 // run list (or, in the #demo showcase, a synthetic set) and, on selection, loads that run's captured
 // output into this same viewer. Purely additive: with no reachable daemon and no demo the tree stays
-// empty/hidden, so the #data/#src/#live load paths above are untouched.
+// empty/hidden, so the #data/#src load and live-attach paths above are untouched.
 function wireRunBrowser(): void {
   const scroll = el("log-scroll");
   if (!scroll) return;
@@ -219,7 +219,7 @@ async function loadFromURL(): Promise<void> {
   const params = viewerParams();
   const ref = params.ref || "";
   // Apply a shared #q= filter (the graph explorer's convention, read via the shared parseHash)
-  // BEFORE any mode renders, and seed the filter box. It combines with #ref/#data/#live/#demo,
+  // BEFORE any mode renders, and seed the filter box. It combines with #ref/#data/#port/#demo,
   // so a deep link like `#demo&q=status:fail` lands already narrowed.
   const q = parseHash().q || "";
   setFilter(q);
@@ -231,10 +231,6 @@ async function loadFromURL(): Promise<void> {
   // streams in with a live-filling waterfall.
   if (wantsDemo(parseHash())) {
     startDemo();
-    return;
-  }
-  if (params.live) {
-    connectLive(params);
     return;
   }
   if (params.data) {
@@ -271,7 +267,15 @@ async function loadFromURL(): Promise<void> {
     }
     return;
   }
-  // No data: leave the empty state visible.
+  // No static content requested: connect live if an explicit daemon attach resolves (a #port link, or
+  // the daemon-origin/shared console). A static #data/#src above always wins, so a live attach never
+  // clobbers a pasted or fetched log.
+  const attach = daemonAttach(parseHash());
+  if (attach) {
+    connectLive(attach, params);
+    return;
+  }
+  // Nothing to show: leave the empty state visible.
 }
 
 function loadText(text: string, ref: string): void {

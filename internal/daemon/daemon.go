@@ -25,6 +25,7 @@ import (
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
+	memoryhandler "github.com/egladman/magus/internal/handler/memory"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
@@ -34,6 +35,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
@@ -376,6 +378,19 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			tokenPath, tokenHandler := tokenv1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr))
 			httpServer.Handle(tokenPath, httpx.GuardRebind(allowed, cors(httpx.BearerGuard(auth.VerifyCLIBearer, tokenHandler))))
 			log.Info("[BRIDGE] token service mounted", slog.String("path", tokenPath))
+
+			// Memory management service: the typed surface the console Settings UI uses to LIST,
+			// READ, EDIT, and DELETE the durable magus_memory files (status, progress, decisions).
+			// It is a second door onto the EXACT on-disk files the magus_memory MCP tool writes,
+			// never a second store - the human edit/delete surface is the safety valve against agent
+			// memory growing unbounded (it is append-heavy and never rotated by default). Mounted on
+			// the loopback listener behind the standard bearer guard and deliberately NOT in
+			// shareGuarded: memory is the operator's own working notes, not a read surface for a
+			// shared phone view. Its content is agent-written and must be rendered as text, never as
+			// trusted HTML.
+			memoryPath, memoryHandler := memoryv1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus))
+			httpServer.Handle(memoryPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, memoryHandler))))
+			log.Info("[BRIDGE] memory service mounted", slog.String("path", memoryPath))
 
 			log.Info("[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}

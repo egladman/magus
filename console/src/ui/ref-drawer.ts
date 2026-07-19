@@ -1,5 +1,6 @@
 import { persisted } from "../lib/persist";
 import { loadDocIndex, runSearch, positiveTerms, snippet, describeQuery, type DocSearchEntry } from "../lib/docsearch";
+import type { PageModule, PageController, SearchProvider } from "../console/page";
 
 // DrawerToggle is a minimal open/close controller with the Reference panel's dismissal + focus
 // behaviour. wireDrawerToggle factors that "pop-out" idiom out of initRefDrawer so a second pop-out (the
@@ -91,7 +92,7 @@ export function wireDrawerToggle(opts: {
 // or a click outside the panel. Cloned example buttons are inert (cloneNode drops listeners), so
 // a click inside the panel on an example carrying a distinguishing data-* (the graph's data-q /
 // data-view / data-lens) is forwarded to the matching live control in the active surface pane.
-export function initRefDrawer(): void {
+export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   const drawer = document.getElementById("console-refdrawer");
   const panel = document.getElementById("console-refpanel");
   const bodyEl = document.getElementById("console-refdrawer-body");
@@ -100,6 +101,7 @@ export function initRefDrawer(): void {
 
   const pinBtn = document.getElementById("console-refpin");
   const closeBtn = document.getElementById("console-refclose");
+  const breakoutBtn = document.getElementById("console-refbreakout");
 
   // The active surface is the one visible pane in the outlet (main.ts hides the others).
   const activePane = (): HTMLElement | null =>
@@ -411,6 +413,10 @@ export function initRefDrawer(): void {
   trigger.addEventListener("click", () => setOpen(!isOpen));
   closeBtn?.addEventListener("click", () => setOpen(false));
   pinBtn?.addEventListener("click", togglePin);
+  // Break out to a tab: promote the console-wide reference into its own persistent, tileable tab, then
+  // close the panel (its content now lives in the tab). main.ts supplies onBreakOut (it opens the
+  // reference surface below).
+  breakoutBtn?.addEventListener("click", () => { opts.onBreakOut?.(); setOpen(false); });
 
   // Outside-click closes an unpinned panel. A click on the trigger is handled by its own listener,
   // so ignore it here to avoid a double-toggle.
@@ -490,4 +496,40 @@ export function initRefDrawer(): void {
   render();
   if (isOpen) refresh();
   requestAnimationFrame(() => drawer.classList.remove("console-shell-refdrawer--instant"));
+}
+
+// referenceSurface is the "break out to tab" target: a lightweight, single-instance surface that renders
+// the CONSOLE-WIDE reference (the #console-ref-shell sections - chords, tabs/panes, where-your-data-goes),
+// the same always-true help the drawer trails after every surface and the whole of what the launcher
+// shows. It is deliberately NOT a live mirror of the drawer's surface-specific sections: a tab persists by
+// pageId alone (no payload), so it must re-derive stable content on every mount/reload - and the shell
+// reference is exactly that. main.ts registers it (kept out of the launcher SURFACES list, so it has no
+// card and is reachable only via the drawer's break-out button) and opens it single-instance.
+const noRefSearch: SearchProvider<null> = { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) };
+
+export function referenceSurface(): PageModule<null, null> {
+  return {
+    id: "reference",
+    title: "Reference",
+    async activate(host: HTMLElement): Promise<PageController<null, null>> {
+      const root = document.createElement("div");
+      root.dataset.surface = "reference";
+      const body = document.createElement("div");
+      body.className = "console-shell-refdrawer__body";
+      const shell = document.getElementById("console-ref-shell");
+      const blocks = shell ? [...shell.querySelectorAll<HTMLElement>("[data-ref-section]")] : [];
+      for (const b of blocks) {
+        const clone = b.cloneNode(true) as HTMLElement;
+        clone.removeAttribute("data-ref-section"); // clones are shown; [data-ref-section]{display:none} hides only sources
+        clone.removeAttribute("id");
+        clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+        if (clone instanceof HTMLDetailsElement) clone.open = true;
+        clone.querySelectorAll("details").forEach((d) => { (d as HTMLDetailsElement).open = true; });
+        body.append(clone);
+      }
+      root.append(body);
+      host.append(root);
+      return { search: noRefSearch, deactivate: () => {} };
+    },
+  };
 }

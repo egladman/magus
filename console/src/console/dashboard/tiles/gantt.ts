@@ -9,6 +9,7 @@
 
 import type { DashboardState, RunView, TargetRunView } from "../state";
 import { Card, h, type Tile } from "./card";
+import { logsLink } from "../../../lib/daemon";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -139,7 +140,7 @@ export function ganttTile(): Tile {
     // tile uses, opened in a new tab so the live board stays put.
     if (t.terminal && t.outputRef && liveHost) {
       const a = svg("a");
-      a.setAttribute("href", "../logs/#live=" + encodeURIComponent(liveHost) + "&ref=" + encodeURIComponent(t.outputRef));
+      a.setAttribute("href", logsLink(liveHost, { ref: t.outputRef }));
       a.setAttribute("target", "_blank");
       a.setAttribute("rel", "noopener");
       a.setAttribute("class", "console-dashboard-gantt__link");

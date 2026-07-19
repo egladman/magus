@@ -10,22 +10,49 @@
 
 import type { DashboardState, StatusView } from "../state";
 import { h, type Tile } from "./card";
+import { logsLink } from "../../../lib/daemon";
 
 // firstFailedInv returns the invocation id of the earliest run carrying a failed target,
-// so the failing count can deep-link into the run whose log an operator needs.
-function firstFailedInv(status: StatusView): string {
+// so the failing count can deep-link into the run whose log an operator needs. Exported so
+// the Big Picture tile (tiles/bigPicture.ts) can compute the same TV-friendly verdict without
+// duplicating the scan.
+export function firstFailedInv(status: StatusView): string {
   for (const run of status.runs) {
     if (run.targets.some((t) => t.state === "failed")) return run.inv;
   }
   return "";
 }
 
-function countFailing(status: StatusView): number {
+export function countFailing(status: StatusView): number {
   let n = 0;
   for (const run of status.runs) {
     for (const t of run.targets) if (t.state === "failed") n++;
   }
   return n;
+}
+
+export interface Verdict { state: "clear" | "warn" | "attention"; line: string; sub: string; }
+
+// verdictFor derives the one-line headline + detail from a status frame and its failing count, in
+// priority order: failing targets, then an unhealthy daemon, then all clear. Exported so the
+// Big Picture tile can show the identical verdict at TV scale without re-deriving the rule.
+export function verdictFor(status: StatusView, failing: number): Verdict {
+  const running = status.pool.running;
+  const down = status.health.cls === "fail";
+  const degraded = status.health.cls === "warn";
+  if (failing > 0) {
+    return { state: "attention", line: "Attention needed", sub: failing === 1 ? "1 target is failing" : failing + " targets are failing" };
+  }
+  if (down || degraded) {
+    return { state: "warn", line: down ? "Daemon down" : "Daemon degraded", sub: "The pool is up but the daemon reports " + status.health.label + "." };
+  }
+  return {
+    state: "clear",
+    line: "All clear",
+    sub: running > 0
+      ? (running === 1 ? "1 target running, nothing failing" : running + " targets running, nothing failing")
+      : "Nothing failing, pool is idle",
+  };
 }
 
 export function attentionTile(): Tile {
@@ -62,8 +89,6 @@ export function attentionTile(): Tile {
     const failing = countFailing(status);
     const running = status.pool.running;
     const queued = status.pool.queued;
-    const down = status.health.cls === "fail";
-    const degraded = status.health.cls === "warn";
 
     failN.textContent = String(failing);
     runN.textContent = String(running);
@@ -73,31 +98,15 @@ export function attentionTile(): Tile {
     runWrap.dataset.n = running > 0 ? "some" : "none";
     queueWrap.dataset.n = queued > 0 ? "some" : "none";
 
-    // Verdict, in priority order: failing targets, then an unhealthy daemon, then all clear.
-    let state: string, line: string, sub: string;
-    if (failing > 0) {
-      state = "attention";
-      line = "Attention needed";
-      sub = failing === 1 ? "1 target is failing" : failing + " targets are failing";
-    } else if (down || degraded) {
-      state = "warn";
-      line = down ? "Daemon down" : "Daemon degraded";
-      sub = "The pool is up but the daemon reports " + status.health.label + ".";
-    } else {
-      state = "clear";
-      line = "All clear";
-      sub = running > 0
-        ? (running === 1 ? "1 target running, nothing failing" : running + " targets running, nothing failing")
-        : "Nothing failing, pool is idle";
-    }
-    root.dataset.state = state;
-    verdict.textContent = line;
-    detail.textContent = sub;
+    const v = verdictFor(status, failing);
+    root.dataset.state = v.state;
+    verdict.textContent = v.line;
+    detail.textContent = v.sub;
 
     // Wire the failing count into the failing run's log when we are live and have an inv.
     const inv = failing > 0 ? firstFailedInv(status) : "";
     if (failing > 0 && liveHost && inv) {
-      failLink.setAttribute("href", "../logs/#live=" + encodeURIComponent(liveHost) + "&inv=" + encodeURIComponent(inv));
+      failLink.setAttribute("href", logsLink(liveHost, { inv }));
       failWrap.dataset.linked = "true";
     } else {
       failLink.removeAttribute("href");

@@ -25,7 +25,9 @@ import { select } from "d3-selection";
 // be copy-pasted into all three tool pages; they now live in one audited module.
 // (The ConnectRPC transport this module also exports is tree-shaken out here - the
 // graph explorer only uses these four primitives.)
-import { validateLiveHost, consumeLiveToken, getLiveToken, fetchSSE, authHeaders, isRemembered, setRemembered, wantsDemo } from "../../lib/daemon";
+import { daemonAttach, consumeLiveToken, getLiveToken, fetchSSE, authHeaders, isRemembered, setRemembered, wantsDemo, createDaemonTransport } from "../../lib/daemon";
+import { createClient } from "@connectrpc/connect";
+import { StatusService } from "../../gen/magus/status/v1/status_pb";
 import type { GLink, GNode, GraphFlavor } from "./types.js";
 import { LAYERED_MAX, layoutLayered } from "./layout.js";
 import { toMermaid } from "./mermaid.js";
@@ -156,7 +158,7 @@ let liveGraphQuery = "";
 let liveSseAbort: AbortController | null = null; // AbortController for the SSE fetch
 let liveReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let liveReconnectDelay = 1000; // ms; doubles on each failure up to 30000
-let liveWorkspaceName: string | null = null; // workspace name from /api/v1/status, for badge
+let liveWorkspaceName: string | null = null; // workspace name from StatusService GetStatus, for badge
 let liveConnected = false; // true while the SSE stream is open; drives the badge style
 let liveFlavor: string | null = null; // null (knowledge) or "targets"
 
@@ -708,7 +710,7 @@ function safeUrl(u: any) {
 }
 
 // A node reference rendered as a button that re-selects it (edges link to their
-// other endpoint, per the plan).
+// other endpoint).
 function nodeRefHtml(id: string) {
   const n = graph.byId.get(id);
   const label = n ? n.label : id;
@@ -757,8 +759,11 @@ function renderCard(id: string | null) {
     // the path plainly rather than guessing a (probably wrong) repo.
     const path = n.source.split(":")[0];
     const base = graph.sourceBase;
-    html += base
-      ? '<dt>source</dt><dd><a href="' + escapeHtml(base + "/" + path) + '" target="_blank" rel="noopener"><code>' + escapeHtml(n.source) + "</code></a></dd>"
+    // graph.json/source_base is untrusted, so scheme-guard the built href with safeUrl (matching the
+    // sibling attrs.url case below); fall back to the plain path when it is not an http(s) URL.
+    const sourceHref = base ? safeUrl(base + "/" + path) : null;
+    html += sourceHref
+      ? '<dt>source</dt><dd><a href="' + escapeHtml(sourceHref) + '" target="_blank" rel="noopener"><code>' + escapeHtml(n.source) + "</code></a></dd>"
       : "<dt>source</dt><dd><code>" + escapeHtml(n.source) + "</code></dd>";
   }
   if (n.attrs && n.attrs.url && safeUrl(n.attrs.url)) {
@@ -1199,7 +1204,7 @@ let suppressHash = false;
 function updateHash() {
   if (suppressHash) return;
   const params = hashParams();
-  if (params.data || params.src || params.live) return; // keep fragment data/loopback/live links intact
+  if (params.data || params.src || params.port !== undefined) return; // keep fragment data/loopback/attach links intact
   const parts = [];
   if (activeView) {
     parts.push("view=" + encodeURIComponent(activeView));
@@ -1957,8 +1962,8 @@ function applyPreset(presetId: string) {
 
 // ---- Phase 9: live mode ----------------------------------------------------
 
-// validateLiveHost, consumeLiveToken, getLiveToken, and fetchSSE now live in
-// ./lib/daemon (imported at the top of this file) - the ONE audited copy of the
+// daemonAttach, consumeLiveToken, getLiveToken, and fetchSSE now live in ./lib/daemon
+// (imported at the top of this file) - the ONE audited copy of host resolution, the
 // loopback lock, the shared bearer token, and the fetch-based SSE reader.
 
 // capturePositions: before replacing the graph on a live refresh, record existing
@@ -2228,13 +2233,12 @@ function updateSnapshotBadge(source: string | null) {
 async function fetchLiveStatus() {
   if (!liveHost || !liveToken) return;
   try {
-    const resp = await fetch("http://" + liveHost + "/api/v1/status", {
-      headers: authHeaders(liveToken)
-    });
-    if (!resp.ok) return;
-    const status = await resp.json();
+    const client = createClient(StatusService, createDaemonTransport(liveHost, liveToken));
+    const res = await client.getStatus({});
+    const status = res.status;
+    if (!status) return;
     // Extract workspace name from the first loaded workspace.
-    if (status.pool && status.pool.workspaces && status.pool.workspaces.length > 0) {
+    if (status.pool && status.pool.workspaces.length > 0) {
       liveWorkspaceName = status.pool.workspaces[0].root;
     }
     // Render status strip.
@@ -2431,8 +2435,8 @@ export async function activate() {
     });
   }
 
-  // Phase 9: check for #live= fragment and attempt live-mode connection.
-  // Returns true if handled (either connected or errored); false falls through.
+  // Phase 9: attempt a live-mode connection on an explicit daemon attach (#port, or the
+  // daemon-origin/shared console). Returns true if handled; false falls through.
   if (await bootLive()) return;
 
   // Show the load spinner while loadGraph() is in flight (it fetches the ~1.4MB demo graph.json on a
@@ -2452,7 +2456,7 @@ export async function activate() {
   renderLoadedGraph(loaded);
   finishInteractiveSetup();
 
-  // Empty state: nothing loaded (no #data/#src/#live), so show the prompt instead. The pipeline ran on
+  // Empty state: nothing loaded (no #data/#src, no live attach), so show the prompt instead. The pipeline ran on
   // an empty graph, so interactions are wired; the demo loads via loadDemoGraph, a dropped file via
   // replaceGraph, both dismissing this.
   if (loaded.source === "empty") {
@@ -2737,17 +2741,16 @@ function bootWireEvents() {
 // Returns true if live mode connected, false to fall through to normal load.
 async function bootLive() {
   const params = hashParams();
-  if (!params.live) return false;
+  // A static graph was explicitly requested (#data/#src): never take over the live path, so those
+  // offline links keep working even when a default daemon is configured.
+  if (params.data || params.src) return false;
 
-  const hostPort = params.live;
-  const normalizedHost = validateLiveHost(hostPort);
-  if (!normalizedHost) {
-    setStatus("live mode refused: host must be literally 127.0.0.1 or [::1] - got: " + hostPort + ". No network request was made.", true);
-    document.body.classList.add("graph-empty");
-    return true; // handled (with error); don't fall through
-  }
+  // Explicit-attach only: a #port link, or the daemon-origin/shared console. A mere configured default
+  // must not force the explorer into live mode - a cold visit shows the static empty state instead.
+  const host = daemonAttach(params);
+  if (!host) return false;
 
-  liveHost = normalizedHost;
+  liveHost = host;
   liveFlavor = params.flavor || null;
 
   // Consume and store the token (strips it from the URL fragment).
@@ -2773,7 +2776,7 @@ async function bootLive() {
     liveGraphQuery = "?level=projects";
     const skeletonData = await skeletonResp.json();
 
-    // Fetch /api/v1/status for workspace name and pool info.
+    // Fetch StatusService GetStatus for workspace name and pool info.
     await fetchLiveStatus();
     updateLiveBadge();
 

@@ -12,21 +12,9 @@
 // the LAN) the command is never registered, and the daemon would reject the
 // share trigger anyway (it is loopback + bearer guarded).
 
-import { parseHash, validateLiveHost, authHeaders, getLiveToken } from "../lib/daemon";
-import { getDefaultHost } from "../lib/settings";
+import { resolveDaemonHost, authHeaders, getLiveToken } from "../lib/daemon";
 import { showToast } from "../lib/refresh-toast";
 import { encodeToCanvas } from "../lib/qr";
-
-// resolveDaemonHost returns the loopback daemon host the console is connected to,
-// or null when none is configured. Mirrors the shell's own host resolution: an
-// explicit #live link first, then the persisted default host.
-function resolveDaemonHost(): string | null {
-  const params = parseHash();
-  const linked = params.live ? validateLiveHost(params.live) : null;
-  if (linked) return linked;
-  const def = getDefaultHost();
-  return def ? validateLiveHost(def) : null;
-}
 
 // openShareDialog triggers a share and shows the QR modal, or toasts why it could
 // not. Exposed as the console.share command's handler.

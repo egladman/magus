@@ -66,8 +66,7 @@ func TestRaceForcesNoCache(t *testing.T) {
 
 // TestRun_RaceReexecutesCachedTarget guards the A2 fix end to end: a target
 // that's already a cache hit must still genuinely re-execute under --race
-// (magus.WithRace), not replay - otherwise the race detector observes nothing,
-// per the plan this fixes.
+// (magus.WithRace), not replay - otherwise the race detector observes nothing.
 func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 	const spellName = "zzz-race-test-spell"
 	var calls atomic.Int32

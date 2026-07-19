@@ -208,6 +208,99 @@
    keybindings table. */
 .console-settings-presets__row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 
+/* --- Access tokens: the list + revoke view over the daemon's connector/share tokens ---------------
+ * No PF Table sheet is bundled, so the list is a lightweight CSS grid with role=table semantics. Five
+ * columns (type, name, fingerprint, expiry, action); the fingerprint sits in mono as a literal handle. */
+.console-settings-tokens { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--sm); }
+.console-settings-tokens__table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  overflow: hidden;
+}
+.console-settings-tokens__row {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(8rem, auto) auto;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+  font-size: var(--pf-t--global--font--size--body--sm);
+}
+.console-settings-tokens__row:first-child { border-top: 0; }
+.console-settings-tokens__row--head {
+  background: var(--pf-t--global--background--color--secondary--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-settings-tokens__cell { min-width: 0; overflow-wrap: anywhere; }
+.console-settings-tokens__name { color: var(--pf-t--global--text--color--regular); }
+.console-settings-tokens__fp { font-family: var(--pf-t--global--font--family--mono); color: var(--pf-t--global--text--color--subtle); }
+.console-settings-tokens__expiry { color: var(--pf-t--global--text--color--subtle); }
+/* The last cell (Revoke) hugs the right edge of its column. */
+.console-settings-tokens__row > .console-settings-tokens__cell:last-child { justify-self: end; }
+/* Stack the grid into label-less rows on a narrow pane so the fingerprint never overflows the pane. */
+@media (max-width: 34rem) {
+  .console-settings-tokens__row { grid-template-columns: 1fr; gap: 0.2rem; }
+  .console-settings-tokens__row--head { display: none; }
+  .console-settings-tokens__row > .console-settings-tokens__cell:last-child { justify-self: start; }
+}
+
+/* --- Agent memory: the read/edit view over the durable memory files -------------------------------
+ * One card per file (status, progress, decisions): a header with the file's role, metadata, and the
+ * Edit/Delete actions, over a body that renders the markdown (safe, text-only) or the edit textarea. */
+.console-settings-memory { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
+.console-settings-memory__dir { margin: 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); overflow-wrap: anywhere; }
+.console-settings-memory__dir code { font-family: var(--pf-t--global--font--family--mono); }
+.console-settings-memory__card {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-settings-memory__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--md);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-settings-memory__headtext { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.console-settings-memory__title {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--heading--h4);
+  font-weight: var(--pf-t--global--font--weight--heading--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-settings-memory__blurb,
+.console-settings-memory__meta { margin: 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+.console-settings-memory__actions { margin-left: auto; display: flex; gap: var(--pf-t--global--spacer--sm); }
+.console-settings-memory__cardbody { padding: var(--pf-t--global--spacer--md); }
+/* The rendered markdown: bounded height and scrollable so a long journal never runs the page. */
+.console-settings-memory__doc {
+  max-height: 22rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-settings-memory__heading { margin: 0.3rem 0 0; font-size: var(--pf-t--global--font--size--body--default); font-weight: var(--pf-t--global--font--weight--body--bold); }
+.console-settings-memory__para { margin: 0; overflow-wrap: anywhere; }
+.console-settings-memory__list { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.15rem; }
+.console-settings-memory__empty { margin: 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+.console-settings-memory__edit { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--sm); }
+.console-settings-memory__edit textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1.5;
+}
+.console-settings-memory__editactions { display: flex; gap: var(--pf-t--global--spacer--sm); }
+
 /* --- About: source/license/feedback, the quiet section at the foot of the page ----------------------
  * Deliberately understated: a small link list over a folded, scrollable license. No marketing copy;
  * version info lives in the status bar, so it is not repeated here. */

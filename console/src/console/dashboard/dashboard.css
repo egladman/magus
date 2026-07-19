@@ -210,6 +210,64 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-row__empty { font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); margin: 0.2rem 0 0; }
 
 
+/* Dashboard header row: the "Active workspace" PF ToggleGroup - only past a single workspace,
+   kept unobtrusive otherwise - on the left, and the Big Picture fullscreen-presentation button
+   pinned to the top-right via margin-left: auto. Always visible, first in the panels grid, above
+   both the board tiles and the Big Picture summary it swaps to. */
+.console-dashboard-viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.2rem; }
+.console-dashboard-viewbar__workspaces { display: flex; align-items: center; }
+/* A bare icon button, same escape hatch as the card collapse caret (button[data-collapse] above):
+   no PF button skin, just a themed square that lights up on hover and on [data-active] (set
+   alongside aria-pressed) while Big Picture mode is on. */
+.console-dashboard-viewbar__bigpicture {
+  margin-left: auto; width: 1.9rem; height: 1.9rem; padding: 0; border: 0; background: none;
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  color: var(--pf-t--global--text--color--subtle); cursor: pointer;
+  border-radius: var(--pf-t--global--border--radius--small);
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.console-dashboard-viewbar__bigpicture:hover,
+.console-dashboard-viewbar__bigpicture[data-active] {
+  color: var(--console-status-running); background: var(--pf-t--global--background--color--secondary--default);
+}
+
+/* Board vs Big Picture: main.ts toggles this attribute (never a class - it is transient view
+   state), not the tiles' own [hidden] - several tiles already drive their own hidden as a
+   "waiting for data" latch, and a plain [hidden] fight would flicker the losing side back in on
+   the next store tick. */
+#dash-panels [data-view-hide] { display: none; }
+
+/* Big Picture: the TV-friendly summary the fullscreen button swaps in - one verdict line, five
+   oversized numbers, one card per workspace. Meant to read from across a room, so type runs much
+   larger than the board's dense tiles and the workspace count is not capped or scrolled. */
+.console-dashboard-bigpicture { display: flex; flex-direction: column; gap: 1.2rem; padding: 1rem 0.2rem; }
+.console-dashboard-bigpicture__verdict { margin: 0; font-size: 2.6rem; font-weight: 700; line-height: 1.1; }
+.console-dashboard-bigpicture[data-state="clear"] .console-dashboard-bigpicture__verdict     { color: var(--console-status-ok); }
+.console-dashboard-bigpicture[data-state="warn"] .console-dashboard-bigpicture__verdict      { color: var(--console-status-warn); }
+.console-dashboard-bigpicture[data-state="attention"] .console-dashboard-bigpicture__verdict { color: var(--console-status-danger); }
+.console-dashboard-bigpicture__detail { margin: 0; font-size: 1.2rem; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-bigpicture__metrics { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.console-dashboard-bigpicture__metric {
+  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+  padding: 1rem 0.5rem;
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-dashboard-bigpicture__n { font-size: 3.4rem; font-weight: 700; font-family: var(--pf-t--global--font--family--mono); line-height: 1; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-bigpicture__l { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pf-t--global--text--color--subtle); margin-top: 0.3rem; }
+.console-dashboard-bigpicture__metric[data-n="some"] .console-dashboard-bigpicture__n { color: var(--console-status-danger); }
+.console-dashboard-bigpicture__wsgrid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.console-dashboard-bigpicture__wscard {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
+}
+.console-dashboard-bigpicture__wsroot { font-size: 1.15rem; font-weight: 600; font-family: var(--pf-t--global--font--family--mono); overflow-wrap: anywhere; }
+.console-dashboard-bigpicture__wsstats { margin-top: 0.25rem; font-size: 0.9rem; color: var(--pf-t--global--text--color--subtle); }
+
+/* Loaded-workspaces row, picked as the active workspace by the dashboard header's picker above. */
+.console-dashboard-row[data-active] { border-color: var(--console-status-running); background: var(--pf-t--global--background--color--primary--default); }
+
 /* Attention hero: the board headline, first in the panels grid and never collapsed. A verdict +
    detail on the left, three loud counts on the right; the left accent rule and the verdict/count
    colors are driven by data-state (clear / warn / attention). Not a PF Card - always-visible. */

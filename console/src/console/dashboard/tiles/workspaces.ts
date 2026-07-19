@@ -4,8 +4,13 @@
 import type { DashboardState, WorkspaceView } from "../state";
 import { relTime } from "../state";
 import { Card, h, type Tile } from "./card";
+import type { Persisted } from "../../../lib/persist";
 
-export function workspacesTile(): Tile {
+// activeWorkspace, when given, is the dashboard header's active-workspace picker pick
+// (tiles/bigPicture.ts): the matching row gets [data-active] so picking a workspace there has a
+// visible effect here - the one place per-workspace data (this daemon's cache tallies) actually
+// exists to scope to. Optional: the standalone case (no picker wired) renders unhighlighted.
+export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
   const card = new Card("workspaces", "Workspaces", { term: "Workspace", label: "workspaces" });
   const countLabel = h("span", "pf-v6-c-label pf-m-compact");
   const count = h("span", "pf-v6-c-label__content", "0");
@@ -19,8 +24,10 @@ export function workspacesTile(): Tile {
     count.textContent = String(wss.length);
     empty.hidden = wss.length > 0;
     list.replaceChildren();
+    const active = activeWorkspace?.get();
     for (const w of wss) {
       const li = h("li", "console-dashboard-row");
+      if (active && w.root === active) li.dataset.active = "";
       const root = h("code", "console-dashboard-row__cmd", w.root);
       const meta = h("span", "console-dashboard-row__wscache");
       if (w.hits != null) {
@@ -39,9 +46,13 @@ export function workspacesTile(): Tile {
     }
   }
 
+  // Repaint the highlight the instant the switcher's pick changes, not on the next status tick.
+  let lastStatus: DashboardState["status"] = null;
+  activeWorkspace?.subscribe(() => { if (lastStatus) render(lastStatus.workspaces); });
+
   return {
     el: card.el,
-    update(s: DashboardState) { if (s.status) render(s.status.workspaces); },
+    update(s: DashboardState) { lastStatus = s.status; if (s.status) render(s.status.workspaces); },
     destroy() {},
   };
 }

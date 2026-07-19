@@ -8,11 +8,12 @@
 // lib/daemon.ts, shared with the graph explorer and log viewer.
 
 import {
-  parseHash, validateLiveHost, consumeLiveToken, wantsDemo,
+  parseHash, daemonAttach, validateLoopbackHost, normalizeDaemonHost, consumeLiveToken, wantsDemo, logsLink,
 } from "../../lib/daemon";
 import { createStore } from "../../lib/store";
 import { persisted } from "../../lib/persist";
 import { notify } from "../../lib/notifications";
+import { bind } from "../view";
 import { initialState, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
 import { startDemo, type DemoHandle } from "./demo";
@@ -34,6 +35,7 @@ import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
+import { viewMode, dashboardHeader, bigPictureTile, activeWorkspace } from "./tiles/bigPicture";
 // The dashboard is only ever mounted as a console surface now (the decoupled console has no standalone
 // docs page), so it wires NO docs-site chrome of its own - the console frame owns the title bar, tab
 // strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
@@ -157,7 +159,7 @@ function wireNotifications(): void {
         const ref = t.outputRef;
         const key = ref ? "fail:" + ref : "dash:fail:" + run.inv + ":" + t.label;
         const link = ref && s.liveHost
-          ? { label: "Open in log viewer", href: "../logs/#live=" + encodeURIComponent(s.liveHost) + "&ref=" + encodeURIComponent(ref) }
+          ? { label: "Open in log viewer", href: logsLink(s.liveHost, { ref }) }
           : undefined;
         notify({ source: "Dashboard", kind: "error", key, message: t.label + " failed.", link });
       }
@@ -171,6 +173,13 @@ let tiles: Tile[] = [];
 function mountTiles(): void {
   const host = el("dash-panels");
   host.replaceChildren();
+
+  // The dashboard header row (the active-workspace picker, shown past a single workspace, +
+  // the Big Picture fullscreen-presentation button) is chrome, not a tile in the ordered board
+  // below - it stays visible in both modes, so it is mounted first and excluded from the
+  // board/Big Picture hide toggle.
+  const header = dashboardHeader();
+  host.append(header.el);
 
   // Board order is triage-first, so a fresh landing reads top-down as "anything wrong? ->
   // what's running? -> instantaneous state -> live timeline -> trends -> heavy metrics
@@ -197,7 +206,7 @@ function mountTiles(): void {
   const cacheRate = cacheRateTile();
   const targets = targetsTile();
   const remote = remoteTile();
-  const workspaces = workspacesTile();
+  const workspaces = workspacesTile(activeWorkspace);
   const services = servicesTile();
   const config = configTile();
   const latency = latencyTile();
@@ -223,11 +232,31 @@ function mountTiles(): void {
   host.append(insight.el);
   for (const t of insight.tiles) host.append(t.el);
 
-  tiles = [...ordered, ...insight.tiles];
+  // Big Picture: the TV-friendly summary the fullscreen button swaps in. Mounted alongside the
+  // board (not built only when entered) so it keeps updating in the background and flipping to
+  // it is instant.
+  const bigPicture = bigPictureTile();
+  host.append(bigPicture.el);
+
+  tiles = [header, ...ordered, ...insight.tiles, bigPicture];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
   store.subscribe(renderStatusBar);
   for (const t of tiles) store.subscribe((s) => t.update(s));
+
+  // Board vs Big Picture: exactly one shows at a time; the header row itself always stays
+  // visible. A data attribute, not .hidden: several tiles (config/services/remote/buzz/sandbox)
+  // already manage their OWN .hidden as a "waiting for data" latch inside update(), which runs
+  // on every store tick AFTER this - fighting over .hidden would flicker the board back on.
+  // [data-view-hide] is touched only here, so the two never collide (dashboard.css draws the
+  // actual display:none). Bound once here, un-disposed on a later remount - the same lifetime
+  // the store.subscribe calls above already have (mountTiles rebuilds the whole panel host on
+  // re-mount).
+  const boardEls: HTMLElement[] = [...ordered.map((t) => t.el), insight.el, ...insight.tiles.map((t) => t.el)];
+  bind(viewMode, (mode) => {
+    for (const e of boardEls) e.toggleAttribute("data-view-hide", mode !== "board");
+    bigPicture.el.toggleAttribute("data-view-hide", mode !== "bigPicture");
+  });
 }
 
 // ---- demo mode -------------------------------------------------------------
@@ -304,9 +333,9 @@ function wireResumeForm(): void {
   if (!form) return;
   form.addEventListener("submit", (e) => {
     e.preventDefault();
-    const host = validateLiveHost((el("dash-resume-host") as HTMLInputElement).value.trim());
+    const host = normalizeDaemonHost((el("dash-resume-host") as HTMLInputElement).value.trim());
     if (!host) {
-      setText("dash-connect-sub", "That host must be literally 127.0.0.1 or [::1] with a port.");
+      setText("dash-connect-sub", "Enter a port (for example 8787) or a full 127.0.0.1:port.");
       return;
     }
     everConnected = false;
@@ -368,33 +397,34 @@ export function activate(): void {
     return;
   }
 
-  // A #live=host in the URL (the link magus printed) always wins.
-  if (params.live !== undefined) {
-    const host = validateLiveHost(params.live);
-    if (!host) {
-      setConn({ state: "disconnected", detail: "invalid host" });
-      setText("dash-connect-title", "Can't connect");
-      setText("dash-connect-sub",
-        "The #live host must be literally 127.0.0.1 or [::1]. Re-open the link magus printed.");
-      return;
-    }
-    connectLive(host);
+  // An explicit attach (a #port link magus printed, or the daemon-origin/shared console) always wins.
+  const attach = daemonAttach(params);
+  if (attach) {
+    connectLive(attach);
+    return;
+  }
+  // A malformed #port is an explicit-but-broken attach: say so rather than silently resuming something else.
+  if (params.port !== undefined) {
+    setConn({ state: "disconnected", detail: "invalid port" });
+    setText("dash-connect-title", "Can't connect");
+    setText("dash-connect-sub",
+      "The #port must be a plain port number (1-65535). Re-open the link magus printed.");
     return;
   }
 
   // No link in the URL: optimistically resume the last daemon we connected to.
   const saved = savedDaemon();
-  const savedHost = saved ? validateLiveHost(saved) : null;
+  const savedHost = saved ? validateLoopbackHost(saved) : null;
   if (savedHost) {
     setText("dash-connect-title", "Reconnecting...");
     setText("dash-connect-sub", "Resuming your last daemon at " + savedHost + ".");
-    connectLive(savedHost); // the normalized host, matching the #live= and resume-form paths
+    connectLive(savedHost); // the normalized host, matching the #port and resume-form paths
     return;
   }
   // No remembered daemon, but the operator set a default host in Settings (the loopback override):
   // connect to it.
   const configured = getDefaultHost();
-  const configuredHost = configured ? validateLiveHost(configured) : null;
+  const configuredHost = configured ? validateLoopbackHost(configured) : null;
   if (configuredHost) {
     setText("dash-connect-title", "Reconnecting...");
     setText("dash-connect-sub", "Connecting to your configured daemon at " + configuredHost + ".");

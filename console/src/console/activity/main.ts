@@ -2,8 +2,9 @@
 // the SAME foldable, status-accented sections as the log viewer (buildSection over the shared render
 // model), so a run's output and the trail read as one design. Unlike logs/graph/dashboard it has NO
 // standalone page - it is built fresh into a console host. It lists a page of events via
-// ActivityService.ListActivity when a daemon is reachable (a #live link, or the last daemon the
-// dashboard connected to), and shows a synthesized demo trail on the shared #demo fragment so the
+// ActivityService.ListActivity when a daemon is reachable (a #port link, the daemon-origin/shared
+// console, or the last daemon the dashboard connected to), and shows a synthesized demo trail on the
+// shared #demo fragment so the
 // design is inspectable offline. activate(host) builds the scaffold, kicks the initial load, and
 // returns a teardown the console calls on close (it just marks in-flight loads stale - there is no
 // long-lived stream yet).
@@ -14,7 +15,7 @@ import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
 import { notify } from "../../lib/notifications";
 import { buildSection } from "../render/sections";
 import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "../logs/runtree";
-import { parseHash, wantsDemo, validateLiveHost, consumeLiveToken, createDaemonTransport } from "../../lib/daemon";
+import { parseHash, wantsDemo, daemonAttach, validateLoopbackHost, consumeLiveToken, createDaemonTransport } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 import { demoEvents } from "./demo";
@@ -273,15 +274,16 @@ export function activate(host: HTMLElement): () => void {
     }
   }
 
-  // load resolves which source to read: an explicit #demo, then a #live host, then the last daemon the
-  // dashboard remembered; otherwise the cold empty state.
+  // load resolves which source to read: an explicit #demo, then an explicit daemon attach (a #port
+  // link or the daemon-origin/shared console), then the last daemon the dashboard remembered;
+  // otherwise the cold empty state.
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
     if (wantsDemo(params)) { render(demoEvents(Date.now())); return; }
-    const linked = params.live !== undefined ? validateLiveHost(params.live) : null;
+    const linked = daemonAttach(params);
     const remembered = daemonCell.get();
-    const daemonHost = linked ?? (remembered ? validateLiveHost(remembered) : null);
+    const daemonHost = linked ?? (remembered ? validateLoopbackHost(remembered) : null);
     if (daemonHost) { void loadLive(daemonHost); return; }
     showEmpty("No daemon connected", "The activity trail records what the daemon did: MCP calls, jobs, config changes.", "not connected");
   }

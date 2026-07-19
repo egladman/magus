@@ -80,6 +80,18 @@
  * the status reads as a chip, not an error message. Surfaces drive [data-state] / [data-health] on
  * #console-conn (their contract). */
 #console-conn { white-space: nowrap; line-height: 1.35; color: var(--pf-t--global--text--color--subtle); }
+
+/* Shared "view only" tag: a quiet, square, lowercase chip beside the connection dot on a phone viewing a
+ * LAN share (main.ts adds it only in shared mode). Ambient read-only reminder, not a banner - muted fill,
+ * no accent, so it never reads as a status or an error. */
+#console-statusbar [data-viewonly] {
+  margin-left: 0.5rem; padding: 0.05rem 0.35rem;
+  font-size: 0.72rem; line-height: 1.3; white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle);
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 8%, transparent);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+}
 #console-conn::before {
   content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
   border-radius: 50%; background: var(--console-conn-dot, currentColor); vertical-align: middle;

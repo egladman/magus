@@ -10,7 +10,7 @@ import (
 // Node ID scheme: "<kind>:<qualified-name>", stable across builds and human
 // readable so external consumers and agent memory can key on it. The project
 // path is embedded in target/op-adjacent IDs so an edge crossing projects names
-// exactly the shard to load next (the routing key, per the plan). No invented
+// exactly the shard to load next (the routing key). No invented
 // vocabulary - kinds and separators only.
 
 func projectID(path string) string { return types.KindProject + ":" + path }
@@ -60,7 +60,7 @@ func authorID(name string) string { return types.KindAuthor + ":" + name }
 func symbolID(key string) string { return types.KindSymbol + ":" + key }
 
 // sanitize normalizes free-form repo text (labels, docs, provenance) before it
-// enters the graph, per the plan's ingest-sanitization requirement: strip
+// enters the graph: strip
 // control characters (which would corrupt MAGUS.md, MCP responses, and agent
 // contexts) and cap length to keep node cards and exports bounded. Newlines and
 // tabs collapse to spaces; other control runes are dropped.

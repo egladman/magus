@@ -308,6 +308,18 @@ body[data-console-fill] > main > .console-render-panel {
 .console-shell-panespopup__closebtn:hover {
   background: var(--pf-t--global--background--color--secondary--default);
 }
+/* The map card's header: a title and a plain X that dismisses the whole popup - the obvious "close this
+   menu" control, distinct from the full-width "Close pane" footer (which closes a PANE). */
+.console-shell-panespopup__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  width: 100%; margin-bottom: 0.1rem;
+}
+.console-shell-panespopup__title { font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--subtle); }
+.console-shell-panespopup__done {
+  padding: 0.15rem; min-height: 0; line-height: 0;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-panespopup__done:hover { color: var(--pf-t--global--text--color--regular); }
 
 /* The map itself: a fixed-size miniature of the active tab's pane tree (main.ts's buildPaneMapNode),
    nesting flex boxes that mirror tileView's own row/col split semantics - row splits side by side, col
@@ -518,8 +530,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     border-bottom: 1px solid var(--pf-t--global--border--color--default);
   }
   /* On a phone the chrome buttons ARE the tap target, so stretch them to the row height for a
-     finger-sized (~44px) hit area (the desktop gap above matters only for the mouse hover). */
-  #console-actions > .pf-v6-c-button { align-self: stretch; }
+     finger-sized (~44px) hit area (the desktop gap above matters only for the mouse hover). Match the
+     WIDTH to that stretched height so the button box - and thus its hover/active highlight - is a SQUARE
+     rather than the tall, narrow rectangle a fixed min-width left it (most visible on touch). */
+  #console-actions > .pf-v6-c-button {
+    align-self: stretch;
+    width: var(--console-titlebar-h); min-width: var(--console-titlebar-h);
+    padding-inline: 0;
+  }
   /* Past a few tabs even a full-width row runs out, and the overflow is otherwise clipped and
      unreachable (no scroll buttons here - see tabBar.ts). On touch the row just scrolls: swiping a tab
      strip is the native gesture, so it needs no chrome. The tabs keep their intrinsic width instead of
@@ -694,6 +712,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   position: relative; overflow: hidden; isolation: isolate;
   display: flex; flex-direction: column; gap: 0.15rem;
   padding: 1.15rem 1.25rem;
+  /* Explicit primary ground so each card reads as a distinct tile on the secondary launcher page: a
+     light card on a greyer page in light mode, the intended card-vs-page step in dark. */
+  background: var(--pf-t--global--background--color--primary--default);
   /* An explicit hairline (the PF card ships none), so cards keep a crisp edge on both grounds - it is
      what reads as separation on the low-contrast dark card, and the hover tints it to the card's hue. */
   border: 1px solid var(--pf-t--global--border--color--default);
@@ -703,9 +724,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-launcher-card:focus-visible {
   transform: translateY(-3px);
   border-color: var(--card-accent);
-  /* Soften the lift: full tertiary reads too dark in light mode, so blend it toward the
-     primary ground and let the border tint carry most of the hover signal. */
-  background: color-mix(in srgb, var(--pf-t--global--background--color--tertiary--default) 55%, var(--pf-t--global--background--color--primary--default));
+  /* Hover is a lift, not a darkening: a faint wash of the card's own hue over the primary ground,
+     never below the page tone. The border tint and the translateY carry the main signal. */
+  background: color-mix(in srgb, var(--card-accent) 8%, var(--pf-t--global--background--color--primary--default));
 }
 .console-launcher-card:focus-visible { outline: 2px solid var(--card-accent); outline-offset: 2px; }
 /* The small icon: the card's colored glyph in a rounded, hue-tinted tile (the "indent box"). */
@@ -738,6 +759,49 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-launcher-card .pf-v6-c-card__body { padding: 0; }
 .console-launcher-card .pf-v6-c-card__title-text { font-size: 1rem; font-weight: 600; }
 .console-launcher-card .pf-v6-c-card__body { color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+
+/* Per-card kebab: a quiet three-dot button in the top-right corner (the watermark bleeds off the
+   bottom-right, so the two never collide). Muted at rest so it does not fight the card's identity,
+   brightening on hover/focus and while its menu is open. Always visible - not hover-revealed - so it is
+   reachable on touch, where there is no hover. Its one-item menu drops just below it; the card's
+   overflow:hidden keeps a modest menu clipped to the card, which the ~11rem menu sits comfortably inside. */
+.console-launcher-card__kebab {
+  position: absolute; top: 0.5rem; right: 0.5rem; z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem; padding: 0;
+  border: 0; border-radius: var(--pf-t--global--border--radius--small);
+  background: transparent; color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer; opacity: 0.55;
+  transition: opacity 0.15s var(--console-ease, ease), background 0.15s var(--console-ease, ease), color 0.15s var(--console-ease, ease);
+}
+.console-launcher-card:hover .console-launcher-card__kebab,
+.console-launcher-card:focus-within .console-launcher-card__kebab,
+.console-launcher-card__kebab[aria-expanded="true"] { opacity: 1; }
+.console-launcher-card__kebab:hover {
+  color: var(--pf-t--global--text--color--regular);
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 10%, transparent);
+}
+.console-launcher-card__kebab:focus-visible { opacity: 1; outline: 2px solid var(--card-accent); outline-offset: 1px; }
+.console-launcher-card__menu {
+  position: absolute; top: 2.3rem; right: 0.5rem; z-index: 3;
+  min-width: 11rem; padding: 0.25rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
+  box-shadow: var(--pf-t--global--box-shadow--md);
+}
+.console-launcher-card__menuitem {
+  display: block; width: 100%; text-align: left;
+  padding: 0.4rem 0.55rem; border: 0; background: transparent;
+  border-radius: var(--pf-t--global--border--radius--small);
+  color: var(--pf-t--global--text--color--regular); font-size: 0.82rem; cursor: pointer;
+}
+.console-launcher-card__menuitem:hover,
+.console-launcher-card__menuitem:focus-visible {
+  color: var(--console-accent);
+  background: color-mix(in srgb, var(--console-accent) 12%, transparent);
+  outline: none;
+}
 
 /* Entrance: the cards fade-and-rise once on load, staggered ~50ms apart. One-shot (forwards), and fully
    disabled under prefers-reduced-motion (below). Kept subtle - a 0.5rem rise over ~0.45s. */
@@ -957,9 +1021,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    SVG sat on the text baseline and read high and off-center in its square; center the button box and
    zero the icon line-height so the glyph is optically centered (same fix as the settings + keybindings
    icons). */
-#console-refpin, #console-refclose { align-items: center; }
+#console-refpin, #console-refclose, #console-refbreakout { align-items: center; }
 #console-refpin .pf-v6-c-button__icon,
-#console-refclose .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
+#console-refclose .pf-v6-c-button__icon,
+#console-refbreakout .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
+
+/* The reference surface (the drawer's "break out to tab" target): the same dense, legible help styling
+   the drawer body uses, in a scrolling, width-capped column so a wide/tiled pane stays readable. */
+#console-outlet [data-surface="reference"] { height: 100%; overflow: auto; padding: 1rem 1.25rem; }
+#console-outlet [data-surface="reference"] .console-shell-refdrawer__body { max-width: 46rem; font-size: 0.85rem; line-height: 1.5; }
 
 /* The cloned help + search sit in the panel's scrolling body; keep it dense and legible. */
 #console-refpanel .console-shell-refdrawer__body { font-size: 0.8rem; line-height: 1.5; }

@@ -3,7 +3,7 @@
 // any one. It reads the daemon's read-only /api/v1/outputs feed (the local output store's retained
 // executions) and, on selection, hands the chosen run's ref to the viewer, which fetches that run's
 // verbatim output from /api/v1/output?ref=. The whole browser is a no-op with no reachable daemon
-// (the tree simply stays empty / shows its cold hint), so the offline #data/#src/#live paths are
+// (the tree simply stays empty / shows its cold hint), so the offline #data/#src paths are
 // unaffected. PF owns the tree chrome (pf-v6-c-tree-view); only the panel frame + status dot are ours.
 
 import { authHeaders } from "../../lib/daemon";

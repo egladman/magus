@@ -15,6 +15,7 @@
 import type { DashboardState, RunningTargetView } from "../state";
 import { fmtArgs, relTime } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
+import { logsLink } from "../../../lib/daemon";
 import { Card, h, type Tile } from "./card";
 
 const PREVIEW_LINES = 120; // most recent captured lines kept in the streaming preview
@@ -58,14 +59,14 @@ export function activityTile(): Tile {
     count.textContent = String(targets.length);
     // Live: deep-link to the host's stream. Demo: stay inside the unified demo (../logs/#demo)
     // instead of dropping into the empty log viewer (demo has no live host). Otherwise plain.
-    open.setAttribute("href", liveHost ? "../logs/#live=" + encodeURIComponent(liveHost) : demo ? "../logs/#demo" : "../logs/");
+    open.setAttribute("href", liveHost ? logsLink(liveHost, {}) : demo ? "../logs/#demo" : "../logs/");
 
     empty.hidden = targets.length > 0;
     list.replaceChildren();
     for (const c of targets) {
       const clickable = liveHost && c.invocation;
       const row = clickable ? h("a", "console-dashboard-row") : h("li", "console-dashboard-row");
-      if (clickable) (row as HTMLAnchorElement).href = "../logs/#live=" + encodeURIComponent(liveHost) + "&inv=" + encodeURIComponent(c.invocation);
+      if (clickable) (row as HTMLAnchorElement).href = logsLink(liveHost, { inv: c.invocation });
       const cmd = h("code", "console-dashboard-row__cmd", fmtArgs(c.args));
       const bits: string[] = [];
       if (c.step) bits.push(c.step);

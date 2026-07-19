@@ -20,12 +20,14 @@ import { createCheatsheet } from "./cheatsheet";
 import { createActionsSurface } from "./actions";
 import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane, type Leaf, type Split } from "./tiling";
-import { initRefDrawer } from "../ui/ref-drawer";
+import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
-import { mountNotificationCenter } from "../lib/notifications";
+import { mountNotificationCenter, notify } from "../lib/notifications";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
-import { parseHash, wantsDemo, validateLiveHost, getLiveToken, authHeaders, fetchReadiness, isSharedMode, enterSharedModeIfNeeded, type ReadinessReport, type ReadinessComponent } from "../lib/daemon";
+import { parseHash, wantsDemo, getLiveToken, resolveDaemonHost, createDaemonTransport, fetchReadiness, isSharedMode, enterSharedModeIfNeeded, type ReadinessReport, type ReadinessComponent } from "../lib/daemon";
+import { createClient } from "@connectrpc/connect";
+import { StatusService } from "../gen/magus/status/v1/status_pb";
 import { openShareDialog } from "./share";
 import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
 import type { PageController, PageModule } from "./page";
@@ -178,9 +180,9 @@ function consoleBasePath(): string {
 interface Mounted { host: HTMLElement; status: HTMLElement; tile: TileView; }
 
 // The status bar shows the connected daemon's build: its version inline, the full fingerprint on
-// hover. Read from GET /api/v1/status (build_info) - the running binary reports its own identity, so
-// the bar reflects the daemon you are talking to. In the daemon-free demo it shows a demo value; with
-// no daemon and no demo the chip stays hidden. Cached once and applied to every tab's status bar.
+// hover. Read via the StatusService GetStatus RPC (build) - the running binary reports its own
+// identity, so the bar reflects the daemon you are talking to. In the daemon-free demo it shows a demo
+// value; with no daemon and no demo the chip stays hidden. Cached once and applied to every tab's bar.
 let buildVersion: string | null = null;
 let buildFingerprint = "";
 
@@ -201,11 +203,11 @@ function setBuild(version: string, fingerprint: string): void {
 function loadBuildInfo(): void {
   const params = parseHash();
   if (wantsDemo(params)) { setBuild("v0.2.0", "magus v0.2.0 (a1b2c3d) built 2026-07-16T00:00:00Z"); return; }
-  const host = params.live ? validateLiveHost(params.live) : null;
+  const host = resolveDaemonHost(params);
   if (!host) return;
-  fetch("http://" + host + "/api/v1/status", { headers: authHeaders(getLiveToken()) })
-    .then((r) => (r.ok ? r.json() : null))
-    .then((st) => { if (st?.build_info?.version) setBuild(st.build_info.version, st.build_info.fingerprint || ""); })
+  const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
+  client.getStatus({})
+    .then((res) => { const b = res.status?.build; if (b?.version) setBuild(b.version, b.fingerprint || ""); })
     .catch(() => {});
 }
 
@@ -306,6 +308,15 @@ function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
   if (iconSpan) iconSpan.replaceChildren(panesIcon(mode));
 }
 
+// notConnectedHint is the #console-conn accessible name / tooltip when the console is not connected: it
+// names the CONFIGURED daemon address so a disconnected user sees the target without opening Settings,
+// and always ends in the click hint (the item jumps to the daemon-address field). Empty host = unset.
+function notConnectedHint(host: string): string {
+  return host
+    ? "Not connected to " + host + ". Click to change the daemon address."
+    : "No daemon address configured. Click to set the daemon address.";
+}
+
 // makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
 // (#console-conn, #console-observing, #console-count) and the .console-shell-statusbar__right slot the
 // log viewer injects its zoom control into. It is a real element (not an innerHTML snapshot) so the
@@ -343,9 +354,23 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   // last-probe sentence the readiness poller keeps current (what hovering SEES).
   conn.setAttribute("role", "button");
   conn.tabIndex = 0;
-  conn.setAttribute("aria-label", "Configure daemon address");
-  conn.title = "Configure daemon address";
+  // Surface the CONFIGURED daemon address up front, so a disconnected user reads what address the console
+  // is trying without opening Settings. Both the accessible name and the hover tooltip carry it; the
+  // readiness poller keeps the tooltip current once it has probed. notConnectedHint owns the wording.
+  const hint = notConnectedHint(getDefaultHost());
+  conn.setAttribute("aria-label", hint);
+  conn.title = hint;
   left.append(conn);
+  // Shared ("view only") reminder: a phone viewing over the LAN share is read-only, so a quiet muted tag
+  // sits next to the connection dot as an ambient cue - not a banner. Loopback consoles never see it.
+  if (isSharedMode()) {
+    const viewOnly = document.createElement("span");
+    viewOnly.className = "console-shell-statusbar__viewonly";
+    viewOnly.dataset.viewonly = "";
+    viewOnly.textContent = "view only";
+    viewOnly.title = "This is a read-only view shared to your phone.";
+    left.append(viewOnly);
+  }
   const right = document.createElement("div");
   right.dataset.cluster = ""; right.className = "console-shell-statusbar__right";
   for (const id of ["console-count", "console-observing"] as const) {
@@ -508,9 +533,9 @@ function summarizeComponents(components: ReadinessComponent[]): string {
 // reads as "how stale is this the moment you're seeing it"). A null report - old daemon or genuinely
 // unreachable, indistinguishable from the browser's side - gets an actionable sentence rather than a
 // guessed cause, always ending in the click hint so the enrichment doubles as a discoverability nudge.
-function formatReadinessTitle(report: ReadinessReport | null, ageSec: number): string {
+function formatReadinessTitle(report: ReadinessReport | null, ageSec: number, host: string): string {
   if (!report) {
-    return "Daemon health unavailable (update the daemon to see component status), last tried " + ageSec + "s ago. Click to set the daemon address.";
+    return "Not connected to " + host + ". Daemon health unavailable (update the daemon to see component status), last tried " + ageSec + "s ago. Click to change the daemon address.";
   }
   const statusLine = report.ready ? "200 (ready)" : "503 (not ready)";
   const summary = summarizeComponents(report.components);
@@ -519,10 +544,13 @@ function formatReadinessTitle(report: ReadinessReport | null, ageSec: number): s
 }
 
 export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statusHost: HTMLElement): void {
+  // Snapshot the boot fragment BEFORE enterSharedModeIfNeeded consumes/strips the #token= (below), so the
+  // attach-visibility notification further down can still tell it booted attached and name the port.
+  const bootParams = parseHash();
   // Enter shared ("share to phone") mode BEFORE anything reads the fragment: on a
-  // phone that opened a LAN share link this synthesizes #live=<page origin> and
-  // stashes the token, so the whole shell treats the daemon's own origin as the
-  // live host and every surface connects read-only over same-origin fetches.
+  // phone that opened a LAN share link this records own-origin adoption and stashes
+  // the token, so resolveDaemonHost returns the page's own origin and every surface
+  // connects read-only over same-origin fetches to the exact LAN host it loaded from.
   enterSharedModeIfNeeded();
   const shared = isSharedMode();
   document.documentElement.toggleAttribute("data-shared-mode", shared);
@@ -714,8 +742,9 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   initAppMenu();
 
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
-  // markup. It reads the active surface's [data-ref-section] help blocks (refreshed on tab change).
-  initRefDrawer();
+  // markup. It reads the active surface's [data-ref-section] help blocks (refreshed on tab change). The
+  // panel's "break out to tab" button promotes the console-wide reference into a persistent tab.
+  initRefDrawer({ onBreakOut: () => open("reference") });
 
   // The notification center: the title-bar bell + its pop-out history panel. It builds its own bell into
   // #console-actions, installs the one document listener that records notifications raised from any
@@ -723,6 +752,19 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // history-tier entries so the panel is not empty offline (demo data never lights the bell).
   const notifications = mountNotificationCenter();
   if (wantsDemo(parseHash())) notifications.seedDemo();
+
+  // Attach visibility: when the console booted attached (an explicit #port=, or a #token= own-origin
+  // adoption), drop a HISTORY-tier note naming the port it connected on. History tier (kind "ok") so it
+  // records silently and never lights the bell; keyed so a reload does not re-announce it. A bare #port
+  // (loopback attach) reports its own value; a #token adoption has no port in the fragment, so the page's
+  // own origin port is the one it is talking to. No notification without an attach directive (the plain
+  // configured-default boot).
+  const attachPort = bootParams.port !== undefined && bootParams.port !== ""
+    ? bootParams.port
+    : (bootParams.token !== undefined ? location.port : "");
+  if (attachPort) {
+    notify({ source: "Console", kind: "ok", message: "Connected to daemon on port " + attachPort + ".", key: "console:attached:" + attachPort });
+  }
 
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
   // The listener skips while typing in a field (see commands.ts), so it never eats filter input.
@@ -822,6 +864,30 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
 
   const panesBody = document.createElement("div");
   panesBody.className = "console-shell-panespopup__body";
+
+  // The popup's own header: a title and a plain X that DISMISSES the popup (closePanesPopup). It is the
+  // obvious "close this menu" affordance, kept distinct from the "Close pane" footer below (which closes a
+  // PANE, not the menu) so the two are never confused. closePanesPopup is hoisted (declared further down).
+  const panesHead = document.createElement("div");
+  panesHead.className = "console-shell-panespopup__head";
+  const panesTitle = document.createElement("span");
+  panesTitle.className = "console-shell-panespopup__title";
+  panesTitle.textContent = "Panes";
+  const panesDone = document.createElement("button");
+  panesDone.type = "button";
+  panesDone.className = "pf-v6-c-button pf-m-plain console-shell-panespopup__done";
+  panesDone.setAttribute("aria-label", "Close the Panes menu");
+  panesDone.title = "Close";
+  const doneIcon = document.createElement("span");
+  doneIcon.className = "pf-v6-c-button__icon";
+  const doneGlyph = svgIcon();
+  const doneX = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  doneX.setAttribute("d", "M6 6l12 12M18 6L6 18");
+  doneGlyph.append(doneX);
+  doneIcon.append(doneGlyph);
+  panesDone.append(doneIcon);
+  panesDone.addEventListener("click", () => closePanesPopup(true));
+  panesHead.append(panesTitle, panesDone);
 
   // surfaceLabel is a map cell's caption: the surface's launcher label, or "Empty" for an unfilled
   // leaf (a fresh split's launcher pane, before the operator picks a surface for it).
@@ -1012,14 +1078,21 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   closePaneBtn.textContent = "Close pane";
   const closeChord = chordFor("console.tab.close");
   closePaneBtn.title = closeChord ? "Close pane (" + closeChord + ")" : "Close pane";
-  // Deliberately does not close the popup - Close, like the map's tap/drag/split gestures, is meant
-  // for repeated use (closing several panes in one popup session) without reopening the tray each time.
-  closePaneBtn.addEventListener("click", () => { dispatchCommand("console.tab.close"); renderPanesMap(); });
+  // Deliberately does not close the popup on a plain pane-close - Close, like the map's tap/drag/split
+  // gestures, is meant for repeated use (closing several panes in one popup session) without reopening the
+  // tray each time. The EXCEPTION: closing the last pane closes the whole tab, taking this popup's anchor
+  // (that tab's tray button) out of the DOM - so when the anchor is gone, dismiss the popup rather than
+  // leave it docked to nothing.
+  closePaneBtn.addEventListener("click", () => {
+    dispatchCommand("console.tab.close");
+    if (panesAnchor && !panesAnchor.isConnected) { closePanesPopup(); return; }
+    renderPanesMap();
+  });
 
   // closePaneBtn is a SIBLING of panesBody, not nested inside it, so it can bleed edge-to-edge as the
   // panel's own footer bar (CSS: .console-shell-panespopup__closebtn) instead of inheriting the body's
   // padding - see .console-shell-panespopup in console.css.
-  panesBody.append(panesMap, panesHintHost);
+  panesBody.append(panesHead, panesMap, panesHintHost);
   panesPopup.append(panesBody, closePaneBtn);
 
   // renderPanesMap (re)paints the live spatial map from the active tab's tile - rebuilt on open and
@@ -1086,10 +1159,12 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     closePanesPopup(); // a different tab's tray button while open: close-then-reopen re-anchors it
     openPanesPopup(anchor);
   }
-  // Outside click closes it - checked against BOTH the popup and its current anchor (app-menu.ts's
-  // idiom), so the same click that opened the popup (which reaches this document listener too, after
-  // the statusHost delegation above already toggled it open) does not immediately close it again.
-  document.addEventListener("click", (e) => {
+  // Outside tap closes it - checked against BOTH the popup and its current anchor, so the pointerdown
+  // that opens the popup (the tray button toggles on the following click, so the popup is still hidden
+  // here and this early-returns) does not immediately close it again. pointerdown, not click, so an
+  // outside TAP reliably dismisses on touch (a synthesized click can be dropped when the tapped node
+  // changes); this matches the Reference panel's outside-dismiss idiom.
+  document.addEventListener("pointerdown", (e) => {
     if (panesPopup.hidden) return;
     const t = e.target as Node;
     if (panesPopup.contains(t) || panesAnchor?.contains(t)) return;
@@ -1162,10 +1237,7 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     else delete conn.dataset.health;
   }
   function pollReadiness(): void {
-    const params = parseHash();
-    const liveHost = params.live ? validateLiveHost(params.live) : null;
-    const defaultHost = getDefaultHost();
-    const host = liveHost ?? (defaultHost ? validateLiveHost(defaultHost) : null);
+    const host = resolveDaemonHost();
     if (!host) {
       // No daemon address configured at all: nothing to probe. A surface, if one is docked, owns the text;
       // but the launcher's own bar (zero tabs) has no surface behind it, so say so plainly - RED, via the
@@ -1176,7 +1248,8 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
           conn.textContent = "not connected";
           conn.dataset.state = "none";
           delete conn.dataset.health;
-          conn.title = "No daemon address configured. Click to set the daemon address.";
+          conn.title = notConnectedHint("");
+          conn.setAttribute("aria-label", notConnectedHint(""));
         }
       }
       return;
@@ -1187,13 +1260,20 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
       if (!conn) return; // momentarily absent between tab swaps
       const ageSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
       // The tooltip is always safe to enrich - no surface writes conn.title, so this never contends.
-      conn.title = formatReadinessTitle(report, ageSec);
+      conn.title = formatReadinessTitle(report, ageSec, host);
       // At ZERO tabs the launcher's default bar has no surface behind it, so the poller owns the text +
       // state outright (a reachable+ready daemon reads "connected", otherwise "disconnected" = red).
       if (ws.get().activeId == null) {
         conn.textContent = report ? (report.ready ? "daemon ready" : "daemon not ready") : "not connected";
         conn.dataset.state = report?.ready ? "connected" : "disconnected";
       }
+      // Keep the accessible name naming the address it is probing: connected reads "Connected to <host>",
+      // anything else falls back to the not-connected hint (which also names <host>). Read AFTER the
+      // zero-tab state update above, and runs regardless of tab count so an open-but-disconnected surface
+      // still surfaces the address on the conn item.
+      conn.setAttribute("aria-label", conn.dataset.state === "connected"
+        ? "Connected to " + host + ". Click to change the daemon address."
+        : notConnectedHint(host));
       // Health enrichment runs regardless of tab count, gated on the (surface- or poller-set) data-state.
       enrichConnHealth(conn, report);
     });
@@ -1243,6 +1323,9 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // editor drives the SAME live keymap cell installKeybindings reads - a separate bundle would get its
   // own non-syncing persisted("keymap"). The shell injects the editable command list, defaults, and cell.
   register(settingsSurface({ keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell }, presets: KEYMAP_PRESETS, presetList: KEYMAP_PRESET_LIST }));
+  // The Reference surface backs the drawer's "break out to tab" button. Registered but NOT in SURFACES:
+  // no launcher card, no app-menu row, no Open command - reachable only via that button, single-instance.
+  register(referenceSurface());
 
   // App mode: a dedicated single-surface window, opened by the app drawer as index.html?app=<id>. It
   // shows ONE surface with the tab bar hidden (CSS keys on the [data-appmode] root) so an installed
@@ -1285,8 +1368,8 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   }
 
   // Consume the entry path: open its surface into the (possibly restored) workspace, then scrub the
-  // path back to the console base. The fragment (a synthesized #live + any content) and query are
-  // preserved; only the surface segment is dropped.
+  // path back to the console base. The fragment (any #port/#token/content) and query are preserved;
+  // only the surface segment is dropped.
   if (entrySurface) {
     if (registry.has(entrySurface)) open(entrySurface);
     history.replaceState(null, "", consoleBasePath() + location.search + location.hash);

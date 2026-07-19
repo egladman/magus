@@ -31,8 +31,9 @@ export function savePollMs(ms: number): void {
   pollMs.persistOnly(ms);
 }
 
-// An explicit default daemon host (host:port) to connect to when the URL carries no #live / no
-// remembered daemon - the "loopback URL override" (implicit 127.0.0.1 otherwise). "" means unset.
+// An explicit default daemon host (host:port) to connect to when the URL carries no explicit attach
+// (#port) and no remembered daemon - the "loopback URL override". Stored canonical (a bare port typed
+// in Settings is expanded to 127.0.0.1:port before it lands here). "" means unset.
 export function getDefaultHost(): string {
   return host.get().trim();
 }
