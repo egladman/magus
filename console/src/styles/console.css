@@ -712,9 +712,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   position: relative; overflow: hidden; isolation: isolate;
   display: flex; flex-direction: column; gap: 0.15rem;
   padding: 1.15rem 1.25rem;
-  /* Explicit primary ground so each card reads as a distinct tile on the secondary launcher page: a
-     light card on a greyer page in light mode, the intended card-vs-page step in dark. */
-  background: var(--pf-t--global--background--color--primary--default);
+  /* Set PF's OWN card background variable (a plain `background` here loses to .pf-v6-c-card, so the card
+     fell back to the near-page default grey) to the FLOATING/elevated surface token: each card is a
+     genuinely lighter tile than the page - white on the grey page in light, a raised surface in dark. */
+  --pf-v6-c-card--BackgroundColor: var(--pf-t--global--background--color--floating--default);
   /* An explicit hairline (the PF card ships none), so cards keep a crisp edge on both grounds - it is
      what reads as separation on the low-contrast dark card, and the hover tints it to the card's hue. */
   border: 1px solid var(--pf-t--global--border--color--default);
@@ -724,9 +725,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-launcher-card:focus-visible {
   transform: translateY(-3px);
   border-color: var(--card-accent);
-  /* Only the BORDER tints to the card's hue; the ground stays neutral - a slight step off the primary
-     ground (a touch darker in light, a touch lighter in dark), never the accent color washing the card. */
-  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 6%, var(--pf-t--global--background--color--primary--default));
+  /* Only the BORDER tints to the card's hue; the ground stays neutral - a slight step off the floating
+     card surface (a touch darker in light, a touch lighter in dark), never the accent color washing it. */
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 6%, var(--pf-t--global--background--color--floating--default));
 }
 .console-launcher-card:focus-visible { outline: 2px solid var(--card-accent); outline-offset: 2px; }
 /* The small icon: the card's colored glyph in a rounded, hue-tinted tile (the "indent box"). */
