@@ -206,9 +206,10 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	// Re-inject the daemon socket vars: childEnv withholds them from subprocesses
 	// (the socket is unauthenticated - MGS2008), but a nested magus is a legitimate
 	// recursive invocation that needs daemon access. Passed as Env overrides, which
-	// childEnv layers last so they win; MAGUS/MAGUS_LEVEL are added by childEnv.
+	// childEnv layers last so they win; MAGUS/MAGUS_LEVEL are added by childEnv. The
+	// withheld set is run.DaemonForwardVars, so this re-injection stays in lockstep.
 	var env []string
-	for _, k := range []string{"MAGUS_DAEMON_SOCKET", "MAGUS_DAEMON_ADDRESS"} {
+	for _, k := range run.DaemonForwardVars {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, k+"="+v)
 			// Debug, not Info: this fires on every recursive invocation (a fan-out can

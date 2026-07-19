@@ -99,6 +99,32 @@ func TestCurrentLevel(t *testing.T) {
 	assert.Equal(t, 0, CurrentLevel(), "invalid CurrentLevel")
 }
 
+// TestExecWithholdsDaemonSocket pins the contract runMagus (std/magus.go) relies on: the
+// daemon/pool pointer MAGUS_DAEMON_SOCKET is magus-internal and must NOT reach an op
+// subprocess - even with the sandbox off (the default), where childEnv takes the raw process
+// env. A leaked socket makes any program that links proc (magus's own test binaries) mistake
+// itself for "already adopted under a parent magus". An explicit Env override still wins, which
+// is how a legitimate nested magus re-injects it for forwarding. Mutates env; not parallel.
+func TestExecWithholdsDaemonSocket(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("'sh' not available")
+	}
+	read := func(t *testing.T, opts ExecOptions) string {
+		t.Helper()
+		opts.Capture = true
+		res, err := Exec(context.Background(), "sh", []string{"-c", `printf %s "$MAGUS_DAEMON_SOCKET"`}, opts)
+		require.NoError(t, err)
+		return res.Stdout
+	}
+	// Set in the parent, as startup does when it hosts its own pool: the child must not see it.
+	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/magus-parent.sock")
+	assert.Empty(t, read(t, ExecOptions{}), "daemon socket must be withheld from an op child")
+	// A nested magus re-injects it as an Env override, which layers last and wins.
+	assert.Equal(t, "unix:///tmp/child.sock",
+		read(t, ExecOptions{Env: []string{"MAGUS_DAEMON_SOCKET=unix:///tmp/child.sock"}}),
+		"an explicit override re-injects the socket for legitimate recursion")
+}
+
 func TestRunSuccess(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("true"); err != nil {

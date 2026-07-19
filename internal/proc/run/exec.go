@@ -153,10 +153,19 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	return res, runErr
 }
 
-// childEnv builds the subprocess environment: the sandbox's frozen BaseEnv (or
-// the process environment when unsandboxed), then the magus self-reference vars
-// (see SelfVars), then the caller's overrides. Later entries win, so a caller may
-// still override the self-reference vars.
+// DaemonForwardVars are magus's internal daemon/pool pointers. They must never reach an
+// arbitrary op subprocess: the socket is unauthenticated (MGS2008), and a program that links
+// proc - magus's own test binaries - would mistake an inherited socket for "already adopted
+// under a parent magus". The sandbox allowlist (internal/sandbox/env) already omits them, but
+// the sandbox is off by default, so childEnv strips them from the base env UNCONDITIONALLY.
+// A legitimate nested magus (runMagus in std/magus.go) re-injects them as Env overrides, which
+// layer last and win - so the withholding here and the re-injection there must name the same set.
+var DaemonForwardVars = []string{"MAGUS_DAEMON_SOCKET", "MAGUS_DAEMON_ADDRESS"}
+
+// childEnv builds the subprocess environment: the sandbox's frozen BaseEnv (or the process
+// environment when unsandboxed) with the daemon pool pointers withheld (see DaemonForwardVars),
+// then the magus self-reference vars (see SelfVars), then the caller's overrides. Later entries
+// win, so a caller may still override the self-reference vars or re-add a daemon pointer.
 func childEnv(policy *sandbox.Policy, overrides []string) []string {
 	var base []string
 	if policy != nil {
@@ -166,8 +175,25 @@ func childEnv(policy *sandbox.Policy, overrides []string) []string {
 	if root == nil {
 		root = os.Environ()
 	}
-	env := append(slices.Clone(root), SelfVars()...)
+	env := withoutEnvVars(root, DaemonForwardVars)
+	env = append(env, SelfVars()...)
 	return append(env, overrides...)
+}
+
+// withoutEnvVars returns a fresh copy of env with every "NAME=value" entry whose NAME is in drop
+// removed. Malformed entries (no '=') are treated as a bare name and kept unless dropped.
+func withoutEnvVars(env, drop []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		name := kv
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			name = kv[:i]
+		}
+		if !slices.Contains(drop, name) {
+			out = append(out, kv)
+		}
+	}
+	return out
 }
 
 // SelfVars returns the magus self-reference variables injected into every magus
