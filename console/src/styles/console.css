@@ -476,7 +476,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      chrome, not a page section, so zero both. Without this the border-box height collapses the
      content area to a ~2px sliver and the tabs render as a clipped, unreadable strip. */
   margin: 0; padding: 0;
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* White top rail: the chrome bars (this and the status bar) are lighter than the grey content page,
+     so together they frame the internal content top and bottom. */
+  background: var(--pf-t--global--background--color--primary--default);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
   -webkit-app-region: drag; app-region: drag;
 }
