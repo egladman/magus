@@ -77,8 +77,8 @@ can't feed back into its own key.
 
 ### Per-target inputs and outputs
 
-A spell contributes its globs to *every* target on the project. To attach a glob
-to *one* target, declare it in that target's body with `magus.inputs(...)` /
+A spell contributes its globs to _every_ target on the project. To attach a glob
+to _one_ target, declare it in that target's body with `magus.inputs(...)` /
 `magus.outputs(...)`:
 
 ```buzz
@@ -93,7 +93,7 @@ export fun build(args: [str]) > void {
 output globs to its snapshot/replay set. So a target's footprint is the **union**
 of three layers: the bound spells' globs, the project-wide `sources`/`outputs`,
 and the target's own `magus.inputs`/`magus.outputs`. Per-target declarations only
-ever *add* - they never shrink the project-wide baseline (see
+ever _add_ - they never shrink the project-wide baseline (see
 [Granularity](#granularity-project-wide-vs-per-target)).
 
 The globs are read **statically**, before the target runs - a cache hit skips the
@@ -172,13 +172,13 @@ its still-present entry. Disk is reclaimed separately by eviction and pruning (s
 
 Four controls, at four different scopes:
 
-| Control                         | Scope                       | Semantics                                                                                     |
-| -------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- |
-| `skip_cache` target policy        | one target, every run         | Always runs; never replays **or** snapshots (a long-running `fs.watch` loop, a service op).      |
-| `magus run <target> --no-cache`  | one target, one invocation    | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`. |
-| `magus.bust_cache(path?)`        | runtime, one magusfile call   | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
-| `magus clean --cache`           | CLI, whole cache               | Wipes the on-disk store from outside any run.                                                  |
-| `cache.immutable` (`MAGUS_CACHE_IMMUTABLE`) | whole cache, whole run | Read-only mode: replays hits, but a miss runs the target and does **not** write a new manifest.  |
+| Control                                     | Scope                       | Semantics                                                                                                                                                                                                                               |
+| ------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skip_cache` target policy                  | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs.watch` loop, a service op).                                                                                                                                             |
+| `magus run <target> --no-cache`             | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
+| `magus.bust_cache(path?)`                   | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
+| `magus clean --cache`                       | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
+| `cache.immutable` (`MAGUS_CACHE_IMMUTABLE`) | whole cache, whole run      | Read-only mode: replays hits, but a miss runs the target and does **not** write a new manifest.                                                                                                                                         |
 
 `skip_cache` and `--no-cache` both force a genuine re-execution; the difference
 is entirely about what happens to the cache entry afterward (never snapshot vs.
@@ -203,7 +203,7 @@ even though `build` only cares about `.go` files. This is deliberately coarse
 far more often than their names alone would suggest.
 
 Per-target [`magus.inputs`/`magus.outputs`](#per-target-inputs-and-outputs) does
-**not** undo this. It *adds* to a target's footprint; it cannot remove the
+**not** undo this. It _adds_ to a target's footprint; it cannot remove the
 project-wide baseline. Declaring `magus.inputs("src/**")` on `build` does not stop
 a `Dockerfile` edit from busting it, because the `docker` spell's globs are still
 in the baseline. Per-target inputs are for attaching an input a target needs that
@@ -218,7 +218,7 @@ That gives a clean rule for **where to declare a glob**:
 Declaring the same glob in both layers is a no-op (the union already has it) and
 `magus doctor` flags it as [MGS1005](codes/magusfile/MGS1005.md). Outputs are
 almost always target-specific (`build` -> `dist/`, `test` -> `coverage/`), so a
-project-wide `outputs` - which makes *every* target snapshot it - is usually the
+project-wide `outputs` - which makes _every_ target snapshot it - is usually the
 wrong tool; prefer per-target `magus.outputs`.
 
 ## Replay: a hit restores outputs, not execution
@@ -257,18 +257,18 @@ An output glob answers two different questions, and magus keeps them on two
 different code paths. Confusing them is the easiest way to introduce a stale-hit
 or a broken `magus clean`, so the model is worth stating once.
 
-| Role | Question it answers | Scope | Where it lives |
-| ---- | ------------------- | ----- | -------------- |
-| **Cache footprint** | "what does *this target* snapshot and replay?" | one target | `cache.Step.Outputs`, assembled per-target in `buildStep`: the project-wide `Outputs` plus that target's `magus.outputs`. |
-| **Generated-files manifest** | "what files does *this project* generate?" | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with *every* target's `magus.outputs`. |
+| Role                         | Question it answers                            | Scope         | Where it lives                                                                                                            |
+| ---------------------------- | ---------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Cache footprint**          | "what does _this target_ snapshot and replay?" | one target    | `cache.Step.Outputs`, assembled per-target in `buildStep`: the project-wide `Outputs` plus that target's `magus.outputs`. |
+| **Generated-files manifest** | "what files does _this project_ generate?"     | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with _every_ target's `magus.outputs`.                   |
 
 The cache role is per-target on purpose. A miss snapshots exactly the outputs in
 that target's `Step`, and a hit replays exactly those - so an output must be
 declared on the target that **produces** it. This is the **producer-ownership
 rule**, and violating it is a real bug, not a style nit: a glob declared
-project-wide is in *every* cacheable target's `Step.Outputs`, including targets
+project-wide is in _every_ cacheable target's `Step.Outputs`, including targets
 that never write it. When one of those unrelated targets gets a cache hit, its
-replay restores the file to whatever it was when *that* target last ran - so a
+replay restores the file to whatever it was when _that_ target last ran - so a
 `go-build` hit can silently **revert** a freshly regenerated `MAGUS.md`. Scoping
 the output to its producer with `magus.outputs` means only the producer's hit
 replays it. Project-wide `outputs` is correct only when every target genuinely

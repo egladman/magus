@@ -169,13 +169,13 @@ before lookup, wherever that input enters.
 
 ### Where it applies
 
-| Surface                                          | Example                                                    |
-| ------------------------------------------------- | ----------------------------------------------------------------- |
-| Magusfile declarations (`export fun`)              | `export fun go_build(...)` registers as `go-build`.                |
-| CLI `run` / `affected` arguments                   | `magus run goBuild` reaches the target declared `go_build`.        |
-| `magus.needs` target handles                       | `magus.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
-| The per-target policy map (`magus.project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa. |
-| Charm names (`NormalizeCharmName`)                 | `target:NoCache` and `target:no-cache` are the same charm.         |
+| Surface                                                 | Example                                                                                                    |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Magusfile declarations (`export fun`)                   | `export fun go_build(...)` registers as `go-build`.                                                        |
+| CLI `run` / `affected` arguments                        | `magus run goBuild` reaches the target declared `go_build`.                                                |
+| `magus.needs` target handles                            | `magus.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
+| The per-target policy map (`magus.project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa.                        |
+| Charm names (`NormalizeCharmName`)                      | `target:NoCache` and `target:no-cache` are the same charm.                                                 |
 
 ### Where it deliberately does not apply
 
@@ -264,14 +264,14 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 
 ## Glossary
 
-| Term       | Definition                                                                                                          |
-| ---------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.                |
-| **Path**   | Project path relative to the workspace root. Empty or `/` means all projects.                                       |
-| **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `clean`, `generate`. |
-| **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                            |
-| **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.              |
-| **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).            |
+| Term       | Definition                                                                                                                 |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.                       |
+| **Path**   | Project path relative to the workspace root. Empty or `/` means all projects.                                              |
+| **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `clean`, `generate`.        |
+| **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                                   |
+| **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.                     |
+| **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).                   |
 | **`ci`**   | An ordinary target you compose with `magus.needs`; `Magus.RunCI` only strips `rw`, anchors `affected`, and must-not-no-op. |
 
 ## See also

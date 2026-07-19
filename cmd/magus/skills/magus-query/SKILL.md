@@ -88,7 +88,7 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
   OBSERVED from local run history, not derived from sources - read them as history, not
   guarantees. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
   captured run (with `last_run_ok` its `true`/`false` outcome), so `magus query output
-  <ref>` on it fetches that output - a target-to-output hop. When `knowledge.vcs` is
+<ref>` on it fetches that output - a target-to-output hop. When `knowledge.vcs` is
   enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
   `vcs_commits` extracted from git history.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.

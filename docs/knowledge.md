@@ -414,7 +414,7 @@ knowledge:
   vcs:
     enabled: true
     max_commits: 1000 # optional: bound the history walk (default 1000)
-    authorship: true  # optional: include author nodes + authored edges (default on)
+    authorship: true # optional: include author nodes + authored edges (default on)
 ```
 
 When enabled and the workspace is a git repo, a `@vcs` shard adds four attrs to every

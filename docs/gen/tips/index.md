@@ -1,7 +1,20 @@
 ---
 title: Tips and tricks
 description: Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, output field discovery, and recursive invocation.
-tags: [tips, status, step, watch, repl, recursion, magus.cmd, magus status, output, template, fields]
+tags:
+  [
+    tips,
+    status,
+    step,
+    watch,
+    repl,
+    recursion,
+    magus.cmd,
+    magus status,
+    output,
+    template,
+    fields,
+  ]
 ---
 
 # Tips and tricks

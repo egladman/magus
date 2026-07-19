@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
 )

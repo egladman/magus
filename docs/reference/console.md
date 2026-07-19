@@ -61,13 +61,13 @@ background maintenance without an open action endpoint. It is the daemon's only
 write surface, and it is bounded: it submits a fixed set of named jobs, never an
 arbitrary command.
 
-| RPC              | Effect                                                        |
-| ---------------- | ------------------------------------------------------------- |
-| `SyncGraph`      | Reconcile the knowledge graph to current source               |
-| `RotateActivities` | Trim the activity trail to its cap                            |
-| `RotateLogs`     | Trim the invocation run-log journals to their cap             |
-| `ClearCache`     | Invalidate cached build entries                               |
-| `ListJobs`       | Report every job's running state, last run, and target size   |
+| RPC                | Effect                                                      |
+| ------------------ | ----------------------------------------------------------- |
+| `SyncGraph`        | Reconcile the knowledge graph to current source             |
+| `RotateActivities` | Trim the activity trail to its cap                          |
+| `RotateLogs`       | Trim the invocation run-log journals to their cap           |
+| `ClearCache`       | Invalidate cached build entries                             |
+| `ListJobs`         | Report every job's running state, last run, and target size |
 
 Each submit is fire-and-forget and coalesced (an identical in-flight job is not
 started twice) and returns a metadata snapshot - the job's last run and the

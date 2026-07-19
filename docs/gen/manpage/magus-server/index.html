@@ -95,7 +95,7 @@ invocations so workspace discovery, config loading, and the content-addressed
 cache are paid for once. Nested magus calls (from build scripts, editor
 integrations, etc.) forward work to the daemon automatically.</p>
 <p>The socket address is resolved in priority order:
---socket flag  &gt;  MAGUS_DAEMON_ADDRESS env  &gt;  daemon.address in magus.yaml  &gt;
+--socket flag &gt; MAGUS_DAEMON_ADDRESS env &gt; daemon.address in magus.yaml &gt;
 stable default ($XDG_RUNTIME_DIR/magus/magus-daemon.sock)</p>
 <p>The socket file acts as the lock: present means a daemon is running, absent
 means none. Shell init hooks (e.g. Nix-injected .profile lines) typically

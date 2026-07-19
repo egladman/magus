@@ -17,23 +17,23 @@ plainly, and vice versa.
 
 ## Terminology map
 
-| Nx                                             | magus                                                                 |
-| ------------------------------------------------ | ------------------------------------------------------------------------ |
-| workspace (`nx.json`)                            | workspace (`magus.yaml`)                                                  |
-| project (`project.json` / `package.json`)        | project (a directory whose `magusfile.buzz` registers it)                |
-| target (`project.json` `targets`)                | target (an exported `fun` in the magusfile; seven canonical names plus custom - see [targets.md](targets.md#the-target-name)) |
-| executor / plugin                                | spell op (a [spell](spells.md) is a library of tool-native ops)           |
-| `nx:run-commands`                                | `os.exec(...)` in a target body                                          |
-| `dependsOn: ["^build"]`                          | `magus.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering - see [dependencies.md](dependencies.md)) |
-| `implicitDependencies`                           | `depends_on` in `magus.project`                                          |
-| `inputs` / `namedInputs`                         | a spell's `needs` globs, plus a project's own [`sources`](workspace.md#magusproject-layering-policy) |
-| `outputs`                                        | `outputs` / a spell's `provides` globs                                   |
-| `nx affected`                                    | `magus affected`                                                          |
-| `nx graph`                                       | `magus graph` / `magus affected --graph` / `magus graph open`            |
-| Nx Cloud remote cache (Nx Replay)                | [magus remote cache](remote-cache.md) (self-hosted backends, Ed25519-signed artifacts) |
-| Nx Cloud DTE / Nx Agents                         | `magus affected --plan` (a provider-neutral JSON shard plan; you bring the runners) |
-| generators / scaffolding                         | fixed, not extensible: `magus init` writes a starter magusfile, `magus init spell <name>` scaffolds one spell stub; there is no generator framework for custom, pluggable scaffolds |
-| task pipeline (`targetDefaults` in `nx.json`)     | composed `magus.needs` calls in the magusfile                             |
+| Nx                                            | magus                                                                                                                                                                               |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| workspace (`nx.json`)                         | workspace (`magus.yaml`)                                                                                                                                                            |
+| project (`project.json` / `package.json`)     | project (a directory whose `magusfile.buzz` registers it)                                                                                                                           |
+| target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; seven canonical names plus custom - see [targets.md](targets.md#the-target-name))                                                       |
+| executor / plugin                             | spell op (a [spell](spells.md) is a library of tool-native ops)                                                                                                                     |
+| `nx:run-commands`                             | `os.exec(...)` in a target body                                                                                                                                                     |
+| `dependsOn: ["^build"]`                       | `magus.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering - see [dependencies.md](dependencies.md))                             |
+| `implicitDependencies`                        | `depends_on` in `magus.project`                                                                                                                                                     |
+| `inputs` / `namedInputs`                      | a spell's `needs` globs, plus a project's own [`sources`](workspace.md#magusproject-layering-policy)                                                                                |
+| `outputs`                                     | `outputs` / a spell's `provides` globs                                                                                                                                              |
+| `nx affected`                                 | `magus affected`                                                                                                                                                                    |
+| `nx graph`                                    | `magus graph` / `magus affected --graph` / `magus graph open`                                                                                                                       |
+| Nx Cloud remote cache (Nx Replay)             | [magus remote cache](remote-cache.md) (self-hosted backends, Ed25519-signed artifacts)                                                                                              |
+| Nx Cloud DTE / Nx Agents                      | `magus affected --plan` (a provider-neutral JSON shard plan; you bring the runners)                                                                                                 |
+| generators / scaffolding                      | fixed, not extensible: `magus init` writes a starter magusfile, `magus init spell <name>` scaffolds one spell stub; there is no generator framework for custom, pluggable scaffolds |
+| task pipeline (`targetDefaults` in `nx.json`) | composed `magus.needs` calls in the magusfile                                                                                                                                       |
 
 ## Model differences
 

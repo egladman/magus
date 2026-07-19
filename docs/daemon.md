@@ -146,7 +146,7 @@ can diverge:
 - the **daemon** (`daemon pid ...` with the live pool, or `daemon: off`) - the socket the
   daemon dispatches build jobs on;
 - the **MCP endpoint** (`mcp endpoint` block with `state: serving | not-ready | unreachable
-  | disabled`) - the HTTP endpoint agent hosts connect to. Nothing starts this on its own,
+| disabled`) - the HTTP endpoint agent hosts connect to. Nothing starts this on its own,
   so an `unreachable` MCP endpoint is the usual reason "the magus tools disappeared" from an
   agent. See [MCP](mcp.md#is-mcp-actually-reachable).
 
@@ -161,10 +161,10 @@ serves `/livez`, `/readyz`, and `/healthz` over HTTP on the MCP port.
 The daemon exposes both HTTP endpoints (for `httpGet` probes) and an exec form (for `exec`
 probes), split along the standard liveness/readiness lines:
 
-| K8s probe   | endpoint                        | passes when                                    |
-| ----------- | ------------------------------- | ---------------------------------------------- |
-| `liveness`  | `GET /livez` (alias `/healthz`) | the daemon answers - independent of warm-up    |
-| `readiness` | `GET /readyz`                   | the daemon answers AND a workspace is loaded   |
+| K8s probe   | endpoint                        | passes when                                     |
+| ----------- | ------------------------------- | ----------------------------------------------- |
+| `liveness`  | `GET /livez` (alias `/healthz`) | the daemon answers - independent of warm-up     |
+| `readiness` | `GET /readyz`                   | the daemon answers AND a workspace is loaded    |
 | `startup`   | `GET /livez`                    | the daemon has come up (reuse the liveness URL) |
 
 Liveness is deliberately **independent of warm-up state**: it returns `200` as soon as the

@@ -92,11 +92,11 @@
 query, explain, and path verbs read the knowledge graph; magus graph is the
 home of the graph itself.</p>
 <p>Subcommands (the first argument):</p>
-<p>deps     The project dependency DAG. A trailing list of project paths roots
+<p>deps The project dependency DAG. A trailing list of project paths roots
 the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
 same view scoped to a run is available as magus run &lt;target&gt; --graph
 and magus affected &lt;target&gt; --graph.
-export   The merged knowledge graph: the deterministic, cache-backed graph of
+export The merged knowledge graph: the deterministic, cache-backed graph of
 the magus domain (projects, targets, spells, ops, charms, modules,
 methods, diagnostics, docs, buzz sources). -o json emits the
 node-link form; -o graphml emits GraphML. External graph viewers
@@ -105,12 +105,12 @@ export to a query's neighborhood (same engine as magus query); -o dot
 and -o mermaid render only with --select, since the full graph has too
 many nodes to lay out. The graph is cache-backed under
 &lt;cache&gt;/knowledge; only shards whose sources changed are rebuilt.
-stats    The graph's shape: god nodes (the most connected spells, modules,
+stats The graph's shape: god nodes (the most connected spells, modules,
 targets - where structural risk concentrates), orphans (docs that
 document nothing, spells no target uses), and doc coverage (the
 share of diagnostics, spells, and modules with a doc). --kind scopes
 every section to one node kind. insight report embeds this section.
-open     Open the workspace's knowledge graph (or target dependency graph with
+open Open the workspace's knowledge graph (or target dependency graph with
 --targets) in the hosted, interactive Graph Explorer. The graph is
 delivered privately: by default it rides in the URL fragment
 (#data=...), which browsers never send to a server; --serve instead

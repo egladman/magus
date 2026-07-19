@@ -29,11 +29,11 @@ declared sources; none of them decides, plans, or injects itself into the
 agent's context. Answering is the tool's job; deciding is the model's.
 The three artifacts:
 
-| artifact | answers | freshness |
-| --- | --- | --- |
-| `MAGUS.md` | WHAT is in this workspace (targets, counts, anchors) | regenerated with the workspace (`magus describe graph -o markdown`) |
-| `.claude/skills/` | HOW to use the magus tool surface | ships with the binary; versioned, drift-checked |
-| MCP daemon | live answers (query, run, explain, logs) | always current; `magus server start` |
+| artifact          | answers                                              | freshness                                                           |
+| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------- |
+| `MAGUS.md`        | WHAT is in this workspace (targets, counts, anchors) | regenerated with the workspace (`magus describe graph -o markdown`) |
+| `.claude/skills/` | HOW to use the magus tool surface                    | ships with the binary; versioned, drift-checked                     |
+| MCP daemon        | live answers (query, run, explain, logs)             | always current; `magus server start`                                |
 
 The split is deliberate: skills never mention workspace specifics, so they only
 go stale when the tool surface changes - and that staleness is detectable (see
@@ -52,12 +52,12 @@ Agent Skills format (SKILL.md with name and description frontmatter) is a
 cross-agent spec, so every skill-directory platform receives identical bytes;
 platforms differ only in where they look:
 
-| platform | writes | serves |
-| --- | --- | --- |
-| `claude` | `.claude/skills/` | Claude Code |
-| `opencode` | `.opencode/skills/` | OpenCode |
-| `agents` | `.agents/skills/` | any Agent Skills spec-compliant framework |
-| `codex` | managed section in `AGENTS.md` | Codex and any AGENTS.md-reading agent (Aider, Droid, ...) |
+| platform   | writes                         | serves                                                    |
+| ---------- | ------------------------------ | --------------------------------------------------------- |
+| `claude`   | `.claude/skills/`              | Claude Code                                               |
+| `opencode` | `.opencode/skills/`            | OpenCode                                                  |
+| `agents`   | `.agents/skills/`              | any Agent Skills spec-compliant framework                 |
+| `codex`    | managed section in `AGENTS.md` | Codex and any AGENTS.md-reading agent (Aider, Droid, ...) |
 
 The `codex` form does not write skill files: it maintains a marker-delimited
 magus section inside `AGENTS.md` (created if absent, replaced in place on

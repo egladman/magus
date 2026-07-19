@@ -43,12 +43,12 @@ mcp endpoint
 
 The `state` is one of:
 
-| state         | meaning                                                              |
-| ------------- | ------------------------------------------------------------------- |
-| `serving`     | listening and a workspace is loaded - the tools are reachable       |
-| `not-ready`   | listening, but no workspace is loaded yet                           |
-| `unreachable` | nothing is listening; start the daemon with `magus server start`    |
-| `disabled`    | turned off by `mcp.enabled=false`                                   |
+| state         | meaning                                                          |
+| ------------- | ---------------------------------------------------------------- |
+| `serving`     | listening and a workspace is loaded - the tools are reachable    |
+| `not-ready`   | listening, but no workspace is loaded yet                        |
+| `unreachable` | nothing is listening; start the daemon with `magus server start` |
+| `disabled`    | turned off by `mcp.enabled=false`                                |
 
 For scripts and container probes, `magus status --probe=<kind>` exits `0` healthy / `1`
 unhealthy. The kinds are `liveness` (the daemon answers), `readiness` (a workspace is
@@ -72,48 +72,48 @@ the live set with full parameters, so trust that over this table if they ever di
 
 Discover:
 
-| Tool                 | Purpose                                                                            |
-| -------------------- | --------------------------------------------------------------------------------- |
-| `magus_describe`     | Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools (pass `name` for one entity's detail) |
-| `magus_describe_file`| Classify paths against declared globs: owning project, and output (generated) vs source |
-| `magus_where`        | Resolve a fuzzy project name to its absolute path                                  |
-| `magus_config_get`   | Read the resolved workspace config (read-only)                                     |
+| Tool                  | Purpose                                                                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `magus_describe`      | Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools (pass `name` for one entity's detail) |
+| `magus_describe_file` | Classify paths against declared globs: owning project, and output (generated) vs source                                          |
+| `magus_where`         | Resolve a fuzzy project name to its absolute path                                                                                |
+| `magus_config_get`    | Read the resolved workspace config (read-only)                                                                                   |
 
 Run:
 
-| Tool                    | Purpose                                                          |
-| ----------------------- | ---------------------------------------------------------------- |
-| `magus_run_target`      | Run a target (`build`, `test`, `lint`, `ci`, ...) for one or more projects |
-| `magus_run_affected`    | Run a target on only the VCS-affected projects                   |
-| `magus_affected_plan`   | Emit a provider-neutral CI shard plan for the affected set       |
-| `magus_affected_explain`| Explain why a project is in the affected set                     |
+| Tool                     | Purpose                                                                    |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `magus_run_target`       | Run a target (`build`, `test`, `lint`, `ci`, ...) for one or more projects |
+| `magus_run_affected`     | Run a target on only the VCS-affected projects                             |
+| `magus_affected_plan`    | Emit a provider-neutral CI shard plan for the affected set                 |
+| `magus_affected_explain` | Explain why a project is in the affected set                               |
 
 Inspect:
 
-| Tool             | Purpose                                                             |
-| ---------------- | ------------------------------------------------------------------ |
-| `magus_doctor`   | Validate workspace health (config, cache, cycles, tool availability) |
-| `magus_status`   | Report telemetry/cache settings and the live proc-server pool state |
-| `magus_tail_log` | Return the most recent captured build log for a project            |
+| Tool             | Purpose                                                                |
+| ---------------- | ---------------------------------------------------------------------- |
+| `magus_doctor`   | Validate workspace health (config, cache, cycles, tool availability)   |
+| `magus_status`   | Report telemetry/cache settings and the live proc-server pool state    |
+| `magus_tail_log` | Return the most recent captured build log for a project                |
 | `magus_output`   | Fetch one target execution's exact captured output by its `out...` ref |
-| `magus_insight`  | VCS-history lenses: hotspots, files, affinity, ownership, trend    |
+| `magus_insight`  | VCS-history lenses: hotspots, files, affinity, ownership, trend        |
 
 Knowledge graph:
 
-| Tool          | Purpose                                                                  |
-| ------------- | ------------------------------------------------------------------------ |
-| `magus_query` | Search the graph and return ranked matches plus their neighborhood       |
-| `magus_explain`| Show one node's data, edges with provenance, and how many nodes reach it |
-| `magus_path`  | Shortest path between two nodes: how two entities relate                  |
-| `magus_refs`  | Where a code symbol is defined and every file that references it (SCIP)   |
-| `magus_stats` | Graph shape: god nodes, orphans, doc coverage                            |
+| Tool            | Purpose                                                                  |
+| --------------- | ------------------------------------------------------------------------ |
+| `magus_query`   | Search the graph and return ranked matches plus their neighborhood       |
+| `magus_explain` | Show one node's data, edges with provenance, and how many nodes reach it |
+| `magus_path`    | Shortest path between two nodes: how two entities relate                 |
+| `magus_refs`    | Where a code symbol is defined and every file that references it (SCIP)  |
+| `magus_stats`   | Graph shape: god nodes, orphans, doc coverage                            |
 
 Memory and scratch:
 
-| Tool               | Purpose                                                                         |
-| ------------------ | ------------------------------------------------------------------------------- |
+| Tool               | Purpose                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------- |
 | `magus_memory`     | Durable per-repo `status` / `progress` / `decisions` files, shared across sessions |
-| `magus_scratchpad` | Private per-workspace scratch file for the agent's intermediate notes            |
+| `magus_scratchpad` | Private per-workspace scratch file for the agent's intermediate notes              |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 

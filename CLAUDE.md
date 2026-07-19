@@ -49,7 +49,7 @@ warm, and runs background jobs (symbol auto-indexing). Start/stop it with:
 - `magus server start` auto-backgrounds by default: it detaches the daemon, waits
   until it is accepting, prints the pid, and returns 0 (starting when one is already
   running is a no-op that also returns 0, so scripts can chain on it). `magus server
-  stop` stops it and prints what it stopped, exiting non-zero when it found nothing
+stop` stops it and prints what it stopped, exiting non-zero when it found nothing
   to stop. The MCP server and the Dashboard come up alongside the daemon. Detached
   daemon logs go to `<sockdir>/magus-daemon.log`. Use `--foreground` (for a
   supervisor like systemd --user, or when debugging) to run it blocking in the
@@ -57,7 +57,7 @@ warm, and runs background jobs (symbol auto-indexing). Start/stop it with:
 - Iterating on daemon code: `go run ./cmd/magus server start --foreground` runs HEAD
   in the foreground, but the process is long-lived, so a source edit does NOT take
   effect until you stop and restart it: `magus server stop && go run ./cmd/magus
-  server start --foreground`. There is no hot reload.
+server start --foreground`. There is no hot reload.
 
 Do NOT wire a watch-rebuild loop for magus itself. magus is the task
 orchestrator, so a "rebuild on every file change" loop would have the tool

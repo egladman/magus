@@ -52,13 +52,13 @@ part of W4.
 The ONE file adapting PF tokens to the console. Fresh - NOT a port of the old `--c-*` /
 `--pico-*` palette.
 
-| Console slot                | PatternFly token                                        | Meaning              |
-| --------------------------- | ------------------------------------------------------- | -------------------- |
-| `--console-accent`          | `--pf-t--global--color--brand--default`                 | primary/active accent |
-| `--console-status-running`  | `--pf-t--global--icon--color--status--info--default`    | pool busy (blue)     |
-| `--console-status-queued`   | `--pf-t--global--icon--color--status--danger--default`  | saturation (red)     |
-| `--console-status-ok`       | `--pf-t--global--icon--color--status--success--default` | healthy (green)      |
-| `--console-status-warn`     | `--pf-t--global--icon--color--status--warning--default` | caution (gold)       |
+| Console slot               | PatternFly token                                        | Meaning               |
+| -------------------------- | ------------------------------------------------------- | --------------------- |
+| `--console-accent`         | `--pf-t--global--color--brand--default`                 | primary/active accent |
+| `--console-status-running` | `--pf-t--global--icon--color--status--info--default`    | pool busy (blue)      |
+| `--console-status-queued`  | `--pf-t--global--icon--color--status--danger--default`  | saturation (red)      |
+| `--console-status-ok`      | `--pf-t--global--icon--color--status--success--default` | healthy (green)       |
+| `--console-status-warn`    | `--pf-t--global--icon--color--status--warning--default` | caution (gold)        |
 
 These PF status tokens are **theme-aware** (they resolve to the right value in light and
 dark), so charts that read `--console-status-*` at runtime via `getComputedStyle` color
@@ -88,12 +88,12 @@ version bumps.
 
 At the W4 cutover the four Pico-era sheets were removed from `gen/`:
 
-| Removed sheet (as shipped) | Bytes reclaimed |
-| -------------------------- | --------------- |
-| `pico.min.css` (raw copy)  | 83,319          |
-| `site.css` (minified)      | 32,685          |
-| `theme.css` (minified)     | 6,796           |
-| `ui-panels.css` (minified) | 5,524           |
+| Removed sheet (as shipped) | Bytes reclaimed       |
+| -------------------------- | --------------------- |
+| `pico.min.css` (raw copy)  | 83,319                |
+| `site.css` (minified)      | 32,685                |
+| `theme.css` (minified)     | 6,796                 |
+| `ui-panels.css` (minified) | 5,524                 |
 | **Total**                  | **~128,324 (~125KB)** |
 
 Measured `gen/` total dropped **1,720KB -> 1,588KB (-132KB)** (the small extra beyond the
@@ -125,14 +125,14 @@ This mirrors PF's `pf-v6-c-<block>__<element>` + `pf-m-<modifier>` BEM structure
   must eventually return nothing but real HTML attributes.
 - **`<area>`** - the region/surface that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
   The allowed areas are a CLOSED set - pick exactly one:
-  - `console-shell-*`     the app frame: title bar, tab strip, status bar, floating gear +
-                          settings popover, command palette, keybindings overlay, tiling.
+  - `console-shell-*` the app frame: title bar, tab strip, status bar, floating gear +
+    settings popover, command palette, keybindings overlay, tiling.
   - `console-dashboard-*` the dashboard surface (hero, tiles, gantt, pool, stat strips, tables).
-  - `console-log-*`       the log viewer surface (filter chips, toolbar bits, zoom control).
-  - `console-graph-*`     the graph explorer surface (stage, sidebar, node cloud, legend, explain card).
-  - `console-activity-*`  the activity surface (only what is not already shared render).
-  - `console-render-*`    the SHARED render model reused by log + activity (foldable sections,
-                          status badges, ANSI spans) - one home so both surfaces stay in lockstep.
+  - `console-log-*` the log viewer surface (filter chips, toolbar bits, zoom control).
+  - `console-graph-*` the graph explorer surface (stage, sidebar, node cloud, legend, explain card).
+  - `console-activity-*` the activity surface (only what is not already shared render).
+  - `console-render-*` the SHARED render model reused by log + activity (foldable sections,
+    status badges, ANSI spans) - one home so both surfaces stay in lockstep.
 - **`<block>`** - the component/thing, kebab-case, verbose and explicit. Prefer a full word to
   an abbreviation: `console-log-filter`, `console-shell-statusbar`, `console-dashboard-gantt`,
   `console-graph-nodelist`, `console-render-badge`, `console-render-ansi`.
@@ -198,10 +198,10 @@ CSS, and only renamed the genuinely component-less escape hatches. Swaps made:
 - Graph: the live/snapshot badges -> **PF Labels**.
 
 Escape hatches that stay custom (renamed to the formula): the ANSI log body + foldable sections + status
-badges (console-render-*), the trace waterfall + zoom control + ref pills (console-log-*), the d3 graph
-stage + node cloud + legend + explain card + Ask views (console-graph-*), the dense dashboard tiles - stat
-strips, pool grid, gantt, utilization heatmap, tables, hero (console-dashboard-*), the status bar +
-theme-cycle + refresh toast (console-shell-*). Transient state moved onto data-* attributes throughout
+badges (console-render-_), the trace waterfall + zoom control + ref pills (console-log-_), the d3 graph
+stage + node cloud + legend + explain card + Ask views (console-graph-_), the dense dashboard tiles - stat
+strips, pool grid, gantt, utilization heatmap, tables, hero (console-dashboard-_), the status bar +
+theme-cycle + refresh toast (console-shell-_). Transient state moved onto data-_ attributes throughout
 (data-collapsed, data-status, data-kind, data-active, data-has-card, data-waterfall, ...).
 
 From this point ON, no NEW custom class may be written except in this formula, and only when no PF

@@ -44,7 +44,7 @@ you had also written a `depends_on` entry - you never write both.
 reads the magusfile's AST; it resolves a same-project target passed by
 reference (`magus.needs(build)`), a cross-project handle passed as a member
 access (`magus.needs(alias.target)`), and each literal pattern given to
-`magus.needsGlob`. What it cannot evaluate is a *computed* dependency - a
+`magus.needsGlob`. What it cannot evaluate is a _computed_ dependency - a
 handle stored in a variable, returned from a function, or otherwise built at
 runtime. Such a `magus.needs` call is invisible to the static graph, to
 `magus describe`, and to the affected set. It still runs correctly at runtime
@@ -77,7 +77,7 @@ consequences worth stating plainly:
   target's body runs as an ordinary function call, not through `cache.Run` -
   there is no separate cache entry, hit, or miss for the child dispatch
   itself. The child's own target (if selected directly, elsewhere) has its
-  own cache entry; the *call from inside this parent* does not.
+  own cache entry; the _call from inside this parent_ does not.
 - **The key is protected by project-wide source globs, so this is
   safe-but-coarse** (see [cache.md](cache.md#granularity-project-wide-vs-per-target)).
   `baseStep` seeds every target's sources with the union of every bound
@@ -108,7 +108,7 @@ is a bug when they do.
   (`magus.needs(self)` inside `self`).
 - **Cross-project runtime cycle.** Two projects whose `magus.needs` chains
   point back at each other fail with `cross-project cycle: <dir> target
-  "<name>"`, detected by the same run's `CrossDispatch` coordinator.
+"<name>"`, detected by the same run's `CrossDispatch` coordinator.
 - **Unregistered `depends_on` path.** A `depends_on` entry naming a project
   path that was never discovered/registered fails workspace load with
   `magus: dependency not registered (N unresolved)`, listing each

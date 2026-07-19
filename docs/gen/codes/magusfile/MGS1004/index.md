@@ -21,7 +21,7 @@ body (see .../MGS1004.md)
 
 ## Why
 
-A per-target footprint has to be known *before* the target runs, because on a
+A per-target footprint has to be known _before_ the target runs, because on a
 cache hit the body never executes. So magus recovers `magus.inputs`/`outputs`
 statically: it walks each `export fun` target and the helper functions it calls
 by a plain name (`srcGlobs()`), and collects the string-literal globs it finds.
@@ -37,8 +37,8 @@ A declaration outside that reach is invisible to the cache:
 The danger is silent under-declaration: the input you thought you declared is not
 in the key, so editing it produces no miss and you replay a stale build. This
 check makes that loud. It is the counterpart to the hard load error you get for a
-non-literal argument in a *reached* call (`magus.inputs(someVar)`) - that one
-magus can see and rejects immediately; an *unreached* call it can only warn about.
+non-literal argument in a _reached_ call (`magus.inputs(someVar)`) - that one
+magus can see and rejects immediately; an _unreached_ call it can only warn about.
 
 This is a **warning**, not a load error: an unreached call may simply be dead
 code, which is harmless.
@@ -65,7 +65,7 @@ If the flagged call is genuinely dead code, delete it.
 ## What this is NOT
 
 - **Not a hard error.** Nothing blocks the build; it is a `magus doctor` finding.
-- **Not the non-literal-argument error.** A computed argument in a *reachable*
+- **Not the non-literal-argument error.** A computed argument in a _reachable_
   call (`magus.inputs(x)`) is a magusfile load error, because magus sees the call
   but cannot resolve the glob. MGS1004 is the opposite: magus resolves nothing
   because it never reaches the call.

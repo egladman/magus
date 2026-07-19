@@ -10,7 +10,7 @@ Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
 
 ## Synopsis
 
-****
+---
 
 ## Description
 
@@ -41,30 +41,30 @@ mgs_ contract stubbed, each function documented, and a runnable test block.
 **--local**
 : Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/
 
-**--vcs** *string*
+**--vcs** _string_
 : VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY
 
 ## Examples
 
-*Bootstrap the current repo*
+_Bootstrap the current repo_
 
 ```sh
 magus init
 ```
 
-*Non-interactive (CI): pick the VCS explicitly*
+_Non-interactive (CI): pick the VCS explicitly_
 
 ```sh
 magus init --vcs git
 ```
 
-*Write only the global config*
+_Write only the global config_
 
 ```sh
 magus init --global
 ```
 
-*Scaffold a new spell*
+_Scaffold a new spell_
 
 ```sh
 magus init spell mytool
@@ -73,4 +73,3 @@ magus init spell mytool
 ## See Also
 
 [**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
-

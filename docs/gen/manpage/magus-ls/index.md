@@ -24,25 +24,25 @@ against the value -o json emits, so its field names are the json keys.
 
 ## Examples
 
-*List all projects*
+_List all projects_
 
 ```sh
 magus ls
 ```
 
-*Pipe-friendly: one path per line*
+_Pipe-friendly: one path per line_
 
 ```sh
 magus ls -o name
 ```
 
-*JSON output*
+_JSON output_
 
 ```sh
 magus ls -o json
 ```
 
-*Custom Go template*
+_Custom Go template_
 
 ```sh
 magus ls -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'
@@ -51,4 +51,3 @@ magus ls -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'
 ## See Also
 
 [**magus**(1)](magus.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
-

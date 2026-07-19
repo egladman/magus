@@ -22,7 +22,7 @@ declaration (a no-op under the additive model); drop the duplicate (see
 
 A target's cache footprint is the **union** of three layers: the globs a bound
 spell contributes, the project-wide `sources`/`outputs`, and the per-target
-`magus.inputs`/`magus.outputs`. Per-target declarations only ever *add* to the
+`magus.inputs`/`magus.outputs`. Per-target declarations only ever _add_ to the
 footprint - they never shrink the project-wide baseline.
 
 So a per-target glob that repeats one already present project-wide changes
@@ -62,7 +62,7 @@ export fun build(args: [str]) > void { go["go-build"](); }
 
 - **Not a hard error.** The duplicate is a no-op; nothing blocks the build.
 - **Not subsumption-aware.** This check matches globs exactly. A per-target glob
-  that is *subsumed* by a broader project-wide pattern (`src/config.go` under
+  that is _subsumed_ by a broader project-wide pattern (`src/config.go` under
   `**/*.go`) is also redundant but is not flagged here.
 
 ## See also

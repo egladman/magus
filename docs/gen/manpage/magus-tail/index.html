@@ -94,10 +94,10 @@ ran). Subsequent cache hits replay the same log without re-running the build.</p
 <p>Requires an interactive terminal (like magus x). Set assume_interactive: true
 in magus.yaml or MAGUS_ASSUME_INTERACTIVE=1 to override.</p>
 <p>target follows the canonical path:target form used by magus run:
-(none)     cwd project, latest run of any target
-:build     cwd project, latest build run
-api        api project, latest run of any target
-api:test   api project, latest test run</p>
+(none) cwd project, latest run of any target
+:build cwd project, latest build run
+api api project, latest run of any target
+api:test api project, latest test run</p>
 <p>Exits non-zero when the project is not found, or when no cache entries
 exist yet (run a build first).</p>
 <h2 id="examples">Examples</h2>

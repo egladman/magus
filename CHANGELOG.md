@@ -84,7 +84,7 @@ target ...:a,b` before a run. Disjoint edits never trip it.
 - Forwarding to a daemon of a different build no longer warns. A version/protocol
   mismatch means the daemon is alive but will not adopt a mismatched client, so the
   command now falls back to local execution quietly (a debug line, not a `[warn]
-  proc forward failed` line). This is routine when multiple worktrees run different
+proc forward failed` line). This is routine when multiple worktrees run different
   builds against one shared per-user daemon.
 - A workspace-local Buzz spell could not declare a service op: the host-registered
   `magus/target` module omitted the `Service` type (present only on the dry-run

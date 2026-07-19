@@ -127,10 +127,10 @@ protected `ispell.Target`, which was the actual offender.
 
 The serializable Buzz value types model the _nouns_ around this hierarchy:
 
-| Value type        | Models                                                                                                                    | Layer it touches            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| **`Target`**      | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skip_cache`, `exclusive`, `slots`, ...) | Target                      |
-| **`ExecResult`**  | the `{stdout, stderr, code, ok}` outcome of one process                                                                   | Process                     |
+| Value type       | Models                                                                                                                     | Layer it touches |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| **`Target`**     | a resolved work-unit (`Path + Name + charms + files`) plus its per-target policy (`skip_cache`, `exclusive`, `slots`, ...) | Target           |
+| **`ExecResult`** | the `{stdout, stderr, code, ok}` outcome of one process                                                                    | Process          |
 
 A `Target` is run as a set of `Operation`s; each `Operation` yields an
 `ExecResult`. A `magus.needs` edge points straight at another `Target`'s

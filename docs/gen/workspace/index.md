@@ -77,15 +77,15 @@ export fun ci(args: [str]) > void {
 
 `magus.project({...})` is **optional**. It does not create the project (the magusfile's presence already did that); it layers configuration onto it. The options map accepts:
 
-| Key            | Effect                                                                                      |
-| -------------- | ------------------------------------------------------------------------------------------- |
-| `spells`       | binds spell handles to the project, contributing their ops, sources, and outputs            |
-| `depends_on`   | declares upstream project paths this project depends on (repo-relative or project-relative) |
-| `outputs`      | declares the project-relative file globs this project produces                              |
+| Key            | Effect                                                                                                                                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spells`       | binds spell handles to the project, contributing their ops, sources, and outputs                                                                                                                                                                      |
+| `depends_on`   | declares upstream project paths this project depends on (repo-relative or project-relative)                                                                                                                                                           |
+| `outputs`      | declares the project-relative file globs this project produces                                                                                                                                                                                        |
 | `sources`      | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
-| `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                |
-| `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list            |
-| `targets`      | a per-target policy table (see below)                                                       |
+| `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
+| `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
+| `targets`      | a per-target policy table (see below)                                                                                                                                                                                                                 |
 
 Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
 other than `skip_cache`/`exclusive`/`slots`) are a magusfile load error, not a
@@ -94,11 +94,11 @@ nearest known one.
 
 The `targets` sub-map keys a target name to a policy table:
 
-| Policy      | Effect                                                                       |
-| ----------- | ---------------------------------------------------------------------------- |
+| Policy       | Effect                                                                       |
+| ------------ | ---------------------------------------------------------------------------- |
 | `skip_cache` | opts the target out of the cache; magus always runs it and never replays it  |
-| `exclusive` | runs the target alone - no peer target runs concurrently while it does       |
-| `slots`     | the target holds N concurrency slots while it runs, throttling parallel work |
+| `exclusive`  | runs the target alone - no peer target runs concurrently while it does       |
+| `slots`      | the target holds N concurrency slots while it runs, throttling parallel work |
 
 ```buzz
 magus.project({

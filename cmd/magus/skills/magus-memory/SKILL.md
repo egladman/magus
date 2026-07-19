@@ -13,11 +13,11 @@ of the repo. What a stronger model decided, a smaller model can read and apply.
 
 Three files, three jobs:
 
-| file | job | write discipline |
-| --- | --- | --- |
-| `status` | where the work stands NOW: current goal, next action, blockers | `op=write` (overwrite - it is a snapshot, not a log) |
-| `progress` | dated journal of what happened and what should happen next | `op=append` (entries are date-stamped automatically) |
-| `decisions` | decisions made, the WHY, and when to revisit | `op=append` (date-stamped automatically) |
+| file        | job                                                            | write discipline                                     |
+| ----------- | -------------------------------------------------------------- | ---------------------------------------------------- |
+| `status`    | where the work stands NOW: current goal, next action, blockers | `op=write` (overwrite - it is a snapshot, not a log) |
+| `progress`  | dated journal of what happened and what should happen next     | `op=append` (entries are date-stamped automatically) |
+| `decisions` | decisions made, the WHY, and when to revisit                   | `op=append` (date-stamped automatically)             |
 
 ## Session start
 
