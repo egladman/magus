@@ -724,9 +724,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-launcher-card:focus-visible {
   transform: translateY(-3px);
   border-color: var(--card-accent);
-  /* Hover is a lift, not a darkening: a faint wash of the card's own hue over the primary ground,
-     never below the page tone. The border tint and the translateY carry the main signal. */
-  background: color-mix(in srgb, var(--card-accent) 8%, var(--pf-t--global--background--color--primary--default));
+  /* Only the BORDER tints to the card's hue; the ground stays neutral - a slight step off the primary
+     ground (a touch darker in light, a touch lighter in dark), never the accent color washing the card. */
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 6%, var(--pf-t--global--background--color--primary--default));
 }
 .console-launcher-card:focus-visible { outline: 2px solid var(--card-accent); outline-offset: 2px; }
 /* The small icon: the card's colored glyph in a rounded, hue-tinted tile (the "indent box"). */
