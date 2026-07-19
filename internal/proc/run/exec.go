@@ -103,10 +103,23 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
-	c.Env = childEnv(policy, opts.Env)
+	env, withheldDaemon := childEnv(policy, opts.Env)
+	c.Env = env
 	// Count the env vars this sandbox withheld from the child (magus's own allowlist
 	// scrub, not a kernel action); attributed to the current step's project.
 	sandbox.RecordEnvDropped(ctx, policy)
+	if len(withheldDaemon) > 0 {
+		// Transparency breadcrumb. magus withholds its OWN daemon/pool pointers from every op
+		// subprocess: they are unauthenticated (MGS2008) and their mere presence makes a program
+		// that links proc - including magus's own binaries - believe it is adopted under a parent.
+		// This is INDEPENDENT of sandbox.enabled, so it is the answer to the otherwise-baffling
+		// "the sandbox is off, why is MAGUS_DAEMON_SOCKET missing in my recipe/test?". Debug, not
+		// Info: it fires on most ops during a run, so reach for it with -v when chasing a missing
+		// var. A nested magus (runMagus) re-injects these, so they never show as withheld there.
+		slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
+			"withheld magus daemon pointer(s) from op subprocess (done regardless of sandbox.enabled)"),
+			"vars", withheldDaemon)
+	}
 	if opts.Stdin != "" {
 		c.Stdin = strings.NewReader(opts.Stdin)
 	}
@@ -165,8 +178,10 @@ var DaemonForwardVars = []string{"MAGUS_DAEMON_SOCKET", "MAGUS_DAEMON_ADDRESS"}
 // childEnv builds the subprocess environment: the sandbox's frozen BaseEnv (or the process
 // environment when unsandboxed) with the daemon pool pointers withheld (see DaemonForwardVars),
 // then the magus self-reference vars (see SelfVars), then the caller's overrides. Later entries
-// win, so a caller may still override the self-reference vars or re-add a daemon pointer.
-func childEnv(policy *sandbox.Policy, overrides []string) []string {
+// win, so a caller may still override the self-reference vars or re-add a daemon pointer. The
+// second return value names the daemon pointers actually withheld from the child - present in the
+// base and not re-added by an override - so the caller can surface a breadcrumb (see Exec).
+func childEnv(policy *sandbox.Policy, overrides []string) (env, withheld []string) {
 	var base []string
 	if policy != nil {
 		base = policy.BaseEnv
@@ -175,9 +190,15 @@ func childEnv(policy *sandbox.Policy, overrides []string) []string {
 	if root == nil {
 		root = os.Environ()
 	}
-	env := withoutEnvVars(root, DaemonForwardVars)
+	for _, name := range DaemonForwardVars {
+		if hasEnvVar(root, name) && !hasEnvVar(overrides, name) {
+			withheld = append(withheld, name)
+		}
+	}
+	env = withoutEnvVars(root, DaemonForwardVars)
 	env = append(env, SelfVars()...)
-	return append(env, overrides...)
+	env = append(env, overrides...)
+	return env, withheld
 }
 
 // withoutEnvVars returns a fresh copy of env with every "NAME=value" entry whose NAME is in drop
@@ -194,6 +215,17 @@ func withoutEnvVars(env, drop []string) []string {
 		}
 	}
 	return out
+}
+
+// hasEnvVar reports whether env holds a "name" or "name=..." entry.
+func hasEnvVar(env []string, name string) bool {
+	prefix := name + "="
+	for _, kv := range env {
+		if kv == name || strings.HasPrefix(kv, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // SelfVars returns the magus self-reference variables injected into every magus

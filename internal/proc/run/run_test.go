@@ -125,6 +125,21 @@ func TestExecWithholdsDaemonSocket(t *testing.T) {
 		"an explicit override re-injects the socket for legitimate recursion")
 }
 
+// TestChildEnvReportsWithheldDaemonVars pins the breadcrumb contract: childEnv reports which
+// daemon pointers it actually withheld from the child (present in the base, not re-added by an
+// override), so Exec can log the answer to "the sandbox is off, why is my var missing?". Mutates
+// env; not parallel.
+func TestChildEnvReportsWithheldDaemonVars(t *testing.T) {
+	t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///tmp/p.sock")
+	t.Setenv("MAGUS_DAEMON_ADDRESS", "unix:///tmp/p.sock")
+	// Both present in the process env, no overrides: both are withheld from the child.
+	_, withheld := childEnv(nil, nil)
+	assert.ElementsMatch(t, DaemonForwardVars, withheld, "both daemon pointers withheld")
+	// An override that re-adds one (a nested magus forwarding) means it is NOT withheld.
+	_, withheld = childEnv(nil, []string{"MAGUS_DAEMON_SOCKET=unix:///tmp/child.sock"})
+	assert.Equal(t, []string{"MAGUS_DAEMON_ADDRESS"}, withheld, "re-injected var is not reported withheld")
+}
+
 func TestRunSuccess(t *testing.T) {
 	t.Parallel()
 	if _, err := exec.LookPath("true"); err != nil {

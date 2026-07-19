@@ -139,8 +139,12 @@ func (s *Server) Close() {
 // New constructs an unstarted Server; returns ErrAlreadyAdopted when MAGUS_DAEMON_SOCKET is set.
 // Call Start to bind the socket.
 func New(opts Options) (*Server, error) {
-	if os.Getenv("MAGUS_DAEMON_SOCKET") != "" {
-		return nil, ErrAlreadyAdopted
+	// Name the culprit in the error. This guard refuses to host a second proc server when
+	// MAGUS_DAEMON_SOCKET is set (a nested process must forward to the parent's pool, not open
+	// its own socket). Surfacing the value turns an opaque "already adopted" - which reads as a
+	// mystery to anyone whose environment merely inherited the var - into an actionable one.
+	if sock := os.Getenv("MAGUS_DAEMON_SOCKET"); sock != "" {
+		return nil, fmt.Errorf("%w (MAGUS_DAEMON_SOCKET=%s)", ErrAlreadyAdopted, sock)
 	}
 
 	var ep endpoint.Endpoint
