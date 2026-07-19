@@ -103,11 +103,13 @@ Passthrough matching is **exact name or suffix glob**: a pattern must end in a s
 
 Env scrubbing runs in **pure Go**, independent of any kernel support, so it is enforced on every platform.
 
-### The daemon socket is withheld, not allowlisted
+### The daemon socket is withheld, independent of the sandbox switch
 
-`MAGUS_DAEMON_SOCKET` and `MAGUS_DAEMON_ADDRESS` are deliberately **absent** from the environment allowlist. The daemon socket is unauthenticated: anything that can reach it can drive the daemon, so a compromised spell that inherited it could issue daemon commands and escape confinement. Withholding it is the default and needs no code path.
+`MAGUS_DAEMON_SOCKET` and `MAGUS_DAEMON_ADDRESS` are magus's own pool pointers, not user configuration. The daemon socket is unauthenticated: anything that can reach it can drive the daemon, so a compromised spell that inherited it could issue daemon commands and escape confinement. magus therefore strips both from **every** op subprocess.
 
-The one exception is a **recursive `magus` invocation**, which is the same trusted binary re-executing itself and genuinely needs daemon coordination. For that case magus re-injects the two vars as explicit overrides on the child and logs [MGS2008](codes/sandbox/MGS2008.md) at debug level. The socket stays hidden from ordinary spell subprocesses; it is handed only to nested magus processes.
+This holds **regardless of `sandbox.enabled`**, and that distinction matters because the sandbox is off by default. With the sandbox on the two vars are simply absent from the environment allowlist. But "off" rebuilds nothing - the child would otherwise inherit the whole parent environment - so the withholding is carried by an explicit code path (`childEnv`) that runs either way. Turning the sandbox off relaxes filesystem and secret-env confinement; it does **not** hand magus's daemon pointers to spells. When a pointer is withheld from a child, magus logs [MGS2008](codes/sandbox/MGS2008.md) at debug level naming the var - so a subprocess that cannot see it (or magus's own tooling, which reads an inherited socket as "already running under a parent magus") has a traceable reason instead of a mystery.
+
+The one case that keeps the vars is a **recursive `magus` invocation**: the same trusted binary re-executing itself, which genuinely needs daemon coordination. For that case magus re-injects the two vars as explicit overrides on the child (also logged under [MGS2008](codes/sandbox/MGS2008.md)). The socket stays hidden from ordinary spell subprocesses; it is handed only to nested magus processes.
 
 ## How a target's declared footprint becomes the allowlist
 
@@ -149,19 +151,19 @@ Being explicit about the boundary is part of the threat model:
 
 Every sandbox violation maps to a boundary described above.
 
-| Code                                                          | Fires when                                                             | Layer / disposition                        |
-| ------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------ |
-| [MGS2001](codes/sandbox/MGS2001.md) PathReadDenied            | read of a path outside the read allowlist                              | binding + kernel; denied                   |
-| [MGS2002](codes/sandbox/MGS2002.md) PathWriteDenied           | write to a path outside the write allowlist                            | binding + kernel; denied                   |
-| [MGS2003](codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped              | pure Go; informational                     |
-| [MGS2004](codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                | policy build; entry skipped, non-fatal     |
-| [MGS2005](codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable; interpreter layer only                    | once per process; non-fatal fallback       |
-| [MGS2006](codes/sandbox/MGS2006.md) PathShimSuspected         | a subprocess likely failed because mise/asdf/direnv vars were stripped | heuristic hint                             |
-| [MGS2007](codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist   | binding + kernel; denied                   |
-| [MGS2008](codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket re-injected into a recursive `magus` invocation          | debug-level note                           |
-| [MGS2009](codes/sandbox/MGS2009.md) NetEgress                 | outbound request through `http.*` while sandboxed                      | audited, **not** blocked                   |
-| [MGS2010](codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union       | fail closed                                |
-| [MGS3001](codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project         | audit rail; observational, not rolled back |
+| Code                                                          | Fires when                                                                                       | Layer / disposition                        |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| [MGS2001](codes/sandbox/MGS2001.md) PathReadDenied            | read of a path outside the read allowlist                                                        | binding + kernel; denied                   |
+| [MGS2002](codes/sandbox/MGS2002.md) PathWriteDenied           | write to a path outside the write allowlist                                                      | binding + kernel; denied                   |
+| [MGS2003](codes/sandbox/MGS2003.md) EnvStripped               | child env rebuilt; secret-bearing / unlisted vars dropped                                        | pure Go; informational                     |
+| [MGS2004](codes/sandbox/MGS2004.md) AllowlistUnresolved       | a `sandbox.allow` / passthrough entry could not resolve                                          | policy build; entry skipped, non-fatal     |
+| [MGS2005](codes/sandbox/MGS2005.md) SandboxUnsupported        | kernel landlock unavailable; interpreter layer only                                              | once per process; non-fatal fallback       |
+| [MGS2006](codes/sandbox/MGS2006.md) PathShimSuspected         | a subprocess likely failed because mise/asdf/direnv vars were stripped                           | heuristic hint                             |
+| [MGS2007](codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                             | binding + kernel; denied                   |
+| [MGS2008](codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket withheld from an op subprocess, or re-injected into a recursive `magus` invocation | debug-level note                           |
+| [MGS2009](codes/sandbox/MGS2009.md) NetEgress                 | outbound request through `http.*` while sandboxed                                                | audited, **not** blocked                   |
+| [MGS2010](codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union                                 | fail closed                                |
+| [MGS3001](codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project                                   | audit rail; observational, not rolled back |
 
 ## Glossary
 
