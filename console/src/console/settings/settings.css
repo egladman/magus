@@ -7,20 +7,63 @@
  * Conventions (PATTERNFLY.md): pf-v6-* is the only borrowed vocabulary; app hooks are console-settings-*
  * classes and data-*; colors come from --pf-t-* / --console-* tokens, never a raw hex. */
 
-/* The page is a single scrolling column, capped for readability and centered in the pane. */
+/* The page is a single scrolling column, capped for readability and centered in the pane. The global
+ * transaction controls (action bar, status, pending diff) stack at the top; the section sub-tabs and
+ * their one visible panel follow. */
 .console-settings-page {
   height: 100%;
   overflow-y: auto;
   padding: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--2xl);
   display: flex;
   flex-direction: column;
-  gap: var(--pf-t--global--spacer--xl);
+  gap: var(--pf-t--global--spacer--lg);
 }
-.console-settings-title {
-  margin: 0;
-  font-size: var(--pf-t--global--font--size--heading--h1);
-  font-weight: var(--pf-t--global--font--weight--heading--bold);
+
+/* --- Section sub-tabs: one panel at a time, not one long scroll -----------------------------------
+ * A horizontal underline tab strip over the section panels. The strip and its panels are grouped so
+ * the page's inter-block gap does not detach the underline from the content it selects. */
+.console-settings-tabs__wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--lg);
+}
+.console-settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--xs);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+/* Each tab is a bare button with a transparent underline that tints to the accent when current; the
+ * -1px bottom margin overlaps the strip's own hairline so the active underline reads as continuous. */
+.console-settings-tabs__tab {
+  appearance: none;
+  margin: 0 0 -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  cursor: pointer;
+  font-size: var(--pf-t--global--font--size--body--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-settings-tabs__tab[hidden] { display: none; }
+.console-settings-tabs__tab:hover { color: var(--pf-t--global--text--color--regular); }
+.console-settings-tabs__tab.pf-m-current {
   color: var(--pf-t--global--text--color--regular);
+  border-bottom-color: var(--console-accent);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+.console-settings-tabs__tab:focus-visible {
+  outline: 2px solid var(--console-accent);
+  outline-offset: -2px;
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+/* Only the current panel is shown; each is a stacked column of its lede + body. */
+.console-settings-tabs__panel[hidden] { display: none; }
+.console-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--md);
 }
 
 /* --- Action bar: the staged-config controls ------------------------------------------------------
@@ -137,42 +180,13 @@
 }
 .console-settings-diff__rawline[data-diff="same"] { color: var(--pf-t--global--text--color--subtle); }
 
-/* A titled section: a heading with a small accent marker, an optional lede, and its body. Sections
- * stack with a hairline rule between them so the surface reads as grouped settings, not one long form. */
-.console-settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pf-t--global--spacer--md);
-  padding-top: var(--pf-t--global--spacer--lg);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
-}
-.console-settings-section:first-of-type { border-top: 0; padding-top: 0; }
-.console-settings-section__head { display: flex; flex-direction: column; gap: 0.15rem; }
-/* A leading accent bar gives each section a point of interest and reinforces the hierarchy. */
-.console-settings-section__title {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--sm);
-  font-size: var(--pf-t--global--font--size--heading--h3);
-  font-weight: var(--pf-t--global--font--weight--heading--bold);
-  color: var(--pf-t--global--text--color--regular);
-}
-.console-settings-section__title::before {
-  content: "";
-  flex: 0 0 auto;
-  width: var(--pf-t--global--spacer--xs);
-  height: 1em;
-  border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--console-accent);
-}
+/* The panel lede (and the Backup section's own lede): a quiet intro line above a section's controls. */
 .console-settings-section__lede,
 .console-settings-io__lede {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-settings-section__body { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
 
 /* The General form: keep the label column tight (PF's default 9.375rem is wide for two short labels)
  * and let the control column carry a small helper line under each field. */
@@ -204,9 +218,16 @@
   position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
 }
 
-/* "Start from a preset": the preset segmented control + Apply button sit on one wrapping row above the
-   keybindings table. */
-.console-settings-presets__row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+/* Keymap-preset strip: a PF ToggleGroup of one-click preset loads, plus a muted "Custom" tag that shows
+   only when the current bindings match no preset. Custom is a READOUT of that state, never a button - so
+   it never competes with the Default preset, which simply means "the console defaults". */
+.console-settings-presets__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pf-t--global--spacer--sm); }
+.console-settings-presets__group { width: auto; flex-wrap: wrap; }
+.console-settings-presets__custom {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-settings-presets__custom[hidden] { display: none; }
 
 /* --- Access tokens: the list + revoke view over the daemon's connector/share tokens ---------------
  * No PF Table sheet is bundled, so the list is a lightweight CSS grid with role=table semantics. Five

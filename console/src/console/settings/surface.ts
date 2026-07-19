@@ -85,14 +85,106 @@ function buildFormGroup(labelText: string, controlId: string | null, control: HT
   return group;
 }
 
-// buildSection builds a titled block: an h2 title, an optional lede, and the given body.
-function buildSection(title: string, body: HTMLElement, lede?: string): HTMLElement {
-  const section = h("section", "console-settings-section");
-  const head = h("div", "console-settings-section__head");
-  head.append(h("h2", "console-settings-section__title", title));
-  if (lede) head.append(h("p", "console-settings-section__lede", lede));
-  section.append(head, body);
-  return section;
+// buildPanel wraps a section body as a tab panel. The tab label already names the section, so there is
+// no in-panel heading - the lede, when present, is the only intro copy above the body.
+function buildPanel(body: HTMLElement, lede?: string): HTMLElement {
+  const panel = h("div", "console-settings-panel");
+  if (lede) panel.append(h("p", "console-settings-section__lede", lede));
+  panel.append(body);
+  return panel;
+}
+
+// A settings tab: its stable id, the label the strip shows, and the panel it reveals.
+interface SettingsTab {
+  id: string;
+  label: string;
+  panel: HTMLElement;
+}
+
+// buildSettingsTabs renders a horizontal tab strip (role=tablist) over the section panels, showing
+// exactly one panel at a time so the surface is a set of focused views rather than one long scroll.
+// Returns the nav strip, the panels host, and setHidden - the daemon-gated Access tokens / Agent memory
+// tabs call setHidden(id, true) when the daemon declines the service, dropping both the tab and its
+// panel; hiding the active tab falls back to the first still-visible one.
+function buildSettingsTabs(tabs: SettingsTab[]): {
+  root: HTMLElement; setHidden: (id: string, hidden: boolean) => void;
+} {
+  const root = h("div", "console-settings-tabs__wrap");
+  const nav = h("div", "console-settings-tabs");
+  nav.setAttribute("role", "tablist");
+  nav.setAttribute("aria-label", "Settings sections");
+  const panelsHost = h("div", "console-settings-tabs__panels");
+  const buttons = new Map<string, HTMLButtonElement>();
+  const panelById = new Map<string, HTMLElement>();
+  let activeId = tabs[0].id;
+
+  const visibleIds = (): string[] => tabs.map((t) => t.id).filter((id) => !buttons.get(id)!.hidden);
+
+  function show(id: string): void {
+    activeId = id;
+    for (const t of tabs) {
+      const on = t.id === id;
+      const btn = buttons.get(t.id)!;
+      btn.classList.toggle("pf-m-current", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+      btn.tabIndex = on ? 0 : -1;
+      panelById.get(t.id)!.hidden = !on;
+    }
+  }
+
+  // Roving keyboard on the tablist (WAI-ARIA): arrows move (and activate, since the panels are cheap to
+  // swap) between visible tabs, Home/End jump to the ends. Mirrors the top tab bar's roving pattern.
+  function onKey(ev: KeyboardEvent, id: string): void {
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight" && ev.key !== "Home" && ev.key !== "End") return;
+    ev.preventDefault();
+    const ids = visibleIds();
+    const here = ids.indexOf(id);
+    if (here < 0) return;
+    let next = here;
+    if (ev.key === "ArrowLeft") next = (here - 1 + ids.length) % ids.length;
+    else if (ev.key === "ArrowRight") next = (here + 1) % ids.length;
+    else if (ev.key === "Home") next = 0;
+    else if (ev.key === "End") next = ids.length - 1;
+    const nid = ids[next];
+    show(nid);
+    buttons.get(nid)!.focus();
+  }
+
+  for (const t of tabs) {
+    const btn = h("button", "console-settings-tabs__tab") as HTMLButtonElement;
+    btn.type = "button";
+    btn.id = "console-settings-tab-" + t.id;
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-controls", "console-settings-panel-" + t.id);
+    btn.append(h("span", "console-settings-tabs__label", t.label));
+    btn.addEventListener("click", () => show(t.id));
+    btn.addEventListener("keydown", (ev) => onKey(ev, t.id));
+    buttons.set(t.id, btn);
+    nav.append(btn);
+
+    const panel = t.panel;
+    panel.classList.add("console-settings-tabs__panel");
+    panel.id = "console-settings-panel-" + t.id;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", btn.id);
+    panel.tabIndex = 0;
+    panelById.set(t.id, panel);
+    panelsHost.append(panel);
+  }
+
+  function setHidden(id: string, hidden: boolean): void {
+    const btn = buttons.get(id);
+    if (!btn) return;
+    btn.hidden = hidden;
+    if (hidden && activeId === id) {
+      const first = visibleIds()[0];
+      if (first) show(first);
+    }
+  }
+
+  root.append(nav, panelsHost);
+  show(activeId);
+  return { root, setHidden };
 }
 
 // externalLink builds an anchor that opens off-app. The console is an installed PWA, so every outbound
@@ -175,7 +267,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
 
   const page = h("div", "console-settings-page");
   page.dataset.surface = "settings";
-  page.append(h("h1", "console-settings-title", "Settings"));
+  // No page heading: the surface's own tab (the top tab bar) already reads "Settings", so an h1 here
+  // just repeats it. The section sub-tabs below carry the naming from here down.
 
   // --- Action bar: a staged-config bar - pending indicator + Save & Apply / Save / Reset ---
   const bar = h("div", "console-settings-actionbar");
@@ -368,7 +461,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     }
   }
   paintThemeToggle();
-  const themeBody = h("div", "console-settings-section__body");
+  // The Appearance panel body: the two toggle groups stacked in a column (same layout as a panel).
+  const themeBody = h("div", "console-settings-panel");
   themeBody.append(buildFormGroup("Theme", null, themeGroup, "System follows your operating system. Applies on Save & Apply."));
 
   // A 2-way focus-ring toggle group, mirrored on the theme toggle above. Off (default) shows the
@@ -401,50 +495,86 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     "Always show the outline on the focused pane. Off shows it only during keyboard navigation.",
   ));
 
-  // --- Keybindings: an optional "start from a preset" seed above the shared editor core over the DRAFT
-  // keymap. Applying a preset stages its whole binding set into the draft (like a bulk edit), which the
-  // editor then reflects and the operator Saves; it is a seed, not a mode. ---
+  // --- Keybindings: an optional keymap-PROFILE strip above the shared editor core over the DRAFT keymap.
+  // The strip is a truthful readout of the current bindings, not a separate selection. Picking a named
+  // preset stages its whole binding set into the draft immediately - there is no separate "Apply", since
+  // the page's own Save / Save & Apply is what commits it, so a preset Apply button just duplicated that.
+  // "Custom" is the derived fallback the strip lands on whenever the draft matches no preset - including
+  // after any manual edit in the editor below - so the strip can never claim a preset the bindings no
+  // longer match. ---
   const editor = createKeybindingsEditor({ commands: kb.commands, defaults: kb.defaults, keymap: keymapDraft });
   let keybindingsContent: HTMLElement = editor.el;
+  let disposeProfile = (): void => {};
   if (deps.presets && deps.presetList && deps.presetList.length) {
     const presets = deps.presets;
     const presetList = deps.presetList;
-    let selectedPreset = presetList[0].id;
-    const presetGroup = h("div", "pf-v6-c-toggle-group");
+
+    // keymapsEqual compares two override layers for the SAME effective bindings, treating an unbound row
+    // and an absent row alike (both drop out of the normalized map). It decides which named preset, if
+    // any, the draft currently equals; no match means Custom.
+    const normalize = (k: Keymap): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const [id, chord] of Object.entries(k)) if (chord) out[id] = chord;
+      return out;
+    };
+    const keymapsEqual = (a: Keymap, b: Keymap): boolean => {
+      const na = normalize(a), nb = normalize(b);
+      const ka = Object.keys(na);
+      return ka.length === Object.keys(nb).length && ka.every((id) => na[id] === nb[id]);
+    };
+    // The profile the draft currently IS: the first preset it equals, else "custom". Empty overrides equal
+    // the "default" preset, so untouched bindings read as Default (they genuinely are the defaults).
+    const activeProfile = (): string => {
+      const cur = keymapDraft.get();
+      for (const p of presetList) if (keymapsEqual(cur, presets[p.id])) return p.id;
+      return "custom";
+    };
+
+    // The strip is the presets as one-click loads: clicking a segment REPLACES the draft with that whole
+    // binding set (the page's Save / Save & Apply commits it - a separate preset Apply just duplicated
+    // that). The segment matching the current draft lights up; when the draft matches no preset, none
+    // lights and a muted "Custom" tag names that state. Custom is a READOUT, never a button - so it can
+    // never be "picked" and never competes with the Default preset (which just means "the console
+    // defaults"); you reach Custom only by editing a row below.
+    const presetGroup = h("div", "pf-v6-c-toggle-group console-settings-presets__group");
     presetGroup.setAttribute("role", "group");
-    presetGroup.setAttribute("aria-label", "Keybinding preset");
+    presetGroup.setAttribute("aria-label", "Keymap preset");
     const presetButtons = new Map<string, HTMLButtonElement>();
-    const paintPresetToggle = (): void => {
+    const customTag = h("span", "console-settings-presets__custom", "Custom") as HTMLElement;
+    customTag.title = "Your bindings match no preset. Pick one to replace them, or keep editing the rows below.";
+    const paintProfile = (): void => {
+      const active = activeProfile();
       for (const [id, btn] of presetButtons) {
-        const on = id === selectedPreset;
+        const on = id === active;
         btn.classList.toggle("pf-m-selected", on);
         btn.setAttribute("aria-pressed", on ? "true" : "false");
       }
+      customTag.hidden = active !== "custom";
     };
     for (const p of presetList) {
       const item = h("div", "pf-v6-c-toggle-group__item");
       const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
       btn.type = "button";
       btn.append(h("span", "pf-v6-c-toggle-group__text", p.label));
-      btn.addEventListener("click", () => { selectedPreset = p.id; paintPresetToggle(); });
+      btn.title = "Replace the keymap with the " + p.label + " preset. It stages into the draft; Save or Save & Apply keeps it.";
+      btn.addEventListener("click", () => {
+        keymapDraft.set({ ...presets[p.id] }); // fires the subscription (repaint) and the cell's onChange (recompute)
+        setStatus("Staged the " + p.label + " keymap. Edit any row, or Save / Save & Apply to keep it.", "ok");
+      });
       item.append(btn);
       presetGroup.append(item);
       presetButtons.set(p.id, btn);
     }
-    paintPresetToggle();
-    const applyBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Apply preset") as HTMLButtonElement;
-    applyBtn.type = "button";
-    applyBtn.addEventListener("click", () => {
-      keymapDraft.set({ ...presets[selectedPreset] });
-      recompute();
-      const label = presetList.find((x) => x.id === selectedPreset)?.label ?? selectedPreset;
-      setStatus("Staged the " + label + " preset. Edit any row, then Save or Save & Apply. Applying it again resets to the preset.", "ok");
-    });
-    const controls = h("div", "console-settings-presets__row");
-    controls.append(presetGroup, applyBtn);
+    // Repaint on every keymap change - a preset click, an editor edit, an import, or a Reset - so the lit
+    // segment always reflects the real bindings. recompute() is driven separately by the draft cell's onChange.
+    disposeProfile = keymapDraft.subscribe(() => paintProfile());
+    paintProfile();
+
+    const strip = h("div", "console-settings-presets__row");
+    strip.append(presetGroup, customTag);
     const wrap = h("div");
     wrap.append(
-      buildFormGroup("Start from a preset", null, controls, "Loads a full set of bindings you can then edit. It seeds your keymap, so any changes you make on top are kept. The Emacs, Vim, and VS Code presets use multi-key sequences like Ctrl+X then O."),
+      buildFormGroup("Keymap preset", null, strip, "Pick a preset to replace your bindings, then edit any row below. The strip shows Custom once your bindings differ from every preset. The Emacs, Vim, and VS Code presets use multi-key sequences like Ctrl+X then O."),
       editor.el,
     );
     keybindingsContent = wrap;
@@ -609,26 +739,33 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // degrade to a clear "connect first" state when none is found.
   //
   // The two LIVE sections are gated by the SERVER, not a client-side mode guess: they always build,
-  // and each hides its own section wrapper if the daemon declines the service to this client
-  // (onDenied) - a read-only phone share cannot reach TokenService/MemoryService (not mounted on the
-  // share listener, and guarded by token class), so those RPCs come back denied and the section
+  // and each hides its own TAB (via tabs.setHidden below) if the daemon declines the service to this
+  // client (onDenied) - a read-only phone share cannot reach TokenService/MemoryService (not mounted
+  // on the share listener, and guarded by token class), so those RPCs come back denied and the tab
   // vanishes. Enforcement lives at the daemon; this only mirrors what the daemon already refuses.
-  let tokensWrap: HTMLElement | null = null;
-  let memoryWrap: HTMLElement | null = null;
-  const tokensSection = buildTokensSection(resolveDaemonHost(), { onDenied: () => { if (tokensWrap) tokensWrap.hidden = true; } });
-  const memorySection = buildMemorySection(resolveDaemonHost(), { onDenied: () => { if (memoryWrap) memoryWrap.hidden = true; } });
-  tokensWrap = buildSection("Access tokens", tokensSection.el, "List and revoke the daemon's connector tokens and the active phone-share token. Minting stays a CLI-only operation - the console can never create a token.");
-  memoryWrap = buildSection("Agent memory", memorySection.el, "View and edit the durable memory files agents write across sessions. Editing is the safety valve against the store growing unbounded.");
+  // (tabs is const-declared below; onDenied only fires after an async RPC, so it is initialized by then.)
+  const tokensSection = buildTokensSection(resolveDaemonHost(), { onDenied: () => tabs.setHidden("tokens", true) });
+  const memorySection = buildMemorySection(resolveDaemonHost(), { onDenied: () => tabs.setHidden("memory", true) });
 
-  page.append(bar, status, diffWrap, buildSection("General", generalForm), buildSection("Appearance", themeBody));
-  page.append(buildSection("Keybindings", keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply."));
-  page.append(tokensWrap, memoryWrap);
-  page.append(buildSection("Backup", io, "Export the current draft, or import a saved set to stage it."));
-  page.append(buildSection("About", buildAbout(), "Source, license, and where to report bugs."));
+  // The action bar and pending diff stay above the tabs: the staged draft is shared across the staged
+  // sections (General, Appearance, Keybindings, Backup), so its commit controls are global to the
+  // surface, not per-tab. Each section is a tab panel; the Access tokens / Agent memory tabs drop out
+  // when the daemon declines the service.
+  const tabs = buildSettingsTabs([
+    { id: "general", label: "General", panel: buildPanel(generalForm) },
+    { id: "appearance", label: "Appearance", panel: buildPanel(themeBody) },
+    { id: "keybindings", label: "Keybindings", panel: buildPanel(keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply.") },
+    { id: "tokens", label: "Access tokens", panel: buildPanel(tokensSection.el, "List and revoke the daemon's connector tokens and the active phone-share token. Minting stays a CLI-only operation - the console can never create a token.") },
+    { id: "memory", label: "Agent memory", panel: buildPanel(memorySection.el, "View and edit the durable memory files agents write across sessions. Editing is the safety valve against the store growing unbounded.") },
+    { id: "backup", label: "Backup", panel: buildPanel(io, "Export the current draft, or import a saved set to stage it.") },
+    { id: "about", label: "About", panel: buildPanel(buildAbout(), "Source, license, and where to report bugs.") },
+  ]);
+
+  page.append(bar, status, diffWrap, tabs.root);
   host.append(page);
 
   recompute();
-  return () => { editor.destroy(); tokensSection?.destroy(); memorySection?.destroy(); };
+  return () => { disposeProfile(); editor.destroy(); tokensSection?.destroy(); memorySection?.destroy(); };
 }
 
 // ensureStylesheet adds the surface's page-scoped stylesheet once (idempotent by id).

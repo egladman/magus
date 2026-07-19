@@ -50,7 +50,7 @@ export function buildTokensSection(host: string | null, opts: { onDenied?: () =>
   if (!host) {
     body.append(buildEmpty(
       "Not connected to a daemon",
-      "Connect the console to a running daemon to list and revoke its access tokens. Open the console from a magus link, or set the daemon host under General above.",
+      "Connect the console to a running daemon to list and revoke its access tokens. Open the console from a magus link, or set the daemon host on the General tab.",
     ));
     return { el: body, destroy() { stale = true; } };
   }
