@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>MGS2008: daemon socket withheld — magus</title>
-  <meta name="description" content="Fires at debug level when magus re-injects the daemon socket vars into a recursive magus invocation, after withholding them from sandboxed spell subprocesses.">
+  <meta name="description" content="Fires at debug level when magus withholds the daemon socket vars from an op subprocess (independent of sandbox.enabled), or re-injects them into a recursive magus invocation.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/codes/sandbox/MGS2008/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="MGS2008: daemon socket withheld — magus">
-  <meta property="og:description" content="Fires at debug level when magus re-injects the daemon socket vars into a recursive magus invocation, after withholding them from sandboxed spell subprocesses.">
+  <meta property="og:description" content="Fires at debug level when magus withholds the daemon socket vars from an op subprocess (independent of sandbox.enabled), or re-injects them into a recursive magus invocation.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/codes/sandbox/MGS2008/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -72,35 +72,52 @@
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
     <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/sandbox/MGS2008.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
-    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
-<h1 id="mgs2008-daemon-socket-withheld-from-sandboxed-children">MGS2008: daemon socket withheld from sandboxed children</h1>
+<h1 id="mgs2008-daemon-socket-withheld-from-subprocesses">MGS2008: daemon socket withheld from subprocesses</h1>
 <p>The daemon socket vars (<code>MAGUS_DAEMON_SOCKET</code>, <code>MAGUS_DAEMON_ADDRESS</code>) are
-withheld from the environment of sandboxed spell subprocesses. This code is
-logged, at debug level only, when magus re-injects them for a legitimate
-recursive <code>magus</code> invocation.</p>
-<pre><code class="language-text">[MGS2008] daemon socket injected into recursive magus invocation (see https://github.com/egladman/magus/blob/main/docs/codes/sandbox/MGS2008.md)
+magus's own pool pointers. magus withholds them from every op subprocess and
+re-hands them only to a nested <code>magus</code>. This code is logged, at debug level
+only, on both halves of that contract: when a var is withheld from a child,
+and when it is re-injected for a legitimate recursive <code>magus</code> invocation.</p>
+<pre><code class="language-text">[MGS2008] withheld magus daemon pointer(s) from op subprocess (done regardless of sandbox.enabled) (see https://github.com/egladman/magus/blob/main/docs/codes/sandbox/MGS2008.md)
+  vars=[MAGUS_DAEMON_SOCKET]
+[MGS2008] daemon socket injected into recursive magus invocation
   var=MAGUS_DAEMON_SOCKET
 </code></pre>
 <h2 id="why">Why</h2>
 <p>The daemon socket is unauthenticated: anything that can reach it can drive
 the daemon. If those vars were inherited by every child, a compromised
-third-party spell could connect to the daemon and issue commands. So the
-sandbox child environment strips them by default, alongside the other
-secret-bearing vars (see <code>MGS2003.md</code>).</p>
-<p>A nested <code>magus</code> call is different. It is a recursive invocation of the same
-trusted binary, and it genuinely needs the daemon to coordinate. For that one
+third-party spell could connect to the daemon and issue commands. So magus
+strips them from every op subprocess, alongside the other secret-bearing vars
+(see <code>MGS2003.md</code>).</p>
+<p>This withholding is <strong>independent of <code>sandbox.enabled</code></strong>. With the sandbox on,
+the vars are simply absent from the environment allowlist. But the sandbox is
+off by default, and &quot;off&quot; rebuilds no environment - the child would otherwise
+inherit the whole parent environment - so magus carries the withholding in an
+explicit code path that runs either way. That is why turning the sandbox off
+does not hand these pointers to spells, and why they can go missing from a
+subprocess even in a workspace with no sandbox configured at all.</p>
+<p>A nested <code>magus</code> call is the one exception. It is a recursive invocation of the
+same trusted binary, and it genuinely needs the daemon to coordinate. For that
 case magus re-injects <code>MAGUS_DAEMON_SOCKET</code> and <code>MAGUS_DAEMON_ADDRESS</code> as
 explicit env overrides on the child, and records it with this code.</p>
-<p>The log fires at debug (<code>-v</code>), not info, because a fan-out can spawn many
-recursive invocations and it would otherwise be pure noise at default
-verbosity. It is an internal correctness note, not an error and not
+<p>The log fires at debug (<code>-v</code>), not info, because a run spawns many ops (and a
+fan-out many recursive invocations) and it would otherwise be pure noise at
+default verbosity. It is an internal correctness note, not an error and not
 user-actionable.</p>
 <h2 id="resolution">Resolution</h2>
 <p>Nothing to do. This is the sandbox working as intended: the socket stays
 hidden from spell subprocesses, and is handed only to nested magus processes
 that need it.</p>
-<p>You will see this line only when running at <code>-v</code> or higher. If you do not
+<p>If a subprocess of yours genuinely needs to reach the daemon and cannot see the
+socket, that is this rule at work - a plain program is not a nested <code>magus</code> and
+is not trusted with the unauthenticated socket. Reach for the pointer through a
+recursive <code>magus</code> call instead. The withheld line explains a missing var; the
+<code>already running under a parent magus</code> error, which now names the inherited
+<code>MAGUS_DAEMON_SOCKET</code>, explains the opposite case where a program mistook the
+inherited socket for adoption.</p>
+<p>You will see these lines only when running at <code>-v</code> or higher. If you do not
 want the noise, run at default verbosity.</p>
     </article>
     <nav class="page-nav" aria-label="Pagination">
@@ -119,7 +136,7 @@ want the noise, run at default verbosity.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS2008%22">MGS2008</a><a class="tag" href="../../../search/?q=tag%3A%22sandbox%22">sandbox</a><a class="tag" href="../../../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../../../search/?q=tag%3A%22socket%22">socket</a><a class="tag" href="../../../search/?q=tag%3A%22env%22">env</a><a class="tag" href="../../../search/?q=tag%3A%22recursive%22">recursive</a><a class="tag" href="../../../search/?q=tag%3A%22security%22">security</a></div>
-    <small>Last updated <time datetime="2026-07-03T20:04:47Z">July 3, 2026, 8:04 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" data-tooltip="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1" title="b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1">b68d6ffe</a>)</small>
+    <small>Last updated <time datetime="2026-07-19T14:33:04Z">July 19, 2026, 2:33 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/52c9d5c43d372105bda466454c2335650a102033" data-tooltip="52c9d5c43d372105bda466454c2335650a102033" title="52c9d5c43d372105bda466454c2335650a102033">52c9d5c4</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b68d6ffe1a5e0c9158b8b50c1853c8995441e1f1"><code>b68d6ffe</code></a> <small><time datetime="2026-07-03T20:04:47Z">Jul 3, 2026</time></small> - merge: document MGS2008, MGS2009, MGS2010</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/sandbox/MGS2008.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/sandbox/MGS2008.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
