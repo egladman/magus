@@ -26,9 +26,9 @@
   display: flex; align-items: center; gap: 0.9rem;
   min-height: var(--console-statusbar-h);
   padding: 0.1rem var(--console-pad);
-  /* White bottom rail, matching the title bar: the two chrome bars are lighter than the grey content
-     page, framing the internal content top and bottom. */
-  background: var(--pf-t--global--background--color--primary--default);
+  /* The status bar stays the page's own grey - quiet, not a bright rail. Only the TOP bar goes white
+     to frame the content; the bottom stays recessive so it does not draw the eye. */
+  background: var(--pf-t--global--background--color--secondary--default);
   border-top: 1px solid var(--pf-t--global--border--color--default);
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */

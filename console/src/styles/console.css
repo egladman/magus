@@ -642,7 +642,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    radius) lets the rounded corners read, so the panel presents as a distinct, inviting rounded
    surface floating in the outlet rather than a flush square fill. The radius is built from the large
    token (device-aware via the tokens.css platform gate), doubled so the curve is unmistakable. */
-#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0.6rem; padding: 2rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); border-radius: calc(var(--pf-t--global--border--radius--large) * 2); }
+#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0; padding: 2rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); }
 
 /* Launch-the-demo affordance: a quiet icon pill below the cards, right-aligned, that expands to show its
    label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. It
