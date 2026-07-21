@@ -1,0 +1,50 @@
+version: v0.2.1
+date: "2026-07-19"
+body: |-
+    See the full changelog at
+    https://github.com/egladman/magus/compare/v0.2.0...v0.2.1
+artifacts:
+    - name: magus_v0.2.1_darwin_amd64-static.tar.gz
+      platform: darwin/amd64
+      size: ""
+      sha256: ""
+    - name: magus_v0.2.1_darwin_arm64-static.tar.gz
+      platform: darwin/arm64
+      size: ""
+      sha256: ""
+    - name: magus_v0.2.1_darwin_arm64.tar.gz
+      platform: darwin/arm64
+      size: ""
+      sha256: ""
+    - name: magus_v0.2.1_linux_amd64-static.tar.gz
+      platform: linux/amd64
+      size: ""
+      sha256: ""
+    - name: magus_v0.2.1_linux_amd64.tar.gz
+      platform: linux/amd64
+      size: ""
+      sha256: ""
+    - name: magus_v0.2.1_linux_arm64-static.tar.gz
+      platform: linux/arm64
+      size: ""
+      sha256: ""
+    - name: magus_v0.2.1_linux_arm64.tar.gz
+      platform: linux/arm64
+      size: ""
+      sha256: ""
+    - name: magus_v0.2.1_windows_amd64-static.tar.gz
+      platform: windows/amd64
+      size: ""
+      sha256: ""
+    - name: magus_v0.2.1_windows_amd64.tar.gz
+      platform: windows/amd64
+      size: ""
+      sha256: ""
+    - name: SHA256SUMS
+      platform: 
+      size: ""
+      sha256: ""
+    - name: SHA256SUMS.sig
+      platform: 
+      size: ""
+      sha256: ""
