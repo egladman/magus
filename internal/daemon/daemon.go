@@ -18,6 +18,8 @@ import (
 	"net/netip"
 	"net/url"
 
+	"connectrpc.com/connect"
+
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
@@ -29,10 +31,12 @@ import (
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
+	"github.com/egladman/magus/internal/handler/trailrpc"
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
@@ -375,7 +379,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// managed SOLELY by the CLI, and structurally invisible+immutable to this service (it
 			// lives in a store the handler never opens, so it is neither listed nor revocable here),
 			// preventing lockout.
-			tokenPath, tokenHandler := tokenv1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr))
+			// The audit interceptor records every MUTATING token RPC (RevokeToken today) to the trail by
+			// construction, closing the gap where a browser-reachable credential revoke recorded nothing.
+			// The actor is stamped "operator" from the mount tier (this surface is cli-guarded), never
+			// read from a caller-supplied field. Reads (ListTokens) are not recorded. See
+			// internal/handler/trailrpc for the pattern and the arch-test ratchet that keeps it honest.
+			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindTokenLifecycle))
+			tokenPath, tokenHandler := tokenv1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit)
 			httpServer.Handle(tokenPath, httpx.GuardRebind(allowed, cors(httpx.BearerGuard(auth.VerifyCLIBearer, tokenHandler))))
 			log.Info("[BRIDGE] token service mounted", slog.String("path", tokenPath))
 

@@ -1,0 +1,139 @@
+package trailrpc
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"connectrpc.com/connect"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+
+	// Blank-imported so every magus.*.v1 service descriptor is registered in protoregistry.GlobalFiles
+	// for TestKnownVerbs to enumerate. This is the whole point of the ratchet: a new service/method
+	// linked into the daemon is visible here, so an unclassified verb cannot ship unnoticed.
+	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/job/v1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/query/v1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/status/v1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/viewer/v1"
+
+	"github.com/egladman/magus/internal/trail"
+	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1"
+	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+)
+
+func TestClassify(t *testing.T) {
+	cases := []struct {
+		method   string
+		mutating bool
+		known    bool
+	}{
+		{"RevokeToken", true, true},
+		{"ClearCache", true, true},
+		{"DeleteMemory", true, true},
+		{"PutMemory", true, true},
+		{"RotateActivities", true, true},
+		{"SyncGraph", true, true},
+		{"ListTokens", false, true},
+		{"GetStatus", false, true},
+		{"StreamStatus", false, true},
+		{"FrobnicateWorkspace", true, false}, // unknown verb: fail-closed to mutating, flagged unknown
+	}
+	for _, c := range cases {
+		mut, known := classify(c.method)
+		if mut != c.mutating || known != c.known {
+			t.Errorf("classify(%q) = (%v,%v), want (%v,%v)", c.method, mut, known, c.mutating, c.known)
+		}
+	}
+}
+
+func TestMethodName(t *testing.T) {
+	if got := methodName("/magus.token.v1.TokenService/RevokeToken"); got != "RevokeToken" {
+		t.Errorf("methodName = %q, want RevokeToken", got)
+	}
+	if got := methodName("Bare"); got != "Bare" {
+		t.Errorf("methodName(bare) = %q, want Bare", got)
+	}
+}
+
+// TestKnownVerbs is the arch ratchet: every method on every magus.*.v1 service linked into this test
+// binary must classify to a KNOWN verb. A new RPC whose leading word is in neither the mutating nor the
+// read set fails here, forcing the author to add it to one bucket in interceptor.go - which is the moment
+// they decide whether it needs auditing. This is what keeps the audit boundary from silently drifting as
+// the service surface grows.
+func TestKnownVerbs(t *testing.T) {
+	var unknown []string
+	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		if !strings.HasPrefix(string(fd.Package()), "magus.") {
+			return true
+		}
+		svcs := fd.Services()
+		for i := 0; i < svcs.Len(); i++ {
+			methods := svcs.Get(i).Methods()
+			for j := 0; j < methods.Len(); j++ {
+				name := string(methods.Get(j).Name())
+				if _, known := classify(name); !known {
+					unknown = append(unknown, string(svcs.Get(i).FullName())+"."+name)
+				}
+			}
+		}
+		return true
+	})
+	if len(unknown) > 0 {
+		t.Fatalf("unclassified RPC verbs (add each verb to trailrpc's mutating or read set and decide auditing): %v", unknown)
+	}
+}
+
+// fakeTokenService is a minimal TokenServiceHandler that always succeeds, so the interceptor's recording
+// is exercised over a real Connect handler+client roundtrip (AnyRequest cannot be faked - it has
+// unexported methods - so a real call is the only way to drive Spec().Procedure).
+type fakeTokenService struct{}
+
+func (fakeTokenService) ListTokens(context.Context, *connect.Request[tokenv1.ListTokensRequest]) (*connect.Response[tokenv1.ListTokensResponse], error) {
+	return connect.NewResponse(&tokenv1.ListTokensResponse{}), nil
+}
+func (fakeTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.RevokeTokenResponse], error) {
+	return connect.NewResponse(&tokenv1.RevokeTokenResponse{}), nil
+}
+
+func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
+	dir := t.TempDir()
+	path, handler := tokenv1connect.NewTokenServiceHandler(
+		fakeTokenService{},
+		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindTokenLifecycle)),
+	)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := tokenv1connect.NewTokenServiceClient(srv.Client(), srv.URL)
+	ctx := context.Background()
+
+	// A read is NOT recorded.
+	if _, err := client.ListTokens(ctx, connect.NewRequest(&tokenv1.ListTokensRequest{})); err != nil {
+		t.Fatalf("ListTokens: %v", err)
+	}
+	// A mutation IS recorded, with the server-stamped actor and the method as the action.
+	if _, err := client.RevokeToken(ctx, connect.NewRequest(&tokenv1.RevokeTokenRequest{Identifier: "abc"})); err != nil {
+		t.Fatalf("RevokeToken: %v", err)
+	}
+
+	events, err := trail.ReadRecent(dir, 10)
+	if err != nil {
+		t.Fatalf("ReadRecent: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("recorded %d events, want exactly 1 (the mutation; the read must not record): %+v", len(events), events)
+	}
+	got := events[0]
+	if got.Action != "RevokeToken" || got.Actor != "operator" || got.Kind != trail.KindTokenLifecycle || got.Outcome != trail.OutcomeOK {
+		t.Errorf("recorded event = %+v, want RevokeToken/operator/token_lifecycle/ok", got)
+	}
+}
