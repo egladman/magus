@@ -141,8 +141,13 @@ func appendRationale(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge, r
 			nodes = append(nodes, types.KnowledgeNode{
 				ID: rID, Kind: types.KindRationale, Label: m[1], Doc: strings.TrimSpace(m[2]), Source: prov,
 			})
+			// Link the rationale to its enclosing function, or - for a file-scope comment sitting above the
+			// first declaration - to the FILE it annotates. Without this fallback a file-level WHY/NOTE
+			// produced a 0-degree orphan node (a known isolated-node source); every rationale now has a home.
 			if fn := enclosingFunction(fnLines, tk.Line); fn != "" {
 				edges = append(edges, extractedEdge(rID, functionID(rel, fn), types.RelationRationaleFor, prov))
+			} else {
+				edges = append(edges, extractedEdge(rID, fileID(rel), types.RelationRationaleFor, prov))
 			}
 		}
 	}

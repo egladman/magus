@@ -66,6 +66,20 @@ func TestStatsOrphans(t *testing.T) {
 	assert.NotContains(t, ids, "spell:magusfile", "a declared spell with no ops (structural) is not an orphan")
 }
 
+func TestStatsConnectivity(t *testing.T) {
+	// The fixture has one connected component around spell:go/target:.:build/op:go:build, another around
+	// spell:cosign/op, another around spell:rust/op, the documented MGS1001<->doc pair, the isolated
+	// spell:magusfile, the isolated diagnostic:MGS2001, and the isolated doc:docs/orphan.md.
+	s := statsFixture().Stats("")
+	// Two non-spell isolated nodes: diagnostic:MGS2001 and doc:docs/orphan.md (spell:magusfile is excluded).
+	assert.Equal(t, 2, s.IsolatedCount, "isolated counts every 0-degree non-spell node")
+	// Every node reachable in some component; a single-node isolated is its own component. The largest is
+	// the go build cluster (spell:go + op:go:build + target:.:build = 3).
+	assert.Equal(t, 3, s.LargestComponent)
+	assert.Greater(t, s.Components, 1, "an unlinked graph splits into several components")
+	assert.LessOrEqual(t, s.Components, s.NodeCount)
+}
+
 func TestStatsCoverage(t *testing.T) {
 	s := statsFixture().Stats("")
 	var diag types.KnowledgeDocCoverage

@@ -10,6 +10,7 @@ import (
 const (
 	maxGods         = 15
 	maxUndocumented = 25
+	maxOrphans      = 40 // cap the orphan SAMPLE; IsolatedCount reports the true total
 )
 
 // documentableKinds are the kinds whose doc coverage graph stats reports:
@@ -22,14 +23,65 @@ var documentableKinds = []string{types.KindDiagnostic, types.KindSpell, types.Ki
 // scopes every section to that node kind. Deterministic and LLM-free.
 func (g *Graph) Stats(kind string) types.KnowledgeStats {
 	g.ensureAdj()
+	orphans, isolated := g.orphanNodes(kind)
+	components, largest := g.connectivity()
 	return types.KnowledgeStats{
-		Definition: types.KnowledgeStatsDefinition,
-		NodeCount:  len(g.nodes),
-		EdgeCount:  len(g.edges),
-		Gods:       g.godNodes(kind),
-		Orphans:    g.orphanNodes(kind),
-		Coverage:   g.docCoverage(kind),
+		Definition:       types.KnowledgeStatsDefinition,
+		NodeCount:        len(g.nodes),
+		EdgeCount:        len(g.edges),
+		Gods:             g.godNodes(kind),
+		Orphans:          orphans,
+		Coverage:         g.docCoverage(kind),
+		IsolatedCount:    isolated,
+		Components:       components,
+		LargestComponent: largest,
 	}
+}
+
+// connectivity measures how fragmented the graph is: the number of weakly-connected components (edge
+// direction ignored) and the size of the largest. A well-linked graph is one big component; many
+// components means the builder minted nodes it never connected. Union-find over the undirected edge set,
+// so it is O(V + E a(V)) and deterministic. Every node starts in its own set, so an isolated node counts
+// as its own component.
+func (g *Graph) connectivity() (components, largest int) {
+	parent := make(map[string]string, len(g.nodes))
+	for id := range g.nodes {
+		parent[id] = id
+	}
+	var find func(string) string
+	find = func(x string) string {
+		for parent[x] != x {
+			parent[x] = parent[parent[x]] // path halving
+			x = parent[x]
+		}
+		return x
+	}
+	union := func(a, b string) {
+		ra, rb := find(a), find(b)
+		if ra != rb {
+			parent[ra] = rb
+		}
+	}
+	for _, e := range g.edges {
+		// An edge can name a node outside g.nodes only in a malformed graph; guard so find never seeds a
+		// stray root. Both endpoints exist for every builder-produced edge.
+		if _, ok := parent[e.Source]; !ok {
+			continue
+		}
+		if _, ok := parent[e.Target]; !ok {
+			continue
+		}
+		union(e.Source, e.Target)
+	}
+	sizes := make(map[string]int, len(g.nodes))
+	for id := range g.nodes {
+		root := find(id)
+		sizes[root]++
+		if sizes[root] > largest {
+			largest = sizes[root]
+		}
+	}
+	return len(sizes), largest
 }
 
 // godNodes returns the highest-degree nodes (concentration), top maxGods, sorted
@@ -58,31 +110,45 @@ func (g *Graph) godNodes(kind string) []types.KnowledgeGodNode {
 	return gods
 }
 
-// orphanNodes returns neglected nodes: a doc with no edges at all (nothing links
-// to it and it documents nothing) and a spell no target uses. Sorted by ID.
-func (g *Graph) orphanNodes(kind string) []types.KnowledgeOrphan {
-	var orphans []types.KnowledgeOrphan
+// orphanNodes returns neglected nodes and the TRUE count of fully isolated ones. An isolated node (any
+// kind, in+out == 0) is the core data-quality signal - the builder minted it but linked nothing to it, so
+// it is undiscoverable in the graph. The returned slice is a SAMPLE capped at maxOrphans (a graph can hold
+// hundreds of isolated diagnostic codes; listing them all would drown the report), sorted by ID; isolated
+// is the full total so the caller can say "showing N of M". The spell case is a SEMANTIC orphan (it has
+// edges - it contains ops - but nothing uses them), so it is reported regardless of the cap's isolated
+// sampling and does not count toward isolated.
+func (g *Graph) orphanNodes(kind string) (sample []types.KnowledgeOrphan, isolated int) {
+	var all []types.KnowledgeOrphan
 	for id, n := range g.nodes {
 		if kind != "" && n.Kind != kind {
 			continue
 		}
-		switch n.Kind {
-		case types.KindDoc:
-			if len(g.in[id])+len(g.out[id]) == 0 {
-				orphans = append(orphans, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "no doc links to it and it documents nothing"})
+		if len(g.in[id])+len(g.out[id]) == 0 {
+			// Spells are edge-light by design: a structural spell (provides no ops) and an unused builtin
+			// are EXPECTED to be unlinked, not data-quality gaps - the spell case below governs the one
+			// spell orphan that matters (a declared op-provider nothing runs, which has edges). So a
+			// 0-degree spell is skipped rather than counted as isolated.
+			if n.Kind == types.KindSpell {
+				continue
 			}
-		case types.KindSpell:
-			// Only a spell the workspace DECLARES and that PROVIDES ops is an orphan
-			// candidate: an undeclared builtin is merely available (unused here is normal),
-			// and a spell with no ops (a structural dispatch spell like the magusfile spell)
-			// provides nothing to use. A declared op-provider nothing runs is genuinely dead.
-			if n.Attrs[AttrDeclared] == "true" && g.spellProvidesOps(id) && !g.spellUsed(id) {
-				orphans = append(orphans, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "declared but no target uses it"})
+			isolated++
+			reason := "isolated: nothing links to it and it links nothing"
+			if n.Kind == types.KindDoc {
+				reason = "no doc links to it and it documents nothing"
 			}
+			all = append(all, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: reason})
+			continue
+		}
+		// A declared, op-providing spell that nothing runs is genuinely dead even though it has edges.
+		if n.Kind == types.KindSpell && n.Attrs[AttrDeclared] == "true" && g.spellProvidesOps(id) && !g.spellUsed(id) {
+			all = append(all, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "declared but no target uses it"})
 		}
 	}
-	slices.SortFunc(orphans, func(a, b types.KnowledgeOrphan) int { return cmp.Compare(a.ID, b.ID) })
-	return orphans
+	slices.SortFunc(all, func(a, b types.KnowledgeOrphan) int { return cmp.Compare(a.ID, b.ID) })
+	if len(all) > maxOrphans {
+		all = all[:maxOrphans]
+	}
+	return all, isolated
 }
 
 // spellProvidesOps reports whether the spell contributes any op node. A spell with none

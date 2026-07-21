@@ -365,6 +365,14 @@ type KnowledgeStats struct {
 	Gods       []KnowledgeGodNode     `json:"gods"                yaml:"gods"`
 	Orphans    []KnowledgeOrphan      `json:"orphans,omitempty"   yaml:"orphans,omitempty"`
 	Coverage   []KnowledgeDocCoverage `json:"coverage,omitempty"  yaml:"coverage,omitempty"`
+	// Connectivity is the data-quality lens: how fragmented the graph is. A high isolated count or many
+	// weakly-connected components means the builder has not linked everything it could, which hurts
+	// discoverability. IsolatedCount is every node with no edge at all (Orphans lists a capped sample by
+	// kind); Components is the number of weakly-connected components (1 = fully reachable); LargestComponent
+	// is the biggest component's node count (the "main" graph most nodes should belong to).
+	IsolatedCount    int `json:"isolated_count"    yaml:"isolated_count"`
+	Components       int `json:"components"        yaml:"components"`
+	LargestComponent int `json:"largest_component" yaml:"largest_component"`
 }
 
 // KnowledgeGodNode is a highly-connected node - where structural risk concentrates.
@@ -399,9 +407,10 @@ type KnowledgeDocCoverage struct {
 // KnowledgeStatsDefinition is the human-readable description of `magus graph stats`.
 const KnowledgeStatsDefinition = "Graph stats reads the knowledge graph to show " +
 	"where the workspace concentrates and where it is neglected: god nodes (the most " +
-	"connected spells, modules, and targets - the structural risk), orphans (docs that " +
-	"document nothing, spells nothing uses), and doc coverage (the share of diagnostics, " +
-	"spells, and modules that have a doc). It is the structural companion to insight's " +
+	"connected spells, modules, and targets - the structural risk), connectivity (how " +
+	"fragmented the graph is - components and isolated nodes the builder never linked), " +
+	"orphans (isolated nodes and spells nothing uses), and doc coverage (the share of " +
+	"diagnostics, spells, and modules that have a doc). It is the structural companion to insight's " +
 	"git-history lenses."
 
 // KnowledgeRouting is the compact "query first" summary rendered into MAGUS.md's

@@ -318,14 +318,25 @@ func graphStats(ctx context.Context, root string, args []string) error {
 
 func statsText(out types.KnowledgeStats) error {
 	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("graph: %d nodes, %d edges\n\n", out.NodeCount, out.EdgeCount)
+	fmt.Printf("graph: %d nodes, %d edges\n", out.NodeCount, out.EdgeCount)
+	// The connectivity lens: fragmentation is a data-quality signal. One component with few isolated nodes
+	// is a well-linked graph; many components / a high isolated count means the builder left relationships
+	// undefined (the discoverability gap to chase).
+	fmt.Printf("connectivity: %d component(s), largest holds %d, %d isolated node(s)\n\n",
+		out.Components, out.LargestComponent, out.IsolatedCount)
 	fmt.Println("god nodes (most connected):")
 	fmt.Printf("  %6s  %4s  %4s  %-11s  %s\n", "DEGREE", "IN", "OUT", "KIND", "LABEL")
 	for _, g := range out.Gods {
 		fmt.Printf("  %6d  %4d  %4d  %-11s  %s\n", g.Degree, g.In, g.Out, g.Kind, g.Label)
 	}
 	if len(out.Orphans) > 0 {
-		fmt.Printf("\norphans (%d):\n", len(out.Orphans))
+		// Orphans is a capped sample; name the true isolated total so a large graph does not read as if
+		// only len(Orphans) nodes are unlinked.
+		if out.IsolatedCount > len(out.Orphans) {
+			fmt.Printf("\norphans (showing %d of %d isolated):\n", len(out.Orphans), out.IsolatedCount)
+		} else {
+			fmt.Printf("\norphans (%d):\n", len(out.Orphans))
+		}
 		for _, o := range out.Orphans {
 			fmt.Printf("  %-11s  %-26s  %s\n", o.Kind, truncate(o.Label, 26), o.Reason)
 		}
