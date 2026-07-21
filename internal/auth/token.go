@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/types"
 )
 
 // ErrNoToken is returned by Load when no token file exists yet.
@@ -150,7 +151,7 @@ func Load() (string, error) {
 		return "", fmt.Errorf("auth: stat token: %w", err)
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		return "", fmt.Errorf("auth: token file %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
+		return "", types.DiagnosticErrorf(types.InsecureTokenPermissions, "auth: token file %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {

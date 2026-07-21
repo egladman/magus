@@ -5,6 +5,8 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+
+	"github.com/egladman/magus/types"
 )
 
 // Verifier decides whether a presented bearer token is accepted. It is the one
@@ -111,5 +113,9 @@ func bearerToken(header string) (string, bool) {
 
 func unauthorized(w http.ResponseWriter) {
 	w.Header().Set("WWW-Authenticate", `Bearer realm="magus"`)
-	http.Error(w, "unauthorized", http.StatusUnauthorized)
+	// Coded so a client debugging an MCP connection gets a lookupable reason. Deliberately GENERIC (it
+	// names every possibility, distinguishing none) to preserve the guard's anti-enumeration posture.
+	http.Error(w, types.FormatDiagnostic(types.BearerRejected,
+		"the daemon rejected the bearer token: it is missing, wrong, expired, or revoked. Mint or inspect a connector token with: magus config mcp connector"),
+		http.StatusUnauthorized)
 }

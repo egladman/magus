@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -103,6 +104,7 @@ func (s *ConnectorSuite) TestLoadRejectsInsecurePerms() {
 
 	_, err = LoadConnectorStore()
 	assert.Error(t, err, "LoadConnectorStore accepted a world-readable store")
+	assert.ErrorIs(t, err, types.InsecureTokenPermissions, "the error carries MGS9002")
 }
 
 func (s *ConnectorSuite) TestRevoke() {
@@ -252,6 +254,7 @@ func (s *ConnectorSuite) TestRejectsNewerStoreVersion() {
 
 	_, err = LoadConnectorStore()
 	assert.Error(t, err, "load accepted a store version newer than supported")
+	assert.ErrorIs(t, err, types.ConnectorStoreTooNew, "the error carries MGS9003")
 }
 
 // --- format-only tests (no state isolation needed) ---

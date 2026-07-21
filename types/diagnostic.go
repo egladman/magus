@@ -14,7 +14,7 @@ import (
 // gopherbuzz instantiates the same framework separately for its own BZZ#### codes; the two namespaces
 // never share a code.
 
-// Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services, 6000=charms, 7000=knowledge-graph extraction, 8000=output references.
+// Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services, 6000=charms, 7000=knowledge-graph extraction, 8000=output references, 9000=auth/connector.
 
 // Base URLs for diagnostic documentation, keyed by code-prefix subdir.
 const (
@@ -25,6 +25,7 @@ const (
 	diagnosticCharmsBase    = "https://github.com/egladman/magus/blob/main/docs/codes/charms/"
 	diagnosticKnowledgeBase = "https://github.com/egladman/magus/blob/main/docs/codes/knowledge/"
 	diagnosticOutputRefBase = "https://github.com/egladman/magus/blob/main/docs/codes/outputref/"
+	diagnosticAuthBase      = "https://github.com/egladman/magus/blob/main/docs/codes/auth/"
 )
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code). It aliases the framework's Code type, so
@@ -49,6 +50,8 @@ var ErrDiag = diag.ErrSentinel
 // coded error is minted through it so the docs URL is captured for rendering.
 var mgs = diag.New(func(c DiagnosticCode) string {
 	switch {
+	case strings.HasPrefix(string(c), "MGS9"):
+		return diagnosticAuthBase + string(c) + ".md"
 	case strings.HasPrefix(string(c), "MGS8"):
 		return diagnosticOutputRefBase + string(c) + ".md"
 	case strings.HasPrefix(string(c), "MGS7"):
@@ -102,6 +105,12 @@ const (
 	OutputRefMissing          DiagnosticCode = "MGS8001"
 	OutputRefAmbiguous        DiagnosticCode = "MGS8002"
 	OutputRefMalformed        DiagnosticCode = "MGS8003"
+	BearerRejected            DiagnosticCode = "MGS9001"
+	InsecureTokenPermissions  DiagnosticCode = "MGS9002"
+	ConnectorStoreTooNew      DiagnosticCode = "MGS9003"
+	NoAuthToken               DiagnosticCode = "MGS9004"
+	ConnectorNameExists       DiagnosticCode = "MGS9005"
+	ConnectorNotFound         DiagnosticCode = "MGS9006"
 )
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
@@ -120,6 +129,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed,
+	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
+	NoAuthToken, ConnectorNameExists, ConnectorNotFound,
 }
 
 // AllDiagnosticCodes returns every registered diagnostic code in ascending MGS

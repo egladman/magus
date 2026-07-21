@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -78,6 +79,7 @@ func (s *TokenSuite) TestLoadRejectsInsecurePerms() {
 
 	_, err = Load()
 	assert.Error(t, err, "Load accepted a world-readable token file; want error")
+	assert.ErrorIs(t, err, types.InsecureTokenPermissions, "the error carries MGS9002")
 }
 
 func (s *TokenSuite) TestRevoke() {

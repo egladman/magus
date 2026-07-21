@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/types"
 )
 
 // Connector tokens are the SECOND auth tier: named, hashed-at-rest, expiring
@@ -148,7 +149,7 @@ func readConnectorFile(path string) (connectorFile, error) {
 		return connectorFile{}, fmt.Errorf("auth: stat connector store: %w", err)
 	}
 	if perm := info.Mode().Perm(); perm&0o077 != 0 {
-		return connectorFile{}, fmt.Errorf("auth: connector store %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
+		return connectorFile{}, types.DiagnosticErrorf(types.InsecureTokenPermissions, "auth: connector store %s has insecure permissions %#o (want 0600); fix with: chmod 600 %s", path, perm, path)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -158,7 +159,7 @@ func readConnectorFile(path string) (connectorFile, error) {
 		return connectorFile{}, fmt.Errorf("auth: parse connector store %s: %w", path, err)
 	}
 	if file.Version > connectorStoreVersion {
-		return connectorFile{}, fmt.Errorf("auth: connector store %s is version %d, newer than this magus supports (%d); upgrade magus", path, file.Version, connectorStoreVersion)
+		return connectorFile{}, types.DiagnosticErrorf(types.ConnectorStoreTooNew, "auth: connector store %s is version %d, newer than this magus supports (%d); upgrade magus", path, file.Version, connectorStoreVersion)
 	}
 	return file, nil
 }

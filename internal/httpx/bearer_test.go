@@ -41,6 +41,7 @@ func TestBearerGuard(t *testing.T) {
 		rr := serve(authHeader, rawQuery)
 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 		assert.NotEmpty(t, rr.Header().Get("WWW-Authenticate"), "missing WWW-Authenticate challenge")
+		assert.Contains(t, rr.Body.String(), "MGS9001", "the 401 body carries the lookupable bearer-rejected code")
 	}
 
 	// Header path.

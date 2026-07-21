@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/interactive/clihint"
+	"github.com/egladman/magus/types"
 )
 
 func configMCPCmd(args []string) error {
@@ -149,7 +150,7 @@ func configMCPTokenPrint(args []string) error {
 	}
 	tok, err := auth.Load()
 	if errors.Is(err, auth.ErrNoToken) {
-		return fmt.Errorf("magus config mcp token print: no token configured; run `%s`", clihint.MCPTokenGenerate)
+		return types.DiagnosticErrorf(types.NoAuthToken, "magus config mcp token print: no token configured; run `%s`", clihint.MCPTokenGenerate)
 	}
 	if err != nil {
 		return err
@@ -269,7 +270,7 @@ func configMCPConnectorCreate(args []string) error {
 	secret, c, err := store.Create(chosen, exp)
 	if err != nil {
 		if errors.Is(err, auth.ErrConnectorExists) {
-			return fmt.Errorf("magus config mcp connector create: a connector named %q already exists; pass a different --name", chosen)
+			return types.DiagnosticErrorf(types.ConnectorNameExists, "magus config mcp connector create: a connector named %q already exists; pass a different --name", chosen)
 		}
 		return err
 	}
@@ -343,7 +344,7 @@ func configMCPConnectorRevoke(args []string) error {
 	removed, err := store.Revoke(rest[0])
 	if err != nil {
 		if errors.Is(err, auth.ErrConnectorNotFound) {
-			return fmt.Errorf("magus config mcp connector revoke: no connector matches %q", rest[0])
+			return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config mcp connector revoke: no connector matches %q", rest[0])
 		}
 		return err
 	}
