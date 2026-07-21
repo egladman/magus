@@ -4,7 +4,23 @@
   <link href="https://github.com/egladman/magus/releases" rel="alternate"/>
   <link href="https://eli.gladman.cc/magus/public/atom/releases.atom.xml" rel="self"/>
   <id>https://github.com/egladman/magus/releases</id>
-  <updated>2026-07-05T00:00:00Z</updated>
+  <updated>2026-07-19T00:00:00Z</updated>
+  <entry>
+    <title>v0.2.1</title>
+    <link href="https://github.com/egladman/magus/releases/tag/v0.2.1"/>
+    <id>https://github.com/egladman/magus/releases/tag/v0.2.1</id>
+    <updated>2026-07-19T00:00:00Z</updated>
+    <summary type="text">See the full changelog at
+https://github.com/egladman/magus/compare/v0.2.0...v0.2.1</summary>
+  </entry>
+  <entry>
+    <title>v0.2.0</title>
+    <link href="https://github.com/egladman/magus/releases/tag/v0.2.0"/>
+    <id>https://github.com/egladman/magus/releases/tag/v0.2.0</id>
+    <updated>2026-07-18T00:00:00Z</updated>
+    <summary type="text">See the full changelog at
+https://github.com/egladman/magus/compare/v0.1.0...v0.2.0</summary>
+  </entry>
   <entry>
     <title>v0.1.0</title>
     <link href="https://github.com/egladman/magus/releases/tag/v0.1.0"/>

@@ -32,9 +32,9 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <div id="announcement-bar" data-version="v0.1.0">
+  <div id="announcement-bar" data-version="v0.2.1">
     <div class="container">
-      <span>magus <strong>v0.1.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.1.0">See what's new</a></span>
+      <span>magus <strong>v0.2.1</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.2.1">See what's new</a></span>
       <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
@@ -93,15 +93,17 @@
 <h1 id="install-on-macos">Install on macOS</h1>
 <p>magus ships as a single self-contained binary. Download it with <code>curl</code>, extract it into a <code>PATH</code> directory you own - no root, no <code>sudo</code> - then <a href="../#verify-a-release">verify it</a> before first run.</p>
 <h2 id="quick-install">Quick install</h2>
-<pre><code class="language-sh">VERSION=v0.1.0
-ARCH=arm64            # or amd64 on Intel
-curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_darwin_${ARCH}.tar.gz&quot;
+<pre><code class="language-sh">VERSION=v0.2.1
+ASSET=magus_${VERSION}_darwin_arm64.tar.gz              # Apple Silicon
+# Intel Macs use the statically linked build:
+#   ASSET=magus_${VERSION}_darwin_amd64-static.tar.gz
+curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/${ASSET}&quot;
 mkdir -p ~/.local/bin
-tar -xzf &quot;magus_${VERSION}_darwin_${ARCH}.tar.gz&quot;
+tar -xzf &quot;${ASSET}&quot;
 mv magus ~/.local/bin/
 magus version
 </code></pre>
-<p><code>${VERSION}</code> above is the current release; <a href="../../public/release">/public/release/</a> lists every build if you need a specific one.</p>
+<p><code>${VERSION}</code> above is the current release; <a href="../../public/release">/public/release/</a> lists every build, including the statically linked <code>-static</code> variants.</p>
 <h2 id="verify-the-download">Verify the download</h2>
 <p>Fetch the manifest and its signature next to the tarball:</p>
 <pre><code class="language-sh">curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS&quot;

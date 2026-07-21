@@ -11,7 +11,7 @@ magus ships as a single self-contained binary. Download it with `curl.exe`, extr
 ## Quick install
 
 ```powershell
-$VERSION = "v0.1.0"
+$VERSION = "v0.2.1"
 curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_amd64.tar.gz"
 mkdir -Force $Env:USERPROFILE\bin | Out-Null
 tar -xzf "magus_${VERSION}_windows_amd64.tar.gz"
