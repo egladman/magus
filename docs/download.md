@@ -11,10 +11,14 @@ magus ships as a single self-contained binary. Pick your platform for step-by-st
 
 ## Install
 
+Each platform guide has a copy-paste `curl` install that pulls the current release, extracts the binary onto your `PATH`, and points you at verification:
+
 - [Linux](download/linux.md) - amd64 or arm64
 - [macOS](download/macos.md) - Apple Silicon or Intel
 - [Windows](download/windows.md) - amd64
 - [Docker](download/docker.md) - run in a container instead of installing a binary (any platform)
+
+Prefer Go tooling or a local build? See [Install with Go](#install-with-go) and [Build from source](#build-from-source).
 
 Every build is published at [/public/release/](../public/release/) alongside its `SHA256SUMS` manifest and signature. However you install, [verify the release](#verify-a-release) first.
 
@@ -103,6 +107,18 @@ Or create a symlink:
 ```sh
 ln -s "$(command -v magus)" ~/.local/bin/mgs
 ```
+
+## Install with Go
+
+`go install github.com/egladman/magus/cmd/magus@latest` is **not currently supported.** magus vendors its embedded Buzz interpreter through a local `replace` directive in `go.mod`, and `go install` refuses any module whose `go.mod` carries a `replace` - it fetches the tagged source from the module proxy, where a local path cannot resolve, and fails with:
+
+```text
+The go.mod file for the module providing named packages contains one or
+more replace directives. It must not contain directives that would cause
+it to be interpreted differently than if it were the main module.
+```
+
+Until the interpreter is published as a standalone, versioned module, install a [prebuilt binary](#install) (recommended) or build from a clone below - a clone works because the `replace` resolves against the checked-out `./gopherbuzz`.
 
 ## Build from source
 

@@ -6,14 +6,32 @@ tags: [download, install, macos, apple silicon, quarantine, path]
 
 # Install on macOS
 
-magus ships as a single self-contained binary. Grab your architecture's tarball from [/public/release/](../../public/release/), [verify it](../download.md#verify-a-release), and extract it into a `PATH` directory you own - no root, no `sudo`.
+magus ships as a single self-contained binary. Download it with `curl`, extract it into a `PATH` directory you own - no root, no `sudo` - then [verify it](../download.md#verify-a-release) before first run.
+
+## Quick install
 
 ```sh
+VERSION=__MAGUS_VERSION__
+ARCH=arm64            # or amd64 on Intel
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_darwin_${ARCH}.tar.gz"
 mkdir -p ~/.local/bin
-tar -xzf magus_*_darwin_arm64.tar.gz   # or darwin_amd64 on Intel
+tar -xzf "magus_${VERSION}_darwin_${ARCH}.tar.gz"
 mv magus ~/.local/bin/
 magus version
 ```
+
+`${VERSION}` above is the current release; [/public/release/](../../public/release/) lists every build if you need a specific one.
+
+## Verify the download
+
+Fetch the manifest and its signature next to the tarball:
+
+```sh
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS"
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS.sig"
+```
+
+Then verify the Ed25519 signature *first*, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands (macOS uses `shasum -a 256`) are in [Verify a release](../download.md#verify-a-release).
 
 ## Clear the quarantine flag
 

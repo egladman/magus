@@ -6,16 +6,31 @@ tags: [download, install, windows, powershell, path]
 
 # Install on Windows
 
-magus ships as a single self-contained binary. Grab the tarball from [/public/release/](../../public/release/), [verify it](../download.md#verify-a-release), and extract it into a `PATH` directory you own. Run these in PowerShell:
+magus ships as a single self-contained binary. Download it with `curl.exe`, extract it into a `PATH` directory you own, then [verify it](../download.md#verify-a-release) before first run. Run these in PowerShell:
+
+## Quick install
 
 ```powershell
+$VERSION = "__MAGUS_VERSION__"
+curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_amd64.tar.gz"
 mkdir -Force $Env:USERPROFILE\bin | Out-Null
-tar -xzf magus_*_windows_amd64.tar.gz
-Move-Item magus.exe $Env:USERPROFILE\bin\magus.exe
+tar -xzf "magus_${VERSION}_windows_amd64.tar.gz"
+Move-Item -Force magus.exe $Env:USERPROFILE\bin\magus.exe
 magus version
 ```
 
-`tar` ships with Windows 10 (1803+) and Windows 11, so no extra tooling is needed.
+Both `curl.exe` and `tar` ship with Windows 10 (1803+) and Windows 11, so no extra tooling is needed. `$VERSION` above is the current release; [/public/release/](../../public/release/) lists every build.
+
+## Verify the download
+
+Fetch the manifest and its signature next to the tarball:
+
+```powershell
+curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/SHA256SUMS"
+curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/SHA256SUMS.sig"
+```
+
+Then verify the Ed25519 signature *first*, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](../download.md#verify-a-release).
 
 ## Put it on your PATH
 
