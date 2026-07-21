@@ -188,6 +188,19 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 
+/* Stacked sections: the console keeps two settings tabs (General, Agent), each stacking several titled
+ * sections. A rule between sections and a heading per section keep them legible as distinct blocks in one
+ * scroll. The first section needs no top rule. */
+.console-settings-section + .console-settings-section {
+  margin-top: 1.75rem; padding-top: 1.5rem;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-settings-section__title {
+  margin: 0 0 0.75rem; font-size: var(--pf-t--global--font--size--body--lg);
+  font-weight: var(--pf-t--global--font--weight--body--bold); color: var(--pf-t--global--text--color--regular);
+}
+.console-settings-section__title + .console-settings-section__lede { margin-top: -0.4rem; margin-bottom: 0.75rem; }
+
 /* The General form: keep the label column tight (PF's default 9.375rem is wide for two short labels)
  * and let the control column carry a small helper line under each field. */
 .console-settings-page .pf-v6-c-form.pf-m-horizontal {

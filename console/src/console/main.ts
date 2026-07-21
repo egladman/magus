@@ -621,6 +621,47 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     show(tab.id); // visible + status attached before the tile's surfaces finish activating
   }
 
+  // Browser-history integration so the mobile back-gesture (and the back button) moves between the
+  // in-app surfaces you have visited instead of leaving the site. The console keeps its tab/split state
+  // in a persisted workspace, NOT the URL (a tiling workspace has no single "current" surface), so the
+  // history stack carries only the ACTIVE-TAB id per entry: each activation pushes one entry, and a pop
+  // re-activates that tab. `historyReady` gates pushing until after boot restore (so the boot's own
+  // replaceState scrubbing is not fought); `historyNavInProgress` suppresses the push that the pop-driven
+  // activation would otherwise trigger; `lastHistoryId` de-dupes repeat show() calls for the same tab.
+  let historyReady = false;
+  let historyNavInProgress = false;
+  let lastHistoryId: string | null = null;
+  function pushHistory(id: string | null): void {
+    if (!historyReady || historyNavInProgress || id === lastHistoryId) return;
+    lastHistoryId = id;
+    history.pushState({ consoleTab: id }, "");
+  }
+  function onHistoryPop(e: PopStateEvent): void {
+    historyNavInProgress = true;
+    try {
+      const st = e.state as { consoleTab?: string | null } | null;
+      const target = st && st.consoleTab ? st.consoleTab : null;
+      lastHistoryId = target;
+      // Re-activate the popped tab when it still exists; otherwise (the launcher baseline, or a
+      // since-closed tab) reveal the launcher. Revealing the launcher leaves the workspace intact (the tab
+      // bar still lists open tabs), so a forward or a tab click re-reveals the surface - back just steps
+      // out of the current surface rather than off the site.
+      if (target && ws.get().tabs.some((t) => t.id === target)) activateTab(target);
+      else show(null);
+    } finally {
+      historyNavInProgress = false;
+    }
+  }
+  // enableHistoryNav is called once after boot restore: it stamps the current active tab as the baseline
+  // history entry (so the first back has somewhere to land) and starts tracking. It keeps the current URL
+  // (no url arg) so it does not disturb the boot's scrubbed address.
+  function enableHistoryNav(): void {
+    lastHistoryId = ws.get().activeId ?? null;
+    history.replaceState({ consoleTab: lastHistoryId }, "");
+    window.addEventListener("popstate", onHistoryPop);
+    historyReady = true;
+  }
+
   // show reveals one tab's tile and swaps its status bar into the footer (detaching the others), so
   // the bottom bar always reflects the active tab. It also tells each tile whether it is visible, so
   // a background streamer suppresses its shared-status writes instead of leaking into the active bar.
@@ -640,6 +681,9 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     statusHost.replaceChildren(active ? active.status : launcherStatus);
     // Let a docked Reference panel re-read the now-active surface's help sections.
     document.dispatchEvent(new CustomEvent("console:activetab", { detail: { id } }));
+    // Record this activation as a history entry so the browser back-gesture returns here (no-op until
+    // boot restore has enabled it, and suppressed while a pop is itself driving this activation).
+    pushHistory(id);
   }
 
   function unmount(id: string): void {
@@ -1384,6 +1428,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     if (registry.has(entrySurface)) open(entrySurface);
     history.replaceState(null, "", consoleBasePath() + location.search + location.hash);
   }
+
+  // Boot restore is done: start history tracking so later surface switches push back-stack entries and
+  // the mobile back-gesture navigates between surfaces instead of leaving the app.
+  enableHistoryNav();
 }
 
 // Entry: wire the console page's DOM. Guarded so the module no-ops when the scaffold is absent. The

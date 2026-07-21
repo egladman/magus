@@ -87,10 +87,22 @@ function buildFormGroup(labelText: string, controlId: string | null, control: HT
 
 // buildPanel wraps a section body as a tab panel. The tab label already names the section, so there is
 // no in-panel heading - the lede, when present, is the only intro copy above the body.
-function buildPanel(body: HTMLElement, lede?: string): HTMLElement {
+// buildSection wraps one settings section with a heading (and optional lede) so several sections read as
+// distinct, titled blocks when several are stacked in a single tab panel.
+function buildSection(title: string, body: HTMLElement, lede?: string): HTMLElement {
+  const sec = h("section", "console-settings-section");
+  sec.append(h("h2", "console-settings-section__title", title));
+  if (lede) sec.append(h("p", "console-settings-section__lede", lede));
+  sec.append(body);
+  return sec;
+}
+
+// buildStackedPanel stacks several titled sections into one tab panel - the console keeps just two
+// settings tabs (General, Agent), so each groups its related sections rather than fanning out one tab per
+// section.
+function buildStackedPanel(...sections: HTMLElement[]): HTMLElement {
   const panel = h("div", "console-settings-panel");
-  if (lede) panel.append(h("p", "console-settings-section__lede", lede));
-  panel.append(body);
+  panel.append(...sections);
   return panel;
 }
 
@@ -744,21 +756,34 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // on the share listener, and guarded by token class), so those RPCs come back denied and the tab
   // vanishes. Enforcement lives at the daemon; this only mirrors what the daemon already refuses.
   // (tabs is const-declared below; onDenied only fires after an async RPC, so it is initialized by then.)
-  const tokensSection = buildTokensSection(resolveDaemonHost(), { onDenied: () => tabs.setHidden("tokens", true) });
-  const memorySection = buildMemorySection(resolveDaemonHost(), { onDenied: () => tabs.setHidden("memory", true) });
+  // The two LIVE sections live under one "Agent" tab (the agent's memory + the tokens agents connect
+  // with). Each is gated by the SERVER: a read-only phone share cannot reach TokenService/MemoryService,
+  // so those RPCs come back denied. The whole Agent tab drops out only when BOTH are denied (they share
+  // the cli-tier gate, so in practice they deny together); a lone denial leaves the tab with the other
+  // section. (tabs is const-declared below; onDenied only fires after an async RPC, so it is initialized
+  // by then.)
+  let tokensDenied = false;
+  let memoryDenied = false;
+  const hideAgentIfBothDenied = (): void => { if (tokensDenied && memoryDenied) tabs.setHidden("agent", true); };
+  const tokensSection = buildTokensSection(resolveDaemonHost(), { onDenied: () => { tokensDenied = true; hideAgentIfBothDenied(); } });
+  const memorySection = buildMemorySection(resolveDaemonHost(), { onDenied: () => { memoryDenied = true; hideAgentIfBothDenied(); } });
 
-  // The action bar and pending diff stay above the tabs: the staged draft is shared across the staged
-  // sections (General, Appearance, Keybindings, Backup), so its commit controls are global to the
-  // surface, not per-tab. Each section is a tab panel; the Access tokens / Agent memory tabs drop out
-  // when the daemon declines the service.
+  // Two tabs only. General stacks the staged sections (daemon address, appearance, keybindings, backup)
+  // plus About; Agent stacks the two live daemon-facing sections. The action bar and pending diff stay
+  // above the tabs: the staged draft is shared across the staged sections, so its commit controls are
+  // global to the surface, not per-tab.
   const tabs = buildSettingsTabs([
-    { id: "general", label: "General", panel: buildPanel(generalForm) },
-    { id: "appearance", label: "Appearance", panel: buildPanel(themeBody) },
-    { id: "keybindings", label: "Keybindings", panel: buildPanel(keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply.") },
-    { id: "tokens", label: "Access tokens", panel: buildPanel(tokensSection.el, "List and revoke the daemon's connector tokens and the active phone-share token. Minting stays a CLI-only operation - the console can never create a token.") },
-    { id: "memory", label: "Agent memory", panel: buildPanel(memorySection.el, "View and edit the durable memory files agents write across sessions. Editing is the safety valve against the store growing unbounded.") },
-    { id: "backup", label: "Backup", panel: buildPanel(io, "Export the current draft, or import a saved set to stage it.") },
-    { id: "about", label: "About", panel: buildPanel(buildAbout(), "Source, license, and where to report bugs.") },
+    { id: "general", label: "General", panel: buildStackedPanel(
+      buildSection("General", generalForm),
+      buildSection("Appearance", themeBody),
+      buildSection("Keybindings", keybindingsContent, "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply."),
+      buildSection("Backup", io, "Export the current draft, or import a saved set to stage it."),
+      buildSection("About", buildAbout(), "Source, license, and where to report bugs."),
+    ) },
+    { id: "agent", label: "Agent", panel: buildStackedPanel(
+      buildSection("Access tokens", tokensSection.el, "List and revoke the daemon's connector tokens and the active phone-share token. Minting stays a CLI-only operation - the console can never create a token."),
+      buildSection("Agent memory", memorySection.el, "View and edit the durable memory files agents write across sessions. Editing is the safety valve against the store growing unbounded."),
+    ) },
   ]);
 
   page.append(bar, status, diffWrap, tabs.root);
