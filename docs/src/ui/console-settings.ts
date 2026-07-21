@@ -5,6 +5,7 @@
 // module. These are BROWSER-side prefs the operator controls; the dashboard reads them on load.
 import { getPollMs, setPollMs, getDefaultHost, setDefaultHost } from "../lib/settings.js";
 import { showRefreshToast } from "../lib/refresh-toast.js";
+import { registerPopup, notifyPopupOpen } from "../site/popups.js";
 
 export function initConsoleSettings(): void {
   const btn = document.getElementById("settings-btn");
@@ -33,13 +34,21 @@ export function initConsoleSettings(): void {
   if (host) host.addEventListener("change", () => { setDefaultHost(host.value); maybePromptReload(); });
 
   let open = false;
+  // Registered with the popup coordinator so opening another overlay (the nav menu,
+  // the reference drawer) closes this panel, and opening this panel closes them.
+  const dismissable = { close: (): void => setOpen(false) };
+  registerPopup(dismissable);
+
   const render = (): void => {
     panel.hidden = !open;
     btn.setAttribute("aria-expanded", open ? "true" : "false");
   };
-  const setOpen = (v: boolean): void => { open = v; render(); };
+  const setOpen = (v: boolean): void => { open = v; render(); if (v) notifyPopupOpen(dismissable); };
 
-  btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
+  // No stopPropagation: cross-popup dismissal is the coordinator's job now, not a
+  // side effect of halting event bubbling. The outside-click handler below already
+  // ignores clicks on the gear (btn.contains), so the panel it just opened survives.
+  btn.addEventListener("click", () => { setOpen(!open); });
   // A click anywhere outside the panel (and not on the gear) closes it.
   document.addEventListener("click", (e) => {
     if (!open) return;

@@ -1,4 +1,5 @@
 import { persisted } from "../lib/persist";
+import { registerPopup, notifyPopupOpen } from "./popups.js";
 
 // Collapsible TOC. A labeled toggle button above the content hides the "On this
 // page" sidebar and lets the article reflow to the full container width; the
@@ -67,6 +68,12 @@ export function initTocToggle(): void {
     grid.classList.toggle("toc-collapsed", collapsed.get());
     setLabel(!collapsed.get());
   };
+  // Registered with the popup coordinator so opening the nav menu / gear panel closes
+  // an open TOC sheet, and opening the sheet closes them. Only meaningful on mobile
+  // (the sheet); on desktop closeSheet just clears classes that are not set.
+  const dismissable = { close: (): void => closeSheet() };
+  registerPopup(dismissable);
+
   function openSheet(): void {
     if (!tocAside) return;
     tocAside.classList.add("toc-sheet-open");
@@ -77,6 +84,7 @@ export function initTocToggle(): void {
       document.body.appendChild(backdrop);
     }
     setLabel(true);
+    notifyPopupOpen(dismissable);
   }
   function closeSheet(): void {
     if (tocAside) tocAside.classList.remove("toc-sheet-open");

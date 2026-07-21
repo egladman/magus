@@ -1,4 +1,5 @@
 import { persisted } from "../lib/persist";
+import { registerPopup, notifyPopupOpen } from "../site/popups.js";
 
 // ref-drawer.ts - a right-side slide-out reference panel shared by the console apps (graph
 // explorer, log viewer, ...). A page marks its reference blocks with .ref-section and supplies a
@@ -136,7 +137,14 @@ export function initRefDrawer(): void {
     // also unpins it so it does not spring back on the next page.
     if (!open) { showReference(); if (pinned) { pinned = false; savePinned(false); } }
     render();
+    // Opening an overlay drawer closes the other menus; a pinned (docked) drawer sits
+    // beside the content and is not a transient popup, so it neither closes them nor is closed by them.
+    if (open && !pinned) notifyPopupOpen(dismissable);
   };
+  // Registered with the popup coordinator: another overlay opening closes an OVERLAY
+  // drawer only. A pinned drawer is docked, not a popup, so it stays put.
+  const dismissable = { close: (): void => { if (isOpen && !pinned) setOpen(false); } };
+  registerPopup(dismissable);
   const togglePin = (): void => {
     pinned = !pinned;
     savePinned(pinned);

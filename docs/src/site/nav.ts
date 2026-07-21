@@ -1,3 +1,5 @@
+import { registerPopup, notifyPopupOpen } from "./popups.js";
+
 // Mobile nav menu. The section links collapse behind a plain <button> (styled by Pico
 // as an ordinary .outline button, so it needs none of the overrides a <details> would);
 // this toggles the dropdown open/closed. No-ops on desktop (the button is display:none)
@@ -7,6 +9,11 @@ export function initNav(): void {
   const right = document.querySelector(".nav-right");
   if (!btn || !right) return;
 
+  // Registered with the popup coordinator so opening another overlay (the gear
+  // panel, the reference drawer) closes this menu, and vice versa.
+  const dismissable = { close: (): void => setOpen(false) };
+  registerPopup(dismissable);
+
   // A const arrow (not a hoisted function declaration) so the null-guard above
   // narrows btn/right to non-null inside it.
   const setOpen = (open: boolean): void => {
@@ -15,6 +22,7 @@ export function initNav(): void {
     // Track the icon swap (hamburger -> X) so the label names the action the
     // button now performs, not a fixed "Menu".
     btn.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    if (open) notifyPopupOpen(dismissable);
   };
 
   btn.addEventListener("click", function () {
