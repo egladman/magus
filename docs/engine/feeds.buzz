@@ -3,18 +3,18 @@
 // llms.txt index, the PWA web manifest, and the service worker. None of these
 // go through renderPage - they read the finished Site (its page URLs, blog
 // posts, releases, docs corpus) and emit a machine-readable artifact beside
-// the pages. Flat-imported by render.buzz (`import "render_feeds" as _`); each
+// the pages. Flat-imported by render.buzz (`import "engine/feeds" as _`); each
 // writer takes a `site: Site` and is called once, post-walk, from site_render.
 import "fs";
 import "io";
 import "os";
 import "crypto";
 import "assert";
-import "render_types" as _;
-import "render_text" as _;
-import "render_feed" as _;
-import "render_csp" as _;
-import "render_route" as _;
+import "engine/types" as _;
+import "lib/text" as _;
+import "lib/feed" as _;
+import "lib/csp" as _;
+import "engine/route" as _;
 
 // writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
 // byte-stable), each as an absolute SITE_URL loc — the home page's "index.html" URL

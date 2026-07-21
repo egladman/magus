@@ -1,6 +1,6 @@
 // render_csp.buzz - Content-Security-Policy construction and the content hashing it
 // rests on. Self-contained (stdlib crypto/fs/io/encoding only), so it unit-tests here
-// and is flat-imported by render.buzz (`import "render_csp" as _`). The site-wide policy
+// and is flat-imported by render.buzz (`import "lib/csp" as _`). The site-wide policy
 // and the tighter redirect-stub policy both live here so the two never drift; the inline
 // <script> hashing is what makes "add a script, forget to regenerate" fail loudly as a
 // browser CSP violation rather than silently shipping a hole.

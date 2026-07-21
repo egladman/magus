@@ -13,10 +13,10 @@ import "os";
 import "fs";
 import "io";
 import "std";
-import "render_types" as _;
-import "render_text" as _;
-import "render_csp" as _;
-import "render_html" as _;
+import "engine/types" as _;
+import "lib/text" as _;
+import "lib/csp" as _;
+import "lib/html" as _;
 
 // Build-orchestration steps that operate ON a Site but reach past the leaf helpers
 // into git metadata (loadMeta) and the post-render integrity gates (assetIntegrityCheck,

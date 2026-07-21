@@ -4,7 +4,7 @@
 // CSP); renderFile/renderRoot drive a Markdown source through it; renderPager
 // builds prev/next; substituteVersionTokens swaps __MAGUS_VERSION__; render404
 // and writeOffline are the two special standalone pages. Flat-imported by
-// render.buzz and by every writer module (`import "render_page" as _`); the
+// render.buzz and by every writer module (`import "engine/page" as _`); the
 // writers call renderPage, so it sits below them in the layer order.
 import "markdown";
 import "fs";
@@ -14,14 +14,14 @@ import "serialize";
 import "encoding";
 import "template";
 import "assert";
-import "render_text" as _;
-import "render_url" as _;
-import "render_html" as _;
-import "render_meta" as _;
-import "render_path" as _;
-import "render_types" as _;
-import "render_route" as _;
-import "render_nav" as _;
+import "lib/text" as _;
+import "lib/url" as _;
+import "lib/html" as _;
+import "engine/meta" as _;
+import "engine/path" as _;
+import "engine/types" as _;
+import "engine/route" as _;
+import "engine/nav" as _;
 
 // render404 writes gen/404.html - the themed "warped off the map" page GitHub
 // Pages serves for any unmatched path. GitHub Pages keeps the deep 404 URL in

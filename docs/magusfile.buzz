@@ -38,7 +38,7 @@ magus.project({
     // manifests, not in the src/ entries. sw.js.tmpl (service-worker template) and
     // tsconfig.json (the ts build) are render/build inputs too. (pnpm is the package
     // manager - NOT npm; there is no package-lock.json.)
-    "sources": ["magusfile.buzz", "*.buzz", "**/*.md",
+    "sources": ["magusfile.buzz", "*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
                 "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "sw.js.tmpl",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "buf.gen.yaml",
                 // The viewer/console bundles a JS client generated FROM these .proto sources

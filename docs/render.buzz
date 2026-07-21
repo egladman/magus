@@ -23,55 +23,55 @@ import "yaml";
 // Pure text, path, and URL helpers, split into their own unit-tested module. Flat
 // import (`as _`) merges its exported functions into this scope, so callers here
 // name them directly (escapeAttr, relativePath, ...) as before the extraction.
-import "render_text" as _;
+import "lib/text" as _;
 // Source-path -> clean-URL mapping (the directory-index scheme and blog date
 // scoping), likewise split into its own unit-tested module and flat-imported so
 // cleanURL/cleanDepth/blogURLPath resolve here unqualified.
-import "render_url" as _;
+import "lib/url" as _;
 // Sitemap/Atom XML serialization and Atom date normalization, split into their own
 // unit-tested module and flat-imported so escapeXml/xmlElement/atomDate resolve here
 // unqualified at their many feed-building call sites.
-import "render_feed" as _;
+import "lib/feed" as _;
 // Date formatting (bylines, feed dates, recent-changes stamps), split into its own
 // unit-tested module and flat-imported so formatISO/blogDate/... resolve unqualified.
-import "render_date" as _;
+import "lib/date" as _;
 // Directory-index link rewriting (resolve, old->new URL map, re-relativize), split
 // into its own unit-tested module and flat-imported so rewriteHref/resolvePath/
 // cleanTarget resolve unqualified at their call sites here.
-import "render_html" as _;
+import "lib/html" as _;
 // Content-Security-Policy construction and the content hashing under it, split into
 // its own unit-tested module and flat-imported so computeCSP/scriptHash/fileSha256/
 // cspForRedirectStub and the CSP_* constants resolve here unqualified.
-import "render_csp" as _;
+import "lib/csp" as _;
 // Per-page facts read from a source page's Markdown (title, tags, page_type,
 // reading time, fallback description, since-badge), flat-imported so deriveTitle/
 // parseTags/pageType/readingTime/deriveDescription/insertSinceBadge resolve here.
-import "render_meta" as _;
+import "engine/meta" as _;
 // Pure release-data transforms (semver ordering, artifact descriptions, release.json
 // string encoding), flat-imported so semverSortKey/sortNamesSemverDesc/artifactDesc/
 // jsonStr/jsonStrList resolve here; the Site-coupled loaders/writers stay below.
-import "render_release" as _;
+import "site/release" as _;
 // Filesystem/walk predicates (isDirectory + the docs-root generator-file/dir skips),
 // a leaf module shared with render_types.buzz so the content walks resolve them here.
-import "render_path" as _;
+import "engine/path" as _;
 // The Site data model + record types (the walk's build state), shared with every
 // writer module so they can take a `site: Site` without a cycle back to this file.
-import "render_types" as _;
+import "engine/types" as _;
 // Path/URL routing helpers (clean URLs, ../ depth, deploy base path).
-import "render_route" as _;
+import "engine/route" as _;
 // The persistent site chrome (nav/footer/panels/announcement/TOC) built as fragments.
-import "render_nav" as _;
+import "engine/nav" as _;
 // Build-correctness + provenance layer (integrity/orphan/abandoned gates, git metadata,
 // output pruning, the URL ledger); free functions over a Site, imported for the calls in
 // site_render below.
-import "render_gates" as _;
-import "render_feeds" as _;
-import "render_page" as _;
-import "render_public" as _;
-import "render_blog" as _;
-import "render_search" as _;
-import "render_tour" as _;
-import "render_development" as _;
+import "engine/gates" as _;
+import "engine/feeds" as _;
+import "engine/page" as _;
+import "site/public" as _;
+import "engine/blog" as _;
+import "engine/search" as _;
+import "site/tour" as _;
+import "site/development" as _;
 
 // Path config, set by site_render() from the arguments the magusfile passes in - the
 // generator does not hardcode where the workspace, docs, or output live, so it stays

@@ -10,11 +10,11 @@ import "serialize";
 import "template";
 import "assert";
 import "yaml";
-import "render_text" as _;
-import "render_feed" as _;
-import "render_release" as _;
-import "render_types" as _;
-import "render_page" as _;
+import "lib/text" as _;
+import "lib/feed" as _;
+import "site/release" as _;
+import "engine/types" as _;
+import "engine/page" as _;
 
 // loadReleases reads releases/v*.yaml (newest-first by numeric semver) and populates
 // site.releases. Each yaml file is authoritative for one version: version, date, body

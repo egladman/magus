@@ -7,10 +7,10 @@ import "io";
 import "std";
 import "encoding";
 import "template";
-import "render_types" as _;
-import "render_route" as _;
-import "render_nav" as _;
-import "render_page" as _;
+import "engine/types" as _;
+import "engine/route" as _;
+import "engine/nav" as _;
+import "engine/page" as _;
 
 // TourStep is one tour card: the .buzz example file, its copy, and a cross-link to
 // the concept doc a newcomer should read next (docSlug is the clean-URL directory,

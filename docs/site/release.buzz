@@ -2,10 +2,10 @@
 // the /public/release/ artifact tree, and release.json: newest-first semver ordering,
 // per-artifact descriptions, and the minimal JSON string encoding release.json needs.
 // Self-contained (only the render_text helpers), so it unit-tests here and is
-// flat-imported by render.buzz (`import "render_release" as _`). The Site-coupled
+// flat-imported by render.buzz (`import "site/release" as _`). The Site-coupled
 // loaders/writers that consume these (loadReleases, renderReleasesAtom, releaseIndexJSON,
 // renderPublic) stay in render.buzz; only the pure transforms live here.
-import "render_text" as _;
+import "lib/text" as _;
 import "assert";
 
 // semverSortKey returns a zero-padded sort key for a release filename.

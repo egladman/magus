@@ -1,5 +1,5 @@
 // render_text.buzz - pure text/path/URL helpers. No site state, so unit-tested here
-// and flat-imported by render.buzz (`import "render_text" as _`).
+// and flat-imported by render.buzz (`import "lib/text" as _`).
 import "assert";
 
 // escapeAttr makes s safe inside a double-quoted HTML attribute.

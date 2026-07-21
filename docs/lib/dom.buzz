@@ -2,7 +2,7 @@
 // bodies are inserted raw (they are already-built HTML). Attrs are ordered by the
 // caller, so output matches hand-written markup byte for byte.
 import "assert";
-import "render_text" as _;
+import "lib/text" as _;
 
 // attr renders one escaped attribute with a leading space: ` name="value"`.
 export fun attr(name: str, value: str) > str {

@@ -7,13 +7,13 @@ import "io";
 import "std";
 import "serialize";
 import "template";
-import "render_text" as _;
-import "render_url" as _;
-import "render_date" as _;
-import "render_html" as _;
-import "render_meta" as _;
-import "render_types" as _;
-import "render_page" as _;
+import "lib/text" as _;
+import "lib/url" as _;
+import "lib/date" as _;
+import "lib/html" as _;
+import "engine/meta" as _;
+import "engine/types" as _;
+import "engine/page" as _;
 
 // renderBlogPost renders one blog/<file>.md as its own directory-index page. base
 // is the file's basename (e.g. "2026-07-01-hello-blog.md"); the written URL is date-

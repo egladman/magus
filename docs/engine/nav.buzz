@@ -9,11 +9,11 @@ import "fs";
 import "io";
 import "markdown";
 import "template";
-import "render_types" as _;
-import "render_route" as _;
-import "render_html" as _;
-import "render_text" as _;
-import "render_date" as _;
+import "engine/types" as _;
+import "engine/route" as _;
+import "lib/html" as _;
+import "lib/text" as _;
+import "lib/date" as _;
 
 // Footer crediting the last commit that touched a page's source (a magus/-relative
 // path), falling back to HEAD for a not-yet-committed file. Keying off the file's

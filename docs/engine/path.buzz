@@ -2,7 +2,7 @@
 // path is a directory, and which docs-root children belong to the SSG itself rather
 // than the docs content. Pure (os only, no Site), so it is a leaf module that both
 // render_types.buzz (Site.collectDocPages) and render.buzz (walk/walkBlog) flat-import
-// (`import "render_path" as _`) without an import cycle.
+// (`import "engine/path" as _`) without an import cycle.
 import "os";
 
 // True if path is a directory.

@@ -6,11 +6,11 @@ import "fs";
 import "io";
 import "os";
 import "template";
-import "render_text" as _;
-import "render_html" as _;
-import "render_path" as _;
-import "render_types" as _;
-import "render_page" as _;
+import "lib/text" as _;
+import "lib/html" as _;
+import "engine/path" as _;
+import "engine/types" as _;
+import "engine/page" as _;
 
 // renderDevelopmentPage renders one /development/ page from markdown through the shared
 // renderPage() pipeline (nav, TOC, theme, search index), skipping the doc-only chrome

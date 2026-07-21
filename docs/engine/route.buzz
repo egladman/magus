@@ -4,8 +4,8 @@
 // Site for its docs/out dirs, or read the base URL), so it imports render_types; kept out
 // of the leaf render_path.buzz for exactly that reason. Flat-imported by render.buzz and
 // the writer/nav modules that resolve page URLs.
-import "render_url" as _;
-import "render_types" as _;
+import "lib/url" as _;
+import "engine/types" as _;
 
 // isGenerated reports whether a page is mechanically generated rather than hand-
 // written. Generated references live under three fixed docs/ subtrees that the doc

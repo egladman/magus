@@ -6,9 +6,9 @@ import "io";
 import "std";
 import "encoding";
 import "template";
-import "render_types" as _;
-import "render_route" as _;
-import "render_page" as _;
+import "engine/types" as _;
+import "engine/route" as _;
+import "engine/page" as _;
 
 // renderSearchPage writes gen/search/index.html: the dedicated, deep-linkable search
 // surface. It is a tool page (no markdown source; kept out of the search index and

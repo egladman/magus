@@ -2,12 +2,12 @@
 // page-type marker, reading-time estimate, fallback description, and the optional
 // "Added in vX.Y.Z" compatibility badge. Pure (stdlib markdown/serialize plus the
 // text helpers), so it unit-tests here and is flat-imported by render.buzz
-// (`import "render_meta" as _`). Kept together because they all answer the same
+// (`import "engine/meta" as _`). Kept together because they all answer the same
 // question - "what does this source page say about itself" - for the head, the
 // chrome, and the search index, from one source of truth each.
 import "markdown";
 import "serialize";
-import "render_text" as _;
+import "lib/text" as _;
 import "assert";
 
 // deriveTitle reads a page title from the first H1, stripping the code backticks a

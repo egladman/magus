@@ -5,19 +5,19 @@
 // related / in-section nav); the build-orchestration steps that reach into git metadata
 // or the post-render integrity gates live as free functions in render.buzz, so this file
 // imports only leaf modules and never forms an import cycle. Flat-imported by render.buzz
-// and by every writer module (`import "render_types" as _`).
+// and by every writer module (`import "engine/types" as _`).
 import "fs";
 import "io";
 import "serialize";
 import "markdown";
 import "template";
 import "assert";
-import "render_text" as _;
-import "render_url" as _;
-import "render_html" as _;
-import "render_csp" as _;
-import "render_meta" as _;
-import "render_path" as _;
+import "lib/text" as _;
+import "lib/url" as _;
+import "lib/html" as _;
+import "lib/csp" as _;
+import "engine/meta" as _;
+import "engine/path" as _;
 
 // Site-wide config constants, shared here (the common foundation every module imports)
 // so any writer module can reference them without a cycle back to render.buzz.
