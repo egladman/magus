@@ -627,7 +627,7 @@ func (c *checker) inferIdent(v *ast.IdentExpr) types.Type {
 		return e.typ
 	}
 	if c.private[v.Name] {
-		c.errorfc(v.Pos, UndefinedName, "undefined: %s (an imported module declares %q but does not export it — add `export` to it)", v.Name, v.Name)
+		c.errorfc(v.Pos, UndefinedName, "undefined: %s (an imported module declares %q but does not export it; add `export` to it)", v.Name, v.Name)
 	} else {
 		c.errorfc(v.Pos, UndefinedName, "undefined: %s", v.Name)
 	}

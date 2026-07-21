@@ -376,10 +376,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// lives in a store the handler never opens, so it is neither listed nor revocable here),
 			// preventing lockout.
 			// The audit interceptor records every MUTATING token RPC (RevokeToken today) to the trail by
-			// construction, closing the gap where a browser-reachable credential revoke recorded nothing.
-			// The actor is stamped "operator" from the mount tier (this surface is cli-guarded), never
-			// read from a caller-supplied field. Reads (ListTokens) are not recorded. See
-			// internal/handler/trailrpc for the pattern and the arch-test ratchet that keeps it honest.
+			// construction, so a browser-reachable credential revoke is always audited. The actor is
+			// stamped "operator" from the mount tier (this surface is cli-guarded), never read from a
+			// caller-supplied field. Reads (ListTokens) are not recorded. See internal/handler/trailrpc for
+			// the pattern and the arch-test ratchet that keeps it honest.
 			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindTokenLifecycle))
 			tokenPath, tokenHandler := tokenv1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit)
 			httpServer.Handle(tokenPath, httpx.GuardRebind(allowed, cors(httpx.BearerGuard(auth.VerifyCLIBearer, tokenHandler))))

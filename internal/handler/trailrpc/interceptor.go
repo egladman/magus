@@ -21,7 +21,7 @@
 //
 // KNOWN LIMIT of verb classification: a method's leading word is matched EXACTLY, so "Listen" is not
 // mistaken for the read verb "List" (it falls to unclassified -> recorded -> flagged by the arch test).
-// What exact-word matching still cannot catch is a genuinely COMPOUND verb whose first word is a read verb
+// What exact-word matching still cannot catch is a COMPOUND verb whose first word is a read verb
 // but whose action mutates (a hypothetical "ExportAndReset"): it would classify read and skip. The
 // convention this codebase follows - one leading verb per method - keeps that out of reach, and the arch
 // test surfaces any novel verb; but a reviewer adding a compound method must place it deliberately.
