@@ -48,6 +48,9 @@ export object Config {
     navLinks: [NavLink] = mut [<NavLink>],
     generatorDirs: [str] = mut [<str>],
     generatorFiles: [str] = mut [<str>],
+    // Base-relative assets the service worker precaches for offline use, in a stable
+    // order (the cache version is a digest of their contents).
+    precacheAssets: [str] = mut [<str>],
 }
 
 // BlogPost is one blog entry's index record, built by renderBlogPost() as the walk

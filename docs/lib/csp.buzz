@@ -81,7 +81,7 @@ export final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https
 // Deny-by-default (default-src 'self' - not 'none': manifest-src and the
 // same-origin-only <link rel=prefetch> hover-warm in src/site/prefetch.ts both fall
 // back to default-src per the CSP3 fetch-directive spec, and the service
-// worker registration (`navigator.serviceWorker.register('sw.js')`, main.js)
+// worker registration (`navigator.serviceWorker.register('service-worker.js')`, main.js)
 // falls back through worker-src -> child-src -> default-src since neither is
 // named explicitly here - 'self' is the minimal fallback that keeps all three
 // working without opening a single directive wider than same-origin; 'none'

@@ -283,7 +283,7 @@ export fun pruneStaleOutputs(site: Site) > void {
     final alwaysKeep: {str: bool} = mut {
         "index.html": true, "index.md": true, "404.html": true,
         "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
-        "sw.js": true, "search-index.json": true, "site-manifest.sha256": true,
+        "service-worker.js": true, "search-index.json": true, "site-manifest.sha256": true,
         "site.css": true, "console.css": true, "ui-panels.css": true, "theme.css": true, "theme.js": true, "main.js": true,
         "search/index.html": true,
         "playground/index.html": true, "playground/buzz.wasm": true,

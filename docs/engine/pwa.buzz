@@ -1,12 +1,11 @@
-// engine/pwa.buzz - the Progressive Web App wiring that lets a browser install the
-// docs and serve them offline: the web app manifest (writeManifest) and the service
-// worker (writeServiceWorker, which digests the precached assets into its cache
-// version). Both are gated on a configured base URL so the install scope is well
-// defined; flat-imported by render.buzz, run once post-walk.
+// engine/pwa.buzz - the Progressive Web App wiring that makes the docs installable and
+// offline-capable: the web app manifest (writeManifest) and the service worker
+// (buildServiceWorker, which bundles src/site/service-worker.ts). Both are gated on a
+// configured base URL; run once post-walk from render.buzz.
 import "fs";
-import "io";
 import "os";
 import "crypto";
+import "serialize";
 import "engine/types" as _;
 import "lib/text" as _;
 import "lib/csp" as _;
@@ -67,56 +66,25 @@ export fun writeManifest(site: Site) > void {
 }
 
 
-// writeServiceWorker writes gen/sw.js - a conservative worker that keeps HTML
-// network-first (never stale docs) and static hashed assets cache-first, and
-// precaches the search index + playground WASM so those two heavy features
-// survive an offline reload. The source lives in docs/sw.js.tmpl (Buzz
-// interpolates { ... } inside strings, so embedding JS with arrow functions
-// as inline strings would collide). We swap __VERSION__ (keyed off HEAD's
-// short commit hash so a new build purges old caches on activate) and
-// __BASE__ (site.config.baseURL's path prefix).
-export fun writeServiceWorker(site: Site) > void {
+// buildServiceWorker bundles src/site/service-worker.ts to gen/service-worker.js with
+// esbuild, injecting the cache version and precache list as build-time constants
+// (--define). The version is a digest of the precached assets' own digests, so it
+// changes exactly when a cached asset does and is byte-stable otherwise - which also
+// changes the worker's bytes, the signal a browser uses to fetch the new version.
+export fun buildServiceWorker(site: Site) > void {
     if (site.config.baseURL == "") { return; }
-    final basePath = sitePathPrefix(site.config.baseURL);
-    final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
-    var body = tmplFile.readAll();
-    tmplFile.close();
-    // The cache version is a digest of the precached assets' own digests, so it changes
-    // exactly when a cached asset changes and is otherwise byte-identical across
-    // re-renders. This deliberately replaces the old "magus-<HEAD short hash>" form, which
-    // changed on every commit, could never contain its own commit's hash, and so
-    // perpetually drifted the gen gate.
-    //
-    // The list is parsed from the template's OWN PRECACHE array (the single source of
-    // truth) rather than duplicated here - a second hand-maintained copy silently drifted
-    // once (the /console/ move left this list pointing at logs/ and dashboard/ instead of
-    // console/logs/ and console/dashboard/, so the test -f guard below skipped them and
-    // editing those apps never bumped the version -> stale service worker). Only the
-    // PRECACHE block is scanned, so the fetch handler's own BASE + "offline/" is ignored.
-    final pcRest = body.sub(body.indexOf("const PRECACHE = ["));
-    final pcBlock = pcRest.sub(0, pcRest.indexOf("];"));
-    var precached = mut [<str>];
-    foreach (line in pcBlock.split("\n")) {
-        final q = line.indexOf("BASE + \"");
-        if (q != null) {
-            final tail = line.sub(q + 8); // past `BASE + "`
-            var rel = tail.sub(0, tail.indexOf("\""));
-            // A directory URL (e.g. offline/) caches its index.html; hash that real file.
-            if (rel.endsWith("/")) { rel = rel + "index.html"; }
-            precached.append(rel);
-        }
-    }
     var manifest = "";
-    foreach (rel in precached) {
+    foreach (asset in site.config.precacheAssets) {
+        var rel = asset;
+        if (rel.endsWith("/")) { rel = rel + "index.html"; }  // a dir URL caches its index.html
         final p = site.outDir + "/" + rel;
         if (os.execute(["test", "-f", p]) == 0) {
             manifest = manifest + rel + ":" + fileSha256(p) + "\n";
         }
     }
-    final version = "magus-" + crypto.hash(crypto.HashAlgorithm.Sha256, manifest).sub(0, 12);
-    // .replace only touches the first match; the markers appear both in the file
-    // header comment and in the code, so replaceAll it is.
-    body = $"__VERSION__".replaceAll(body, version);
-    body = $"__BASE__".replaceAll(body, basePath);
-    fs.writeFile(site.outDir + "/sw.js", body);
+    final version = site.config.title + "-" + crypto.hash(crypto.HashAlgorithm.Sha256, manifest).sub(0, 12);
+    os.execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
+        "--define:SERVICE_WORKER_VERSION=\"" + version + "\"",
+        "--define:SERVICE_WORKER_PRECACHE=" + serialize.jsonEncode(site.config.precacheAssets),
+        "--outfile=" + site.outDir + "/service-worker.js"]);
 }

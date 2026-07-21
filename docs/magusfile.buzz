@@ -35,11 +35,10 @@ magus.project({
     // project affected just like a .js one. package.json + pnpm-lock.yaml are named so a
     // bundled-dep version bump (mermaid, hljs, d3, codemirror) invalidates the cacheable
     // build-* targets and marks this project affected - the esbuild inputs live in those
-    // manifests, not in the src/ entries. sw.js.tmpl (service-worker template) and
-    // tsconfig.json (the ts build) are render/build inputs too. (pnpm is the package
-    // manager - NOT npm; there is no package-lock.json.)
+    // manifests, not in the src/ entries. tsconfig.json (the ts build) is a render/build
+    // input too. (pnpm is the package manager - NOT npm; there is no package-lock.json.)
     "sources": ["magusfile.buzz", "*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
-                "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "sw.js.tmpl",
+                "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
                 "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "buf.gen.yaml",
                 // The viewer/console bundles a JS client generated FROM these .proto sources
                 // (buf.gen.yaml -> src/gen/), so a schema change reruns codegen + rebuild.

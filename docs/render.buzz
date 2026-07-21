@@ -326,9 +326,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // walk order is fs.list's (sorted), so the file is byte-stable across runs.
     fs.writeFile(site.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
 
-    // Written last: its cache version is a digest of the precached assets (incl.
-    // search-index.json just above), so every one of them must already exist.
-    writeServiceWorker(site);
+    // Built last: the cache version digests the precached assets (incl. search-index.json
+    // just above), so every one of them must already exist.
+    buildServiceWorker(site);
 
     // Clean up anything left on disk from a previous render whose source is gone
     // (see pruneStaleOutputs' doc comment). Runs before the two gates below so
