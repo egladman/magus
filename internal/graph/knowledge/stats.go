@@ -26,15 +26,15 @@ func (g *Graph) Stats(kind string) types.KnowledgeStats {
 	orphans, isolated := g.orphanNodes(kind)
 	components, largest := g.connectivity()
 	return types.KnowledgeStats{
-		Definition:       types.KnowledgeStatsDefinition,
-		NodeCount:        len(g.nodes),
-		EdgeCount:        len(g.edges),
-		Gods:             g.godNodes(kind),
-		Orphans:          orphans,
-		Coverage:         g.docCoverage(kind),
-		IsolatedCount:    isolated,
-		Components:       components,
-		LargestComponent: largest,
+		Definition:           types.KnowledgeStatsDefinition,
+		NodeCount:            len(g.nodes),
+		EdgeCount:            len(g.edges),
+		Gods:                 g.godNodes(kind),
+		Orphans:              orphans,
+		Coverage:             g.docCoverage(kind),
+		IsolatedCount:        isolated,
+		ComponentCount:       components,
+		LargestComponentSize: largest,
 	}
 }
 
@@ -81,7 +81,8 @@ func (g *Graph) connectivity() (components, largest int) {
 			largest = sizes[root]
 		}
 	}
-	return len(sizes), largest
+	components = len(sizes)
+	return components, largest
 }
 
 // godNodes returns the highest-degree nodes (concentration), top maxGods, sorted
@@ -118,7 +119,7 @@ func (g *Graph) godNodes(kind string) []types.KnowledgeGodNode {
 // edges - it contains ops - but nothing uses them), so it is reported regardless of the cap's isolated
 // sampling and does not count toward isolated.
 func (g *Graph) orphanNodes(kind string) (sample []types.KnowledgeOrphan, isolated int) {
-	var all []types.KnowledgeOrphan
+	var isolatedOrphans, spellOrphans []types.KnowledgeOrphan
 	for id, n := range g.nodes {
 		if kind != "" && n.Kind != kind {
 			continue
@@ -136,19 +137,24 @@ func (g *Graph) orphanNodes(kind string) (sample []types.KnowledgeOrphan, isolat
 			if n.Kind == types.KindDoc {
 				reason = "no doc links to it and it documents nothing"
 			}
-			all = append(all, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: reason})
+			isolatedOrphans = append(isolatedOrphans, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: reason})
 			continue
 		}
 		// A declared, op-providing spell that nothing runs is genuinely dead even though it has edges.
 		if n.Kind == types.KindSpell && n.Attrs[AttrDeclared] == "true" && g.spellProvidesOps(id) && !g.spellUsed(id) {
-			all = append(all, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "declared but no target uses it"})
+			spellOrphans = append(spellOrphans, types.KnowledgeOrphan{ID: id, Kind: n.Kind, Label: n.Label, Reason: "declared but no target uses it"})
 		}
 	}
-	slices.SortFunc(all, func(a, b types.KnowledgeOrphan) int { return cmp.Compare(a.ID, b.ID) })
-	if len(all) > maxOrphans {
-		all = all[:maxOrphans]
+	// The isolated list is a SAMPLE capped at maxOrphans (a graph can hold hundreds of isolated nodes;
+	// isolated reports the true total). Spell orphans are FEW (bounded by the declared spells) and are the
+	// semantic orphan that matters, so they are always reported - appended after the cap, never truncated.
+	slices.SortFunc(isolatedOrphans, func(a, b types.KnowledgeOrphan) int { return cmp.Compare(a.ID, b.ID) })
+	if len(isolatedOrphans) > maxOrphans {
+		isolatedOrphans = isolatedOrphans[:maxOrphans]
 	}
-	return all, isolated
+	slices.SortFunc(spellOrphans, func(a, b types.KnowledgeOrphan) int { return cmp.Compare(a.ID, b.ID) })
+	sample = append(isolatedOrphans, spellOrphans...)
+	return sample, isolated
 }
 
 // spellProvidesOps reports whether the spell contributes any op node. A spell with none

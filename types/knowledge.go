@@ -368,11 +368,12 @@ type KnowledgeStats struct {
 	// Connectivity is the data-quality lens: how fragmented the graph is. A high isolated count or many
 	// weakly-connected components means the builder has not linked everything it could, which hurts
 	// discoverability. IsolatedCount is every node with no edge at all (Orphans lists a capped sample by
-	// kind); Components is the number of weakly-connected components (1 = fully reachable); LargestComponent
-	// is the biggest component's node count (the "main" graph most nodes should belong to).
-	IsolatedCount    int `json:"isolated_count"    yaml:"isolated_count"`
-	Components       int `json:"components"        yaml:"components"`
-	LargestComponent int `json:"largest_component" yaml:"largest_component"`
+	// kind); ComponentCount is the number of weakly-connected components (1 = fully reachable);
+	// LargestComponentSize is the biggest component's node count (the "main" graph most nodes should
+	// belong to).
+	IsolatedCount        int `json:"isolated_count"         yaml:"isolated_count"`
+	ComponentCount       int `json:"component_count"        yaml:"component_count"`
+	LargestComponentSize int `json:"largest_component_size" yaml:"largest_component_size"`
 }
 
 // KnowledgeGodNode is a highly-connected node - where structural risk concentrates.

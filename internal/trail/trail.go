@@ -56,16 +56,20 @@ const maxEvents = 10000
 // rare relative to tool-call traffic.
 const rotateEvery = 512
 
-// Kind values name an action's source; they map to the magus.activity.v1 Kind enum at the wire.
-// Readable strings on disk, like the journal's status strings. MCP tool calls and jobs have
-// producers today; the rest name the governance sources the envelope is built to hold, so a
-// reader can switch on kind and a producer adds one without a schema change.
+// Kind names an action's source; the values map to the magus.activity.v1 Kind enum at the wire.
+// Readable strings on disk, like the journal's status strings. It is a NAMED string (not a bare string)
+// so a producer or the audit interceptor cannot pass an arbitrary label where a Kind is wanted - the
+// param is type-checked against these consts. MCP tool calls and jobs have producers today; the rest name
+// the governance sources the envelope is built to hold, so a reader can switch on kind and a producer adds
+// one without a schema change.
+type Kind string
+
 const (
-	KindMCPToolCall    = "mcp_tool_call"
-	KindJob            = "job"             // a daemon background job (SCIP reindex, graph build, VCS refresh)
-	KindConfigChange   = "config_change"   // magus.yaml changed on reload, or a config-set mutation
-	KindTokenLifecycle = "token_lifecycle" // a connector token minted or revoked
-	KindSandboxDenial  = "sandbox_denial"  // a target attempted a disallowed filesystem write
+	KindMCPToolCall    Kind = "mcp_tool_call"
+	KindJob            Kind = "job"             // a daemon background job (SCIP reindex, graph build, VCS refresh)
+	KindConfigChange   Kind = "config_change"   // magus.yaml changed on reload, or a config-set mutation
+	KindTokenLifecycle Kind = "token_lifecycle" // a connector token minted or revoked
+	KindSandboxDenial  Kind = "sandbox_denial"  // a target attempted a disallowed filesystem write
 )
 
 // Outcome values; map to the wire Outcome enum.
@@ -80,7 +84,7 @@ const (
 // they overlap (Ts, DurMs).
 type Event struct {
 	Ts            int64  `json:"ts"`                      // unix milliseconds at the action's start
-	Kind          string `json:"kind"`                    // one of the Kind* constants
+	Kind          Kind   `json:"kind"`                    // one of the Kind* constants
 	Actor         string `json:"actor"`                   // who: an agent id, "daemon", a user
 	UserAgent     string `json:"user_agent,omitempty"`    // caller's HTTP User-Agent, when known (MCP over HTTP)
 	Workspace     string `json:"workspace,omitempty"`     // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)

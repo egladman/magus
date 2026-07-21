@@ -14,15 +14,22 @@
 //     (the arch ratchet) additionally fails CI if any mounted service grows a method with an unclassified
 //     verb, forcing the author to place it in one bucket or the other.
 //
-// It is deliberately NARROW today: mounted only on the services whose mutations lacked a completion-time
-// producer (TokenService). Extending it to the other mutating services (notably MemoryService's
-// PutMemory/DeleteMemory, which are also unaudited today) is the recommended next step; doing so must
-// reconcile with producers that already record on completion (jobs) so a mutation is not double-recorded,
-// and may need a new wire Kind for memory edits.
+// It is deliberately NARROW today: mounted only on TokenService (whose RevokeToken mutation lacked any
+// producer). The audit-trail assessment (session plans) tracks extending it to the other mutating
+// services and the reconciliation that needs (jobs already record on completion; memory edits would need
+// a new wire Kind) - kept out of this doc so it does not rot against current method names.
+//
+// KNOWN LIMIT of verb classification: a method's leading word is matched EXACTLY, so "Listen" is not
+// mistaken for the read verb "List" (it falls to unclassified -> recorded -> flagged by the arch test).
+// What exact-word matching still cannot catch is a genuinely COMPOUND verb whose first word is a read verb
+// but whose action mutates (a hypothetical "ExportAndReset"): it would classify read and skip. The
+// convention this codebase follows - one leading verb per method - keeps that out of reach, and the arch
+// test surfaces any novel verb; but a reviewer adding a compound method must place it deliberately.
 package trailrpc
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,26 +39,35 @@ import (
 )
 
 // mutatingVerbs and readVerbs are the leading-word buckets every Connect method name falls into. They are
-// the single source of truth classify() and the arch ratchet share: a method whose first word is in
+// the single source of truth classify() and the arch ratchet share: a method whose leading word is in
 // neither is UNCLASSIFIED - recorded at runtime (fail-closed) and rejected by TestKnownVerbs at build.
 var (
 	mutatingVerbs = []string{"Clear", "Delete", "Put", "Revoke", "Rotate", "Sync", "Create", "Update", "Set", "Submit", "Remove", "Mint"}
 	readVerbs     = []string{"Get", "List", "Stream", "Watch", "Describe", "Export", "Query", "Explain"}
 )
 
-// classify reports whether a bare method name (e.g. "RevokeToken") names a mutation, and whether its verb
-// was recognized at all. An unknown verb returns (true, false): audit it, but flag it as unclassified so
-// the arch test can force a human decision before it ships.
-func classify(method string) (mutating, known bool) {
-	for _, v := range mutatingVerbs {
-		if strings.HasPrefix(method, v) {
-			return true, true
+// leadingWord returns a PascalCase method's first word: the run up to (not including) the second uppercase
+// letter ("RevokeToken" -> "Revoke", "ListTokens" -> "List", "Listen" -> "Listen"). Matching this EXACTLY
+// against the verb sets - rather than HasPrefix - is what stops "Listen" being read as the verb "List".
+func leadingWord(method string) string {
+	for i := 1; i < len(method); i++ {
+		if method[i] >= 'A' && method[i] <= 'Z' {
+			return method[:i]
 		}
 	}
-	for _, v := range readVerbs {
-		if strings.HasPrefix(method, v) {
-			return false, true
-		}
+	return method
+}
+
+// classify reports whether a bare method name (e.g. "RevokeToken") names a mutation, and whether its
+// leading word was recognized at all. An unknown verb returns (true, false): audit it, but flag it as
+// unclassified so the arch test can force a human decision before it ships.
+func classify(method string) (mutating, known bool) {
+	word := leadingWord(method)
+	if slices.Contains(mutatingVerbs, word) {
+		return true, true
+	}
+	if slices.Contains(readVerbs, word) {
+		return false, true
 	}
 	return true, false
 }
@@ -71,7 +87,7 @@ func methodName(procedure string) string {
 // Recording is best-effort and post-hoc: it never blocks or fails the RPC - trail.Append swallows I/O
 // errors, matching the trail's "never a precondition for the action it records" contract - and a failed
 // mutation is still recorded, with its error, because an attempted revoke is itself worth auditing.
-func Interceptor(trailDir, actor, kind string) connect.Interceptor {
+func Interceptor(trailDir, actor string, kind trail.Kind) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			start := time.Now()

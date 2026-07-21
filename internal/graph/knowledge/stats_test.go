@@ -75,9 +75,9 @@ func TestStatsConnectivity(t *testing.T) {
 	assert.Equal(t, 2, s.IsolatedCount, "isolated counts every 0-degree non-spell node")
 	// Every node reachable in some component; a single-node isolated is its own component. The largest is
 	// the go build cluster (spell:go + op:go:build + target:.:build = 3).
-	assert.Equal(t, 3, s.LargestComponent)
-	assert.Greater(t, s.Components, 1, "an unlinked graph splits into several components")
-	assert.LessOrEqual(t, s.Components, s.NodeCount)
+	assert.Equal(t, 3, s.LargestComponentSize)
+	assert.Greater(t, s.ComponentCount, 1, "an unlinked graph splits into several components")
+	assert.LessOrEqual(t, s.ComponentCount, s.NodeCount)
 }
 
 func TestStatsCoverage(t *testing.T) {

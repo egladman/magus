@@ -114,7 +114,7 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 	return true
 }
 
-func encodeKind(k string) activityv1.Kind {
+func encodeKind(k trail.Kind) activityv1.Kind {
 	switch k {
 	case trail.KindMCPToolCall:
 		return activityv1.Kind_KIND_MCP_TOOL_CALL

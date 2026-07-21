@@ -323,7 +323,7 @@ func statsText(out types.KnowledgeStats) error {
 	// is a well-linked graph; many components / a high isolated count means the builder left relationships
 	// undefined (the discoverability gap to chase).
 	fmt.Printf("connectivity: %d component(s), largest holds %d, %d isolated node(s)\n\n",
-		out.Components, out.LargestComponent, out.IsolatedCount)
+		out.ComponentCount, out.LargestComponentSize, out.IsolatedCount)
 	fmt.Println("god nodes (most connected):")
 	fmt.Printf("  %6s  %4s  %4s  %-11s  %s\n", "DEGREE", "IN", "OUT", "KIND", "LABEL")
 	for _, g := range out.Gods {
