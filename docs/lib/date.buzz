@@ -1,27 +1,29 @@
 // lib/date.buzz - pure date formatting for bylines, feeds, and the recent-changes
 // footer. Flat-imported by render.buzz (`import "lib/date" as _`).
+namespace date;
+
 import "time";
 import "assert";
 
 // formatISO renders an ISO 8601 UTC string as "June 29, 2026, 1:41 AM UTC" (no-JS
 // fallback; client JS rewrites it to the viewer's local zone).
 export fun formatISO(iso: str) > str {
-    final ms = time.parse("2006-01-02T15:04:05Z", iso);
-    return time.format("January 2, 2006, 3:04 PM UTC", ms);
+    final ms = time\parse("2006-01-02T15:04:05Z", iso);
+    return time\format("January 2, 2006, 3:04 PM UTC", ms);
 }
 
 // formatISOShort is the compact recent-changes form ("Jan 2, 2006").
 export fun formatISOShort(iso: str) > str {
-    final ms = time.parse("2006-01-02T15:04:05Z", iso);
-    return time.format("Jan 2, 2006", ms);
+    final ms = time\parse("2006-01-02T15:04:05Z", iso);
+    return time\format("Jan 2, 2006", ms);
 }
 
 // blogDate renders a post's frontmatter date as a plain calendar byline ("July 1, 2026").
 export fun blogDate(d: str) > str {
     final dateOnly = d.split("T")[0];          // date-only or the date part of RFC3339
     if (dateOnly.split("-").len() < 3) { return d; }
-    final ms = time.parse("2006-01-02", dateOnly);
-    return time.format("January 2, 2006", ms);
+    final ms = time\parse("2006-01-02", dateOnly);
+    return time\format("January 2, 2006", ms);
 }
 
 // blogDateAttr is the date-only "YYYY-MM-DD" that pairs with blogDate() in <time datetime>.
@@ -30,16 +32,16 @@ export fun blogDateAttr(d: str) > str {
 }
 
 test "blogDateAttr keeps just the calendar day" {
-    assert.equal(blogDateAttr("2026-07-01T12:00:00Z"), "2026-07-01", "drops the time part");
-    assert.equal(blogDateAttr("2026-07-01"), "2026-07-01", "date-only unchanged");
+    assert\equal(blogDateAttr("2026-07-01T12:00:00Z"), "2026-07-01", "drops the time part");
+    assert\equal(blogDateAttr("2026-07-01"), "2026-07-01", "date-only unchanged");
 }
 
 test "blogDate renders a calendar byline" {
-    assert.equal(blogDate("2026-07-01"), "July 1, 2026", "date-only byline");
-    assert.equal(blogDate("2026-07-01T12:00:00Z"), "July 1, 2026", "RFC3339 byline");
+    assert\equal(blogDate("2026-07-01"), "July 1, 2026", "date-only byline");
+    assert\equal(blogDate("2026-07-01T12:00:00Z"), "July 1, 2026", "RFC3339 byline");
 }
 
 test "formatISO renders human-readable UTC" {
-    assert.equal(formatISO("2026-06-29T01:41:51Z"), "June 29, 2026, 1:41 AM UTC", "full form");
-    assert.equal(formatISOShort("2026-06-29T01:41:51Z"), "Jun 29, 2026", "compact form");
+    assert\equal(formatISO("2026-06-29T01:41:51Z"), "June 29, 2026, 1:41 AM UTC", "full form");
+    assert\equal(formatISOShort("2026-06-29T01:41:51Z"), "Jun 29, 2026", "compact form");
 }

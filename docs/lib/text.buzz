@@ -1,5 +1,7 @@
 // lib/text.buzz - pure text/path/URL helpers. No site state; flat-imported by
 // render.buzz (`import "lib/text" as _`).
+namespace text;
+
 import "assert";
 
 // escapeAttr makes s safe inside a double-quoted HTML attribute.
@@ -146,29 +148,29 @@ export fun truncateWords(s: str, n: int) > str {
 }
 
 test "firstPathSegment returns a clean URL's leading segment" {
-    assert.equal(firstPathSegment("spells/go/"), "spells", "spells/go/ -> spells");
-    assert.equal(firstPathSegment("targets"), "targets", "no slash -> whole string");
-    assert.equal(firstPathSegment(""), "", "empty -> empty");
+    assert\equal(firstPathSegment("spells/go/"), "spells", "spells/go/ -> spells");
+    assert\equal(firstPathSegment("targets"), "targets", "no slash -> whole string");
+    assert\equal(firstPathSegment(""), "", "empty -> empty");
 }
 
 test "pad4 left-pads to width four" {
-    assert.equal(pad4(7), "0007", "7 -> 0007");
-    assert.equal(pad4(1234), "1234", "1234 unchanged");
-    assert.equal(pad4(12345), "12345", "wider than four is kept");
+    assert\equal(pad4(7), "0007", "7 -> 0007");
+    assert\equal(pad4(1234), "1234", "1234 unchanged");
+    assert\equal(pad4(12345), "12345", "wider than four is kept");
 }
 
 test "escapeAttr escapes the attribute-dangerous characters" {
-    assert.equal(escapeAttr("a & b"), "a &amp; b", "ampersand");
-    assert.equal(escapeAttr("x\"y<z"), "x&quot;y&lt;z", "quote and less-than");
+    assert\equal(escapeAttr("a & b"), "a &amp; b", "ampersand");
+    assert\equal(escapeAttr("x\"y<z"), "x&quot;y&lt;z", "quote and less-than");
 }
 
 test "sharedTagCount counts common bar-joined tags" {
-    assert.equal(sharedTagCount("a||b||c", "b||c||d"), 2, "b and c shared");
-    assert.equal(sharedTagCount("a", "b"), 0, "none shared");
-    assert.equal(sharedTagCount("", "a||b"), 0, "empty side -> 0");
+    assert\equal(sharedTagCount("a||b||c", "b||c||d"), 2, "b and c shared");
+    assert\equal(sharedTagCount("a", "b"), 0, "none shared");
+    assert\equal(sharedTagCount("", "a||b"), 0, "empty side -> 0");
 }
 
 test "relativePath walks from a dir to a target URL" {
-    assert.equal(relativePath("a/b", "a/c/"), "../c/", "sibling directory");
-    assert.equal(relativePath("development/projects", "development/"), "../", "up one level");
+    assert\equal(relativePath("a/b", "a/c/"), "../c/", "sibling directory");
+    assert\equal(relativePath("development/projects", "development/"), "../", "up one level");
 }

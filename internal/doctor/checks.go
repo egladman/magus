@@ -599,10 +599,13 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 	const name = "redundant footprint globs"
 	var details []string
 	for _, p := range projects {
-		for target, globs := range p.TargetSources {
-			for _, g := range globs {
-				if slices.Contains(p.Sources, g) {
-					details = append(details, fmt.Sprintf("%s: magus.inputs(%q) already in project sources", target, g))
+		for target, refs := range p.TargetInputs {
+			for _, ref := range refs {
+				// Only a same-project input (owner == this project) shares the project
+				// source namespace; a cross-project input's Rel is relative to another
+				// project, so it can never redundantly duplicate p.Sources.
+				if ref.Project == p.Path && slices.Contains(p.Sources, ref.Glob) {
+					details = append(details, fmt.Sprintf("%s: magus.inputs(%q) already in project sources", target, ref.Glob))
 				}
 			}
 		}

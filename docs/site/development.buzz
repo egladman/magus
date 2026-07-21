@@ -1,6 +1,8 @@
 // site/development.buzz - the /development/ contributor section (renderDevelopment),
 // built from the repo's own docs; pages emit through renderDevelopmentPage (Markdown)
 // or renderDevelopmentPageRaw (pre-rendered HTML).
+namespace development;
+
 import "markdown";
 import "fs";
 import "io";
@@ -17,11 +19,11 @@ import "engine/page" as _;
 // srcRel uses the "<dir>/_index.md" marker so rootPrefix/renderBreadcrumb derive the
 // right depth and trail.
 fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void {
-    final html = renderContentHTML(markdown.toHtml(md), "", "");
+    final html = renderContentHTML(markdown\toHtml(md), "", "");
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
-    fs.makeDirectory(dir);
-    fs.writeFile(dir + "/index.html", doc);
+    fs\makeDirectory(dir);
+    fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, md);
     site.pageUrls[url] = true;
 }
@@ -35,8 +37,8 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
 fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void {
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
-    fs.makeDirectory(dir);
-    fs.writeFile(dir + "/index.html", doc);
+    fs\makeDirectory(dir);
+    fs\writeFile(dir + "/index.html", doc);
     site.addRecord(url, title, desc, searchText);
     site.pageUrls[url] = true;
 }
@@ -51,12 +53,12 @@ fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, 
 // source for the online reader, where Mermaid graphs and theming beat a raw file view.
 export fun renderDevelopment(site: Site) > void {
     var projects: [{str: str}] = mut [<{str: str}>];
-    if (os.execute(["test", "-f", site.root + "/MAGUS.md"]) == 0) {
+    if (os\execute(["test", "-f", site.root + "/MAGUS.md"]) == 0) {
         projects.append(mut {"name": "magus", "path": site.root + "/MAGUS.md"});
     }
-    foreach (name in fs.list(site.root)) {
+    foreach (name in fs\list(site.root)) {
         if (name.startsWith(".") == false and isDirectory(site.root + "/" + name)) {
-            if (os.execute(["test", "-f", site.root + "/" + name + "/MAGUS.md"]) == 0) {
+            if (os\execute(["test", "-f", site.root + "/" + name + "/MAGUS.md"]) == 0) {
                 projects.append(mut {"name": name, "path": site.root + "/" + name + "/MAGUS.md"});
             }
         }
@@ -64,7 +66,7 @@ export fun renderDevelopment(site: Site) > void {
     if (projects.len() == 0) { return; }
 
     foreach (proj in projects) {
-        final f = io.File.open(proj["path"], io.FileMode.read);
+        final f = io\File.open(proj["path"], io\FileMode.read);
         final md = f.readAll();
         f.close();
         final name = proj["name"];
@@ -90,8 +92,8 @@ export fun renderDevelopment(site: Site) > void {
 
     // CONTRIBUTING.md (repo root) as its own page under /development/.
     var haveContributing = false;
-    if (os.execute(["test", "-f", site.root + "/CONTRIBUTING.md"]) == 0) {
-        final cf = io.File.open(site.root + "/CONTRIBUTING.md", io.FileMode.read);
+    if (os\execute(["test", "-f", site.root + "/CONTRIBUTING.md"]) == 0) {
+        final cf = io\File.open(site.root + "/CONTRIBUTING.md", io\FileMode.read);
         final contributingMd = cf.readAll();
         cf.close();
         renderDevelopmentPage("Contributing",
@@ -112,7 +114,7 @@ export fun renderDevelopment(site: Site) > void {
     // quickstart, contributing rules, per-project graphs, and links into the deeper
     // reference docs. Raw HTML (skips the markdown pipeline) so card hrefs keep their
     // trailing slash; the language-sh block is highlighted client-side.
-    final devHtml = template.render(`<h1 id="development">Development</h1>
+    final devHtml = template\render(`<h1 id="development">Development</h1>
 <p>Reference for people working <em>on</em> magus rather than building with it. magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too.</p>
 <h2 id="getting-started">Getting started</h2>
 <p>Building the <code>magus</code> binary needs only Go. The docs site and WebAssembly playground also need the Node, esbuild, and TinyGo toolchain pinned in <code>mise.toml</code>, which <a href="https://mise.jdx.dev/">mise</a> installs in one step. From a fresh clone:</p>

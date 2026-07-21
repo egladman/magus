@@ -1,5 +1,7 @@
 // lib/url.buzz - source-path -> clean-URL mapping for the directory-index layout.
 // Pure: cleanURL/cleanDepth take the blog dir as an arg, not a global.
+namespace url;
+
 import "assert";
 
 // allDigits reports whether every byte of s is an ASCII digit (and s is non-empty).
@@ -83,15 +85,15 @@ export fun cleanDepth(rel: str, blogDir: str) > int {
 // "_index" must strip like "index"/"README": a stray segment inflates the "../"
 // climb by one and 404s every asset/nav link.
 test "cleanURL strips the _index landing marker like index" {
-    assert.equal(cleanURL("public/_index.md", "blog"), "public/", "public/_index.md -> public/");
-    assert.equal(cleanDepth("public/_index.md", "blog"), 1, "public landing is one level deep");
-    assert.equal(cleanDepth("public/atom/_index.md", "blog"), 2, "public/atom landing is two levels deep");
-    assert.equal(cleanDepth("development/_index.md", "blog"), 1, "development landing is one level deep");
+    assert\equal(cleanURL("public/_index.md", "blog"), "public/", "public/_index.md -> public/");
+    assert\equal(cleanDepth("public/_index.md", "blog"), 1, "public landing is one level deep");
+    assert\equal(cleanDepth("public/atom/_index.md", "blog"), 2, "public/atom landing is two levels deep");
+    assert\equal(cleanDepth("development/_index.md", "blog"), 1, "development landing is one level deep");
 }
 
 // Manpage Markdown (docs/manpage/*.md) maps straight to /manpage/<cmd>/; no "gen"
 // build segment to flatten.
 test "cleanURL maps a manpage page to its flat URL" {
-    assert.equal(cleanURL("manpage/magus-graph.md", "blog"), "manpage/magus-graph/", "manpage page URL");
-    assert.equal(cleanURL("manpage/magus.md", "blog"), "manpage/magus/", "manpage umbrella page URL");
+    assert\equal(cleanURL("manpage/magus-graph.md", "blog"), "manpage/magus-graph/", "manpage page URL");
+    assert\equal(cleanURL("manpage/magus.md", "blog"), "manpage/magus/", "manpage umbrella page URL");
 }

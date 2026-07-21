@@ -3,6 +3,8 @@
 // (`import "lib/csp" as _`). Site-wide and redirect-stub policies both live here so they
 // never drift. Inline-<script> hashing makes "add a script, forget to regenerate" fail
 // loudly as a browser CSP violation rather than silently shipping a hole.
+namespace csp;
+
 import "crypto";
 import "fs";
 import "io";
@@ -14,7 +16,7 @@ import "assert";
 // writeSiteManifest's per-asset integrity list), so the two never compute "the same
 // hash" two different ways.
 export fun fileSha256(path: str) > str {
-    return crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(path));
+    return crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(path));
 }
 
 // scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes
@@ -22,7 +24,7 @@ export fun fileSha256(path: str) > str {
 // CSP hash-sources are base64, so hexDecode back to raw digest bytes before
 // base64-encoding.
 export fun scriptHash(js: str) > str {
-    return "sha256-" + encoding.base64Encode(encoding.hexDecode(crypto.hash(crypto.HashAlgorithm.Sha256, js)));
+    return "sha256-" + encoding\base64Encode(encoding\hexDecode(crypto\hash(crypto\HashAlgorithm.Sha256, js)));
 }
 
 // extractInlineScripts pulls the text of every attribute-less `<script>...</script>`
@@ -93,7 +95,7 @@ export final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https
 export fun computeCSP(imgSrc: str) > str {
     var scriptSrc = "'self' 'wasm-unsafe-eval'";
     foreach (path in CSP_INLINE_SCRIPT_SOURCES) {
-        final f = io.File.open(path, io.FileMode.read);
+        final f = io\File.open(path, io\FileMode.read);
         final html = f.readAll();
         f.close();
         foreach (js in extractInlineScripts(html)) {
@@ -121,24 +123,24 @@ test "extractInlineScripts finds only attribute-less <script> blocks, in order" 
     final html = "<script src=\"a.js\"></script><p>x</p><script>one();</script>"
         + "<script type=\"module\" src=\"b.js\"></script><script>two();</script>";
     final got = extractInlineScripts(html);
-    assert.equal(got, ["one();", "two();"], "external scripts skipped; inline ones returned in order");
-    assert.equal(extractInlineScripts("no scripts here"), [], "no match -> empty list");
+    assert\equal(got, ["one();", "two();"], "external scripts skipped; inline ones returned in order");
+    assert\equal(extractInlineScripts("no scripts here"), [], "no match -> empty list");
 }
 
 test "scriptHash matches a known sha256-then-base64 digest" {
     // echo -n "" | openssl dgst -sha256 -binary | openssl base64
-    assert.equal(scriptHash(""), "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", "empty string's well-known SHA-256, base64-encoded");
+    assert\equal(scriptHash(""), "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", "empty string's well-known SHA-256, base64-encoded");
 }
 
 test "computeCSP names every directive exactly once and includes the loopback hosts" {
     final got = computeCSP(CSP_IMG_SRC_DEFAULT);
-    assert.equal(got.indexOf("default-src 'self'") != null, true, "default-src present");
-    assert.equal(got.indexOf("'wasm-unsafe-eval'") != null, true, "wasm-unsafe-eval present for the playground's wasm runtime");
-    assert.equal(got.indexOf("connect-src 'self' http://127.0.0.1:* http://[::1]:*") != null, true, "connect-src carries exactly the loopback wildcards");
-    assert.equal(got.indexOf("object-src 'none'") != null, true, "object-src 'none'");
-    assert.equal(got.indexOf("frame-src 'none'") != null, true, "frame-src 'none'");
+    assert\equal(got.indexOf("default-src 'self'") != null, true, "default-src present");
+    assert\equal(got.indexOf("'wasm-unsafe-eval'") != null, true, "wasm-unsafe-eval present for the playground's wasm runtime");
+    assert\equal(got.indexOf("connect-src 'self' http://127.0.0.1:* http://[::1]:*") != null, true, "connect-src carries exactly the loopback wildcards");
+    assert\equal(got.indexOf("object-src 'none'") != null, true, "object-src 'none'");
+    assert\equal(got.indexOf("frame-src 'none'") != null, true, "frame-src 'none'");
     // Every playground.html inline <script> contributes exactly one sha256- source.
-    final f = io.File.open("playground.html", io.FileMode.read);
+    final f = io\File.open("playground.html", io\FileMode.read);
     final n = extractInlineScripts(f.readAll()).len();
     f.close();
     var hashCount = 0;
@@ -148,24 +150,24 @@ test "computeCSP names every directive exactly once and includes the loopback ho
         rest = rest.sub(i + 1);
         hashCount = hashCount + 1;
     }
-    assert.equal(hashCount, n, "one script-src hash per playground.html inline script");
+    assert\equal(hashCount, n, "one script-src hash per playground.html inline script");
 }
 
 test "computeCSP's img-src is exactly the caller's imgSrc argument - the per-page hook" {
     final withDefault = computeCSP(CSP_IMG_SRC_DEFAULT);
-    assert.equal(withDefault.indexOf("img-src 'self' data:;") != null, true, "default img-src has no external host");
-    assert.equal(withDefault.indexOf("github.com") != null, false, "default img-src never carries the badge hosts");
-    assert.equal(withDefault.indexOf("pkg.go.dev") != null, false, "default img-src never carries the badge hosts");
+    assert\equal(withDefault.indexOf("img-src 'self' data:;") != null, true, "default img-src has no external host");
+    assert\equal(withDefault.indexOf("github.com") != null, false, "default img-src never carries the badge hosts");
+    assert\equal(withDefault.indexOf("pkg.go.dev") != null, false, "default img-src never carries the badge hosts");
 
     final withHome = computeCSP(CSP_IMG_SRC_HOME);
-    assert.equal(withHome.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, true, "home img-src carries both badge hosts, verbatim");
+    assert\equal(withHome.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, true, "home img-src carries both badge hosts, verbatim");
 }
 
 test "cspForRedirectStub is scoped tighter than computeCSP and hashes exactly the given script" {
     final got = cspForRedirectStub("location.replace(\"../x/\");");
-    assert.equal(got, "default-src 'none'; script-src '" + scriptHash("location.replace(\"../x/\");") + "'"
+    assert\equal(got, "default-src 'none'; script-src '" + scriptHash("location.replace(\"../x/\");") + "'"
         + "; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'", "exact policy string");
-    assert.equal(got.indexOf("style-src") != null, false, "no style-src - a redirect stub has no stylesheet or style attribute");
-    assert.equal(got.indexOf("img-src") != null, false, "no img-src - a redirect stub has no image");
-    assert.equal(got.indexOf("connect-src") != null, false, "no connect-src - a redirect stub makes no fetch");
+    assert\equal(got.indexOf("style-src") != null, false, "no style-src - a redirect stub has no stylesheet or style attribute");
+    assert\equal(got.indexOf("img-src") != null, false, "no img-src - a redirect stub has no image");
+    assert\equal(got.indexOf("connect-src") != null, false, "no connect-src - a redirect stub makes no fetch");
 }

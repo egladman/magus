@@ -1,6 +1,8 @@
 // engine/search.buzz - the /search/ page: renderSearchPage builds the offline client-side
 // search UI over search-index.json; renderSyntaxRow is its query-syntax help row. Called
 // once post-walk.
+namespace search;
+
 import "fs";
 import "io";
 import "std";
@@ -18,8 +20,8 @@ import "engine/page" as _;
 // (search.js intercepts the ?q= link) beside a plain-language description. The query is
 // url-encoded for the href and entity-escaped for its <code> display.
 fun renderSyntaxRow(q: str, desc: str) > str {
-    return template.render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
-`, {"qEnc": encoding.urlEncode(q), "q": q, "desc": desc});
+    return template\render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
+`, {"qEnc": encoding\urlEncode(q), "q": q, "desc": desc});
 }
 
 
@@ -40,7 +42,7 @@ export fun renderSearchPage(site: Site) > void {
         + renderSyntaxRow("tag:(cache OR build)", "Group several values for one field.")
         + renderSyntaxRow("title:mag*", "Wildcards: * stands for any run of characters.")
         + renderSyntaxRow("(tag:a OR tag:b) -tag:c", "Parenthesize to group; combine with exclusion.");
-    final body = template.render(`<h1>Search</h1>
+    final body = template\render(`<h1>Search</h1>
 <div id="search-page">
   <div class="search-page-inputwrap">
     <input id="search-page-input" class="search-input" type="text" placeholder="Search docs... (try tag:cache)" autocomplete="off" spellcheck="false" aria-label="Search the documentation" aria-controls="search-page-results">
@@ -67,9 +69,9 @@ export fun renderSearchPage(site: Site) > void {
     final title = "Search";
     final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
     final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], site);
-    fs.makeDirectory(site.outDir + "/search");
-    final of = io.File.open(site.outDir + "/search/index.html", io.FileMode.write);
+    fs\makeDirectory(site.outDir + "/search");
+    final of = io\File.open(site.outDir + "/search/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
-    std.print("  search page -> " + site.outDir + "/search/index.html");
+    std\print("  search page -> " + site.outDir + "/search/index.html");
 }

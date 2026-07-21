@@ -2,6 +2,8 @@
 // marker, reading-time estimate, fallback description, and the optional "Added in vX.Y.Z"
 // badge. Pure (stdlib plus text helpers), so it unit-tests here and render.buzz flat-imports
 // it. One source of truth each for the head, chrome, and search index.
+namespace meta;
+
 import "markdown";
 import "serialize";
 import "lib/text" as _;
@@ -20,7 +22,7 @@ export fun deriveTitle(md: str, rel: str) > str {
 // parseTags reads the frontmatter `tags:` list as [str] (empty when absent). The one
 // extraction point, so rendered chips and the search index draw from the same source.
 export fun parseTags(md: str) > [str] {
-    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
     final tags: [str] = mut [];
     foreach (t in fm.q("tags").listValue()) {
         final tag = t.stringValue();
@@ -36,7 +38,7 @@ export fun parseTags(md: str) > [str] {
 // ranking favors these hubs and the reachability gate trusts them as roots, so declaring
 // the type in frontmatter beats guessing it from a URL shape.
 export fun pageType(md: str) > str {
-    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
     return fm.q("page_type").stringValue();
 }
 
@@ -45,7 +47,7 @@ export fun pageType(md: str) > str {
 // a few seconds each - so a code- or figure-heavy page gets a truer number. Frontmatter is
 // stripped so YAML doesn't skew it. "" for pages too short to label. Deterministic.
 export fun readingTime(md: str) > str {
-    final text = markdown.stripFrontmatter(md);
+    final text = markdown\stripFrontmatter(md);
     final WPM = 220;               // prose words per minute
     final CODE_SEC_PER_LINE = 2;   // a code line is read deliberately, not skimmed
     final IMG_SEC = 10;            // time to take in one image or diagram
@@ -129,12 +131,12 @@ export fun insertSinceBadge(html: str, since: str) > str {
 
 test "insertSinceBadge places an Added-in marker right after the h1" {
     final got = insertSinceBadge("<h1 id=\"t\">Title</h1>\n<p>body</p>", "v0.2.0");
-    assert.equal(got.indexOf("class=\"since-badge\"") != null, true, "badge present");
-    assert.equal(got.indexOf("Added in <code>v0.2.0</code>") != null, true, "version rendered in code");
-    assert.equal(got.indexOf("since-badge") < got.indexOf("<p>body"), true, "badge sits between the h1 and the body");
+    assert\equal(got.indexOf("class=\"since-badge\"") != null, true, "badge present");
+    assert\equal(got.indexOf("Added in <code>v0.2.0</code>") != null, true, "version rendered in code");
+    assert\equal(got.indexOf("since-badge") < got.indexOf("<p>body"), true, "badge sits between the h1 and the body");
 }
 
 test "insertSinceBadge is a no-op without a since value or without an h1" {
-    assert.equal(insertSinceBadge("<h1>X</h1>", ""), "<h1>X</h1>", "empty since leaves html untouched");
-    assert.equal(insertSinceBadge("<p>no heading</p>", "v1.0.0"), "<p>no heading</p>", "no h1 leaves html untouched");
+    assert\equal(insertSinceBadge("<h1>X</h1>", ""), "<h1>X</h1>", "empty since leaves html untouched");
+    assert\equal(insertSinceBadge("<p>no heading</p>", "v1.0.0"), "<p>no heading</p>", "no h1 leaves html untouched");
 }

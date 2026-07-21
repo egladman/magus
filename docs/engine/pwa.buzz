@@ -1,6 +1,8 @@
 // engine/pwa.buzz - PWA wiring that makes the docs installable and offline-capable: the
 // web app manifest (writeManifest) and the service worker (buildServiceWorker, bundling
 // src/site/service-worker.ts). Both gated on a configured base URL, run post-walk.
+namespace pwa;
+
 import "fs";
 import "os";
 import "crypto";
@@ -56,7 +58,7 @@ export fun writeManifest(site: Site) > void {
         + "  ],\n"
         + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
         + "\}\n";
-    fs.writeFile(site.outDir + "/manifest.webmanifest", body);
+    fs\writeFile(site.outDir + "/manifest.webmanifest", body);
 }
 
 
@@ -72,13 +74,13 @@ export fun buildServiceWorker(site: Site) > void {
         var rel = asset;
         if (rel.endsWith("/")) { rel = rel + "index.html"; }  // a dir URL caches its index.html
         final p = site.outDir + "/" + rel;
-        if (os.execute(["test", "-f", p]) == 0) {
+        if (os\execute(["test", "-f", p]) == 0) {
             manifest = manifest + rel + ":" + fileSha256(p) + "\n";
         }
     }
-    final version = site.config.title + "-" + crypto.hash(crypto.HashAlgorithm.Sha256, manifest).sub(0, 12);
-    os.execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
+    final version = site.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest).sub(0, 12);
+    os\execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
         "--define:SERVICE_WORKER_VERSION=\"" + version + "\"",
-        "--define:SERVICE_WORKER_PRECACHE=" + serialize.jsonEncode(site.config.precacheAssets),
+        "--define:SERVICE_WORKER_PRECACHE=" + serialize\jsonEncode(site.config.precacheAssets),
         "--outfile=" + site.outDir + "/service-worker.js"]);
 }

@@ -1,6 +1,8 @@
 // engine/blog.buzz - the blog: a single post (renderBlogPost, driven per file by
 // walkBlog), the paginated index (renderBlogIndex), and their shared prev/next
 // pager (renderBlogPager). Each post runs through renderPage like any doc.
+namespace blog;
+
 import "markdown";
 import "fs";
 import "io";
@@ -21,11 +23,11 @@ import "engine/page" as _;
 // metadata is captured into site.blogPosts for the index page.
 export fun renderBlogPost(base: str, site: Site) > void {
     final rel = site.blog + "/" + base;
-    final f = io.File.open(site.root + "/" + rel, io.FileMode.read);
+    final f = io\File.open(site.root + "/" + rel, io\FileMode.read);
     final md = f.readAll();
     f.close();
 
-    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
     var title = fm.q("title").stringValue();
     if (title == "") { title = deriveTitle(md, base); }
     final date = fm.q("date").stringValue();
@@ -57,7 +59,7 @@ export fun renderBlogPost(base: str, site: Site) > void {
     // Blog posts sit at gen/blog/<urlPath>/index.html. The link rewriter needs both the flat
     // directory ("blog") and the date-scoped clean directory ("blog/<urlPath>") so
     // cross-references (../../documentation/) resolve at the post's real depth.
-    final html = renderContentHTML(markdown.toHtml(md), site.blog, site.blog + "/" + urlPath);
+    final html = renderContentHTML(markdown\toHtml(md), site.blog, site.blog + "/" + urlPath);
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
@@ -82,11 +84,11 @@ export fun renderBlogPost(base: str, site: Site) > void {
     final pager = renderBlogPager(base, site);
 
     final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), site);
-    fs.makeDirectory(site.outDir + "/" + site.blog + "/" + urlPath);
-    final of = io.File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io.FileMode.write);
+    fs\makeDirectory(site.outDir + "/" + site.blog + "/" + urlPath);
+    final of = io\File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
-    fs.writeFile(site.outDir + "/" + site.blog + "/" + urlPath + "/index.md", md);
+    fs\writeFile(site.outDir + "/" + site.blog + "/" + urlPath + "/index.md", md);
 
     site.addRecord(url, title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
@@ -96,7 +98,7 @@ export fun renderBlogPost(base: str, site: Site) > void {
         date = date, description = desc, url = url,
     });
 
-    std.print("  " + rel + " -> " + site.outDir + "/" + site.blog + "/" + urlPath + "/index.html");
+    std\print("  " + rel + " -> " + site.outDir + "/" + site.blog + "/" + urlPath + "/index.html");
 }
 
 
@@ -107,12 +109,12 @@ fun renderBlogPager(base: str, site: Site) > str {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
     var posts: [BlogPost] = mut [<BlogPost>];
-    foreach (name in fs.list(site.root + "/" + site.blog)) {
+    foreach (name in fs\list(site.root + "/" + site.blog)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
-            final f = io.File.open(site.root + "/" + site.blog + "/" + name, io.FileMode.read);
+            final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
             final md = f.readAll();
             f.close();
-            final fm = serialize.jsonDecode(markdown.frontmatter(md));
+            final fm = serialize\jsonDecode(markdown\frontmatter(md));
             var t = fm.q("title").stringValue();
             if (t == "") { t = deriveTitle(md, name); }
             posts.append(BlogPost{ base = name, date = fm.q("date").stringValue(), title = t });
@@ -184,7 +186,7 @@ export fun renderBlogIndex(site: Site) > void {
         rec["description"] = p.description;
         posts.append(rec);
     }
-    final body = template.render(`<h1>Blog</h1>
+    final body = template\render(`<h1>Blog</h1>
 {{#hasPosts}}
 <ul class="blog-index">
 {{#posts}}
@@ -209,8 +211,8 @@ export fun renderBlogIndex(site: Site) > void {
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
     }
     final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], site);
-    fs.makeDirectory(site.outDir + "/" + site.blog);
-    final of = io.File.open(site.outDir + "/" + site.blog + "/index.html", io.FileMode.write);
+    fs\makeDirectory(site.outDir + "/" + site.blog);
+    final of = io\File.open(site.outDir + "/" + site.blog + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
     // A real page, so it belongs in the search index and sitemap. No frontmatter
@@ -219,5 +221,5 @@ export fun renderBlogIndex(site: Site) > void {
     // Build a fake mini record so addRecord's shape stays consistent.
     final recStub = "---\ntitle: " + title + "\ndescription: " + desc + "\ntags: []\n---\nBlog listing.\n";
     site.addRecord(url, title, desc, recStub);
-    std.print("  blog index -> " + site.outDir + "/" + site.blog + "/index.html");
+    std\print("  blog index -> " + site.outDir + "/" + site.blog + "/index.html");
 }

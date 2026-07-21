@@ -3,6 +3,11 @@ import "magus";
 import "fs";
 import "os";
 import "vcs";
+// The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
+// Reference drawer imports from source. Affected tracking is glob-based (not
+// import-graph), so this handle lets lint pull in textsearch.lint (type-check + biome) - a
+// lib edit then marks the console affected and re-checks it through the target graph.
+import "project/../libs/textsearch" as textsearch;
 
 // magusfile binds this file's own exported targets (build, typecheck, test, ci); ts adds the
 // TypeScript spell so the app's src/ is symbol-capable - its `scip` op indexes it (via tsconfig.json)
@@ -75,6 +80,9 @@ export fun build(args: [str]) > void {
 // fails lint. The console has no separate linter yet; if one lands it composes in here beside tsc.
 export fun lint(args: [str]) > void {
     magus.needs(preflight);
+    // The Reference drawer imports the search grammar from the shared libs/textsearch
+    // source, so gate its type-check + biome here: a lib edit fails console lint too.
+    magus.needs(textsearch.lint);
     install();
     os.exec("pnpm", ["run", "typecheck"], ".", {});
 }

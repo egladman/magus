@@ -150,18 +150,37 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						// Record the callee (magus.inputs) position so UnreachedIO knows this
 						// call was reached; keyed on the MemberExpr, matching its full-program scan.
 						attributedIO[ast.NodePos(e.Callee)] = true
-						if len(globs) < len(e.Args) {
-							node.DynamicIO = true
-						}
+						// recognized counts every argument the static read could attribute:
+						// a string literal, or (for inputs) a <alias>.file("lit") cross ref.
+						// recognized < len(args) means a computed argument slipped through -
+						// flag DynamicIO so the load path rejects it.
+						recognized := len(globs)
 						switch kind {
 						case "inputs":
+							// One representation for every input: a bare-literal glob is a
+							// same-project input (empty Project, meaning "this target's own
+							// project", filled at resolution); a <alias>.file("lit") arg is a
+							// cross-project input (Project = the raw import path). Same-project
+							// entries land first (in arg order), cross entries after, matching
+							// the fold order buildStep produced before the two were unified.
 							for _, g := range globs {
-								node.Inputs = appendUniq(node.Inputs, g)
+								node.Inputs = appendUniqRef(node.Inputs, types.InputRef{Glob: g})
+							}
+							// A cross-project file input counts as recognized (so it does NOT
+							// trip DynamicIO); a computed rel is not recognized and trips it.
+							for _, a := range e.Args {
+								if ref, ok := crossFileArg(a, projectAliases); ok {
+									recognized++
+									node.Inputs = appendUniqRef(node.Inputs, ref)
+								}
 							}
 						case "outputs":
 							for _, g := range globs {
 								node.Outputs = appendUniq(node.Outputs, g)
 							}
+						}
+						if recognized < len(e.Args) {
+							node.DynamicIO = true
 						}
 					}
 					// Dotted spell op: handle.op(...), where handle is an imported spell.
@@ -188,8 +207,10 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 				case *ast.MemberExpr:
 					// Cross-project edge: <alias>.<target>, where <alias> came from an
 					// `import "project/<path>"`. The project path is left as written; the
-					// caller resolves it later.
-					if id, ok := e.Object.(*ast.IdentExpr); ok {
+					// caller resolves it later. The reserved `.file` member is a path
+					// resolver, not a target, so skip it - it must not mint a phantom
+					// cross-dependency (it is handled as a cross-input via crossFileArg).
+					if id, ok := e.Object.(*ast.IdentExpr); ok && e.Name != types.CrossFileMember {
 						if proj, ok := projectAliases[id.Name]; ok {
 							ref := types.CrossTargetRef{Project: proj, Target: norm(e.Name)}
 							if !slices.Contains(node.CrossDependencies, ref) {
@@ -294,6 +315,48 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 		}
 	}
 	return me.Name, globs, true
+}
+
+// crossFileArg recognizes a <alias>.file("literal") argument to magus.inputs, where
+// <alias> names a project import in aliases. It returns the cross-project file input as
+// an InputRef (the dep project path as written and the file path relative to it) so
+// magus.inputs(alias.file("x")) registers a cross-project input without hand-counting
+// "..". ok is false for any other argument shape - notably a computed, non-literal rel,
+// which the caller treats as dynamic (DynamicIO).
+func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool) {
+	call, ok := arg.(*ast.CallExpr)
+	if !ok {
+		return types.InputRef{}, false
+	}
+	me, ok := call.Callee.(*ast.MemberExpr)
+	if !ok || me.Name != types.CrossFileMember {
+		return types.InputRef{}, false
+	}
+	id, ok := me.Object.(*ast.IdentExpr)
+	if !ok {
+		return types.InputRef{}, false
+	}
+	proj, ok := aliases[id.Name]
+	if !ok {
+		return types.InputRef{}, false
+	}
+	if len(call.Args) != 1 {
+		return types.InputRef{}, false
+	}
+	lit, ok := call.Args[0].(*ast.StringLit)
+	if !ok {
+		return types.InputRef{}, false
+	}
+	return types.InputRef{Project: proj, Glob: lit.Val}, true
+}
+
+// appendUniqRef appends ref unless an equal one is already present (InputRef is a
+// comparable value), the []InputRef counterpart of appendUniq for input dedup.
+func appendUniqRef(s []types.InputRef, ref types.InputRef) []types.InputRef {
+	if slices.Contains(s, ref) {
+		return s
+	}
+	return append(s, ref)
 }
 
 // charmCall recognizes a magus.has_charm("name") call and returns the charm name.

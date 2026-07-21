@@ -9,6 +9,8 @@
 //      integrity manifest and URL ledger.
 // All take a `site: Site` - free functions, not Site methods, so engine/types.buzz stays
 // leaf-only and cycle-free.
+namespace gates;
+
 import "os";
 import "fs";
 import "io";
@@ -40,7 +42,7 @@ export fun assetIntegrityCheck(site: Site) > void {
         if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
             // Non-textual asset: nothing to scan for refs.
         } else {
-            final fh = io.File.open(site.outDir + "/" + f, io.FileMode.read);
+            final fh = io\File.open(site.outDir + "/" + f, io\FileMode.read);
             final html = fh.readAll();
             fh.close();
             final parts = f.split("/");
@@ -79,7 +81,7 @@ export fun orphanCheck(site: Site) > void {
         head = head + 1;
         var path = site.outDir + "/index.html";
         if (key != "") { path = site.outDir + "/" + key + "/index.html"; }
-        final fh = io.File.open(path, io.FileMode.read);
+        final fh = io\File.open(path, io\FileMode.read);
         final html = fh.readAll();
         fh.close();
         foreach (ref in scanReferencesInHTML(html, key)) {
@@ -104,16 +106,16 @@ export fun orphanCheck(site: Site) > void {
 
 
 export fun capture(cmd: str) > str {
-    final tmp = os.tmpFilename("sitegen");
-    final code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
+    final tmp = os\tmpFilename("sitegen");
+    final code = os\execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
     if (code != 0) {
-        fs.delete(tmp);
+        fs\delete(tmp);
         return "";
     }
-    final f = io.File.open(tmp, io.FileMode.read);
+    final f = io\File.open(tmp, io\FileMode.read);
     final result = f.readAll();
     f.close();
-    fs.delete(tmp);
+    fs\delete(tmp);
     return result.trim();
 }
 
@@ -170,13 +172,13 @@ export fun checkPathExists(target: str, site: Site) > bool {
     // Empty target = gen/'s root, always the index.html landing. This shows up
     // when a page links to "../" (Parent Directory in an autoindex root) and the
     // resolver pops back to the root.
-    if (target == "") { return os.execute(["test", "-f", site.outDir + "/index.html"]) == 0; }
-    if (os.execute(["test", "-f", site.outDir + "/" + target]) == 0) { return true; }
-    if (os.execute(["test", "-d", site.outDir + "/" + target]) == 0) {
-        return os.execute(["test", "-f", site.outDir + "/" + target + "/index.html"]) == 0;
+    if (target == "") { return os\execute(["test", "-f", site.outDir + "/index.html"]) == 0; }
+    if (os\execute(["test", "-f", site.outDir + "/" + target]) == 0) { return true; }
+    if (os\execute(["test", "-d", site.outDir + "/" + target]) == 0) {
+        return os\execute(["test", "-f", site.outDir + "/" + target + "/index.html"]) == 0;
     }
     if (target.endsWith("/")) {
-        return os.execute(["test", "-f", site.outDir + "/" + target + "index.html"]) == 0;
+        return os\execute(["test", "-f", site.outDir + "/" + target + "index.html"]) == 0;
     }
     return false;
 }
@@ -239,10 +241,10 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
 export fun walkGen(rel: str, acc: [str], site: Site) > void {
     var dir = site.outDir;
     if (rel != "") { dir = site.outDir + "/" + rel; }
-    foreach (name in fs.list(dir)) {
+    foreach (name in fs\list(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
-        if (os.execute(["test", "-d", site.outDir + "/" + childRel]) == 0) {
+        if (os\execute(["test", "-d", site.outDir + "/" + childRel]) == 0) {
             walkGen(childRel, acc, site);
         } else {
             acc.append(childRel);
@@ -284,8 +286,8 @@ export fun pruneStaleOutputs(site: Site) > void {
         staleDirs[path.sub(0, path.len() - 11)] = true;   // len("/index.html") == 11
     }
     foreach (dir in staleDirs.keys()) {
-        std.print("  pruning stale " + dir + "/ (no longer produced)");
-        fs.delete(site.outDir + "/" + dir);
+        std\print("  pruning stale " + dir + "/ (no longer produced)");
+        fs\delete(site.outDir + "/" + dir);
     }
 }
 
@@ -304,7 +306,7 @@ export fun writeSiteManifest(site: Site) > void {
         if (rel == "site-manifest.sha256") { continue; }
         body = body + fileSha256(site.outDir + "/" + rel) + "  " + rel + "\n";
     }
-    fs.writeFile(site.outDir + "/site-manifest.sha256", body);
+    fs\writeFile(site.outDir + "/site-manifest.sha256", body);
 }
 
 // pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no
@@ -330,8 +332,8 @@ final RETIRED_URLS = "retired.urls.lock";
 // "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
 export fun readURLSet(path: str) > {str: bool} {
     var set: {str: bool} = mut {};
-    if (os.execute(["test", "-f", path]) != 0) { return set; }
-    final f = io.File.open(path, io.FileMode.read);
+    if (os\execute(["test", "-f", path]) != 0) { return set; }
+    final f = io\File.open(path, io\FileMode.read);
     final content = f.readAll();
     f.close();
     foreach (line in content.split("\n")) {
@@ -374,5 +376,5 @@ export fun updateUrlLock(site: Site) > void {
     final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
     var body = "";
     foreach (u in sorted) { body = body + u + "\n"; }
-    fs.writeFile(URL_LOCK, body);
+    fs\writeFile(URL_LOCK, body);
 }

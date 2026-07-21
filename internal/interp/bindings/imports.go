@@ -3,10 +3,12 @@ package bindings
 import (
 	"context"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -70,6 +72,38 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 			}
 		}
 	}
+	// The reserved `.file(rel)` member: a general cross-project path resolver, not a
+	// target. It returns the authoritative WORKSPACE-relative path of a file in the
+	// imported project, resolved with the SAME file.Resolve formula the static extractor
+	// uses so a magus.inputs(<alias>.file(...)) declaration agrees between static
+	// analysis and runtime. The returned path is a usable value: pass it to magus.inputs
+	// to declare a cross-project input, or use it directly (e.g. an exec argv). It
+	// registers nothing itself.
+	// Set after the target loop so it reserves the name even if a target is called file.
+	m.MapSet(types.CrossFileMember, vm.DirectValue(raw+"."+types.CrossFileMember, func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
+		var rel string
+		if len(args) > 0 && args[0].IsStr() {
+			rel = args[0].AsString()
+		}
+		joined := path.Join(raw, filepath.ToSlash(rel))
+		// No workspace in context (a bare `magus buzz` script): degrade to a cleaned
+		// relative path rather than error. The real run path always carries the workspace.
+		ws := types.WorkspaceFromContext(callCtx)
+		if ws == nil {
+			return vm.StrValue(path.Clean(joined)), nil
+		}
+		callerRel, err := filepath.Rel(ws.Root(), src.Dir)
+		if err != nil {
+			return vm.StrValue(path.Clean(joined)), nil
+		}
+		resolved, err := file.Resolve(joined, filepath.ToSlash(callerRel))
+		if err != nil {
+			// Match the static extractor's best-effort drop and the branches above:
+			// degrade to the cleaned path rather than aborting the target at runtime.
+			return vm.StrValue(path.Clean(joined)), nil
+		}
+		return vm.StrValue(resolved), nil
+	}))
 	return m, true
 }
 

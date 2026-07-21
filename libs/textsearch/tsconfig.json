@@ -1,0 +1,19 @@
+{
+  "//": "Type-check gate for the shared browser client library (src/**/*.ts). Same shape as the console/docs TS gates: esbuild does the actual compilation in each consumer, this only drives `pnpm run typecheck` (tsc --noEmit). Tests are excluded so the gate needs no @types/node (the *.test.ts imports node:test, exercised by `pnpm run test`).",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "src/**/*.test.ts"]
+}

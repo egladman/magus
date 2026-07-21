@@ -88,11 +88,13 @@ export fun test(args: [str]) > void {
 export fun plain(args: [str]) > void { }
 `)
 	build, _ := nodeByName(g, "build")
-	assert.Equal(t, []string{"src/**", "tsconfig.json"}, build.Inputs)
+	// A bare-literal glob is a same-project input: empty Project (meaning "this target's
+	// own project", filled at resolution), Rel the glob.
+	assert.Equal(t, []types.InputRef{{Glob: "src/**"}, {Glob: "tsconfig.json"}}, build.Inputs)
 	assert.Equal(t, []string{"dist/**"}, build.Outputs)
 	assert.False(t, build.DynamicIO)
 	testNode, _ := nodeByName(g, "test")
-	assert.Equal(t, []string{"src/**"}, testNode.Inputs)
+	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, testNode.Inputs)
 	assert.Empty(t, testNode.Outputs)
 	plain, _ := nodeByName(g, "plain")
 	assert.Empty(t, plain.Inputs)
@@ -110,7 +112,7 @@ func TestInputsOutputsDynamic(t *testing.T) {
 `)
 	build, _ := nodeByName(g, "build")
 	assert.True(t, build.DynamicIO, "a computed magus.inputs argument must flag DynamicIO")
-	assert.Equal(t, []string{"src/**"}, build.Inputs, "literal args are still collected")
+	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, build.Inputs, "literal args are still collected")
 }
 
 // TestUnreachedIO pins orphan detection: a magus.inputs/outputs reached from a target
@@ -327,6 +329,43 @@ export fun setup(args: [str]) > void { go["x"](); }
 	require.True(t, ok, "missing build; got %v", g)
 	assert.Empty(t, b.Dependencies, "the identifier handle is inside a string literal")
 	assert.Empty(t, b.CrossDependencies, "the cross-project ref is inside a string literal")
+}
+
+// TestCrossFileInputs: magus.inputs(<alias>.file("lit")) and a sibling bare string
+// literal land on the SAME Inputs list in one shape - the literal a same-project input
+// (empty Project), the alias.file a cross-project input (raw dep path + rel); the
+// recognized cross-file arg does NOT trip DynamicIO, and the .file member mints no
+// phantom cross-dependency. Same-project entries come first (arg order), cross after.
+func TestCrossFileInputs(t *testing.T) {
+	g := Extract(`import "project/../lib" as lib;
+export fun build(args: [str]) > void {
+    magus.inputs(lib.file("go.mod"), "src/**/*.go");
+    go["go-build"]();
+}
+`)
+	b, ok := nodeByName(g, "build")
+	require.True(t, ok, "missing build; got %v", g)
+	assert.Equal(t, []types.InputRef{
+		{Glob: "src/**/*.go"},               // same-project literal: empty Project (self)
+		{Project: "../lib", Glob: "go.mod"}, // cross-project: raw dep path for the caller to resolve
+	}, b.Inputs, "a literal and an alias.file input share one representation")
+	assert.False(t, b.DynamicIO, "a recognized alias.file(lit) arg must not trip DynamicIO")
+	assert.Empty(t, b.CrossDependencies, "the reserved .file member mints no phantom cross-dependency")
+}
+
+// TestCrossFileInputsDynamic: a computed (non-literal) rel in alias.file(...) is invisible
+// to the static read, so it trips DynamicIO exactly like any other non-literal io arg.
+func TestCrossFileInputsDynamic(t *testing.T) {
+	g := Extract(`import "project/../lib" as lib;
+export fun build(args: [str]) > void {
+    magus.inputs(lib.file(args[0]));
+    go["go-build"]();
+}
+`)
+	b, ok := nodeByName(g, "build")
+	require.True(t, ok, "missing build; got %v", g)
+	assert.True(t, b.DynamicIO, "a computed rel is invisible to the static read and must trip DynamicIO")
+	assert.Empty(t, b.Inputs, "a non-literal rel contributes no input")
 }
 
 func TestCycle(t *testing.T) {

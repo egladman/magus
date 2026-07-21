@@ -1,6 +1,8 @@
 // lib/dom.buzz - a small HTML builder. Attribute values are escaped; element bodies
 // are inserted raw (already-built HTML). Caller orders the attrs, so output matches
 // hand-written markup byte for byte.
+namespace dom;
+
 import "assert";
 import "lib/text" as _;
 
@@ -25,9 +27,9 @@ export fun esc(s: str) > str {
 }
 
 test "attr escapes and el/voidEl wrap" {
-    assert.equal(attr("class", "a & b"), " class=\"a &amp; b\"", "escaped attribute");
-    assert.equal(el("p", attr("id", "x"), "hi"), "<p id=\"x\">hi</p>", "element with attr");
-    assert.equal(el("div", "", "raw"), "<div>raw</div>", "no attrs");
-    assert.equal(voidEl("meta", attr("charset", "utf-8")), "<meta charset=\"utf-8\">", "void element");
-    assert.equal(esc("<a & b>"), "&lt;a &amp; b&gt;", "text escape");
+    assert\equal(attr("class", "a & b"), " class=\"a &amp; b\"", "escaped attribute");
+    assert\equal(el("p", attr("id", "x"), "hi"), "<p id=\"x\">hi</p>", "element with attr");
+    assert\equal(el("div", "", "raw"), "<div>raw</div>", "no attrs");
+    assert\equal(voidEl("meta", attr("charset", "utf-8")), "<meta charset=\"utf-8\">", "void element");
+    assert\equal(esc("<a & b>"), "&lt;a &amp; b&gt;", "text escape");
 }

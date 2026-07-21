@@ -1,5 +1,7 @@
 // lib/feed.buzz - pure XML builders and date normalization for the sitemap and Atom
 // feeds. Flat-imported by render.buzz (`import "lib/feed" as _`).
+namespace feed;
+
 import "assert";
 
 // escapeXml is escapeAttr's XML form (five entities, & last to avoid double-encoding).
@@ -31,19 +33,19 @@ export fun atomDate(d: str) > str {
 }
 
 test "escapeXml substitutes all five XML entities, ampersand-safe" {
-    assert.equal(escapeXml("a & b < c > d \" e ' f"),
+    assert\equal(escapeXml("a & b < c > d \" e ' f"),
         "a &amp; b &lt; c &gt; d &quot; e &apos; f", "all five entities");
-    assert.equal(escapeXml("plain"), "plain", "no-op on safe text");
+    assert\equal(escapeXml("plain"), "plain", "no-op on safe text");
 }
 
 test "xml builders wrap and escape" {
-    assert.equal(xmlAttribute("rel", "self"), " rel=\"self\"", "attribute with leading space");
-    assert.equal(xmlElement("title", "a & b"), "<title>a &amp; b</title>", "element escapes body");
-    assert.equal(xmlSelfClose("link", xmlAttribute("href", "u")), "<link href=\"u\"/>", "self-closing tag");
+    assert\equal(xmlAttribute("rel", "self"), " rel=\"self\"", "attribute with leading space");
+    assert\equal(xmlElement("title", "a & b"), "<title>a &amp; b</title>", "element escapes body");
+    assert\equal(xmlSelfClose("link", xmlAttribute("href", "u")), "<link href=\"u\"/>", "self-closing tag");
 }
 
 test "atomDate normalizes to RFC3339 UTC" {
-    assert.equal(atomDate("2026-07-01"), "2026-07-01T00:00:00Z", "bare date gets midnight UTC");
-    assert.equal(atomDate("2026-07-01T12:00:00Z"), "2026-07-01T12:00:00Z", "full RFC3339 passes through");
-    assert.equal(atomDate(""), "", "empty stays empty");
+    assert\equal(atomDate("2026-07-01"), "2026-07-01T00:00:00Z", "bare date gets midnight UTC");
+    assert\equal(atomDate("2026-07-01T12:00:00Z"), "2026-07-01T12:00:00Z", "full RFC3339 passes through");
+    assert\equal(atomDate(""), "", "empty stays empty");
 }

@@ -4,6 +4,8 @@
 // source through it; renderPager builds prev/next; substituteVersionTokens swaps
 // __MAGUS_VERSION__; render404/writeOffline are the two standalone pages. Flat-imported by
 // render.buzz and every writer module; it sits below the writers that call it.
+namespace page;
+
 import "markdown";
 import "fs";
 import "io";
@@ -70,11 +72,11 @@ export fun render404(site: Site) > void {
 </body>
 </html>
 `;
-    final doc = template.render(tmpl, {
+    final doc = template\render(tmpl, {
         "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
         "nav": renderSiteNav(basePath, "", false, site.config), "footer": renderSiteFooter(basePath, site),
     });
-    fs.writeFile(site.outDir + "/404.html", doc);
+    fs\writeFile(site.outDir + "/404.html", doc);
 }
 
 
@@ -121,12 +123,12 @@ export fun writeOffline(site: Site) > void {
 </body>
 </html>
 `;
-    final doc = template.render(tmpl, {
+    final doc = template\render(tmpl, {
         "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
         "nav": renderSiteNav(basePath, "", false, site.config), "footer": renderSiteFooter(basePath, site),
     });
-    fs.makeDirectory(site.outDir + "/offline");
-    fs.writeFile(site.outDir + "/offline/index.html", doc);
+    fs\makeDirectory(site.outDir + "/offline");
+    fs\writeFile(site.outDir + "/offline/index.html", doc);
     // Register so pruneStaleOutputs doesn't treat it as stale - it is always produced
     // (the SW precaches it).
     site.writtenPaths["offline/index.html"] = true;
@@ -136,16 +138,16 @@ export fun writeOffline(site: Site) > void {
 // renderPagerLink renders one prev/next card, reading the sibling's source so it credits
 // the same title (frontmatter title, else first H1) the sibling page renders with.
 fun renderPagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str {
-    final f = io.File.open(srcDir + "/" + name, io.FileMode.read);
+    final f = io\File.open(srcDir + "/" + name, io\FileMode.read);
     final md = f.readAll();
     f.close();
-    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
     var title = fm.q("title").stringValue();
     if (title == "") { title = deriveTitle(md, name); }
     // A regular page lives in its own <slug>/ subdir, so it climbs one level to reach a
     // sibling (../<slug>/); an index.md landing sits in the parent, so it does not.
     final slug = name.sub(0, name.len() - 3);   // drop ".md"
-    return template.render(`      <a class="{{cls}}" href="{{climbPrefix}}{{slug}}/"><span class="page-nav-dir">{{dir}}</span><span class="page-nav-title">{{title}}</span></a>
+    return template\render(`      <a class="{{cls}}" href="{{climbPrefix}}{{slug}}/"><span class="page-nav-dir">{{dir}}</span><span class="page-nav-title">{{title}}</span></a>
 `, {"cls": cls, "climbPrefix": climbPrefix, "slug": slug, "dir": dir, "title": title});
 }
 
@@ -161,7 +163,7 @@ fun renderPager(rel: str, site: Site) > str {
     if (parts.len() > 1) { srcDir = srcDir + "/" + parts.sub(0, parts.len() - 1).join("/"); }
 
     var sibs: [str] = mut [<str>];
-    foreach (name in fs.list(srcDir)) {
+    foreach (name in fs\list(srcDir)) {
         // README.md/index.md are the directory's landing page (reached via breadcrumb and
         // nav, not a prev/next peer), and their clean URL is the parent dir, which a sibling
         // link can't express - so they stay out. isGeneratorFile drops the SSG's own
@@ -190,7 +192,7 @@ fun renderPager(rel: str, site: Site) > str {
     if (pos > 0) { body = body + renderPagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev", climbPrefix); }
     if (pos < ordered.len() - 1) { body = body + renderPagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next", climbPrefix); }
     if (body == "") { return ""; }
-    return template.render(`    <nav class="page-nav" aria-label="Pagination">
+    return template\render(`    <nav class="page-nav" aria-label="Pagination">
 {{{body}}}    </nav>
 `, {"body": body});
 }
@@ -257,7 +259,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
             // Topical tags link into the search page scoped to that exact tag (tag:"<name>"),
             // so a click lists every page carrying it. Quoted so a multi-word tag stays one
             // token; urlEncode makes it querystring-safe.
-            final tagQuery = encoding.urlEncode("tag:\"" + t + "\"");
+            final tagQuery = encoding\urlEncode("tag:\"" + t + "\"");
             chips = chips + "<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>";
         }
         tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips + "</div>\n";
@@ -379,7 +381,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 </body>
 </html>
 `;
-    return template.render(pageTmpl, {
+    return template\render(pageTmpl, {
         "fullTitle": fullTitle,
         "csp": pageCsp,
         "description": description,
@@ -412,7 +414,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 // href="docs/X" (repo-root-relative) resolve from gen/index.html as href="X", so strip
 // the docs/ prefix.
 export fun renderRoot(site: Site) > void {
-    final f = io.File.open(site.root + "/README.md", io.FileMode.read);
+    final f = io\File.open(site.root + "/README.md", io\FileMode.read);
     final rawMd = f.readAll();
     f.close();
 
@@ -422,7 +424,7 @@ export fun renderRoot(site: Site) > void {
     // paragraph); only tag classification has nothing to derive from, so it gets one basic tag.
     final md = "---\ntags: [readme]\n---\n\n" + rawMd;
 
-    var html = markdown.toHtml(md);
+    var html = markdown\toHtml(md);
     while (html.indexOf("href=\"./docs/") != null) {
         html = html.replace("href=\"./docs/", "href=\"");
     }
@@ -432,7 +434,7 @@ export fun renderRoot(site: Site) > void {
     // The home page sits at gen root, so its in-content links are rewritten root-to-root.
     html = renderContentHTML(html, "", "");
 
-    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
     var title = fm.q("title").stringValue();
     if (title == "") { title = deriveTitle(md, "README.md"); }
     // Description: frontmatter, else first paragraph, else site default - always non-empty
@@ -442,15 +444,15 @@ export fun renderRoot(site: Site) > void {
     if (desc == "") { desc = site.config.description; }
 
     final doc = renderPage(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md), site);
-    final of = io.File.open(site.outDir + "/index.html", io.FileMode.write);
+    final of = io\File.open(site.outDir + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
     // "View source" targets this file directly - write the original, unamended README so it
     // matches the committed source byte for byte (the synthesized tags are build-only).
-    fs.writeFile(site.outDir + "/index.md", rawMd);
+    fs\writeFile(site.outDir + "/index.md", rawMd);
     site.addRecord("index.html", title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), "index.html"); }
-    std.print("  README.md -> " + site.outDir + "/index.html");
+    std\print("  README.md -> " + site.outDir + "/index.html");
 }
 
 
@@ -468,18 +470,18 @@ fun substituteVersionTokens(md: str, site: Site) > str {
 // Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
 // docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
 export fun renderFile(rel: str, site: Site) > void {
-    final f = io.File.open(site.root + "/" + site.docs + "/" + rel, io.FileMode.read);
+    final f = io\File.open(site.root + "/" + site.docs + "/" + rel, io\FileMode.read);
     var md = f.readAll();
     f.close();
     // Resolve version placeholders once, up front, so every downstream consumer (HTML,
     // search record, emitted index.md) sees the real tag.
     md = substituteVersionTokens(md, site);
 
-    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
     var title = fm.q("title").stringValue();
     if (title == "") { title = deriveTitle(md, rel); }
 
-    var html = renderContentHTML(markdown.toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
+    var html = renderContentHTML(markdown\toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
     // Optional "Added in vX.Y.Z" compatibility marker from the frontmatter `since:`.
     html = insertSinceBadge(html, fm.q("since").stringValue());
 
@@ -495,21 +497,21 @@ export fun renderFile(rel: str, site: Site) > void {
     // Directory-index output: every page is <cleanURL>index.html (extensionless). url is
     // gen-root-relative and ends in a slash, matching search.js/sitemap/canonical.
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);   // drop trailing slash for mkdir
-    fs.makeDirectory(dir);
+    fs\makeDirectory(dir);
 
-    final of = io.File.open(dir + "/index.html", io.FileMode.write);
+    final of = io\File.open(dir + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
 
     // Emit the page's source Markdown next to its HTML for "View source" (or copy-as-
     // markdown), and as the per-page input llms-full.txt reuses.
-    fs.writeFile(dir + "/index.md", md);
+    fs\writeFile(dir + "/index.md", md);
 
     site.addRecord(url, title, desc, md);
     // Redirect stubs for any old paths this page declares (frontmatter aliases:).
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
 
-    std.print("  " + rel + " -> " + dir + "/index.html");
+    std\print("  " + rel + " -> " + dir + "/index.html");
 }
 
 
@@ -517,10 +519,10 @@ test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest r
     final s = mut Site{};
     s.releases.append(Release{ version = "v0.2.0" });
     final got = substituteVersionTokens("get __MAGUS_VERSION__/magus___MAGUS_VERSION___linux.tar.gz", s);
-    assert.equal(got, "get v0.2.0/magus_v0.2.0_linux.tar.gz", "both tokens replaced with the tag");
+    assert\equal(got, "get v0.2.0/magus_v0.2.0_linux.tar.gz", "both tokens replaced with the tag");
 }
 
 test "substituteVersionTokens is a no-op before any release has shipped" {
     final s = mut Site{};
-    assert.equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
+    assert\equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
 }

@@ -10,6 +10,11 @@ import "http";
 // gopherbuzz's build. The path import binds its targets as cross-project handles
 // (gopherbuzz.build), and folds gopherbuzz into this project's affected set.
 import "project/../libs/gopherbuzz" as gopherbuzz;
+// The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
+// site bundle imports from source. Affected tracking is glob-based (not import-graph),
+// so this handle lets lint pull in textsearch.lint (type-check + biome) - a lib edit then
+// marks docs affected and re-checks it through the target graph.
+import "project/../libs/textsearch" as textsearch;
 // The static site generator, a sibling module. Aliased so it does not collide with the
 // `render` target below: a same-name target shadows the import and nulls its members.
 import "render" as renderer;
@@ -196,6 +201,9 @@ export fun format(args: [str]) > void { magus.needs(generate); }
 // the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.
 export fun lint(args: [str]) > void {
     magus.needs(format);
+    // The site bundle imports the search grammar from the shared libs/textsearch source,
+    // so gate its type-check + biome here: a lib edit fails docs lint through the graph.
+    magus.needs(textsearch.lint);
     if (!fs.isDir("node_modules")) { os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {}); }
     os.exec("pnpm", ["run", "typecheck"], ".", {});
     os.exec("pnpm", ["exec", "biome", "check", "src"], ".", {});

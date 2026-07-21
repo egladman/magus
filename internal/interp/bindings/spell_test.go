@@ -9,9 +9,55 @@ import (
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// rootOnlyWS is a WorkspaceRepository that answers only Root(); the file resolver
+// reads nothing else off the workspace, so the embedded nil interface is never called.
+type rootOnlyWS struct {
+	types.WorkspaceRepository
+	root string
+}
+
+func (w rootOnlyWS) Root() string { return w.root }
+
+// TestProjectImportFileResolver exercises the reserved `.file(rel)` member on a
+// project-import handle: at runtime `b.file("go.mod")` resolves to the authoritative
+// WORKSPACE-relative path of a file in the imported project and feeds magus.inputs
+// without error, whether or not a workspace is on the context (a bare script degrades
+// to a cleaned relative path rather than failing).
+func TestProjectImportFileResolver(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "a/magusfile.buzz", `import "magus";
+import "project/../b" as b;
+export fun build(args: [str]) > void {
+    magus.inputs(b.file("go.mod"));
+}`)
+	writeFile(t, root, "b/magusfile.buzz", `import "magus";
+export fun compile(args: [str]) > void {}`)
+	writeFile(t, root, "b/go.mod", "module b\n")
+
+	src, err := interp.Find(filepath.Join(root, "a"))
+	require.NoError(t, err)
+
+	t.Run("with a workspace resolves and feeds magus.inputs", func(t *testing.T) {
+		// wsRoot is derived from src.Dir so it stays symlink-consistent (t.TempDir
+		// resolves through /private on macOS). callerRel is then "a", so the resolver
+		// yields "b/go.mod" and magus.inputs (a runtime no-op) accepts it.
+		ctx := types.WithWorkspace(context.Background(), rootOnlyWS{root: filepath.Dir(src.Dir)})
+		require.NoError(t,
+			interp.Run(ctx, src, "build", nil, filepath.Join(root, "a")),
+			"b.file(...) must resolve and feed magus.inputs without error")
+	})
+
+	t.Run("without a workspace degrades without error", func(t *testing.T) {
+		require.NoError(t,
+			interp.Run(context.Background(), src, "build", nil, filepath.Join(root, "a")),
+			"a bare script must degrade the resolver, not error")
+	})
+}
 
 // writeFile writes content under dir/rel, creating parent dirs.
 func writeFile(t *testing.T, dir, rel, content string) {

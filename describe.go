@@ -236,9 +236,14 @@ func gitRoot(dir string) string {
 // Cross-project deps (project imports) union into DependsOn, so the affected set and
 // scheduling treat them exactly like a project-level depends_on: a magusfile declares a
 // cross-project dependency once, at the target, rather than also in magus.project.
-// Per-target inputs/outputs populate TargetSources/TargetOutputs (stored
-// project-root relative), adding to that target's cache key and snapshot set - unioned
-// onto the project-wide globs, never replacing them.
+// Per-target inputs populate TargetInputs in one representation (each InputRef resolved
+// to its owning project's workspace-relative path); outputs populate TargetOutputs
+// (project-root relative). Both add to that target's cache/snapshot footprint, unioned
+// onto the project-wide globs, never replacing them. A cross-project input's owning
+// project is also unioned into DependsOn, so an input change marks the consumer affected
+// exactly like a project-level depends_on; a same-project input's owning project is this
+// project itself, which is skipped (a project cannot depend on itself, and it already
+// seeds by directory containment).
 //
 // It mutates projects in place. ctx is honored between projects. A project whose source
 // can't be read or whose dep path won't resolve contributes nothing (best-effort,
@@ -262,21 +267,45 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			}
 			for _, n := range describe.Extract(concatSource(src)) {
 				for _, ref := range n.CrossDependencies {
-					if r, err := file.Resolve(ref.Project, p.Path); err == nil {
+					// Skip a self-resolving import (r == p.Path): a self-edge is both
+					// unnecessary and rejected by the depgraph as a self-loop - same guard
+					// the input loop below applies.
+					if r, err := file.Resolve(ref.Project, p.Path); err == nil && r != p.Path {
 						extra = append(extra, r)
 					}
 				}
 				if n.DynamicIO {
 					return fmt.Errorf("%s: target %q: magus.inputs/outputs requires string-literal globs; a computed argument is invisible to the cache and would risk a stale hit", types.ProjectLabel(p.Path, p.Dir), n.Name)
 				}
-				// Stored project-relative, matching the p.Sources/p.Outputs convention;
-				// buildStep joins to the project path for the cache key, and the race
-				// diagnostics glob them against p.Dir directly.
-				for _, g := range n.Inputs {
-					if p.TargetSources == nil {
-						p.TargetSources = map[string][]string{}
+				// Every input, same-project or cross, flows through one loop. Resolve each
+				// to its owning project's workspace-relative path (a bare-literal glob's
+				// owner is this project; a <alias>.file cross ref's owner is file.Resolve of
+				// the raw import path), then store the resolved InputRef. buildStep folds it
+				// to the cache key via joinGlob(Project, Glob). A cross
+				// input's owner is also unioned into DependsOn so a change to it marks this
+				// project affected (project.Affected is a DependsOn-reverse-closure); a
+				// same-project owner is this project itself and is skipped - a self-edge is
+				// both unnecessary (it seeds by directory containment) and rejected by the
+				// depgraph as a self-loop.
+				for _, ref := range n.Inputs {
+					owner := ref.Project
+					if owner == "" {
+						owner = p.Path // same-project input: owned by this project
+					} else if r, rerr := file.Resolve(ref.Project, p.Path); rerr == nil {
+						owner = r
+					} else {
+						continue // unresolvable cross ref: drop (best-effort)
 					}
-					p.TargetSources[n.Name] = appendUniq(p.TargetSources[n.Name], g)
+					if p.TargetInputs == nil {
+						p.TargetInputs = map[string][]types.InputRef{}
+					}
+					resolved := types.InputRef{Project: owner, Glob: ref.Glob}
+					if !slices.Contains(p.TargetInputs[n.Name], resolved) {
+						p.TargetInputs[n.Name] = append(p.TargetInputs[n.Name], resolved)
+					}
+					if owner != p.Path {
+						extra = append(extra, owner)
+					}
 				}
 				for _, g := range n.Outputs {
 					if p.TargetOutputs == nil {
@@ -333,7 +362,7 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
 			if src.Engine == "buzz" {
 				nodes := describe.Extract(concatSource(src))
-				resolveCrossDependencies(nodes, p.Path)
+				resolveNodeRefs(nodes, p.Path)
 				entry.Nodes = nodes
 				entry.Cycle = describe.Cycle(nodes)
 			}
@@ -343,25 +372,43 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 	return out
 }
 
-// resolveCrossDependencies rewrites each node's cross-project dependency paths from the
-// dot-/repo-relative form written in the magusfile to the workspace-relative path
-// the rest of the graph keys projects by — the same resolution WithDependsOn does
-// for project-level deps. An unresolvable path is dropped (best-effort, matching
-// the static extractor's never-error contract).
-func resolveCrossDependencies(nodes []types.TargetGraphNode, projectPath string) {
+// resolveNodeRefs rewrites each node's cross-project dependency paths and its
+// input owning-project paths from the form written in the magusfile to the
+// workspace-relative path the rest of the graph keys projects by — the same resolution
+// WithDependsOn does for project-level deps. For inputs: a same-project entry (empty
+// Project) takes this project's path; a cross-project entry resolves its raw import path.
+// Resolving here lets assembleIO link every consumes edge by path.Join(Project, Rel)
+// against the file node in the owning project directly, without re-anchoring. An
+// unresolvable path is dropped (best-effort, matching the static extractor's never-error
+// contract).
+func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 	for i := range nodes {
-		if len(nodes[i].CrossDependencies) == 0 {
-			continue
-		}
-		resolved := make([]types.CrossTargetRef, 0, len(nodes[i].CrossDependencies))
-		for _, ref := range nodes[i].CrossDependencies {
-			r, err := file.Resolve(ref.Project, projectPath)
-			if err != nil {
-				continue
+		if len(nodes[i].CrossDependencies) > 0 {
+			resolved := make([]types.CrossTargetRef, 0, len(nodes[i].CrossDependencies))
+			for _, ref := range nodes[i].CrossDependencies {
+				r, err := file.Resolve(ref.Project, projectPath)
+				if err != nil {
+					continue
+				}
+				resolved = append(resolved, types.CrossTargetRef{Project: r, Target: ref.Target})
 			}
-			resolved = append(resolved, types.CrossTargetRef{Project: r, Target: ref.Target})
+			nodes[i].CrossDependencies = resolved
 		}
-		nodes[i].CrossDependencies = resolved
+		if len(nodes[i].Inputs) > 0 {
+			resolved := make([]types.InputRef, 0, len(nodes[i].Inputs))
+			for _, ref := range nodes[i].Inputs {
+				if ref.Project == "" {
+					resolved = append(resolved, types.InputRef{Project: projectPath, Glob: ref.Glob})
+					continue
+				}
+				r, err := file.Resolve(ref.Project, projectPath)
+				if err != nil {
+					continue
+				}
+				resolved = append(resolved, types.InputRef{Project: r, Glob: ref.Glob})
+			}
+			nodes[i].Inputs = resolved
+		}
 	}
 }
 

@@ -290,15 +290,16 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	for _, s := range p.ResolvedSpells {
 		step.Sources = append(step.Sources, s.TargetSources()[target]...)
 	}
-	// Per-target footprint declared in the body via magus.inputs/outputs (stored
-	// project-root relative, joined here like baseStep joins p.Sources/p.Outputs). These
-	// ADD to this target's cache key and snapshot set - unioned onto the project-wide
-	// globs baseStep seeded, never replacing them. Deduped against what baseStep already
-	// added so a glob declared both project-wide and per-target isn't hashed twice
-	// (keeping this path's set identical to effectiveOutputs').
-	for _, g := range p.TargetSources[target] {
-		if jg := joinGlob(p.Path, g); !slices.Contains(step.Sources, jg) {
-			step.Sources = append(step.Sources, jg)
+	// Per-target inputs declared via magus.inputs (one InputRef shape for same-project
+	// globs and cross-project files; each carries its owning project). This is the one
+	// place the declared "inputs" vocabulary folds into the cache Step's aggregate
+	// "sources" footprint: joinGlob(Project, Glob) - the SAME join the outputs fold
+	// below uses, so inputs and outputs treat an identical literal identically. Inputs
+	// ADD to this target's key (unioned onto the project-wide globs baseStep seeded,
+	// deduped so a glob declared both places isn't hashed twice); keyVersion is unchanged.
+	for _, ref := range p.TargetInputs[target] {
+		if g := joinGlob(ref.Project, ref.Glob); !slices.Contains(step.Sources, g) {
+			step.Sources = append(step.Sources, g)
 		}
 	}
 	for _, g := range p.TargetOutputs[target] {

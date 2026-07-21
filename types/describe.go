@@ -126,13 +126,20 @@ type TargetGraphNode struct {
 	// target names), each carries the other project's path, so the graph can draw a
 	// target -> target edge across project boundaries instead of a coarse project -> project one.
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
-	// Inputs and Outputs are the per-target cache-footprint globs the body declares
-	// via magus.inputs(...) / magus.outputs(...), captured statically as string
-	// literals. They ADD to the target's cache key (inputs) and its snapshot/replay
-	// set (outputs) - unioned onto the project-wide and spell-contributed globs, never
-	// replacing them, so the footprint can only grow. Extracted here so the same static
-	// read feeds both the cache path and describe.
-	Inputs  []string `json:"inputs,omitempty"  yaml:"inputs,omitempty"`
+	// Inputs are the per-target file inputs the body declares via magus.inputs(...),
+	// captured statically in ONE representation where each entry carries its owning
+	// project (InputRef). A bare-literal glob (magus.inputs("glob")) is a same-project
+	// input whose owning project is the target's own project; a magus.inputs(<alias>.
+	// file("lit")) entry is a cross-project input whose owning project is the imported
+	// one. Inputs ADD to the target's cache key - unioned onto the project-wide and
+	// spell-contributed globs, never replacing them, so the footprint can only grow. The
+	// single shape feeds the cache footprint, the affected-tracking depends_on edge (a
+	// cross-project input only; a same-project one seeds by directory containment), and
+	// the consumes edge to the file node in the owning project.
+	Inputs []InputRef `json:"inputs,omitempty" yaml:"inputs,omitempty"`
+	// Outputs are the per-target magus.outputs(...) globs, captured statically as string
+	// literals (project-relative). They ADD to the target's snapshot/replay set - unioned
+	// onto the project-wide and spell-contributed globs, never replacing them.
 	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
 	// DynamicIO is set when a magus.inputs/outputs call carries a non-literal
 	// argument. A computed glob is invisible to this static read, so the load path
@@ -148,6 +155,28 @@ type CrossTargetRef struct {
 	Project string `json:"project" yaml:"project"`
 	Target  string `json:"target"  yaml:"target"`
 }
+
+// InputRef names one file input a target declares via magus.inputs, in a single shape
+// that carries the owning project for both a same-project glob and a cross-project file -
+// maximally explicit: a local input's project is simply itself. Project is the owning
+// project's path; Glob is the doublestar glob (or exact file) relative to that root. For a
+// same-project input (magus.inputs("glob")) Project is empty at extraction, meaning "this
+// target's own project", and is filled to the project's path when resolved. For a
+// cross-project input (magus.inputs(<alias>.file("rel"))) Project names the imported
+// project (dot-/repo-relative as written in the magusfile until resolved to
+// workspace-relative, mirroring CrossTargetRef). Folding into the cache key, the
+// affected-tracking depends_on edge, and the consumes edge all read this one shape.
+type InputRef struct {
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Glob    string `json:"glob" yaml:"glob"`
+}
+
+// CrossFileMember is the reserved member on a project-import handle
+// (`<alias>.file("rel")`) that resolves a cross-project file to a workspace-relative
+// path. The static extractor (internal/describe) and the runtime resolver
+// (internal/interp/bindings) MUST agree on this name; this single const is the
+// shared source of truth so the two cannot drift apart.
+const CrossFileMember = "file"
 
 // TargetSpellUse is one spell a target invokes and the ops it calls on it.
 type TargetSpellUse struct {

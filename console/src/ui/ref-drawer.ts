@@ -1,6 +1,45 @@
 import { persisted } from "../lib/persist";
-import { loadDocIndex, runSearch, positiveTerms, snippet, describeQuery, type DocSearchEntry } from "../lib/docsearch";
+import { createTextSearch, type TextSearchEntry } from "@magus/textsearch";
 import type { PageModule, PageController, SearchProvider } from "../console/page";
+
+// One docs-index record. It carries a url (for the result link) on top of the fields the
+// shared ranker reads; the engine ignores url and hands it back on each result. This is the
+// console's OWN record type - the shared lib is app-agnostic and never names it.
+interface RefEntry extends TextSearchEntry {
+  url: string;
+}
+
+// loadRefIndex is the console's OWN data source for the shared search engine (injected via
+// createTextSearch below): it fetches the docs site's prebuilt search-index.json. The docs
+// site ships it at the SITE ROOT; the console lives at the site's /console/ sibling, so the
+// index is one level up. A standalone dev console has no docs sibling, so a console-relative
+// copy (a gitignored dev artifact) is tried as a fallback. A miss resolves to null (never
+// throws) so the panel degrades to a note. All of this docs-layout knowledge lives HERE, in
+// the app - the shared lib knows none of it. The AbortSignal (threaded from the searcher's
+// load() call) cancels an in-flight fetch when the load is torn down, so a superseded request
+// does not settle against a gone consumer.
+async function loadRefIndex(signal?: AbortSignal): Promise<RefEntry[] | null> {
+  let base = "";
+  try {
+    base = import.meta.url.replace(/[^/]*$/, "");
+  } catch {
+    base = "";
+  }
+  const candidates = base
+    ? [base + "../search-index.json", base + "search-index.json"]
+    : ["../search-index.json", "search-index.json"];
+  for (const url of candidates) {
+    try {
+      const r = await fetch(url, { signal });
+      if (!r.ok) continue;
+      const data = (await r.json()) as RefEntry[];
+      if (Array.isArray(data)) return data;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return null;
+}
 
 // DrawerToggle is a minimal open/close controller with the Reference panel's dismissal + focus
 // behaviour. wireDrawerToggle factors that "pop-out" idiom out of initRefDrawer so a second pop-out (the
@@ -81,7 +120,7 @@ export function wireDrawerToggle(opts: {
 // outside-click; "unpinned" closes on Escape or an outside click. Both look the same (inset/docked).
 //
 // The panel shows two things: a documentation search field (searches the docs site's prebuilt
-// index via the ported Datadog grammar in lib/docsearch.ts, results open in a new tab) and the
+// index via the shared @magus/textsearch grammar, results open in a new tab) and the
 // ACTIVE surface's reference sections. Each surface scaffold carries help blocks marked
 // [data-ref-section] (the graph explorer's query/search-syntax help, the log viewer's filter
 // help). Because surfaces mount dynamically, this CLONES the active surface's blocks each time
@@ -185,15 +224,16 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   });
 
   // --- Documentation search -----------------------------------------------------------------
-  // A debounced search over the docs site's prebuilt index. The grammar/ranking is the ported
-  // Datadog-style search from the docs site (lib/docsearch.ts). Results open in a NEW tab so the
-  // console stays put. The index is fetched lazily on first focus/type; if it is unreachable (a
-  // standalone dev console with no docs sibling), we degrade to a subtle note and never throw.
+  // A debounced search over the docs site's prebuilt index. The grammar/ranking come from the
+  // shared @magus/textsearch engine; the console supplies its OWN data source (loadRefIndex,
+  // above) via createTextSearch, so the engine stays app-agnostic. Results open in a NEW tab so
+  // the console stays put. The index is fetched lazily on first focus/type; if it is unreachable
+  // (a standalone dev console with no docs sibling), we degrade to a subtle note and never throw.
   const searchInput = document.getElementById("console-refsearch-input") as HTMLInputElement | null;
   const resultsEl = document.getElementById("console-refsearch-results");
   const noteEl = document.getElementById("console-refsearch-note");
   if (searchInput && resultsEl && noteEl) {
-    let index: DocSearchEntry[] | null = null;
+    const searcher = createTextSearch<RefEntry>(loadRefIndex);
     let loaded = false; // the fetch has completed (with or without an index)
     let sel = -1;
 
@@ -242,7 +282,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     // renderPreview shows the parsed query as compact read-only chips (field scoping, exclusions,
     // phrases, wildcards), so a user sees how their query was understood.
     const renderPreview = (raw: string): void => {
-      const parts = describeQuery(raw);
+      const parts = searcher.describeQuery(raw);
       previewEl.replaceChildren();
       if (parts.length === 0) { previewEl.hidden = true; return; }
       for (const p of parts) {
@@ -294,17 +334,17 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
       const raw = searchInput.value.trim();
       if (!raw) { closeResults(); clearNote(); return; }
       renderPreview(raw); // show how the query parsed as soon as there is a query, even while loading
-      if (!index) {
-        // Not yet loaded, or the load failed. loaded=false: a fetch is pending -> show the spinner; the
-        // input handler re-renders when it lands. loaded=true with no index: the docs index is unreachable.
+      const res = searcher.runSearch(raw);
+      if (res === null) {
+        // The index is not loaded. loaded=false: a fetch is pending -> show the spinner; the input
+        // handler re-renders when it lands. loaded=true with no index: the docs index is unreachable.
         if (loaded) { spinnerEl.hidden = true; closeResults(); renderPreview(raw); showNote("Search needs the docs site."); }
         else { spinnerEl.hidden = false; resultsEl.hidden = true; }
         return;
       }
       spinnerEl.hidden = true;
       clearNote();
-      const res = runSearch(index, raw);
-      const terms = positiveTerms(raw);
+      const terms = searcher.getPositiveTerms(raw);
       resultsEl.replaceChildren();
       sel = -1;
       searchInput.setAttribute("aria-expanded", "true");
@@ -331,7 +371,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
         title.className = "console-shell-refsearch__title";
         title.append(markMatches(r.entry.title, terms));
         a.append(title);
-        const snip = snippet(r.entry.text || r.entry.description || "", terms);
+        const snip = searcher.buildSnippet(r.entry.text || r.entry.description || "", terms);
         if (snip) {
           const sn = document.createElement("span");
           sn.className = "console-shell-refsearch__snippet";
@@ -345,10 +385,19 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     };
 
     // Kick the lazy index load once; re-render when it resolves so a query typed before the fetch
-    // finished still gets results (or the unreachable-note).
+    // finished still gets results (or the unreachable-note). The load carries an AbortSignal so a
+    // page teardown cancels the in-flight ~486KB fetch instead of letting it settle in the void.
+    const loadAbort = new AbortController();
+    window.addEventListener("pagehide", () => loadAbort.abort(), { once: true });
     const ensureIndex = (): void => {
       if (loaded) return;
-      loadDocIndex().then((data) => { loaded = true; index = data; render(); }).catch(() => { loaded = true; render(); });
+      searcher.load(loadAbort.signal).then(() => { loaded = true; render(); }).catch((err) => {
+        loaded = true;
+        // Degrade to the unreachable-note (render() shows it), but surface the real reason so a
+        // genuine index-pipeline failure (bad JSON, a moved path) is not silently invisible.
+        if (!loadAbort.signal.aborted) console.error("docs search index failed to load", err);
+        render();
+      });
     };
 
     let debounce: ReturnType<typeof setTimeout> | undefined;

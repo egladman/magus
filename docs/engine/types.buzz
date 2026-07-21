@@ -4,6 +4,8 @@
 // collection, relatedness corpus, breadcrumb/related/section nav). The steps that reach
 // into git metadata or the post-render gates live as free functions in engine/gates.buzz,
 // so this file imports only leaf modules and never forms an import cycle.
+namespace types;
+
 import "fs";
 import "io";
 import "serialize";
@@ -188,10 +190,10 @@ export object Site {
         final rec = mut {<str: any>};
         rec["url"] = url;
         rec["title"] = title;
-        rec["text"] = cleanBody(markdown.stripFrontmatter(md));
+        rec["text"] = cleanBody(markdown\stripFrontmatter(md));
         rec["tags"] = parseTags(md);
         if (desc != "") { rec["description"] = desc; }
-        this.searchRecords.append(serialize.jsonEncode(serialize.Boxed.init(rec)));
+        this.searchRecords.append(serialize\jsonEncode(serialize\Boxed.init(rec)));
     }
 
     // collectAlias records that the clean old path `alias` should redirect to
@@ -217,10 +219,10 @@ export object Site {
             if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
                 throw "alias \"" + a + "\" collides with a real page at the same path";
             }
-            fs.makeDirectory(this.outDir + "/" + a);
+            fs\makeDirectory(this.outDir + "/" + a);
             final rel = relativePath(a, this.aliasTarget[a]);
             final csp = cspForRedirectStub(redirectScript(rel));
-            fs.writeFile(this.outDir + "/" + a + "/index.html", aliasStub(rel, csp));
+            fs\writeFile(this.outDir + "/" + a + "/index.html", aliasStub(rel, csp));
             this.writtenPaths[a + "/index.html"] = true;
         }
     }
@@ -228,10 +230,10 @@ export object Site {
     // collectDocPage reads one docs page's frontmatter into a DocPage on docPages
     // (the relatedness/breadcrumb corpus). rel is the path under docs/.
     fun collectDocPage(rel: str) > void {
-        final f = io.File.open(this.root + "/" + this.docs + "/" + rel, io.FileMode.read);
+        final f = io\File.open(this.root + "/" + this.docs + "/" + rel, io\FileMode.read);
         final md = f.readAll();
         f.close();
-        final fm = serialize.jsonDecode(markdown.frontmatter(md));
+        final fm = serialize\jsonDecode(markdown\frontmatter(md));
         var title = fm.q("title").stringValue();
         if (title == "") { title = deriveTitle(md, rel); }
         final desc = fm.q("description").stringValue();
@@ -260,7 +262,7 @@ export object Site {
     fun collectDocPages(rel: str) > void {
         var dir = this.root + "/" + this.docs;
         if (rel != "") { dir = this.root + "/" + this.docs + "/" + rel; }
-        foreach (name in fs.list(dir)) {
+        foreach (name in fs\list(dir)) {
             var childRel = name;
             if (rel != "") { childRel = rel + "/" + name; }
             if (isDirectory(this.root + "/" + this.docs + "/" + childRel)) {
@@ -296,28 +298,28 @@ export object Site {
         // becomes the leaf). srcRel is blog/<file>.md for posts, or blog/index.md for
         // the listing page.
         if (srcRel == this.blog + "/index.md") {
-            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Blog</li>"});
+            return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Blog</li>"});
         }
         // The search page is a top-level tool surface: Home / Search (no Documentation
         // root, it does not hang off the documentation index).
         if (srcRel == "search/index.md") {
-            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Search</li>"});
+            return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Search</li>"});
         }
         // The tour page is a top-level onboarding surface: Home / Tour.
         if (srcRel == "tour/index.md") {
-            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Tour</li>"});
+            return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Tour</li>"});
         }
         if (srcRel.startsWith(this.blog + "/")) {
             li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
                 + "<li aria-current=\"page\">" + title + "</li>";
-            return template.render(bcTmpl, {"li": li});
+            return template\render(bcTmpl, {"li": li});
         }
         // The /public/ autoindex tree also skips the Documentation root; each level
         // gets a bare Home / <path> breadcrumb (the autoindex itself lists the parent
         // link in its own body, so the breadcrumb stays flat).
         if (srcRel.startsWith("public/")) {
             li = li + "<li aria-current=\"page\">" + title + "</li>";
-            return template.render(bcTmpl, {"li": li});
+            return template\render(bcTmpl, {"li": li});
         }
 
         // /development/ contributor surface. Home / Development for the landing; Home /
@@ -330,13 +332,13 @@ export object Site {
                 li = li + "<li><a href=\"" + root + "development/\">Development</a></li>"
                     + "<li aria-current=\"page\">" + title + "</li>";
             }
-            return template.render(bcTmpl, {"li": li});
+            return template\render(bcTmpl, {"li": li});
         }
 
         // The documentation index roots every docs trail; on that page itself it is
         // the current leaf rather than a link back to where you already are.
         if (rel == "documentation.md") {
-            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Documentation</li>"});
+            return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Documentation</li>"});
         }
         li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
 
@@ -372,7 +374,7 @@ export object Site {
 
         // The leaf is the current page's own title, matching how the intermediate crumbs read.
         li = li + "<li aria-current=\"page\">" + title + "</li>";
-        return template.render(bcTmpl, {"li": li});
+        return template\render(bcTmpl, {"li": li});
     }
 
     // renderRelated builds the "Related" card grid for the page whose source is
@@ -453,7 +455,7 @@ export object Site {
 
         if (picks.len() == 0) { return ""; }
 
-        return template.render(`  <section class="related container" aria-labelledby="related-heading">
+        return template\render(`  <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
 {{#picks}}
@@ -511,7 +513,7 @@ export object Site {
         foreach (k in ordered) {
             picks.append(mut {"url": k["url"], "title": k["title"], "current": k["url"] == curUrl});
         }
-        return template.render(`        <p class="toc-title">In this section</p>
+        return template\render(`        <p class="toc-title">In this section</p>
         <ul class="section-nav">
 {{#picks}}
           <li><a href="{{root}}{{url}}"{{#current}} aria-current="page"{{/current}} title="{{title}}">{{title}}</a></li>
@@ -540,14 +542,14 @@ test "Site.collectAlias trims slashes and records every alias" {
     final s = mut Site{};
     s.collectAlias("/old-path/", "new-path/");
     s.collectAlias("same", "same/");
-    assert.equal(s.aliasTarget, {"old-path": "new-path/", "same": "same/"}, "both aliases recorded with slashes trimmed");
+    assert\equal(s.aliasTarget, {"old-path": "new-path/", "same": "same/"}, "both aliases recorded with slashes trimmed");
 }
 
 test "Site.addRecord marks the URL written and appends one search record" {
     final s = mut Site{};
     s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
-    assert.equal(s.pageUrls, {"guide/": true}, "url marked written");
-    assert.len(s.searchRecords, 1, "one search record appended");
+    assert\equal(s.pageUrls, {"guide/": true}, "url marked written");
+    assert\len(s.searchRecords, 1, "one search record appended");
 }
 
 
@@ -563,16 +565,16 @@ test "renderSectionNav lists an overview's direct children and marks the current
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
 
     final got = s.renderSectionNav("docs/spells/go.md", "spells/go/", "../../");
-    assert.equal(got.indexOf("In this section") != null, true, "section label present");
-    assert.equal(got.indexOf("href=\"../../spells/bash/\"") != null, true, "sibling bash listed");
-    assert.equal(got.indexOf("aria-current=\"page\" title=\"go\"") != null, true, "current page marked");
-    assert.equal(got.indexOf("spells/go/nested/") != null, false, "grandchild is not a direct child");
-    assert.equal(got.indexOf("targets/") != null, false, "an unrelated section is excluded");
+    assert\equal(got.indexOf("In this section") != null, true, "section label present");
+    assert\equal(got.indexOf("href=\"../../spells/bash/\"") != null, true, "sibling bash listed");
+    assert\equal(got.indexOf("aria-current=\"page\" title=\"go\"") != null, true, "current page marked");
+    assert\equal(got.indexOf("spells/go/nested/") != null, false, "grandchild is not a direct child");
+    assert\equal(got.indexOf("targets/") != null, false, "an unrelated section is excluded");
 }
 
 test "renderSectionNav returns empty for a top-level page with no overview ancestor" {
     final s = mut Site{};
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
     s.docPages.append(DocPage{ url = "cache/", title = "Cache", srcRel = "docs/cache.md", section = "cache" });
-    assert.equal(s.renderSectionNav("docs/targets.md", "targets/", "../"), "", "no section nav without an overview parent");
+    assert\equal(s.renderSectionNav("docs/targets.md", "targets/", "../"), "", "no section nav without an overview parent");
 }

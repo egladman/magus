@@ -1,5 +1,7 @@
 // lib/html.buzz - link rewriting and goldmark-output post-processing for the
 // directory-index layout. Pure string transforms; golden-gated.
+namespace html;
+
 import "assert";
 import "lib/text" as _;
 import "lib/dom" as _;
@@ -362,108 +364,108 @@ export fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
 }
 
 test "stripMdFromLinkText drops a trailing .md from link text only" {
-    assert.equal(stripMdFromLinkText("<a href=\"workspace/\">workspace.md</a>"),
+    assert\equal(stripMdFromLinkText("<a href=\"workspace/\">workspace.md</a>"),
         "<a href=\"workspace/\">workspace</a>", "path-named link text cleaned");
-    assert.equal(stripMdFromLinkText("<a href=\"x/\">Targets</a>"),
+    assert\equal(stripMdFromLinkText("<a href=\"x/\">Targets</a>"),
         "<a href=\"x/\">Targets</a>", "non-.md link text untouched");
-    assert.equal(stripMdFromLinkText("edit README.md by hand"),
+    assert\equal(stripMdFromLinkText("edit README.md by hand"),
         "edit README.md by hand", "prose .md that is not link text is untouched");
 }
 
 test "tagMermaid wraps a mermaid fence and passes other html through" {
-    assert.equal(tagMermaid("<pre><code class=\"language-mermaid\">graph</code></pre>"),
+    assert\equal(tagMermaid("<pre><code class=\"language-mermaid\">graph</code></pre>"),
         "<div class=\"mermaid-src\"><pre><code class=\"language-mermaid\">graph</code></pre>"
         + "<span class=\"noscript-inline mermaid-src-caption\">Diagram source - renders with JavaScript enabled.</span></div>",
         "wraps the fence");
-    assert.equal(tagMermaid("<p>hi</p>"), "<p>hi</p>", "non-mermaid unchanged");
+    assert\equal(tagMermaid("<p>hi</p>"), "<p>hi</p>", "non-mermaid unchanged");
 }
 
 test "wrapTables wraps each table in a scroll figure" {
-    assert.equal(wrapTables("<table><tr><td>a</td></tr></table>"),
+    assert\equal(wrapTables("<table><tr><td>a</td></tr></table>"),
         "<figure class=\"table-scroll\"><table><tr><td>a</td></tr></table></figure>", "single table wrapped");
-    assert.equal(wrapTables("<table>1</table><p>x</p><table>2</table>"),
+    assert\equal(wrapTables("<table>1</table><p>x</p><table>2</table>"),
         "<figure class=\"table-scroll\"><table>1</table></figure><p>x</p><figure class=\"table-scroll\"><table>2</table></figure>",
         "each table wrapped, prose between untouched");
-    assert.equal(wrapTables("<p>no table</p>"), "<p>no table</p>", "no table, unchanged");
+    assert\equal(wrapTables("<p>no table</p>"), "<p>no table</p>", "no table, unchanged");
 }
 
 test "rewriteLinks rewrites in-content hrefs" {
-    assert.equal(rewriteLinks("<a href=\"other.html\">x</a>", "docs", "docs/page"),
+    assert\equal(rewriteLinks("<a href=\"other.html\">x</a>", "docs", "docs/page"),
         "<a href=\"../other/\">x</a>", "internal link resolved and re-relativized");
-    assert.equal(rewriteLinks("<a href=\"https://x\">y</a>", "d", "d"),
+    assert\equal(rewriteLinks("<a href=\"https://x\">y</a>", "d", "d"),
         "<a href=\"https://x\">y</a>", "external link untouched");
 }
 
 test "oldFlatDirectory returns the parent directory" {
-    assert.equal(oldFlatDirectory("docs/guide/page.md"), "docs/guide", "nested page");
-    assert.equal(oldFlatDirectory("top.md"), "", "top-level has no parent");
+    assert\equal(oldFlatDirectory("docs/guide/page.md"), "docs/guide", "nested page");
+    assert\equal(oldFlatDirectory("top.md"), "", "top-level has no parent");
 }
 
 test "cleanBody strips fences and markers for the search index" {
-    assert.equal(cleanBody("# Hi\n`x`"), "Hi x", "drops #, `, collapses");
-    assert.equal(cleanBody("a ```fenced``` c"), "a c", "drops fenced content");
+    assert\equal(cleanBody("# Hi\n`x`"), "Hi x", "drops #, `, collapses");
+    assert\equal(cleanBody("a ```fenced``` c"), "a c", "drops fenced content");
 }
 
 test "aliasStub is a redirect page to rel, carrying the caller's CSP" {
     final stub = aliasStub("/new/", "default-src 'none'; script-src 'sha256-x'");
-    assert.equal(stub.sub(0, 15), "<!DOCTYPE html>", "html stub");
-    assert.equal(stub.indexOf("Content-Security-Policy") != null, true, "csp meta present");
-    assert.equal(stub.indexOf("script-src &#39;sha256-x&#39;") != null, false, "csp attribute is not double-escaped");
-    assert.equal(stub.indexOf("script-src 'sha256-x'") != null, true, "csp content passed through verbatim (single quotes unescaped)");
+    assert\equal(stub.sub(0, 15), "<!DOCTYPE html>", "html stub");
+    assert\equal(stub.indexOf("Content-Security-Policy") != null, true, "csp meta present");
+    assert\equal(stub.indexOf("script-src &#39;sha256-x&#39;") != null, false, "csp attribute is not double-escaped");
+    assert\equal(stub.indexOf("script-src 'sha256-x'") != null, true, "csp content passed through verbatim (single quotes unescaped)");
 }
 
 test "redirectScript matches the literal text aliasStub embeds" {
-    assert.equal(redirectScript("../x/"), "location.replace(\"../x/\");", "exact redirect script body");
-    assert.equal(aliasStub("../x/", "").indexOf(redirectScript("../x/")) != null, true, "aliasStub embeds redirectScript's exact text");
+    assert\equal(redirectScript("../x/"), "location.replace(\"../x/\");", "exact redirect script body");
+    assert\equal(aliasStub("../x/", "").indexOf(redirectScript("../x/")) != null, true, "aliasStub embeds redirectScript's exact text");
 }
 
 test "tagAdmonition builds a callout div" {
-    assert.equal(tagAdmonition("<blockquote>\n<p>[!NOTE]\nbody</p>\n</blockquote>"),
+    assert\equal(tagAdmonition("<blockquote>\n<p>[!NOTE]\nbody</p>\n</blockquote>"),
         "<div class=\"admonition admonition-note\"><p class=\"admonition-title\">Note</p>\n<p>body</p>\n</div>",
         "note callout");
-    assert.equal(tagAdmonition("<blockquote>\n<p>hi</p>\n</blockquote>"),
+    assert\equal(tagAdmonition("<blockquote>\n<p>hi</p>\n</blockquote>"),
         "<blockquote>\n<p>hi</p>\n</blockquote>", "no marker, unchanged");
 }
 
 test "tagRunnable tags a fenced block after a run marker" {
-    assert.equal(tagRunnable("<!-- run -->\n<pre>code</pre>"),
+    assert\equal(tagRunnable("<!-- run -->\n<pre>code</pre>"),
         "\n<pre data-runnable=\"true\">code</pre>", "marker dropped, pre tagged");
-    assert.equal(tagRunnable("<!-- run --> text"), " text", "marker not before a fence is dropped");
-    assert.equal(tagRunnable("<pre>plain</pre>"), "<pre>plain</pre>", "no marker, unchanged");
+    assert\equal(tagRunnable("<!-- run --> text"), " text", "marker not before a fence is dropped");
+    assert\equal(tagRunnable("<pre>plain</pre>"), "<pre>plain</pre>", "no marker, unchanged");
 }
 
 test "externalLinks marks http anchors" {
-    assert.equal(externalLinks("<a href=\"https://x.com\">y</a>"),
+    assert\equal(externalLinks("<a href=\"https://x.com\">y</a>"),
         "<a href=\"https://x.com\" rel=\"noopener noreferrer\" target=\"_blank\" data-external>y</a>", "adds all three");
-    assert.equal(externalLinks("<a href=\"/docs/\">y</a>"), "<a href=\"/docs/\">y</a>", "internal link untouched");
+    assert\equal(externalLinks("<a href=\"/docs/\">y</a>"), "<a href=\"/docs/\">y</a>", "internal link untouched");
 }
 
 test "lazyImages adds lazy loading to bare img tags" {
-    assert.equal(lazyImages("<img src=\"a.png\">"),
+    assert\equal(lazyImages("<img src=\"a.png\">"),
         "<img loading=\"lazy\" decoding=\"async\" src=\"a.png\">", "adds loading + decoding");
-    assert.equal(lazyImages("<img loading=\"high\" src=\"hero.png\">"),
+    assert\equal(lazyImages("<img loading=\"high\" src=\"hero.png\">"),
         "<img loading=\"high\" src=\"hero.png\">", "author loading wins");
 }
 
 test "resolvePath normalizes .. and . against a base dir" {
-    assert.equal(resolvePath("a/b", "../c"), "a/c", "up one, then into c");
-    assert.equal(resolvePath("a/b/c", "../../x"), "a/x", "up two");
-    assert.equal(resolvePath("docs", "img.png"), "docs/img.png", "plain descent");
+    assert\equal(resolvePath("a/b", "../c"), "a/c", "up one, then into c");
+    assert\equal(resolvePath("a/b/c", "../../x"), "a/x", "up two");
+    assert\equal(resolvePath("docs", "img.png"), "docs/img.png", "plain descent");
 }
 
 test "cleanTarget maps old flat paths to clean URLs" {
-    assert.equal(cleanTarget("manpage/magus-ls.html"), "manpage/magus-ls/", "drops .html, de-collided manpage dir");
-    assert.equal(cleanTarget("codes/race/index.html"), "codes/race/", "drops index landing");
-    assert.equal(cleanTarget("install.html"), "install/", "top-level page");
-    assert.equal(cleanTarget("index.html"), "", "home page");
+    assert\equal(cleanTarget("manpage/magus-ls.html"), "manpage/magus-ls/", "drops .html, de-collided manpage dir");
+    assert\equal(cleanTarget("codes/race/index.html"), "codes/race/", "drops index landing");
+    assert\equal(cleanTarget("install.html"), "install/", "top-level page");
+    assert\equal(cleanTarget("index.html"), "", "home page");
 }
 
 test "rewriteHref passes through external and fragment links" {
-    assert.equal(rewriteHref("https://example.com", "docs", "docs/page"), "https://example.com", "external");
-    assert.equal(rewriteHref("#section", "docs", "docs/page"), "#section", "pure fragment");
+    assert\equal(rewriteHref("https://example.com", "docs", "docs/page"), "https://example.com", "external");
+    assert\equal(rewriteHref("#section", "docs", "docs/page"), "#section", "pure fragment");
 }
 
 test "rewriteHref re-relativizes an internal page link" {
-    assert.equal(rewriteHref("sibling.html", "docs/guide", "docs/guide/page"), "../sibling/",
+    assert\equal(rewriteHref("sibling.html", "docs/guide", "docs/guide/page"), "../sibling/",
         "sibling .html resolves, cleans, and re-relativizes");
 }

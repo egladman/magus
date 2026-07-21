@@ -1,6 +1,8 @@
 // engine/route.buzz - path/URL routing: source path -> clean output URL, the "../" depth
 // back to site root, and the deploy base path from the configured site URL. Site-aware, so
 // it imports engine/types and stays out of the leaf engine/path.buzz.
+namespace route;
+
 import "lib/url" as _;
 import "engine/types" as _;
 

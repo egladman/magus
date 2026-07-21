@@ -1,0 +1,106 @@
+// magusfile.buzz for @magus/textsearch, the shared DOM-free browser client library at
+// libs/textsearch. It holds code that would otherwise be duplicated across the two
+// independent front-end esbuild projects (docs/ and console/) - currently the
+// Datadog-style documentation search grammar (src/textsearch.ts). Registered as its own
+// first-class magus project so `magus affected ci` type-checks and tests it. Mirrors
+// libs/gopherbuzz's magusfile structure, TS-flavored.
+//
+//   magus run lint libs/textsearch   type-check (tsc) + biome
+//   magus run test libs/textsearch   run the node:test suite
+//   magus run ci libs/textsearch     lint + test
+//   magus run generate libs/textsearch  refresh MAGUS.md (target catalog)
+//
+// There is deliberately NO build target: this library is shared SOURCE, not a build
+// artifact. It ships no bundle of its own; each consumer's esbuild follows the relative
+// import into src/ and bundles it inline (the library has zero npm deps, so that
+// resolves cleanly across project dirs). Its lint target is wired into each consumer's
+// lint via magus.needs(textsearch.lint), so a lib edit pulls the consumer checks through
+// the target graph - affected tracking is glob-based (sources), not import-graph-based.
+
+import "magus";
+// fs guards the node_modules install and writes MAGUS.md; os shells out to pnpm
+// (typecheck/biome/test); vcs gates the generated MAGUS.md on drift.
+import "fs";
+import "os";
+import "vcs";
+
+// magusfile binds this file's exported targets (generate, lint, test, ci); ts adds the
+// TypeScript spell so the shared src/ is symbol-capable - its `scip` op indexes it (via
+// tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns the dependency graph;
+// informational) and does not run in ci, which uses the custom targets below.
+import "magus/spell/magusfile";
+import "magus/spell/ts";
+
+magus.project({
+    "spells": [magusfile, ts],
+    // Affected/drift tracks this sources glob, not the import graph, so every input must
+    // be named to be watched: the shared TypeScript, the build manifests (package.json +
+    // pnpm-lock.yaml, where the dev-gate deps are pinned), and the tsconfig/biome configs
+    // that drive the gates. pnpm is the package manager - NOT npm; .npmrc's
+    // minimum-release-age gate is the reason.
+    "sources": ["magusfile.buzz", "src/**/*.ts", "package.json", "pnpm-lock.yaml",
+                "tsconfig.json", "biome.json"],
+    // Generated target catalog; the only output this pure-source library declares. It is
+    // also what the cacheable lint/test targets snapshot: the ts spell contributes a
+    // dist/** provided-glob that a source-only lib never fills, so without a real output
+    // to record the cache snapshot would find nothing to match. MAGUS.md is that output.
+    "outputs": ["MAGUS.md"],
+    "targets": {
+        // Drift-gates MAGUS.md via git status: run alone, every time.
+        "generate": {"skip_cache": true, "exclusive": true},
+    },
+});
+
+export fun preflight(args: [str]) > void {}
+
+// install restores the dev-only gate deps (typescript + biome) with pnpm, honoring
+// .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
+// local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the gate.
+fun install() > void {
+    if (!fs.isDir("node_modules")) {
+        os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    }
+}
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift =
+// regeneration dirtied a file that was clean, via vcs.isDirty, so a locally-regenerated
+// MAGUS.md passes whether or not it is committed; only a regeneration that changes a
+// clean file fails.
+export fun generate(args: [str]) > void {
+    magus.needs(preflight);
+    final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
+    magus.needs(md_generate);
+    if (magus.has_charm("rw")) { return; }
+
+    if (clean_before and vcs.isDirty(["MAGUS.md"])) {
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/textsearch` and commit";
+    }
+}
+
+// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+export fun md_generate(args: [str]) > void {
+    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs.writeFile("MAGUS.md", doc + "\n");
+}
+
+// lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit)
+// plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).
+// os.exec raises on a non-zero exit, so either gate fails lint.
+export fun lint(args: [str]) > void {
+    magus.needs(preflight);
+    install();
+    os.exec("pnpm", ["run", "typecheck"], ".", {});
+    os.exec("pnpm", ["run", "biome"], ".", {});
+}
+
+// test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).
+export fun test(args: [str]) > void {
+    magus.needs(preflight);
+    install();
+    os.exec("pnpm", ["run", "test"], ".", {});
+}
+
+// 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.
+export fun ci(args: [str]) > void {
+    magus.needs(lint, test);
+}

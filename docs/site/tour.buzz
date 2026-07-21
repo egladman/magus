@@ -1,6 +1,8 @@
 // site/tour.buzz - the two interactive-demo pages: the guided tour (renderTourPage,
 // with codeTeaser/tourSrc/playgroundLink) and the standalone playground
 // (renderPlayground). Both called once by site_render; both inject the shared nav.
+namespace tour;
+
 import "fs";
 import "io";
 import "std";
@@ -27,7 +29,7 @@ object TourStep {
     fun renderCard(root: str, num: int) > str {
         final src = tourSrc(this.file);
         // The cross-link is inline at the end of the description, not a separate line.
-        return template.render(`      <li class="tour-card">
+        return template\render(`      <li class="tour-card">
         <div class="tour-head"><span class="tour-num">{{num}}</span><h3>{{title}}</h3></div>
         <p class="tour-desc">{{desc}} <a class="tour-learn" href="{{root}}{{docSlug}}/">{{docLabel}} <span class="xref-arrow" aria-hidden="true">&rarr;</span></a></p>
         <pre class="tour-teaser"><code class="language-buzz">{{teaser}}</code></pre>
@@ -46,7 +48,7 @@ object TourStep {
 // templating just the nav keeps it in lockstep with every other page. Its bottom
 // chrome is the console status bar (in playground.html), not the docs footer.
 export fun renderPlayground(site: Site) > void {
-    final f = io.File.open("playground.html", io.FileMode.read);
+    final f = io\File.open("playground.html", io\FileMode.read);
     var html = f.readAll();
     f.close();
     // Ships at /playground/ (a directory index), so the nav climbs one level to root.
@@ -59,8 +61,8 @@ export fun renderPlayground(site: Site) > void {
     // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
     // this file is both the hash's source and its sink.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
-    fs.makeDirectory(site.outDir + "/" + outDir);
-    fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
+    fs\makeDirectory(site.outDir + "/" + outDir);
+    fs\writeFile(site.outDir + "/" + outDir + "/index.html", html);
 }
 
 
@@ -85,7 +87,7 @@ fun codeTeaser(src: str) > str {
 // tourSrc reads one curated example from tour/ (cwd-relative, build-time only; the
 // files aren't written - their content rides into the page as teaser + deep-link).
 fun tourSrc(file: str) > str {
-    final f = io.File.open("tour/" + file, io.FileMode.read);
+    final f = io\File.open("tour/" + file, io\FileMode.read);
     final s = f.readAll();
     f.close();
     return s;
@@ -96,7 +98,7 @@ fun tourSrc(file: str) > str {
 // url-safe unpadded base64 (matching src/site/run-example.ts and the wasm's
 // applyHashSource decoder), so the code stays client-side, never hitting server/CDN.
 fun playgroundLink(root: str, src: str) > str {
-    var enc = encoding.base64urlEncode(src);
+    var enc = encoding\base64urlEncode(src);
     while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
     return root + "playground/#source=" + enc;
 }
@@ -161,7 +163,7 @@ export fun renderTourPage(site: Site) > void {
         n = n + 1;
     }
 
-    final body = template.render(`<h1>Tour</h1>
+    final body = template\render(`<h1>Tour</h1>
 <p class="lede">A guided walk through magusfiles and Buzz, step by step. Open any example in the Playground to run and edit it.</p>
     <ol class="tour-grid">
 {{{cards}}}    </ol>
@@ -169,8 +171,8 @@ export fun renderTourPage(site: Site) > void {
     final title = "Tour";
     final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
     final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], site);
-    fs.makeDirectory(site.outDir + "/tour");
-    final of = io.File.open(site.outDir + "/tour/index.html", io.FileMode.write);
+    fs\makeDirectory(site.outDir + "/tour");
+    final of = io\File.open(site.outDir + "/tour/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
     // addRecord uses the desc arg directly and parses this stub only for tags, so the
@@ -178,5 +180,5 @@ export fun renderTourPage(site: Site) > void {
     // YAML). The body text seeds a few search terms.
     site.addRecord("tour/", title, desc,
         "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
-    std.print("  tour page -> " + site.outDir + "/tour/index.html");
+    std\print("  tour page -> " + site.outDir + "/tour/index.html");
 }

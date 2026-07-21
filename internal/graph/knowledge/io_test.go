@@ -28,7 +28,9 @@ func TestAssembleIO(t *testing.T) {
 	projects := []types.TargetGraphProject{{
 		Path: "docs",
 		Nodes: []types.TargetGraphNode{
-			{Name: "gen", Outputs: []string{"spells/*.md"}, Inputs: []string{"src/foo.go"}},
+			// Inputs carry the owning project's workspace-relative path (as resolved in
+			// DescribeGraph); a same-project input's owner is this project ("docs").
+			{Name: "gen", Outputs: []string{"spells/*.md"}, Inputs: []types.InputRef{{Project: "docs", Glob: "src/foo.go"}}},
 			{Name: "ghost", Outputs: []string{"nowhere/*.md"}}, // matches no node
 			{Name: "wide", Outputs: []string{"**/*.md"}},       // too broad -> guard drops it
 		},
@@ -48,6 +50,34 @@ func TestAssembleIO(t *testing.T) {
 	// The over-broad `**/*.md` glob is dropped whole - no produces edges from `wide`.
 	for _, e := range out.Links {
 		assert.NotEqual(t, "target:docs:wide", e.Source, "a glob over the fan-out cap is dropped, not fanned out")
+	}
+}
+
+// TestAssembleIOCrossInputs: a cross-project file input links the consumes edge to the
+// file node in the OWNING project (matched by its already-workspace-relative path),
+// never re-anchored to the consumer's project path.
+func TestAssembleIOCrossInputs(t *testing.T) {
+	pathToNode := map[string]string{
+		"lib/go.mod": "file:lib/go.mod",
+	}
+	projects := []types.TargetGraphProject{{
+		Path: "consumer",
+		Nodes: []types.TargetGraphNode{
+			// A cross-project input carries the owning project's workspace-relative path
+			// (as resolved in DescribeGraph), so the file node lives in "lib", not "consumer".
+			{Name: "build", Inputs: []types.InputRef{{Project: "lib", Glob: "go.mod"}}},
+		},
+	}}
+	out := mergeAll([]Shard{assembleIO(projects, pathToNode)}).Output()
+
+	assert.True(t, hasEdge(out, "target:consumer:build", "file:lib/go.mod", types.RelationConsumes),
+		"a cross-input links the file node in the other project directly")
+	// A re-anchored path (consumer/lib/go.mod) would match nothing and mint no edge; assert
+	// no consumes edge points anywhere but the real cross-project node.
+	for _, e := range out.Links {
+		if e.Source == "target:consumer:build" {
+			assert.Equal(t, "file:lib/go.mod", e.Target, "the cross-input edge must not re-anchor to the consumer")
+		}
 	}
 }
 

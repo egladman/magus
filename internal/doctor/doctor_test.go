@@ -252,16 +252,24 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 	r := &runner{root: t.TempDir()}
 	t.Run("no redundancy is clean", func(t *testing.T) {
 		p := &types.Project{Path: ".", Sources: []string{"**/*.go"},
-			TargetSources: map[string][]string{"build": {"src/**"}}}
+			TargetInputs: map[string][]types.InputRef{"build": {{Project: ".", Glob: "src/**"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
 		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 	t.Run("per-target glob duplicating project sources is flagged", func(t *testing.T) {
 		p := &types.Project{Path: ".", Sources: []string{"src/**"},
-			TargetSources: map[string][]string{"build": {"src/**"}}}
+			TargetInputs: map[string][]types.InputRef{"build": {{Project: ".", Glob: "src/**"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
 		require.Equal(t, StatusFail, got.Status, got.Message)
 		assert.Contains(t, got.Details[0], "build")
+	})
+	t.Run("cross-project input is never flagged redundant", func(t *testing.T) {
+		// A cross input's Rel is relative to the OTHER project, so it must not be
+		// compared against this project's sources even when the strings coincide.
+		p := &types.Project{Path: "consumer", Sources: []string{"go.mod"},
+			TargetInputs: map[string][]types.InputRef{"build": {{Project: "lib", Glob: "go.mod"}}}}
+		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
+		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 }
 

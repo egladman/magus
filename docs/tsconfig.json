@@ -12,8 +12,13 @@
     "skipLibCheck": true,
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,
-    "types": []
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "@magus/textsearch": ["../libs/textsearch/src/textsearch"]
+    }
   },
+  "//paths": "The shared DOM-free search engine (libs/textsearch) is consumed as source, not an npm package: the paths alias maps @magus/textsearch straight to its entry module so tsc resolves the search-grammar import for the type-check gate. esbuild honors the same tsconfig paths when it bundles from this project cwd, so the client bundle inlines the source too (the lib has zero npm deps, so cross-dir resolution is clean); NO pnpm workspace.",
   "include": ["src/**/*.ts"],
   "//exclude": "The *.test.ts loopback-lock test imports node:test / node:assert (validated by `pnpm run test` via node --test, not by tsc). It is excluded here so the type-check gate needs no @types/node; the tested function itself lives in daemon.ts and IS checked.",
   "exclude": ["node_modules", "src/**/*.test.ts"]

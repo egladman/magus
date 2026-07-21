@@ -74,16 +74,20 @@ type Project struct {
 	Exclusive      bool
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
-	// TargetSources and TargetOutputs are per-target cache-footprint globs (project-root
-	// relative, like Sources/Outputs) declared in a target body via magus.inputs(...) /
-	// magus.outputs(...), keyed by normalized target name (DefaultTargetNameNormalizer,
-	// matching the TargetPolicies key space buildStep looks up). They ADD to that
-	// target's cache key (sources) and snapshot/replay set (outputs) - unioned onto the
-	// project-wide Sources/Outputs, never replacing them. Populated statically at load
-	// from describe.Extract.
-	TargetSources  map[string][]string
-	TargetOutputs  map[string][]string
-	ResolvedSpells []*Spell // set at the end of magus.Open; immutable thereafter
+	// TargetInputs are per-target file inputs declared in a target body via
+	// magus.inputs(...), keyed by normalized target name (DefaultTargetNameNormalizer,
+	// matching the TargetPolicies key space buildStep looks up). ONE representation
+	// covers both a same-project glob and a cross-project file: each InputRef carries its
+	// owning project (workspace-relative once resolved) and the glob/file relative to
+	// that project. They ADD to the target's cache key - buildStep folds each to a
+	// workspace-relative glob via path.Join(Project, Rel) and unions it onto the
+	// project-wide Sources, never replacing them. A cross-project input's owning project
+	// is also unioned into DependsOn so a change to it marks this project affected; a
+	// same-project input needs no such edge (it seeds by directory containment).
+	// Populated statically at load from describe.Extract.
+	TargetInputs   map[string][]InputRef
+	TargetOutputs  map[string][]string // per-target magus.outputs globs (project-root relative), added to the snapshot/replay set
+	ResolvedSpells []*Spell            // set at the end of magus.Open; immutable thereafter
 }
 
 // AllOutputs is the project's full set of declared output globs: the project-wide

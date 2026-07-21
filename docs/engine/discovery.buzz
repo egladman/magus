@@ -2,6 +2,8 @@
 // crawlers (writeSEOFiles) and llms.txt for AI agents (writeLLMsIndex, body is the pure,
 // unit-tested llmsIndexBody). Each reads the finished Site and writes one index post-walk,
 // gated on a configured base URL.
+namespace discovery;
+
 import "fs";
 import "assert";
 import "engine/types" as _;
@@ -25,8 +27,8 @@ export fun writeSEOFiles(site: Site) > void {
         body = body + "  <url>" + xmlElement("loc", site.config.baseURL + loc) + "</url>\n";
     }
     body = body + "</urlset>\n";
-    fs.writeFile(site.outDir + "/sitemap.xml", body);
-    fs.writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.config.baseURL + "sitemap.xml\n");
+    fs\writeFile(site.outDir + "/sitemap.xml", body);
+    fs\writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.config.baseURL + "sitemap.xml\n");
 }
 
 
@@ -63,7 +65,7 @@ export fun writeLLMsIndex(site: Site) > void {
         base = site.config.baseURL;
         if (base.endsWith("/") == false) { base = base + "/"; }
     }
-    fs.writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.config.title));
+    fs\writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.config.title));
 }
 
 
@@ -80,5 +82,5 @@ test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descript
         + "- [Cache](/cache/index.md): The cache model\n"
         + "- [FAQ](/faq/index.md)\n"
         + "- [Targets](/targets/index.md): What a target is\n";
-    assert.equal(llmsIndexBody(pages, "/", "magus"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
+    assert\equal(llmsIndexBody(pages, "/", "magus"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
 }

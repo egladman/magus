@@ -1,0 +1,16 @@
+{
+  "name": "@magus/textsearch",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared, DOM-free full-text search engine consumed by both the docs site and the console PWA. Holds the Datadog-style query grammar (lexer + parser + ranker), a generic entry type, and the createTextSearch factory (src/textsearch.ts) that would otherwise be duplicated across the two independent esbuild projects. Depends on NEITHER app: callers inject their own records and index source. Has NO runtime npm dependencies, so each consumer bundles it straight from source via a relative import across project dirs (there is NO pnpm workspace). devDeps are the type-check and lint gates only. pnpm (pinned in mise.toml), NOT npm; .npmrc's minimum-release-age is the supply-chain guard.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "biome": "biome check src",
+    "test": "rm -rf .testcache && esbuild $(find src -name '*.test.ts') --bundle --platform=node --format=esm --outdir=.testcache && node --test $(find .testcache -name '*.test.js')"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.3",
+    "typescript": "5.8.3"
+  }
+}

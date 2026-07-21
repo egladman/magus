@@ -2,6 +2,8 @@
 // settings dropdown, reference drawer, announcement strip, "On this page" list, and the
 // "Last updated" provenance line. These build fragments that renderPage assembles around
 // the article; they never call it, so this module sits below engine/page in the layering.
+namespace nav;
+
 import "fs";
 import "io";
 import "markdown";
@@ -28,7 +30,7 @@ export fun renderCommitFooter(path: str, site: Site) > str {
     }
     // "Last updated" line: always-visible provenance. A <small> paragraph so Pico's
     // typography sets the muted look, no custom classes. One inline line (no newlines).
-    var line = template.render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
+    var line = template\render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
         {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.config.repoURL, "full": cFull, "short": cShort});
 
     // <details> disclosure of the EARLIER commits (the latest is named above, so it is
@@ -53,7 +55,7 @@ export fun renderCommitFooter(path: str, site: Site) > str {
             }
         }
         if (earlier.len() > 0) {
-            line = line + template.render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
+            line = line + template\render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
                 {"count": earlier.len(), "earlier": earlier, "gh": site.config.repoURL, "branch": site.metaBranch, "histKey": histKey});
         }
     }
@@ -114,7 +116,7 @@ export fun renderTocList(content: str) > str {
     if (inSub) { ul = ul + "</ul>"; }
     if (haveLi) { ul = ul + "</li>"; }
     ul = ul + "</ul>";
-    return template.render(`        <p class="toc-title">On this page</p>
+    return template\render(`        <p class="toc-title">On this page</p>
         {{{ul}}}
 `, {"ul": ul});
 }
@@ -142,7 +144,7 @@ export fun renderSettingsPanel(showConsole: bool) > str {
           <p class="settings-note">{{note}}</p>
 {{{rows}}}          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
         </div>`;
-    return template.render(tmpl, {"note": note, "rows": rows});
+    return template\render(tmpl, {"note": note, "rows": rows});
 }
 
 // renderSiteNav renders the shared top bar (brand + section links + settings gear). One
@@ -183,7 +185,7 @@ export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > s
     foreach (nl in cfg.navLinks) {
         links.append({"href": root + nl.suffix, "label": nl.label, "current": active == nl.key, "blank": nl.blank});
     }
-    return template.render(tmpl, {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
+    return template\render(tmpl, {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
 }
 
 // renderReferenceDrawer returns the docs-site reference panel: the same slide-out drawer the
@@ -197,10 +199,10 @@ var _refLoaded = false;
 
 // refDocHtml renders one docs/*.md to content HTML and templatizes its root-relative links.
 export fun refDocHtml(rel: str, site: Site) > str {
-    final f = io.File.open(site.root + "/" + site.docs + "/" + rel, io.FileMode.read);
+    final f = io\File.open(site.root + "/" + site.docs + "/" + rel, io\FileMode.read);
     final md = f.readAll();
     f.close();
-    var html = renderContentHTML(markdown.toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
+    var html = renderContentHTML(markdown\toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
     while (html.indexOf("=\"../") != null) { html = html.replace("=\"../", "=\"%%ROOT%%"); }
     return html;
 }
@@ -237,7 +239,7 @@ export fun renderReferenceDrawer(root: str, site: Site) > str {
     </div>
   </aside>
 `;
-    return template.render(tmpl, {"root": root, "glossary": glossary, "conventions": conventions});
+    return template\render(tmpl, {"root": root, "glossary": glossary, "conventions": conventions});
 }
 
 // renderSiteFooter renders the shared one-line attribution footer: root-relative site links
@@ -255,7 +257,7 @@ export fun renderSiteFooter(root: str, site: Site) > str {
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
-    return template.render(tmpl, {"root": root, "gh": site.config.repoURL, "branch": site.metaBranch});
+    return template\render(tmpl, {"root": root, "gh": site.config.repoURL, "branch": site.metaBranch});
 }
 
 
@@ -273,5 +275,5 @@ export fun renderAnnouncementBar(site: Site) > str {
     </div>
   </div>
 `;
-    return template.render(tmpl, {"ver": ver, "gh": site.config.repoURL});
+    return template\render(tmpl, {"ver": ver, "gh": site.config.repoURL});
 }

@@ -1,6 +1,8 @@
 // site/release.buzz - pure transforms over releases/*.yaml: newest-first semver
 // ordering and per-artifact descriptions. Self-contained (only lib/text), so it
 // unit-tests here; the Site-coupled loaders/writers stay in render.buzz.
+namespace release;
+
 import "lib/text" as _;
 import "assert";
 
@@ -69,11 +71,11 @@ export fun artifactDesc(name: str, platform: str) > str {
 // needs no hand-rolled JSON string helpers.
 
 test "semverSortKey produces zero-padded keys for numeric semver comparison" {
-    assert.equal(semverSortKey("v0.2.0.yaml"),  "0000.0002.0000", "v0.2.0");
-    assert.equal(semverSortKey("v0.10.0.yaml"), "0000.0010.0000", "v0.10.0");
-    assert.equal(semverSortKey("v1.0.0.yaml"),  "0001.0000.0000", "v1.0.0");
+    assert\equal(semverSortKey("v0.2.0.yaml"),  "0000.0002.0000", "v0.2.0");
+    assert\equal(semverSortKey("v0.10.0.yaml"), "0000.0010.0000", "v0.10.0");
+    assert\equal(semverSortKey("v1.0.0.yaml"),  "0001.0000.0000", "v1.0.0");
     // v0.10.0 key > v0.2.0 key: newest-first sort is correct
     final key10 = semverSortKey("v0.10.0.yaml");
     final key2  = semverSortKey("v0.2.0.yaml");
-    assert.equal(key10 > key2, true, "v0.10.0 sorts after v0.2.0 in descending pass");
+    assert\equal(key10 > key2, true, "v0.10.0 sorts after v0.2.0 in descending pass");
 }

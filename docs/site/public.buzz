@@ -2,6 +2,8 @@
 // listings (renderAutoindex), the per-version release tree, the self-update
 // index.json (releaseIndexJSON), and loadReleases (releases/v*.yaml -> Site).
 // renderPublic walks it all; site_render calls loadReleases + renderPublic once each.
+namespace public;
+
 import "fs";
 import "io";
 import "os";
@@ -23,20 +25,20 @@ import "engine/page" as _;
 export fun loadReleases(site: Site) > void {
     site.releases = mut [<Release>];
     final relDir = site.root + "/releases";
-    if (os.execute(["test", "-d", relDir]) != 0) { return; }
+    if (os\execute(["test", "-d", relDir]) != 0) { return; }
     // Sort newest-first by numeric semver so v0.10.0 precedes v0.2.0 (a plain
     // lexicographic reversal gets that wrong).
     var names: [str] = mut [<str>];
-    foreach (name in fs.list(relDir)) {
+    foreach (name in fs\list(relDir)) {
         if (name.endsWith(".yaml")) { names.append(name); }
     }
     final sorted = sortNamesSemverDesc(names);
     foreach (name in sorted) {
         final path = relDir + "/" + name;
-        final f = io.File.open(path, io.FileMode.read);
+        final f = io\File.open(path, io\FileMode.read);
         final src = f.readAll();
         f.close();
-        final doc = serialize.Boxed.init(yaml.parse(src));
+        final doc = serialize\Boxed.init(yaml\parse(src));
         final ver = doc.q("version").stringValue();
         final date = doc.q("date").stringValue();
         final body = doc.q("body").stringValue();
@@ -150,14 +152,14 @@ fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str, site: Sit
         var sk = e["size"].len(); while (sk < sizeW) { padSize = " " + padSize; sk = sk + 1; }
         rows = rows + nameCell + "  " + padMod + "  " + padSize + "  " + e["desc"] + "\n";
     }
-    final body = template.render(`<h1>Index of {{displayPath}}</h1>
+    final body = template\render(`<h1>Index of {{displayPath}}</h1>
 <pre class="autoindex"><span class="autoindex-head">{{{head}}}</span>
 <hr>
 {{{parent}}}{{{rows}}}<hr>
 </pre>
 `, {"displayPath": displayPath, "head": head, "parent": parent, "rows": rows});
 
-    fs.makeDirectory(site.outDir + "/" + path);
+    fs\makeDirectory(site.outDir + "/" + path);
     // srcMarker matches the written dir depth so rootPrefix computes the right "../"
     // climb (public/x.md -> "../", public/atom/x.md -> "../../").
     final srcMarker = path + "/_index.md";
@@ -172,7 +174,7 @@ fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str, site: Sit
         site.metaCommits[site.metaPrefix + srcMarker] = site.metaFull + "|" + site.metaShort + "|" + site.metaStamp;
     }
     final doc = renderPage("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/", "", mut [], site);
-    final of = io.File.open(site.outDir + "/" + path + "/index.html", io.FileMode.write);
+    final of = io\File.open(site.outDir + "/" + path + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
     // Register the URL for the sitemap and mark it written, so pruneStaleOutputs
@@ -202,7 +204,7 @@ fun releaseIndexJSON(site: Site) > str {
         releases.append(entry);
     }
     final root: {str: any} = mut {"schema_version": 1, "releases": releases};
-    return serialize.jsonEncode(serialize.Boxed.init(root)) + "\n";
+    return serialize\jsonEncode(serialize\Boxed.init(root)) + "\n";
 }
 
 
@@ -272,7 +274,7 @@ export fun renderPublic(site: Site) > void {
     // at site-build time). Track in writtenPaths so pruneStaleOutputs keeps it.
     if (site.releases.len() > 0) {
         final idxJson = releaseIndexJSON(site);
-        fs.writeFile(site.outDir + "/public/release/index.json", idxJson);
+        fs\writeFile(site.outDir + "/public/release/index.json", idxJson);
         site.writtenPaths["public/release/index.json"] = true;
     }
 
@@ -307,15 +309,15 @@ test "releaseIndexJSON emits the slim self-update manifest and omits the changel
     final got = releaseIndexJSON(s);
     // Probe via indexOf so literal braces need no escaping. The manifest carries
     // exactly what a consumer reads: schema_version, version, artifacts.
-    assert.equal(got.indexOf("\"schema_version\":1") != null, true, "schema_version:1 present");
-    assert.equal(got.indexOf("\"version\":\"v0.2.0\"") != null, true, "version present");
-    assert.equal(got.indexOf("\"name\":\"magus_v0.2.0_linux_amd64.tar.gz\"") != null, true, "artifact name present");
-    assert.equal(got.indexOf("\"platform\":\"linux/amd64\"") != null, true, "artifact platform present");
+    assert\equal(got.indexOf("\"schema_version\":1") != null, true, "schema_version:1 present");
+    assert\equal(got.indexOf("\"version\":\"v0.2.0\"") != null, true, "version present");
+    assert\equal(got.indexOf("\"name\":\"magus_v0.2.0_linux_amd64.tar.gz\"") != null, true, "artifact name present");
+    assert\equal(got.indexOf("\"platform\":\"linux/amd64\"") != null, true, "artifact platform present");
     // Changelog prose (notes/body) and date are excluded - they ship in the Atom
     // feed/YAML, nothing reads them here.
-    assert.equal(got.indexOf("\"notes\"") != null, false, "notes omitted");
-    assert.equal(got.indexOf("\"body\"") != null, false, "body omitted");
-    assert.equal(got.indexOf("\"date\"") != null, false, "date omitted");
+    assert\equal(got.indexOf("\"notes\"") != null, false, "notes omitted");
+    assert\equal(got.indexOf("\"body\"") != null, false, "body omitted");
+    assert\equal(got.indexOf("\"date\"") != null, false, "date omitted");
     // yanked is omitted when false (matching the reader's omitempty).
-    assert.equal(got.indexOf("yanked") != null, false, "yanked absent when false");
+    assert\equal(got.indexOf("yanked") != null, false, "yanked absent when false");
 }

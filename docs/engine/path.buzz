@@ -2,11 +2,13 @@
 // are the SSG's own files rather than content. Pure (os only, no Site) so it stays a leaf
 // that both engine/types.buzz and render.buzz flat-import without a cycle. The
 // generated-name lists come from Config (generatorDirs/generatorFiles), not hardcoded.
+namespace path;
+
 import "os";
 
 // True if path is a directory.
 export fun isDirectory(path: str) > bool {
-    return os.execute(["test", "-d", path]) == 0;
+    return os\execute(["test", "-d", path]) == 0;
 }
 
 // isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than

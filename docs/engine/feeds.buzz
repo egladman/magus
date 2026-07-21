@@ -2,6 +2,8 @@
 // releases feed. Each reads the finished Site and writes an XML feed under
 // gen/public/atom/. Flat-imported by render.buzz; each writer takes a `site: Site`
 // and runs once, post-walk, gated on a configured base URL.
+namespace feeds;
+
 import "fs";
 import "engine/types" as _;
 import "lib/text" as _;
@@ -37,8 +39,8 @@ export fun renderBlogAtom(site: Site) > void {
             + "  </entry>\n";
     }
     body = body + "</feed>\n";
-    fs.makeDirectory(site.outDir + "/public/atom");
-    fs.writeFile(site.outDir + "/public/atom/blog.atom.xml", body);
+    fs\makeDirectory(site.outDir + "/public/atom");
+    fs\writeFile(site.outDir + "/public/atom/blog.atom.xml", body);
 }
 
 
@@ -70,6 +72,6 @@ export fun renderReleasesAtom(site: Site) > void {
             + "  </entry>\n";
     }
     body = body + "</feed>\n";
-    fs.makeDirectory(site.outDir + "/public/atom");
-    fs.writeFile(site.outDir + "/public/atom/releases.atom.xml", body);
+    fs\makeDirectory(site.outDir + "/public/atom");
+    fs\writeFile(site.outDir + "/public/atom/releases.atom.xml", body);
 }

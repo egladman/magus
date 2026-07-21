@@ -4,6 +4,8 @@
 // modules flat-imported below; this file wires them and holds the Site-coupled steps that
 // must sit at the root. A flat sibling of magusfile.buzz, resolvable via buzz's
 // project-relative import search paths.
+namespace render;
+
 import "markdown";
 import "fs";
 import "io";
@@ -82,7 +84,7 @@ import "site/config" as _;
 // under blog/.
 fun walkBlog(site: Site) > void {
     if (isDirectory(site.root + "/" + site.blog) == false) { return; }
-    foreach (name in fs.list(site.root + "/" + site.blog)) {
+    foreach (name in fs\list(site.root + "/" + site.blog)) {
         if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
             renderBlogPost(name, site);
         }
@@ -96,7 +98,7 @@ fun walk(rel: str, site: Site) > void {
     var dir = site.root + "/" + site.docs;
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
 
-    foreach (name in fs.list(dir)) {
+    foreach (name in fs\list(dir)) {
         var childRel = name;
         if (rel != "") { childRel = rel + "/" + name; }
 
@@ -133,7 +135,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     site.blogPosts = mut [<BlogPost>];
     site.hasBlogPosts = false;
     if (isDirectory(site.root + "/" + site.blog)) {
-        foreach (name in fs.list(site.root + "/" + site.blog)) {
+        foreach (name in fs\list(site.root + "/" + site.blog)) {
             if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
                 site.hasBlogPosts = true;
             }
@@ -149,8 +151,8 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // post, a dropped alias, a release out of CHANGELOG.md. Committed-but-not-rendered
     // artifacts (the playground WASM/editor bundle) persist untouched, since nothing here
     // writes or deletes them.
-    fs.makeDirectory(site.outDir);
-    std.print("generating site from " + site.root + "/" + site.docs + "/ -> " + site.outDir + "/");
+    fs\makeDirectory(site.outDir);
+    std\print("generating site from " + site.root + "/" + site.docs + "/ -> " + site.outDir + "/");
 
     // Copy static assets the root README references (images, badges). Scoped delete-
     // then-recopy: cp -r alone wouldn't drop a since-deleted source image, so the copied
@@ -158,8 +160,8 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // hljs.js) - they live in gen/assets, not site.root/assets, so a blind wipe would
     // delete them on `serve` (which re-renders without rebuilding bundles); generate
     // rebuilds them afterward anyway.
-    os.execute(["sh", "-c", "mkdir -p " + site.outDir + "/assets && find " + site.outDir + "/assets -mindepth 1 -maxdepth 1 ! -name mermaid.js ! -name hljs.js -exec rm -rf \{\} +"]);
-    os.execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets/. " + site.outDir + "/assets/ || true"]);
+    os\execute(["sh", "-c", "mkdir -p " + site.outDir + "/assets && find " + site.outDir + "/assets -mindepth 1 -maxdepth 1 ! -name mermaid.js ! -name hljs.js -exec rm -rf \{\} +"]);
+    os\execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets/. " + site.outDir + "/assets/ || true"]);
 
     // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
     // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
@@ -167,21 +169,21 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // gen/assets/mermaid.js bundle (built by build-mermaid); esbuild leaves dynamic
     // imports external. CSS is minified per-file, not bundled. Pinned esbuild ->
     // byte-stable output, so the drift gate holds.
-    os.execute(["sh", "-c", "esbuild src/styles/site.css --minify --outfile=" + site.outDir + "/site.css"]);
+    os\execute(["sh", "-c", "esbuild src/styles/site.css --minify --outfile=" + site.outDir + "/site.css"]);
     // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
     // layout), loaded by /dashboard/, /logs/, /graph/ and the playground status bar but NOT
     // the docs corpus. Minified to gen root, enumerated in the precache/allowlist next to
     // site.css.
-    os.execute(["sh", "-c", "esbuild src/styles/console.css --minify --outfile=" + site.outDir + "/console.css"]);
+    os\execute(["sh", "-c", "esbuild src/styles/console.css --minify --outfile=" + site.outDir + "/console.css"]);
     // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
     // drawer) used by BOTH docs pages and console apps. Separate from console.css so the docs
     // corpus can load only this. Gen-root, precached like the others.
-    os.execute(["sh", "-c", "esbuild src/styles/ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
-    os.execute(["sh", "-c", "esbuild src/styles/theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
+    os\execute(["sh", "-c", "esbuild src/styles/ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
+    os\execute(["sh", "-c", "esbuild src/styles/theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
     // The console surfaces (graph/logs/dashboard/activity) live in the standalone console/
     // project (its own build, deployed to /console/); the docs site renders none of them.
-    os.execute(["sh", "-c", "esbuild src/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
-    os.execute(["sh", "-c", "esbuild src/site/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
+    os\execute(["sh", "-c", "esbuild src/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
+    os\execute(["sh", "-c", "esbuild src/site/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
     // buzz.wasm, wasm_exec.js, and editor.js are committed in gen/playground/ - rebuilt in
     // place by build-playground / build-playground-editor, never by this render - so
@@ -234,7 +236,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // Flat {url, title, text, tags, description?} record per page; search.js fetches it
     // lazily on first focus. serialize sorts keys and the walk order is fs.list's (sorted),
     // so the file is byte-stable across runs.
-    fs.writeFile(site.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
+    fs\writeFile(site.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
 
     // Built last: the cache version digests the precached assets (incl. search-index.json
     // just above), so every one of them must already exist.
@@ -262,7 +264,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // Parity gate: no previously-shipped URL may silently start 404-ing.
     abandonedLinkCheck(site);
 
-    std.print("done");
+    std\print("done");
     // Hand the populated state back; the caller threads it into updateUrlLock (no
     // module-global carries it between the two calls).
     return site;

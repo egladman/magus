@@ -14,54 +14,28 @@
 // a bonus at each level). If nothing matches exactly, a typo-tolerant subsequence
 // pass on titles rescues near-misses.
 
-// One record in the search index (gen/search-index.json), with a lazily-populated
-// lowercased-fields cache hung off it (_lc) so re-scans don't re-lowercase.
-interface LcFields {
-  title: string;
-  tags: string[];
-  tagsJoined: string;
-  desc: string;
-  text: string;
-  hay: string;
-}
-interface SearchEntry {
+// The search grammar - the lexer, parser, and ranker - lives in the shared, DOM-free
+// @magus/textsearch engine, the one source of truth this docs site and the console both
+// consume (no more copy of the parser per app). This module is the docs site's DOM glue
+// around it: the toolbar dropdown, the /search/ page, the token chips, and the tag facets.
+// The docs site injects its OWN index into runSearch (fetched below); buildQuery/Token
+// drive the chip preview (the raw token stream, which describeQuery's AST walk would
+// collapse away); runSearch/getPositiveTerms do the matching and highlighting.
+import {
+  buildQuery,
+  getPositiveTerms,
+  runSearch,
+  type TextSearchEntry,
+  type Token,
+} from "@magus/textsearch";
+
+// One record in the site's search index (gen/search-index.json). It carries a url (for the
+// result link) on top of the fields the shared ranker reads; the engine ignores url and
+// hands it back on each result. This is the docs site's OWN record type - @magus/textsearch
+// is app-agnostic and never names it.
+interface SearchEntry extends TextSearchEntry {
   url: string;
-  title: string;
-  text?: string;
-  tags?: string[];
-  description?: string;
-  _lc?: LcFields;
 }
-
-// One lexer token. Structural tokens ("(", ")", operators) carry only `t`; term
-// tokens additionally carry the parsed field/value/phrase/wildcard bits.
-interface Token {
-  t: "(" | ")" | "and" | "or" | "not" | "term";
-  field?: string | null;
-  value?: string;
-  phrase?: boolean;
-  wildcard?: boolean;
-  display?: string;
-}
-
-// The parsed query AST: a discriminated union over `op`.
-interface TermNode {
-  op: "term";
-  field: string | null;
-  value: string;
-  phrase: boolean;
-  wildcard: boolean;
-  re: RegExp | null;
-}
-interface NotNode {
-  op: "not";
-  kid: QueryNode;
-}
-interface GroupNode {
-  op: "and" | "or";
-  kids: QueryNode[];
-}
-type QueryNode = TermNode | NotNode | GroupNode;
 
 export function initSearch(): void {
   const main = document.querySelector("main.container") || document.querySelector("main");
@@ -200,343 +174,6 @@ export function initSearch(): void {
     return String(s).replace(/[&<>"]/g, (c) => HTML_ESCAPES[c]);
   }
 
-  function wordStart(hay: string, i: number): boolean {
-    return i === 0 || /[^a-z0-9]/.test(hay.charAt(i - 1));
-  }
-
-  // True if needle's chars appear in order within hay (typo-tolerant fallback).
-  function subseq(needle: string, hay: string): boolean {
-    let j = 0;
-    for (let i = 0; i < hay.length && j < needle.length; i++) {
-      if (hay.charAt(i) === needle.charAt(j)) j++;
-    }
-    return j === needle.length;
-  }
-
-  // Lowercased fields for one record, computed once and cached (search re-scans every
-  // record on every keystroke, so lowercasing per-call was pure waste). tags stays an
-  // array (tag: needs whole-tag equality); tagsJoined + hay serve substring matching.
-  function lc(e: SearchEntry): LcFields {
-    if (e._lc) return e._lc;
-    const title = (e.title || "").toLowerCase();
-    const tags = (e.tags || []).map((t) => String(t).toLowerCase());
-    const joined = tags.join(" ");
-    const desc = (e.description || "").toLowerCase();
-    const text = (e.text || "").toLowerCase();
-    const fields: LcFields = {
-      title,
-      tags,
-      tagsJoined: joined,
-      desc,
-      text,
-      hay: title + " " + joined + " " + desc + " " + text,
-    };
-    e._lc = fields;
-    return fields;
-  }
-
-  // A wildcard value ("build*", "*cache*") compiles to a regex: escape regex specials,
-  // turn * into .*, anchor whole-tag matches (^...$) but leave field/free-text loose.
-  function buildWild(value: string, field: string | null): RegExp {
-    const body = value.replace(/[.*+?^${}()|[\]\\]/g, (ch) => (ch === "*" ? ".*" : "\\" + ch));
-    const anchored = field === "tag" || field === "tags";
-    return new RegExp(anchored ? "^" + body + "$" : body, "i");
-  }
-
-  // Tokenize a raw query into (, ), AND, OR, NOT, and term objects. Datadog-style:
-  // uppercase AND/OR/NOT are operators, a leading - is NOT, field:value scopes a term,
-  // "quoted" is a phrase (or a multi-word field value), and field:(...) distributes the
-  // field over the bare terms inside via a field stack. Lenient by construction.
-  function tokenize(raw: string): Token[] {
-    const toks: Token[] = [],
-      fieldStack: (string | null)[] = [];
-    let i = 0;
-    const n = raw.length;
-    function curField(): string | null {
-      return fieldStack.length ? fieldStack[fieldStack.length - 1] : null;
-    }
-    function isSpace(c: string): boolean {
-      return c === " " || c === "\t" || c === "\n" || c === "\r";
-    }
-    while (i < n) {
-      const c = raw.charAt(i);
-      if (isSpace(c)) {
-        i++;
-        continue;
-      }
-      if (c === "(") {
-        toks.push({ t: "(" });
-        fieldStack.push(null);
-        i++;
-        continue;
-      }
-      if (c === ")") {
-        toks.push({ t: ")" });
-        if (fieldStack.length) fieldStack.pop();
-        i++;
-        continue;
-      }
-      if (c === "-" && i + 1 < n && !isSpace(raw.charAt(i + 1))) {
-        toks.push({ t: "not" });
-        i++;
-        continue;
-      }
-      // Optional field: prefix (word chars then a colon).
-      let field: string | null = null,
-        j = i;
-      while (j < n && /[a-z0-9_.\-]/i.test(raw.charAt(j))) j++;
-      if (j < n && raw.charAt(j) === ":" && j > i) {
-        field = raw.slice(i, j).toLowerCase();
-        i = j + 1;
-        if (i < n && raw.charAt(i) === "(") {
-          toks.push({ t: "(" });
-          fieldStack.push(field);
-          i++;
-          continue;
-        }
-      }
-      // Value: quoted or bare (stopping at whitespace/parens).
-      let value: string,
-        phrase = false;
-      if (i < n && raw.charAt(i) === '"') {
-        let end = raw.indexOf('"', i + 1);
-        if (end === -1) end = n;
-        value = raw.slice(i + 1, end);
-        phrase = field === null;
-        i = end + 1;
-      } else {
-        const vs = i;
-        while (i < n && !isSpace(raw.charAt(i)) && raw.charAt(i) !== "(" && raw.charAt(i) !== ")")
-          i++;
-        value = raw.slice(vs, i);
-      }
-      if (value === "" && field === null) continue;
-      if (field === null && !phrase) {
-        const up = value.toUpperCase();
-        if (up === "AND") {
-          toks.push({ t: "and" });
-          continue;
-        }
-        if (up === "OR") {
-          toks.push({ t: "or" });
-          continue;
-        }
-        if (up === "NOT") {
-          toks.push({ t: "not" });
-          continue;
-        }
-      }
-      toks.push({
-        t: "term",
-        field: field !== null ? field : curField(),
-        value: value.toLowerCase(),
-        phrase: phrase,
-        wildcard: value.indexOf("*") !== -1,
-        display: value,
-      });
-    }
-    return toks;
-  }
-
-  // Recursive-descent parse into an AST. Precedence: NOT > AND (implicit or explicit) >
-  // OR. Leaves precompile their wildcard regex. Tolerant of stray/unbalanced tokens.
-  function parse(toks: Token[]): QueryNode | null {
-    let pos = 0;
-    function peek(): Token | undefined {
-      return toks[pos];
-    }
-    function parseOr(): QueryNode | null {
-      const kids = [parseAnd()];
-      let tk;
-      while ((tk = peek()) && tk.t === "or") {
-        pos++;
-        kids.push(parseAnd());
-      }
-      const k = kids.filter((x): x is QueryNode => x !== null);
-      return k.length === 1 ? k[0] : k.length ? { op: "or", kids: k } : null;
-    }
-    function parseAnd(): QueryNode | null {
-      const kids = [parseNot()];
-      let tk;
-      while ((tk = peek()) && tk.t !== "or" && tk.t !== ")") {
-        if (tk.t === "and") {
-          pos++;
-          const next = peek();
-          if (!next || next.t === "or" || next.t === ")") break;
-        }
-        kids.push(parseNot());
-      }
-      const k = kids.filter((x): x is QueryNode => x !== null);
-      return k.length === 1 ? k[0] : k.length ? { op: "and", kids: k } : null;
-    }
-    function parseNot(): QueryNode | null {
-      const tk = peek();
-      if (tk && tk.t === "not") {
-        pos++;
-        const k = parseNot();
-        return k ? { op: "not", kid: k } : null;
-      }
-      return parsePrimary();
-    }
-    function parsePrimary(): QueryNode | null {
-      const tk = peek();
-      if (!tk) return null;
-      if (tk.t === "(") {
-        pos++;
-        const inner = parseOr();
-        const close = peek();
-        if (close && close.t === ")") pos++;
-        return inner;
-      }
-      if (tk.t === "term") {
-        pos++;
-        const value = tk.value ?? "";
-        const field = tk.field ?? null;
-        return {
-          op: "term",
-          field,
-          value,
-          phrase: tk.phrase ?? false,
-          wildcard: tk.wildcard ?? false,
-          re: tk.wildcard ? buildWild(value, field) : null,
-        };
-      }
-      pos++; // stray ) / operator — skip and continue
-      return parsePrimary();
-    }
-    return parseOr();
-  }
-
-  // Build the parsed query once: token stream (drives the chip preview) + AST.
-  function buildQuery(raw: string): { tokens: Token[]; ast: QueryNode | null } {
-    const tokens = tokenize(raw);
-    return { tokens: tokens, ast: parse(tokens) };
-  }
-
-  // Does one term leaf match a record? tag = whole-tag equality (or regex); other fields
-  // are substring on that field; a free-text term matches the combined haystack.
-  function matchLeaf(leaf: TermNode, e: SearchEntry): boolean {
-    const L = lc(e);
-    if (leaf.field === "tag" || leaf.field === "tags") {
-      for (let i = 0; i < L.tags.length; i++) {
-        if (leaf.wildcard && leaf.re ? leaf.re.test(L.tags[i]) : L.tags[i] === leaf.value)
-          return true;
-      }
-      return false;
-    }
-    const hay =
-      leaf.field === "title"
-        ? L.title
-        : leaf.field === "description" || leaf.field === "desc"
-          ? L.desc
-          : leaf.field === "text" || leaf.field === "body"
-            ? L.text
-            : L.hay;
-    return leaf.wildcard && leaf.re ? leaf.re.test(hay) : hay.indexOf(leaf.value) !== -1;
-  }
-
-  // Boolean inclusion: evaluate the AST against a record. Missing node = matches all.
-  function evalNode(node: QueryNode | null, e: SearchEntry): boolean {
-    if (!node) return true;
-    if (node.op === "term") return matchLeaf(node, e);
-    if (node.op === "not") return !evalNode(node.kid, e);
-    if (node.op === "and") {
-      for (let i = 0; i < node.kids.length; i++) if (!evalNode(node.kids[i], e)) return false;
-      return true;
-    }
-    if (node.op === "or") {
-      for (let j = 0; j < node.kids.length; j++) if (evalNode(node.kids[j], e)) return true;
-      return false;
-    }
-    return true;
-  }
-
-  // Relevance weight of one positive term leaf (field-weighted, mirroring the old
-  // scoring: title > tags > description > body, with a word-start / title-start bonus).
-  function scoreLeaf(leaf: TermNode, e: SearchEntry): number {
-    const L = lc(e),
-      v = leaf.value;
-    function hit(hay: string, base: number, ws: number): number {
-      if (leaf.wildcard) return leaf.re && leaf.re.test(hay) ? base : 0;
-      const idx = hay.indexOf(v);
-      return idx === -1 ? 0 : base + (wordStart(hay, idx) ? ws : 0);
-    }
-    if (leaf.field === "tag" || leaf.field === "tags") return matchLeaf(leaf, e) ? 8 : 0;
-    if (leaf.field === "title") {
-      let s = hit(L.title, 10, 4);
-      if (!leaf.wildcard && L.title.indexOf(v) === 0) s += 4;
-      return s;
-    }
-    if (leaf.field === "description" || leaf.field === "desc") return hit(L.desc, 4, 2);
-    if (leaf.field === "text" || leaf.field === "body") return hit(L.text, 2, 1);
-    let free =
-      hit(L.title, 10, 4) + hit(L.tagsJoined, 8, 3) + hit(L.desc, 4, 2) + hit(L.text, 2, 1);
-    if (!leaf.wildcard && L.title.indexOf(v) === 0) free += 4;
-    return free;
-  }
-
-  // Rank = sum of positively-reachable leaf weights (an even number of NOTs above it),
-  // so OR/NOT decide inclusion while the positive hits that landed decide ordering.
-  function scoreAst(node: QueryNode | null, e: SearchEntry, neg: boolean): number {
-    if (!node) return 0;
-    if (node.op === "term") return neg ? 0 : scoreLeaf(node, e);
-    if (node.op === "not") return scoreAst(node.kid, e, !neg);
-    if (node.op === "and" || node.op === "or") {
-      let s = 0;
-      for (let i = 0; i < node.kids.length; i++) s += scoreAst(node.kids[i], e, neg);
-      return s;
-    }
-    return 0;
-  }
-
-  // Positive (non-negated) leaf values, for snippet/description highlighting.
-  function positiveTerms(node: QueryNode | null, neg: boolean, acc: string[] = []): string[] {
-    if (!node) return acc;
-    if (node.op === "term") {
-      if (!neg && node.value) acc.push(node.value);
-      return acc;
-    }
-    if (node.op === "not") return positiveTerms(node.kid, !neg, acc);
-    node.kids.forEach((k) => {
-      positiveTerms(k, neg, acc);
-    });
-    return acc;
-  }
-
-  function runSearch(raw: string): { e: SearchEntry; s: number }[] {
-    if (!index) return [];
-    const q = buildQuery(raw);
-    // Need at least one positive term (a bare -exclusion or pure operators match nothing,
-    // matching the old behaviour and avoiding a stray "-" dumping the whole corpus).
-    const pos = positiveTerms(q.ast, false);
-    if (!pos.length) return [];
-    const out: { e: SearchEntry; s: number }[] = [];
-    for (let i = 0; i < index.length; i++) {
-      if (evalNode(q.ast, index[i])) out.push({ e: index[i], s: scoreAst(q.ast, index[i], false) });
-    }
-    // Typo-tolerant fallback: only when the query is a plain AND of bare words that found
-    // nothing (no fields/operators/parens), rescue near-misses via subsequence on titles.
-    const simple =
-      q.tokens.length > 0 &&
-      q.tokens.every((t) => t.t === "term" && t.field === null && !t.phrase && !t.wildcard);
-    if (!out.length && simple) {
-      index.forEach((e) => {
-        let ok = true,
-          sc = 0;
-        for (let k = 0; k < pos.length; k++) {
-          if (subseq(pos[k], lc(e).title)) sc += 2;
-          else {
-            ok = false;
-            break;
-          }
-        }
-        if (ok) out.push({ e: e, s: sc });
-      });
-    }
-    out.sort((a, b) => b.s - a.s || a.e.title.length - b.e.title.length);
-    return out;
-  }
-
   // sel indexes the arrow-key-highlighted option within the rendered results
   // (-1 = none). highlight() reflects it into the DOM/ARIA; render() resets it.
   let sel = -1;
@@ -613,10 +250,12 @@ export function initSearch(): void {
       setExpanded(false);
       return;
     } // re-renders once loaded
+    // Capture the now-non-null index before any call that could invalidate the narrowing;
+    // runSearch takes the corpus as its first argument now that it lives in the shared lib.
+    const res = runSearch(index, query);
     results.hidden = false;
     setExpanded(true);
 
-    const res = runSearch(query);
     if (!res.length) {
       const empty = document.createElement("li");
       empty.className = "search-empty";
@@ -631,15 +270,15 @@ export function initSearch(): void {
       const li = document.createElement("li");
       li.setAttribute("role", "presentation"); // the <a> is the listbox option, not the <li>
       const a = document.createElement("a");
-      a.href = ROOT + r.e.url;
+      a.href = ROOT + r.entry.url;
       a.id = "search-opt-" + i;
       a.setAttribute("role", "option");
       a.innerHTML =
         '<span class="search-title">' +
-        escapeHtml(r.e.title) +
+        escapeHtml(r.entry.title) +
         "</span>" +
         '<span class="search-url">' +
-        escapeHtml(r.e.url) +
+        escapeHtml(r.entry.url) +
         "</span>";
       li.appendChild(a);
       results.appendChild(li);
@@ -804,23 +443,24 @@ export function initSearch(): void {
         .map((tk) => {
           if (tk.t === "(") return '<span class="qbracket">(</span>';
           if (tk.t === ")") return '<span class="qbracket">)</span>';
-          if (tk.t === "and" || tk.t === "or" || tk.t === "not")
-            return '<span class="qop">' + tk.t.toUpperCase() + "</span>";
+          // Anything not a term is an operator (and/or/not); a positive "term" test below is
+          // what narrows tk to the term variant so its field/phrase/display are readable.
+          if (tk.t !== "term") return '<span class="qop">' + tk.t.toUpperCase() + "</span>";
           if (tk.field)
             return (
               '<span class="qchip qchip-field">' +
               escapeHtml(tk.field) +
               ":<b>" +
-              escapeHtml(tk.display ?? "") +
+              escapeHtml(tk.display) +
               "</b></span>"
             );
           if (tk.phrase)
             return (
               '<span class="qchip qchip-phrase">&quot;' +
-              escapeHtml(tk.display ?? "") +
+              escapeHtml(tk.display) +
               "&quot;</span>"
             );
-          return '<span class="qchip">' + escapeHtml(tk.display ?? "") + "</span>";
+          return '<span class="qchip">' + escapeHtml(tk.display) + "</span>";
         })
         .join("");
     }
@@ -828,7 +468,7 @@ export function initSearch(): void {
     function renderPage(): void {
       const query = input.value.trim();
       syncUrl(query);
-      renderChips(buildQuery(query).tokens);
+      renderChips(buildQuery(query));
       list.innerHTML = "";
       if (!query) {
         status.textContent = "Type a query, or click a tag on any page.";
@@ -841,15 +481,15 @@ export function initSearch(): void {
         });
         return;
       }
-      const res = runSearch(query);
+      const res = runSearch(index, query);
       if (!res.length) {
         status.textContent = "No matches for " + query;
         return;
       }
       status.textContent = res.length + (res.length === 1 ? " result" : " results");
-      const terms = positiveTerms(buildQuery(query).ast, false);
+      const terms = getPositiveTerms(query);
       res.forEach((r) => {
-        const e = r.e;
+        const e = r.entry;
         const li = document.createElement("li");
         let html =
           '<a class="result-main" href="' +

@@ -2,6 +2,8 @@
 // point: engine/ reads everything site-specific through the Site's Config, so
 // retargeting this SSG means a different Config here. Nothing under engine/ imports
 // this; render.buzz injects magusConfig() into the Site once at build start.
+namespace config;
+
 import "engine/types" as _;
 
 // Nav links in display order; Console opens blank (new tab) - it is a standalone app,
