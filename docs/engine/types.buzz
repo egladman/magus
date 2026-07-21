@@ -1,4 +1,4 @@
-// render_types.buzz - the docs build's data model: the Site build-state object plus
+// engine/types.buzz - the docs build's data model: the Site build-state object plus
 // the small record types (BlogPost, DocPage, Release) the walk fills in. Site owns the
 // state-management and per-page navigation logic that only needs the leaf helpers below
 // (search-index bookkeeping, alias collection, the relatedness corpus, breadcrumb /
@@ -19,17 +19,36 @@ import "lib/csp" as _;
 import "engine/meta" as _;
 import "engine/path" as _;
 
-// Site-wide config constants, shared here (the common foundation every module imports)
-// so any writer module can reference them without a cycle back to render.buzz.
-export final GH   = "https://github.com/egladman/magus";
+// NavLink is one top-nav entry. suffix is appended to the per-page root prefix to
+// form the href (so it is host- and depth-independent); key is what renderSiteNav
+// compares against its `active` argument to mark the current section; blank flags a
+// link that opens in a new tab (an app that lives outside the docs, like the console).
+export object NavLink {
+    suffix: str = "",
+    label: str = "",
+    key: str = "",
+    blank: bool = false,
+}
 
-// SITE_URL is the site's public base (with trailing slash), used for the canonical
-// link, sitemap, and (later) the Atom feeds. Set non-empty to enable them; leave ""
-// to ship those surfaces dark until the host is confirmed. SITE_DESC is the
-// belt-and-suspenders page description when a page has neither a frontmatter
-// description nor a derivable first paragraph.
-export final SITE_URL  = "https://eli.gladman.cc/magus/";
-export final SITE_DESC = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.";
+// Config is the whole site-specific surface the engine renders against - the single
+// swap point that makes this SSG reusable. The engine reads it only through
+// Site.config; nothing in engine/ hardcodes a URL, a nav link, or a title. The
+// concrete magus value lives in site/config.buzz and is injected by render.buzz.
+//
+// baseURL is the public base (with trailing slash); leave it "" to ship the SEO
+// files, Atom feeds, and PWA manifest dark until the host is confirmed. description
+// is the belt-and-suspenders page description when a page has neither a frontmatter
+// description nor a derivable first paragraph. generatorDirs/generatorFiles name the
+// generated outputs the source walk skips so they never leak in as content.
+export object Config {
+    baseURL: str = "",
+    title: str = "",
+    description: str = "",
+    repoURL: str = "",
+    navLinks: [NavLink] = mut [<NavLink>],
+    generatorDirs: [str] = mut [<str>],
+    generatorFiles: [str] = mut [<str>],
+}
 
 // BlogPost is one blog entry's index record, built by renderBlogPost() as the walk
 // visits each post; the blog index, the Atom feed, and the prev/next pager consume
@@ -93,6 +112,12 @@ export object Site {
     docs: str = "",
     blog: str = "",
     outDir: str = "",
+
+    // The site-specific configuration this build renders against, injected once by
+    // site_render() from site/config.buzz. Immutable input, kept beside the mutable
+    // build state so every engine function that already threads a Site reaches its
+    // baseURL/title/nav/generator dirs without a global.
+    config: Config = Config{},
 
     // Per-page commit metadata, loaded lazily by loadMeta() at render time (NOT at
     // magusfile load - these shell out to git, and a magusfile is parsed on every
@@ -255,10 +280,10 @@ export object Site {
                 // Skip the SSG's own root children (node_modules/gen/src/tour) - same skip
                 // as walk(), only at the docs root (rel == ""), so metadata collection
                 // matches what actually renders. See isGeneratorDir for why root-only.
-                if (rel == "" and isGeneratorDir(name)) { continue; }
+                if (rel == "" and isGeneratorDir(name, this.config.generatorDirs)) { continue; }
                 this.collectDocPages(childRel);
             } else {
-                if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name) == false)) { this.collectDocPage(childRel); }
+                if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, this.config.generatorFiles) == false)) { this.collectDocPage(childRel); }
             }
         }
     }

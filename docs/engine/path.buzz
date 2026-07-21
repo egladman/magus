@@ -1,8 +1,9 @@
-// render_path.buzz - filesystem/walk predicates the content walks share: whether a
+// engine/path.buzz - filesystem/walk predicates the content walks share: whether a
 // path is a directory, and which docs-root children belong to the SSG itself rather
 // than the docs content. Pure (os only, no Site), so it is a leaf module that both
-// render_types.buzz (Site.collectDocPages) and render.buzz (walk/walkBlog) flat-import
-// (`import "engine/path" as _`) without an import cycle.
+// engine/types.buzz (Site.collectDocPages) and render.buzz (walk/walkBlog) flat-import
+// (`import "engine/path" as _`) without an import cycle. The generated-name lists are
+// passed in from Config (generatorDirs/generatorFiles), not hardcoded here.
 import "os";
 
 // True if path is a directory.
@@ -21,8 +22,11 @@ export fun isDirectory(path: str) > bool {
 // every depth, so a content subdir that happened to share one of these names would still
 // be walked. Real content subdirs at the root (reference/, spells/, targets/, codes/,
 // manpage/, ...) are not listed and are walked as before.
-export fun isGeneratorDir(name: str) > bool {
-    return name == "node_modules" or name == "gen" or name == "src" or name == "tour";
+export fun isGeneratorDir(name: str, dirs: [str]) > bool {
+    foreach (d in dirs) {
+        if (name == d) { return true; }
+    }
+    return false;
 }
 
 // isGeneratorFile reports whether a docs-ROOT .md file is an SSG artifact rather than
@@ -31,6 +35,9 @@ export fun isGeneratorDir(name: str) > bool {
 // content walk must not render it as a doc page. It is discovered instead through
 // renderDevelopment (the /development/ project catalog). Like isGeneratorDir, this is
 // only consulted at the docs root (rel == "").
-export fun isGeneratorFile(name: str) > bool {
-    return name == "MAGUS.md";
+export fun isGeneratorFile(name: str, files: [str]) > bool {
+    foreach (f in files) {
+        if (name == f) { return true; }
+    }
+    return false;
 }

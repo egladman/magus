@@ -45,14 +45,14 @@ export fun climbFromDir(dir: str) > str {
 }
 
 // sitePathPrefix returns the root-absolute URL path prefix for this deployment - the path
-// component of SITE_URL, e.g. "https://eli.gladman.cc/magus/" -> "/magus/" - or "/" when
-// SITE_URL is unset (an empty string splits to length 1, so the branch is skipped). Only the
+// component of baseURL, e.g. "https://eli.gladman.cc/magus/" -> "/magus/" - or "/" when
+// baseURL is unset (an empty string splits to length 1, so the branch is skipped). Only the
 // pages that can be served at an unpredictable depth (the 404 and the SW offline fallback)
 // and the PWA manifest/service worker use this absolute scheme; every other page uses the
 // depth-relative rootPrefix. One definition so the derivation isn't copy-pasted four ways.
-export fun sitePathPrefix() > str {
+export fun sitePathPrefix(baseURL: str) > str {
     var basePath = "/";
-    final parts = SITE_URL.split("://");
+    final parts = baseURL.split("://");
     if (parts.len() > 1) {
         final rest = parts[1];
         final firstSlash = rest.indexOf("/");

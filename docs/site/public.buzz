@@ -229,7 +229,7 @@ fun releaseIndexJSON(site: Site) > str {
 // two Atom feeds; /public/release/ is a data-driven listing of release artifacts.
 // Deterministic (no network at build).
 export fun renderPublic(site: Site) > void {
-    if (SITE_URL == "") { return; }
+    if (site.config.baseURL == "") { return; }
 
     // /public/atom/ - the two feeds (if they were written).
     var atomEntries: [{str: str}] = mut [<{str: str}>];
@@ -258,7 +258,7 @@ export fun renderPublic(site: Site) > void {
     foreach (rel in site.releases) {
         final ver = rel.version;
         final date = rel.date;
-        final assetBase = GH + "/releases/download/" + ver;
+        final assetBase = site.config.repoURL + "/releases/download/" + ver;
         var verEntries: [{str: str}] = mut [<{str: str}>];
         foreach (art in rel.artifacts) {
             final artName = art["name"];

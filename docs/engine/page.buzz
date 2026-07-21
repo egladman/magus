@@ -32,7 +32,7 @@ import "engine/nav" as _;
 // -> "/magus/"); when SITE_URL is empty, fall back to "/" so the page still
 // renders locally with absolute paths from the server root.
 export fun render404(site: Site) > void {
-    final basePath = sitePathPrefix();
+    final basePath = sitePathPrefix(site.config.baseURL);
     final title = "Page not found - magus";
     final desc = "You have warped off the map. That page is not here; head back to the documentation, install page, or playground.";
     // Its own template (rather than renderPage()) because every asset/link here must be
@@ -76,7 +76,7 @@ export fun render404(site: Site) > void {
 `;
     final doc = template.render(tmpl, {
         "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
-        "nav": renderSiteNav(basePath, "", false), "footer": renderSiteFooter(basePath, site),
+        "nav": renderSiteNav(basePath, "", false, site.config), "footer": renderSiteFooter(basePath, site),
     });
     fs.writeFile(site.outDir + "/404.html", doc);
 }
@@ -89,7 +89,7 @@ export fun render404(site: Site) > void {
 // Graph and playground are called out explicitly because they are precached and fully
 // functional offline - they are the honest answer to "what CAN I do right now?".
 export fun writeOffline(site: Site) > void {
-    final basePath = sitePathPrefix();
+    final basePath = sitePathPrefix(site.config.baseURL);
     final title = "You are offline - magus";
     final desc = "No network connection. The graph explorer and playground are fully functional offline.";
     final tmpl = `<!DOCTYPE html>
@@ -129,7 +129,7 @@ export fun writeOffline(site: Site) > void {
 `;
     final doc = template.render(tmpl, {
         "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
-        "nav": renderSiteNav(basePath, "", false), "footer": renderSiteFooter(basePath, site),
+        "nav": renderSiteNav(basePath, "", false, site.config), "footer": renderSiteFooter(basePath, site),
     });
     fs.makeDirectory(site.outDir + "/offline");
     fs.writeFile(site.outDir + "/offline/index.html", doc);
@@ -177,7 +177,7 @@ fun renderPager(rel: str, site: Site) > str {
         // generator lives here) so it is not offered as a prev/next page - the walk
         // never renders it, so a pager link to it would dangle.
         if (name.endsWith(".md") and name != "README.md" and name != "index.md"
-            and name.startsWith("_") == false and isGeneratorFile(name) == false) {
+            and name.startsWith("_") == false and isGeneratorFile(name, site.config.generatorFiles) == false) {
             sibs.append(name);
         }
     }
@@ -236,7 +236,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // must be absolute), so the site can ship dark until the host is confirmed;
     // SITE_URL carries the trailing slash, canonUrl is the slashed clean path.
     final hasDescription = description != "";
-    final hasSiteUrl = SITE_URL != "";
+    final hasSiteUrl = site.config.baseURL != "";
     // Atom feed discovery advertises each feed only when it was actually written:
     // releases once a version has shipped, blog on the home + blog pages once a post
     // exists. Advertising a missing file would trip the asset-integrity check.
@@ -313,7 +313,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     if (hasSource) {
         edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View source</a> &middot; ";
     }
-    edit = edit + "<a href=\"" + GH + "/edit/" + site.metaBranch + "/" + site.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
+    edit = edit + "<a href=\"" + site.config.repoURL + "/edit/" + site.metaBranch + "/" + site.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
     // Second row under the search box: "Suggest an edit" hugging the right edge
     // via margin-left:auto (reading-time now lives inside the article, above). The
     // search page is a generated tool surface with no editable source, so it skips
@@ -416,7 +416,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "description": description,
         "hasDescription": hasDescription,
         "hasSiteUrl": hasSiteUrl,
-        "siteUrl": SITE_URL,
+        "siteUrl": site.config.baseURL,
         "canonUrl": canonUrl,
         "ogType": ogType,
         "hasReleasesFeed": hasReleasesFeed,
@@ -424,9 +424,9 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "isHome": isHome,
         "bodyClass": bodyClass,
         "root": root,
-        "gh": GH,
+        "gh": site.config.repoURL,
         "announcement": renderAnnouncementBar(site),
-        "nav": renderSiteNav(root, active, true),
+        "nav": renderSiteNav(root, active, true, site.config),
         "breadcrumb": site.renderBreadcrumb(srcRel, title, root),
         "secondaryRow": secondaryRow,
         "contentBlock": contentBlock,
@@ -474,7 +474,7 @@ export fun renderRoot(site: Site) > void {
     // else the site default — always non-empty so the meta tag always fires.
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
-    if (desc == "") { desc = SITE_DESC; }
+    if (desc == "") { desc = site.config.description; }
 
     final doc = renderPage(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md), site);
     final of = io.File.open(site.outDir + "/index.html", io.FileMode.write);
@@ -526,7 +526,7 @@ export fun renderFile(rel: str, site: Site) > void {
     // else the site default — always non-empty so the meta tag always fires.
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
-    if (desc == "") { desc = SITE_DESC; }
+    if (desc == "") { desc = site.config.description; }
 
     final url = cleanURL(rel, site.blog);
     final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), site);

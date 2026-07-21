@@ -68,7 +68,7 @@ export fun renderSearchPage(site: Site) > void {
   </div>
   <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
 </div>
-`, {"root": root, "gh": GH, "rows": rows});
+`, {"root": root, "gh": site.config.repoURL, "rows": rows});
     final title = "Search";
     final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
     final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], site);

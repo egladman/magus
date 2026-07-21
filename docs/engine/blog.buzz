@@ -65,7 +65,7 @@ export fun renderBlogPost(base: str, site: Site) > void {
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
-    if (desc == "") { desc = SITE_DESC; }
+    if (desc == "") { desc = site.config.description; }
 
     // Dateline: a scoped byline injected directly under the post's H1 - publish
     // date (calendar day; see blogDate), author, and a permalink to the post's
@@ -79,7 +79,7 @@ export fun renderBlogPost(base: str, site: Site) > void {
         var meta = "<p class=\"blog-post-meta\"><time datetime=\"" + blogDateAttr(date)
             + "\">" + blogDate(date) + "</time>";
         if (author != "") { meta = meta + " &middot; " + author; }
-        meta = meta + " &middot; <a href=\"" + SITE_URL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
+        meta = meta + " &middot; <a href=\"" + site.config.baseURL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
         final cut = h1End + 5;   // length of "</h1>"
         article = html.sub(0, cut) + "\n" + meta + html.sub(cut);
     }

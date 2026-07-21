@@ -1,0 +1,29 @@
+// site/config.buzz - the concrete configuration for THIS site (magus's docs). It is
+// the single swap point: the engine reads everything site-specific through a Config
+// value on the Site, so aiming this SSG at a different site means providing a different
+// Config here. Nothing under engine/ imports this file; render.buzz (the composition
+// root) calls magusConfig() and injects it into the Site once, at the top of the build.
+import "engine/types" as _;
+
+// magusConfig returns the live configuration for the magus docs site. The nav links
+// are authored in display order; Console opens in a new tab (blank) because it is a
+// standalone app, not a docs page.
+export fun magusConfig() > Config {
+    final nav = mut [<NavLink>];
+    nav.append(NavLink{ suffix = "index.html", label = "Home", key = "home" });
+    nav.append(NavLink{ suffix = "documentation/", label = "Documentation", key = "documentation" });
+    nav.append(NavLink{ suffix = "blog/", label = "Blog", key = "blog" });
+    nav.append(NavLink{ suffix = "download/", label = "Download", key = "download" });
+    nav.append(NavLink{ suffix = "tour/", label = "Tour", key = "tour" });
+    nav.append(NavLink{ suffix = "playground/", label = "Playground", key = "playground" });
+    nav.append(NavLink{ suffix = "console/", label = "Console", key = "console", blank = true });
+    return Config{
+        baseURL = "https://eli.gladman.cc/magus/",
+        title = "magus",
+        description = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.",
+        repoURL = "https://github.com/egladman/magus",
+        navLinks = nav,
+        generatorDirs = mut ["node_modules", "gen", "src", "tour"],
+        generatorFiles = mut ["MAGUS.md"],
+    };
+}

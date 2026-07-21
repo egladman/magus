@@ -57,7 +57,7 @@ export fun renderPlayground(site: Site) > void {
     // its injected nav climbs one level to reach the site root.
     final outDir = "playground";
     final root = climbFromDir(outDir);
-    html = html.replace("<!-- site-nav -->", renderSiteNav(root, "playground", true));
+    html = html.replace("<!-- site-nav -->", renderSiteNav(root, "playground", true, site.config));
     // No site-footer injection: the playground wears the console apps' bottom status bar
     // (authored directly in playground.html) instead of the docs footer, so the parse
     // result reads in the console design language. renderSiteFooter still serves the docs

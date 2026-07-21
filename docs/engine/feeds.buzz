@@ -22,7 +22,7 @@ import "engine/route" as _;
 // belong in a sitemap). Gated on SITE_URL so the site can ship dark until the host
 // is confirmed. robots points crawlers at the sitemap.
 export fun writeSEOFiles(site: Site) > void {
-    if (SITE_URL == "") { return; }
+    if (site.config.baseURL == "") { return; }
     var urls: [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
     final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
@@ -31,11 +31,11 @@ export fun writeSEOFiles(site: Site) > void {
     foreach (u in sorted) {
         var loc = u;
         if (loc == "index.html") { loc = ""; }
-        body = body + "  <url>" + xmlElement("loc", SITE_URL + loc) + "</url>\n";
+        body = body + "  <url>" + xmlElement("loc", site.config.baseURL + loc) + "</url>\n";
     }
     body = body + "</urlset>\n";
     fs.writeFile(site.outDir + "/sitemap.xml", body);
-    fs.writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + SITE_URL + "sitemap.xml\n");
+    fs.writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.config.baseURL + "sitemap.xml\n");
 }
 
 
@@ -44,7 +44,7 @@ export fun writeSEOFiles(site: Site) > void {
 // updated (post date), summary (description), author. Feed-level updated = newest
 // post's date. Gated on SITE_URL so it can ship dark until the host is confirmed.
 export fun renderBlogAtom(site: Site) > void {
-    if (SITE_URL == "") { return; }
+    if (site.config.baseURL == "") { return; }
     if (site.blogPosts.len() == 0) { return; }
     final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
         if (a.date != b.date) { return strLess(b.date, a.date); }
@@ -53,13 +53,13 @@ export fun renderBlogAtom(site: Site) > void {
     final feedUpdated = atomDate(sorted[0].date);
     var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
-        + "  " + xmlElement("title", "magus blog") + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "blog/") + xmlAttribute("rel", "alternate")) + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "public/atom/blog.atom.xml") + xmlAttribute("rel", "self")) + "\n"
-        + "  " + xmlElement("id", SITE_URL + "blog/") + "\n"
+        + "  " + xmlElement("title", site.config.title + " blog") + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "blog/") + xmlAttribute("rel", "alternate")) + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "public/atom/blog.atom.xml") + xmlAttribute("rel", "self")) + "\n"
+        + "  " + xmlElement("id", site.config.baseURL + "blog/") + "\n"
         + "  " + xmlElement("updated", feedUpdated) + "\n";
     foreach (p in sorted) {
-        final entryUrl = SITE_URL + p.url;
+        final entryUrl = site.config.baseURL + p.url;
         body = body + "  <entry>\n"
             + "    " + xmlElement("title", p.title) + "\n"
             + "    " + xmlSelfClose("link", xmlAttribute("href", entryUrl)) + "\n"
@@ -80,19 +80,19 @@ export fun renderBlogAtom(site: Site) > void {
 // body. Feed-level updated = newest release's date. Gated on SITE_URL and on
 // having at least one released version.
 export fun renderReleasesAtom(site: Site) > void {
-    if (SITE_URL == "") { return; }
+    if (site.config.baseURL == "") { return; }
     if (site.releases.len() == 0) { return; }
     final feedUpdated = atomDate(site.releases[0].date);
     var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
-        + "  " + xmlElement("title", "magus releases") + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", GH + "/releases") + xmlAttribute("rel", "alternate")) + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "public/atom/releases.atom.xml") + xmlAttribute("rel", "self")) + "\n"
-        + "  " + xmlElement("id", GH + "/releases") + "\n"
+        + "  " + xmlElement("title", site.config.title + " releases") + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.repoURL + "/releases") + xmlAttribute("rel", "alternate")) + "\n"
+        + "  " + xmlSelfClose("link", xmlAttribute("href", site.config.baseURL + "public/atom/releases.atom.xml") + xmlAttribute("rel", "self")) + "\n"
+        + "  " + xmlElement("id", site.config.repoURL + "/releases") + "\n"
         + "  " + xmlElement("updated", feedUpdated) + "\n";
     foreach (r in site.releases) {
         final ver = r.version;
-        final link = GH + "/releases/tag/" + ver;
+        final link = site.config.repoURL + "/releases/tag/" + ver;
         body = body + "  <entry>\n"
             + "    " + xmlElement("title", ver) + "\n"
             + "    " + xmlSelfClose("link", xmlAttribute("href", link)) + "\n"
@@ -113,11 +113,11 @@ export fun renderReleasesAtom(site: Site) > void {
 // prefix (SITE_URL for absolute links, else "/"). Each linked page has its Markdown
 // source at <url>index.md (emitted next to the HTML by renderFile), so an agent can
 // fetch clean Markdown per page. Kept pure so a unit test can pin the exact output.
-fun llmsIndexBody(pages: [DocPage], base: str) > str {
+fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
     final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
         return strLess(a.url, b.url);
     });
-    var body = "# magus\n\n"
+    var body = "# " + title + "\n\n"
         + "> Workspace-aware build orchestrator and content-addressed cache. "
         + "Every link below is the page's raw Markdown (its index.md sibling), "
         + "so an agent fetches clean content directly.\n\n"
@@ -138,11 +138,11 @@ fun llmsIndexBody(pages: [DocPage], base: str) > str {
 // an external agent can follow them; otherwise root-relative.
 export fun writeLLMsIndex(site: Site) > void {
     var base = "/";
-    if (SITE_URL != "") {
-        base = SITE_URL;
+    if (site.config.baseURL != "") {
+        base = site.config.baseURL;
         if (base.endsWith("/") == false) { base = base + "/"; }
     }
-    fs.writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base));
+    fs.writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.config.title));
 }
 
 
@@ -152,8 +152,8 @@ export fun writeLLMsIndex(site: Site) > void {
 // nested install stays inside /magus/. Gated on SITE_URL so a same-origin
 // scope is well-defined; without it we'd default to "/" and mis-scope.
 export fun writeManifest(site: Site) > void {
-    if (SITE_URL == "") { return; }
-    final basePath = sitePathPrefix();
+    if (site.config.baseURL == "") { return; }
+    final basePath = sitePathPrefix(site.config.baseURL);
     // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
     // (see gopherbuzz/testdata/54_raw_string.buzz).
     // Icons: favicon-32 and apple-touch-icon are the legacy set; icon-192/512 target
@@ -169,11 +169,11 @@ export fun writeManifest(site: Site) > void {
     // light-mode users get a brief on-brand dark flash instead of a blinding
     // white one.
     final body = "\{\n"
-        + "  \"name\": \"magus\",\n"
-        + "  \"short_name\": \"magus\",\n"
+        + "  \"name\": \"" + site.config.title + "\",\n"
+        + "  \"short_name\": \"" + site.config.title + "\",\n"
         + "  \"id\": \"" + basePath + "\",\n"
         + "  \"lang\": \"en\",\n"
-        + "  \"description\": \"" + escapeAttr(SITE_DESC) + "\",\n"
+        + "  \"description\": \"" + escapeAttr(site.config.description) + "\",\n"
         + "  \"start_url\": \"" + basePath + "\",\n"
         + "  \"scope\": \"" + basePath + "\",\n"
         + "  \"display\": \"standalone\",\n"
@@ -210,8 +210,8 @@ export fun writeManifest(site: Site) > void {
 // short commit hash so a new build purges old caches on activate) and
 // __BASE__ (SITE_URL's path prefix).
 export fun writeServiceWorker(site: Site) > void {
-    if (SITE_URL == "") { return; }
-    final basePath = sitePathPrefix();
+    if (site.config.baseURL == "") { return; }
+    final basePath = sitePathPrefix(site.config.baseURL);
     final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
     var body = tmplFile.readAll();
     tmplFile.close();
@@ -269,5 +269,5 @@ test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descript
         + "- [Cache](/cache/index.md): The cache model\n"
         + "- [FAQ](/faq/index.md)\n"
         + "- [Targets](/targets/index.md): What a target is\n";
-    assert.equal(llmsIndexBody(pages, "/"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
+    assert.equal(llmsIndexBody(pages, "/", "magus"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
 }

@@ -72,6 +72,9 @@ import "engine/blog" as _;
 import "engine/search" as _;
 import "site/tour" as _;
 import "site/development" as _;
+// The concrete site configuration (base URL, title, nav, generated-tree names); the only
+// site/-specific value the composition root injects into the Site so the engine stays generic.
+import "site/config" as _;
 
 // Path config, set by site_render() from the arguments the magusfile passes in - the
 // generator does not hardcode where the workspace, docs, or output live, so it stays
@@ -82,8 +85,10 @@ import "site/development" as _;
 //   sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU
 // To upgrade: download the new pico.min.css into assets/ (not gen/assets/), update the
 // version comment, recompute the SRI if ever reverting to CDN delivery, and regenerate.
-// GH / SITE_URL / SITE_DESC are in render_types.buzz (shared config the writer
-// modules also need).
+// The site's base URL, title, repo, nav, and generated-tree names are no longer loose
+// constants: they live in a Config value (engine/types.buzz defines the type,
+// site/config.buzz holds magus's) that site_render injects into site.config, and every
+// engine module reads them from the Site it already threads.
 
 
 // Value objects. They must precede Site, which holds arrays of them - Buzz has no
@@ -166,10 +171,10 @@ fun walk(rel: str, site: Site) > void {
         if (rel != "") { childRel = rel + "/" + name; }
 
         if (isDirectory(site.root + "/" + site.docs + "/" + childRel)) {
-            if (rel == "" and isGeneratorDir(name)) { continue; }
+            if (rel == "" and isGeneratorDir(name, site.config.generatorDirs)) { continue; }
             walk(childRel, site);
         } else {
-            if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name) == false)) { renderFile(childRel, site); }
+            if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, site.config.generatorFiles) == false)) { renderFile(childRel, site); }
         }
     }
 }
@@ -185,6 +190,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // renders (or parallel sessions) never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
     var site: Site = mut Site{};
+    site.config = magusConfig();
     site.root = root;
     site.docs = docs;
     site.blog = blog;

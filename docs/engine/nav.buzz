@@ -33,7 +33,7 @@ export fun renderCommitFooter(path: str, site: Site) > str {
     // Pico's typography sets the muted look; no custom classes. It stays one inline
     // line (no newlines) so the templates below carry none either.
     var line = template.render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
-        {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": GH, "full": cFull, "short": cShort});
+        {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.config.repoURL, "full": cFull, "short": cShort});
 
     // <details> disclosure of the EARLIER commits that touched this page (the latest
     // is already named above, so it is skipped to avoid a double reference). Semantic
@@ -60,7 +60,7 @@ export fun renderCommitFooter(path: str, site: Site) > str {
         }
         if (earlier.len() > 0) {
             line = line + template.render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
-                {"count": earlier.len(), "earlier": earlier, "gh": GH, "branch": site.metaBranch, "histKey": histKey});
+                {"count": earlier.len(), "earlier": earlier, "gh": site.config.repoURL, "branch": site.metaBranch, "histKey": histKey});
         }
     }
     return line;
@@ -177,7 +177,7 @@ export fun renderSettingsPanel(showConsole: bool) > str {
 // playground (whose drawer holds its "not everything runs here" module note). The 404
 // and offline pages have no reference content, so they pass false to omit the trigger
 // and its divider rather than render an oversized, dead button.
-export fun renderSiteNav(root: str, active: str, withRef: bool) > str {
+export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > str {
     // On mobile the five section links collapse behind a menu button. That button is a
     // plain Pico .outline <button> (like the theme toggle) - NOT a <details>, whose Pico
     // accordion styling we kept having to fight - so it inherits the button look for free
@@ -190,7 +190,7 @@ export fun renderSiteNav(root: str, active: str, withRef: bool) > str {
     // a backtick raw string holds the Mustache verbatim.
     final tmpl = `  <header class="site-header">
     <nav class="container">
-      <ul><li><a href="{{root}}index.html" class="contrast"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <ul><li><a href="{{root}}index.html" class="contrast"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="65" height="48" alt=""></picture> <strong>{{title}}</strong></a></li></ul>
       <div class="nav-right">
 {{#withRef}}        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
         <span class="nav-divider" aria-hidden="true"></span>
@@ -205,24 +205,15 @@ export fun renderSiteNav(root: str, active: str, withRef: bool) > str {
     </nav>
   </header>
 `;
+    // The nav is data-driven from Config: each entry's href is root + suffix (so it stays
+    // depth-relative), and the active section is the one whose key matches `active`. A blank
+    // entry (the console, the only link that leaves the docs) opens in a new tab; the template
+    // adds the "opens elsewhere" arrow and target=_blank off that flag.
     final links = mut [<{str: any}>];
-    links.append({"href": root + "index.html", "label": "Home", "current": active == "home"});
-    links.append({"href": root + "documentation/", "label": "Documentation", "current": active == "documentation"});
-    links.append({"href": root + "blog/", "label": "Blog", "current": active == "blog"});
-    links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
-    links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
-    links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
-    // Console opens in a NEW TAB (blank), flagged with the north-east "opens elsewhere" arrow: it is an
-    // app, not a docs page - it holds tabs, panes, and a live daemon link, so navigating the docs away
-    // into it (and back) would throw that state out. The only nav link that leaves the site.
-    links.append({"href": root + "console/", "label": "Console", "current": active == "console", "blank": true});
-    // The console SPA (a separate top-level project, copied to /console/ at deploy) is the single
-    // public entry point to magus's browser apps: it hosts the dashboard, graph explorer, log viewer,
-    // and activity trail as tabs, so none of them get their own top-nav item. The docs site no longer
-    // renders anything at /console/ - the app owns it. The loopback-API reference doc lives under
-    // /reference/console/. Playground stays a distinct link above because it is a standalone in-browser
-    // Buzz runner (no daemon) that the tour deep-links into, not a daemon app.
-    return template.render(tmpl, {"root": root, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
+    foreach (nl in cfg.navLinks) {
+        links.append({"href": root + nl.suffix, "label": nl.label, "current": active == nl.key, "blank": nl.blank});
+    }
+    return template.render(tmpl, {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
 }
 
 // renderReferenceDrawer returns the docs-site reference panel: the same slide-out drawer the console
@@ -302,7 +293,7 @@ export fun renderSiteFooter(root: str, site: Site) > str {
     <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
 `;
-    return template.render(tmpl, {"root": root, "gh": GH, "branch": site.metaBranch});
+    return template.render(tmpl, {"root": root, "gh": site.config.repoURL, "branch": site.metaBranch});
 }
 
 
@@ -321,5 +312,5 @@ export fun renderAnnouncementBar(site: Site) > str {
     </div>
   </div>
 `;
-    return template.render(tmpl, {"ver": ver, "gh": GH});
+    return template.render(tmpl, {"ver": ver, "gh": site.config.repoURL});
 }
