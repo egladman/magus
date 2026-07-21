@@ -68,6 +68,84 @@ export fun pad4(n: int) > str {
     return s;
 }
 
+// strToNat converts a decimal digit string to a non-negative int.
+// Non-digit characters are ignored. Used for numeric semver segment parsing.
+export fun strToNat(s: str) > int {
+    var n = 0;
+    var i = 0;
+    while (i < s.len()) {
+        final b = s.byte(i);
+        if (b >= 48 and b <= 57) { // '0'..'9' are codepoints 48-57
+            n = n * 10 + (b - 48);
+        }
+        i = i + 1;
+    }
+    return n;
+}
+
+// strLess is lexicographic string ordering by byte; buzz has no `<` on str, so
+// the sibling pager spells it out to sort filenames deterministically.
+export fun strLess(a: str, b: str) > bool {
+    final n = a.len();
+    final m = b.len();
+    var i = 0;
+    while (i < n and i < m) {
+        if (a.byte(i) != b.byte(i)) { return a.byte(i) < b.byte(i); }
+        i = i + 1;
+    }
+    return n < m;
+}
+
+// capitalizeFirst upper-cases the first character of a slug (a breadcrumb label).
+export fun capitalizeFirst(s: str) > str {
+    if (s == "") { return s; }
+    return s.sub(0, 1).upper() + s.sub(1);
+}
+
+// stripTags removes HTML tags from a fragment, leaving its text. The text keeps
+// the HTML-encoded entities goldmark produced, so it drops straight into a
+// double-quoted attribute (TOC link tooltips) without re-escaping.
+export fun stripTags(s: str) > str {
+    var r = s;
+    var lt = r.indexOf("<");
+    while (lt != null) {
+        final gt = r.indexOf(">");
+        if (gt == null) { return r; }
+        r = r.sub(0, lt) + r.sub(gt + 1);
+        lt = r.indexOf("<");
+    }
+    return r;
+}
+
+// collapseWs turns any run of whitespace (newlines/tabs/spaces goldmark left in the
+// markup) into single spaces, so a derived description reads as one clean line.
+export fun collapseWs(s: str) > str {
+    var r = s.replace("\n", " ").replace("\t", " ").replace("\r", " ");
+    while (r.indexOf("  ") != null) { r = r.replace("  ", " "); }
+    return r.trim();
+}
+
+// decodeEntities turns the HTML entities goldmark produces back into their characters
+// for a plain-text description. &amp; is decoded LAST so an entity like "&amp;lt;"
+// does not get double-decoded into "<".
+export fun decodeEntities(s: str) > str {
+    return s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+        .replace("&#39;", "'").replace("&#34;", "\"").replace("&amp;", "&");
+}
+
+// truncateWords caps s at about n characters, cutting on a word boundary so the
+// description never ends mid-word. Short paragraphs (the common case) pass through.
+export fun truncateWords(s: str, n: int) > str {
+    if (s.len() <= n) { return s; }
+    final head = s.sub(0, n);
+    var i = head.len() - 1;
+    while (i > 0) {
+        if (head.sub(i, 1) == " ") { return head.sub(0, i); }
+        i = i - 1;
+    }
+    return head;
+}
+
 test "firstPathSegment returns a clean URL's leading segment" {
     assert.equal(firstPathSegment("spells/go/"), "spells", "spells/go/ -> spells");
     assert.equal(firstPathSegment("targets"), "targets", "no slash -> whole string");

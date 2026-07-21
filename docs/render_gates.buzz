@@ -1,0 +1,404 @@
+// render_gates.buzz - the build-correctness layer: it produces nothing the site
+// serves, it PROVES the site is correct and records its provenance. Two jobs:
+//   1. Provenance - loadMeta/buildCommits read the git history behind each page
+//      (the "Last updated" line and its History disclosure).
+//   2. Gates - after every page is written, throw on any dangling internal link or
+//      missing asset (assetIntegrityCheck), any page unreachable by clicking from the
+//      homepage (orphanCheck), and any previously-shipped URL that has silently started
+//      404-ing (abandonedLinkCheck). pruneStaleOutputs deletes outputs whose source is
+//      gone; writeSiteManifest/updateUrlLock write the integrity manifest and URL ledger.
+// All take a `site: Site` and import render_types for it - the reason these are free
+// functions and not Site methods (keeping render_types.buzz leaf-only and cycle-free).
+import "os";
+import "fs";
+import "io";
+import "std";
+import "render_types" as _;
+import "render_text" as _;
+import "render_csp" as _;
+import "render_html" as _;
+
+// Build-orchestration steps that operate ON a Site but reach past the leaf helpers
+// into git metadata (loadMeta) and the post-render integrity gates (assetIntegrityCheck,
+// orphanCheck) - free functions here rather than Site methods so render_types.buzz stays
+// leaf-only and cycle-free. They call capture/buildCommits/walkGen/scanReferencesInHTML/
+// checkPathExists/pageKey, which live below in this file.
+// loadMeta populates the commit-metadata fields once, shelling out to git. Pinned
+// to the default branch so deployed links stay stable across feature-branch renders.
+export fun loadMeta(site: Site) > void {
+    if (site.metaLoaded) { return; }
+    site.metaPrefix = capture("git -C " + site.root + " rev-parse --show-prefix");
+    site.metaBranch = "main";
+    site.metaFull = capture("git -C " + site.root + " rev-parse HEAD");
+    site.metaShort = capture("git -C " + site.root + " rev-parse --short HEAD");
+    site.metaStamp = capture("TZ=UTC git -C " + site.root + " show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd HEAD");
+    site.metaCommits = buildCommits(site);
+    site.metaLoaded = true;
+}
+
+// assetIntegrityCheck throws on any dangling href/src in the written output, so a
+// renamed bundle or forgotten alias fails the build instead of shipping a 404.
+export fun assetIntegrityCheck(site: Site) > void {
+    var files: [str] = mut [<str>];
+    walkGen("", files, site);
+    foreach (f in files) {
+        if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
+            // Non-textual asset: nothing to scan for refs.
+        } else {
+            final fh = io.File.open(site.outDir + "/" + f, io.FileMode.read);
+            final html = fh.readAll();
+            fh.close();
+            final parts = f.split("/");
+            var pageDir = "";
+            if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
+            foreach (target in scanReferencesInHTML(html, pageDir)) {
+                if (checkPathExists(target, site) == false) {
+                    throw "asset integrity: " + f + " references missing " + target;
+                }
+            }
+        }
+    }
+}
+
+// orphanCheck proves every docs page is reachable by BFS from the nav roots, so a
+// page with no inbound link fails the build instead of shipping unreachable.
+export fun orphanCheck(site: Site) > void {
+    // Every written page, keyed the way pageKey() yields, so BFS can tell a page
+    // link from an asset link.
+    var files: [str] = mut [<str>];
+    walkGen("", files, site);
+    var isPage: {str: bool} = mut {};
+    foreach (f in files) {
+        if (f == "index.html") { isPage[""] = true; }
+        else { if (f.endsWith("/index.html")) { isPage[f.sub(0, f.len() - 11)] = true; } }
+    }
+
+    var visited: {str: bool} = mut {};
+    var queue: [str] = mut [<str>];
+    foreach (r in ["", "documentation", "blog", "download", "tour", "playground", "search", "public", "development"]) {
+        if (isPage[r] != null and visited[r] == null) { visited[r] = true; queue.append(r); }
+    }
+    var head = 0;
+    while (head < queue.len()) {
+        final key = queue[head];
+        head = head + 1;
+        var path = site.outDir + "/index.html";
+        if (key != "") { path = site.outDir + "/" + key + "/index.html"; }
+        final fh = io.File.open(path, io.FileMode.read);
+        final html = fh.readAll();
+        fh.close();
+        foreach (ref in scanReferencesInHTML(html, key)) {
+            final k = pageKey(ref);
+            if (isPage[k] != null and visited[k] == null) {
+                visited[k] = true;
+                queue.append(k);
+            }
+        }
+    }
+
+    var orphans: [str] = mut [<str>];
+    foreach (p in site.docPages) {
+        var dk = p.url;
+        if (dk.endsWith("/")) { dk = dk.sub(0, dk.len() - 1); }
+        if (visited[dk] == null) { orphans.append(p.url); }
+    }
+    if (orphans.len() > 0) {
+        throw "orphaned pages: {orphans.len()} docs renderPage(s) unreachable from site navigation (add a link from an overview page): " + orphans.join(", ");
+    }
+}
+
+
+// (The per-page reading-time and tags are no longer module globals: they are passed
+// straight into renderPage() as the `reading` / `tags` arguments, so there is no
+// set-before-call / clear-after temporal coupling to get wrong.)
+
+export fun capture(cmd: str) > str {
+    final tmp = os.tmpFilename("sitegen");
+    final code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
+    if (code != 0) {
+        fs.delete(tmp);
+        return "";
+    }
+    final f = io.File.open(tmp, io.FileMode.read);
+    final result = f.readAll();
+    f.close();
+    fs.delete(tmp);
+    return result.trim();
+}
+
+// Map of repo-root-relative source path -> "full|short|date" of the most recent
+// commit that touched it, built from ONE git log (newest-first, so a file's first
+// sighting wins) instead of a git call per page. ">>>" can't begin a repo path,
+// so it cleanly marks each commit header; the file names follow until the next.
+// Run with `git -C ..` so the pathspecs (README.md, docs) and written paths are
+// magus/-relative, matching site.metaPrefix.
+// HISTORY_MAX caps the per-file history depth in the "History" disclosure. The
+// full log is one git spawn, so pushing this higher is cheap; a low cap keeps
+// the rendered <details> panel from bloating on hot-edit files.
+final HISTORY_MAX = 8;
+
+// buildCommits parses one git-log pass:
+//   - metaCommits: path -> "full|short|stamp" of the FIRST (newest) sighting.
+//     Drives the always-visible "Last updated" footer line.
+//   - metaHistory: path -> list of up to HISTORY_MAX "full|short|stamp|subject"
+//     entries in newest-first order. Drives the collapsed WS R history panel.
+// The log prints "SUBJ:<one-line subject>" after each ">>>" header so the two
+// fields ride together without a second git spawn.
+export fun buildCommits(site: Site) > {str: str} {
+    var m: {str: str} = mut {};
+    site.metaHistory = mut {};
+    final log = capture("TZ=UTC git -C " + site.root + " log --first-parent --diff-merges=first-parent --name-only "
+        + "--date=format-local:'%Y-%m-%dT%H:%M:%SZ' "
+        + "--format='>>>%H|%h|%cd%nSUBJ:%s' -- README.md docs blog CHANGELOG.md");
+    var curHeader = "";
+    var curSubject = "";
+    foreach (line in log.split("\n")) {
+        if (line.startsWith(">>>")) {
+            curHeader = line.sub(3);
+            curSubject = "";
+        } else if (line.startsWith("SUBJ:")) {
+            curSubject = line.sub(5);
+        } else if (line != "" and curHeader != "") {
+            // Newest sighting wins for the "last updated" line.
+            if (m[line] == null) { m[line] = curHeader; }
+            // Append to per-file history (newest-first) until HISTORY_MAX.
+            var hist = site.metaHistory[line];
+            if (hist == null) { hist = mut [<str>]; }
+            if (hist.len() < HISTORY_MAX) {
+                hist.append(curHeader + "|" + curSubject);
+            }
+            site.metaHistory[line] = hist;
+        }
+    }
+    return m;
+}
+
+// checkPathExists returns true when target (gen-root-relative, no leading slash)
+// resolves to a real file under gen/. Directory refs (URL ending in "/" or a plain
+// slugged path) resolve to their index.html; assets pass through verbatim.
+export fun checkPathExists(target: str, site: Site) > bool {
+    // Empty target = gen/'s root, always the index.html landing. This shows up
+    // when a page links to "../" (Parent Directory in an autoindex root) and the
+    // resolver pops back to the root.
+    if (target == "") { return os.execute(["test", "-f", site.outDir + "/index.html"]) == 0; }
+    if (os.execute(["test", "-f", site.outDir + "/" + target]) == 0) { return true; }
+    if (os.execute(["test", "-d", site.outDir + "/" + target]) == 0) {
+        return os.execute(["test", "-f", site.outDir + "/" + target + "/index.html"]) == 0;
+    }
+    if (target.endsWith("/")) {
+        return os.execute(["test", "-f", site.outDir + "/" + target + "index.html"]) == 0;
+    }
+    return false;
+}
+
+// scanReferencesInHTML pulls every href="..." and src="..." out of html, skipping
+// external URLs, mailto:, javascript:, data:, and pure fragments. Each reference
+// is returned as a gen-root-relative path (resolved against pageDir).
+export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
+    var refs: [str] = mut [<str>];
+    var seen: {str: bool} = mut {};
+    var rest = html;
+    while (true) {
+        final iHref = rest.indexOf("href=\"");
+        final iSrc = rest.indexOf("src=\"");
+        var i: int = -1;
+        var advance = 0;
+        if (iHref != null and iSrc != null) {
+            if (iHref < iSrc) { i = iHref; advance = 6; } else { i = iSrc; advance = 5; }
+        } else if (iHref != null) { i = iHref; advance = 6; }
+        else if (iSrc != null) { i = iSrc; advance = 5; }
+        else { i = -1; }
+        if (i < 0) { return refs; }
+        rest = rest.sub(i + advance);
+        final end = rest.indexOf("\"");
+        if (end == null) { return refs; }
+        final raw = rest.sub(0, end);
+        rest = rest.sub(end + 1);
+        if (raw == "") { continue; }
+        if (raw.startsWith("http://") or raw.startsWith("https://") or raw.startsWith("//")
+            or raw.startsWith("#") or raw.startsWith("mailto:") or raw.startsWith("javascript:")
+            or raw.startsWith("data:") or raw.startsWith("tel:")) { continue; }
+        // Root-absolute paths (leading /) are the deploy-time reference form
+        // (WS0b's ONE deliberate exception on 404.html, WS S's manifest, etc.);
+        // they resolve at the deploy base, not against gen/'s root, so we can't
+        // check them locally without threading SITE_URL's basePath in. Skip.
+        if (raw.startsWith("/")) { continue; }
+        // References to repo source files (.go/.buzz) point at their GitHub
+        // location relative to the repo root, not to a generated site asset.
+        // magus's `markdown` module rewrites .md links but leaves .go/.buzz
+        // untouched, matching author intent. Skip so the check stays focused on
+        // real page/asset breakage.
+        if (raw.endsWith(".go") or raw.endsWith(".buzz")) { continue; }
+        // Strip a URL #fragment; the file only needs to exist, the fragment is
+        // client-side.
+        var path = raw;
+        final hash = path.indexOf("#");
+        if (hash != null) { path = path.sub(0, hash); }
+        if (path == "") { continue; }
+        // Also drop a query string.
+        final q = path.indexOf("?");
+        if (q != null) { path = path.sub(0, q); }
+        if (path == "") { continue; }
+        final resolved = resolvePath(pageDir, path);
+        if (seen[resolved] == null) {
+            seen[resolved] = true;
+            refs.append(resolved);
+        }
+    }
+    return refs;
+}
+
+// walkGen recursively enumerates every written file under gen/ so the integrity
+// check reads each once. Skips buzz.wasm (binary; slow file test suffices).
+export fun walkGen(rel: str, acc: [str], site: Site) > void {
+    var dir = site.outDir;
+    if (rel != "") { dir = site.outDir + "/" + rel; }
+    foreach (name in fs.list(dir)) {
+        var childRel = name;
+        if (rel != "") { childRel = rel + "/" + name; }
+        if (os.execute(["test", "-d", site.outDir + "/" + childRel]) == 0) {
+            walkGen(childRel, acc, site);
+        } else {
+            acc.append(childRel);
+        }
+    }
+}
+
+// pruneStaleOutputs deletes gen/ output left behind by a source that no longer
+// produces it - a renamed/removed docs page, a deleted blog post, a dropped
+// frontmatter alias, a release that fell out of CHANGELOG.md. gen/ is no longer
+// wiped before each render (see the comment in site_render), so this is what keeps
+// it from silently accumulating orphans instead: walk what is really on disk,
+// and for every "<dir>/index.html" NOT in writtenPaths (this render's actual
+// output) and not in alwaysKeep, delete the whole directory - taking any sibling
+// file (an index.md, say) with it. Run before assetIntegrityCheck/orphanCheck so
+// neither gate can trip on a stale page's dangling reference to content that was
+// removed along with it.
+export fun pruneStaleOutputs(site: Site) > void {
+    // Fixed, unconditional-or-deliberately-persistent outputs that are never
+    // candidates for pruning: paths a normal render always (re)writes regardless of
+    // docs/blog content (so they're never actually stale), plus the playground's
+    // committed WASM/editor bundle, which this render never writes or deletes at all
+    // (it is refreshed out of band by build-playground / build-playground-editor).
+    final alwaysKeep: {str: bool} = mut {
+        "index.html": true, "index.md": true, "404.html": true,
+        "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
+        "sw.js": true, "search-index.json": true, "site-manifest.sha256": true,
+        "site.css": true, "console.css": true, "ui-panels.css": true, "theme.css": true, "theme.js": true, "main.js": true,
+        "search/index.html": true,
+        "playground/index.html": true, "playground/buzz.wasm": true,
+        "playground/wasm_exec.js": true, "playground/editor.js": true,
+        // /console/ is owned by the standalone console/ project (copied in at deploy). The docs render
+        // only emits a redirect stub there via the reference/console alias, which writeAliases already
+        // registers in writtenPaths, so it needs no alwaysKeep entry.
+    };
+    final acc: [str] = mut [<str>];
+    walkGen("", acc, site);
+    final staleDirs: {str: bool} = mut {};
+    foreach (path in acc) {
+        if (alwaysKeep[path] != null) { continue; }
+        if (path.startsWith("assets/")) { continue; }   // scoped delete+recopy above already keeps this clean
+        if (path.endsWith("/index.html") == false) { continue; }   // only page-shaped files drive pruning
+        if (site.writtenPaths[path] != null) { continue; }
+        staleDirs[path.sub(0, path.len() - 11)] = true;   // len("/index.html") == 11
+    }
+    foreach (dir in staleDirs.keys()) {
+        std.print("  pruning stale " + dir + "/ (no longer produced)");
+        fs.delete(site.outDir + "/" + dir);
+    }
+}
+
+// writeSiteManifest emits gen/site-manifest.sha256: one "<sha256>  <path>\n"
+// line (standard sha256sum(1) format, so `sha256sum -c` or a spot-check
+// `curl -s <asset-url> | sha256sum` verifies it directly - see
+// docs/reference/console.md's "Verify our claims" section) per file actually
+// shipped under gen/, repo-relative, sorted. Reuses fileSha256 - the same
+// per-file digest writeServiceWorker already computes for its cache-version
+// stamp, just surfaced for every asset instead of folded into one internal
+// checksum. Exported and called from magusfile.buzz's generate(), AFTER
+// generateJsBundles() - not from inside site_render() - because
+// generateJsBundles() writes gen/assets/mermaid.js and gen/assets/hljs.js
+// (both served assets) only after site_render() has already returned;
+// computing the manifest inside site_render would silently omit them. The
+// manifest excludes its own output path (a file cannot hash itself).
+export fun writeSiteManifest(site: Site) > void {
+    final acc: [str] = mut [<str>];
+    walkGen("", acc, site);
+    final sorted = acc.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    var body = "";
+    foreach (rel in sorted) {
+        if (rel == "site-manifest.sha256") { continue; }
+        body = body + fileSha256(site.outDir + "/" + rel) + "  " + rel + "\n";
+    }
+    fs.writeFile(site.outDir + "/site-manifest.sha256", body);
+}
+
+// pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no
+// trailing slash - "spells/go", "index.html", "assets/x.png") to a page key: "" for
+// the home page, else the directory that holds the page's index.html. Asset paths
+// pass through unchanged and simply never match a real page key.
+export fun pageKey(resolved: str) > str {
+    var r = resolved;
+    if (r.endsWith("/index.html")) { r = r.sub(0, r.len() - 11); }  // len("/index.html") == 11
+    if (r == "index.html") { return ""; }
+    if (r.endsWith("/")) { r = r.sub(0, r.len() - 1); }
+    return r;
+}
+
+
+// URL_LOCK is the committed, append-only ledger of every URL the site has ever
+// shipped (one per line, sorted). RETIRED_URLS lists URLs intentionally removed,
+// exempting them from the abandoned-link gate.
+final URL_LOCK = "active.urls.lock";
+final RETIRED_URLS = "retired.urls.lock";
+
+// readURLSet reads a newline-delimited URL file into a set, skipping blanks and
+// "#" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).
+export fun readURLSet(path: str) > {str: bool} {
+    var set: {str: bool} = mut {};
+    if (os.execute(["test", "-f", path]) != 0) { return set; }
+    final f = io.File.open(path, io.FileMode.read);
+    final content = f.readAll();
+    f.close();
+    foreach (line in content.split("\n")) {
+        final t = line.trim();
+        if (t != "" and t.startsWith("#") == false) { set[t] = true; }
+    }
+    return set;
+}
+
+// abandonedLinkCheck is the parity gate: every URL the site has shipped before
+// (recorded in URL_LOCK) must still resolve, so a renamed or deleted page can't
+// silently start 404-ing on inbound links and bookmarks. To retire a URL on
+// purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old
+// URL resolving) or list it in retired.urls.lock. Runs every render; the lock only
+// grows (updateUrlLock, under the rw charm).
+export fun abandonedLinkCheck(site: Site) > void {
+    final locked = readURLSet(URL_LOCK);
+    final retired = readURLSet(RETIRED_URLS);
+    var abandoned: [str] = mut [<str>];
+    foreach (url in locked.keys()) {
+        if (retired[url] == null and checkPathExists(url, site) == false) {
+            abandoned.append(url);
+        }
+    }
+    if (abandoned.len() > 0) {
+        final sorted = abandoned.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+        throw "abandoned links: {sorted.len()} previously-shipped URL(s) no longer resolve. Add a redirect (frontmatter aliases:) or list them in retired.urls.lock: " + sorted.join(", ");
+    }
+}
+
+// updateUrlLock folds this build's URLs into URL_LOCK and rewrites it sorted. It
+// only adds - a URL that drops out of the build stays in the ledger so the gate
+// keeps demanding a redirect or an explicit retirement for it. Called under the rw
+// charm so a plain (checking) render never mutates the tree.
+export fun updateUrlLock(site: Site) > void {
+    var set = readURLSet(URL_LOCK);
+    foreach (u in site.pageUrls.keys()) { set[u] = true; }
+    var lines: [str] = mut [<str>];
+    foreach (u in set.keys()) { lines.append(u); }
+    final sorted = lines.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    var body = "";
+    foreach (u in sorted) { body = body + u + "\n"; }
+    fs.writeFile(URL_LOCK, body);
+}

@@ -1,0 +1,527 @@
+// render_types.buzz - the docs build's data model: the Site build-state object plus
+// the small record types (BlogPost, DocPage, Release) the walk fills in. Site owns the
+// state-management and per-page navigation logic that only needs the leaf helpers below
+// (search-index bookkeeping, alias collection, the relatedness corpus, breadcrumb /
+// related / in-section nav); the build-orchestration steps that reach into git metadata
+// or the post-render integrity gates live as free functions in render.buzz, so this file
+// imports only leaf modules and never forms an import cycle. Flat-imported by render.buzz
+// and by every writer module (`import "render_types" as _`).
+import "fs";
+import "io";
+import "serialize";
+import "markdown";
+import "template";
+import "render_text" as _;
+import "render_url" as _;
+import "render_html" as _;
+import "render_csp" as _;
+import "render_meta" as _;
+import "render_path" as _;
+
+// Site-wide config constants, shared here (the common foundation every module imports)
+// so any writer module can reference them without a cycle back to render.buzz.
+export final GH   = "https://github.com/egladman/magus";
+
+// SITE_URL is the site's public base (with trailing slash), used for the canonical
+// link, sitemap, and (later) the Atom feeds. Set non-empty to enable them; leave ""
+// to ship those surfaces dark until the host is confirmed. SITE_DESC is the
+// belt-and-suspenders page description when a page has neither a frontmatter
+// description nor a derivable first paragraph.
+export final SITE_URL  = "https://eli.gladman.cc/magus/";
+export final SITE_DESC = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.";
+
+// BlogPost is one blog entry's index record, built by renderBlogPost() as the walk
+// visits each post; the blog index, the Atom feed, and the prev/next pager consume
+// it. base is the source filename (sort tiebreak + commit key); urlPath is the
+// date-scoped clean path (YYYY/MM/DD/slug).
+export object BlogPost {
+    base: str = "",
+    slug: str = "",
+    urlPath: str = "",
+    title: str = "",
+    date: str = "",
+    description: str = "",
+    url: str = "",
+}
+
+// DocPage is one docs page's relatedness metadata. tags is ||-joined (split back out
+// by sharedTagCount); overview is true for a landing/index page (page_type: overview).
+// renderRelated() scores these to fill each page's "Related" cards, and
+// renderBreadcrumb() looks one up by url for its title.
+export object DocPage {
+    url: str = "",
+    title: str = "",
+    desc: str = "",
+    tags: str = "",
+    section: str = "",
+    overview: bool = false,
+    srcRel: str = "",
+}
+
+// Release is one release entry read from releases/v<semver>.yaml. The body field
+// holds the trimmed markdown for the Atom feed; artifacts is the list of release
+// assets with their integrity data (name, platform, size, sha256).
+// notes* fields carry the Keep-a-Changelog sections as structured string lists;
+// yanked marks a release that should not be used (security issue, etc.).
+// These fields mirror the Go ReleaseManifest struct (cmd/magus-utils/release.go)
+// so the index.json schema is a proper frozen v1.
+export object Release {
+    version: str = "",
+    date: str = "",
+    body: str = "",
+    notesAdded: [str] = mut [<str>],
+    notesChanged: [str] = mut [<str>],
+    notesFixed: [str] = mut [<str>],
+    notesRemoved: [str] = mut [<str>],
+    yanked: bool = false,
+    // artifacts holds the release assets. Each entry has: name, platform, size, sha256.
+    // size and sha256 may be "" for historical releases migrated without artifact data.
+    artifacts: [{str: str}] = mut [<{str: str}>],
+}
+
+// Site holds ALL the generator's state on one object instead of a scatter of module
+// globals: the input paths (set once by site_render), the per-page commit metadata,
+// the search-index records, the URL-alias / written-URL bookkeeping, and the
+// blog/doc/release collections. A single module-global instance (`site`) carries it;
+// the walk-scoped parts are reset per site_render().
+export object Site {
+    // Input paths, set once by site_render(). root is the magus/ workspace dir
+    // (relative to this project); docs and blog are source subtrees under root; out
+    // is the generated site output under this project.
+    root: str = "",
+    docs: str = "",
+    blog: str = "",
+    outDir: str = "",
+
+    // Per-page commit metadata, loaded lazily by loadMeta() at render time (NOT at
+    // magusfile load - these shell out to git, and a magusfile is parsed on every
+    // `magus ls`). metaHistory maps a repo-relative path to the last N commits that
+    // touched it ("full|short|stamp|subject" each), from one git-log pass.
+    metaPrefix: str = "",
+    metaBranch: str = "",
+    metaFull: str = "",
+    metaShort: str = "",
+    metaStamp: str = "",
+    metaCommits: {str: str} = mut {},
+    metaHistory: {str: [str]} = mut {},
+    metaLoaded: bool = false,
+
+    // One JSON-encoded search record per rendered page, joined into
+    // gen/search-index.json at the end of a render, in the sorted walk order so the
+    // index is deterministic and the drift gate stays stable.
+    searchRecords: [str] = mut [<str>],
+
+    // URL-alias bookkeeping. aliasTarget maps a declared old path (frontmatter
+    // aliases:) to the clean URL of the page that owns it; pageUrls is the set of
+    // real written page URLs. Both feed the alias pass after the walk, which writes a
+    // redirect stub per alias and throws on a collision.
+    aliasTarget: {str: str} = mut {},
+    pageUrls: {str: bool} = mut {},
+
+    // Every gen-root-relative file this render pass actually wrote, populated at the
+    // handful of choke points that own an output write (addRecord, writeAliases,
+    // renderAutoindex; a couple of one-off index.md siblings track themselves
+    // directly). pruneStaleOutputs() diffs this against what's really on disk after
+    // the render completes and deletes anything left over from a previous run whose
+    // source (a docs page, a blog post, an alias, a release) is gone - so a rename or
+    // deletion cleans up its old gen/ output without needing to nuke and rebuild the
+    // entire tree on every run.
+    writtenPaths: {str: bool} = mut {},
+
+    // Blog posts (consumed by the blog index, Atom feed, and pager). hasBlogPosts is
+    // precomputed before the walk so an early page (README) can decide whether to
+    // advertise the blog Atom feed in <head>.
+    blogPosts: [BlogPost] = mut [<BlogPost>],
+    hasBlogPosts: bool = false,
+
+    // Docs relatedness corpus, built pre-walk by collectDocPages so each page can
+    // pick its Related neighbors.
+    docPages: [DocPage] = mut [<DocPage>],
+
+    // Releases loaded from releases/*.yaml, for the Atom feed, announcement bar,
+    // and /public/release/ artifact listing. Ordered newest-first (by file sort,
+    // which matches semver descending for vX.Y.Z names).
+    releases: [Release] = mut [<Release>],
+
+    // The default Content-Security-Policy meta content, computed once by
+    // computeCSP() at the top of site_render() and threaded verbatim into every
+    // page's head EXCEPT the home page (renderPage's pageTmpl for every non-home
+    // page, render404, writeOffline, and the hand-authored playground.html/
+    // graph.html - none of them embed the README's status badges, so none of them
+    // need img-src widened past same-origin). A build-once value rather than a
+    // per-page recomputation.
+    csp: str = "",
+
+    // The home-page-only Content-Security-Policy: identical to csp except its
+    // img-src also allows the two hosts the README's status badges load from (see
+    // computeCSP's doc comment). Only renderPage() reaches for this, and only when
+    // rendering README.md - every other page keeps the tighter default so an
+    // img-src GET (a channel connect-src cannot restrict) is not left open on
+    // pages that hold the reader's own dependency graph or source code.
+    cspHome: str = "",
+
+    // --- Methods that manage this state (pure helpers stay free functions below) ---
+
+    // addRecord appends one page's search-index record and marks its URL as written
+    // (so the alias pass can catch a redirect that shadows a real page). Called once
+    // per rendered page. Also records the page's index.html in writtenPaths (root's
+    // url is the bare "index.html" filename, every other url ends in "/") so
+    // pruneStaleOutputs knows this page is current.
+    fun addRecord(url: str, title: str, desc: str, md: str) > void {
+        this.pageUrls[url] = true;
+        var filePath = url;
+        if (filePath.endsWith("/")) { filePath = filePath + "index.html"; }
+        this.writtenPaths[filePath] = true;
+        final rec = mut {<str: any>};
+        rec["url"] = url;
+        rec["title"] = title;
+        rec["text"] = cleanBody(markdown.stripFrontmatter(md));
+        rec["tags"] = parseTags(md);
+        if (desc != "") { rec["description"] = desc; }
+        this.searchRecords.append(serialize.jsonEncode(serialize.Boxed.init(rec)));
+    }
+
+    // collectAlias records that the clean old path `alias` should redirect to
+    // `target`. It throws if two pages claim the same alias, so a rename can never
+    // silently shadow another page's redirect. Leading/trailing slashes normalize away.
+    fun collectAlias(alias: str, target: str) > void {
+        var a = alias;
+        while (a.startsWith("/")) { a = a.sub(1); }
+        while (a.endsWith("/")) { a = a.sub(0, a.len() - 1); }
+        if (a == "") { return; }
+        final owner = this.aliasTarget[a];
+        if (owner != null and owner != target) {
+            throw "alias \"" + a + "\" is claimed by two pages (" + owner + " and " + target + ")";
+        }
+        this.aliasTarget[a] = target;
+    }
+
+    // writeAliases writes one redirect stub per collected alias (after the walk, so
+    // every real page URL is known for the collision guard). It throws if an alias
+    // would shadow a real generated page.
+    fun writeAliases() > void {
+        foreach (a in this.aliasTarget.keys()) {
+            if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
+                throw "alias \"" + a + "\" collides with a real page at the same path";
+            }
+            fs.makeDirectory(this.outDir + "/" + a);
+            final rel = relativePath(a, this.aliasTarget[a]);
+            final csp = cspForRedirectStub(redirectScript(rel));
+            fs.writeFile(this.outDir + "/" + a + "/index.html", aliasStub(rel, csp));
+            this.writtenPaths[a + "/index.html"] = true;
+        }
+    }
+
+    // collectDocPage reads one docs page's frontmatter into a DocPage on docPages
+    // (the relatedness/breadcrumb corpus). rel is the path under docs/.
+    fun collectDocPage(rel: str) > void {
+        final f = io.File.open(this.root + "/" + this.docs + "/" + rel, io.FileMode.read);
+        final md = f.readAll();
+        f.close();
+        final fm = serialize.jsonDecode(markdown.frontmatter(md));
+        var title = fm.q("title").stringValue();
+        if (title == "") { title = deriveTitle(md, rel); }
+        final desc = fm.q("description").stringValue();
+        final url = cleanURL(rel, this.blog);
+        // Join tags with "||" (never present in a tag) so the record stays flat;
+        // sharedTagCount splits it back out.
+        var joined = "";
+        var first = true;
+        foreach (t in parseTags(md)) {
+            if (first) { joined = t; first = false; }
+            else { joined = joined + "||" + t; }
+        }
+        this.docPages.append(DocPage{
+            url = url,
+            title = title,
+            desc = desc,
+            tags = joined,
+            section = firstPathSegment(url),
+            overview = pageType(md) == "overview",
+            srcRel = this.docs + "/" + rel,
+        });
+    }
+
+    // collectDocPages walks the docs/ subtree (same order as walk()) filling docPages
+    // before any page renders, so renderRelated() sees the whole corpus.
+    fun collectDocPages(rel: str) > void {
+        var dir = this.root + "/" + this.docs;
+        if (rel != "") { dir = this.root + "/" + this.docs + "/" + rel; }
+        foreach (name in fs.list(dir)) {
+            var childRel = name;
+            if (rel != "") { childRel = rel + "/" + name; }
+            if (isDirectory(this.root + "/" + this.docs + "/" + childRel)) {
+                // Skip the SSG's own root children (node_modules/gen/src/tour) - same skip
+                // as walk(), only at the docs root (rel == ""), so metadata collection
+                // matches what actually renders. See isGeneratorDir for why root-only.
+                if (rel == "" and isGeneratorDir(name)) { continue; }
+                this.collectDocPages(childRel);
+            } else {
+                if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name) == false)) { this.collectDocPage(childRel); }
+            }
+        }
+    }
+
+    // renderBreadcrumb builds the breadcrumb <nav> for one page. Blog, search, tour,
+    // /public/, and /development/ get their own flat trails; docs pages hang off the
+    // documentation index, each intermediate crumb showing the linked page's real
+    // title (looked up in docPages via lookupTitle).
+    fun renderBreadcrumb(srcRel: str, title: str, root: str) > str {
+        if (srcRel == "README.md") { return ""; }
+        // The crumb <li>s are computed per branch below (titles, links, current
+        // markers); this one template wraps whichever list a branch builds. li is
+        // injected raw - it is already-assembled markup, not a value to escape.
+        final bcTmpl = `    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul>{{{li}}}</ul>
+    </nav>
+`;
+        var rel = srcRel;
+        if (rel.startsWith(this.docs + "/")) { rel = rel.sub((this.docs + "/").len()); }
+        final segsRaw = rel.split("/");
+
+        var li = "<li><a href=\"" + root + "index.html\">Home</a></li>";
+
+        // Blog pages have their own root: Home / Blog / <post> (the blog index itself
+        // becomes the leaf). srcRel is blog/<file>.md for posts, or blog/index.md for
+        // the listing page.
+        if (srcRel == this.blog + "/index.md") {
+            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Blog</li>"});
+        }
+        // The search page is a top-level tool surface: Home / Search (no Documentation
+        // root, it does not hang off the documentation index).
+        if (srcRel == "search/index.md") {
+            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Search</li>"});
+        }
+        // The tour page is a top-level onboarding surface: Home / Tour.
+        if (srcRel == "tour/index.md") {
+            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Tour</li>"});
+        }
+        if (srcRel.startsWith(this.blog + "/")) {
+            li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
+                + "<li aria-current=\"page\">" + title + "</li>";
+            return template.render(bcTmpl, {"li": li});
+        }
+        // The /public/ autoindex tree also skips the Documentation root; each level
+        // gets a bare Home / <path> breadcrumb (the autoindex itself lists the parent
+        // link in its own body, so the breadcrumb stays flat).
+        if (srcRel.startsWith("public/")) {
+            li = li + "<li aria-current=\"page\">" + title + "</li>";
+            return template.render(bcTmpl, {"li": li});
+        }
+
+        // /development/ contributor surface. Home / Development for the landing; Home /
+        // Development / <page> for a direct child (Contributing or a per-project target
+        // catalog). Its own root, not the documentation index.
+        if (srcRel.startsWith("development/")) {
+            if (srcRel == "development/_index.md") {
+                li = li + "<li aria-current=\"page\">Development</li>";
+            } else {
+                li = li + "<li><a href=\"" + root + "development/\">Development</a></li>"
+                    + "<li aria-current=\"page\">" + title + "</li>";
+            }
+            return template.render(bcTmpl, {"li": li});
+        }
+
+        // The documentation index roots every docs trail; on that page itself it is
+        // the current leaf rather than a link back to where you already are.
+        if (rel == "documentation.md") {
+            return template.render(bcTmpl, {"li": li + "<li aria-current=\"page\">Documentation</li>"});
+        }
+        li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
+
+        // The docs tree carries no "gen" path segment, so the source segments map
+        // straight to breadcrumb crumbs (a manpage trail reads Documentation / Manpage
+        // / <cmd>, matching its URL).
+        final segs = segsRaw;
+        final base = segs[segs.len() - 1];
+
+        final landing = (base == "index.md" or base == "README.md");
+        var dirCount = segs.len() - 1;                              // directory segments before the file
+        if (landing and dirCount > 0) { dirCount = dirCount - 1; }  // a landing's own dir is the leaf
+
+        // Each intermediate crumb reads as the exact title of the page it links to
+        // (looked up in docPages by URL), so the trail is consistent with the site's
+        // own naming instead of a first-letter-capped URL segment. A crumb links when a
+        // real page owns that URL - whether from an in-dir index (codes/race/README.md)
+        // or a sibling-file landing (targets.md next to the targets/ subtree). Segments
+        // with no page (e.g. the bare "codes/" grouping) fall back to a capitalized label.
+        var acc = "";
+        var i = 0;
+        while (i < dirCount) {
+            final seg = segs[i];
+            if (acc == "") { acc = seg; } else { acc = acc + "/" + seg; }
+            var label = capitalizeFirst(seg);
+            final t = this.lookupTitle(acc + "/");
+            if (t != "") {
+                li = li + "<li><a href=\"" + root + acc + "/\">" + t + "</a></li>";
+            } else {
+                li = li + "<li>" + label + "</li>";
+            }
+            i = i + 1;
+        }
+
+        // The leaf is the current page's own title (faithful for both a landing and a
+        // regular page), matching how the intermediate crumbs now read.
+        li = li + "<li aria-current=\"page\">" + title + "</li>";
+        return template.render(bcTmpl, {"li": li});
+    }
+
+    // renderRelated builds the "Related" card grid for the page whose source is
+    // srcRel, or "" when it is not a docs page or is an overview page (those
+    // enumerate their children in the body). Scores docPages: shared tags (x3),
+    // same section (+4), overview (+3), the documentation index (+1); leads with the
+    // nearest-ancestor overview. Up to four cards, ties broken by URL for stability.
+    fun renderRelated(srcRel: str, root: str) > str {
+        var curTags = "";
+        var curSection = "";
+        var curUrl = "";
+        var curOverview = false;
+        var found = false;
+        foreach (p in this.docPages) {
+            if (p.srcRel == srcRel) {
+                curTags = p.tags;
+                curSection = p.section;
+                curUrl = p.url;
+                curOverview = p.overview;
+                found = true;
+                break;
+            }
+        }
+        if (found == false) { return ""; }
+        if (curOverview) { return ""; }
+
+        // picks is the final ordered card list; used dedups by URL (a page never links
+        // to itself or lists the same neighbor twice).
+        var picks: [{str: any}] = mut [<{str: any}>];
+        var used: {str: bool} = mut {};
+        used[curUrl] = true;
+
+        // Stage 1: lead with the nearest-ancestor overview - the overview page whose
+        // URL is the longest prefix of this page's URL.
+        var leadUrl = "";
+        var leadTitle = "";
+        var leadDesc = "";
+        foreach (p in this.docPages) {
+            if (p.overview and p.url != curUrl and curUrl.startsWith(p.url)) {
+                if (p.url.len() > leadUrl.len()) {
+                    leadUrl = p.url;
+                    leadTitle = p.title;
+                    leadDesc = p.desc;
+                }
+            }
+        }
+        if (leadUrl != "") {
+            picks.append(mut {"url": leadUrl, "title": leadTitle, "desc": leadDesc, "hasDesc": leadDesc != ""});
+            used[leadUrl] = true;
+        }
+
+        // Stage 2: score every remaining page and fill up to four cards.
+        var scored: [{str: str}] = mut [<{str: str}>];
+        foreach (p in this.docPages) {
+            if (used[p.url] == null) {
+                var score = 3 * sharedTagCount(curTags, p.tags);
+                if (curSection != "" and p.section == curSection) { score = score + 4; }
+                if (p.overview) { score = score + 3; }
+                if (p.srcRel == this.docs + "/documentation.md") { score = score + 1; }
+                if (score > 0) {
+                    scored.append(mut {
+                        "key": pad4(score), "url": p.url, "title": p.title, "desc": p.desc
+                    });
+                }
+            }
+        }
+        // Highest score first; ties by URL ascending. Padded keys compare lexically
+        // the same as numerically, so strLess on the key is a numeric compare.
+        final sorted = scored.sort(fun (a: {str: str}, b: {str: str}) > bool {
+            if (a["key"] != b["key"]) { return strLess(b["key"], a["key"]); }
+            return strLess(a["url"], b["url"]);
+        });
+        foreach (r in sorted) {
+            if (picks.len() < 4) {
+                picks.append(mut {"url": r["url"], "title": r["title"], "desc": r["desc"], "hasDesc": r["desc"] != ""});
+            }
+        }
+
+        if (picks.len() == 0) { return ""; }
+
+        return template.render(`  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+{{#picks}}
+        <a class="related-card" href="{{root}}{{url}}"><span class="related-card-title">{{title}}</span>{{#hasDesc}}<span class="related-card-desc">{{desc}}</span>{{/hasDesc}}</a>
+{{/picks}}
+    </div>
+  </section>
+`, {"root": root, "picks": picks});
+    }
+
+    // renderSectionNav builds the "In this section" sidebar list: the pages that are
+    // direct children of this page's section overview - the nearest-ancestor overview
+    // page whose clean URL is a prefix of this one (or this page itself, when it is the
+    // overview). It gives every page in a section a consistent, structural list of its
+    // siblings, and every overview a list of its children - the down/lateral axis the
+    // breadcrumb (up) and pager (prev/next) do not provide, replacing per-page hand
+    // curation with the same corpus the orphan gate already walks. The current page is
+    // marked aria-current. "" when the page belongs to no section (a top-level page with
+    // no overview ancestor) or the section has no children. curUrl is the page's own
+    // clean URL; root is its gen-root-relative prefix (as renderRelated uses).
+    fun renderSectionNav(srcRel: str, curUrl: str, root: str) > str {
+        if (curUrl == "") { return ""; }
+        // The section root: this page if it is itself an overview, else the longest
+        // overview-URL prefix of this page's URL (the nearest-ancestor overview).
+        var selfOverview = false;
+        foreach (p in this.docPages) {
+            if (p.srcRel == srcRel and p.overview) { selfOverview = true; break; }
+        }
+        var rootUrl = "";
+        if (selfOverview) {
+            rootUrl = curUrl;
+        } else {
+            foreach (p in this.docPages) {
+                if (p.overview and p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > rootUrl.len()) {
+                    rootUrl = p.url;
+                }
+            }
+        }
+        if (rootUrl == "") { return ""; }
+
+        // Direct children: pages whose clean URL is exactly one path segment deeper than
+        // the section root (so a grandchild does not surface in a parent's list).
+        var kids: [{str: str}] = mut [<{str: str}>];
+        foreach (p in this.docPages) {
+            if (p.url != rootUrl and p.url.startsWith(rootUrl)) {
+                final rest = p.url.sub(rootUrl.len());
+                if (splitPath(rest).len() == 1) {
+                    kids.append(mut {"url": p.url, "title": p.title});
+                }
+            }
+        }
+        if (kids.len() == 0) { return ""; }
+        final ordered = kids.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["url"], b["url"]); });
+
+        // Render through Mustache (like renderRelated) so {{title}} is HTML-escaped in
+        // both the link text and the title attribute - a page title is trusted but the
+        // hand-built string this replaced escaped only the attribute, not the text.
+        var picks: [{str: any}] = mut [<{str: any}>];
+        foreach (k in ordered) {
+            picks.append(mut {"url": k["url"], "title": k["title"], "current": k["url"] == curUrl});
+        }
+        return template.render(`        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+{{#picks}}
+          <li><a href="{{root}}{{url}}"{{#current}} aria-current="page"{{/current}} title="{{title}}">{{title}}</a></li>
+{{/picks}}
+        </ul>
+`, {"root": root, "picks": picks});
+    }
+
+    // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
+    // "modules/" -> "magus stdlib"), or "" when no docs page owns that URL. Used by
+    // renderBreadcrumb so an intermediate crumb reads as its destination page's real title.
+    fun lookupTitle(url: str) > str {
+        foreach (p in this.docPages) {
+            if (p.url == url) { return p.title; }
+        }
+        return "";
+    }
+}

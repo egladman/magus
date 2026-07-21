@@ -1,0 +1,325 @@
+// render_nav.buzz - the persistent site UI that frames every page but is not the page
+// content: the top navigation bar, the footer, the settings dropdown, the reference
+// drawer, the announcement strip, the "On this page" list, and the per-page "Last
+// updated" provenance line. These build HTML fragments that renderPage assembles around
+// the article - they are consumed BY the page assembler, they never call it, so this
+// module sits below render_page in the layering. Flat-imported by render.buzz (and,
+// once split out, render_page).
+import "fs";
+import "io";
+import "markdown";
+import "template";
+import "render_types" as _;
+import "render_route" as _;
+import "render_html" as _;
+import "render_text" as _;
+import "render_date" as _;
+
+// Footer crediting the last commit that touched a page's source (a magus/-relative
+// path), falling back to HEAD for a not-yet-committed file. Keying off the file's
+// own history means a page changes when its source does, not when any commit lands.
+export fun renderCommitFooter(path: str, site: Site) > str {
+    var cFull = site.metaFull;
+    var cShort = site.metaShort;
+    var cStamp = site.metaStamp;
+    final rec = site.metaCommits[site.metaPrefix + path];
+    if (rec != null) {
+        final parts = rec.split("|");
+        cFull = parts[0];
+        cShort = parts[1];
+        cStamp = parts[2];
+    }
+    // "Last updated" line: the always-visible provenance. A <small> paragraph so
+    // Pico's typography sets the muted look; no custom classes. It stays one inline
+    // line (no newlines) so the templates below carry none either.
+    var line = template.render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
+        {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": GH, "full": cFull, "short": cShort});
+
+    // <details> disclosure of the EARLIER commits that touched this page (the latest
+    // is already named above, so it is skipped to avoid a double reference). Semantic
+    // markup only - Pico styles <details>/<summary>/<ul>/<code>/<small>/<a> natively.
+    // Gated on the file having a real history entry; synthesized pages fall back to
+    // the "Last updated" line alone, and a single-commit page shows nothing extra.
+    final histKey = site.metaPrefix + path;
+    final hist = site.metaHistory[histKey];
+    if (hist != null and hist.len() > 0) {
+        var earlier: [{str: any}] = mut [<{str: any}>];
+        foreach (row in hist) {
+            final parts = row.split("|");
+            if (parts.len() >= 3 and parts[0] != cFull) {
+                final rec = mut {<str: any>};
+                rec["full"] = parts[0];
+                rec["short"] = parts[1];
+                rec["stampAttr"] = parts[2];
+                rec["stampDisplay"] = formatISOShort(parts[2]);
+                var rowSubj = "";
+                if (parts.len() >= 4) { rowSubj = parts[3]; }
+                rec["subj"] = rowSubj;
+                earlier.append(rec);
+            }
+        }
+        if (earlier.len() > 0) {
+            line = line + template.render(`<details class="recent-changes"><summary>Earlier changes on this page ({{count}})</summary><ul>{{#earlier}}<li><a href="{{gh}}/commit/{{full}}"><code>{{short}}</code></a> <small><time datetime="{{stampAttr}}">{{stampDisplay}}</time></small> - {{subj}}</li>{{/earlier}}</ul><p><small><a href="{{gh}}/commits/{{branch}}/{{histKey}}" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="{{gh}}/blame/{{branch}}/{{histKey}}" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>`,
+                {"count": earlier.len(), "earlier": earlier, "gh": GH, "branch": site.metaBranch, "histKey": histKey});
+        }
+    }
+    return line;
+}
+
+// rootPrefix moved to render_route.buzz.
+
+// (moved to render_meta.buzz)
+
+// (moved to render_meta.buzz)
+
+// renderTocList builds the "On this page" block from a rendered page's h2/h3 headings
+// (goldmark produces each on its own line with a slug id); h3s nest under their h2.
+// Returns "" with fewer than three headings — too little to warrant a sidebar (a
+// module page with one "Methods" h2 over many h3 methods still qualifies). It returns
+// just the title + list; renderPage() wraps it (with any section nav) in the .toc
+// <aside>. toc.js layers scroll-spy + the collapse toggle onto that markup.
+export fun renderTocList(content: str) > str {
+    final lines = content.split("\n");
+    var nHead = 0;
+    foreach (line in lines) {
+        if (line.startsWith("<h2 id=\"") or line.startsWith("<h3 id=\"")) { nHead = nHead + 1; }
+    }
+    if (nHead < 3) { return ""; }
+
+    var ul = "<ul>";
+    var haveLi = false;   // an h2 <li> is open, awaiting its </li>
+    var inSub = false;    // an h3 sublist <ul> is open
+    foreach (line in lines) {
+        var lvl = 0;
+        if (line.startsWith("<h2 id=\"")) { lvl = 2; }
+        if (line.startsWith("<h3 id=\"")) { lvl = 3; }
+        if (lvl != 0) {
+            final after = line.sub(8);                 // past `<hN id="`
+            final q = after.indexOf("\"");
+            final gt = line.indexOf(">");
+            if (q != null) {
+                if (gt != null) {
+                    final id = after.sub(0, q);
+                    final inner = line.sub(gt + 1);
+                    final end = inner.indexOf("</h");
+                    var label = inner;
+                    if (end != null) { label = inner.sub(0, end); }
+                    // TOC entries render as plain text - drop inline <code>,
+                    // <strong>, <em> etc from the heading so nothing in the
+                    // sidebar looks bold, italic, or code-styled.
+                    final plain = stripTags(label);
+                    final link = "<a href=\"#" + id + "\" title=\"" + plain + "\">" + plain + "</a>";
+                    if (lvl == 2) {
+                        if (inSub) { ul = ul + "</ul>"; inSub = false; }
+                        if (haveLi) { ul = ul + "</li>"; }
+                        ul = ul + "<li>" + link;
+                        haveLi = true;
+                    } else {
+                        if (haveLi == false) {
+                            ul = ul + "<li>" + link + "</li>";
+                        } else {
+                            if (inSub == false) { ul = ul + "<ul>"; inSub = true; }
+                            ul = ul + "<li>" + link + "</li>";
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (inSub) { ul = ul + "</ul>"; }
+    if (haveLi) { ul = ul + "</li>"; }
+    ul = ul + "</ul>";
+    return template.render(`        <p class="toc-title">On this page</p>
+        {{{ul}}}
+`, {"ul": ul});
+}
+
+// navLink renders one top-nav item, marking it aria-current when it is the page
+// the visitor is currently on (key == active).
+
+// renderSettingsPanel renders the gear button and its dropdown - the rightmost control
+// in every top bar. The theme (auto/light/dark) select lives here on EVERY page: it
+// replaced the standalone toggle button so the bar carries two trailing controls
+// (reference + gear), not three. showConsole adds the daemon-app operator prefs (refresh
+// rate, daemon host) that only the console apps read and persist; the docs, playground,
+// 404, and offline pages get the theme row alone. console-settings.js opens/closes the
+// panel (and persists poll/host); theme.js seeds and drives the #theme-cycle button
+// (click cycles auto/light/dark), since it owns the pre-paint theme set(). Both scripts
+// no-op when their controls are absent.
+export fun renderSettingsPanel(showConsole: bool) > str {
+    var rows = "";
+    if (showConsole) {
+        rows = `          <label class="settings-row"><span>Refresh rate</span><select id="settings-poll"><option value="5000">5s</option><option value="10000">10s</option><option value="20000">20s</option><option value="60000">60s</option></select></label>
+          <label class="settings-row"><span>Daemon host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
+`;
+    }
+    // "Saved locally" rather than "in this browser": these apps install as a PWA, so the
+    // browser framing reads wrong. The reload behavior is no longer stated here - changing a
+    // console pref now raises a "reload to apply" toast (console-settings.js), so the note
+    // stays short and the same on every surface.
+    final note = "Saved locally.";
+    final tmpl = `        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
+          <h2 class="settings-title">Settings</h2>
+          <p class="settings-note">{{note}}</p>
+{{{rows}}}          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+        </div>`;
+    return template.render(tmpl, {"note": note, "rows": rows});
+}
+
+// renderSiteNav renders the shared top bar (brand + section links + settings gear). One
+// definition for every page - docs pages via renderPage(), the 404, and the playground
+// (build-time injected via renderPlayground) - so adding a nav item lands everywhere
+// at once. root is the relative prefix back to gen/'s root; active is the current
+// section's key (or "" for none). withRef controls the Reference (drawer trigger)
+// button: it is shown only where the page actually ships a #ref-drawer + ref-drawer.js
+// and loads console.css (which sizes the icon button) - the docs pages and the
+// playground (whose drawer holds its "not everything runs here" module note). The 404
+// and offline pages have no reference content, so they pass false to omit the trigger
+// and its divider rather than render an oversized, dead button.
+export fun renderSiteNav(root: str, active: str, withRef: bool) > str {
+    // On mobile the five section links collapse behind a menu button. That button is a
+    // plain Pico .outline <button> (like the theme toggle) - NOT a <details>, whose Pico
+    // accordion styling we kept having to fight - so it inherits the button look for free
+    // and nav.js toggles the dropdown. Brand + theme toggle stay outside it, always shown.
+    // The toggle icon swaps hamburger -> X when the menu is open (CSS keys off
+    // .nav-right.nav-open); both glyphs ship in the button, one shows at a time. The
+    // "Menu" caption and the closing hint are mobile-popup only (aria-hidden on
+    // desktop). Home is an explicit link because the brand mark's accessible name is
+    // just "magus". The {{#links}} section marks the active item with aria-current;
+    // a backtick raw string holds the Mustache verbatim.
+    final tmpl = `  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="{{root}}index.html" class="contrast"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+{{#withRef}}        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
+{{/withRef}}        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+{{#links}}        <li><a href="{{href}}"{{#current}} aria-current="page"{{/current}}{{#blank}} target="_blank" rel="noopener" title="Opens in a new tab"{{/blank}}>{{label}}{{#blank}} <span class="ext-arrow" aria-hidden="true">&#x2197;</span>{{/blank}}</a></li>
+{{/links}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+{{{settings}}}
+      </div>
+    </nav>
+  </header>
+`;
+    final links = mut [<{str: any}>];
+    links.append({"href": root + "index.html", "label": "Home", "current": active == "home"});
+    links.append({"href": root + "documentation/", "label": "Documentation", "current": active == "documentation"});
+    links.append({"href": root + "blog/", "label": "Blog", "current": active == "blog"});
+    links.append({"href": root + "download/", "label": "Download", "current": active == "download"});
+    links.append({"href": root + "tour/", "label": "Tour", "current": active == "tour"});
+    links.append({"href": root + "playground/", "label": "Playground", "current": active == "playground"});
+    // Console opens in a NEW TAB (blank), flagged with the north-east "opens elsewhere" arrow: it is an
+    // app, not a docs page - it holds tabs, panes, and a live daemon link, so navigating the docs away
+    // into it (and back) would throw that state out. The only nav link that leaves the site.
+    links.append({"href": root + "console/", "label": "Console", "current": active == "console", "blank": true});
+    // The console SPA (a separate top-level project, copied to /console/ at deploy) is the single
+    // public entry point to magus's browser apps: it hosts the dashboard, graph explorer, log viewer,
+    // and activity trail as tabs, so none of them get their own top-nav item. The docs site no longer
+    // renders anything at /console/ - the app owns it. The loopback-API reference doc lives under
+    // /reference/console/. Playground stays a distinct link above because it is a standalone in-browser
+    // Buzz runner (no daemon) that the tour deep-links into, not a daemon app.
+    return template.render(tmpl, {"root": root, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
+}
+
+// renderReferenceDrawer returns the docs-site reference panel: the same slide-out drawer the console
+// apps use (styled by console.css, driven by ref-drawer.js), but WITHOUT data-relocate-search so the
+// docs keep their prominent top search bar in place. Its one .ref-section links the key reference
+// pages; ref-drawer.js relocates it into the drawer and the inline-browse feature opens each one in
+// the panel (no navigating away). root is the relative prefix back to gen/'s root.
+// Cached, root-templated reference content. Each doc is rendered to HTML ONCE, then its root-relative
+// links ("../X", from a depth-1 page) get a %%ROOT%% marker so renderReferenceDrawer can substitute
+// the embedding page's own root prefix per page - the same content works from any depth.
+var _refGlossary = "";
+var _refConventions = "";
+var _refLoaded = false;
+
+// refDocHtml renders one docs/*.md to content HTML and templatizes its root-relative links.
+export fun refDocHtml(rel: str, site: Site) > str {
+    final f = io.File.open(site.root + "/" + site.docs + "/" + rel, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+    var html = renderContentHTML(markdown.toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
+    while (html.indexOf("=\"../") != null) { html = html.replace("=\"../", "=\"%%ROOT%%"); }
+    return html;
+}
+
+export fun loadReferenceContent(site: Site) > void {
+    if (_refLoaded) { return; }
+    _refLoaded = true;
+    _refGlossary = refDocHtml("glossary.md", site);
+    _refConventions = refDocHtml("conventions.md", site);
+}
+
+export fun renderReferenceDrawer(root: str, site: Site) > str {
+    loadReferenceContent(site);
+    var glossary = _refGlossary;
+    while (glossary.indexOf("%%ROOT%%") != null) { glossary = glossary.replace("%%ROOT%%", root); }
+    var conventions = _refConventions;
+    while (conventions.indexOf("%%ROOT%%") != null) { conventions = conventions.replace("%%ROOT%%", root); }
+    final tmpl = `  <details class="ref-section" open>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed">{{{glossary}}}</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed">{{{conventions}}}</div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
+`;
+    return template.render(tmpl, {"root": root, "glossary": glossary, "conventions": conventions});
+}
+
+// renderSiteFooter renders the shared one-line attribution footer. It leads with two
+// root-relative site links (the Search tool and the /public/ file tree) so those
+// surfaces are reachable from every page, then the absolute GitHub/Buzz links; the
+// License link points at the pinned site.metaBranch (main) like the other GitHub links.
+// root is the relative prefix back to gen/'s root (so the site links resolve at any
+// page depth), matching renderSiteNav's root argument.
+export fun renderSiteFooter(root: str, site: Site) > str {
+    // Two clusters spread across the footer's width: this site's own surfaces on
+    // the left, the project/external links on the right. Dots separate items within
+    // a cluster; the clusters divide the row without adding a second line on desktop.
+    // The middle cluster's app entry is the Console (the single entry point to the browser
+    // apps, matching the header) - the dashboard, graph, logs, and activity are its tabs.
+    // Backtick raw string holds the Mustache verbatim (a double-quoted "{{x}}" would
+    // collide with Buzz's own {expr} interpolation).
+    final tmpl = `  <footer class="site-footer container">
+    <small class="footer-group"><a href="{{root}}search/">Search</a> &middot; <a href="{{root}}public/">Files</a></small>
+    <small class="footer-group"><a href="{{root}}console/">Console</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
+    <small class="footer-group"><a href="{{gh}}">Source Code</a> &middot; <a href="{{gh}}/blob/{{branch}}/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+`;
+    return template.render(tmpl, {"root": root, "gh": GH, "branch": site.metaBranch});
+}
+
+
+// renderAnnouncementBar renders a dismissible top strip announcing the newest shipped
+// release, or "" when none has shipped yet (so it stays dormant until then). The
+// version comes from loadReleases (releases/*.yaml), so it is drift-stable;
+// announcement.js hides it once the reader dismisses that version and re-shows it on
+// the next release. The GitHub tag link mirrors the releases Atom feed's convention.
+export fun renderAnnouncementBar(site: Site) > str {
+    if (site.releases.len() == 0) { return ""; }
+    final ver = site.releases[0].version;
+    final tmpl = `  <div id="announcement-bar" data-version="{{ver}}">
+    <div class="container">
+      <span>magus <strong>{{ver}}</strong> is out. <a href="{{gh}}/releases/tag/{{ver}}">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+`;
+    return template.render(tmpl, {"ver": ver, "gh": GH});
+}

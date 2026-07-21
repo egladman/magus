@@ -1,0 +1,117 @@
+// render_release.buzz - pure helpers for turning releases/*.yaml into the Atom feed,
+// the /public/release/ artifact tree, and release.json: newest-first semver ordering,
+// per-artifact descriptions, and the minimal JSON string encoding release.json needs.
+// Self-contained (only the render_text helpers), so it unit-tests here and is
+// flat-imported by render.buzz (`import "render_release" as _`). The Site-coupled
+// loaders/writers that consume these (loadReleases, renderReleasesAtom, releaseIndexJSON,
+// renderPublic) stay in render.buzz; only the pure transforms live here.
+import "render_text" as _;
+import "assert";
+
+// semverSortKey returns a zero-padded sort key for a release filename.
+// "v0.10.0.yaml" -> "0000.0010.0000", so lexicographic order matches numeric semver.
+// Unknown filename formats fall through to the original name (safe: only used for sort).
+export fun semverSortKey(name: str) > str {
+    var v = name;
+    if (v.startsWith("v")) { v = v.sub(1); }
+    if (v.endsWith(".yaml")) { v = v.sub(0, v.len() - 5); }
+    final parts = v.split(".");
+    var key = "";
+    foreach (p in parts) {
+        if (key.len() > 0) { key = key + "."; }
+        key = key + pad4(strToNat(p));
+    }
+    return key;
+}
+
+// sortNamesSemverDesc sorts a list of release filenames descending by semver
+// (newest-first). Uses selection sort; O(n^2) fine for the expected ~10-20 releases.
+// Mirrors Go's compareSemver in cmd/magus-utils/release.go.
+export fun sortNamesSemverDesc(names: [str]) > [str] {
+    var remaining: [str] = mut [<str>];
+    foreach (n in names) { remaining.append(n); }
+    var sorted: [str] = mut [<str>];
+    while (remaining.len() > 0) {
+        var maxIdx = 0;
+        var maxKey = semverSortKey(remaining[0]);
+        var k = 1;
+        while (k < remaining.len()) {
+            final key = semverSortKey(remaining[k]);
+            if (key > maxKey) {
+                maxKey = key;
+                maxIdx = k;
+            }
+            k = k + 1;
+        }
+        sorted.append(remaining[maxIdx]);
+        var next: [str] = mut [<str>];
+        var m = 0;
+        while (m < remaining.len()) {
+            if (m != maxIdx) { next.append(remaining[m]); }
+            m = m + 1;
+        }
+        remaining = next;
+    }
+    return sorted;
+}
+
+// artifactDesc returns a human-readable description for a release artifact given
+// its filename and platform string. Covers the standard release asset set.
+export fun artifactDesc(name: str, platform: str) > str {
+    if (name == "SHA256SUMS")        { return "SHA-256 manifest"; }
+    if (name == "SHA256SUMS.sig")    { return "Ed25519 signature of SHA256SUMS"; }
+    if (name == "magus-release.pem") { return "Release signing key (SPKI PEM)"; }
+    // Tarballs: derive from platform string (e.g. "linux/amd64", "darwin/arm64").
+    if (platform == "linux/amd64")   { return "Linux amd64 binary"; }
+    if (platform == "linux/arm64")   { return "Linux arm64 binary"; }
+    if (platform == "darwin/amd64")  { return "macOS Intel binary"; }
+    if (platform == "darwin/arm64")  { return "macOS Apple Silicon binary"; }
+    if (platform == "windows/amd64") { return "Windows amd64 binary"; }
+    return name;
+}
+
+// jsonStr encodes a string value as a JSON string literal, escaping only the
+// characters JSON requires: backslash, double-quote, and ASCII control characters
+// 0x00-0x1F. Unicode pass-through is fine for JSON (and for this use case: release
+// notes may contain em-dashes or other non-ASCII). Tabs/newlines are escaped
+// explicitly since they appear in release note bodies.
+export fun jsonStr(s: str) > str {
+    // str.replace is first-match only; split+join replaces every occurrence without
+    // regex escaping concerns. Order matters: escape backslashes first so new ones
+    // added for later escapes are not re-escaped.
+    var escaped = s.split("\\").join("\\\\");
+    escaped = escaped.split("\"").join("\\\"");
+    escaped = escaped.split("\n").join("\\n");
+    escaped = escaped.split("\r").join("\\r");
+    escaped = escaped.split("\t").join("\\t");
+    return "\"" + escaped + "\"";
+}
+
+// jsonStrList encodes a [str] as a JSON array of string literals.
+export fun jsonStrList(items: [str]) > str {
+    var parts: [str] = mut [<str>];
+    foreach (s in items) { parts.append(jsonStr(s)); }
+    return "[" + parts.join(",") + "]";
+}
+
+test "jsonStr escapes backslash, double-quote, newline, tab, and carriage-return" {
+    assert.equal(jsonStr(""), "\"\"", "empty string");
+    assert.equal(jsonStr("hello"), "\"hello\"", "plain string passthrough");
+    assert.equal(jsonStr("a\\b"), "\"a\\\\b\"", "backslash escaped first");
+    assert.equal(jsonStr("say \"hi\""), "\"say \\\"hi\\\"\"", "double-quote escaped");
+    assert.equal(jsonStr("line1\nline2"), "\"line1\\nline2\"", "newline escaped");
+    assert.equal(jsonStr("col1\tcol2"), "\"col1\\tcol2\"", "tab escaped");
+    assert.equal(jsonStr("cr\r"), "\"cr\\r\"", "carriage-return escaped");
+    // Backslash must be escaped before quotes so new backslashes are not re-escaped.
+    assert.equal(jsonStr("a\\\"b"), "\"a\\\\\\\"b\"", "backslash then quote: backslash first");
+}
+
+test "semverSortKey produces zero-padded keys for numeric semver comparison" {
+    assert.equal(semverSortKey("v0.2.0.yaml"),  "0000.0002.0000", "v0.2.0");
+    assert.equal(semverSortKey("v0.10.0.yaml"), "0000.0010.0000", "v0.10.0");
+    assert.equal(semverSortKey("v1.0.0.yaml"),  "0001.0000.0000", "v1.0.0");
+    // v0.10.0 key > v0.2.0 key: newest-first sort is correct
+    final key10 = semverSortKey("v0.10.0.yaml");
+    final key2  = semverSortKey("v0.2.0.yaml");
+    assert.equal(key10 > key2, true, "v0.10.0 sorts after v0.2.0 in descending pass");
+}
