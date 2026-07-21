@@ -118,7 +118,7 @@ more replace directives. It must not contain directives that would cause
 it to be interpreted differently than if it were the main module.
 ```
 
-Until the interpreter is published as a standalone, versioned module, install a [prebuilt binary](#install) (recommended) or build from a clone below - a clone works because the `replace` resolves against the checked-out `./gopherbuzz`.
+Until the interpreter is published as a standalone, versioned module, install a [prebuilt binary](#install) (recommended) or build from a clone below - a clone works because the `replace` resolves against the checked-out `./libs/gopherbuzz`.
 
 ## Build from source
 
