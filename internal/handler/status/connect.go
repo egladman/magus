@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
@@ -38,12 +39,24 @@ func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger
 
 var _ statusv1connect.StatusServiceHandler = (*ConnectService)(nil)
 
-// GetStatus returns the current live snapshot as a typed magus.status.v1.Status - the unary
-// equivalent of a single GET /api/v1/status, but on the wire contract.
+// GetStatus returns the current live snapshot as a typed magus.status.v1.Status, plus the two static
+// per-session fields (observing_since, config) on the response envelope - the typed replacement for the
+// deprecated JSON /api/v1/status route, which carried the live status AND those static fields in one body.
 func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statusv1.GetStatusRequest]) (*connect.Response[statusv1.GetStatusResponse], error) {
-	return connect.NewResponse(&statusv1.GetStatusResponse{
-		Status: statusReportToProto(s.src.StatusReport(ctx), s.build),
-	}), nil
+	report := s.src.StatusReport(ctx)
+	resp := &statusv1.GetStatusResponse{
+		Status: statusReportToProto(report, s.build),
+		Config: &statusv1.Config{
+			DefaultCharms: report.Config.DefaultCharms,
+			Concurrency:   int32(report.Config.Concurrency),
+			Sandbox:       report.Config.Sandbox,
+		},
+	}
+	// observing_since is omitted (zero) when reported by a non-daemon `magus status`; only stamp it when set.
+	if !report.ObservingSince.IsZero() {
+		resp.ObservingSince = timestamppb.New(report.ObservingSince)
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // StreamStatus pushes a snapshot on connect, then re-samples on a ticker and pushes again only

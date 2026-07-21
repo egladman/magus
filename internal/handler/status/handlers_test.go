@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,45 +22,6 @@ type fakeSource struct {
 }
 
 func (f fakeSource) StatusReport(context.Context) types.StatusReport { return f.report }
-
-// --- statusHandler ---
-
-func TestStatusHandler_Returns200WithJSON(t *testing.T) {
-	h := NewStatusHandler(fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon"}}}, types.BuildInfo{}, nil)
-	r := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", w.Code)
-	}
-	var out map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
-		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
-	}
-}
-
-func TestStatusHandler_MethodNotAllowed(t *testing.T) {
-	h := NewStatusHandler(fakeSource{}, types.BuildInfo{}, nil)
-	r := httptest.NewRequest(http.MethodPost, "/api/v1/status", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("want 405, got %d", w.Code)
-	}
-}
-
-func TestStatusHandler_OptionsNoContent(t *testing.T) {
-	h := NewStatusHandler(fakeSource{}, types.BuildInfo{}, nil)
-	r := httptest.NewRequest(http.MethodOptions, "/api/v1/status", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if w.Code != http.StatusNoContent {
-		t.Errorf("want 204 for preflight, got %d", w.Code)
-	}
-	if w.Body.Len() != 0 {
-		t.Errorf("preflight body should be empty, got %q", w.Body.String())
-	}
-}
 
 func TestEventsHandler_OptionsNoContent(t *testing.T) {
 	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, nil, 0, 0, nil)

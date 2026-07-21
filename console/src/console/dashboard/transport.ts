@@ -16,7 +16,7 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { createClient, type Client } from "@connectrpc/connect";
-import { StatusSchema, type Status } from "../../gen/magus/status/v1/status_pb";
+import { StatusSchema, StatusService, type Status } from "../../gen/magus/status/v1/status_pb";
 import { MetricsService } from "../../gen/magus/metrics/v1/metrics_pb";
 import {
   authHeaders, createDaemonTransport, fetchSSE, getLiveToken, type SSEHeaders,
@@ -228,24 +228,22 @@ export class DashboardTransport {
     }
   }
 
-  // One-shot fetch of the daemon's observing-since (when it began collecting the counters), read
-  // from the JSON status endpoint because it is static per session and NOT on the proto event
-  // stream. Best-effort: a failure just means no since-caption; it never blocks the live view.
+  // One-shot fetch of the daemon's observing-since (when it began collecting the counters) and its
+  // resolved config, read via the typed StatusService.GetStatus RPC. Both ride the one-shot response
+  // envelope (not the streamed Status frame) because they are static per session. This replaced the
+  // deprecated JSON GET /api/v1/status route. Best-effort: a failure just means no since-caption / config;
+  // it never blocks the live view.
   private async fetchObservingSince(host: string): Promise<void> {
     try {
-      const res = await fetch("http://" + host + "/api/v1/status", { headers: authHeaders() });
-      if (!res.ok) return;
-      const raw = (await res.json()) as {
-        observing_since?: string;
-        config?: { default_charms?: string[]; concurrency?: number; sandbox?: boolean };
-      };
-      const ms = raw.observing_since ? Date.parse(raw.observing_since) : NaN;
-      if (!Number.isNaN(ms)) this.store.set({ observingSince: ms });
-      if (raw.config) {
+      const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
+      const resp = await client.getStatus({});
+      const ts = resp.observingSince;
+      if (ts) this.store.set({ observingSince: Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6) });
+      if (resp.config) {
         this.store.set({ config: {
-          defaultCharms: raw.config.default_charms || [],
-          concurrency: raw.config.concurrency || 0,
-          sandbox: !!raw.config.sandbox,
+          defaultCharms: resp.config.defaultCharms,
+          concurrency: resp.config.concurrency,
+          sandbox: resp.config.sandbox,
         } });
       }
     } catch {

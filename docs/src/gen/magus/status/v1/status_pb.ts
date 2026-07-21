@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/status/v1/status.proto.
  */
 export const file_magus_status_v1_status: GenFile = /*@__PURE__*/
-  fileDesc("ChxtYWd1cy9zdGF0dXMvdjEvc3RhdHVzLnByb3RvEg9tYWd1cy5zdGF0dXMudjEi5gEKBlN0YXR1cxInCgZoZWFsdGgYASABKA4yFy5tYWd1cy5zdGF0dXMudjEuSGVhbHRoEiMKBHBvb2wYAiABKAsyFS5tYWd1cy5zdGF0dXMudjEuUG9vbBIiCgRydW5zGAQgAygLMhQubWFndXMuc3RhdHVzLnYxLlJ1bhIqCghzZXJ2aWNlcxgFIAMoCzIYLm1hZ3VzLnN0YXR1cy52MS5TZXJ2aWNlEikKBWJ1aWxkGAYgASgLMhoubWFndXMuc3RhdHVzLnYxLkJ1aWxkSW5mb0oECAMQBFINbWFndXNfdmVyc2lvbiJPCglCdWlsZEluZm8SDwoHdmVyc2lvbhgBIAEoCRIOCgZjb21taXQYAiABKAkSDAoEZGF0ZRgDIAEoCRITCgtmaW5nZXJwcmludBgEIAEoCSKAAQoDUnVuEgsKA2ludhgBIAEoCRIPCgd0cmlnZ2VyGAIgASgJEi4KCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB3RhcmdldHMYBCADKAsyGi5tYWd1cy5zdGF0dXMudjEuVGFyZ2V0UnVuIsECCglUYXJnZXRSdW4SDwoHcHJvamVjdBgBIAEoCRIOCgZ0YXJnZXQYAiABKAkSLwoFc3RhdGUYAyABKA4yIC5tYWd1cy5zdGF0dXMudjEuVGFyZ2V0UnVuLlN0YXRlEi4KCnN0YXJ0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiwKCGVuZGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpvdXRwdXRfcmVmGAYgASgJEhMKC2R1cmF0aW9uX21zGAcgASgDIlsKBVN0YXRlEhUKEVNUQVRFX1VOU1BFQ0lGSUVEEAASCgoGUVVFVUVEEAESCwoHUlVOTklORxACEgoKBlBBU1NFRBADEgoKBkZBSUxFRBAEEgoKBkNBQ0hFRBAFIpYBCgdTZXJ2aWNlEgoKAmlkGAEgASgJEg0KBWxhYmVsGAIgASgJEg8KB2NvbW1hbmQYAyABKAkSDAoEcG9ydBgEIAMoCRINCgVzdGF0ZRgFIAEoCRISCgpkZXBlbmRlbnRzGAYgASgFEi4KCnN0YXJ0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpUCCgRQb29sEhIKCnBhcmVudF9waWQYASABKAUSFgoOZGFlbW9uX3ZlcnNpb24YAiABKAkSDAoEbW9kZRgDIAEoCRIQCghjYXBhY2l0eRgEIAEoBRIPCgdydW5uaW5nGAUgASgFEg4KBnF1ZXVlZBgGIAEoBRI3Cg9ydW5uaW5nX3RhcmdldHMYByADKAsyHi5tYWd1cy5zdGF0dXMudjEuUnVubmluZ1RhcmdldBIuCgp3b3Jrc3BhY2VzGAggAygLMhoubWFndXMuc3RhdHVzLnYxLldvcmtzcGFjZRIQCghhZmZlY3RlZBgJIAMoCRIlCgVjYWNoZRgKIAEoCzIWLm1hZ3VzLnN0YXR1cy52MS5DYWNoZSKCAQoNUnVubmluZ1RhcmdldBIMCgRhcmdzGAEgAygJEhEKCXdvcmtzcGFjZRgCIAEoCRIuCgpzdGFydF90aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRzdGVwGAQgASgJEhIKCmludm9jYXRpb24YBSABKAkipQEKCVdvcmtzcGFjZRIMCgRyb290GAEgASgJEi0KCWxvYWRfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoQbGFzdF9hY2Nlc3NfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoFY2FjaGUYBCABKAsyFi5tYWd1cy5zdGF0dXMudjEuQ2FjaGUiXgoFQ2FjaGUSDAoEaGl0cxgBIAEoAxIOCgZtaXNzZXMYAiABKAMSDgoGZXJyb3JzGAMgASgDEhIKCnNpemVfYnl0ZXMYBCABKAMSEwoLc2l6ZV9jYXBfbWIYBSABKAUiEgoQR2V0U3RhdHVzUmVxdWVzdCI8ChFHZXRTdGF0dXNSZXNwb25zZRInCgZzdGF0dXMYASABKAsyFy5tYWd1cy5zdGF0dXMudjEuU3RhdHVzIhUKE1N0cmVhbVN0YXR1c1JlcXVlc3QiPwoUU3RyZWFtU3RhdHVzUmVzcG9uc2USJwoGc3RhdHVzGAEgASgLMhcubWFndXMuc3RhdHVzLnYxLlN0YXR1cypaCgZIZWFsdGgSFgoSSEVBTFRIX1VOU1BFQ0lGSUVEEAASEgoOSEVBTFRIX0hFQUxUSFkQARITCg9IRUFMVEhfREVHUkFERUQQAhIPCgtIRUFMVEhfRE9XThADMsIBCg1TdGF0dXNTZXJ2aWNlElIKCUdldFN0YXR1cxIhLm1hZ3VzLnN0YXR1cy52MS5HZXRTdGF0dXNSZXF1ZXN0GiIubWFndXMuc3RhdHVzLnYxLkdldFN0YXR1c1Jlc3BvbnNlEl0KDFN0cmVhbVN0YXR1cxIkLm1hZ3VzLnN0YXR1cy52MS5TdHJlYW1TdGF0dXNSZXF1ZXN0GiUubWFndXMuc3RhdHVzLnYxLlN0cmVhbVN0YXR1c1Jlc3BvbnNlMAFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("ChxtYWd1cy9zdGF0dXMvdjEvc3RhdHVzLnByb3RvEg9tYWd1cy5zdGF0dXMudjEi5gEKBlN0YXR1cxInCgZoZWFsdGgYASABKA4yFy5tYWd1cy5zdGF0dXMudjEuSGVhbHRoEiMKBHBvb2wYAiABKAsyFS5tYWd1cy5zdGF0dXMudjEuUG9vbBIiCgRydW5zGAQgAygLMhQubWFndXMuc3RhdHVzLnYxLlJ1bhIqCghzZXJ2aWNlcxgFIAMoCzIYLm1hZ3VzLnN0YXR1cy52MS5TZXJ2aWNlEikKBWJ1aWxkGAYgASgLMhoubWFndXMuc3RhdHVzLnYxLkJ1aWxkSW5mb0oECAMQBFINbWFndXNfdmVyc2lvbiJPCglCdWlsZEluZm8SDwoHdmVyc2lvbhgBIAEoCRIOCgZjb21taXQYAiABKAkSDAoEZGF0ZRgDIAEoCRITCgtmaW5nZXJwcmludBgEIAEoCSKAAQoDUnVuEgsKA2ludhgBIAEoCRIPCgd0cmlnZ2VyGAIgASgJEi4KCnN0YXJ0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB3RhcmdldHMYBCADKAsyGi5tYWd1cy5zdGF0dXMudjEuVGFyZ2V0UnVuIsECCglUYXJnZXRSdW4SDwoHcHJvamVjdBgBIAEoCRIOCgZ0YXJnZXQYAiABKAkSLwoFc3RhdGUYAyABKA4yIC5tYWd1cy5zdGF0dXMudjEuVGFyZ2V0UnVuLlN0YXRlEi4KCnN0YXJ0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiwKCGVuZGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpvdXRwdXRfcmVmGAYgASgJEhMKC2R1cmF0aW9uX21zGAcgASgDIlsKBVN0YXRlEhUKEVNUQVRFX1VOU1BFQ0lGSUVEEAASCgoGUVVFVUVEEAESCwoHUlVOTklORxACEgoKBlBBU1NFRBADEgoKBkZBSUxFRBAEEgoKBkNBQ0hFRBAFIpYBCgdTZXJ2aWNlEgoKAmlkGAEgASgJEg0KBWxhYmVsGAIgASgJEg8KB2NvbW1hbmQYAyABKAkSDAoEcG9ydBgEIAMoCRINCgVzdGF0ZRgFIAEoCRISCgpkZXBlbmRlbnRzGAYgASgFEi4KCnN0YXJ0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpUCCgRQb29sEhIKCnBhcmVudF9waWQYASABKAUSFgoOZGFlbW9uX3ZlcnNpb24YAiABKAkSDAoEbW9kZRgDIAEoCRIQCghjYXBhY2l0eRgEIAEoBRIPCgdydW5uaW5nGAUgASgFEg4KBnF1ZXVlZBgGIAEoBRI3Cg9ydW5uaW5nX3RhcmdldHMYByADKAsyHi5tYWd1cy5zdGF0dXMudjEuUnVubmluZ1RhcmdldBIuCgp3b3Jrc3BhY2VzGAggAygLMhoubWFndXMuc3RhdHVzLnYxLldvcmtzcGFjZRIQCghhZmZlY3RlZBgJIAMoCRIlCgVjYWNoZRgKIAEoCzIWLm1hZ3VzLnN0YXR1cy52MS5DYWNoZSKCAQoNUnVubmluZ1RhcmdldBIMCgRhcmdzGAEgAygJEhEKCXdvcmtzcGFjZRgCIAEoCRIuCgpzdGFydF90aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRzdGVwGAQgASgJEhIKCmludm9jYXRpb24YBSABKAkipQEKCVdvcmtzcGFjZRIMCgRyb290GAEgASgJEi0KCWxvYWRfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoQbGFzdF9hY2Nlc3NfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoFY2FjaGUYBCABKAsyFi5tYWd1cy5zdGF0dXMudjEuQ2FjaGUiXgoFQ2FjaGUSDAoEaGl0cxgBIAEoAxIOCgZtaXNzZXMYAiABKAMSDgoGZXJyb3JzGAMgASgDEhIKCnNpemVfYnl0ZXMYBCABKAMSEwoLc2l6ZV9jYXBfbWIYBSABKAUiEgoQR2V0U3RhdHVzUmVxdWVzdCKaAQoRR2V0U3RhdHVzUmVzcG9uc2USJwoGc3RhdHVzGAEgASgLMhcubWFndXMuc3RhdHVzLnYxLlN0YXR1cxIzCg9vYnNlcnZpbmdfc2luY2UYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEicKBmNvbmZpZxgDIAEoCzIXLm1hZ3VzLnN0YXR1cy52MS5Db25maWciRgoGQ29uZmlnEhYKDmRlZmF1bHRfY2hhcm1zGAEgAygJEhMKC2NvbmN1cnJlbmN5GAIgASgFEg8KB3NhbmRib3gYAyABKAgiFQoTU3RyZWFtU3RhdHVzUmVxdWVzdCI/ChRTdHJlYW1TdGF0dXNSZXNwb25zZRInCgZzdGF0dXMYASABKAsyFy5tYWd1cy5zdGF0dXMudjEuU3RhdHVzKloKBkhlYWx0aBIWChJIRUFMVEhfVU5TUEVDSUZJRUQQABISCg5IRUFMVEhfSEVBTFRIWRABEhMKD0hFQUxUSF9ERUdSQURFRBACEg8KC0hFQUxUSF9ET1dOEAMywgEKDVN0YXR1c1NlcnZpY2USUgoJR2V0U3RhdHVzEiEubWFndXMuc3RhdHVzLnYxLkdldFN0YXR1c1JlcXVlc3QaIi5tYWd1cy5zdGF0dXMudjEuR2V0U3RhdHVzUmVzcG9uc2USXQoMU3RyZWFtU3RhdHVzEiQubWFndXMuc3RhdHVzLnYxLlN0cmVhbVN0YXR1c1JlcXVlc3QaJS5tYWd1cy5zdGF0dXMudjEuU3RyZWFtU3RhdHVzUmVzcG9uc2UwAWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * Status is the live snapshot.
@@ -565,6 +565,25 @@ export type GetStatusResponse = Message<"magus.status.v1.GetStatusResponse"> & {
    * @generated from field: magus.status.v1.Status status = 1;
    */
   status?: Status;
+
+  /**
+   * observing_since and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
+   * are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them
+   * once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields
+   * the deprecated JSON /api/v1/status route used to carry.
+   *
+   * when this daemon began observing (its start)
+   *
+   * @generated from field: google.protobuf.Timestamp observing_since = 2;
+   */
+  observingSince?: Timestamp;
+
+  /**
+   * the daemon's resolved, read-only configuration
+   *
+   * @generated from field: magus.status.v1.Config config = 3;
+   */
+  config?: Config;
 };
 
 /**
@@ -573,6 +592,43 @@ export type GetStatusResponse = Message<"magus.status.v1.GetStatusResponse"> & {
  */
 export const GetStatusResponseSchema: GenMessage<GetStatusResponse> = /*@__PURE__*/
   messageDesc(file_magus_status_v1_status, 10);
+
+/**
+ * Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what
+ * the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
+ * (the one-shot), never the live Status frame.
+ *
+ * @generated from message magus.status.v1.Config
+ */
+export type Config = Message<"magus.status.v1.Config"> & {
+  /**
+   * the charms applied to every run by default
+   *
+   * @generated from field: repeated string default_charms = 1;
+   */
+  defaultCharms: string[];
+
+  /**
+   * the concurrency cap (0 = unlimited)
+   *
+   * @generated from field: int32 concurrency = 2;
+   */
+  concurrency: number;
+
+  /**
+   * whether filesystem sandboxing is on
+   *
+   * @generated from field: bool sandbox = 3;
+   */
+  sandbox: boolean;
+};
+
+/**
+ * Describes the message magus.status.v1.Config.
+ * Use `create(ConfigSchema)` to create a new message.
+ */
+export const ConfigSchema: GenMessage<Config> = /*@__PURE__*/
+  messageDesc(file_magus_status_v1_status, 11);
 
 /**
  * @generated from message magus.status.v1.StreamStatusRequest
@@ -585,7 +641,7 @@ export type StreamStatusRequest = Message<"magus.status.v1.StreamStatusRequest">
  * Use `create(StreamStatusRequestSchema)` to create a new message.
  */
 export const StreamStatusRequestSchema: GenMessage<StreamStatusRequest> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 11);
+  messageDesc(file_magus_status_v1_status, 12);
 
 /**
  * @generated from message magus.status.v1.StreamStatusResponse
@@ -602,7 +658,7 @@ export type StreamStatusResponse = Message<"magus.status.v1.StreamStatusResponse
  * Use `create(StreamStatusResponseSchema)` to create a new message.
  */
 export const StreamStatusResponseSchema: GenMessage<StreamStatusResponse> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1_status, 12);
+  messageDesc(file_magus_status_v1_status, 13);
 
 /**
  * Health is the at-a-glance rollup a dashboard shows.

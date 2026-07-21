@@ -58,14 +58,14 @@ type Daemon struct {
 type Option func(*Daemon)
 
 // WithRuns supplies the daemon's live-run source (the run registry's Snapshot). When
-// set, /api/v1/status and the status SSE frame carry the per-target execution state of every
-// adopted run alongside the pool - the same status surface, more live state.
+// set, the StatusService (GetStatus/StreamStatus) and the status SSE frame carry the per-target
+// execution state of every adopted run alongside the pool - the same status surface, more live state.
 func WithRuns(fn func() []types.StatusRun) Option {
 	return func(d *Daemon) { d.runs = fn }
 }
 
 // WithServices supplies the daemon's hosted-services source (the service registry's
-// Snapshot). When set, /api/v1/status and the status SSE frame carry the long-running
+// Snapshot). When set, the StatusService and the status SSE frame carry the long-running
 // shared services the daemon is keeping warm alongside the pool and runs.
 func WithServices(fn func() []types.StatusService) Option {
 	return func(d *Daemon) { d.services = fn }
@@ -214,19 +214,16 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// see shareGuarded). Building them once keeps the two surfaces serving the
 			// identical read logic.
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
-			statusH := status.NewStatusHandler(svc, opts.Build, log)
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
 			insightH := status.NewInsightHandler(svc, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 
 			bridgeMux := http.NewServeMux()
-			// DEPRECATED: the hand-shaped JSON /api/v1/status route. Superseded by the typed
-			// StatusService Connect route (magus.status.v1.StatusService/GetStatus), mounted
-			// below, which serves the SAME live snapshot on the wire contract. Kept for now
-			// because console/src still fetches this JSON (dashboard transport observingSince);
-			// remove once the frontend migrates to the Connect client. See NewConnectService.
-			bridgeMux.Handle("/api/v1/status", cors(statusH))
+			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route
+			// (magus.status.v1.StatusService/GetStatus, mounted below) is its full replacement -
+			// it serves the same live snapshot plus observing_since and config on the wire contract,
+			// and the console reads it there now.
 			bridgeMux.Handle("/api/v1/events", cors(eventsH))
 			bridgeMux.Handle("/api/v1/graph", cors(graphhandler.NewGraphHandler(svc, log)))
 			// In-daemon insight: the four VCS-history lenses (cached scan) plus the folded-in
@@ -248,7 +245,6 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// read routes. The two Connect read services (activity, metrics) are added
 			// to this map below, where their handlers are built.
 			shareGuarded := map[string]http.Handler{
-				"/api/v1/status":  statusH,
 				"/api/v1/events":  eventsH,
 				"/api/v1/insight": insightH,
 				"/api/v1/outputs": outputsH,

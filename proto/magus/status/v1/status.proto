@@ -141,6 +141,21 @@ service StatusService {
 message GetStatusRequest {}
 message GetStatusResponse {
   Status status = 1;
+  // observing_since and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
+  // are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them
+  // once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields
+  // the deprecated JSON /api/v1/status route used to carry.
+  google.protobuf.Timestamp observing_since = 2; // when this daemon began observing (its start)
+  Config config = 3;                             // the daemon's resolved, read-only configuration
+}
+
+// Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what
+// the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
+// (the one-shot), never the live Status frame.
+message Config {
+  repeated string default_charms = 1; // the charms applied to every run by default
+  int32 concurrency = 2;              // the concurrency cap (0 = unlimited)
+  bool sandbox = 3;                   // whether filesystem sandboxing is on
 }
 message StreamStatusRequest {}
 message StreamStatusResponse {

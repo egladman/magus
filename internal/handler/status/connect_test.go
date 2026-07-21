@@ -33,6 +33,35 @@ func TestConnectGetStatusReportsLiveSnapshot(t *testing.T) {
 	assert.Equal(t, "abc1234", got.GetBuild().GetCommit())
 }
 
+// TestConnectGetStatusCarriesEnvelopeExtras pins the two static per-session fields that moved off the
+// deprecated JSON route onto the GetStatus response envelope: observing_since and the resolved config.
+func TestConnectGetStatusCarriesEnvelopeExtras(t *testing.T) {
+	since := time.Date(2026, 7, 21, 10, 0, 0, 0, time.UTC)
+	src := fakeSource{report: types.StatusReport{
+		ObservingSince: since,
+		Config:         types.StatusConfig{DefaultCharms: []string{"rw"}, Concurrency: 8, Sandbox: true},
+	}}
+	svc := NewConnectService(src, types.BuildInfo{}, nil)
+
+	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
+	require.NoError(t, err)
+
+	assert.Equal(t, since.Unix(), resp.Msg.GetObservingSince().GetSeconds())
+	cfg := resp.Msg.GetConfig()
+	require.NotNil(t, cfg)
+	assert.Equal(t, []string{"rw"}, cfg.GetDefaultCharms())
+	assert.Equal(t, int32(8), cfg.GetConcurrency())
+	assert.True(t, cfg.GetSandbox())
+}
+
+// A non-daemon report leaves observing_since zero, so GetStatus must omit it (not stamp epoch).
+func TestConnectGetStatusOmitsZeroObservingSince(t *testing.T) {
+	svc := NewConnectService(fakeSource{}, types.BuildInfo{}, nil)
+	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
+	require.NoError(t, err)
+	assert.Nil(t, resp.Msg.GetObservingSince(), "zero observing-since must be omitted, not epoch")
+}
+
 // mutableSource lets a test flip the reported snapshot mid-stream so StreamStatus's push-on-change
 // path is exercised. The mutex keeps the handler goroutine's read race-clean against the test's write.
 type mutableSource struct {

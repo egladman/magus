@@ -3,7 +3,6 @@ package status
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,45 +18,6 @@ import (
 // *console.Service; the handler package never imports the service concretely.
 type statusSource interface {
 	StatusReport(context.Context) types.StatusReport
-}
-
-// StatusHandler serves GET /api/v1/status: the same JSON as `magus status -o json`
-// (types.StatusReport). The telemetry/cache/build fields come from the service's static
-// base; pool and pool_error are live so the response reflects current daemon state.
-type StatusHandler struct {
-	handler.Base
-	src   statusSource
-	build types.BuildInfo
-}
-
-// NewStatusHandler returns the GET /api/v1/status handler reading from src. build stamps the
-// reporting binary's identity onto every response.
-func NewStatusHandler(src statusSource, build types.BuildInfo, log *slog.Logger) *StatusHandler {
-	h := &StatusHandler{src: src, build: build}
-	h.Base = handler.New(h.serve, log)
-	return h
-}
-
-func (h *StatusHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	report := h.src.StatusReport(r.Context())
-	report.BuildInfo = h.build
-	body, err := json.Marshal(report)
-	if err != nil {
-		http.Error(w, "marshal error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(body)
 }
 
 // EventsHandler serves GET /api/v1/events as a Server-Sent Events stream.
