@@ -358,46 +358,30 @@ fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str, site: Sit
     site.writtenPaths[path + "/index.html"] = true;
 }
 
-// releaseIndexJSON builds the JSON body for gen/public/release/index.json.
-// Schema version 1 (frozen): schema_version, releases[]{version, date, notes{added?,
-// changed?, fixed?, removed?}, body, artifacts[]{name, platform, size, sha256}, yanked?}.
-// Field order and names match the Go ReleaseManifest struct in cmd/magus-utils/release.go
-// so the schema is one canonical frozen v1 regardless of emitter.
-// Emits compact JSON; git-stable across runs; one release per line.
+// releaseIndexJSON builds gen/public/release/index.json - the machine-readable release
+// manifest `magus self update` fetches (and Go signs into index.json.sig). It carries
+// only what a consumer reads: schema_version, and per release the version, an optional
+// yanked flag, and the artifact list (name/platform/size/sha256). The human-readable
+// changelog (the notes/body sections) is NOT duplicated here - it already ships in the
+// releases Atom feed and each release YAML, and nothing reads it from this manifest, so
+// carrying it was dead weight. Built with serialize.jsonEncode rather than hand-rolled
+// string concatenation: the encoder sorts keys deterministically, so the output stays
+// byte-stable for the drift gate, and there are no escaping pitfalls to get wrong.
+// Schema stays version 1: this only drops fields no consumer parsed, so an existing
+// reader (which ignores unknown/missing fields) is unaffected.
 fun releaseIndexJSON(site: Site) > str {
-    // \{ and \} are the Buzz escape sequences for literal braces in a double-quoted
-    // string (the unescaped { would start a string-interpolation expression).
-    var relJson: [str] = mut [<str>];
+    var releases: [{str: any}] = mut [<{str: any}>];
     foreach (rel in site.releases) {
-        // Build the notes sub-object, omitting empty sections (matching Go omitempty).
-        var notesParts: [str] = mut [<str>];
-        if (rel.notesAdded.len() > 0) {
-            notesParts.append("\"added\":" + jsonStrList(rel.notesAdded));
-        }
-        if (rel.notesChanged.len() > 0) {
-            notesParts.append("\"changed\":" + jsonStrList(rel.notesChanged));
-        }
-        if (rel.notesFixed.len() > 0) {
-            notesParts.append("\"fixed\":" + jsonStrList(rel.notesFixed));
-        }
-        if (rel.notesRemoved.len() > 0) {
-            notesParts.append("\"removed\":" + jsonStrList(rel.notesRemoved));
-        }
-        final notesJson = "\{" + notesParts.join(",") + "\}";
-        var artJson: [str] = mut [<str>];
+        var arts: [{str: any}] = mut [<{str: any}>];
         foreach (a in rel.artifacts) {
-            artJson.append("\{\"name\":" + jsonStr(a["name"]) + ",\"platform\":" + jsonStr(a["platform"]) + ",\"size\":" + jsonStr(a["size"]) + ",\"sha256\":" + jsonStr(a["sha256"]) + "\}");
+            arts.append(mut {"name": a["name"], "platform": a["platform"], "size": a["size"], "sha256": a["sha256"]});
         }
-        var entry = "\{\"version\":" + jsonStr(rel.version)
-            + ",\"date\":" + jsonStr(rel.date)
-            + ",\"notes\":" + notesJson
-            + ",\"body\":" + jsonStr(rel.body)
-            + ",\"artifacts\":[" + artJson.join(",") + "]";
-        if (rel.yanked) { entry = entry + ",\"yanked\":true"; }
-        entry = entry + "\}";
-        relJson.append(entry);
+        var entry: {str: any} = mut {"version": rel.version, "artifacts": arts};
+        if (rel.yanked) { entry["yanked"] = true; }   // omitted when false, matching the reader's omitempty
+        releases.append(entry);
     }
-    return "\{\"schema_version\":1,\"releases\":[" + relJson.join(",") + "]\}\n";
+    final root: {str: any} = mut {"schema_version": 1, "releases": releases};
+    return serialize.jsonEncode(serialize.Boxed.init(root)) + "\n";
 }
 
 // renderPublic writes the nested /public/ autoindex tree: the root at /public/
@@ -2009,7 +1993,7 @@ test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descript
     assert.equal(llmsIndexBody(pages, "/"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
 }
 
-test "releaseIndexJSON emits schema_version=1 and frozen v1 fields for a known release" {
+test "releaseIndexJSON emits the slim self-update manifest and omits the changelog prose" {
     final s = mut Site{};
     var added: [str] = mut [<str>];
     added.append("first feature");
@@ -2024,16 +2008,18 @@ test "releaseIndexJSON emits schema_version=1 and frozen v1 fields for a known r
     });
     final got = releaseIndexJSON(s);
     // Check JSON structure via indexOf so literal braces in assertions don't need escaping.
+    // The manifest carries exactly what a consumer reads: schema_version, version, artifacts.
     assert.equal(got.indexOf("\"schema_version\":1") != null, true, "schema_version:1 present");
-    assert.equal(got.indexOf("\"releases\":[") != null, true, "releases array present");
     assert.equal(got.indexOf("\"version\":\"v0.2.0\"") != null, true, "version present");
-    assert.equal(got.indexOf("\"notes\":") != null, true, "notes field present");
-    assert.equal(got.indexOf("\"added\":[\"first feature\"]") != null, true, "notes.added present");
-    assert.equal(got.indexOf("\"body\":\"### Added\\n\\n- first feature\"") != null, true, "body present with escaped newlines");
+    assert.equal(got.indexOf("\"name\":\"magus_v0.2.0_linux_amd64.tar.gz\"") != null, true, "artifact name present");
     assert.equal(got.indexOf("\"platform\":\"linux/amd64\"") != null, true, "artifact platform present");
-    // yanked must be absent when false (omitempty)
+    // The human-readable changelog (notes/body) and the release date are NOT duplicated
+    // into the manifest - nothing reads them from here, they ship in the Atom feed/YAML.
+    assert.equal(got.indexOf("\"notes\"") != null, false, "notes omitted");
+    assert.equal(got.indexOf("\"body\"") != null, false, "body omitted");
+    assert.equal(got.indexOf("\"date\"") != null, false, "date omitted");
+    // yanked is omitted when false (matching the reader's omitempty).
     assert.equal(got.indexOf("yanked") != null, false, "yanked absent when false");
-    assert.equal(got.endsWith("]\}\n"), true, "ends with closing brace and newline");
 }
 
 test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest release tag" {
