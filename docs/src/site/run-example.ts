@@ -72,18 +72,30 @@ export function initRunExample(): void {
           if (WebAssembly.instantiateStreaming) {
             WebAssembly.instantiateStreaming(loader, go.importObject).then(startWith).catch(reject);
           } else {
-            loader.then(function (r) { return r.arrayBuffer(); })
-              .then(function (bs) { return WebAssembly.instantiate(bs, go.importObject); })
-              .then(startWith).catch(reject);
+            loader
+              .then(function (r) {
+                return r.arrayBuffer();
+              })
+              .then(function (bs) {
+                return WebAssembly.instantiate(bs, go.importObject);
+              })
+              .then(startWith)
+              .catch(reject);
           }
-        } catch (e) { reject(e); }
+        } catch (e) {
+          reject(e);
+        }
       };
-      s.onerror = function () { reject(new Error("wasm_exec.js failed to load")); };
+      s.onerror = function () {
+        reject(new Error("wasm_exec.js failed to load"));
+      };
       document.head.appendChild(s);
     });
     // A transient load failure must not poison every later Run; drop the cache so the
     // next click retries. The caller still sees this attempt's rejection.
-    wasmPromise.catch(() => { wasmPromise = null; });
+    wasmPromise.catch(() => {
+      wasmPromise = null;
+    });
     return wasmPromise;
   }
 
@@ -94,7 +106,9 @@ export function initRunExample(): void {
   function base64url(text: string): string {
     // UTF-8 -> latin1 (unescape(encodeURIComponent)) -> btoa -> URL-safe alphabet.
     return btoa(unescape(encodeURIComponent(text)))
-      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
   }
 
   // formatTrace renders an evalBuzzWithRecorder result as text lines, matching the
@@ -114,8 +128,9 @@ export function initRunExample(): void {
       lines.push(tag + op.name + detail + "  " + op.kind + " · recorded");
     }
     const n = trace.length;
-    lines.push("[pass] dry-run: " + n + " step" + (n === 1 ? "" : "s") +
-      " recorded, nothing executed");
+    lines.push(
+      "[pass] dry-run: " + n + " step" + (n === 1 ? "" : "s") + " recorded, nothing executed",
+    );
     return lines.join("\n");
   }
 
@@ -147,7 +162,7 @@ export function initRunExample(): void {
     const runBtn = document.createElement("button");
     runBtn.type = "button";
     runBtn.className = "run-example";
-    runBtn.innerHTML = PLAY + '<span>Run</span>';
+    runBtn.innerHTML = PLAY + "<span>Run</span>";
     runBtn.setAttribute("aria-label", "Run this Buzz snippet");
     runBtn.setAttribute("title", "Run this Buzz snippet");
     runBtn.setAttribute("data-tooltip", "Run this snippet");
@@ -190,28 +205,32 @@ export function initRunExample(): void {
       // reports the tool invocations they WOULD trigger as a trace. Module
       // examples stay on the plain evalBuzz path (print output).
       const recorder = pre.hasAttribute("data-recorder");
-      ensureBuzz().then(() => {
-        const buzz = window.buzz;
-        if (!buzz) throw new Error("buzz.evalBuzz not ready");
-        const pnl = panel();
-        const src = code.textContent ?? "";
-        if (recorder) {
-          const r = buzz.evalBuzzWithRecorder(src);
-          pnl.textContent = formatTrace(r);
-          pnl.classList.toggle("failed", !(r && r.ok));
-        } else {
-          const r = buzz.evalBuzz(src);
-          pnl.textContent = (r && r.output) ? r.output : "(no output)";
-          pnl.classList.toggle("failed", !(r && r.ok));
-        }
-      }).catch((e) => {
-        const pnl = panel();
-        pnl.textContent = "Failed to load the Buzz runtime: " + (e instanceof Error ? e.message : String(e));
-        pnl.classList.add("failed");
-      }).finally(() => {
-        runBtn.disabled = false;
-        if (span) span.textContent = oldLabel;
-      });
+      ensureBuzz()
+        .then(() => {
+          const buzz = window.buzz;
+          if (!buzz) throw new Error("buzz.evalBuzz not ready");
+          const pnl = panel();
+          const src = code.textContent ?? "";
+          if (recorder) {
+            const r = buzz.evalBuzzWithRecorder(src);
+            pnl.textContent = formatTrace(r);
+            pnl.classList.toggle("failed", !(r && r.ok));
+          } else {
+            const r = buzz.evalBuzz(src);
+            pnl.textContent = r && r.output ? r.output : "(no output)";
+            pnl.classList.toggle("failed", !(r && r.ok));
+          }
+        })
+        .catch((e) => {
+          const pnl = panel();
+          pnl.textContent =
+            "Failed to load the Buzz runtime: " + (e instanceof Error ? e.message : String(e));
+          pnl.classList.add("failed");
+        })
+        .finally(() => {
+          runBtn.disabled = false;
+          if (span) span.textContent = oldLabel;
+        });
     });
   });
 }

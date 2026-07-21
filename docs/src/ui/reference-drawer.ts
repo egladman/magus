@@ -57,30 +57,38 @@ export function initRefDrawer(): void {
   };
 
   const isDocLink = (a: HTMLAnchorElement): boolean => {
-    if (a.origin !== location.origin) return false;              // external
+    if (a.origin !== location.origin) return false; // external
     if (a.hasAttribute("download") || (a.target && a.target !== "_self")) return false;
-    if (/\.(png|jpe?g|webp|gif|svg|css|js|json|xml|txt|pdf|wasm|zip)(\?|$)/i.test(a.pathname)) return false;
+    if (/\.(png|jpe?g|webp|gif|svg|css|js|json|xml|txt|pdf|wasm|zip)(\?|$)/i.test(a.pathname))
+      return false;
     if (a.pathname === location.pathname && a.hash) return false; // in-page anchor: let it scroll
     return true;
   };
 
   let openDocController: AbortController | null = null;
   const openDoc = async (url: string): Promise<void> => {
-    openDocController?.abort();   // a newer open supersedes the in-flight one (last click wins)
+    openDocController?.abort(); // a newer open supersedes the in-flight one (last click wins)
     const controller = new AbortController();
     openDocController = controller;
     try {
       const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) { location.href = url; return; }
+      if (!res.ok) {
+        location.href = url;
+        return;
+      }
       const parsed = new DOMParser().parseFromString(await res.text(), "text/html");
       const article = parsed.querySelector("main article") ?? parsed.querySelector("main");
-      if (!article) { location.href = url; return; }
+      if (!article) {
+        location.href = url;
+        return;
+      }
       article.querySelectorAll("script").forEach((s) => s.remove());
       // Resolve relative href/src against the fetched page so its links + images work from the panel.
       article.querySelectorAll("[href], [src]").forEach((el) => {
         (["href", "src"] as const).forEach((attr) => {
           const v = el.getAttribute(attr);
-          if (v && !/^(https?:|data:|mailto:|#)/i.test(v)) el.setAttribute(attr, new URL(v, url).href);
+          if (v && !/^(https?:|data:|mailto:|#)/i.test(v))
+            el.setAttribute(attr, new URL(v, url).href);
         });
       });
       docBody.replaceChildren(article);
@@ -90,10 +98,15 @@ export function initRefDrawer(): void {
       let hash = "";
       if (url.includes("#")) {
         const raw = url.slice(url.indexOf("#") + 1);
-        try { hash = decodeURIComponent(raw); } catch { hash = raw; } // ids are percent-decoded
+        try {
+          hash = decodeURIComponent(raw);
+        } catch {
+          hash = raw;
+        } // ids are percent-decoded
       }
       const target = hash ? docBody.querySelector('[id="' + CSS.escape(hash) + '"]') : null;
-      if (target) target.scrollIntoView(); else drawer.scrollTop = 0;
+      if (target) target.scrollIntoView();
+      else drawer.scrollTop = 0;
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return; // superseded by a newer open
       location.href = url; // network/parse failure: just navigate there
@@ -101,9 +114,10 @@ export function initRefDrawer(): void {
   };
 
   backBtn.addEventListener("click", () => {
-    trail.pop();                          // drop the current doc
+    trail.pop(); // drop the current doc
     const prev = trail[trail.length - 1]; // the one before it, if any
-    if (prev) void openDoc(prev); else showReference();
+    if (prev) void openDoc(prev);
+    else showReference();
   });
 
   drawer.addEventListener("click", (e) => {
@@ -144,7 +158,13 @@ export function initRefDrawer(): void {
     isOpen = open;
     // Closing returns to the reference view (leave any doc you were reading); closing a pinned panel
     // also unpins it so it does not spring back on the next page.
-    if (!open) { showReference(); if (pinned) { pinned = false; savePinned(false); } }
+    if (!open) {
+      showReference();
+      if (pinned) {
+        pinned = false;
+        savePinned(false);
+      }
+    }
     render();
     // Opening an overlay drawer closes the other menus; a pinned (docked) drawer sits
     // beside the content and is not a transient popup, so it neither closes them nor is closed by them.
@@ -152,7 +172,11 @@ export function initRefDrawer(): void {
   };
   // Registered with the popup coordinator: another overlay opening closes an OVERLAY
   // drawer only. A pinned drawer is docked, not a popup, so it stays put.
-  const dismissable = { close: (): void => { if (isOpen && !pinned) setOpen(false); } };
+  const dismissable = {
+    close: (): void => {
+      if (isOpen && !pinned) setOpen(false);
+    },
+  };
   registerPopup(dismissable);
   const togglePin = (): void => {
     pinned = !pinned;
@@ -186,7 +210,10 @@ export function initRefDrawer(): void {
     if (e.key !== "Escape" || !isOpen) return;
     // While reading a doc, Escape steps back to the reference view first; then it closes an overlay
     // panel (a pinned panel stays put).
-    if (drawer.classList.contains("browsing")) { showReference(); return; }
+    if (drawer.classList.contains("browsing")) {
+      showReference();
+      return;
+    }
     if (!pinned) setOpen(false);
   });
 

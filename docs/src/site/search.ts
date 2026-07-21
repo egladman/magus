@@ -53,8 +53,14 @@ interface TermNode {
   wildcard: boolean;
   re: RegExp | null;
 }
-interface NotNode { op: "not"; kid: QueryNode; }
-interface GroupNode { op: "and" | "or"; kids: QueryNode[]; }
+interface NotNode {
+  op: "not";
+  kid: QueryNode;
+}
+interface GroupNode {
+  op: "and" | "or";
+  kids: QueryNode[];
+}
 type QueryNode = TermNode | NotNode | GroupNode;
 
 export function initSearch(): void {
@@ -70,7 +76,10 @@ export function initSearch(): void {
   // A dedicated /search/ page carries a #search-page container; when present, run
   // the full-page results mode (its own input + uncapped, URL-synced results) and
   // skip building the header dropdown so there's only one search box on that page.
-  if (document.getElementById("search-page")) { initSearchPage(); return; }
+  if (document.getElementById("search-page")) {
+    initSearchPage();
+    return;
+  }
 
   // page() renders the toolbar (with the edit link); reuse it, else create one so
   // search works on any page.
@@ -91,8 +100,8 @@ export function initSearch(): void {
     navigator.platform ||
     "";
   const isMac = /mac/i.test(platform);
-  const modKey = isMac ? "⌘K" : "Ctrl+K";        // the compact hint badge
-  const modName = isMac ? "Cmd-K" : "Ctrl-K";    // spoken/tooltip form
+  const modKey = isMac ? "⌘K" : "Ctrl+K"; // the compact hint badge
+  const modName = isMac ? "Cmd-K" : "Ctrl-K"; // spoken/tooltip form
 
   const input = document.createElement("input");
   input.type = "text"; // not type=search: avoids Pico's pill shape; the magnifier is a CSS bg
@@ -143,36 +152,57 @@ export function initSearch(): void {
   // page. ready() fires once the index is available (immediately if already
   // loaded); fail() fires on a fetch/parse error. Index stays null (not []) on
   // failure so a later focus/input retries rather than wedging until a page reload.
-  let index: SearchEntry[] | null = null, loading = false;
+  let index: SearchEntry[] | null = null,
+    loading = false;
   function fetchIndex(ready: () => void, fail?: () => void): void {
-    if (index) { ready(); return; }
+    if (index) {
+      ready();
+      return;
+    }
     if (loading) return;
     loading = true;
     fetch(ROOT + "search-index.json")
-      .then((r) => { if (!r.ok) throw new Error("search index HTTP " + r.status); return r.json(); })
+      .then((r) => {
+        if (!r.ok) throw new Error("search index HTTP " + r.status);
+        return r.json();
+      })
       .then((data: unknown) => {
         if (!Array.isArray(data)) throw new Error("search index is not an array");
-        index = data; loading = false; ready();
+        index = data;
+        loading = false;
+        ready();
       })
-      .catch(() => { loading = false; if (fail) fail(); });
+      .catch(() => {
+        loading = false;
+        if (fail) fail();
+      });
   }
   function loadIndex(): void {
     fetchIndex(
-      () => { render(input.value); },
+      () => {
+        render(input.value);
+      },
       () => {
         if (input.value.trim() && document.activeElement === input) {
           showMessage("Search index unavailable");
         }
-      }
+      },
     );
   }
 
-  const HTML_ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
+  const HTML_ESCAPES: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+  };
   function escapeHtml(s: string): string {
     return String(s).replace(/[&<>"]/g, (c) => HTML_ESCAPES[c]);
   }
 
-  function wordStart(hay: string, i: number): boolean { return i === 0 || /[^a-z0-9]/.test(hay.charAt(i - 1)); }
+  function wordStart(hay: string, i: number): boolean {
+    return i === 0 || /[^a-z0-9]/.test(hay.charAt(i - 1));
+  }
 
   // True if needle's chars appear in order within hay (typo-tolerant fallback).
   function subseq(needle: string, hay: string): boolean {
@@ -193,8 +223,14 @@ export function initSearch(): void {
     const joined = tags.join(" ");
     const desc = (e.description || "").toLowerCase();
     const text = (e.text || "").toLowerCase();
-    const fields: LcFields = { title, tags, tagsJoined: joined, desc, text,
-      hay: title + " " + joined + " " + desc + " " + text };
+    const fields: LcFields = {
+      title,
+      tags,
+      tagsJoined: joined,
+      desc,
+      text,
+      hay: title + " " + joined + " " + desc + " " + text,
+    };
     e._lc = fields;
     return fields;
   }
@@ -202,7 +238,7 @@ export function initSearch(): void {
   // A wildcard value ("build*", "*cache*") compiles to a regex: escape regex specials,
   // turn * into .*, anchor whole-tag matches (^...$) but leave field/free-text loose.
   function buildWild(value: string, field: string | null): RegExp {
-    const body = value.replace(/[.*+?^${}()|[\]\\]/g, (ch) => ch === "*" ? ".*" : "\\" + ch);
+    const body = value.replace(/[.*+?^${}()|[\]\\]/g, (ch) => (ch === "*" ? ".*" : "\\" + ch));
     const anchored = field === "tag" || field === "tags";
     return new RegExp(anchored ? "^" + body + "$" : body, "i");
   }
@@ -212,27 +248,56 @@ export function initSearch(): void {
   // "quoted" is a phrase (or a multi-word field value), and field:(...) distributes the
   // field over the bare terms inside via a field stack. Lenient by construction.
   function tokenize(raw: string): Token[] {
-    const toks: Token[] = [], fieldStack: (string | null)[] = [];
+    const toks: Token[] = [],
+      fieldStack: (string | null)[] = [];
     let i = 0;
     const n = raw.length;
-    function curField(): string | null { return fieldStack.length ? fieldStack[fieldStack.length - 1] : null; }
-    function isSpace(c: string): boolean { return c === " " || c === "\t" || c === "\n" || c === "\r"; }
+    function curField(): string | null {
+      return fieldStack.length ? fieldStack[fieldStack.length - 1] : null;
+    }
+    function isSpace(c: string): boolean {
+      return c === " " || c === "\t" || c === "\n" || c === "\r";
+    }
     while (i < n) {
       const c = raw.charAt(i);
-      if (isSpace(c)) { i++; continue; }
-      if (c === "(") { toks.push({ t: "(" }); fieldStack.push(null); i++; continue; }
-      if (c === ")") { toks.push({ t: ")" }); if (fieldStack.length) fieldStack.pop(); i++; continue; }
-      if (c === "-" && i + 1 < n && !isSpace(raw.charAt(i + 1))) { toks.push({ t: "not" }); i++; continue; }
+      if (isSpace(c)) {
+        i++;
+        continue;
+      }
+      if (c === "(") {
+        toks.push({ t: "(" });
+        fieldStack.push(null);
+        i++;
+        continue;
+      }
+      if (c === ")") {
+        toks.push({ t: ")" });
+        if (fieldStack.length) fieldStack.pop();
+        i++;
+        continue;
+      }
+      if (c === "-" && i + 1 < n && !isSpace(raw.charAt(i + 1))) {
+        toks.push({ t: "not" });
+        i++;
+        continue;
+      }
       // Optional field: prefix (word chars then a colon).
-      let field: string | null = null, j = i;
+      let field: string | null = null,
+        j = i;
       while (j < n && /[a-z0-9_.\-]/i.test(raw.charAt(j))) j++;
       if (j < n && raw.charAt(j) === ":" && j > i) {
         field = raw.slice(i, j).toLowerCase();
         i = j + 1;
-        if (i < n && raw.charAt(i) === "(") { toks.push({ t: "(" }); fieldStack.push(field); i++; continue; }
+        if (i < n && raw.charAt(i) === "(") {
+          toks.push({ t: "(" });
+          fieldStack.push(field);
+          i++;
+          continue;
+        }
       }
       // Value: quoted or bare (stopping at whitespace/parens).
-      let value: string, phrase = false;
+      let value: string,
+        phrase = false;
       if (i < n && raw.charAt(i) === '"') {
         let end = raw.indexOf('"', i + 1);
         if (end === -1) end = n;
@@ -241,18 +306,34 @@ export function initSearch(): void {
         i = end + 1;
       } else {
         const vs = i;
-        while (i < n && !isSpace(raw.charAt(i)) && raw.charAt(i) !== "(" && raw.charAt(i) !== ")") i++;
+        while (i < n && !isSpace(raw.charAt(i)) && raw.charAt(i) !== "(" && raw.charAt(i) !== ")")
+          i++;
         value = raw.slice(vs, i);
       }
       if (value === "" && field === null) continue;
       if (field === null && !phrase) {
         const up = value.toUpperCase();
-        if (up === "AND") { toks.push({ t: "and" }); continue; }
-        if (up === "OR") { toks.push({ t: "or" }); continue; }
-        if (up === "NOT") { toks.push({ t: "not" }); continue; }
+        if (up === "AND") {
+          toks.push({ t: "and" });
+          continue;
+        }
+        if (up === "OR") {
+          toks.push({ t: "or" });
+          continue;
+        }
+        if (up === "NOT") {
+          toks.push({ t: "not" });
+          continue;
+        }
       }
-      toks.push({ t: "term", field: field !== null ? field : curField(), value: value.toLowerCase(),
-                  phrase: phrase, wildcard: value.indexOf("*") !== -1, display: value });
+      toks.push({
+        t: "term",
+        field: field !== null ? field : curField(),
+        value: value.toLowerCase(),
+        phrase: phrase,
+        wildcard: value.indexOf("*") !== -1,
+        display: value,
+      });
     }
     return toks;
   }
@@ -261,39 +342,64 @@ export function initSearch(): void {
   // OR. Leaves precompile their wildcard regex. Tolerant of stray/unbalanced tokens.
   function parse(toks: Token[]): QueryNode | null {
     let pos = 0;
-    function peek(): Token | undefined { return toks[pos]; }
+    function peek(): Token | undefined {
+      return toks[pos];
+    }
     function parseOr(): QueryNode | null {
       const kids = [parseAnd()];
       let tk;
-      while ((tk = peek()) && tk.t === "or") { pos++; kids.push(parseAnd()); }
+      while ((tk = peek()) && tk.t === "or") {
+        pos++;
+        kids.push(parseAnd());
+      }
       const k = kids.filter((x): x is QueryNode => x !== null);
-      return k.length === 1 ? k[0] : (k.length ? { op: "or", kids: k } : null);
+      return k.length === 1 ? k[0] : k.length ? { op: "or", kids: k } : null;
     }
     function parseAnd(): QueryNode | null {
       const kids = [parseNot()];
       let tk;
       while ((tk = peek()) && tk.t !== "or" && tk.t !== ")") {
-        if (tk.t === "and") { pos++; const next = peek(); if (!next || next.t === "or" || next.t === ")") break; }
+        if (tk.t === "and") {
+          pos++;
+          const next = peek();
+          if (!next || next.t === "or" || next.t === ")") break;
+        }
         kids.push(parseNot());
       }
       const k = kids.filter((x): x is QueryNode => x !== null);
-      return k.length === 1 ? k[0] : (k.length ? { op: "and", kids: k } : null);
+      return k.length === 1 ? k[0] : k.length ? { op: "and", kids: k } : null;
     }
     function parseNot(): QueryNode | null {
       const tk = peek();
-      if (tk && tk.t === "not") { pos++; const k = parseNot(); return k ? { op: "not", kid: k } : null; }
+      if (tk && tk.t === "not") {
+        pos++;
+        const k = parseNot();
+        return k ? { op: "not", kid: k } : null;
+      }
       return parsePrimary();
     }
     function parsePrimary(): QueryNode | null {
       const tk = peek();
       if (!tk) return null;
-      if (tk.t === "(") { pos++; const inner = parseOr(); const close = peek(); if (close && close.t === ")") pos++; return inner; }
+      if (tk.t === "(") {
+        pos++;
+        const inner = parseOr();
+        const close = peek();
+        if (close && close.t === ")") pos++;
+        return inner;
+      }
       if (tk.t === "term") {
         pos++;
         const value = tk.value ?? "";
         const field = tk.field ?? null;
-        return { op: "term", field, value, phrase: tk.phrase ?? false,
-                 wildcard: tk.wildcard ?? false, re: tk.wildcard ? buildWild(value, field) : null };
+        return {
+          op: "term",
+          field,
+          value,
+          phrase: tk.phrase ?? false,
+          wildcard: tk.wildcard ?? false,
+          re: tk.wildcard ? buildWild(value, field) : null,
+        };
       }
       pos++; // stray ) / operator — skip and continue
       return parsePrimary();
@@ -302,7 +408,10 @@ export function initSearch(): void {
   }
 
   // Build the parsed query once: token stream (drives the chip preview) + AST.
-  function buildQuery(raw: string): { tokens: Token[]; ast: QueryNode | null } { const tokens = tokenize(raw); return { tokens: tokens, ast: parse(tokens) }; }
+  function buildQuery(raw: string): { tokens: Token[]; ast: QueryNode | null } {
+    const tokens = tokenize(raw);
+    return { tokens: tokens, ast: parse(tokens) };
+  }
 
   // Does one term leaf match a record? tag = whole-tag equality (or regex); other fields
   // are substring on that field; a free-text term matches the combined haystack.
@@ -310,14 +419,19 @@ export function initSearch(): void {
     const L = lc(e);
     if (leaf.field === "tag" || leaf.field === "tags") {
       for (let i = 0; i < L.tags.length; i++) {
-        if (leaf.wildcard && leaf.re ? leaf.re.test(L.tags[i]) : L.tags[i] === leaf.value) return true;
+        if (leaf.wildcard && leaf.re ? leaf.re.test(L.tags[i]) : L.tags[i] === leaf.value)
+          return true;
       }
       return false;
     }
-    const hay = leaf.field === "title" ? L.title
-      : (leaf.field === "description" || leaf.field === "desc") ? L.desc
-      : (leaf.field === "text" || leaf.field === "body") ? L.text
-      : L.hay;
+    const hay =
+      leaf.field === "title"
+        ? L.title
+        : leaf.field === "description" || leaf.field === "desc"
+          ? L.desc
+          : leaf.field === "text" || leaf.field === "body"
+            ? L.text
+            : L.hay;
     return leaf.wildcard && leaf.re ? leaf.re.test(hay) : hay.indexOf(leaf.value) !== -1;
   }
 
@@ -326,25 +440,37 @@ export function initSearch(): void {
     if (!node) return true;
     if (node.op === "term") return matchLeaf(node, e);
     if (node.op === "not") return !evalNode(node.kid, e);
-    if (node.op === "and") { for (let i = 0; i < node.kids.length; i++) if (!evalNode(node.kids[i], e)) return false; return true; }
-    if (node.op === "or") { for (let j = 0; j < node.kids.length; j++) if (evalNode(node.kids[j], e)) return true; return false; }
+    if (node.op === "and") {
+      for (let i = 0; i < node.kids.length; i++) if (!evalNode(node.kids[i], e)) return false;
+      return true;
+    }
+    if (node.op === "or") {
+      for (let j = 0; j < node.kids.length; j++) if (evalNode(node.kids[j], e)) return true;
+      return false;
+    }
     return true;
   }
 
   // Relevance weight of one positive term leaf (field-weighted, mirroring the old
   // scoring: title > tags > description > body, with a word-start / title-start bonus).
   function scoreLeaf(leaf: TermNode, e: SearchEntry): number {
-    const L = lc(e), v = leaf.value;
+    const L = lc(e),
+      v = leaf.value;
     function hit(hay: string, base: number, ws: number): number {
       if (leaf.wildcard) return leaf.re && leaf.re.test(hay) ? base : 0;
       const idx = hay.indexOf(v);
       return idx === -1 ? 0 : base + (wordStart(hay, idx) ? ws : 0);
     }
     if (leaf.field === "tag" || leaf.field === "tags") return matchLeaf(leaf, e) ? 8 : 0;
-    if (leaf.field === "title") { let s = hit(L.title, 10, 4); if (!leaf.wildcard && L.title.indexOf(v) === 0) s += 4; return s; }
+    if (leaf.field === "title") {
+      let s = hit(L.title, 10, 4);
+      if (!leaf.wildcard && L.title.indexOf(v) === 0) s += 4;
+      return s;
+    }
     if (leaf.field === "description" || leaf.field === "desc") return hit(L.desc, 4, 2);
     if (leaf.field === "text" || leaf.field === "body") return hit(L.text, 2, 1);
-    let free = hit(L.title, 10, 4) + hit(L.tagsJoined, 8, 3) + hit(L.desc, 4, 2) + hit(L.text, 2, 1);
+    let free =
+      hit(L.title, 10, 4) + hit(L.tagsJoined, 8, 3) + hit(L.desc, 4, 2) + hit(L.text, 2, 1);
     if (!leaf.wildcard && L.title.indexOf(v) === 0) free += 4;
     return free;
   }
@@ -356,7 +482,9 @@ export function initSearch(): void {
     if (node.op === "term") return neg ? 0 : scoreLeaf(node, e);
     if (node.op === "not") return scoreAst(node.kid, e, !neg);
     if (node.op === "and" || node.op === "or") {
-      let s = 0; for (let i = 0; i < node.kids.length; i++) s += scoreAst(node.kids[i], e, neg); return s;
+      let s = 0;
+      for (let i = 0; i < node.kids.length; i++) s += scoreAst(node.kids[i], e, neg);
+      return s;
     }
     return 0;
   }
@@ -364,9 +492,14 @@ export function initSearch(): void {
   // Positive (non-negated) leaf values, for snippet/description highlighting.
   function positiveTerms(node: QueryNode | null, neg: boolean, acc: string[] = []): string[] {
     if (!node) return acc;
-    if (node.op === "term") { if (!neg && node.value) acc.push(node.value); return acc; }
+    if (node.op === "term") {
+      if (!neg && node.value) acc.push(node.value);
+      return acc;
+    }
     if (node.op === "not") return positiveTerms(node.kid, !neg, acc);
-    node.kids.forEach((k) => { positiveTerms(k, neg, acc); });
+    node.kids.forEach((k) => {
+      positiveTerms(k, neg, acc);
+    });
     return acc;
   }
 
@@ -383,11 +516,20 @@ export function initSearch(): void {
     }
     // Typo-tolerant fallback: only when the query is a plain AND of bare words that found
     // nothing (no fields/operators/parens), rescue near-misses via subsequence on titles.
-    const simple = q.tokens.length > 0 && q.tokens.every((t) => t.t === "term" && t.field === null && !t.phrase && !t.wildcard);
+    const simple =
+      q.tokens.length > 0 &&
+      q.tokens.every((t) => t.t === "term" && t.field === null && !t.phrase && !t.wildcard);
     if (!out.length && simple) {
       index.forEach((e) => {
-        let ok = true, sc = 0;
-        for (let k = 0; k < pos.length; k++) { if (subseq(pos[k], lc(e).title)) sc += 2; else { ok = false; break; } }
+        let ok = true,
+          sc = 0;
+        for (let k = 0; k < pos.length; k++) {
+          if (subseq(pos[k], lc(e).title)) sc += 2;
+          else {
+            ok = false;
+            break;
+          }
+        }
         if (ok) out.push({ e: e, s: sc });
       });
     }
@@ -398,7 +540,9 @@ export function initSearch(): void {
   // sel indexes the arrow-key-highlighted option within the rendered results
   // (-1 = none). highlight() reflects it into the DOM/ARIA; render() resets it.
   let sel = -1;
-  function options(): NodeListOf<HTMLAnchorElement> { return results.querySelectorAll<HTMLAnchorElement>('a[role="option"]'); }
+  function options(): NodeListOf<HTMLAnchorElement> {
+    return results.querySelectorAll<HTMLAnchorElement>('a[role="option"]');
+  }
   function highlight(opts: NodeListOf<HTMLAnchorElement>): void {
     for (let i = 0; i < opts.length; i++) {
       if (i === sel) {
@@ -439,9 +583,16 @@ export function initSearch(): void {
     const li = document.createElement("li");
     li.className = "search-footer";
     li.setAttribute("role", "presentation");
-    const label = count > 0 ? "See all " + count + " result" + (count === 1 ? "" : "s") : "Open full search";
+    const label =
+      count > 0 ? "See all " + count + " result" + (count === 1 ? "" : "s") : "Open full search";
     li.innerHTML =
-      '<a class="search-seeall" href="' + ROOT + "search/?q=" + encodeURIComponent(query) + '">' + label + ' <span class="xref-arrow" aria-hidden="true">&rarr;</span></a>' +
+      '<a class="search-seeall" href="' +
+      ROOT +
+      "search/?q=" +
+      encodeURIComponent(query) +
+      '">' +
+      label +
+      ' <span class="xref-arrow" aria-hidden="true">&rarr;</span></a>' +
       '<span class="search-synhint">Syntax: <code>tag:name</code> <code>-term</code> <code>&quot;phrase&quot;</code></span>';
     return li;
   }
@@ -450,8 +601,18 @@ export function initSearch(): void {
     results.innerHTML = "";
     sel = -1;
     const query = (raw || "").trim();
-    if (!query) { results.hidden = true; setExpanded(false); live.textContent = ""; return; }
-    if (!index) { loadIndex(); results.hidden = true; setExpanded(false); return; } // re-renders once loaded
+    if (!query) {
+      results.hidden = true;
+      setExpanded(false);
+      live.textContent = "";
+      return;
+    }
+    if (!index) {
+      loadIndex();
+      results.hidden = true;
+      setExpanded(false);
+      return;
+    } // re-renders once loaded
     results.hidden = false;
     setExpanded(true);
 
@@ -474,8 +635,12 @@ export function initSearch(): void {
       a.id = "search-opt-" + i;
       a.setAttribute("role", "option");
       a.innerHTML =
-        '<span class="search-title">' + escapeHtml(r.e.title) + "</span>" +
-        '<span class="search-url">' + escapeHtml(r.e.url) + "</span>";
+        '<span class="search-title">' +
+        escapeHtml(r.e.title) +
+        "</span>" +
+        '<span class="search-url">' +
+        escapeHtml(r.e.url) +
+        "</span>";
       li.appendChild(a);
       results.appendChild(li);
     });
@@ -484,13 +649,18 @@ export function initSearch(): void {
     results.appendChild(footerLi(query, res.length));
   }
 
-  input.addEventListener("focus", () => { loadIndex(); if (input.value.trim()) render(input.value); });
+  input.addEventListener("focus", () => {
+    loadIndex();
+    if (input.value.trim()) render(input.value);
+  });
   // Debounce typing so a burst of keystrokes coalesces into one index scan +
   // DOM rebuild instead of one per character. Focus/arrow paths stay immediate.
   let debounce: number | undefined;
   input.addEventListener("input", () => {
     clearTimeout(debounce);
-    debounce = setTimeout(() => { render(input.value); }, 80);
+    debounce = setTimeout(() => {
+      render(input.value);
+    }, 80);
   });
   input.addEventListener("keydown", (e: KeyboardEvent) => {
     const opts = options();
@@ -507,7 +677,10 @@ export function initSearch(): void {
       // A highlighted option navigates straight to it. With no selection, Enter
       // opens the full /search/ page for the current query - the "see all results"
       // affordance that bridges the dropdown and the dedicated results page.
-      if (sel >= 0 && opts[sel]) { window.location.href = opts[sel].href; return; }
+      if (sel >= 0 && opts[sel]) {
+        window.location.href = opts[sel].href;
+        return;
+      }
       const q = input.value.trim();
       if (q) window.location.href = ROOT + "search/?q=" + encodeURIComponent(q);
     } else if (e.key === "Escape") {
@@ -517,7 +690,10 @@ export function initSearch(): void {
     }
   });
   document.addEventListener("click", (e) => {
-    if (!results.hidden && !tools.contains(e.target as Node | null)) { results.hidden = true; setExpanded(false); }
+    if (!results.hidden && !tools.contains(e.target as Node | null)) {
+      results.hidden = true;
+      setExpanded(false);
+    }
   });
 
   // Global shortcut: "/" or Cmd/Ctrl-K focuses the search field, unless the user
@@ -534,16 +710,23 @@ export function initSearch(): void {
     input.select();
   });
 
-  function escapeRegExp(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  function escapeRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
 
   // Escape raw text for HTML, wrapping any term occurrence in <mark>. Escaping
   // happens per-segment so a term containing HTML-special chars can't break out.
   function markup(raw: string, terms: string[]): string {
     if (!terms.length) return escapeHtml(raw);
     const re = new RegExp("(" + terms.map(escapeRegExp).join("|") + ")", "gi");
-    let out = "", last = 0, m: RegExpExecArray | null;
+    let out = "",
+      last = 0,
+      m: RegExpExecArray | null;
     while ((m = re.exec(raw)) !== null) {
-      if (m.index === re.lastIndex) { re.lastIndex++; continue; }
+      if (m.index === re.lastIndex) {
+        re.lastIndex++;
+        continue;
+      }
       out += escapeHtml(raw.slice(last, m.index)) + "<mark>" + escapeHtml(m[0]) + "</mark>";
       last = m.index + m[0].length;
     }
@@ -564,9 +747,15 @@ export function initSearch(): void {
     }
     const WIN = 170;
     let start = pos === -1 ? 0 : Math.max(0, pos - 55);
-    if (start > 0) { const sp = text.indexOf(" ", start); if (sp !== -1 && sp - start < 20) start = sp + 1; }
-    return (start > 0 ? "..." : "") + markup(text.slice(start, start + WIN), terms) +
-      (start + WIN < text.length ? "..." : "");
+    if (start > 0) {
+      const sp = text.indexOf(" ", start);
+      if (sp !== -1 && sp - start < 20) start = sp + 1;
+    }
+    return (
+      (start > 0 ? "..." : "") +
+      markup(text.slice(start, start + WIN), terms) +
+      (start + WIN < text.length ? "..." : "")
+    );
   }
 
   // Coarse page kind from the URL's leading segment, shown as a scannable badge.
@@ -605,16 +794,35 @@ export function initSearch(): void {
     // the reader sees exactly how the query parsed. Cleared when the box is empty.
     function renderChips(tokens: Token[]): void {
       if (!chips) return;
-      if (!tokens.length) { chips.innerHTML = ""; chips.hidden = true; return; }
+      if (!tokens.length) {
+        chips.innerHTML = "";
+        chips.hidden = true;
+        return;
+      }
       chips.hidden = false;
-      chips.innerHTML = tokens.map((tk) => {
-        if (tk.t === "(") return '<span class="qbracket">(</span>';
-        if (tk.t === ")") return '<span class="qbracket">)</span>';
-        if (tk.t === "and" || tk.t === "or" || tk.t === "not") return '<span class="qop">' + tk.t.toUpperCase() + "</span>";
-        if (tk.field) return '<span class="qchip qchip-field">' + escapeHtml(tk.field) + ":<b>" + escapeHtml(tk.display ?? "") + "</b></span>";
-        if (tk.phrase) return '<span class="qchip qchip-phrase">&quot;' + escapeHtml(tk.display ?? "") + "&quot;</span>";
-        return '<span class="qchip">' + escapeHtml(tk.display ?? "") + "</span>";
-      }).join("");
+      chips.innerHTML = tokens
+        .map((tk) => {
+          if (tk.t === "(") return '<span class="qbracket">(</span>';
+          if (tk.t === ")") return '<span class="qbracket">)</span>';
+          if (tk.t === "and" || tk.t === "or" || tk.t === "not")
+            return '<span class="qop">' + tk.t.toUpperCase() + "</span>";
+          if (tk.field)
+            return (
+              '<span class="qchip qchip-field">' +
+              escapeHtml(tk.field) +
+              ":<b>" +
+              escapeHtml(tk.display ?? "") +
+              "</b></span>"
+            );
+          if (tk.phrase)
+            return (
+              '<span class="qchip qchip-phrase">&quot;' +
+              escapeHtml(tk.display ?? "") +
+              "&quot;</span>"
+            );
+          return '<span class="qchip">' + escapeHtml(tk.display ?? "") + "</span>";
+        })
+        .join("");
     }
 
     function renderPage(): void {
@@ -622,32 +830,55 @@ export function initSearch(): void {
       syncUrl(query);
       renderChips(buildQuery(query).tokens);
       list.innerHTML = "";
-      if (!query) { status.textContent = "Type a query, or click a tag on any page."; return; }
+      if (!query) {
+        status.textContent = "Type a query, or click a tag on any page.";
+        return;
+      }
       if (!index) {
         status.textContent = "Loading...";
-        fetchIndex(renderPage, () => { status.textContent = "Search index unavailable."; });
+        fetchIndex(renderPage, () => {
+          status.textContent = "Search index unavailable.";
+        });
         return;
       }
       const res = runSearch(query);
-      if (!res.length) { status.textContent = "No matches for " + query; return; }
+      if (!res.length) {
+        status.textContent = "No matches for " + query;
+        return;
+      }
       status.textContent = res.length + (res.length === 1 ? " result" : " results");
       const terms = positiveTerms(buildQuery(query).ast, false);
       res.forEach((r) => {
         const e = r.e;
         const li = document.createElement("li");
         let html =
-          '<a class="result-main" href="' + ROOT + escapeHtml(e.url) + '">' +
-            '<span class="result-head"><span class="search-title">' + markup(e.title, terms) + "</span>" +
-            '<span class="result-type">' + escapeHtml(typeLabel(e.url)) + "</span></span>" +
-            '<span class="search-url">' + escapeHtml(e.url) + "</span>";
-        if (e.description) html += '<span class="result-desc">' + markup(e.description, terms) + "</span>";
+          '<a class="result-main" href="' +
+          ROOT +
+          escapeHtml(e.url) +
+          '">' +
+          '<span class="result-head"><span class="search-title">' +
+          markup(e.title, terms) +
+          "</span>" +
+          '<span class="result-type">' +
+          escapeHtml(typeLabel(e.url)) +
+          "</span></span>" +
+          '<span class="search-url">' +
+          escapeHtml(e.url) +
+          "</span>";
+        if (e.description)
+          html += '<span class="result-desc">' + markup(e.description, terms) + "</span>";
         const snip = snippet(e.text || "", terms);
         if (snip) html += '<span class="result-snippet">' + snip + "</span>";
         html += "</a>";
         if (e.tags && e.tags.length) {
           html += '<div class="result-tags">';
           e.tags.forEach((t) => {
-            html += '<a class="result-tag" href="?q=' + encodeURIComponent('tag:"' + t + '"') + '">' + escapeHtml(t) + "</a>";
+            html +=
+              '<a class="result-tag" href="?q=' +
+              encodeURIComponent('tag:"' + t + '"') +
+              '">' +
+              escapeHtml(t) +
+              "</a>";
           });
           html += "</div>";
         }
@@ -659,42 +890,92 @@ export function initSearch(): void {
     // Facet autocomplete: while the caret sits in a tag:<partial> token, suggest real
     // tag values from the index. Arrow/Enter/click completes it (quoting multi-word
     // tags) and re-runs; Escape, blur, or a completed token closes it.
-    let allTags: string[] | null = null, fsel = -1;
+    let allTags: string[] | null = null,
+      fsel = -1;
     function tagsList(): string[] {
       if (!allTags && index) {
         const set: Record<string, boolean> = {};
-        index.forEach((e) => { (e.tags || []).forEach((t) => { set[String(t)] = true; }); });
+        index.forEach((e) => {
+          (e.tags || []).forEach((t) => {
+            set[String(t)] = true;
+          });
+        });
         allTags = Object.keys(set).sort();
       }
       return allTags || [];
     }
-    function caretToken(): { field: string; partial: string; quoted: boolean; valStart: number; caret: number } | null {
+    function caretToken(): {
+      field: string;
+      partial: string;
+      quoted: boolean;
+      valStart: number;
+      caret: number;
+    } | null {
       const caret = input.selectionStart == null ? input.value.length : input.selectionStart;
       const m = /(?:^|[\s(])(-?)([a-z][\w.-]*):("?)([^"\s()]*)$/i.exec(input.value.slice(0, caret));
       if (!m) return null;
       const quoted = m[3] === '"';
-      return { field: m[2].toLowerCase(), partial: m[4].toLowerCase(), quoted: quoted,
-               valStart: caret - m[4].length - (quoted ? 1 : 0), caret: caret };
+      return {
+        field: m[2].toLowerCase(),
+        partial: m[4].toLowerCase(),
+        quoted: quoted,
+        valStart: caret - m[4].length - (quoted ? 1 : 0),
+        caret: caret,
+      };
     }
-    function hideFacets(): void { if (facets) { facets.hidden = true; facets.innerHTML = ""; fsel = -1; } }
+    function hideFacets(): void {
+      if (facets) {
+        facets.hidden = true;
+        facets.innerHTML = "";
+        fsel = -1;
+      }
+    }
     function updateFacets(): void {
       if (!facets) return;
       const tk = caretToken();
-      if (!tk || (tk.field !== "tag" && tk.field !== "tags")) { hideFacets(); return; }
-      const p = tk.partial, pre: string[] = [], inc: string[] = [];
-      tagsList().forEach((t) => { const i = t.toLowerCase().indexOf(p); if (i === 0) pre.push(t); else if (i > 0) inc.push(t); });
+      if (!tk || (tk.field !== "tag" && tk.field !== "tags")) {
+        hideFacets();
+        return;
+      }
+      const p = tk.partial,
+        pre: string[] = [],
+        inc: string[] = [];
+      tagsList().forEach((t) => {
+        const i = t.toLowerCase().indexOf(p);
+        if (i === 0) pre.push(t);
+        else if (i > 0) inc.push(t);
+      });
       const matches = pre.concat(inc).slice(0, 8);
-      if (!matches.length) { hideFacets(); return; }
-      facets.innerHTML = matches.map((t, i) => {
-        return '<li role="option" id="facet-opt-' + i + '" data-tag="' + escapeHtml(t) + '"><span class="facet-key">tag:</span>' + escapeHtml(t) + "</li>";
-      }).join("");
+      if (!matches.length) {
+        hideFacets();
+        return;
+      }
+      facets.innerHTML = matches
+        .map((t, i) => {
+          return (
+            '<li role="option" id="facet-opt-' +
+            i +
+            '" data-tag="' +
+            escapeHtml(t) +
+            '"><span class="facet-key">tag:</span>' +
+            escapeHtml(t) +
+            "</li>"
+          );
+        })
+        .join("");
       facets.hidden = false;
       fsel = -1;
     }
-    function facetOpts(): HTMLLIElement[] { return facets ? Array.from(facets.querySelectorAll<HTMLLIElement>('li[role="option"]')) : []; }
-    function facetHighlight(opts: HTMLLIElement[]): void { for (let i = 0; i < opts.length; i++) opts[i].setAttribute("aria-selected", i === fsel ? "true" : "false"); }
+    function facetOpts(): HTMLLIElement[] {
+      return facets ? Array.from(facets.querySelectorAll<HTMLLIElement>('li[role="option"]')) : [];
+    }
+    function facetHighlight(opts: HTMLLIElement[]): void {
+      for (let i = 0; i < opts.length; i++)
+        opts[i].setAttribute("aria-selected", i === fsel ? "true" : "false");
+    }
     function applyFacet(tag: string): void {
-      const tk = caretToken(); if (!tk) return;
+      const tk = caretToken();
+      if (!tk) return;
       const value = /\s/.test(tag) ? '"' + tag + '"' : tag;
       const before = input.value.slice(0, tk.valStart);
       input.value = before + value + input.value.slice(tk.caret);
@@ -707,24 +988,41 @@ export function initSearch(): void {
     if (facets) {
       // mousedown (not click) so it fires before the input's blur hides the list.
       facets.addEventListener("mousedown", (ev) => {
-        const li = (ev.target as Element | null)?.closest("li[role=option]"); if (!li) return;
-        ev.preventDefault(); applyFacet(li.getAttribute("data-tag") ?? "");
+        const li = (ev.target as Element | null)?.closest("li[role=option]");
+        if (!li) return;
+        ev.preventDefault();
+        applyFacet(li.getAttribute("data-tag") ?? "");
       });
     }
     input.addEventListener("keydown", (e: KeyboardEvent) => {
       if (!facets || facets.hidden) return;
       const opts = facetOpts();
-      if (e.key === "ArrowDown") { e.preventDefault(); fsel = (fsel + 1) % opts.length; facetHighlight(opts); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); fsel = (fsel <= 0 ? opts.length : fsel) - 1; facetHighlight(opts); }
-      else if (e.key === "Enter" && fsel >= 0 && opts[fsel]) { e.preventDefault(); applyFacet(opts[fsel].getAttribute("data-tag") ?? ""); }
-      else if (e.key === "Escape") { e.preventDefault(); hideFacets(); }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        fsel = (fsel + 1) % opts.length;
+        facetHighlight(opts);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        fsel = (fsel <= 0 ? opts.length : fsel) - 1;
+        facetHighlight(opts);
+      } else if (e.key === "Enter" && fsel >= 0 && opts[fsel]) {
+        e.preventDefault();
+        applyFacet(opts[fsel].getAttribute("data-tag") ?? "");
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        hideFacets();
+      }
     });
-    input.addEventListener("blur", () => { setTimeout(hideFacets, 120); });
+    input.addEventListener("blur", () => {
+      setTimeout(hideFacets, 120);
+    });
 
     // A syntax example or a per-result tag chip runs its query in place (no full
     // reload). They stay real ?q= links, so middle-click, copy, and no-JS all work.
     document.getElementById("search-page")?.addEventListener("click", (ev) => {
-      const a = (ev.target as Element | null)?.closest("a.syntax-example, a.result-tag") as HTMLAnchorElement | null;
+      const a = (ev.target as Element | null)?.closest(
+        "a.syntax-example, a.result-tag",
+      ) as HTMLAnchorElement | null;
       if (!a) return;
       const q = new URL(a.href).searchParams.get("q");
       if (q === null) return;
@@ -752,7 +1050,9 @@ export function initSearch(): void {
 
     // Warm the index immediately so the first query is instant; renderPage runs
     // once it lands (showing the seeded query's results, or the empty prompt).
-    fetchIndex(renderPage, () => { status.textContent = "Search index unavailable."; });
+    fetchIndex(renderPage, () => {
+      status.textContent = "Search index unavailable.";
+    });
     input.focus();
   }
 }

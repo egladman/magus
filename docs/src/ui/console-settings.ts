@@ -30,8 +30,16 @@ export function initConsoleSettings(): void {
   if (poll) poll.value = String(getPollMs());
   if (host) host.value = getDefaultHost();
 
-  if (poll) poll.addEventListener("change", () => { setPollMs(Number(poll.value)); maybePromptReload(); });
-  if (host) host.addEventListener("change", () => { setDefaultHost(host.value); maybePromptReload(); });
+  if (poll)
+    poll.addEventListener("change", () => {
+      setPollMs(Number(poll.value));
+      maybePromptReload();
+    });
+  if (host)
+    host.addEventListener("change", () => {
+      setDefaultHost(host.value);
+      maybePromptReload();
+    });
 
   let open = false;
   // Registered with the popup coordinator so opening another overlay (the nav menu,
@@ -43,12 +51,18 @@ export function initConsoleSettings(): void {
     panel.hidden = !open;
     btn.setAttribute("aria-expanded", open ? "true" : "false");
   };
-  const setOpen = (v: boolean): void => { open = v; render(); if (v) notifyPopupOpen(dismissable); };
+  const setOpen = (v: boolean): void => {
+    open = v;
+    render();
+    if (v) notifyPopupOpen(dismissable);
+  };
 
   // No stopPropagation: cross-popup dismissal is the coordinator's job now, not a
   // side effect of halting event bubbling. The outside-click handler below already
   // ignores clicks on the gear (btn.contains), so the panel it just opened survives.
-  btn.addEventListener("click", () => { setOpen(!open); });
+  btn.addEventListener("click", () => {
+    setOpen(!open);
+  });
   // A click anywhere outside the panel (and not on the gear) closes it.
   document.addEventListener("click", (e) => {
     if (!open) return;

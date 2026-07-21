@@ -88,7 +88,10 @@ export function initTocToggle(): void {
   }
   function closeSheet(): void {
     if (tocAside) tocAside.classList.remove("toc-sheet-open");
-    if (backdrop) { backdrop.remove(); backdrop = null; }
+    if (backdrop) {
+      backdrop.remove();
+      backdrop = null;
+    }
     setLabel(false);
   }
   // Reconcile state for the current breakpoint: on mobile the TOC is a closed
@@ -146,7 +149,11 @@ export function initScrollSpy(): void {
     if (!href) return;
     const raw = href.slice(1);
     let id: string;
-    try { id = decodeURIComponent(raw); } catch { id = raw; }
+    try {
+      id = decodeURIComponent(raw);
+    } catch {
+      id = raw;
+    }
     if (id) links[id] = a;
   });
 
@@ -178,18 +185,24 @@ export function initScrollSpy(): void {
       pick();
     },
     // rootMargin takes only px/% (no rem): -72px ~= the 4.5rem sticky header.
-    { rootMargin: "-72px 0px -70% 0px", threshold: 0 }
+    { rootMargin: "-72px 0px -70% 0px", threshold: 0 },
   );
-  headings.forEach((h) => { observer.observe(h); });
+  headings.forEach((h) => {
+    observer.observe(h);
+  });
 
   function pick(): void {
     if (visible.size) {
       // Choose the topmost heading still intersecting the active band.
-      let best: string | null = null, bestTop = Infinity;
+      let best: string | null = null,
+        bestTop = Infinity;
       headings.forEach((h) => {
         if (!visible.has(h.id)) return;
         const top = h.getBoundingClientRect().top;
-        if (top < bestTop) { bestTop = top; best = h.id; }
+        if (top < bestTop) {
+          bestTop = top;
+          best = h.id;
+        }
       });
       if (best) setCurrent(best);
       return;

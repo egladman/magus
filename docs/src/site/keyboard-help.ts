@@ -16,15 +16,15 @@ export function initKeyboardHelp(): void {
     const d = document.createElement("dialog");
     d.className = "shortcut-help";
     d.innerHTML =
-      '<article>' +
-        '<header><h2>Keyboard shortcuts</h2>' +
-        '<button type="button" aria-label="Close" class="shortcut-close">&times;</button></header>' +
-        '<dl>' +
-          '<dt><kbd>/</kbd> or <kbd>&#8984;K</kbd></dt><dd>Focus search</dd>' +
-          '<dt><kbd>?</kbd></dt><dd>Show this help</dd>' +
-          '<dt><kbd>Esc</kbd></dt><dd>Close overlay</dd>' +
-        '</dl>' +
-      '</article>';
+      "<article>" +
+      "<header><h2>Keyboard shortcuts</h2>" +
+      '<button type="button" aria-label="Close" class="shortcut-close">&times;</button></header>' +
+      "<dl>" +
+      "<dt><kbd>/</kbd> or <kbd>&#8984;K</kbd></dt><dd>Focus search</dd>" +
+      "<dt><kbd>?</kbd></dt><dd>Show this help</dd>" +
+      "<dt><kbd>Esc</kbd></dt><dd>Close overlay</dd>" +
+      "</dl>" +
+      "</article>";
     document.body.appendChild(d);
     d.querySelector(".shortcut-close")?.addEventListener("click", function () {
       d.close();

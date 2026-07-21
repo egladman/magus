@@ -18,7 +18,8 @@ export function initBackToTop(): void {
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg>';
   btn.addEventListener("click", function () {
-    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduce =
+      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
   });
   document.body.appendChild(btn);
@@ -31,8 +32,15 @@ export function initBackToTop(): void {
     if (window.scrollY > 400) btn.classList.add("visible");
     else btn.classList.remove("visible");
   }
-  window.addEventListener("scroll", function () {
-    if (!ticking) { requestAnimationFrame(apply); ticking = true; }
-  }, { passive: true });
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!ticking) {
+        requestAnimationFrame(apply);
+        ticking = true;
+      }
+    },
+    { passive: true },
+  );
   apply();
 }

@@ -11,7 +11,12 @@ export function initRelativeTime(): void {
   const times = document.querySelectorAll(".page-provenance time[datetime]");
   if (!times.length) return;
 
-  const MIN = 60, HOUR = 3600, DAY = 86400, WEEK = 604800, MONTH = 2629800, YEAR = 31557600;
+  const MIN = 60,
+    HOUR = 3600,
+    DAY = 86400,
+    WEEK = 604800,
+    MONTH = 2629800,
+    YEAR = 31557600;
 
   function relative(then: number, now: number): string {
     const s = Math.round((now - then) / 1000);

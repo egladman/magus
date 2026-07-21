@@ -15,18 +15,21 @@ const precacheUrls = SERVICE_WORKER_PRECACHE.map((asset) => base + asset);
 self.addEventListener("install", (event) => {
   // Cache each asset on its own: addAll is atomic, so one bad URL would sink the whole precache.
   event.waitUntil(
-    caches.open(SERVICE_WORKER_VERSION).then((cache) =>
-      Promise.allSettled(precacheUrls.map((url) => cache.add(url)))
-    )
+    caches
+      .open(SERVICE_WORKER_VERSION)
+      .then((cache) => Promise.allSettled(precacheUrls.map((url) => cache.add(url)))),
   );
   void self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== SERVICE_WORKER_VERSION).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== SERVICE_WORKER_VERSION).map((k) => caches.delete(k))),
+      )
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -53,10 +56,11 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() =>
-          caches.match(request)
+          caches
+            .match(request)
             .then((cached) => cached ?? caches.match(base + "offline/"))
-            .then((cached) => cached ?? new Response("Offline", { status: 503 }))
-        )
+            .then((cached) => cached ?? new Response("Offline", { status: 503 })),
+        ),
     );
     return;
   }
@@ -69,6 +73,6 @@ self.addEventListener("fetch", (event) => {
         store(event, request, response);
         return response;
       });
-    })
+    }),
   );
 });

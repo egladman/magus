@@ -37,7 +37,11 @@ export function persisted<T>(key: string, fallback: T): Persisted<T> {
   return {
     get: read,
     set(value: T): void {
-      try { localStorage.setItem(full, JSON.stringify(value)); } catch { /* ignore */ }
+      try {
+        localStorage.setItem(full, JSON.stringify(value));
+      } catch {
+        /* ignore */
+      }
       for (const fn of listeners) fn(value); // notify this tab immediately (storage fires only cross-tab)
     },
     subscribe(fn): () => void {

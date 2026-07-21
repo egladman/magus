@@ -21,7 +21,8 @@ export function initPrefetch(): void {
     // Cross-origin: skip.
     if (a.origin !== origin) return false;
     // Non-HTML asset: the browser caches it fine on its own.
-    if (/\.(jpg|jpeg|png|webp|gif|svg|css|js|woff2?|wasm|xml|json|txt|pdf)($|\?)/i.test(a.pathname)) return false;
+    if (/\.(jpg|jpeg|png|webp|gif|svg|css|js|woff2?|wasm|xml|json|txt|pdf)($|\?)/i.test(a.pathname))
+      return false;
     if (seen.has(a.href)) return false;
     return true;
   }
