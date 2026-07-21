@@ -296,7 +296,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { secondaryRow = ""; }
     // Consistent "<page title> - magus" suffix everywhere; home is just "magus" (its
     // H1-derived title is the wordmark).
-    var fullTitle = title + " — magus";
+    var fullTitle = title + " - magus";
     if (srcRel == "README.md") { fullTitle = "magus"; }
     // OpenGraph + Twitter Card meta so a shared link renders a card, not a bare URL. The
     // og:* block lives in the template (gated on hasSiteUrl); here we only pick og:type
