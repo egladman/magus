@@ -75,7 +75,7 @@ import "render_gates" as _;
 //   sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU
 // To upgrade: download the new pico.min.css into assets/ (not gen/assets/), update the
 // version comment, recompute the SRI if ever reverting to CDN delivery, and regenerate.
-// GH / SITE_URL / SITE_DESC moved to render_types.buzz (shared config the writer
+// GH / SITE_URL / SITE_DESC are in render_types.buzz (shared config the writer
 // modules also need).
 
 
@@ -624,7 +624,7 @@ fun writeLLMsIndex(site: Site) > void {
     fs.writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base));
 }
 
-// CSP construction and content hashing moved to render_csp.buzz (flat-imported
+// CSP construction and content hashing are in render_csp.buzz (flat-imported
 // above): fileSha256, scriptHash, extractInlineScripts, computeCSP,
 // cspForRedirectStub, and the CSP_* constants.
 
@@ -737,7 +737,7 @@ fun writeServiceWorker(site: Site) > void {
 }
 
 // The persistent site UI (nav bar, footer, settings/reference panels, announcement,
-// TOC list, commit footer) moved to render_nav.buzz.
+// TOC list, commit footer) are in render_nav.buzz.
 
 // renderPlayground writes gen/playground/index.html from the hand-authored source, injecting
 // the shared nav + footer at its <!-- site-nav --> / <!-- site-footer --> placeholders.
@@ -1129,7 +1129,7 @@ fun substituteVersionTokens(md: str, site: Site) > str {
     return $"__MAGUS_VERSION__".replaceAll(md, site.releases[0].version);
 }
 
-// (moved to render_meta.buzz)
+// (defined in render_meta.buzz)
 
 // Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
 // docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
@@ -1622,7 +1622,7 @@ fun walkBlog(site: Site) > void {
     renderBlogIndex(site);
 }
 
-// isDirectory / isGeneratorDir / isGeneratorFile moved to render_path.buzz (a leaf
+// isDirectory / isGeneratorDir / isGeneratorFile are in render_path.buzz (a leaf
 // module both this file and render_types.buzz import).
 
 // Recursively walk docs/ (the render reads its co-located markdown; the SSG's own

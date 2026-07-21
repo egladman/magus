@@ -70,8 +70,8 @@ export fun artifactDesc(name: str, platform: str) > str {
     return name;
 }
 
-// (jsonStr/jsonStrList removed: releaseIndexJSON now uses serialize.jsonEncode, which
-// was their only caller.)
+// releaseIndexJSON encodes its output with serialize.jsonEncode, so this module carries
+// no hand-rolled JSON string helpers.
 
 test "semverSortKey produces zero-padded keys for numeric semver comparison" {
     assert.equal(semverSortKey("v0.2.0.yaml"),  "0000.0002.0000", "v0.2.0");

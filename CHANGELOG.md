@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+See the unreleased changes at
+https://github.com/egladman/magus/compare/v0.2.1...main
+
 ### Added
 
 - File authorship is now first-class in the graph (schema v6): an `author` node per git
