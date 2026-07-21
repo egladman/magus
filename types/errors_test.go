@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -79,4 +80,34 @@ func TestDiagnosticErrorf(t *testing.T) {
 	msg := err.Error()
 	assert.Contains(t, msg, "MGS2003")
 	assert.Contains(t, msg, "HOME")
+}
+
+// A DiagnosticCode is itself an errors.Is sentinel (the idiomatic match form), alongside the
+// same-code-error form.
+func TestDiagnosticCodeSentinelMatch(t *testing.T) {
+	err := DiagnosticErrorf(ExecDenied, "denied")
+	assert.ErrorIs(t, err, ExecDenied, "a code is an errors.Is sentinel")
+	assert.NotErrorIs(t, err, PathReadDenied, "a different code must not match")
+}
+
+func TestFormatDiagnostic(t *testing.T) {
+	got := FormatDiagnostic(NoCITarget, "no ci target")
+	assert.Contains(t, got, "MGS1001")
+	assert.Contains(t, got, "no ci target")
+	assert.Contains(t, got, "see ") // the slog one-liner carries the doc URL inline
+}
+
+// captureSink records emitted diagnostics for the sink-plumbing test.
+type captureSink struct{ events []DiagnosticEvent }
+
+func (c *captureSink) Record(e DiagnosticEvent) { c.events = append(c.events, e) }
+
+func TestDiagnosticSinkPlumbing(t *testing.T) {
+	// No sink installed: EmitDiagnostic is a silent no-op.
+	EmitDiagnostic(context.Background(), DiagnosticEvent{Code: ExecDenied})
+
+	sink := &captureSink{}
+	ctx := WithDiagnosticSink(context.Background(), sink)
+	EmitDiagnostic(ctx, DiagnosticEvent{Code: ExecDenied, Unit: "a:build"})
+	assert.Equal(t, []DiagnosticEvent{{Code: ExecDenied, Unit: "a:build"}}, sink.events)
 }

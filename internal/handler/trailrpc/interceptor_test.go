@@ -2,6 +2,7 @@ package trailrpc
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,6 +45,7 @@ func TestClassify(t *testing.T) {
 		{"GetStatus", false, true},
 		{"StreamStatus", false, true},
 		{"FrobnicateWorkspace", true, false}, // unknown verb: fail-closed to mutating, flagged unknown
+		{"Listen", true, false},              // single-word (no internal capital): leadingWord returns it whole, unknown
 	}
 	for _, c := range cases {
 		mut, known := classify(c.method)
@@ -135,5 +137,41 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	got := events[0]
 	if got.Action != "RevokeToken" || got.Actor != "operator" || got.Kind != trail.KindTokenLifecycle || got.Outcome != trail.OutcomeOK {
 		t.Errorf("recorded event = %+v, want RevokeToken/operator/token_lifecycle/ok", got)
+	}
+}
+
+// erroringTokenService fails RevokeToken, so the interceptor's error-outcome branch is exercised: a failed
+// mutation is still recorded, with OutcomeError and the error text.
+type erroringTokenService struct{ fakeTokenService }
+
+func (erroringTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.RevokeTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeNotFound, errors.New("no token matches"))
+}
+
+func TestInterceptorRecordsFailedMutation(t *testing.T) {
+	dir := t.TempDir()
+	path, handler := tokenv1connect.NewTokenServiceHandler(
+		erroringTokenService{},
+		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindTokenLifecycle)),
+	)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := tokenv1connect.NewTokenServiceClient(srv.Client(), srv.URL)
+	if _, err := client.RevokeToken(context.Background(), connect.NewRequest(&tokenv1.RevokeTokenRequest{Identifier: "x"})); err == nil {
+		t.Fatal("expected RevokeToken to fail")
+	}
+
+	events, err := trail.ReadRecent(dir, 10)
+	if err != nil {
+		t.Fatalf("ReadRecent: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("recorded %d events, want 1 (the failed mutation is still audited)", len(events))
+	}
+	if events[0].Outcome != trail.OutcomeError || events[0].Error == "" {
+		t.Errorf("recorded event = %+v, want OutcomeError with a non-empty error", events[0])
 	}
 }

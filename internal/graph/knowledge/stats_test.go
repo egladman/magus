@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -78,6 +79,41 @@ func TestStatsConnectivity(t *testing.T) {
 	assert.Equal(t, 3, s.LargestComponentSize)
 	assert.Greater(t, s.ComponentCount, 1, "an unlinked graph splits into several components")
 	assert.LessOrEqual(t, s.ComponentCount, s.NodeCount)
+}
+
+// TestStatsOrphanCapExemptsSpells builds more than maxOrphans isolated nodes plus a semantic spell orphan
+// whose ID sorts last, and pins that the isolated list is capped to a SAMPLE while the spell orphan is
+// still reported (never truncated) and IsolatedCount reflects the true total.
+func TestStatsOrphanCapExemptsSpells(t *testing.T) {
+	g := NewGraph()
+	total := maxOrphans + 10
+	for i := 0; i < total; i++ {
+		// Zero-padded so "diagnostic:MGS0000".. all sort before the "spell:zzz" orphan below.
+		id := "diagnostic:MGS" + pad(i)
+		g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindDiagnostic, Label: id})
+	}
+	// A declared, op-providing, unused spell: a semantic orphan (has edges), ID sorts after every diagnostic.
+	g.AddNode(types.KnowledgeNode{ID: "spell:zzz", Kind: types.KindSpell, Label: "zzz", Attrs: map[string]string{AttrDeclared: "true"}})
+	g.AddNode(types.KnowledgeNode{ID: "op:zzz:x", Kind: types.KindOp, Label: "x"})
+	g.AddEdge(types.KnowledgeEdge{Source: "spell:zzz", Target: "op:zzz:x", Relation: types.RelationContains, Confidence: types.ConfidenceExtracted, Score: 1})
+
+	s := g.Stats("")
+	assert.Equal(t, total, s.IsolatedCount, "IsolatedCount is the true total of 0-degree non-spell nodes")
+	assert.Len(t, s.Orphans, maxOrphans+1, "the isolated SAMPLE is capped, plus the one exempt spell orphan")
+	// The spell orphan survives the cap even though its ID sorts last.
+	var sawSpell bool
+	for _, o := range s.Orphans {
+		if o.ID == "spell:zzz" {
+			sawSpell = true
+		}
+	}
+	assert.True(t, sawSpell, "the semantic spell orphan is never truncated by the isolated-sample cap")
+}
+
+// pad renders i as a 5-digit zero-padded string so generated node IDs sort lexically by number.
+func pad(i int) string {
+	s := "00000" + strconv.Itoa(i)
+	return s[len(s)-5:]
 }
 
 func TestStatsCoverage(t *testing.T) {

@@ -30,6 +30,14 @@ func TestIsMatching(t *testing.T) {
 	if !errors.Is(err, ErrSentinel) {
 		t.Error("a diagnostic error must match ErrSentinel")
 	}
+	// The idiomatic sentinel form: a bare Code as the errors.Is target.
+	if !errors.Is(err, Code("TST0001")) {
+		t.Error("must match a same-code Code sentinel")
+	}
+	if errors.Is(err, Code("TST0002")) {
+		t.Error("must NOT match a different-code Code sentinel")
+	}
+	// The struct-literal target form stays supported for back-compat.
 	if !errors.Is(err, &Error{Code: "TST0001"}) {
 		t.Error("must match a same-code target literal")
 	}
@@ -38,6 +46,19 @@ func TestIsMatching(t *testing.T) {
 	}
 	if errors.Is(errors.New("plain"), ErrSentinel) {
 		t.Error("a plain error must not match ErrSentinel")
+	}
+	// A target that is neither ErrSentinel, a Code, nor an *Error takes Is's default (no match).
+	if errors.Is(err, errors.New("some other error")) {
+		t.Error("must not match an unrelated error target")
+	}
+}
+
+// TestCodeIsError pins that a Code satisfies the error interface (so it can be an errors.Is sentinel) and
+// renders as the bare code.
+func TestCodeIsError(t *testing.T) {
+	var e error = Code("TST0001")
+	if e.Error() != "TST0001" {
+		t.Errorf("Code.Error() = %q, want TST0001", e.Error())
 	}
 }
 

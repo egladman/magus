@@ -156,7 +156,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 		}
 	}
 	res, err := run.Exec(ctx, cmd, args, run.ExecOptions{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture})
-	if err != nil && errors.Is(err, &types.DiagnosticError{Code: types.ExecDenied}) {
+	if err != nil && errors.Is(err, types.ExecDenied) {
 		return res, err // sandbox exec denial: surface the diagnostic verbatim
 	}
 	if !res.Started || res.Code != 0 {

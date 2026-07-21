@@ -280,7 +280,7 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 		Stdin:   optStringDefault(opts, "stdin", ""),
 		Capture: true,
 	})
-	if err != nil && errors.Is(err, &types.DiagnosticError{Code: types.ExecDenied}) {
+	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err
 	}
 	if res.Code != 0 && !optBoolDefault(opts, "allow_failure", false) {

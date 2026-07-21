@@ -20,6 +20,12 @@ import (
 // convention of the consumer that declares it; this package never interprets the string.
 type Code string
 
+// Error lets a Code serve as an errors.Is sentinel, so `errors.Is(err, MGS2007)` matches an *Error
+// carrying that code - the idiomatic Go form (cf. syscall.Errno). The rendered text is the bare code; a
+// Code is an IDENTIFIER, not a message, so build an error that carries context with Domain.Errorf rather
+// than returning a bare Code.
+func (c Code) Error() string { return string(c) }
+
 // Error is a coded diagnostic error: a Code, a human message, and - when built through a Domain - the docs
 // URL to render. A bare literal &Error{Code: X} carries no URL and is meant only as an errors.Is target.
 type Error struct {
@@ -40,13 +46,19 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("[%s] %s\n  see: %s", e.Code, e.Msg, e.url)
 }
 
-// Is matches ErrSentinel (any diagnostic error) or another *Error carrying the same Code.
+// Is matches ErrSentinel (any diagnostic error), a bare Code sentinel with the same code, or another
+// *Error carrying the same code. The Code case is the idiomatic target: errors.Is(err, MGS2007).
 func (e *Error) Is(target error) bool {
 	if target == ErrSentinel {
 		return true
 	}
-	other, ok := target.(*Error)
-	return ok && other.Code == e.Code
+	switch t := target.(type) {
+	case Code:
+		return e.Code == t
+	case *Error:
+		return e.Code == t.Code
+	}
+	return false
 }
 
 // Domain is one consumer's diagnostic namespace: how to build the docs URL for a Code in its family, and

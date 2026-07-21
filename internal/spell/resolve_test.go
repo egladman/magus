@@ -160,7 +160,7 @@ export fun mgs_listTargets() > any { return {"pg": pg}; }
 `
 	_, err := resolve(t, src)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, &types.DiagnosticError{Code: types.ServiceOpDetached})
+	assert.ErrorIs(t, err, types.ServiceOpDetached)
 }
 
 // TestResolve_NonCommandOpRejected pins the new invariant: every op is a command,

@@ -234,7 +234,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	runFn := func() error {
 		res, err := run.Exec(ctx, self, full, run.ExecOptions{Dir: dir, Env: env, Capture: true, Quiet: quiet})
 		switch {
-		case err != nil && errors.Is(err, &types.DiagnosticError{Code: types.ExecDenied}):
+		case err != nil && errors.Is(err, types.ExecDenied):
 			cmdErr = err
 		case res.Code != 0 && !res.Started:
 			// The child never launched (binary not found, permission, ctx cancelled

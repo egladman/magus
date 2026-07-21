@@ -84,7 +84,7 @@ func TestApplyFingerprintMismatch(t *testing.T) {
 	// must NOT attach the new policy (the returned ctx is the unchanged input).
 	gotCtx, err := Apply(ctx, policyB, rootB)
 	require.Error(t, err, "a divergent policy must be rejected")
-	assert.ErrorIs(t, err, &types.DiagnosticError{Code: types.SandboxPolicyMismatch},
+	assert.ErrorIs(t, err, types.SandboxPolicyMismatch,
 		"mismatch must carry the MGS2010 diagnostic")
 	assert.ErrorContains(t, err, rootB, "mismatch error should name the offending workspace")
 	// context.Context is an interface, not a pointer, so compare by value: a rejected
@@ -104,6 +104,6 @@ func TestApplyFingerprintMismatch(t *testing.T) {
 func TestDiagnosticMismatchSentinel(t *testing.T) {
 	t.Parallel()
 	err := types.DiagnosticErrorf(types.SandboxPolicyMismatch, "x")
-	assert.True(t, errors.Is(err, &types.DiagnosticError{Code: types.SandboxPolicyMismatch}))
-	assert.False(t, errors.Is(err, &types.DiagnosticError{Code: types.SandboxUnsupported}))
+	assert.True(t, errors.Is(err, types.SandboxPolicyMismatch))
+	assert.False(t, errors.Is(err, types.SandboxUnsupported))
 }

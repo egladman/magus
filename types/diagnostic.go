@@ -31,9 +31,9 @@ const (
 // every consumer keeps referring to types.DiagnosticCode while the machinery is shared.
 type DiagnosticCode = diag.Code
 
-// DiagnosticError is a typed error carrying an MGS code and message (the framework's Error). Aliased so
-// existing &types.DiagnosticError{Code: X} errors.Is targets and *types.DiagnosticError references are
-// unchanged.
+// DiagnosticError is a typed error carrying an MGS code and message (the framework's Error). It implements
+// error, and a DiagnosticCode is itself an errors.Is sentinel, so a caller matches one idiomatically:
+// errors.Is(err, types.ExecDenied).
 type DiagnosticError = diag.Error
 
 // DiagnosticEvent is one diagnostic fired during a run (the framework's Event).
