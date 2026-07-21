@@ -76,6 +76,8 @@ const (
 	BespokePhaseFragmentName  DiagnosticCode = "MGS1003"
 	UnreachedFootprintDecl    DiagnosticCode = "MGS1004"
 	RedundantFootprintGlob    DiagnosticCode = "MGS1005"
+	UnknownTarget             DiagnosticCode = "MGS1006"
+	TargetDependencyCycle     DiagnosticCode = "MGS1007"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -108,7 +110,7 @@ const (
 // are not reflectable.
 var allDiagnosticCodes = []DiagnosticCode{
 	NoCITarget, SpellShadowed, BespokePhaseFragmentName,
-	UnreachedFootprintDecl, RedundantFootprintGlob,
+	UnreachedFootprintDecl, RedundantFootprintGlob, UnknownTarget, TargetDependencyCycle,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	NetEgress, SandboxPolicyMismatch,
@@ -137,6 +139,13 @@ func DiagnosticErrorf(c DiagnosticCode, format string, args ...any) *DiagnosticE
 // FormatDiagnostic formats a diagnostic message with code and doc URL for slog logging.
 func FormatDiagnostic(c DiagnosticCode, msg string) string {
 	return mgs.Format(c, msg)
+}
+
+// WrapDiagnostic builds a DiagnosticError that carries an MGS code AND wraps cause, so errors.Is(err,
+// cause) keeps matching while the error gains a lookupable code. Use it when a sentinel already drives
+// control flow (e.g. ErrUnknownTarget) and must keep matching.
+func WrapDiagnostic(c DiagnosticCode, cause error, format string, args ...any) *DiagnosticError {
+	return mgs.Wrapf(c, cause, format, args...)
 }
 
 // WithDiagnosticSink returns ctx carrying s, so a deep emission site can reach the

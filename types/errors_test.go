@@ -90,6 +90,18 @@ func TestDiagnosticCodeSentinelMatch(t *testing.T) {
 	assert.NotErrorIs(t, err, PathReadDenied, "a different code must not match")
 }
 
+// WrapDiagnostic carries a code AND unwraps to its cause, so a pre-existing sentinel keeps matching via
+// errors.Is (the property that lets us add MGS1006 to the unknown-target error without breaking the
+// ErrUnknownTarget fan-out suppression).
+func TestWrapDiagnostic(t *testing.T) {
+	sentinel := errors.New("magusfile: unknown target")
+	err := WrapDiagnostic(UnknownTarget, sentinel, "unknown target %q (registered: %s)", "buld", "build, test")
+	assert.ErrorIs(t, err, UnknownTarget, "carries the code")
+	assert.ErrorIs(t, err, sentinel, "still unwraps to the wrapped sentinel")
+	assert.Contains(t, err.Error(), "MGS1006")
+	assert.Contains(t, err.Error(), "buld")
+}
+
 func TestFormatDiagnostic(t *testing.T) {
 	got := FormatDiagnostic(NoCITarget, "no ci target")
 	assert.Contains(t, got, "MGS1001")

@@ -62,6 +62,30 @@ func TestCodeIsError(t *testing.T) {
 	}
 }
 
+// TestWrapfChainsCause pins that a Wrapf error carries the code AND unwraps to its cause, so a pre-existing
+// sentinel still matches via errors.Is while the error gains a lookupable code.
+func TestWrapfChainsCause(t *testing.T) {
+	d := New(testURL)
+	sentinel := errors.New("underlying sentinel")
+	err := d.Wrapf(Code("TST0001"), sentinel, "boom %d", 3)
+
+	// The rendered message does NOT splice the cause; it is the coded form.
+	if err.Error() != "[TST0001] boom 3\n  see: https://example/docs/TST0001.md" {
+		t.Errorf("render = %q", err.Error())
+	}
+	// Both the code sentinel and the wrapped cause match.
+	if !errors.Is(err, Code("TST0001")) {
+		t.Error("must still match its own code")
+	}
+	if !errors.Is(err, sentinel) {
+		t.Error("must unwrap to the wrapped cause")
+	}
+	// Unwrap is nil for a plain Errorf.
+	if plain := d.Errorf(Code("TST0002"), "x"); plain.Unwrap() != nil {
+		t.Error("a non-wrapping Errorf must Unwrap to nil")
+	}
+}
+
 func TestDomainURLAndFormat(t *testing.T) {
 	d := New(testURL)
 	if got := d.URL(Code("TST0009")); got != "https://example/docs/TST0009.md" {

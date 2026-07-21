@@ -239,8 +239,10 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 			names = append(names, k)
 		}
 		slices.Sort(names)
-		return fmt.Errorf("magusfile: unknown target %q (registered: %s): %w",
-			target, strings.Join(names, ", "), ErrUnknownTarget)
+		// Carries the MGS1006 code for lookup, but still Unwraps to ErrUnknownTarget so the fan-out
+		// suppression (errors.Is(err, ErrUnknownTarget)) that skips projects lacking this target keeps working.
+		return types.WrapDiagnostic(types.UnknownTarget, ErrUnknownTarget,
+			"magusfile: unknown target %q (registered: %s)", target, strings.Join(names, ", "))
 	}
 	buzzArgs := make([]vm.Value, len(extraArgs))
 	for i, s := range extraArgs {

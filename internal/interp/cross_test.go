@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -46,6 +47,7 @@ func TestCrossDispatchCycle(t *testing.T) {
 	}
 	err := cd.Dispatch(context.Background(), "/ws/a", "build")
 	assert.Error(t, err, "expected a cross-project cycle error")
+	assert.ErrorIs(t, err, types.TargetDependencyCycle, "a cycle carries the MGS1007 diagnostic code")
 }
 
 // TestCrossDispatchPanicUnblocksWaiters verifies that a panic in the runner is

@@ -225,7 +225,7 @@ func dispatchBuzzDeps(callCtx context.Context, targets map[string]vm.Callable, n
 	for _, name := range names {
 		fn, ok := targets[name]
 		if !ok {
-			return fmt.Errorf("unknown target %q", name)
+			return types.DiagnosticErrorf(types.UnknownTarget, "unknown target %q", name)
 		}
 		if fn == nil {
 			continue

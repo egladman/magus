@@ -29,9 +29,10 @@ func (c Code) Error() string { return string(c) }
 // Error is a coded diagnostic error: a Code, a human message, and - when built through a Domain - the docs
 // URL to render. A bare literal &Error{Code: X} carries no URL and is meant only as an errors.Is target.
 type Error struct {
-	Code Code
-	Msg  string
-	url  string // docs URL, captured at construction by a Domain; empty for a bare errors.Is-target literal
+	Code  Code
+	Msg   string
+	url   string // docs URL, captured at construction by a Domain; empty for a bare errors.Is-target literal
+	cause error  // optional wrapped cause (see Domain.Wrapf), so errors.Is/As reach an underlying sentinel
 }
 
 // ErrSentinel matches any *Error via errors.Is, so a caller can test "is this a diagnostic error at all"
@@ -61,6 +62,10 @@ func (e *Error) Is(target error) bool {
 	return false
 }
 
+// Unwrap returns the wrapped cause (nil if none), so errors.Is/As can reach an underlying sentinel or
+// error a coded error was layered over. See Domain.Wrapf.
+func (e *Error) Unwrap() error { return e.cause }
+
 // Domain is one consumer's diagnostic namespace: how to build the docs URL for a Code in its family, and
 // the factory for that consumer's coded errors. "Domain" here is the NSError sense - a namespace of related
 // codes - not a network domain. A consumer creates one (magus for MGS, gopherbuzz for BZZ) and declares
@@ -80,6 +85,16 @@ func (d *Domain) URL(c Code) string { return d.urlFn(c) }
 // Errorf builds an *Error with c, a formatted message, and c's docs URL captured for rendering.
 func (d *Domain) Errorf(c Code, format string, args ...any) *Error {
 	return &Error{Code: c, Msg: fmt.Sprintf(format, args...), url: d.urlFn(c)}
+}
+
+// Wrapf builds a coded *Error over an existing cause: it renders "[code] msg / see: url" (cause is NOT
+// spliced into the message) and Unwraps to cause, so errors.Is(err, cause) still matches. Use it when a
+// sentinel error must keep matching while the error also gains a lookupable code - e.g. adding a code to an
+// error whose sentinel already drives control flow.
+func (d *Domain) Wrapf(c Code, cause error, format string, args ...any) *Error {
+	e := d.Errorf(c, format, args...)
+	e.cause = cause
+	return e
 }
 
 // Format renders a code+message as a single slog-friendly line: "[CODE] msg (see URL)".

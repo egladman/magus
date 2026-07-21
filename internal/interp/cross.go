@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/types"
 )
 
 type crossDispatchCtxKey struct{}
@@ -72,7 +73,7 @@ func crossAncestors(ctx context.Context) []string {
 func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error {
 	key := dir + "\x00" + target
 	if slices.Contains(crossAncestors(ctx), key) {
-		return fmt.Errorf("cross-project cycle: %s target %q", dir, target)
+		return types.DiagnosticErrorf(types.TargetDependencyCycle, "cross-project cycle: %s target %q", dir, target)
 	}
 
 	c.mu.Lock()
