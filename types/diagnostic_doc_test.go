@@ -36,9 +36,9 @@ func TestEveryDiagnosticCodeHasDocPage(t *testing.T) {
 
 	for _, m := range codes {
 		code := DiagnosticCode(m[1])
-		url := code.URL()
+		url := CodeURL(code)
 		i := strings.Index(url, "docs/codes/")
-		require.GreaterOrEqual(t, i, 0, "%s: URL() %q has no docs/codes path", code, url)
+		require.GreaterOrEqual(t, i, 0, "%s: CodeURL %q has no docs/codes path", code, url)
 		path := filepath.Join(root, filepath.FromSlash(url[i:]))
 		_, statErr := os.Stat(path)
 		if knownUndocumented[code] {

@@ -46,7 +46,7 @@ func (*runner) checkNearDuplicateServices(projects []*types.Project) Check {
 		return Check{Name: name, Status: StatusOK, Message: "no near-duplicate services detected"}
 	}
 	details := strings.Split(serviceident.FormatWarning(clusters), "\n")
-	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.NearDuplicateServices.URL()))
+	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.CodeURL(types.NearDuplicateServices)))
 	return Check{
 		Name:    name,
 		Status:  StatusFail,
@@ -69,7 +69,7 @@ func (*runner) checkStaleServiceSuppressions(projects []*types.Project) Check {
 	for _, n := range unused {
 		details = append(details, fmt.Sprintf("%s is marked distinct but has no near-duplicate; remove the opt-out", n))
 	}
-	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.NearDuplicateServices.URL()))
+	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.CodeURL(types.NearDuplicateServices)))
 	return Check{
 		Name:    name,
 		Status:  StatusFail,
@@ -128,7 +128,7 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 		Details: []string{
 			`define one in your magusfile, e.g.  export fun ci(_a: [str]) > void { magus.needs(build, test, lint); }`,
 			"run 'magus describe targets' to see the available stages to compose",
-			fmt.Sprintf("see %s: %s", types.NoCITarget, types.NoCITarget.URL()),
+			fmt.Sprintf("see %s: %s", types.NoCITarget, types.CodeURL(types.NoCITarget)),
 		},
 	}
 }
@@ -550,7 +550,7 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Che
 		Message: fmt.Sprintf(
 			"%d target name(s) name static analysis or formatting rather than a phase of their own; "+
 				"compose the op into lint (or format) so `magus affected ci` covers it (docs/targets.md#the-target-name, see %s)",
-			len(seen), types.BespokePhaseFragmentName.URL()),
+			len(seen), types.CodeURL(types.BespokePhaseFragmentName)),
 		Details: details,
 	}
 }
@@ -585,7 +585,7 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) Check {
 		Message: fmt.Sprintf(
 			"%d magus.inputs/outputs call(s) are not statically reachable from a target body, so they never enter a cache key; "+
 				"call them directly in the target body (see %s)",
-			len(details), types.UnreachedFootprintDecl.URL()),
+			len(details), types.CodeURL(types.UnreachedFootprintDecl)),
 		Details: details,
 	}
 }
@@ -624,7 +624,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 		Message: fmt.Sprintf(
 			"%d per-target magus.inputs/outputs glob(s) duplicate a project-wide declaration (a no-op under the additive model); "+
 				"drop the duplicate (see %s)",
-			len(details), types.RedundantFootprintGlob.URL()),
+			len(details), types.CodeURL(types.RedundantFootprintGlob)),
 		Details: details,
 	}
 }

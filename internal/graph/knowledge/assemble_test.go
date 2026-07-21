@@ -141,7 +141,7 @@ func TestAssembleNodes(t *testing.T) {
 	assert.Equal(t, "vcs.shortHash() str", method.Attrs["buzz"])
 
 	diag, _ := nodeByID(out, "diagnostic:MGS2010")
-	assert.Equal(t, types.SandboxPolicyMismatch.URL(), diag.Attrs["url"])
+	assert.Equal(t, types.CodeURL(types.SandboxPolicyMismatch), diag.Attrs["url"])
 }
 
 // TestProjectAttrsWithoutEngine: a project that declares no engine still reports

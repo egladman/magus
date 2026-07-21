@@ -235,9 +235,9 @@ func TestInputsDynamicArgIsLoadError(t *testing.T) {
 }
 
 func TestDiagCollectorCollects(t *testing.T) {
-	d := &diagCollector{} // nil report writer: RecordDiagnostic must still collect
-	d.RecordDiagnostic(types.DiagnosticEvent{Unit: "a:build", Code: types.ExecDenied})
-	d.RecordDiagnostic(types.DiagnosticEvent{Unit: "b:test", Code: types.RaceDetected})
+	d := &diagCollector{} // nil report writer: Record must still collect
+	d.Record(types.DiagnosticEvent{Unit: "a:build", Code: types.ExecDenied})
+	d.Record(types.DiagnosticEvent{Unit: "b:test", Code: types.RaceDetected})
 
 	snap := d.snapshot()
 	assert.Len(t, snap, 2)

@@ -49,18 +49,18 @@ func TestSpellErrors_Unwrap(t *testing.T) {
 }
 
 func TestDiagnosticCode_URL(t *testing.T) {
-	assert.Contains(t, PathReadDenied.URL(), "MGS2001")
-	assert.Contains(t, RaceDetected.URL(), "MGS4001")
-	assert.Contains(t, NoCITarget.URL(), "MGS1001")
+	assert.Contains(t, CodeURL(PathReadDenied), "MGS2001")
+	assert.Contains(t, CodeURL(RaceDetected), "MGS4001")
+	assert.Contains(t, CodeURL(NoCITarget), "MGS1001")
 
 	for _, code := range []DiagnosticCode{PathReadDenied, RaceDetected, NoCITarget} {
-		assert.Truef(t, strings.HasSuffix(code.URL(), ".md"), "URL() = %q, want .md suffix", code.URL())
+		assert.Truef(t, strings.HasSuffix(CodeURL(code), ".md"), "URL() = %q, want .md suffix", CodeURL(code))
 	}
 	// MGS1xxx routes to the magusfile docs dir, not the sandbox/race bases.
-	assert.Contains(t, NoCITarget.URL(), "/docs/codes/magusfile/")
+	assert.Contains(t, CodeURL(NoCITarget), "/docs/codes/magusfile/")
 	// MGS5xxx routes to the services docs dir.
-	assert.Contains(t, NearDuplicateServices.URL(), "MGS5001")
-	assert.Contains(t, NearDuplicateServices.URL(), "/docs/codes/services/")
+	assert.Contains(t, CodeURL(NearDuplicateServices), "MGS5001")
+	assert.Contains(t, CodeURL(NearDuplicateServices), "/docs/codes/services/")
 }
 
 func TestDiagnosticError_Is(t *testing.T) {

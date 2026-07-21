@@ -55,6 +55,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/egladman/diag v0.0.0
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -95,3 +96,5 @@ tool (
 	connectrpc.com/connect/cmd/protoc-gen-connect-go
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
+
+replace github.com/egladman/diag => ./libs/diag

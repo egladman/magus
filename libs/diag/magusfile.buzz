@@ -1,0 +1,63 @@
+// magusfile.buzz for diag, a standalone Go module (github.com/egladman/diag) at
+// libs/diag: the shared diagnostic-code framework both magus and gopherbuzz depend
+// on. Its own module (not part of the magus module) so gopherbuzz - a separate
+// module - can consume it without depending on magus. Set up as its own magus
+// project, scoped to its go.mod.
+//
+//   magus run build libs/diag   compile the package
+//   magus run test libs/diag    run the Go test suite
+//   magus run ci libs/diag      lint, build, and test
+
+import "magus";
+
+// go spell claims **/*.go and the module files; magusfile spell makes this file's
+// export-fun targets runnable. Listed explicitly because "spells" below replaces the
+// default set.
+import "magus/spell/magusfile";
+import "magus/spell/go";
+
+import "fs";
+import "vcs";
+
+magus.project({
+    "spells": [magusfile, go],
+    // Generated catalog; cached so a hit restores it without re-describing.
+    "outputs": ["MAGUS.md"],
+    "targets": {
+        // Drift-gates MAGUS.md via git status: run alone, every time.
+        "generate": {"skip_cache": true, "exclusive": true},
+    },
+});
+
+// A pure library, so the pipeline is the Go lifecycle plus md-generate. Each target
+// delegates to the go spell's ops.
+
+export fun preflight(args: [str]) > void {}
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(args: [str]) > void {
+    magus.needs(preflight);
+    final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
+    magus.needs(md_generate);
+    if (magus.has_charm("rw")) { return; }
+
+    if (clean_before and vcs.isDirty(["MAGUS.md"])) {
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diag` and commit";
+    }
+}
+
+// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+export fun md_generate(args: [str]) > void {
+    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs.writeFile("MAGUS.md", doc + "\n");
+}
+
+export fun format(args: [str]) > void { magus.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
+export fun lint(args: [str]) > void { magus.needs(format); go["go-vet"](); }
+export fun build(args: [str]) > void { magus.needs(format); go["go-build"](); }
+export fun test(args: [str]) > void { magus.needs(format); go["go-test"](); }
+
+// The anchor `magus affected ci` keys off; fans out lint/build/test after format.
+export fun ci(args: [str]) > void {
+    magus.needs(lint, build, test);
+}

@@ -318,7 +318,7 @@ func assembleRegistry(in Inputs) Shard {
 			ID:    diagnosticID(string(code)),
 			Kind:  types.KindDiagnostic,
 			Label: string(code),
-			Attrs: map[string]string{"url": code.URL()},
+			Attrs: map[string]string{"url": types.CodeURL(code)},
 		})
 	}
 

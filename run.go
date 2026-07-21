@@ -1007,7 +1007,7 @@ type diagCollector struct {
 	report *report.Writer // forward target; nil when no report is configured (Record is a no-op)
 }
 
-func (d *diagCollector) RecordDiagnostic(ev types.DiagnosticEvent) {
+func (d *diagCollector) Record(ev types.DiagnosticEvent) {
 	d.mu.Lock()
 	d.events = append(d.events, ev)
 	d.mu.Unlock()
