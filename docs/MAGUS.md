@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **705 nodes** and **1764 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **706 nodes** and **1770 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -52,7 +52,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 37 | `magus query kind:diagnostic` | `MGS4001`, `MGS5002`, `MGS5003` |
 | doc | 136 | `magus query kind:doc` | `documentation.md`, `spells.md`, `manpage/magus-affected.md` |
-| file | 31 | `magus query kind:file` | `render.buzz`, `magusfile.buzz`, `render_html.buzz` |
+| file | 32 | `magus query kind:file` | `render.buzz`, `magusfile.buzz`, `render_html.buzz` |
 | function | 213 | `magus query kind:function` | `site_render`, `renderPage`, `renderContentHTML` |
 | import | 25 | `magus query kind:import` | `magus`, `assert`, `magus/spell/go` |
 

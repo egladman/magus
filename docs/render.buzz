@@ -65,6 +65,7 @@ import "render_nav" as _;
 // output pruning, the URL ledger); free functions over a Site, imported for the calls in
 // site_render below.
 import "render_gates" as _;
+import "render_feeds" as _;
 
 // Path config, set by site_render() from the arguments the magusfile passes in - the
 // generator does not hardcode where the workspace, docs, or output live, so it stays
@@ -90,62 +91,8 @@ import "render_gates" as _;
 // render_route.buzz (path/URL routing helpers).
 
 
-// writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
-// byte-stable), each as an absolute SITE_URL loc — the home page's "index.html" URL
-// maps to the bare site root. Aliases are deliberately absent (only canonical pages
-// belong in a sitemap). Gated on SITE_URL so the site can ship dark until the host
-// is confirmed. robots points crawlers at the sitemap.
-fun writeSEOFiles(site: Site) > void {
-    if (SITE_URL == "") { return; }
-    var urls: [str] = mut [<str>];
-    foreach (u in site.pageUrls.keys()) { urls.append(u); }
-    final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
-    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
-    foreach (u in sorted) {
-        var loc = u;
-        if (loc == "index.html") { loc = ""; }
-        body = body + "  <url>" + xmlElement("loc", SITE_URL + loc) + "</url>\n";
-    }
-    body = body + "</urlset>\n";
-    fs.writeFile(site.outDir + "/sitemap.xml", body);
-    fs.writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + SITE_URL + "sitemap.xml\n");
-}
 
 
-// renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of
-// site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL),
-// updated (post date), summary (description), author. Feed-level updated = newest
-// post's date. Gated on SITE_URL so it can ship dark until the host is confirmed.
-fun renderBlogAtom(site: Site) > void {
-    if (SITE_URL == "") { return; }
-    if (site.blogPosts.len() == 0) { return; }
-    final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
-        if (a.date != b.date) { return strLess(b.date, a.date); }
-        return strLess(a.base, b.base);
-    });
-    final feedUpdated = atomDate(sorted[0].date);
-    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
-        + "  " + xmlElement("title", "magus blog") + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "blog/") + xmlAttribute("rel", "alternate")) + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "public/atom/blog.atom.xml") + xmlAttribute("rel", "self")) + "\n"
-        + "  " + xmlElement("id", SITE_URL + "blog/") + "\n"
-        + "  " + xmlElement("updated", feedUpdated) + "\n";
-    foreach (p in sorted) {
-        final entryUrl = SITE_URL + p.url;
-        body = body + "  <entry>\n"
-            + "    " + xmlElement("title", p.title) + "\n"
-            + "    " + xmlSelfClose("link", xmlAttribute("href", entryUrl)) + "\n"
-            + "    " + xmlElement("id", entryUrl) + "\n"
-            + "    " + xmlElement("updated", atomDate(p.date)) + "\n"
-            + "    " + xmlElement("summary", p.description) + "\n"
-            + "  </entry>\n";
-    }
-    body = body + "</feed>\n";
-    fs.makeDirectory(site.outDir + "/public/atom");
-    fs.writeFile(site.outDir + "/public/atom/blog.atom.xml", body);
-}
 
 
 // loadReleases reads releases/v*.yaml (newest-first by numeric semver) and populates
@@ -228,37 +175,6 @@ fun loadReleases(site: Site) > void {
     }
 }
 
-// renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed
-// releases (newest first as authored). Per <entry>: title = version, link =
-// GH/releases/tag/<ver>, id = same, updated = release date, summary = the section
-// body. Feed-level updated = newest release's date. Gated on SITE_URL and on
-// having at least one released version.
-fun renderReleasesAtom(site: Site) > void {
-    if (SITE_URL == "") { return; }
-    if (site.releases.len() == 0) { return; }
-    final feedUpdated = atomDate(site.releases[0].date);
-    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        + "<feed xmlns=\"http://www.w3.org/2005/Atom\">\n"
-        + "  " + xmlElement("title", "magus releases") + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", GH + "/releases") + xmlAttribute("rel", "alternate")) + "\n"
-        + "  " + xmlSelfClose("link", xmlAttribute("href", SITE_URL + "public/atom/releases.atom.xml") + xmlAttribute("rel", "self")) + "\n"
-        + "  " + xmlElement("id", GH + "/releases") + "\n"
-        + "  " + xmlElement("updated", feedUpdated) + "\n";
-    foreach (r in site.releases) {
-        final ver = r.version;
-        final link = GH + "/releases/tag/" + ver;
-        body = body + "  <entry>\n"
-            + "    " + xmlElement("title", ver) + "\n"
-            + "    " + xmlSelfClose("link", xmlAttribute("href", link)) + "\n"
-            + "    " + xmlElement("id", link) + "\n"
-            + "    " + xmlElement("updated", atomDate(r.date)) + "\n"
-            + "    " + xmlElementAttribute("summary", xmlAttribute("type", "text"), r.body.trim()) + "\n"
-            + "  </entry>\n";
-    }
-    body = body + "</feed>\n";
-    fs.makeDirectory(site.outDir + "/public/atom");
-    fs.writeFile(site.outDir + "/public/atom/releases.atom.xml", body);
-}
 
 // autoindex renders one Apache-`mod_autoindex`-styled listing at path (a gen-
 // root-relative dir, without trailing slash; "" for the root of the /public/
@@ -587,154 +503,13 @@ fun writeOffline(site: Site) > void {
     site.writtenPaths["offline/index.html"] = true;
 }
 
-// llmsIndexBody builds the gen/llms.txt document (the llms.txt convention): an H1,
-// a one-line summary, then every docs page as "- [title](base+url): description",
-// sorted by URL for a byte-stable artifact like search-index.json. base is the link
-// prefix (SITE_URL for absolute links, else "/"). Each linked page has its Markdown
-// source at <url>index.md (emitted next to the HTML by renderFile), so an agent can
-// fetch clean Markdown per page. Kept pure so a unit test can pin the exact output.
-fun llmsIndexBody(pages: [DocPage], base: str) > str {
-    final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
-        return strLess(a.url, b.url);
-    });
-    var body = "# magus\n\n"
-        + "> Workspace-aware build orchestrator and content-addressed cache. "
-        + "Every link below is the page's raw Markdown (its index.md sibling), "
-        + "so an agent fetches clean content directly.\n\n"
-        + "## Documentation\n\n";
-    foreach (p in sorted) {
-        // Link straight to the page's Markdown (directory-style url + index.md, the
-        // sibling of index.html), not the HTML page, so no URL guessing is needed.
-        var line = "- [" + p.title + "](" + base + p.url + "index.md)";
-        if (p.desc != "") { line = line + ": " + p.desc; }
-        body = body + line + "\n";
-    }
-    return body;
-}
 
-// writeLLMsIndex writes gen/llms.txt from the collected docs corpus, mirroring the
-// post-walk search-index.json write. Links are absolute under SITE_URL when set so
-// an external agent can follow them; otherwise root-relative.
-fun writeLLMsIndex(site: Site) > void {
-    var base = "/";
-    if (SITE_URL != "") {
-        base = SITE_URL;
-        if (base.endsWith("/") == false) { base = base + "/"; }
-    }
-    fs.writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base));
-}
 
 // CSP construction and content hashing are in render_csp.buzz (flat-imported
 // above): fileSha256, scriptHash, extractInlineScripts, computeCSP,
 // cspForRedirectStub, and the CSP_* constants.
 
-// writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers
-// (mostly on Android and Windows) read to allow "install this site". Icons
-// use the gopher-magus mark; scope/start_url match the deploy base so a
-// nested install stays inside /magus/. Gated on SITE_URL so a same-origin
-// scope is well-defined; without it we'd default to "/" and mis-scope.
-fun writeManifest(site: Site) > void {
-    if (SITE_URL == "") { return; }
-    final basePath = sitePathPrefix();
-    // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
-    // (see gopherbuzz/testdata/54_raw_string.buzz).
-    // Icons: favicon-32 and apple-touch-icon are the legacy set; icon-192/512 target
-    // Android/Windows install prompts; icon-512-maskable carries a solid #13171f
-    // background so the gopher-magus mark stays centered in the safe zone for
-    // circular crops.
-    //
-    // background_color is the PWA splash-screen fill shown while the app boots.
-    // The manifest spec has no light/dark media-query variant (unlike theme-color
-    // below in the HTML head), so it must be one value that reads fine in both
-    // schemes. #13171f matches the docs site's own dark background and the
-    // gopher-magus icon's canvas, so dark-mode users get a seamless splash and
-    // light-mode users get a brief on-brand dark flash instead of a blinding
-    // white one.
-    final body = "\{\n"
-        + "  \"name\": \"magus\",\n"
-        + "  \"short_name\": \"magus\",\n"
-        + "  \"id\": \"" + basePath + "\",\n"
-        + "  \"lang\": \"en\",\n"
-        + "  \"description\": \"" + escapeAttr(SITE_DESC) + "\",\n"
-        + "  \"start_url\": \"" + basePath + "\",\n"
-        + "  \"scope\": \"" + basePath + "\",\n"
-        + "  \"display\": \"standalone\",\n"
-        + "  \"categories\": [\"developer\", \"utilities\"],\n"
-        + "  \"background_color\": \"#13171f\",\n"
-        // theme_color tints the installed app's title bar / status bar. Match the
-        // dark canvas rather than an accent: the site's identity is earthy, never
-        // blue, and a neutral dark frame reads correctly in both schemes.
-        + "  \"theme_color\": \"#13171f\",\n"
-        + "  \"icons\": [\n"
-        + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/icon-192.png\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/icon-512.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
-        + "    \{ \"src\": \"" + basePath + "assets/icon-512-maskable.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"maskable\" \}\n"
-        + "  ],\n"
-        + "  \"shortcuts\": [\n"
-        + "    \{ \"name\": \"Console\", \"url\": \"" + basePath + "console/\" \},\n"
-        + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
-        + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
-        + "  ],\n"
-        + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
-        + "\}\n";
-    fs.writeFile(site.outDir + "/manifest.webmanifest", body);
-}
 
-// writeServiceWorker writes gen/sw.js - a conservative worker that keeps HTML
-// network-first (never stale docs) and static hashed assets cache-first, and
-// precaches the search index + playground WASM so those two heavy features
-// survive an offline reload. The source lives in docs/sw.js.tmpl (Buzz
-// interpolates { ... } inside strings, so embedding JS with arrow functions
-// as inline strings would collide). We swap __VERSION__ (keyed off HEAD's
-// short commit hash so a new build purges old caches on activate) and
-// __BASE__ (SITE_URL's path prefix).
-fun writeServiceWorker(site: Site) > void {
-    if (SITE_URL == "") { return; }
-    final basePath = sitePathPrefix();
-    final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
-    var body = tmplFile.readAll();
-    tmplFile.close();
-    // The cache version is a digest of the precached assets' own digests, so it changes
-    // exactly when a cached asset changes and is otherwise byte-identical across
-    // re-renders. This deliberately replaces the old "magus-<HEAD short hash>" form, which
-    // changed on every commit, could never contain its own commit's hash, and so
-    // perpetually drifted the gen gate.
-    //
-    // The list is parsed from the template's OWN PRECACHE array (the single source of
-    // truth) rather than duplicated here - a second hand-maintained copy silently drifted
-    // once (the /console/ move left this list pointing at logs/ and dashboard/ instead of
-    // console/logs/ and console/dashboard/, so the test -f guard below skipped them and
-    // editing those apps never bumped the version -> stale service worker). Only the
-    // PRECACHE block is scanned, so the fetch handler's own BASE + "offline/" is ignored.
-    final pcRest = body.sub(body.indexOf("const PRECACHE = ["));
-    final pcBlock = pcRest.sub(0, pcRest.indexOf("];"));
-    var precached = mut [<str>];
-    foreach (line in pcBlock.split("\n")) {
-        final q = line.indexOf("BASE + \"");
-        if (q != null) {
-            final tail = line.sub(q + 8); // past `BASE + "`
-            var rel = tail.sub(0, tail.indexOf("\""));
-            // A directory URL (e.g. offline/) caches its index.html; hash that real file.
-            if (rel.endsWith("/")) { rel = rel + "index.html"; }
-            precached.append(rel);
-        }
-    }
-    var manifest = "";
-    foreach (rel in precached) {
-        final p = site.outDir + "/" + rel;
-        if (os.execute(["test", "-f", p]) == 0) {
-            manifest = manifest + rel + ":" + fileSha256(p) + "\n";
-        }
-    }
-    final version = "magus-" + crypto.hash(crypto.HashAlgorithm.Sha256, manifest).sub(0, 12);
-    // .replace only touches the first match; the markers appear both in the file
-    // header comment and in the code, so replaceAll it is.
-    body = $"__VERSION__".replaceAll(body, version);
-    body = $"__BASE__".replaceAll(body, basePath);
-    fs.writeFile(site.outDir + "/sw.js", body);
-}
 
 // The persistent site UI (nav bar, footer, settings/reference panels, announcement,
 // TOC list, commit footer) are in render_nav.buzz.
@@ -1977,21 +1752,6 @@ test "Site.addRecord marks the URL written and appends one search record" {
     assert.len(s.searchRecords, 1, "one search record appended");
 }
 
-test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descriptions" {
-    final pages = mut [<DocPage>];
-    pages.append(DocPage{url = "targets/", title = "Targets", desc = "What a target is"});
-    pages.append(DocPage{url = "cache/", title = "Cache", desc = "The cache model"});
-    pages.append(DocPage{url = "faq/", title = "FAQ", desc = ""});
-    final want = "# magus\n\n"
-        + "> Workspace-aware build orchestrator and content-addressed cache. "
-        + "Every link below is the page's raw Markdown (its index.md sibling), "
-        + "so an agent fetches clean content directly.\n\n"
-        + "## Documentation\n\n"
-        + "- [Cache](/cache/index.md): The cache model\n"
-        + "- [FAQ](/faq/index.md)\n"
-        + "- [Targets](/targets/index.md): What a target is\n";
-    assert.equal(llmsIndexBody(pages, "/"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
-}
 
 test "releaseIndexJSON emits the slim self-update manifest and omits the changelog prose" {
     final s = mut Site{};
