@@ -1,4 +1,4 @@
-// render_text.buzz - pure text/path/URL helpers. No site state, so unit-tested here
+// lib/text.buzz - pure text/path/URL helpers. No site state, so unit-tested here
 // and flat-imported by render.buzz (`import "lib/text" as _`).
 import "assert";
 

@@ -1,4 +1,4 @@
-// render_csp.buzz - Content-Security-Policy construction and the content hashing it
+// lib/csp.buzz - Content-Security-Policy construction and the content hashing it
 // rests on. Self-contained (stdlib crypto/fs/io/encoding only), so it unit-tests here
 // and is flat-imported by render.buzz (`import "lib/csp" as _`). The site-wide policy
 // and the tighter redirect-stub policy both live here so the two never drift; the inline
@@ -143,7 +143,7 @@ export fun computeCSP(imgSrc: str) > str {
 // (aliasStub) loads no stylesheet, image, or external script; its only
 // content is one inline <script> whose text embeds the redirect target, so
 // it differs per stub and cannot share the single site-wide hash list. script
-// is the exact text redirectScript(rel) (render_html.buzz) produces - the
+// is the exact text redirectScript(rel) (lib/html.buzz) produces - the
 // same string aliasStub embeds, so the hash always matches what ships.
 export fun cspForRedirectStub(script: str) > str {
     return "default-src 'none'; script-src '" + scriptHash(script) + "'"

@@ -1,4 +1,4 @@
-// render_tour.buzz - the two interactive-demo pages: the guided tour
+// site/tour.buzz - the two interactive-demo pages: the guided tour
 // (renderTourPage, with its codeTeaser/tourSrc/playgroundLink helpers) and the
 // standalone playground page (renderPlayground). Both are called once by
 // site_render and inject the shared nav/footer.

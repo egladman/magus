@@ -1,4 +1,4 @@
-// render_date.buzz - pure date formatting for bylines, feeds, and the recent-changes
+// lib/date.buzz - pure date formatting for bylines, feeds, and the recent-changes
 // footer. Flat-imported by render.buzz (`import "lib/date" as _`).
 import "time";
 import "assert";

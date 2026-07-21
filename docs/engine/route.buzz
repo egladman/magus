@@ -1,8 +1,8 @@
-// render_route.buzz - path and URL routing helpers: turning a source-tree path into a
+// engine/route.buzz - path and URL routing helpers: turning a source-tree path into a
 // clean output URL, computing how many "../" a page needs to reach the site root, and
 // the deploy base path derived from the configured site URL. Site-aware (a few take the
-// Site for its docs/out dirs, or read the base URL), so it imports render_types; kept out
-// of the leaf render_path.buzz for exactly that reason. Flat-imported by render.buzz and
+// Site for its docs/out dirs, or read the base URL), so it imports engine/types; kept out
+// of the leaf engine/path.buzz for exactly that reason. Flat-imported by render.buzz and
 // the writer/nav modules that resolve page URLs.
 import "lib/url" as _;
 import "engine/types" as _;
@@ -70,7 +70,7 @@ export fun sitePathPrefix(baseURL: str) > str {
 // newCleanDirectory gives a docs page's directory after the directory-index move -
 // its clean URL without the trailing slash - for rewriteLinks. It reads site state
 // (the blog dir, via cleanURL), so it stays here; the pure old-directory counterpart
-// (oldFlatDirectory) lives in render_html.
+// (oldFlatDirectory) lives in lib/html.
 export fun newCleanDirectory(rel: str, site: Site) > str {
     final u = cleanURL(rel, site.blog);
     if (u == "") { return ""; }

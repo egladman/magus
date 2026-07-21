@@ -1,4 +1,4 @@
-// render_url.buzz - source-path -> clean-URL mapping for the directory-index layout.
+// lib/url.buzz - source-path -> clean-URL mapping for the directory-index layout.
 // Pure functions (cleanURL/cleanDepth take the blog dir as an arg, not a global).
 import "assert";
 

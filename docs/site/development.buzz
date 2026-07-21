@@ -1,4 +1,4 @@
-// render_development.buzz - the /development/ section: the contributor-facing
+// site/development.buzz - the /development/ section: the contributor-facing
 // pages built from the repo's own docs (renderDevelopment), each emitted through
 // renderDevelopmentPage (Markdown) or renderDevelopmentPageRaw (pre-rendered HTML).
 import "markdown";

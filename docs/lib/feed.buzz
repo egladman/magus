@@ -1,4 +1,4 @@
-// render_feed.buzz - pure XML builders and date normalization for the sitemap and
+// lib/feed.buzz - pure XML builders and date normalization for the sitemap and
 // Atom feeds. Flat-imported by render.buzz (`import "lib/feed" as _`).
 import "assert";
 

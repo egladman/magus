@@ -1,4 +1,4 @@
-// render_gates.buzz - the build-correctness layer: it produces nothing the site
+// engine/gates.buzz - the build-correctness layer: it produces nothing the site
 // serves, it PROVES the site is correct and records its provenance. Two jobs:
 //   1. Provenance - loadMeta/buildCommits read the git history behind each page
 //      (the "Last updated" line and its History disclosure).
@@ -7,8 +7,8 @@
 //      homepage (orphanCheck), and any previously-shipped URL that has silently started
 //      404-ing (abandonedLinkCheck). pruneStaleOutputs deletes outputs whose source is
 //      gone; writeSiteManifest/updateUrlLock write the integrity manifest and URL ledger.
-// All take a `site: Site` and import render_types for it - the reason these are free
-// functions and not Site methods (keeping render_types.buzz leaf-only and cycle-free).
+// All take a `site: Site` and import engine/types for it - the reason these are free
+// functions and not Site methods (keeping engine/types.buzz leaf-only and cycle-free).
 import "os";
 import "fs";
 import "io";
@@ -20,7 +20,7 @@ import "lib/html" as _;
 
 // Build-orchestration steps that operate ON a Site but reach past the leaf helpers
 // into git metadata (loadMeta) and the post-render integrity gates (assetIntegrityCheck,
-// orphanCheck) - free functions here rather than Site methods so render_types.buzz stays
+// orphanCheck) - free functions here rather than Site methods so engine/types.buzz stays
 // leaf-only and cycle-free. They call capture/buildCommits/walkGen/scanReferencesInHTML/
 // checkPathExists/pageKey, which live below in this file.
 // loadMeta populates the commit-metadata fields once, shelling out to git. Pinned
@@ -221,7 +221,7 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
         // Root-absolute paths (leading /) are the deploy-time reference form
         // (WS0b's ONE deliberate exception on 404.html, WS S's manifest, etc.);
         // they resolve at the deploy base, not against gen/'s root, so we can't
-        // check them locally without threading SITE_URL's basePath in. Skip.
+        // check them locally without threading site.config.baseURL's basePath in. Skip.
         if (raw.startsWith("/")) { continue; }
         // References to repo source files (.go/.buzz) point at their GitHub
         // location relative to the repo root, not to a generated site asset.

@@ -1,4 +1,4 @@
-// render_page.buzz - the page layer: it turns finished HTML content into a
+// engine/page.buzz - the page layer: it turns finished HTML content into a
 // complete, chrome-wrapped document and writes it to gen/. renderPage is the
 // shared template every page funnels through (head, nav, footer, TOC, pager,
 // CSP); renderFile/renderRoot drive a Markdown source through it; renderPager
@@ -28,8 +28,8 @@ import "engine/nav" as _;
 // the address bar, so the site's ordinary relative paths would break here; this
 // page therefore uses root-absolute paths (/<basePath>/site.css, /<basePath>/
 // main.js, etc.) - the ONE deliberate exception to the relative-link scheme in
-// WS0b. basePath is derived from SITE_URL (e.g. https://eli.gladman.cc/magus/
-// -> "/magus/"); when SITE_URL is empty, fall back to "/" so the page still
+// WS0b. basePath is derived from site.config.baseURL (e.g. https://eli.gladman.cc/magus/
+// -> "/magus/"); when site.config.baseURL is empty, fall back to "/" so the page still
 // renders locally with absolute paths from the server root.
 export fun render404(site: Site) > void {
     final basePath = sitePathPrefix(site.config.baseURL);
@@ -234,7 +234,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // the template's sections below. hasDescription gates the description meta and
     // og:description. hasSiteUrl gates the canonical + og:* block (og:url/og:image
     // must be absolute), so the site can ship dark until the host is confirmed;
-    // SITE_URL carries the trailing slash, canonUrl is the slashed clean path.
+    // site.config.baseURL carries the trailing slash, canonUrl is the slashed clean path.
     final hasDescription = description != "";
     final hasSiteUrl = site.config.baseURL != "";
     // Atom feed discovery advertises each feed only when it was actually written:

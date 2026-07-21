@@ -1,4 +1,4 @@
-// render_public.buzz - the /public/ mirror: the Apache-mod_autoindex-styled
+// site/public.buzz - the /public/ mirror: the Apache-mod_autoindex-styled
 // directory listings (renderAutoindex), the release tree with its per-version
 // pages, the self-update index.json (releaseIndexJSON), and loadReleases, which
 // reads releases/v*.yaml into the Site. renderPublic walks it all; site_render
@@ -251,7 +251,7 @@ export fun renderPublic(site: Site) > void {
 
     // /public/release/  - per-version tree. Each released version (loaded from
     // releases/v*.yaml by loadReleases) gets its own subdirectory listing its
-    // artifacts. Deep-links to individual assets use GH/releases/download/<ver>/<name>
+    // artifacts. Deep-links to individual assets use site.config.repoURL/releases/download/<ver>/<name>
     // directly; magus-release.pem links to the local /assets/ copy (three levels up).
     // size comes from the manifest (populated by the release-cut tool); "-" for
     // historical releases migrated without artifact data.

@@ -265,7 +265,7 @@ export fun build_hljs(args: [str]) > void {
 // gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild,
 // no drift gate). The workspace-root `serve` dev loop os.exec's `magus run render
 // docs` on every docs/blog change - running it as its own sub-invocation is what
-// lets render.buzz's flat imports (render_text, render_html, ...) resolve, since
+// lets render.buzz's flat imports (lib/text, lib/html, ...) resolve, since
 // they are looked up relative to this project's dir, not the workspace root.
 export fun render(args: [str]) > void {
     renderer.site_render(ROOT, DOCS, BLOG, OUT);

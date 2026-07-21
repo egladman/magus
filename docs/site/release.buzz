@@ -1,7 +1,7 @@
-// render_release.buzz - pure helpers for turning releases/*.yaml into the Atom feed,
+// site/release.buzz - pure helpers for turning releases/*.yaml into the Atom feed,
 // the /public/release/ artifact tree, and release.json: newest-first semver ordering,
 // per-artifact descriptions, and the minimal JSON string encoding release.json needs.
-// Self-contained (only the render_text helpers), so it unit-tests here and is
+// Self-contained (only the lib/text helpers), so it unit-tests here and is
 // flat-imported by render.buzz (`import "site/release" as _`). The Site-coupled
 // loaders/writers that consume these (loadReleases, renderReleasesAtom, releaseIndexJSON,
 // renderPublic) stay in render.buzz; only the pure transforms live here.

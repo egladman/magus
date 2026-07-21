@@ -1,4 +1,4 @@
-// render_meta.buzz - reads a page's facts from its Markdown: the title, tags,
+// engine/meta.buzz - reads a page's facts from its Markdown: the title, tags,
 // page-type marker, reading-time estimate, fallback description, and the optional
 // "Added in vX.Y.Z" compatibility badge. Pure (stdlib markdown/serialize plus the
 // text helpers), so it unit-tests here and is flat-imported by render.buzz
@@ -107,7 +107,7 @@ export fun readingTime(md: str) > str {
 // substantive paragraph of the rendered HTML, tags stripped, whitespace collapsed,
 // entities decoded, truncated on a word boundary. A leading image-only paragraph
 // (the hero) yields empty text and is skipped. "" when no paragraph has text, so
-// the caller can fall back to SITE_DESC. Runs before escapeAttr re-encodes, so the
+// the caller can fall back to site.config.description. Runs before escapeAttr re-encodes, so the
 // decode here avoids the double-encoding the plan's risk register flags.
 export fun deriveDescription(html: str) > str {
     var rest = html;

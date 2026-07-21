@@ -1,10 +1,10 @@
-// render_nav.buzz - the persistent site UI that frames every page but is not the page
+// engine/nav.buzz - the persistent site UI that frames every page but is not the page
 // content: the top navigation bar, the footer, the settings dropdown, the reference
 // drawer, the announcement strip, the "On this page" list, and the per-page "Last
 // updated" provenance line. These build HTML fragments that renderPage assembles around
 // the article - they are consumed BY the page assembler, they never call it, so this
-// module sits below render_page in the layering. Flat-imported by render.buzz (and,
-// once split out, render_page).
+// module sits below engine/page in the layering. Flat-imported by render.buzz (and,
+// once split out, engine/page).
 import "fs";
 import "io";
 import "markdown";
@@ -66,11 +66,11 @@ export fun renderCommitFooter(path: str, site: Site) > str {
     return line;
 }
 
-// rootPrefix moved to render_route.buzz.
+// rootPrefix moved to engine/route.buzz.
 
-// (moved to render_meta.buzz)
+// (moved to engine/meta.buzz)
 
-// (moved to render_meta.buzz)
+// (moved to engine/meta.buzz)
 
 // renderTocList builds the "On this page" block from a rendered page's h2/h3 headings
 // (goldmark produces each on its own line with a slug id); h3s nest under their h2.

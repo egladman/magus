@@ -556,7 +556,7 @@ export object Site {
 // Tests for the Site build-state methods defined above. Run them with the
 // docs `buzz-test` target (`magus buzz -t --embedded render.buzz`), which reaches
 // this module transitively through render.buzz's flat imports; each also runs
-// standalone via `magus buzz -t --embedded render_types.buzz`. Buzz's == is
+// standalone via `magus buzz -t --embedded engine/types.buzz`. Buzz's == is
 // identity (not structural) for maps, so assert.equal does the value comparison.
 test "Site.collectAlias trims slashes and records every alias" {
     final s = mut Site{};

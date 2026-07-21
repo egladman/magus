@@ -1,4 +1,4 @@
-// render_search.buzz - the /search/ page: renderSearchPage builds the offline
+// engine/search.buzz - the /search/ page: renderSearchPage builds the offline
 // client-side search UI over the site's search-index.json; renderSyntaxRow is its
 // query-syntax help row. site_render calls renderSearchPage once, post-walk.
 import "fs";

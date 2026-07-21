@@ -52,7 +52,7 @@ import "engine/meta" as _;
 // jsonStr/jsonStrList resolve here; the Site-coupled loaders/writers stay below.
 import "site/release" as _;
 // Filesystem/walk predicates (isDirectory + the docs-root generator-file/dir skips),
-// a leaf module shared with render_types.buzz so the content walks resolve them here.
+// a leaf module shared with engine/types.buzz so the content walks resolve them here.
 import "engine/path" as _;
 // The Site data model + record types (the walk's build state), shared with every
 // writer module so they can take a `site: Site` without a cycle back to this file.
@@ -95,11 +95,11 @@ import "site/config" as _;
 // forward references to types.
 
 // loadMeta/assetIntegrityCheck/orphanCheck/capture/buildCommits (+ HISTORY_MAX) moved to
-// render_gates.buzz (the build-correctness + provenance layer).
+// engine/gates.buzz (the build-correctness + provenance layer).
 
 
 // isGenerated/outputName/climb/climbFromDir/sitePathPrefix/newCleanDirectory moved to
-// render_route.buzz (path/URL routing helpers).
+// engine/route.buzz (path/URL routing helpers).
 
 
 
@@ -115,14 +115,14 @@ import "site/config" as _;
 
 
 
-// CSP construction and content hashing are in render_csp.buzz (flat-imported
+// CSP construction and content hashing are in lib/csp.buzz (flat-imported
 // above): fileSha256, scriptHash, extractInlineScripts, computeCSP,
 // cspForRedirectStub, and the CSP_* constants.
 
 
 
 // The persistent site UI (nav bar, footer, settings/reference panels, announcement,
-// TOC list, commit footer) are in render_nav.buzz.
+// TOC list, commit footer) are in engine/nav.buzz.
 
 
 
@@ -130,7 +130,7 @@ import "site/config" as _;
 
 
 
-// (defined in render_meta.buzz)
+// (defined in engine/meta.buzz)
 
 
 
@@ -157,8 +157,8 @@ fun walkBlog(site: Site) > void {
     renderBlogIndex(site);
 }
 
-// isDirectory / isGeneratorDir / isGeneratorFile are in render_path.buzz (a leaf
-// module both this file and render_types.buzz import).
+// isDirectory / isGeneratorDir / isGeneratorFile are in engine/path.buzz (a leaf
+// module both this file and engine/types.buzz import).
 
 // Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
 // root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).
@@ -363,4 +363,4 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
 
 // checkPathExists/scanReferencesInHTML/walkGen/pruneStaleOutputs/writeSiteManifest/
 // pageKey/readURLSet/abandonedLinkCheck/updateUrlLock (+ URL_LOCK/RETIRED_URLS) moved
-// to render_gates.buzz.
+// to engine/gates.buzz.

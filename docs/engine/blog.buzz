@@ -1,4 +1,4 @@
-// render_blog.buzz - the blog: a single post (renderBlogPost, driven per file by
+// engine/blog.buzz - the blog: a single post (renderBlogPost, driven per file by
 // walkBlog), the paginated index (renderBlogIndex), and their shared prev/next
 // pager (renderBlogPager). Each post runs through renderPage like any doc.
 import "markdown";

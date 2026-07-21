@@ -1,4 +1,4 @@
-// render_feeds.buzz - the site's non-HTML machine outputs: the SEO files
+// engine/feeds.buzz - the site's non-HTML machine outputs: the SEO files
 // (sitemap.xml + robots.txt), the two Atom feeds (blog + releases), the
 // llms.txt index, the PWA web manifest, and the service worker. None of these
 // go through renderPage - they read the finished Site (its page URLs, blog
@@ -17,9 +17,9 @@ import "lib/csp" as _;
 import "engine/route" as _;
 
 // writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
-// byte-stable), each as an absolute SITE_URL loc — the home page's "index.html" URL
+// byte-stable), each as an absolute site.config.baseURL loc — the home page's "index.html" URL
 // maps to the bare site root. Aliases are deliberately absent (only canonical pages
-// belong in a sitemap). Gated on SITE_URL so the site can ship dark until the host
+// belong in a sitemap). Gated on site.config.baseURL so the site can ship dark until the host
 // is confirmed. robots points crawlers at the sitemap.
 export fun writeSEOFiles(site: Site) > void {
     if (site.config.baseURL == "") { return; }
@@ -42,7 +42,7 @@ export fun writeSEOFiles(site: Site) > void {
 // renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of
 // site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL),
 // updated (post date), summary (description), author. Feed-level updated = newest
-// post's date. Gated on SITE_URL so it can ship dark until the host is confirmed.
+// post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.
 export fun renderBlogAtom(site: Site) > void {
     if (site.config.baseURL == "") { return; }
     if (site.blogPosts.len() == 0) { return; }
@@ -76,8 +76,8 @@ export fun renderBlogAtom(site: Site) > void {
 
 // renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed
 // releases (newest first as authored). Per <entry>: title = version, link =
-// GH/releases/tag/<ver>, id = same, updated = release date, summary = the section
-// body. Feed-level updated = newest release's date. Gated on SITE_URL and on
+// site.config.repoURL/releases/tag/<ver>, id = same, updated = release date, summary = the section
+// body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on
 // having at least one released version.
 export fun renderReleasesAtom(site: Site) > void {
     if (site.config.baseURL == "") { return; }
@@ -110,7 +110,7 @@ export fun renderReleasesAtom(site: Site) > void {
 // llmsIndexBody builds the gen/llms.txt document (the llms.txt convention): an H1,
 // a one-line summary, then every docs page as "- [title](base+url): description",
 // sorted by URL for a byte-stable artifact like search-index.json. base is the link
-// prefix (SITE_URL for absolute links, else "/"). Each linked page has its Markdown
+// prefix (site.config.baseURL for absolute links, else "/"). Each linked page has its Markdown
 // source at <url>index.md (emitted next to the HTML by renderFile), so an agent can
 // fetch clean Markdown per page. Kept pure so a unit test can pin the exact output.
 fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
@@ -134,7 +134,7 @@ fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
 
 
 // writeLLMsIndex writes gen/llms.txt from the collected docs corpus, mirroring the
-// post-walk search-index.json write. Links are absolute under SITE_URL when set so
+// post-walk search-index.json write. Links are absolute under site.config.baseURL when set so
 // an external agent can follow them; otherwise root-relative.
 export fun writeLLMsIndex(site: Site) > void {
     var base = "/";
@@ -149,7 +149,7 @@ export fun writeLLMsIndex(site: Site) > void {
 // writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers
 // (mostly on Android and Windows) read to allow "install this site". Icons
 // use the gopher-magus mark; scope/start_url match the deploy base so a
-// nested install stays inside /magus/. Gated on SITE_URL so a same-origin
+// nested install stays inside /magus/. Gated on site.config.baseURL so a same-origin
 // scope is well-defined; without it we'd default to "/" and mis-scope.
 export fun writeManifest(site: Site) > void {
     if (site.config.baseURL == "") { return; }
@@ -208,7 +208,7 @@ export fun writeManifest(site: Site) > void {
 // interpolates { ... } inside strings, so embedding JS with arrow functions
 // as inline strings would collide). We swap __VERSION__ (keyed off HEAD's
 // short commit hash so a new build purges old caches on activate) and
-// __BASE__ (SITE_URL's path prefix).
+// __BASE__ (site.config.baseURL's path prefix).
 export fun writeServiceWorker(site: Site) > void {
     if (site.config.baseURL == "") { return; }
     final basePath = sitePathPrefix(site.config.baseURL);
