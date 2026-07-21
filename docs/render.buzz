@@ -66,6 +66,8 @@ import "engine/nav" as _;
 // site_render below.
 import "engine/gates" as _;
 import "engine/feeds" as _;
+import "engine/discovery" as _;
+import "engine/pwa" as _;
 import "engine/page" as _;
 import "site/public" as _;
 import "engine/blog" as _;

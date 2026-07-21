@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **714 nodes** and **1836 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **716 nodes** and **1847 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -52,9 +52,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 37 | `magus query kind:diagnostic` | `MGS4001`, `MGS5002`, `MGS5003` |
 | doc | 136 | `magus query kind:doc` | `documentation.md`, `spells.md`, `manpage/magus-affected.md` |
-| file | 39 | `magus query kind:file` | `render.buzz`, `engine/page.buzz`, `lib/html.buzz` |
+| file | 41 | `magus query kind:file` | `render.buzz`, `engine/page.buzz`, `lib/text.buzz` |
 | function | 214 | `magus query kind:function` | `renderContentHTML`, `walkGen`, `assetIntegrityCheck` |
-| import | 25 | `magus query kind:import` | `assert`, `fs`, `magus` |
+| import | 25 | `magus query kind:import` | `fs`, `assert`, `magus` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|

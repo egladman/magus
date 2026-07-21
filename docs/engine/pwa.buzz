@@ -1,0 +1,122 @@
+// engine/pwa.buzz - the Progressive Web App wiring that lets a browser install the
+// docs and serve them offline: the web app manifest (writeManifest) and the service
+// worker (writeServiceWorker, which digests the precached assets into its cache
+// version). Both are gated on a configured base URL so the install scope is well
+// defined; flat-imported by render.buzz, run once post-walk.
+import "fs";
+import "io";
+import "os";
+import "crypto";
+import "engine/types" as _;
+import "lib/text" as _;
+import "lib/csp" as _;
+import "engine/route" as _;
+
+// writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers
+// (mostly on Android and Windows) read to allow "install this site". Icons
+// use the gopher-magus mark; scope/start_url match the deploy base so a
+// nested install stays inside /magus/. Gated on site.config.baseURL so a same-origin
+// scope is well-defined; without it we'd default to "/" and mis-scope.
+export fun writeManifest(site: Site) > void {
+    if (site.config.baseURL == "") { return; }
+    final basePath = sitePathPrefix(site.config.baseURL);
+    // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
+    // (see gopherbuzz/testdata/54_raw_string.buzz).
+    // Icons: favicon-32 and apple-touch-icon are the legacy set; icon-192/512 target
+    // Android/Windows install prompts; icon-512-maskable carries a solid #13171f
+    // background so the gopher-magus mark stays centered in the safe zone for
+    // circular crops.
+    //
+    // background_color is the PWA splash-screen fill shown while the app boots.
+    // The manifest spec has no light/dark media-query variant (unlike theme-color
+    // below in the HTML head), so it must be one value that reads fine in both
+    // schemes. #13171f matches the docs site's own dark background and the
+    // gopher-magus icon's canvas, so dark-mode users get a seamless splash and
+    // light-mode users get a brief on-brand dark flash instead of a blinding
+    // white one.
+    final body = "\{\n"
+        + "  \"name\": \"" + site.config.title + "\",\n"
+        + "  \"short_name\": \"" + site.config.title + "\",\n"
+        + "  \"id\": \"" + basePath + "\",\n"
+        + "  \"lang\": \"en\",\n"
+        + "  \"description\": \"" + escapeAttr(site.config.description) + "\",\n"
+        + "  \"start_url\": \"" + basePath + "\",\n"
+        + "  \"scope\": \"" + basePath + "\",\n"
+        + "  \"display\": \"standalone\",\n"
+        + "  \"categories\": [\"developer\", \"utilities\"],\n"
+        + "  \"background_color\": \"#13171f\",\n"
+        // theme_color tints the installed app's title bar / status bar. Match the
+        // dark canvas rather than an accent: the site's identity is earthy, never
+        // blue, and a neutral dark frame reads correctly in both schemes.
+        + "  \"theme_color\": \"#13171f\",\n"
+        + "  \"icons\": [\n"
+        + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/icon-192.png\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/icon-512.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
+        + "    \{ \"src\": \"" + basePath + "assets/icon-512-maskable.png\", \"sizes\": \"512x512\", \"type\": \"image/png\", \"purpose\": \"maskable\" \}\n"
+        + "  ],\n"
+        + "  \"shortcuts\": [\n"
+        + "    \{ \"name\": \"Console\", \"url\": \"" + basePath + "console/\" \},\n"
+        + "    \{ \"name\": \"Playground\", \"url\": \"" + basePath + "playground/\" \},\n"
+        + "    \{ \"name\": \"Getting started\", \"url\": \"" + basePath + "getting-started/\" \}\n"
+        + "  ],\n"
+        + "  \"launch_handler\": \{ \"client_mode\": \"focus-existing\" \}\n"
+        + "\}\n";
+    fs.writeFile(site.outDir + "/manifest.webmanifest", body);
+}
+
+
+// writeServiceWorker writes gen/sw.js - a conservative worker that keeps HTML
+// network-first (never stale docs) and static hashed assets cache-first, and
+// precaches the search index + playground WASM so those two heavy features
+// survive an offline reload. The source lives in docs/sw.js.tmpl (Buzz
+// interpolates { ... } inside strings, so embedding JS with arrow functions
+// as inline strings would collide). We swap __VERSION__ (keyed off HEAD's
+// short commit hash so a new build purges old caches on activate) and
+// __BASE__ (site.config.baseURL's path prefix).
+export fun writeServiceWorker(site: Site) > void {
+    if (site.config.baseURL == "") { return; }
+    final basePath = sitePathPrefix(site.config.baseURL);
+    final tmplFile = io.File.open("sw.js.tmpl", io.FileMode.read);
+    var body = tmplFile.readAll();
+    tmplFile.close();
+    // The cache version is a digest of the precached assets' own digests, so it changes
+    // exactly when a cached asset changes and is otherwise byte-identical across
+    // re-renders. This deliberately replaces the old "magus-<HEAD short hash>" form, which
+    // changed on every commit, could never contain its own commit's hash, and so
+    // perpetually drifted the gen gate.
+    //
+    // The list is parsed from the template's OWN PRECACHE array (the single source of
+    // truth) rather than duplicated here - a second hand-maintained copy silently drifted
+    // once (the /console/ move left this list pointing at logs/ and dashboard/ instead of
+    // console/logs/ and console/dashboard/, so the test -f guard below skipped them and
+    // editing those apps never bumped the version -> stale service worker). Only the
+    // PRECACHE block is scanned, so the fetch handler's own BASE + "offline/" is ignored.
+    final pcRest = body.sub(body.indexOf("const PRECACHE = ["));
+    final pcBlock = pcRest.sub(0, pcRest.indexOf("];"));
+    var precached = mut [<str>];
+    foreach (line in pcBlock.split("\n")) {
+        final q = line.indexOf("BASE + \"");
+        if (q != null) {
+            final tail = line.sub(q + 8); // past `BASE + "`
+            var rel = tail.sub(0, tail.indexOf("\""));
+            // A directory URL (e.g. offline/) caches its index.html; hash that real file.
+            if (rel.endsWith("/")) { rel = rel + "index.html"; }
+            precached.append(rel);
+        }
+    }
+    var manifest = "";
+    foreach (rel in precached) {
+        final p = site.outDir + "/" + rel;
+        if (os.execute(["test", "-f", p]) == 0) {
+            manifest = manifest + rel + ":" + fileSha256(p) + "\n";
+        }
+    }
+    final version = "magus-" + crypto.hash(crypto.HashAlgorithm.Sha256, manifest).sub(0, 12);
+    // .replace only touches the first match; the markers appear both in the file
+    // header comment and in the code, so replaceAll it is.
+    body = $"__VERSION__".replaceAll(body, version);
+    body = $"__BASE__".replaceAll(body, basePath);
+    fs.writeFile(site.outDir + "/sw.js", body);
+}

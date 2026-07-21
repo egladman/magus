@@ -1,0 +1,88 @@
+// engine/discovery.buzz - the machine-readable content indexes that tell automated
+// consumers what the site holds: sitemap.xml + robots.txt for search crawlers
+// (writeSEOFiles) and llms.txt for AI agents (writeLLMsIndex, whose body is the pure,
+// unit-tested llmsIndexBody). Each reads the finished Site and writes one index;
+// flat-imported by render.buzz, run once post-walk, gated on a configured base URL.
+import "fs";
+import "assert";
+import "engine/types" as _;
+import "lib/text" as _;
+import "lib/feed" as _;
+
+// writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
+// byte-stable), each as an absolute site.config.baseURL loc — the home page's "index.html" URL
+// maps to the bare site root. Aliases are deliberately absent (only canonical pages
+// belong in a sitemap). Gated on site.config.baseURL so the site can ship dark until the host
+// is confirmed. robots points crawlers at the sitemap.
+export fun writeSEOFiles(site: Site) > void {
+    if (site.config.baseURL == "") { return; }
+    var urls: [str] = mut [<str>];
+    foreach (u in site.pageUrls.keys()) { urls.append(u); }
+    final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    var body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        + "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
+    foreach (u in sorted) {
+        var loc = u;
+        if (loc == "index.html") { loc = ""; }
+        body = body + "  <url>" + xmlElement("loc", site.config.baseURL + loc) + "</url>\n";
+    }
+    body = body + "</urlset>\n";
+    fs.writeFile(site.outDir + "/sitemap.xml", body);
+    fs.writeFile(site.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.config.baseURL + "sitemap.xml\n");
+}
+
+
+// llmsIndexBody builds the gen/llms.txt document (the llms.txt convention): an H1,
+// a one-line summary, then every docs page as "- [title](base+url): description",
+// sorted by URL for a byte-stable artifact like search-index.json. base is the link
+// prefix (site.config.baseURL for absolute links, else "/"). Each linked page has its Markdown
+// source at <url>index.md (emitted next to the HTML by renderFile), so an agent can
+// fetch clean Markdown per page. Kept pure so a unit test can pin the exact output.
+fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
+    final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
+        return strLess(a.url, b.url);
+    });
+    var body = "# " + title + "\n\n"
+        + "> Workspace-aware build orchestrator and content-addressed cache. "
+        + "Every link below is the page's raw Markdown (its index.md sibling), "
+        + "so an agent fetches clean content directly.\n\n"
+        + "## Documentation\n\n";
+    foreach (p in sorted) {
+        // Link straight to the page's Markdown (directory-style url + index.md, the
+        // sibling of index.html), not the HTML page, so no URL guessing is needed.
+        var line = "- [" + p.title + "](" + base + p.url + "index.md)";
+        if (p.desc != "") { line = line + ": " + p.desc; }
+        body = body + line + "\n";
+    }
+    return body;
+}
+
+
+// writeLLMsIndex writes gen/llms.txt from the collected docs corpus, mirroring the
+// post-walk search-index.json write. Links are absolute under site.config.baseURL when set so
+// an external agent can follow them; otherwise root-relative.
+export fun writeLLMsIndex(site: Site) > void {
+    var base = "/";
+    if (site.config.baseURL != "") {
+        base = site.config.baseURL;
+        if (base.endsWith("/") == false) { base = base + "/"; }
+    }
+    fs.writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.config.title));
+}
+
+
+test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descriptions" {
+    final pages = mut [<DocPage>];
+    pages.append(DocPage{url = "targets/", title = "Targets", desc = "What a target is"});
+    pages.append(DocPage{url = "cache/", title = "Cache", desc = "The cache model"});
+    pages.append(DocPage{url = "faq/", title = "FAQ", desc = ""});
+    final want = "# magus\n\n"
+        + "> Workspace-aware build orchestrator and content-addressed cache. "
+        + "Every link below is the page's raw Markdown (its index.md sibling), "
+        + "so an agent fetches clean content directly.\n\n"
+        + "## Documentation\n\n"
+        + "- [Cache](/cache/index.md): The cache model\n"
+        + "- [FAQ](/faq/index.md)\n"
+        + "- [Targets](/targets/index.md): What a target is\n";
+    assert.equal(llmsIndexBody(pages, "/", "magus"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
+}
