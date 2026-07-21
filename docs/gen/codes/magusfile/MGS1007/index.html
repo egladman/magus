@@ -6,14 +6,14 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
-  <title>MGS2002: path write denied — magus</title>
-  <meta name="description" content="Fires when a spell tries to write to a file outside the workspace and outside the sandbox allowlist, blocking persistence and tampering attacks.">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/sandbox/MGS2002/">
+  <title>MGS1007: target dependency cycle — magus</title>
+  <meta name="description" content="Fires when target dependencies form a cycle, so a target would have to run before itself. Detected across projects during cross-project dispatch.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/codes/magusfile/MGS1007/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
-  <meta property="og:title" content="MGS2002: path write denied — magus">
-  <meta property="og:description" content="Fires when a spell tries to write to a file outside the workspace and outside the sandbox allowlist, blocking persistence and tampering attacks.">
-  <meta property="og:url" content="https://eli.gladman.cc/magus/codes/sandbox/MGS2002/">
+  <meta property="og:title" content="MGS1007: target dependency cycle — magus">
+  <meta property="og:description" content="Fires when target dependencies form a cycle, so a target would have to run before itself. Detected across projects during cross-project dispatch.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/codes/magusfile/MGS1007/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../public/atom/releases.atom.xml">
@@ -67,83 +67,91 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/sandbox/">sandbox diagnostics</a></li><li aria-current="page">MGS2002: path write denied</li></ul>
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Codes</li><li><a href="../../../codes/magusfile/">magusfile diagnostics</a></li><li aria-current="page">MGS1007: target dependency cycle</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/sandbox/MGS2002.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/codes/magusfile/MGS1007.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
         <p class="toc-title">In this section</p>
         <ul class="section-nav">
-          <li><a href="../../../codes/sandbox/MGS2001/" title="MGS2001: path read denied">MGS2001: path read denied</a></li>
-          <li><a href="../../../codes/sandbox/MGS2002/" aria-current="page" title="MGS2002: path write denied">MGS2002: path write denied</a></li>
-          <li><a href="../../../codes/sandbox/MGS2003/" title="MGS2003: env vars stripped">MGS2003: env vars stripped</a></li>
-          <li><a href="../../../codes/sandbox/MGS2004/" title="MGS2004: sandbox.allow unresolved">MGS2004: sandbox.allow unresolved</a></li>
-          <li><a href="../../../codes/sandbox/MGS2005/" title="MGS2005: kernel landlock unavailable">MGS2005: kernel landlock unavailable</a></li>
-          <li><a href="../../../codes/sandbox/MGS2006/" title="MGS2006: PATH-shim manager stripped">MGS2006: PATH-shim manager stripped</a></li>
-          <li><a href="../../../codes/sandbox/MGS2007/" title="MGS2007: exec denied">MGS2007: exec denied</a></li>
-          <li><a href="../../../codes/sandbox/MGS2008/" title="MGS2008: daemon socket withheld">MGS2008: daemon socket withheld</a></li>
-          <li><a href="../../../codes/sandbox/MGS2009/" title="MGS2009: outbound network request">MGS2009: outbound network request</a></li>
-          <li><a href="../../../codes/sandbox/MGS2010/" title="MGS2010: sandbox policy mismatch">MGS2010: sandbox policy mismatch</a></li>
-          <li><a href="../../../codes/sandbox/MGS3001/" title="MGS3001: descendant project boundary crossed">MGS3001: descendant project boundary crossed</a></li>
+          <li><a href="../../../codes/magusfile/MGS1001/" title="MGS1001: no ci target defined">MGS1001: no ci target defined</a></li>
+          <li><a href="../../../codes/magusfile/MGS1002/" title="MGS1002: spell import shadowed">MGS1002: spell import shadowed</a></li>
+          <li><a href="../../../codes/magusfile/MGS1003/" title="MGS1003: bespoke phase-fragment target name">MGS1003: bespoke phase-fragment target name</a></li>
+          <li><a href="../../../codes/magusfile/MGS1004/" title="MGS1004: unreached footprint declaration">MGS1004: unreached footprint declaration</a></li>
+          <li><a href="../../../codes/magusfile/MGS1005/" title="MGS1005: redundant footprint glob">MGS1005: redundant footprint glob</a></li>
+          <li><a href="../../../codes/magusfile/MGS1006/" title="MGS1006: unknown target">MGS1006: unknown target</a></li>
+          <li><a href="../../../codes/magusfile/MGS1007/" aria-current="page" title="MGS1007: target dependency cycle">MGS1007: target dependency cycle</a></li>
         </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
-<h1 id="mgs2002-path-write-denied-by-sandbox">MGS2002: path write denied by sandbox</h1>
-<p>A spell tried to write to a file outside the workspace and outside the
-configured allowlist.</p>
-<pre><code class="language-text">[MGS2002] fs write denied: /home/user/.bashrc
+<h1 id="mgs1007-target-dependency-cycle">MGS1007: target dependency cycle</h1>
+<p>A target's dependencies form a cycle: following them leads back to the target
+itself, so it would have to finish before it could start. Magus detects this
+and errors instead of deadlocking.</p>
+<pre><code class="language-text">[MGS1007] cross-project cycle: ../api target &quot;build&quot;
+  see: .../MGS1007.md
 </code></pre>
 <h2 id="why">Why</h2>
-<p>The sandbox denies writes outside <code>&lt;workspace&gt;</code> and <code>/tmp</code> by default.
-This blocks the supply-chain attack pattern of modifying shell startup
-files, sudoers, or cron tables for persistence.</p>
+<p>Targets declare what they depend on (<code>magus.needs(...)</code>, cross-project handles).
+Magus runs a target's dependencies before the target. If A depends on B and B
+depends on A - directly, or through a longer chain A -&gt; B -&gt; C -&gt; A - there is no
+valid order: each is waiting on the other. Left unchecked that is a deadlock, so
+magus fails fast with this diagnostic naming the target the cycle closes on.</p>
+<p>The check fires during cross-project dispatch: a <code>(project, target)</code> pair that is
+already on the current call stack when it is requested again is a cycle.</p>
 <h2 id="resolution">Resolution</h2>
-<ol>
-<li>
-<p><strong>If the write target is a legitimate cache</strong> (e.g. a Rust spell
-writing to <code>~/.cargo/registry/cache</code>): add it to <code>magus.yaml</code>:</p>
-<pre><code class="language-yaml">sandbox:
-  allow:
-    - path: ~/.cargo
-      mode: rw
-</code></pre>
-</li>
-<li>
-<p><strong>If the spell should be writing inside the workspace</strong> but is using
-an absolute path: the spell has a bug. File an issue with the spell
-author; in the meantime grant the path explicitly or disable sandbox
-mode.</p>
-</li>
-<li>
-<p><strong>If this is a malicious spell</strong>: do not grant the path. Uninstall.</p>
-</li>
-</ol>
+<p>Break the loop by removing one edge:</p>
+<ul>
+<li><strong>Find the back-edge.</strong> Follow the <code>needs</code>/cross-project dependencies from the
+named target until you return to it. One of those edges is the one to cut.</li>
+<li><strong>Invert or extract.</strong> If two targets genuinely need each other's output,
+factor the shared work into a third target both depend on, so the graph stays
+acyclic (A -&gt; C, B -&gt; C instead of A &lt;-&gt; B).</li>
+<li><strong>Cross-project cycles</strong> usually mean two projects each build-depend on the
+other. Decide which is the leaf and make the dependency one-directional.</li>
+</ul>
+<p>Run <code>magus describe graph</code> (or open the Graph Explorer) to see the dependency
+edges and spot the cycle.</p>
+<h2 id="what-this-is-not">What this is NOT</h2>
+<ul>
+<li><strong>Not a data race.</strong> A cycle is a structural dependency loop, not concurrent
+writes; those are the MGS4001-4004 race diagnostics.</li>
+<li><strong>Not caused by concurrency settings.</strong> Lowering concurrency will not resolve
+a cycle - the dependency graph itself has no valid order.</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../../../targets/">targets</a>: how targets declare dependencies.</li>
+<li><code>magus describe graph</code>: the dependency edges, to locate the cycle.</li>
+</ul>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../MGS2001/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS2001: path read denied</span></a>
-      <a class="page-nav-next" href="../MGS2003/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS2003: env vars stripped</span></a>
+      <a class="page-nav-prev" href="../MGS1006/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS1006: unknown target</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
-        <a class="related-card" href="../../../codes/sandbox/MGS2001/"><span class="related-card-title">MGS2001: path read denied</span><span class="related-card-desc">Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.</span></a>
-        <a class="related-card" href="../../../codes/sandbox/MGS2007/"><span class="related-card-title">MGS2007: exec denied</span><span class="related-card-desc">Fires when a spell tries to execute a binary whose resolved path is outside the workspace, tmp, and the system executable allowlist.</span></a>
-        <a class="related-card" href="../../../codes/auth/MGS9002/"><span class="related-card-title">MGS9002: insecure token file permissions</span><span class="related-card-desc">A magus auth token or connector store file is readable beyond its owner. Magus refuses to use it until the permissions are tightened to 0600.</span></a>
+        <a class="related-card" href="../../../codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../../../codes/magusfile/MGS1006/"><span class="related-card-title">MGS1006: unknown target</span><span class="related-card-desc">Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus.needs.</span></a>
+        <a class="related-card" href="../../../codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
+        <a class="related-card" href="../../../codes/magusfile/MGS1003/"><span class="related-card-title">MGS1003: bespoke phase-fragment target name</span><span class="related-card-desc">Fires when a magusfile declares a target named after a static-analysis or formatting subset (typecheck, vet, audit, security, style, prettify) instead of composing it into lint or format.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS2002%22">MGS2002</a><a class="tag" href="../../../search/?q=tag%3A%22sandbox%22">sandbox</a><a class="tag" href="../../../search/?q=tag%3A%22security%22">security</a><a class="tag" href="../../../search/?q=tag%3A%22permissions%22">permissions</a><a class="tag" href="../../../search/?q=tag%3A%22write%22">write</a><a class="tag" href="../../../search/?q=tag%3A%22allowlist%22">allowlist</a><a class="tag" href="../../../search/?q=tag%3A%22persistence%22">persistence</a></div>
-    <small>Last updated <time datetime="2026-07-02T17:35:39Z">July 2, 2026, 5:35 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5d9e514ddc79f4e388d41f11d6894bd4afba27de" data-tooltip="5d9e514ddc79f4e388d41f11d6894bd4afba27de" title="5d9e514ddc79f4e388d41f11d6894bd4afba27de">5d9e514d</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/2d8cb4765b87f8a212eb3bd893bf020c16ff97f4"><code>2d8cb476</code></a> <small><time datetime="2026-07-01T00:25:12Z">Jul 1, 2026</time></small> - apply markdownlint formatting across docs</li><li><a href="https://github.com/egladman/magus/commit/9ee3dce1b3c7ab7473778d3bc86398a929467ebf"><code>9ee3dce1</code></a> <small><time datetime="2026-06-23T03:26:53Z">Jun 23, 2026</time></small> - tidy diagnostic code docs</li><li><a href="https://github.com/egladman/magus/commit/765b783998dccefb47e3f19fdf6e16e00d4393e1"><code>765b7839</code></a> <small><time datetime="2026-05-07T03:42:00Z">May 7, 2026</time></small> - a parallel build orchestrator with content-addressed caching</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/codes/sandbox/MGS2002.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/codes/sandbox/MGS2002.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS1007%22">MGS1007</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../../search/?q=tag%3A%22depends%22">depends</a><a class="tag" href="../../../search/?q=tag%3A%22cycle%22">cycle</a><a class="tag" href="../../../search/?q=tag%3A%22cross-project%22">cross-project</a></div>
+    <small>Last updated <time datetime="2026-07-21T12:21:34Z">July 21, 2026, 12:21 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a0eab87e6dee9ffc69cf1ff825b05de7ef31a428" data-tooltip="a0eab87e6dee9ffc69cf1ff825b05de7ef31a428" title="a0eab87e6dee9ffc69cf1ff825b05de7ef31a428">a0eab87e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

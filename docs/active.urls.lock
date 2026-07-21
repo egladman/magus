@@ -30,6 +30,12 @@ buzz/modules/yaml/
 cache/
 charms/
 ci/
+codes/auth/MGS9001/
+codes/auth/MGS9002/
+codes/auth/MGS9003/
+codes/auth/MGS9004/
+codes/auth/MGS9005/
+codes/auth/MGS9006/
 codes/charms/
 codes/charms/MGS6001/
 codes/knowledge/
@@ -41,6 +47,8 @@ codes/magusfile/MGS1002/
 codes/magusfile/MGS1003/
 codes/magusfile/MGS1004/
 codes/magusfile/MGS1005/
+codes/magusfile/MGS1006/
+codes/magusfile/MGS1007/
 codes/outputref/
 codes/outputref/MGS8001/
 codes/outputref/MGS8002/
@@ -146,6 +154,8 @@ public/atom/
 public/release/
 public/release/index.json
 public/release/v0.1.0/
+public/release/v0.2.0/
+public/release/v0.2.1/
 reference/console/
 remote-cache/
 sandbox/

@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-gopherbuzz" title="Project: gopherbuzz">Project: gopherbuzz</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
+        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-notification-center-v2-plan-9e7c5d" title="Project: notification-center-v2-plan-9e7c5d">Project: notification-center-v2-plan-9e7c5d</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -126,7 +126,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <p>Prefer a picture? Explore this graph in the <a href="https://eli.gladman.cc/magus/console/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>1818 nodes</strong> and <strong>3973 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>1836 nodes</strong> and <strong>4008 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -145,13 +145,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>project</td>
-<td style="text-align:right">6</td>
+<td style="text-align:right">7</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:project</code></a></td>
-<td><code>docs</code>, <code>magus</code>, <code>gopherbuzz</code></td>
+<td><code>docs</code>, <code>notification-center-v2-plan-9e7c5d</code>, <code>libs/gopherbuzz</code></td>
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">63</td>
+<td style="text-align:right">71</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:target</code></a></td>
 <td><code>content-generate</code>, <code>generate</code>, <code>generate</code></td>
 </tr>
@@ -205,13 +205,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>file</td>
-<td style="text-align:right">201</td>
+<td style="text-align:right">202</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:file</code></a></td>
-<td><code>docs/render.buzz</code>, <code>gopherbuzz/examples/bubblegum/config.buzz</code>, <code>gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code></td>
+<td><code>docs/render.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/config.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1011</td>
+<td style="text-align:right">1019</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:function</code></a></td>
 <td><code>sel</code>, <code>site_render</code>, <code>sendObject</code></td>
 </tr>
@@ -264,9 +264,15 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td><code>content-generate</code>, <code>generate</code>, <code>ci</code></td>
 </tr>
 <tr>
-<td>gopherbuzz</td>
+<td>libs/diag</td>
+<td style="text-align:right">8</td>
+<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Fdiag" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:libs/diag</code></a></td>
+<td><code>format</code>, <code>generate</code>, <code>build</code></td>
+</tr>
+<tr>
+<td>libs/gopherbuzz</td>
 <td style="text-align:right">9</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:gopherbuzz" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:gopherbuzz</code></a></td>
+<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Fgopherbuzz" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:libs/gopherbuzz</code></a></td>
 <td><code>build</code>, <code>format</code>, <code>generate</code></td>
 </tr>
 <tr>
@@ -277,7 +283,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 </tbody>
 </table></figure>
-<h2 id="project-magus">Project: magus</h2>
+<h2 id="project-notification-center-v2-plan-9e7c5d">Project: notification-center-v2-plan-9e7c5d</h2>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -525,7 +531,50 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 </tbody>
 </table></figure>
-<h2 id="project-gopherbuzz">Project: gopherbuzz</h2>
+<h2 id="project-libsdiag">Project: libs/diag</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>generate</code></td>
+<td>Regenerates MAGUS.md and fails on drift.</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>The anchor <code>magus affected ci</code> keys off; fans out lint/build/test after format.</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>md-generate</code></td>
+<td>Renders MAGUS.md (target catalog plus graph) from this magusfile.</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="project-libsgopherbuzz">Project: libs/gopherbuzz</h2>
 <figure class="table-scroll"><table>
 <thead>
 <tr>

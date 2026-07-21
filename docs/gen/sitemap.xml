@@ -30,6 +30,12 @@
   <url><loc>https://eli.gladman.cc/magus/buzz/modules/yaml/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/cache/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/charms/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/auth/MGS9001/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/auth/MGS9002/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/auth/MGS9003/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/auth/MGS9004/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/auth/MGS9005/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/auth/MGS9006/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/charms/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/charms/MGS6001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/knowledge/</loc></url>
@@ -41,6 +47,8 @@
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1003/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1004/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1005/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1006/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1007/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/outputref/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/outputref/MGS8001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/outputref/MGS8002/</loc></url>
@@ -74,7 +82,6 @@
   <url><loc>https://eli.gladman.cc/magus/development/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/contributing/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/docs/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/development/gopherbuzz/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/magus/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/documentation/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/download/</loc></url>
