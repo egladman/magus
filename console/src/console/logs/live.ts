@@ -8,7 +8,7 @@
 import { fromBinary } from "@bufbuild/protobuf";
 import { EventSchema, Kind, Status } from "../../gen/magus/viewer/v1/viewer_pb";
 import { consumeLiveToken, getLiveToken, fetchSSE, logsLink } from "../../lib/daemon";
-import { notify } from "../../lib/notifications";
+import { notify, matchAuthorMarker } from "../../lib/notifications";
 import type { ViewerParams } from "./fragment";
 import { base64ToBytes } from "./fragment";
 import { state, waterfallSource } from "./state";
@@ -77,6 +77,14 @@ function onLiveEvent(type: string, data: string): void {
       ? { label: "Open in log viewer", href: logsLink(liveNotifyHost, { ref: ev.ref }) }
       : undefined;
     notify({ source: "Log Viewer", kind: "error", key: "fail:" + ev.ref, message: label + " failed.", link });
+  }
+  // Author-declared markers: a build that prints `magus:alert:`/`magus:notice:` raises a bell/history
+  // notification, matched frontend-side off the verbatim output line (no backend push). Keyed on the
+  // marker text so a stream reconnect that replays the same backlog line does not re-fire it; two genuinely
+  // distinct alerts with identical text collapsing to one is the accepted, lesser evil.
+  if (ev.kind === Kind.OUTPUT && ev.text) {
+    const marker = matchAuthorMarker(ev.text);
+    if (marker) notify({ ...marker, key: (marker.important ? "alert:" : "notice:") + marker.message });
   }
   state.liveEvents.push(ev);
   scheduleLiveRender();

@@ -23,6 +23,7 @@ import { leaves, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { mountNotificationCenter, notify } from "../lib/notifications";
+import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
 import { parseHash, wantsDemo, getLiveToken, resolveDaemonHost, createDaemonTransport, fetchReadiness, isSharedMode, enterSharedModeIfNeeded, type ReadinessReport, type ReadinessComponent } from "../lib/daemon";
@@ -765,6 +766,14 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
       ? "port " + bootParams.port
       : (location.port ? "port " + location.port : (location.host || "the daemon origin"));
     notify({ source: "Console", kind: "ok", message: "Connected to daemon on " + where + ".", key: "console:attached:" + where });
+  }
+
+  // Shell-side watchers (share-connect + storage thresholds). Skipped in the daemon-free demo (they would
+  // poll a daemon that is not there and perturb the deterministic scenario) and in shared/phone mode (a
+  // read-only viewer does not manage the host's share token, and TokenService is denied there anyway).
+  if (!wantsDemo(parseHash()) && !isSharedMode()) {
+    checkLocalStorageAlert(notifications.store);
+    startShellWatch(notifications.store);
   }
 
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.

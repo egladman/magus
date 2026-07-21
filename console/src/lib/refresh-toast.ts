@@ -73,7 +73,7 @@ export function showToast(source: string, message: string, kind: "ok" | "warn" |
     const action = document.createElement("button");
     action.type = "button";
     action.textContent = link.label;
-    action.addEventListener("click", () => { location.assign(link.href); });
+    action.addEventListener("click", () => { if (link.run) void link.run(); else if (link.href) location.assign(link.href); });
     toast.appendChild(action);
   }
   document.body.appendChild(toast);

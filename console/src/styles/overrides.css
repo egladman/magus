@@ -159,14 +159,18 @@
   background: var(--pf-t--global--color--status--danger--default, #c9190b);
   box-shadow: 0 0 0 2px var(--pf-t--global--background--color--primary--default);
 }
+/* v2: a full-height right-docked SIDE PANEL (the reference-drawer idiom), not a small dropdown. A popover
+   is a usability nightmare under volume - it clips the list and steals focus; a side panel lets you scroll
+   a long run of notifications while the surface behind stays visible. It docks between the top chrome and
+   the status bar on the right edge, overlaying the content (no inset reflow - it is a peek, dismissed by
+   Escape / outside-click via wireDrawerToggle). */
 .console-shell-notify {
-  position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
-  width: 22rem; max-width: calc(100vw - 1rem); max-height: min(28rem, calc(100vh - 4rem));
+  position: fixed; top: var(--console-topchrome-h); bottom: var(--console-statusbar-h); right: 0; left: auto;
+  width: 24rem; max-width: calc(100vw - 1rem);
   display: flex; flex-direction: column;
   background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border-left: 1px solid var(--pf-t--global--border--color--default);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.28);
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
 .console-shell-notify[hidden] { display: none; }
@@ -176,6 +180,24 @@
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-shell-notify__title { font-size: 0.85rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+/* Header actions: the "Dismiss older" menu beside "Clear all". */
+.console-shell-notify__actions { display: flex; align-items: center; gap: 0.5rem; }
+.console-shell-notify__older { position: relative; }
+.console-shell-notify__older-btn { font-size: 0.75rem; --pf-v6-c-button--PaddingBlock: 0; }
+.console-shell-notify__older-menu {
+  position: absolute; top: calc(100% + 0.2rem); right: 0; min-width: 11rem; z-index: 1;
+  display: flex; flex-direction: column; padding: 0.2rem;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.console-shell-notify__older-menu[hidden] { display: none; }
+.console-shell-notify__older-item {
+  text-align: left; padding: 0.35rem 0.5rem; font-size: 0.78rem; background: none; border: none; cursor: pointer;
+  color: var(--pf-t--global--text--color--regular); border-radius: var(--pf-t--global--border--radius--small);
+}
+.console-shell-notify__older-item:hover { background: var(--pf-t--global--background--color--secondary--default); }
 .console-shell-notify__list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 .console-shell-notify__empty {
   margin: 0; padding: 1.25rem 0.9rem; font-size: 0.82rem; line-height: 1.4;
@@ -210,9 +232,9 @@
 .console-shell-notify__item-time { font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .console-shell-notify__item-link { font-size: 0.75rem; --pf-v6-c-button--PaddingBlock: 0; }
 .console-shell-notify__item-dismiss { flex: 0 0 auto; --pf-v6-c-button--PaddingInline: 0.25rem; color: var(--pf-t--global--text--color--subtle); }
-/* On a phone the popover fills nearly the whole width so the rows have room to read. */
+/* On a phone the side panel spans the full width so the rows have room to read. */
 @media (max-width: 30rem) {
-  .console-shell-notify { position: fixed; top: auto; bottom: 0.5rem; right: 0.5rem; left: 0.5rem; width: auto; max-height: 70vh; }
+  .console-shell-notify { left: 0; right: 0; width: auto; max-width: none; }
 }
 
 /* --- Keybindings editor --------------------------------------------------------------------------

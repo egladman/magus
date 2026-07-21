@@ -37,12 +37,16 @@ import { wireDrawerToggle } from "../ui/ref-drawer";
 
 export type NotifyKind = "ok" | "warn" | "error";
 
-// A deep link rendered as an action on both the transient toast and the history entry. Clicking it
-// navigates (location.assign): a same-app fragment URL updates the view in place, an app-relative page
-// URL (e.g. the log viewer at a ref) navigates there.
+// An action rendered as a button on both the transient toast and the history entry. It is EITHER a deep
+// link (`href`, clicked -> location.assign: a same-app fragment updates in place, an app-relative page
+// navigates there) OR a callback (`run`, clicked -> invoked). `run` is for a shell-originated action that
+// is not a navigation - e.g. "Revoke share" calling TokenService. It cannot cross the NOTIFY_EVENT bundle
+// boundary (a function does not serialize), so only a caller holding the store directly (the shell) may
+// set it; cross-bundle callers use `href`.
 export interface NotifyLink {
   label: string;
-  href: string;
+  href?: string;
+  run?: () => void | Promise<void>;
 }
 
 // The caller-facing shape. `source` is REQUIRED (not optional-with-empty) so a new caller cannot forget
@@ -60,10 +64,17 @@ export interface NotifyInput {
   link?: NotifyLink | string;
   key?: string;
   at?: number;
+  // `important` opts an entry into the BELL tier (lights the unseen-dot until the panel is opened),
+  // decoupled from `kind` (severity/color). It defaults to `kind === "error"`, so every existing caller
+  // is unchanged: a failure still rings, an ok/warn still records silently. It exists so a signal that is
+  // NOT a failure but still needs a human - a device connecting to your share token, storage crossing a
+  // threshold, an author-declared magus:alert: - can ring the bell while keeping a warn/ok color.
+  important?: boolean;
 }
 
-// One recorded notification. `seen` gates the bell's unseen-dot and is only ever false for error-kind
-// entries (ok/warn are recorded already-seen, so they never light the dot).
+// One recorded notification. `important` marks the bell tier; `seen` gates the unseen-dot and is only
+// ever false for important entries (history-tier entries are recorded already-seen, so they never light
+// the dot).
 export interface Notification {
   id: string;
   source: string;
@@ -71,6 +82,7 @@ export interface Notification {
   message: string;
   link?: NotifyLink;
   at: number;
+  important: boolean;
   seen: boolean;
 }
 
@@ -78,9 +90,13 @@ export interface NotificationStore {
   // notify admits an input, returning the created Notification, or null when it was deduped away.
   notify(input: NotifyInput): Notification | null;
   list(): Notification[]; // newest first
-  unseenCount(): number;  // error-kind, not yet seen
+  unseenCount(): number;  // important, not yet seen
   markAllSeen(): void;
   dismiss(id: string): void;
+  // dismissOlderThan drops every entry older than maxAgeMs (measured from `now`, injectable for tests),
+  // leaving the recent tail. It backs the granular "dismiss older than 1h/3h/6h" control, a lighter touch
+  // than clear() when a burst of stale notifications has piled up but the recent ones still matter.
+  dismissOlderThan(maxAgeMs: number, now?: number): void;
   clear(): void;
   subscribe(fn: () => void): () => void;
 }
@@ -96,6 +112,7 @@ const MAX_HISTORY = 200;
 function normalizeLink(link: NotifyLink | string | undefined): NotifyLink | undefined {
   if (!link) return undefined;
   if (typeof link === "string") return link ? { label: "Open", href: link } : undefined;
+  if (link.run) return { label: link.label || "Open", run: link.run };
   return link.href ? { label: link.label || "Open", href: link.href } : undefined;
 }
 
@@ -112,6 +129,7 @@ export function createNotificationStore(): NotificationStore {
       if (input.key && keys.has(input.key)) return null; // same event, already recorded
       if (input.key) keys.add(input.key);
       const kind = input.kind ?? "ok";
+      const important = input.important ?? kind === "error";
       const n: Notification = {
         id: "n" + (++seq),
         source: input.source,
@@ -119,9 +137,10 @@ export function createNotificationStore(): NotificationStore {
         message: input.message,
         link: normalizeLink(input.link),
         at: input.at ?? Date.now(),
-        // Only the bell tier (error) starts unseen; history-tier entries are recorded already-seen so
+        important,
+        // Only the bell tier (important) starts unseen; history-tier entries are recorded already-seen so
         // they never light the dot.
-        seen: kind !== "error",
+        seen: !important,
       };
       items.unshift(n);
       if (items.length > MAX_HISTORY) items = items.slice(0, MAX_HISTORY);
@@ -129,7 +148,7 @@ export function createNotificationStore(): NotificationStore {
       return n;
     },
     list(): Notification[] { return items.slice(); },
-    unseenCount(): number { return items.reduce((acc, n) => acc + (n.kind === "error" && !n.seen ? 1 : 0), 0); },
+    unseenCount(): number { return items.reduce((acc, n) => acc + (n.important && !n.seen ? 1 : 0), 0); },
     markAllSeen(): void {
       let changed = false;
       for (const n of items) if (!n.seen) { n.seen = true; changed = true; }
@@ -140,6 +159,12 @@ export function createNotificationStore(): NotificationStore {
       items = items.filter((n) => n.id !== id);
       if (items.length !== before) emit();
     },
+    dismissOlderThan(maxAgeMs: number, now: number = Date.now()): void {
+      const cutoff = now - maxAgeMs;
+      const before = items.length;
+      items = items.filter((n) => n.at >= cutoff);
+      if (items.length !== before) emit();
+    },
     clear(): void {
       if (items.length === 0) return;
       items = [];
@@ -147,6 +172,76 @@ export function createNotificationStore(): NotificationStore {
     },
     subscribe(fn: () => void): () => void { listeners.add(fn); return () => listeners.delete(fn); },
   };
+}
+
+// AUTHOR MARKER SEAM. A magusfile author declares a notification from inside a build by printing a marker
+// line - `magus:alert:<message>` for the bell tier, `magus:notice:<message>` for the history tier. These
+// ride the captured output stream verbatim (the daemon does no push plumbing for them), so the console
+// matches them FRONTEND-side wherever it already reads that stream. matchAuthorMarker turns one output
+// line into a NotifyInput, or null when the line carries no marker. It is pure (no DOM, no store) so the
+// matching is unit-tested here and the caller owns only the where-and-dedupe. The message is trimmed; an
+// empty message after the prefix is not a marker (so a bare "magus:alert:" does not raise a blank entry).
+const ALERT_PREFIX = "magus:alert:";
+const NOTICE_PREFIX = "magus:notice:";
+export function matchAuthorMarker(line: string, source = "Build"): NotifyInput | null {
+  const text = line.trimStart();
+  const hit = (prefix: string): string | null => {
+    if (!text.startsWith(prefix)) return null;
+    const msg = text.slice(prefix.length).trim();
+    return msg.length > 0 ? msg : null;
+  };
+  const alert = hit(ALERT_PREFIX);
+  if (alert) return { source, kind: "warn", important: true, message: alert };
+  const notice = hit(NOTICE_PREFIX);
+  if (notice) return { source, kind: "ok", important: false, message: notice };
+  return null;
+}
+
+// STORAGE ALERTS. Two storage stores can grow until they hurt: the browser's localStorage (the console's
+// own persisted settings/tokens/workspace) and the daemon's on-disk cache. Both are silent until they
+// bite, so the console warns the operator ONCE when either crosses a threshold - a history-tier warn that
+// rings the bell (important) so it is not missed, but is not styled as a failure. The thresholds are
+// arbitrary-but-sane: a browser localStorage quota is ~5 MB, so 4 MB is "getting full"; the daemon cache
+// warns at 85% of its configured cap, or at an absolute 2 GiB when uncapped.
+export const LOCALSTORAGE_WARN_BYTES = 4 * 1024 * 1024;
+export const DAEMON_CACHE_WARN_FRACTION = 0.85;
+export const DAEMON_CACHE_WARN_ABS_BYTES = 2 * 1024 * 1024 * 1024;
+
+// A minimal Storage view (localStorage satisfies it) so estimateStorageBytes is pure and testable.
+export interface StorageLike {
+  length: number;
+  key(i: number): string | null;
+  getItem(k: string): string | null;
+}
+
+// estimateStorageBytes approximates a Web Storage area's footprint: the sum over every entry of
+// (key length + value length), counted as UTF-16 code units x2 bytes, which is how browsers charge the
+// quota. It is an estimate (surrogate pairs, engine overhead) but good enough to decide "getting full".
+export function estimateStorageBytes(store: StorageLike): number {
+  let bytes = 0;
+  for (let i = 0; i < store.length; i++) {
+    const k = store.key(i);
+    if (k === null) continue;
+    const v = store.getItem(k) ?? "";
+    bytes += (k.length + v.length) * 2;
+  }
+  return bytes;
+}
+
+// humanBytes renders a byte count as a compact human size (MB/GB) for a message. Plain ASCII.
+export function humanBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
+  if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
+  return bytes + " B";
+}
+
+// daemonCacheOverThreshold decides whether the daemon cache warrants a warning: over 85% of its cap when
+// capped (capBytes > 0), else over the absolute fallback. Returns false for a zero/unknown size.
+export function daemonCacheOverThreshold(sizeBytes: number, capBytes: number): boolean {
+  if (sizeBytes <= 0) return false;
+  if (capBytes > 0) return sizeBytes >= capBytes * DAEMON_CACHE_WARN_FRACTION;
+  return sizeBytes >= DAEMON_CACHE_WARN_ABS_BYTES;
 }
 
 // notify raises a notification from ANY bundle. It dispatches NOTIFY_EVENT on document; the shell's
@@ -231,12 +326,52 @@ export function mountNotificationCenter(): NotificationCenter {
   const title = document.createElement("span");
   title.className = "console-shell-notify__title";
   title.textContent = "Notifications";
+
+  // The header's right-side actions: a "Dismiss older" menu (1h/3h/6h - the granular filter for a pile of
+  // stale entries) beside the heavy-handed "Clear all". Under volume, clearing everything throws away the
+  // recent ones you still care about; the age filter is the lighter touch. The menu reuses the launcher
+  // kebab idiom (button + hidden menu, outside/Escape dismiss) rather than a native <select> so it matches
+  // the console's other popovers.
+  const actionsGroup = document.createElement("div");
+  actionsGroup.className = "console-shell-notify__actions";
+
+  const olderWrap = document.createElement("div");
+  olderWrap.className = "console-shell-notify__older";
+  const olderBtn = document.createElement("button");
+  olderBtn.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__older-btn";
+  olderBtn.type = "button";
+  olderBtn.setAttribute("aria-haspopup", "menu");
+  olderBtn.setAttribute("aria-expanded", "false");
+  olderBtn.textContent = "Dismiss older";
+  const olderMenu = document.createElement("div");
+  olderMenu.className = "console-shell-notify__older-menu";
+  olderMenu.setAttribute("role", "menu");
+  olderMenu.hidden = true;
+  const HOUR_MS = 60 * 60 * 1000;
+  let olderOpen = false;
+  const setOlder = (v: boolean): void => { olderOpen = v; olderMenu.hidden = !v; olderBtn.setAttribute("aria-expanded", v ? "true" : "false"); };
+  for (const [label, hours] of [["Older than 1 hour", 1], ["Older than 3 hours", 3], ["Older than 6 hours", 6]] as const) {
+    const mi = document.createElement("button");
+    mi.className = "console-shell-notify__older-item";
+    mi.type = "button";
+    mi.setAttribute("role", "menuitem");
+    mi.textContent = label;
+    mi.addEventListener("click", () => { store.dismissOlderThan(hours * HOUR_MS); setOlder(false); });
+    olderMenu.append(mi);
+  }
+  olderBtn.addEventListener("click", (e) => { e.stopPropagation(); setOlder(!olderOpen); });
+  olderMenu.addEventListener("click", (e) => e.stopPropagation());
+  document.addEventListener("pointerdown", (e) => { if (olderOpen && e.target instanceof Node && !olderWrap.contains(e.target)) setOlder(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && olderOpen) { e.stopPropagation(); setOlder(false); olderBtn.focus(); } });
+  olderWrap.append(olderBtn, olderMenu);
+
   const clearBtn = document.createElement("button");
   clearBtn.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__clear";
   clearBtn.type = "button";
   clearBtn.textContent = "Clear all";
   clearBtn.addEventListener("click", () => store.clear());
-  head.append(title, clearBtn);
+  actionsGroup.append(olderWrap, clearBtn);
+  head.append(title, actionsGroup);
 
   const listEl = document.createElement("div");
   listEl.className = "console-shell-notify__list";
@@ -258,16 +393,19 @@ export function mountNotificationCenter(): NotificationCenter {
       empty.textContent = "Nothing to report. Failures, sandbox denials, and daemon health changes show up here.";
       listEl.append(empty);
       clearBtn.hidden = true;
+      olderWrap.hidden = true;
+      setOlder(false);
       return;
     }
     clearBtn.hidden = false;
+    olderWrap.hidden = false;
     const now = Date.now();
     for (const n of items) {
       const item = document.createElement("div");
       item.className = "console-shell-notify__item";
       item.dataset.kind = n.kind;
       item.setAttribute("role", "listitem");
-      if (n.kind === "error" && !n.seen) item.dataset.unseen = "";
+      if (n.important && !n.seen) item.dataset.unseen = "";
 
       const dot = document.createElement("span");
       dot.className = "console-shell-notify__item-dot";
@@ -297,8 +435,11 @@ export function mountNotificationCenter(): NotificationCenter {
         link.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__item-link";
         link.type = "button";
         link.textContent = n.link.label;
-        const href = n.link.href;
-        link.addEventListener("click", () => { location.assign(href); });
+        const nlink = n.link;
+        link.addEventListener("click", () => {
+          if (nlink.run) { link.disabled = true; void Promise.resolve(nlink.run()).finally(() => { link.disabled = false; }); }
+          else if (nlink.href) location.assign(nlink.href);
+        });
         meta.append(link);
       }
       body.append(meta);

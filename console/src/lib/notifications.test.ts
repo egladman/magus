@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createNotificationStore } from "./notifications";
+import {
+  createNotificationStore, matchAuthorMarker,
+  estimateStorageBytes, humanBytes, daemonCacheOverThreshold,
+  LOCALSTORAGE_WARN_BYTES, DAEMON_CACHE_WARN_ABS_BYTES,
+} from "./notifications";
 
 // These pin the pure store: admission, dedupe, the error-only unseen-dot logic, and the mutators. The
 // bell/drawer DOM and the cross-bundle event plumbing are exercised in the browser, not here.
@@ -98,6 +102,70 @@ test("link normalization: bare href, full link, and empty", () => {
   assert.deepEqual(bare?.link, { label: "Open", href: "../logs/#ref=x" });
   assert.deepEqual(full?.link, { label: "Open logs", href: "../logs/#ref=y" });
   assert.equal(empty?.link, undefined);
+});
+
+test("important decouples the bell tier from error kind", () => {
+  const s = createNotificationStore();
+  // A warn that opts into important rings the bell and starts unseen, though it is not an error.
+  const alert = s.notify({ source: "Share", message: "device connected", kind: "warn", important: true });
+  assert.equal(alert?.important, true);
+  assert.equal(alert?.seen, false);
+  assert.equal(s.unseenCount(), 1);
+  // An error that opts OUT of important records silently.
+  const quiet = s.notify({ source: "x", message: "handled", kind: "error", important: false });
+  assert.equal(quiet?.seen, true);
+  assert.equal(s.unseenCount(), 1, "the opted-out error does not add to the dot");
+});
+
+test("dismissOlderThan drops the stale tail, keeps the recent", () => {
+  const s = createNotificationStore();
+  const now = 10_000_000;
+  s.notify({ source: "x", message: "old", at: now - 2 * 60 * 60 * 1000 });   // 2h old
+  s.notify({ source: "x", message: "recent", at: now - 30 * 60 * 1000 });    // 30m old
+  s.dismissOlderThan(60 * 60 * 1000, now); // drop older than 1h
+  assert.deepEqual(s.list().map((n) => n.message), ["recent"]);
+});
+
+test("matchAuthorMarker maps alert->bell and notice->history, else null", () => {
+  const alert = matchAuthorMarker("magus:alert: build broke");
+  assert.deepEqual(alert, { source: "Build", kind: "warn", important: true, message: "build broke" });
+  const notice = matchAuthorMarker("  magus:notice: cache primed  ");
+  assert.deepEqual(notice, { source: "Build", kind: "ok", important: false, message: "cache primed" });
+  assert.equal(matchAuthorMarker("magus:alert:"), null, "empty message is not a marker");
+  assert.equal(matchAuthorMarker("ordinary output line"), null);
+  assert.equal(matchAuthorMarker("magus:alert: x", "svc/api:build")?.source, "svc/api:build");
+});
+
+test("link.run normalizes to a callback action (no href)", () => {
+  const s = createNotificationStore();
+  let ran = 0;
+  const n = s.notify({ source: "Share", message: "connected", link: { label: "Revoke share", run: () => { ran++; } } });
+  assert.equal(n?.link?.label, "Revoke share");
+  assert.equal(n?.link?.href, undefined);
+  n?.link?.run?.();
+  assert.equal(ran, 1);
+});
+
+test("estimateStorageBytes sums (key+value) as UTF-16 bytes", () => {
+  const data: Record<string, string> = { ab: "cd", e: "fgh" }; // (2+2) + (1+3) = 8 code units -> 16 bytes
+  const keys = Object.keys(data);
+  const store = { length: keys.length, key: (i: number) => keys[i] ?? null, getItem: (k: string) => data[k] ?? null };
+  assert.equal(estimateStorageBytes(store), 16);
+});
+
+test("daemonCacheOverThreshold: capped uses 85%, uncapped uses the absolute fallback", () => {
+  assert.equal(daemonCacheOverThreshold(0, 0), false, "unknown size never warns");
+  assert.equal(daemonCacheOverThreshold(90, 100), true, "90 of 100 is over 85%");
+  assert.equal(daemonCacheOverThreshold(80, 100), false, "80 of 100 is under 85%");
+  assert.equal(daemonCacheOverThreshold(DAEMON_CACHE_WARN_ABS_BYTES, 0), true, "uncapped hits the absolute floor");
+  assert.equal(daemonCacheOverThreshold(1024, 0), false, "small uncapped never warns");
+});
+
+test("humanBytes and the localStorage threshold render sanely", () => {
+  assert.equal(humanBytes(512), "512 B");
+  assert.equal(humanBytes(2 * 1024 * 1024), "2.0 MB");
+  assert.equal(humanBytes(3 * 1024 * 1024 * 1024), "3.0 GB");
+  assert.ok(LOCALSTORAGE_WARN_BYTES > 0);
 });
 
 test("subscribe fires on change and unsubscribe stops it", () => {
