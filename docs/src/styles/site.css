@@ -35,8 +35,17 @@
    horizontal scroll - including programmatic - without establishing a new
    scroll container, so position: sticky (the header, the desktop TOC sidebar)
    keeps working unaffected; verified against both before shipping this. CSS
-   only, no JS. */
-html {
+   only, no JS.
+
+   The clip is on BOTH html and body: on Android Chrome, overflow-x: clip on
+   html alone leaves a residual few px of horizontal scroll (measured 385 vs a
+   375 viewport) - the scrollbar-gutter reservation above, plus fixed/off-canvas
+   panels (the reference drawer) whose containing block is the viewport, not
+   html, so html's clip does not contain them. Clipping body too catches both.
+   Measured: with the body clip the page scrollWidth equals the viewport and the
+   sticky header stays sticky. */
+html,
+body {
   overflow-x: clip;
 }
 
@@ -350,7 +359,7 @@ html {
   font-weight: 600;
 }
 
-/* Small "On this page" label above the TOC list. */
+/* Small "In this section" / "On this page" labels above each aside list. */
 .toc-title {
   margin: 0 0 0.5rem;
   font-size: 0.75rem;
@@ -358,6 +367,18 @@ html {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--pico-muted-color);
+}
+/* The aside stacks two lists: "In this section" (structural siblings, injected by
+   render.buzz's renderSectionNav) over "On this page". The first title hugs the top;
+   a following one gets breathing room so the two groups read as distinct. */
+.toc nav .toc-title:not(:first-child) {
+  margin-top: 1.1rem;
+}
+/* The current page within its section list mirrors the scroll-spy "you are here"
+   accent (primary + bold), set statically by render.buzz via aria-current. */
+.toc nav .section-nav a[aria-current]:not([aria-current="false"]) {
+  color: var(--pico-primary);
+  font-weight: 600;
 }
 /* "Tap outside or press Esc to close" hint at the foot of the TOC. Only the mobile
    bottom sheet (below) reveals it; hidden on the desktop sidebar, where there is
@@ -1473,6 +1494,29 @@ a code {
   opacity: 0.7;
 }
 
+/* "Added in vX.Y.Z" compatibility marker, injected under a page's H1 by render.buzz
+   from the frontmatter `since:`. A muted tag-like chip (same shape as .post-tags .tag)
+   so it reads as metadata, not body copy; the version reads in code font. */
+.since-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0 0 1.25rem;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-muted-color);
+  white-space: nowrap;
+}
+.since-badge code {
+  font-size: inherit;
+  padding: 0;
+  background: none;
+  color: var(--pico-color);
+}
+
 /* Floating back-to-top button (JS-injected by back-to-top.js). Hidden until
    scroll passes ~400px; smooth-scrolls (respects prefers-reduced-motion). Sits
    in the bottom-right safe area so it stays clear of the mobile TOC sheet. */
@@ -2019,6 +2063,11 @@ a code {
    natural width so nothing wraps or clips. */
 .table-scroll {
   margin: 1rem 0;
+  /* max-width caps the figure at its container so overflow-x actually engages: without
+     it the figure grows to the table's natural width and pushes the whole column past a
+     narrow viewport (where the page-level overflow-x: clip then hides the extra columns
+     with no way to reach them). Capped, the figure scrolls and every column is swipeable. */
+  max-width: 100%;
   overflow-x: auto;
 }
 .table-scroll table {
