@@ -4,11 +4,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/egladman/diag"
+	"github.com/egladman/magus/libs/diag"
 )
 
 // magus's diagnostic codes are the MGS#### family. The MECHANISM (the Code/Error types, the rendering, the
-// errors.Is matching, the run-time sink) lives in the shared github.com/egladman/diag framework; this file
+// errors.Is matching, the run-time sink) lives in the shared github.com/egladman/magus/libs/diag framework; this file
 // is magus's INSTANTIATION of it - the MGS docs-URL layout, the MGS catalog, and thin re-exports so the
 // ~20 in-tree consumers keep using types.DiagnosticCode / DiagnosticError / DiagnosticErrorf unchanged.
 // gopherbuzz instantiates the same framework separately for its own BZZ#### codes; the two namespaces

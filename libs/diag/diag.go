@@ -6,7 +6,7 @@
 // constants; the namespaces are entirely separate, so no code is ever shared across consumers. magus
 // instantiates it for its MGS#### codes; gopherbuzz instantiates it separately for its BZZ#### codes.
 //
-// It is its own module (github.com/egladman/diag, at libs/diag) precisely so both magus and gopherbuzz -
+// It is its own module (github.com/egladman/magus/libs/diag, at libs/diag) precisely so both magus and gopherbuzz -
 // which are separate Go modules - can each depend on it without depending on each other.
 package diag
 
