@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/libs/diag"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -218,11 +219,11 @@ func (s *Session) Tests() []TestEntry { return s.tests }
 // over (upstream parity: resume never errors on a completed fiber).
 func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 	if len(args) < 1 {
-		return vmpackage.Null, fmt.Errorf("buzz: resume requires a fiber argument")
+		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: resume requires a fiber argument")
 	}
 	fib, ok := vmpackage.AsFiber(args[0])
 	if !ok {
-		return vmpackage.Null, fmt.Errorf("buzz: resume requires a fiber, got %s", args[0].Kind())
+		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: resume requires a fiber, got %s", args[0].Kind())
 	}
 	switch fib.Status() {
 	case vmpackage.FiberDone:
@@ -231,7 +232,7 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 		// clean completion, so this returns null, nil in that case).
 		return vmpackage.Null, fib.Err()
 	case vmpackage.FiberRunning:
-		return vmpackage.Null, fmt.Errorf("buzz: cannot resume a running fiber (recursive resume)")
+		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resume a running fiber (recursive resume)")
 	}
 	fibVM := fib.VM()
 	fibVM.SetCtx(ctx)
@@ -259,11 +260,11 @@ func (s *Session) builtinResume(ctx context.Context, args []vmpackage.Value) (vm
 // returns the cached return value (upstream: resolve is idempotent after done).
 func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (vmpackage.Value, error) {
 	if len(args) < 1 {
-		return vmpackage.Null, fmt.Errorf("buzz: resolve requires a fiber argument")
+		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: resolve requires a fiber argument")
 	}
 	fib, ok := vmpackage.AsFiber(args[0])
 	if !ok {
-		return vmpackage.Null, fmt.Errorf("buzz: resolve requires a fiber, got %s", args[0].Kind())
+		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: resolve requires a fiber, got %s", args[0].Kind())
 	}
 	switch fib.Status() {
 	case vmpackage.FiberDone:
@@ -271,7 +272,7 @@ func (s *Session) builtinResolve(ctx context.Context, args []vmpackage.Value) (v
 		// (Err is nil for a clean completion).
 		return fib.Return(), fib.Err()
 	case vmpackage.FiberRunning:
-		return vmpackage.Null, fmt.Errorf("buzz: cannot resolve a running fiber (recursive resolve)")
+		return vmpackage.Null, bzz.Errorf(FiberMisuse, "buzz: cannot resolve a running fiber (recursive resolve)")
 	}
 	fibVM := fib.VM()
 	fibVM.SetCtx(ctx)
@@ -615,10 +616,12 @@ func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeEr
 // Diagnostic is a positioned diagnostic for editor tooling. Line and Col are
 // 1-based; a zero Line means no position was recoverable (Col is only meaningful
 // beside a nonzero Line). Msg has the "buzz: line L:C:" prefix stripped - the
-// position travels in the fields instead. Msg/Line/Col mirror the unexported checker
+// position travels in the fields instead. Code is the BZZ diagnostic code (empty for
+// a parse error, which has no code). Msg/Line/Col/Code mirror the unexported checker
 // typeError; keep the two shapes in sync if either gains a field.
 type Diagnostic struct {
 	Line, Col int
+	Code      diag.Code
 	Msg       string
 }
 
@@ -643,7 +646,7 @@ func (s *Session) Diagnostics(code string) []Diagnostic {
 	}
 	out := make([]Diagnostic, len(errs))
 	for i, e := range errs {
-		out[i] = Diagnostic{Line: e.Line, Col: e.Col, Msg: e.Msg}
+		out[i] = Diagnostic{Line: e.Line, Col: e.Col, Code: e.Code, Msg: e.Msg}
 	}
 	return out
 }
@@ -774,7 +777,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		s.collectImportedModule(boundName, src)
 		exports, err := s.execImport(s.ctx, src)
 		if err != nil {
-			return ImportSource, fmt.Errorf("buzz: import %q: %w", imp.Path, err)
+			return ImportSource, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 		}
 		s.bindNamespaceObject(boundName, exports)
 		if ns := s.declaredNamespace(src); ns != nil {
@@ -801,11 +804,11 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		// search path. Binding nothing would let the unresolved name surface
 		// later as a disconnected "undefined" error, or silently no-op if it is
 		// never referenced, so fail here at the import that is actually wrong.
-		return ImportNotFound, fmt.Errorf("buzz: import %q: module not found", imp.Path)
+		return ImportNotFound, bzz.Errorf(UnresolvedImport, "buzz: import %q: module not found", imp.Path)
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return ImportFile, fmt.Errorf("buzz: import %q: resolve path: %w", imp.Path, err)
+		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: resolve path: %v", imp.Path, err)
 	}
 	if s.loadedPaths[abs] {
 		return ImportBound, nil
@@ -814,7 +817,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return ImportFile, fmt.Errorf("buzz: import %q: %w", imp.Path, err)
+		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
 
 	if imp.Alias != "" && imp.Alias != "_" {
@@ -832,7 +835,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 	s.collectImportedModule(boundName, string(data))
 	exports, err := s.execImport(s.ctx, string(data))
 	if err != nil {
-		return ImportFile, fmt.Errorf("buzz: import %q: %w", imp.Path, err)
+		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
 	// Also bind a namespace object under the basename so upstream-Buzz
 	// qualified access (`regex\reCompile`) resolves the same export the
@@ -1003,7 +1006,7 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 
 	// Execute the imported file.
 	if err := sub.Exec(s.ctx, src); err != nil {
-		return fmt.Errorf("buzz: import %q: %w", importPath, err)
+		return bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", importPath, err)
 	}
 
 	// Collect new globals: anything in sub-session not in the host snapshot.

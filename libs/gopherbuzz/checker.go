@@ -4,18 +4,22 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/libs/diag"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/types"
 )
 
-// typeError is a type-checking diagnostic.
+// typeError is a type-checking diagnostic. Code is its BZZ diagnostic code (defaulting to the general
+// TypeError until a site opts into a more specific one), rendered inline with a docs link.
 type typeError struct {
 	Line, Col int
+	Code      diag.Code
 	Msg       string
 }
 
 func (e typeError) Error() string {
-	return fmt.Sprintf("buzz: line %d:%d: %s", e.Line, e.Col, e.Msg)
+	msg := fmt.Sprintf("buzz: line %d:%d: %s", e.Line, e.Col, e.Msg)
+	return fmt.Sprintf("[%s] %s\n  see: %s", e.Code, msg, bzz.URL(e.Code))
 }
 
 type scopeEntry struct {
@@ -108,9 +112,16 @@ func (c *checker) lookup(name string) (scopeEntry, bool) {
 	return scopeEntry{}, false
 }
 
+// errorf records a type error with the general TypeError (BZZ1000) code. Sites with a more specific code
+// call errorfc instead.
 func (c *checker) errorf(p ast.Pos, format string, args ...any) {
+	c.errorfc(p, TypeError, format, args...)
+}
+
+// errorfc records a type error under a specific BZZ code.
+func (c *checker) errorfc(p ast.Pos, code diag.Code, format string, args ...any) {
 	c.errors = append(c.errors, typeError{
-		Line: p.Line, Col: p.Col,
+		Line: p.Line, Col: p.Col, Code: code,
 		Msg: fmt.Sprintf(format, args...),
 	})
 }
@@ -268,14 +279,14 @@ func (c *checker) checkStmt(n ast.Node) {
 	case *ast.WhileStmt:
 		cond := c.infer(v.Cond)
 		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
-			c.errorf(ast.NodePos(v.Cond), "while condition must be bool, got %s", cond.TypeName())
+			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "while condition must be bool, got %s", cond.TypeName())
 		}
 		c.checkBlock(v.Body)
 	case *ast.DoStmt:
 		c.checkBlock(v.Body)
 		cond := c.infer(v.Cond)
 		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
-			c.errorf(ast.NodePos(v.Cond), "do-until condition must be bool, got %s", cond.TypeName())
+			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "do-until condition must be bool, got %s", cond.TypeName())
 		}
 	case *ast.ForStmt:
 		c.pushScope()
@@ -285,7 +296,7 @@ func (c *checker) checkStmt(n ast.Node) {
 		if v.Cond != nil {
 			cond := c.infer(v.Cond)
 			if cond != types.Any && cond != types.Unknown && cond != types.Bool {
-				c.errorf(ast.NodePos(v.Cond), "for condition must be bool, got %s", cond.TypeName())
+				c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "for condition must be bool, got %s", cond.TypeName())
 			}
 		}
 		if v.Post != nil {
@@ -327,7 +338,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 	if v.TypeAnnot != "" {
 		annotTyp := c.resolveAnnot(v.TypeAnnot)
 		if !types.Compat(inferred, annotTyp) {
-			c.errorf(v.Pos, "cannot assign %s to %s variable %q",
+			c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s variable %q",
 				inferred.TypeName(), annotTyp.TypeName(), v.Name)
 		}
 		declTyp = annotTyp
@@ -347,7 +358,7 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 		} else if found {
 			rhs := c.infer(v.Value)
 			if !types.Compat(rhs, e.typ) {
-				c.errorf(v.Pos, "cannot assign %s to %s", rhs.TypeName(), e.typ.TypeName())
+				c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s", rhs.TypeName(), e.typ.TypeName())
 			}
 			return
 		}
@@ -370,7 +381,7 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 	// the checked function return type.
 	_, retIsFibType := c.retTyp.(*types.FibType)
 	if c.retTyp != nil && c.retTyp != types.Any && c.retTyp != types.Fib && !retIsFibType && c.yieldTyp == nil && !types.Compat(ret, c.retTyp) {
-		c.errorf(v.Pos, "return type mismatch: got %s, want %s",
+		c.errorfc(v.Pos, TypeMismatch, "return type mismatch: got %s, want %s",
 			ret.TypeName(), c.retTyp.TypeName())
 	}
 }
@@ -393,7 +404,7 @@ func (c *checker) checkIf(v *ast.IfStmt) {
 		return
 	}
 	if cond != types.Any && cond != types.Unknown && cond != types.Bool {
-		c.errorf(ast.NodePos(v.Cond), "if condition must be bool, got %s", cond.TypeName())
+		c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "if condition must be bool, got %s", cond.TypeName())
 	}
 	c.checkBlock(v.Then)
 	if v.Else != nil {
@@ -567,7 +578,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 	case *ast.YieldExpr:
 		vt := c.infer(v.Value)
 		if c.yieldTyp != nil && !types.Compat(vt, c.yieldTyp) {
-			c.errorf(v.Pos, "yield type mismatch: got %s, want %s", vt.TypeName(), c.yieldTyp.TypeName())
+			c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: got %s, want %s", vt.TypeName(), c.yieldTyp.TypeName())
 		}
 		return types.Null // yield expression evaluates to null (the resumed value)
 	case *ast.FiberExpr:
@@ -585,7 +596,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 			return types.Fib // callee type unknown (any) — leave the fiber untyped
 		}
 		if !ft.Variadic && len(v.Call.Args) != len(ft.Params) {
-			c.errorf(v.Pos, "wrong argument count: got %d, want %d", len(v.Call.Args), len(ft.Params))
+			c.errorfc(v.Pos, ArgumentError, "wrong argument count: got %d, want %d", len(v.Call.Args), len(ft.Params))
 		}
 		// Recover the fiber's yield/return types from the wrapped function so
 		// `resume`/`resolve` on this inline fiber are typed (not just `any`).
@@ -616,9 +627,9 @@ func (c *checker) inferIdent(v *ast.IdentExpr) types.Type {
 		return e.typ
 	}
 	if c.private[v.Name] {
-		c.errorf(v.Pos, "undefined: %s (an imported module declares %q but does not export it — add `export` to it)", v.Name, v.Name)
+		c.errorfc(v.Pos, UndefinedName, "undefined: %s (an imported module declares %q but does not export it — add `export` to it)", v.Name, v.Name)
 	} else {
-		c.errorf(v.Pos, "undefined: %s", v.Name)
+		c.errorfc(v.Pos, UndefinedName, "undefined: %s", v.Name)
 	}
 	return types.Any
 }
@@ -672,7 +683,7 @@ func (c *checker) numericResult(p ast.Pos, left, right types.Type) types.Type {
 		return types.Int
 	}
 	if left != types.Int && left != types.Double {
-		c.errorf(p, "invalid type %s in arithmetic expression", left.TypeName())
+		c.errorfc(p, TypeMismatch, "invalid type %s in arithmetic expression", left.TypeName())
 	}
 	return types.Any
 }
@@ -684,7 +695,7 @@ func (c *checker) inferUnary(v *ast.UnaryExpr) types.Type {
 		if t == types.Any || t == types.Unknown || t == types.Int || t == types.Double {
 			return t
 		}
-		c.errorf(v.Pos, "unary - requires numeric operand, got %s", t.TypeName())
+		c.errorfc(v.Pos, TypeMismatch, "unary - requires numeric operand, got %s", t.TypeName())
 		return types.Any
 	case "!":
 		return types.Bool
@@ -716,7 +727,7 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		return types.Unknown
 	}
 	if !ft.Variadic && len(v.Args) != len(ft.Params) {
-		c.errorf(v.Pos, "wrong argument count: got %d, want %d", len(v.Args), len(ft.Params))
+		c.errorfc(v.Pos, ArgumentError, "wrong argument count: got %d, want %d", len(v.Args), len(ft.Params))
 	}
 	if ft.Ret == nil || ft.Ret == types.Void {
 		return types.Void
@@ -749,11 +760,11 @@ func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
 		name := v.ArgNames[i]
 		if name == "" {
 			if sawNamed {
-				c.errorf(v.Pos, "positional argument after named argument")
+				c.errorfc(v.Pos, ArgumentError, "positional argument after named argument")
 				return
 			}
 			if pos >= n {
-				c.errorf(v.Pos, "wrong argument count: got %d, want %d", len(v.Args), n)
+				c.errorfc(v.Pos, ArgumentError, "wrong argument count: got %d, want %d", len(v.Args), n)
 				return
 			}
 			slots[pos] = arg
@@ -770,11 +781,11 @@ func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
 			}
 		}
 		if idx < 0 {
-			c.errorf(v.Pos, "unknown argument name %q (parameters are %s)", name, strings.Join(ft.ParamNames, ", "))
+			c.errorfc(v.Pos, ArgumentError, "unknown argument name %q (parameters are %s)", name, strings.Join(ft.ParamNames, ", "))
 			return
 		}
 		if filled[idx] {
-			c.errorf(v.Pos, "argument %q given more than once", name)
+			c.errorfc(v.Pos, ArgumentError, "argument %q given more than once", name)
 			return
 		}
 		slots[idx] = arg
@@ -782,7 +793,7 @@ func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
 	}
 	for j, ok := range filled {
 		if !ok {
-			c.errorf(v.Pos, "missing argument %q", ft.ParamNames[j])
+			c.errorfc(v.Pos, ArgumentError, "missing argument %q", ft.ParamNames[j])
 			return
 		}
 	}
@@ -923,7 +934,7 @@ func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
 func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 	resolved, ok := c.types[v.TypeName]
 	if !ok {
-		c.errorf(v.Pos, "undefined type %q", v.TypeName)
+		c.errorfc(v.Pos, UndefinedType, "undefined type %q", v.TypeName)
 		return types.Any
 	}
 	ot, ok := resolved.(*types.ObjectType)
