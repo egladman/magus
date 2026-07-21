@@ -1,0 +1,567 @@
+// render_page.buzz - the page layer: it turns finished HTML content into a
+// complete, chrome-wrapped document and writes it to gen/. renderPage is the
+// shared template every page funnels through (head, nav, footer, TOC, pager,
+// CSP); renderFile/renderRoot drive a Markdown source through it; renderPager
+// builds prev/next; substituteVersionTokens swaps __MAGUS_VERSION__; render404
+// and writeOffline are the two special standalone pages. Flat-imported by
+// render.buzz and by every writer module (`import "render_page" as _`); the
+// writers call renderPage, so it sits below them in the layer order.
+import "markdown";
+import "fs";
+import "io";
+import "std";
+import "serialize";
+import "encoding";
+import "template";
+import "assert";
+import "render_text" as _;
+import "render_url" as _;
+import "render_html" as _;
+import "render_meta" as _;
+import "render_path" as _;
+import "render_types" as _;
+import "render_route" as _;
+import "render_nav" as _;
+
+// render404 writes gen/404.html - the themed "warped off the map" page GitHub
+// Pages serves for any unmatched path. GitHub Pages keeps the deep 404 URL in
+// the address bar, so the site's ordinary relative paths would break here; this
+// page therefore uses root-absolute paths (/<basePath>/site.css, /<basePath>/
+// main.js, etc.) - the ONE deliberate exception to the relative-link scheme in
+// WS0b. basePath is derived from SITE_URL (e.g. https://eli.gladman.cc/magus/
+// -> "/magus/"); when SITE_URL is empty, fall back to "/" so the page still
+// renders locally with absolute paths from the server root.
+export fun render404(site: Site) > void {
+    final basePath = sitePathPrefix();
+    final title = "Page not found - magus";
+    final desc = "You have warped off the map. That page is not here; head back to the documentation, install page, or playground.";
+    // Its own template (rather than renderPage()) because every asset/link here must be
+    // root-absolute, not relative - GitHub Pages keeps the deep 404 URL in the bar.
+    final tmpl = `<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
+  <title>{{title}}</title>
+  <meta name="description" content="{{desc}}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{basePath}}assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
+  <link rel="stylesheet" href="{{basePath}}theme.css">
+  <link rel="stylesheet" href="{{basePath}}site.css">
+  <!-- ui-panels.css: the shared settings-gear dropdown + reference drawer (split out of console.css). -->
+  <link rel="stylesheet" href="{{basePath}}ui-panels.css">
+  <script src="{{basePath}}theme.js"></script>
+</head>
+<body>
+{{{nav}}}  <main class="container">
+    <article>
+      <h1>You have warped off the map.</h1>
+      <p><em>No such target.</em> Let us get you back:</p>
+      <ul>
+        <li><a href="{{basePath}}">Home</a></li>
+        <li><a href="{{basePath}}documentation/">Documentation</a></li>
+        <li><a href="{{basePath}}download/">Download</a></li>
+        <li><a href="{{basePath}}tour/">Tour</a></li>
+        <li><a href="{{basePath}}playground/">Playground</a></li>
+      </ul>
+    </article>
+  </main>
+{{{footer}}}  <script type="module" src="{{basePath}}main.js"></script>
+</body>
+</html>
+`;
+    final doc = template.render(tmpl, {
+        "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
+        "nav": renderSiteNav(basePath, "", false), "footer": renderSiteFooter(basePath, site),
+    });
+    fs.writeFile(site.outDir + "/404.html", doc);
+}
+
+
+// writeOffline writes gen/offline/index.html - the themed page shown by the service
+// worker when a navigation request fails (network unreachable and no cached copy).
+// Like render404, it must use root-absolute asset paths because its URL depth differs
+// from the rest of the site; basePath is derived the same way render404 derives it.
+// Graph and playground are called out explicitly because they are precached and fully
+// functional offline - they are the honest answer to "what CAN I do right now?".
+export fun writeOffline(site: Site) > void {
+    final basePath = sitePathPrefix();
+    final title = "You are offline - magus";
+    final desc = "No network connection. The graph explorer and playground are fully functional offline.";
+    final tmpl = `<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
+  <title>{{title}}</title>
+  <meta name="description" content="{{desc}}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{basePath}}assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{basePath}}assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="{{basePath}}assets/pico.min.css">
+  <link rel="stylesheet" href="{{basePath}}theme.css">
+  <link rel="stylesheet" href="{{basePath}}site.css">
+  <!-- ui-panels.css: the shared settings-gear dropdown + reference drawer (split out of console.css). -->
+  <link rel="stylesheet" href="{{basePath}}ui-panels.css">
+  <script src="{{basePath}}theme.js"></script>
+</head>
+<body>
+{{{nav}}}  <main class="container">
+    <article>
+      <h1>You are offline.</h1>
+      <p>This page requires a network connection and is not available offline.</p>
+      <p>This works fully offline (it is cached on your device):</p>
+      <ul>
+        <li><a href="{{basePath}}playground/">Playground</a> - run Buzz code in the browser</li>
+      </ul>
+      <p>The <a href="{{basePath}}console/">console</a> is a separate installable app with its own offline cache.</p>
+    </article>
+  </main>
+{{{footer}}}  <script type="module" src="{{basePath}}main.js"></script>
+</body>
+</html>
+`;
+    final doc = template.render(tmpl, {
+        "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
+        "nav": renderSiteNav(basePath, "", false), "footer": renderSiteFooter(basePath, site),
+    });
+    fs.makeDirectory(site.outDir + "/offline");
+    fs.writeFile(site.outDir + "/offline/index.html", doc);
+    // Register so pruneStaleOutputs does not treat it as a stale leftover; it
+    // is always produced (the SW precaches it) so it never becomes stale.
+    site.writtenPaths["offline/index.html"] = true;
+}
+
+
+// renderPagerLink renders one prev/next card, reading the sibling's source so it credits
+// the same title (frontmatter title, else first H1) the sibling page renders with.
+fun renderPagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str) > str {
+    final f = io.File.open(srcDir + "/" + name, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = deriveTitle(md, name); }
+    // Siblings are directory-index pages under the same parent dir. A regular page
+    // lives in its own <slug>/ subdir, so it climbs one level to reach a sibling
+    // (../<slug>/); an index.md landing sits directly in the parent, so it does not.
+    final slug = name.sub(0, name.len() - 3);   // drop ".md"
+    return template.render(`      <a class="{{cls}}" href="{{climbPrefix}}{{slug}}/"><span class="page-nav-dir">{{dir}}</span><span class="page-nav-title">{{title}}</span></a>
+`, {"cls": cls, "climbPrefix": climbPrefix, "slug": slug, "dir": dir, "title": title});
+}
+
+
+// renderPager renders the previous/next links among a page's siblings — the other
+// rendered docs in the same source directory, ordered by filename (README/index
+// and underscore-prefixed fixtures excluded). Links are bare basenames, since a
+// sibling lives in the same output directory. "" when there is no sibling on
+// either side. rel is docs-relative (e.g. "modules/fs.md").
+fun renderPager(rel: str, site: Site) > str {
+    final parts = rel.split("/");
+    final base = parts[parts.len() - 1];
+    var srcDir = site.root + "/" + site.docs;
+    if (parts.len() > 1) { srcDir = srcDir + "/" + parts.sub(0, parts.len() - 1).join("/"); }
+
+    var sibs: [str] = mut [<str>];
+    foreach (name in fs.list(srcDir)) {
+        // README.md/index.md are the directory's landing page, reached via the
+        // breadcrumb and nav — not a prev/next peer — so they stay out of the pager
+        // (and their clean URL is the parent dir, which a sibling link can't express).
+        // isGeneratorFile drops the SSG's own MAGUS.md (a docs-root sibling now the
+        // generator lives here) so it is not offered as a prev/next page - the walk
+        // never renders it, so a pager link to it would dangle.
+        if (name.endsWith(".md") and name != "README.md" and name != "index.md"
+            and name.startsWith("_") == false and isGeneratorFile(name) == false) {
+            sibs.append(name);
+        }
+    }
+    if (sibs.len() < 2) { return ""; }
+    final ordered = sibs.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+
+    var pos = -1;
+    var i = 0;
+    while (i < ordered.len()) {
+        if (ordered[i] == base) { pos = i; }
+        i = i + 1;
+    }
+    if (pos < 0) { return ""; }
+
+    // Every pageable sibling now lives in its own <slug>/ subdir, so a page climbs
+    // one level to reach a peer (../<slug>/). Landings are excluded above.
+    final climbPrefix = "../";
+
+    var body = "";
+    if (pos > 0) { body = body + renderPagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev", climbPrefix); }
+    if (pos < ordered.len() - 1) { body = body + renderPagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next", climbPrefix); }
+    if (body == "") { return ""; }
+    return template.render(`    <nav class="page-nav" aria-label="Pagination">
+{{{body}}}    </nav>
+`, {"body": body});
+}
+
+
+// srcRel is the page's source path relative to magus/ (e.g. "docs/spells.md");
+// it drives both the per-page commit footer and the "Suggest an edit" link.
+// description is the resolved page description (frontmatter, else derived, else the
+// site default) — always non-empty, so the meta tag always fires. canonUrl is the
+// page's clean gen-root URL ("" for home) for the canonical link. pager is the
+// prev/next nav (may be ""); the home page and lone pages pass "".
+export fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], site: Site) > str {
+    final root = rootPrefix(srcRel, site);
+    // Which top-nav item to mark current. Every rendered docs page hangs off the
+    // documentation index, except the dedicated install page; the home page (README)
+    // highlights nothing (its wordmark is the home link).
+    var active = "documentation";
+    if (srcRel == "README.md") { active = "home"; }
+    if (srcRel == site.docs + "/download.md" or srcRel.startsWith(site.docs + "/download/")) { active = "download"; }
+    // Blog posts and the blog index live under the "Blog" nav item.
+    if (srcRel.startsWith(site.blog + "/") or srcRel == site.blog + "/index.md") { active = "blog"; }
+    // /public/ autoindex pages are meta surfaces; no nav item is current.
+    if (srcRel.startsWith("public/")) { active = ""; }
+    // The search page is a tool surface with no nav home of its own.
+    if (srcRel == "search/index.md") { active = ""; }
+    // The tour page is its own top-nav item.
+    if (srcRel == "tour/index.md") { active = "tour"; }
+    // /development/ is a contributor surface reached from the footer, not the top nav.
+    if (srcRel.startsWith("development/")) { active = "development"; }
+    // View-model flags for the head's optional blocks; the markup itself lives in
+    // the template's sections below. hasDescription gates the description meta and
+    // og:description. hasSiteUrl gates the canonical + og:* block (og:url/og:image
+    // must be absolute), so the site can ship dark until the host is confirmed;
+    // SITE_URL carries the trailing slash, canonUrl is the slashed clean path.
+    final hasDescription = description != "";
+    final hasSiteUrl = SITE_URL != "";
+    // Atom feed discovery advertises each feed only when it was actually written:
+    // releases once a version has shipped, blog on the home + blog pages once a post
+    // exists. Advertising a missing file would trip the asset-integrity check.
+    final hasReleasesFeed = hasSiteUrl and site.releases.len() > 0;
+    final hasBlogFeed = hasSiteUrl and site.hasBlogPosts and (srcRel == "README.md" or srcRel.startsWith(site.blog + "/"));
+    // Preload the LCP hero image on the home page only (README's gopher), so the
+    // browser fetches it in parallel with the CSS.
+    final isHome = srcRel == "README.md";
+    // The home page is the only one whose CSP img-src needs to reach past
+    // same-origin (its two status badges); every other page keeps site.csp's
+    // tighter default. See Site.csp/Site.cspHome's doc comments.
+    var pageCsp = site.csp;
+    if (isHome) { pageCsp = site.cspHome; }
+    // Reading-time chip (module var, set by the renderX() caller). Rendered as
+    // a sibling ABOVE the <article> card but INSIDE its column - a chip that
+    // hovers above the card, aligned with the card's left edge, not floating
+    // far-left above the TOC sidebar. Passed in per call (reading), so a page that
+    // wants none passes "".
+    var readingHtml = "";
+    if (reading != "") {
+        readingHtml = "    <small class=\"reading-time\" title=\"Estimated reading time\">" + reading + "</small>\n";
+    }
+    // Frontmatter tags (passed in per call) render as outlined, non-interactive chips
+    // in the provenance footer (there are no tag-archive pages to link to yet).
+    // Generated pages (module/spell/man-page references) lead with a filled
+    // "Generated" status chip so readers know the source of truth is code, not the
+    // page - and that its "Suggest an edit" link points at generated output.
+    final gen = isGenerated(srcRel, site);
+    var tagsHtml = "";
+    if (gen or tags.len() > 0) {
+        var chips = "";
+        if (gen) {
+            chips = chips + "<span class=\"tag generated\" data-tooltip=\"Auto-generated from source; edit the generator, not this page\" title=\"Auto-generated from source; edit the generator, not this page\">auto-generated</span>";
+        }
+        foreach (t in tags) {
+            // Topical tags are links into the search page, scoped to that exact tag
+            // (tag:"<name>"), so a click lists every page carrying it. The value is
+            // quoted so multi-word tags survive as one token; url_encode makes the
+            // whole thing querystring-safe. The generated status chip stays a span.
+            final tagQuery = encoding.urlEncode("tag:\"" + t + "\"");
+            chips = chips + "<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>";
+        }
+        tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips + "</div>\n";
+    }
+    // The .toc sidebar aside carries two lists: "In this section" (this page's siblings
+    // within its section, structural) and "On this page" (its own h2/h3 headings). Either
+    // may be empty - a top-level page with no section overview has no section nav, and a
+    // page with fewer than three headings has no on-page list. The aside (and the .with-toc
+    // two-column grid) appears when at least one is present; otherwise the article goes
+    // full-width. reading-time + article share the article grid cell (aside in col 1).
+    final sectionNav = site.renderSectionNav(srcRel, canonUrl, root);
+    final tocList = renderTocList(content);
+    var contentBlock = "" + readingHtml + "    <article>\n" + content + "    </article>\n";
+    if (sectionNav != "" or tocList != "") {
+        // A muted closing hint at the foot of the aside, revealed only when the aside is
+        // the mobile bottom sheet (dismissed by tapping the backdrop or pressing Esc);
+        // CSS hides it on the desktop sidebar, where there is nothing to dismiss.
+        final aside = "    <aside class=\"toc\">\n      <nav>\n" + sectionNav + tocList
+            + "        <p class=\"toc-hint\" aria-hidden=\"true\">Tap outside or press Esc to close</p>\n"
+            + "      </nav>\n    </aside>\n";
+        contentBlock = "    <div class=\"with-toc\">\n" + aside
+            + "    <div>\n" + readingHtml + "    <article>\n" + content + "    </article>\n    </div>\n"
+            + "    </div>\n";
+    }
+    // Page tools: two plain links on the right of the secondary row, separated
+    // by a middle-dot. "View source" only appears for pages backed by a real
+    // .md on disk (synthesized pages like the blog index and /public/* have no
+    // source). "Report an issue" was dropped - GitHub's edit flow is one click
+    // from Issues, and readers who just want to file a bug rarely start from
+    // a docs page.
+    final hasSource = srcRel.endsWith(".md") and srcRel.startsWith("public/") == false
+        and srcRel != site.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md";
+    var edit = "<small class=\"page-tools-edit\">";
+    if (hasSource) {
+        edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View source</a> &middot; ";
+    }
+    edit = edit + "<a href=\"" + GH + "/edit/" + site.metaBranch + "/" + site.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
+    // Second row under the search box: "Suggest an edit" hugging the right edge
+    // via margin-left:auto (reading-time now lives inside the article, above). The
+    // search page is a generated tool surface with no editable source, so it skips
+    // the row entirely (a "Suggest an edit" link there would 404 on GitHub).
+    var secondaryRow = "    <div class=\"page-tools-secondary\">" + edit + "</div>\n";
+    if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { secondaryRow = ""; }
+    // Consistent "<page title> - magus" suffix everywhere. Home just says
+    // "magus" (its H1-derived title is the wordmark, no need to duplicate).
+    var fullTitle = title + " — magus";
+    if (srcRel == "README.md") { fullTitle = "magus"; }
+    // OpenGraph + Twitter Card meta so a shared link renders a title/description/
+    // image card instead of a bare URL. The og:* block lives in the template, gated
+    // on hasSiteUrl; here we only pick og:type ("website" for home, else "article").
+    var ogType = "article";
+    if (isHome) { ogType = "website"; }
+    // Body class marks the meta surfaces that keep the full chrome but drop or widen
+    // parts of it: /public/ file-tree pages (site.css keys .site-public to hide the
+    // doc-only controls) and the search page (site-search widens the container for
+    // the results listing). "" for an ordinary page.
+    var bodyClass = "";
+    if (srcRel.startsWith("public/")) { bodyClass = "site-public"; }
+    if (srcRel == "search/index.md") { bodyClass = "site-search"; }
+    // Per-page provenance strip (footer tags + "Last updated" commit line). The
+    // search page is a generated tool surface with no source commit; writing it
+    // would make renderCommitFooter fall back to HEAD, drifting the output every commit
+    // and tripping the generate drift gate. So omit the whole strip there.
+    var provenance = "  <div class=\"page-provenance container\">\n"
+        + tagsHtml
+        + "    " + renderCommitFooter(srcRel, site) + "\n"
+        + "  </div>\n";
+    if (srcRel == "search/index.md" or srcRel == "tour/index.md" or srcRel.startsWith("development/")) { provenance = ""; }
+    // The page skeleton as one Mustache template. The head's optional blocks are
+    // logic-less sections keyed off the view-model flags computed above
+    // (hasDescription/hasSiteUrl/hasReleasesFeed/hasBlogFeed/isHome); {{value}}
+    // interpolation HTML-escapes. The body's composed components (announcement, nav,
+    // breadcrumb, contentBlock, related, provenance, footer) are whole rendered
+    // fragments, injected raw via {{{...}}}. Inline notes that used to live here:
+    //   - favicon set reuses the optimized hat mark; PNG + apple-touch cover clients.
+    //   - the <noscript> explains the missing search box (no JS, no injected input).
+    //   - one deferred main.js bundle; head-critical theme.js stays separate above.
+    final pageTmpl = `<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="{{{csp}}}">
+  <title>{{fullTitle}}</title>
+{{#hasDescription}}
+  <meta name="description" content="{{description}}">
+{{/hasDescription}}
+{{#hasSiteUrl}}
+  <link rel="canonical" href="{{siteUrl}}{{canonUrl}}">
+  <meta property="og:type" content="{{ogType}}">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="{{fullTitle}}">
+{{#hasDescription}}
+  <meta property="og:description" content="{{description}}">
+{{/hasDescription}}
+  <meta property="og:url" content="{{siteUrl}}{{canonUrl}}">
+  <meta property="og:image" content="{{siteUrl}}assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+{{/hasSiteUrl}}
+{{#hasReleasesFeed}}
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="{{root}}public/atom/releases.atom.xml">
+{{/hasReleasesFeed}}
+{{#hasBlogFeed}}
+  <link rel="alternate" type="application/atom+xml" title="magus blog" href="{{root}}public/atom/blog.atom.xml">
+{{/hasBlogFeed}}
+{{#isHome}}
+  <link rel="preload" as="image" href="{{root}}assets/gopher.webp" type="image/webp" fetchpriority="high">
+{{/isHome}}
+  <link rel="icon" type="image/png" sizes="32x32" href="{{root}}assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{root}}assets/apple-touch-icon.png">
+  <link rel="manifest" href="{{root}}manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="{{root}}assets/pico.min.css">
+  <link rel="stylesheet" href="{{root}}theme.css">
+  <link rel="stylesheet" href="{{root}}site.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="{{root}}ui-panels.css">
+  <script src="{{root}}theme.js"></script>
+</head>
+<body{{#bodyClass}} class="{{bodyClass}}"{{/bodyClass}}>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+{{{announcement}}}{{{nav}}}  <main id="main-content" class="container" tabindex="-1">
+{{{breadcrumb}}}    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
+{{{secondaryRow}}}{{{contentBlock}}}{{{pager}}}  </main>
+{{{related}}}{{{provenance}}}{{{refdrawer}}}{{{footer}}}  <script type="module" src="{{root}}main.js"></script>
+</body>
+</html>
+`;
+    return template.render(pageTmpl, {
+        "fullTitle": fullTitle,
+        "csp": pageCsp,
+        "description": description,
+        "hasDescription": hasDescription,
+        "hasSiteUrl": hasSiteUrl,
+        "siteUrl": SITE_URL,
+        "canonUrl": canonUrl,
+        "ogType": ogType,
+        "hasReleasesFeed": hasReleasesFeed,
+        "hasBlogFeed": hasBlogFeed,
+        "isHome": isHome,
+        "bodyClass": bodyClass,
+        "root": root,
+        "gh": GH,
+        "announcement": renderAnnouncementBar(site),
+        "nav": renderSiteNav(root, active, true),
+        "breadcrumb": site.renderBreadcrumb(srcRel, title, root),
+        "secondaryRow": secondaryRow,
+        "contentBlock": contentBlock,
+        "pager": pager,
+        "related": site.renderRelated(srcRel, root),
+        "provenance": provenance,
+        "refdrawer": renderReferenceDrawer(root, site),
+        "footer": renderSiteFooter(root, site),
+    });
+}
+
+
+// Render the repo's top-level README.md as the site landing page (index.html).
+// Links of the form href="docs/X" (relative from the repo root) resolve from
+// gen/index.html as href="X" — strip the docs/ prefix.
+export fun renderRoot(site: Site) > void {
+    final f = io.File.open(site.root + "/README.md", io.FileMode.read);
+    final rawMd = f.readAll();
+    f.close();
+
+    // The committed README carries no frontmatter (GitHub renders a leading YAML
+    // block as an ugly metadata table on the repo landing page), so a minimal
+    // frontmatter is synthesized here, in memory, before the README is used for
+    // anything else. Title and description are deliberately left out: they
+    // already derive correctly from the content below (the H1, then the first
+    // real paragraph), so only the search/tag classification - which has no
+    // content to derive from - needs a value. Kept to one basic tag by design.
+    final md = "---\ntags: [readme]\n---\n\n" + rawMd;
+
+    var html = markdown.toHtml(md);
+    while (html.indexOf("href=\"./docs/") != null) {
+        html = html.replace("href=\"./docs/", "href=\"");
+    }
+    while (html.indexOf("href=\"docs/") != null) {
+        html = html.replace("href=\"docs/", "href=\"");
+    }
+    // The home page stays at gen/index.html (gen root), so its in-content links are
+    // rewritten from the root directory to the root directory.
+    html = renderContentHTML(html, "", "");
+
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = deriveTitle(md, "README.md"); }
+    // Resolve the description: authored frontmatter, else the first real paragraph,
+    // else the site default — always non-empty so the meta tag always fires.
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
+
+    final doc = renderPage(title, desc, html, "README.md", "", "", readingTime(md), parseTags(md), site);
+    final of = io.File.open(site.outDir + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // The "View source" link targets this file directly - write the original,
+    // unamended README so it matches the committed source byte for byte (the
+    // synthesized tags frontmatter above is a build-time-only detail).
+    fs.writeFile(site.outDir + "/index.md", rawMd);
+    site.addRecord("index.html", title, desc, md);
+    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), "index.html"); }
+    std.print("  README.md -> " + site.outDir + "/index.html");
+}
+
+
+// substituteVersionTokens replaces build-time version placeholders in authored
+// markdown so install snippets reference a real, current release instead of a
+// hardcoded tag. __MAGUS_VERSION__ -> the latest release version WITH the leading
+// "v" (e.g. "v0.1.0"), read from releases/*.yaml via loadReleases - the single
+// version source of truth (do NOT read git tags; the yaml is the curated record).
+// Run on the source md before it is rendered AND before it is written back as the
+// per-page index.md, so the rendered page and its "View source" copy agree. No-op
+// when no release has shipped (the token stays literal, a visible prompt to cut one).
+fun substituteVersionTokens(md: str, site: Site) > str {
+    if (site.releases.len() == 0) { return md; }
+    return $"__MAGUS_VERSION__".replaceAll(md, site.releases[0].version);
+}
+
+
+// Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
+// docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
+export fun renderFile(rel: str, site: Site) > void {
+    final f = io.File.open(site.root + "/" + site.docs + "/" + rel, io.FileMode.read);
+    var md = f.readAll();
+    f.close();
+    // Resolve version placeholders once, up front, so every downstream consumer
+    // (the rendered HTML, the search record, the emitted index.md) sees the real tag.
+    md = substituteVersionTokens(md, site);
+
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = deriveTitle(md, rel); }
+
+    var html = renderContentHTML(markdown.toHtml(md), oldFlatDirectory(rel), newCleanDirectory(rel, site));
+    // Optional "Added in vX.Y.Z" compatibility marker from the frontmatter `since:`.
+    html = insertSinceBadge(html, fm.q("since").stringValue());
+
+    // Resolve the description: authored frontmatter, else the first real paragraph,
+    // else the site default — always non-empty so the meta tag always fires.
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
+
+    final url = cleanURL(rel, site.blog);
+    final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), site);
+
+    // Directory-index output: every page is <cleanURL>index.html (extensionless).
+    // url is gen/-root-relative and ends in a slash, matching what
+    // search.js/sitemap/canonical use.
+    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);   // drop trailing slash for mkdir
+    fs.makeDirectory(dir);
+
+    final of = io.File.open(dir + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+
+    // Emit the page's source Markdown next to its HTML so a reader can "View
+    // source" (or copy-as-markdown) directly. Powers llms-full.txt too - a
+    // committed .md-per-page is the single input that later WS T slices reuse.
+    fs.writeFile(dir + "/index.md", md);
+
+    site.addRecord(url, title, desc, md);
+    // Redirect stubs for any old paths this page declares (frontmatter aliases:).
+    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
+
+    std.print("  " + rel + " -> " + dir + "/index.html");
+}
+
+
+test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest release tag" {
+    final s = mut Site{};
+    s.releases.append(Release{ version = "v0.2.0" });
+    final got = substituteVersionTokens("get __MAGUS_VERSION__/magus___MAGUS_VERSION___linux.tar.gz", s);
+    assert.equal(got, "get v0.2.0/magus_v0.2.0_linux.tar.gz", "both tokens replaced with the tag");
+}
+
+test "substituteVersionTokens is a no-op before any release has shipped" {
+    final s = mut Site{};
+    assert.equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
+}
