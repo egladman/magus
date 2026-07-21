@@ -75,23 +75,32 @@
     <div class="with-toc">
     <aside class="toc">
       <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../download/docker/" title="Run magus in Docker">Run magus in Docker</a></li>
+          <li><a href="../download/linux/" title="Install on Linux">Install on Linux</a></li>
+          <li><a href="../download/macos/" title="Install on macOS">Install on macOS</a></li>
+          <li><a href="../download/windows/" title="Install on Windows">Install on Windows</a></li>
+        </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#install" title="Install">Install</a></li><li><a href="#update" title="Update">Update</a></li><li><a href="#verify-a-release" title="Verify a release">Verify a release</a><ul><li><a href="#release-signing-key-ed25519" title="Release signing key (Ed25519)">Release signing key (Ed25519)</a></li></ul></li><li><a href="#shell-completion" title="Shell completion">Shell completion</a></li><li><a href="#mgs-shorthand" title="mgs shorthand">mgs shorthand</a></li><li><a href="#build-from-source" title="Build from source">Build from source</a></li><li><a href="#changelog" title="Changelog">Changelog</a></li></ul>
+        <ul><li><a href="#install" title="Install">Install</a></li><li><a href="#update" title="Update">Update</a></li><li><a href="#verify-a-release" title="Verify a release">Verify a release</a><ul><li><a href="#release-signing-key-ed25519" title="Release signing key (Ed25519)">Release signing key (Ed25519)</a></li></ul></li><li><a href="#shell-completion" title="Shell completion">Shell completion</a></li><li><a href="#mgs-shorthand" title="mgs shorthand">mgs shorthand</a></li><li><a href="#install-with-go" title="Install with Go">Install with Go</a></li><li><a href="#build-from-source" title="Build from source">Build from source</a></li><li><a href="#changelog" title="Changelog">Changelog</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="download">Download</h1>
 <p>magus ships as a single self-contained binary. Pick your platform for step-by-step install and PATH setup, then verify the signature before you run it.</p>
 <h2 id="install">Install</h2>
+<p>Each platform guide has a copy-paste <code>curl</code> install that pulls the current release, extracts the binary onto your <code>PATH</code>, and points you at verification:</p>
 <ul>
 <li><a href="linux/">Linux</a> - amd64 or arm64</li>
 <li><a href="macos/">macOS</a> - Apple Silicon or Intel</li>
 <li><a href="windows/">Windows</a> - amd64</li>
 <li><a href="docker/">Docker</a> - run in a container instead of installing a binary (any platform)</li>
 </ul>
+<p>Prefer Go tooling or a local build? See <a href="#install-with-go">Install with Go</a> and <a href="#build-from-source">Build from source</a>.</p>
 <p>Every build is published at <a href="../public/release">/public/release/</a> alongside its <code>SHA256SUMS</code> manifest and signature. However you install, <a href="#verify-a-release">verify the release</a> first.</p>
 <h2 id="update">Update</h2>
 <p><code>magus self update</code> fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: <a href="../manpage/magus-self"><code>magus self</code></a>.</p>
@@ -176,6 +185,13 @@ MCowBQYDK2VwAyEA/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 <p>Or create a symlink:</p>
 <pre><code class="language-sh">ln -s &quot;$(command -v magus)&quot; ~/.local/bin/mgs
 </code></pre>
+<h2 id="install-with-go">Install with Go</h2>
+<p><code>go install github.com/egladman/magus/cmd/magus@latest</code> is <strong>not currently supported.</strong> magus vendors its embedded Buzz interpreter through a local <code>replace</code> directive in <code>go.mod</code>, and <code>go install</code> refuses any module whose <code>go.mod</code> carries a <code>replace</code> - it fetches the tagged source from the module proxy, where a local path cannot resolve, and fails with:</p>
+<pre><code class="language-text">The go.mod file for the module providing named packages contains one or
+more replace directives. It must not contain directives that would cause
+it to be interpreted differently than if it were the main module.
+</code></pre>
+<p>Until the interpreter is published as a standalone, versioned module, install a <a href="#install">prebuilt binary</a> (recommended) or build from a clone below - a clone works because the <code>replace</code> resolves against the checked-out <code>./gopherbuzz</code>.</p>
 <h2 id="build-from-source">Build from source</h2>
 <pre><code class="language-sh">git clone https://github.com/egladman/magus
 cd magus

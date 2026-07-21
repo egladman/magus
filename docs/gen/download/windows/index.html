@@ -72,15 +72,41 @@
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
     <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/download/windows.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../../download/docker/" title="Run magus in Docker">Run magus in Docker</a></li>
+          <li><a href="../../download/linux/" title="Install on Linux">Install on Linux</a></li>
+          <li><a href="../../download/macos/" title="Install on macOS">Install on macOS</a></li>
+          <li><a href="../../download/windows/" aria-current="page" title="Install on Windows">Install on Windows</a></li>
+        </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#quick-install" title="Quick install">Quick install</a></li><li><a href="#verify-the-download" title="Verify the download">Verify the download</a></li><li><a href="#put-it-on-your-path" title="Put it on your PATH">Put it on your PATH</a></li><li><a href="#next-steps" title="Next steps">Next steps</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="install-on-windows">Install on Windows</h1>
-<p>magus ships as a single self-contained binary. Grab the tarball from <a href="../../public/release">/public/release/</a>, <a href="../#verify-a-release">verify it</a>, and extract it into a <code>PATH</code> directory you own. Run these in PowerShell:</p>
-<pre><code class="language-powershell">mkdir -Force $Env:USERPROFILE\bin | Out-Null
-tar -xzf magus_*_windows_amd64.tar.gz
-Move-Item magus.exe $Env:USERPROFILE\bin\magus.exe
+<p>magus ships as a single self-contained binary. Download it with <code>curl.exe</code>, extract it into a <code>PATH</code> directory you own, then <a href="../#verify-a-release">verify it</a> before first run. Run these in PowerShell:</p>
+<h2 id="quick-install">Quick install</h2>
+<pre><code class="language-powershell">$VERSION = &quot;v0.1.0&quot;
+curl.exe -fLO &quot;https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_amd64.tar.gz&quot;
+mkdir -Force $Env:USERPROFILE\bin | Out-Null
+tar -xzf &quot;magus_${VERSION}_windows_amd64.tar.gz&quot;
+Move-Item -Force magus.exe $Env:USERPROFILE\bin\magus.exe
 magus version
 </code></pre>
-<p><code>tar</code> ships with Windows 10 (1803+) and Windows 11, so no extra tooling is needed.</p>
+<p>Both <code>curl.exe</code> and <code>tar</code> ship with Windows 10 (1803+) and Windows 11, so no extra tooling is needed. <code>$VERSION</code> above is the current release; <a href="../../public/release">/public/release/</a> lists every build.</p>
+<h2 id="verify-the-download">Verify the download</h2>
+<p>Fetch the manifest and its signature next to the tarball:</p>
+<pre><code class="language-powershell">curl.exe -fLO &quot;https://github.com/egladman/magus/releases/download/$VERSION/SHA256SUMS&quot;
+curl.exe -fLO &quot;https://github.com/egladman/magus/releases/download/$VERSION/SHA256SUMS.sig&quot;
+</code></pre>
+<p>Then verify the Ed25519 signature <em>first</em>, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in <a href="../#verify-a-release">Verify a release</a>.</p>
 <h2 id="put-it-on-your-path">Put it on your PATH</h2>
 <p>If <code>magus version</code> is not found, add the install directory to your user <code>PATH</code> (persists across sessions):</p>
 <pre><code class="language-powershell">[Environment]::SetEnvironmentVariable(&quot;Path&quot;, &quot;$Env:USERPROFILE\bin;$Env:Path&quot;, &quot;User&quot;)
@@ -93,6 +119,8 @@ magus version
 <li>Keep it current with <a href="../#update"><code>magus self update</code></a>.</li>
 </ul>
     </article>
+    </div>
+    </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../macos/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Install on macOS</span></a>
     </nav>

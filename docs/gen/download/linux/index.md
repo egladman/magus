@@ -6,14 +6,32 @@ tags: [download, install, linux, path]
 
 # Install on Linux
 
-magus ships as a single self-contained binary. Grab your architecture's tarball from [/public/release/](../../public/release/), [verify it](../download.md#verify-a-release), and extract it into a `PATH` directory you own - no root, no `sudo`.
+magus ships as a single self-contained binary. Download it with `curl`, extract it into a `PATH` directory you own - no root, no `sudo` - then [verify it](../download.md#verify-a-release) before first run.
+
+## Quick install
 
 ```sh
+VERSION=v0.1.0
+ARCH=amd64            # or arm64 on ARM
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}.tar.gz"
 mkdir -p ~/.local/bin
-tar -xzf magus_*_linux_amd64.tar.gz    # or linux_arm64 on ARM
+tar -xzf "magus_${VERSION}_linux_${ARCH}.tar.gz"
 mv magus ~/.local/bin/
 magus version
 ```
+
+`${VERSION}` above is the current release. Every build - both `amd64`/`arm64` and the statically linked `-static` variants for musl or minimal images - is listed at [/public/release/](../../public/release/).
+
+## Verify the download
+
+Fetch the manifest and its signature next to the tarball:
+
+```sh
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS"
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS.sig"
+```
+
+Then verify the Ed25519 signature *first*, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](../download.md#verify-a-release).
 
 ## Put it on your PATH
 
