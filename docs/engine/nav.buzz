@@ -1,10 +1,7 @@
-// engine/nav.buzz - the persistent site UI that frames every page but is not the page
-// content: the top navigation bar, the footer, the settings dropdown, the reference
-// drawer, the announcement strip, the "On this page" list, and the per-page "Last
-// updated" provenance line. These build HTML fragments that renderPage assembles around
-// the article - they are consumed BY the page assembler, they never call it, so this
-// module sits below engine/page in the layering. Flat-imported by render.buzz (and,
-// once split out, engine/page).
+// engine/nav.buzz - the persistent chrome that frames every page: top nav bar, footer,
+// settings dropdown, reference drawer, announcement strip, "On this page" list, and the
+// "Last updated" provenance line. These build fragments that renderPage assembles around
+// the article; they never call it, so this module sits below engine/page in the layering.
 import "fs";
 import "io";
 import "markdown";
@@ -15,9 +12,9 @@ import "lib/html" as _;
 import "lib/text" as _;
 import "lib/date" as _;
 
-// Footer crediting the last commit that touched a page's source (a magus/-relative
-// path), falling back to HEAD for a not-yet-committed file. Keying off the file's
-// own history means a page changes when its source does, not when any commit lands.
+// Footer crediting the last commit that touched a page's source, falling back to HEAD for
+// a not-yet-committed file. Keying off the file's own history means a page changes when its
+// source does, not when any commit lands.
 export fun renderCommitFooter(path: str, site: Site) > str {
     var cFull = site.metaFull;
     var cShort = site.metaShort;
@@ -29,17 +26,14 @@ export fun renderCommitFooter(path: str, site: Site) > str {
         cShort = parts[1];
         cStamp = parts[2];
     }
-    // "Last updated" line: the always-visible provenance. A <small> paragraph so
-    // Pico's typography sets the muted look; no custom classes. It stays one inline
-    // line (no newlines) so the templates below carry none either.
+    // "Last updated" line: always-visible provenance. A <small> paragraph so Pico's
+    // typography sets the muted look, no custom classes. One inline line (no newlines).
     var line = template.render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,
         {"stampAttr": cStamp, "stampDisplay": formatISO(cStamp), "gh": site.config.repoURL, "full": cFull, "short": cShort});
 
-    // <details> disclosure of the EARLIER commits that touched this page (the latest
-    // is already named above, so it is skipped to avoid a double reference). Semantic
-    // markup only - Pico styles <details>/<summary>/<ul>/<code>/<small>/<a> natively.
-    // Gated on the file having a real history entry; synthesized pages fall back to
-    // the "Last updated" line alone, and a single-commit page shows nothing extra.
+    // <details> disclosure of the EARLIER commits (the latest is named above, so it is
+    // skipped to avoid a double reference). Semantic markup only. Gated on a real history
+    // entry; synthesized or single-commit pages show nothing extra.
     final histKey = site.metaPrefix + path;
     final hist = site.metaHistory[histKey];
     if (hist != null and hist.len() > 0) {
@@ -66,18 +60,10 @@ export fun renderCommitFooter(path: str, site: Site) > str {
     return line;
 }
 
-// rootPrefix moved to engine/route.buzz.
-
-// (moved to engine/meta.buzz)
-
-// (moved to engine/meta.buzz)
-
-// renderTocList builds the "On this page" block from a rendered page's h2/h3 headings
-// (goldmark produces each on its own line with a slug id); h3s nest under their h2.
-// Returns "" with fewer than three headings — too little to warrant a sidebar (a
-// module page with one "Methods" h2 over many h3 methods still qualifies). It returns
-// just the title + list; renderPage() wraps it (with any section nav) in the .toc
-// <aside>. toc.js layers scroll-spy + the collapse toggle onto that markup.
+// renderTocList builds the "On this page" block from a page's h2/h3 headings (goldmark
+// puts each on its own line with a slug id); h3s nest under their h2. Returns "" below
+// three headings - too little for a sidebar. Returns just the title + list; renderPage()
+// wraps it in the .toc <aside>, and toc.js adds scroll-spy + the collapse toggle.
 export fun renderTocList(content: str) > str {
     final lines = content.split("\n");
     var nHead = 0;
@@ -104,9 +90,8 @@ export fun renderTocList(content: str) > str {
                     final end = inner.indexOf("</h");
                     var label = inner;
                     if (end != null) { label = inner.sub(0, end); }
-                    // TOC entries render as plain text - drop inline <code>,
-                    // <strong>, <em> etc from the heading so nothing in the
-                    // sidebar looks bold, italic, or code-styled.
+                    // TOC entries are plain text: drop inline <code>/<strong>/<em> so
+                    // nothing in the sidebar looks bold, italic, or code-styled.
                     final plain = stripTags(label);
                     final link = "<a href=\"#" + id + "\" title=\"" + plain + "\">" + plain + "</a>";
                     if (lvl == 2) {
@@ -134,18 +119,12 @@ export fun renderTocList(content: str) > str {
 `, {"ul": ul});
 }
 
-// navLink renders one top-nav item, marking it aria-current when it is the page
-// the visitor is currently on (key == active).
-
-// renderSettingsPanel renders the gear button and its dropdown - the rightmost control
-// in every top bar. The theme (auto/light/dark) select lives here on EVERY page: it
-// replaced the standalone toggle button so the bar carries two trailing controls
-// (reference + gear), not three. showConsole adds the daemon-app operator prefs (refresh
-// rate, daemon host) that only the console apps read and persist; the docs, playground,
-// 404, and offline pages get the theme row alone. console-settings.js opens/closes the
-// panel (and persists poll/host); theme.js seeds and drives the #theme-cycle button
-// (click cycles auto/light/dark), since it owns the pre-paint theme set(). Both scripts
-// no-op when their controls are absent.
+// renderSettingsPanel renders the gear button and its dropdown, the rightmost control in
+// every top bar. The theme (auto/light/dark) cycle lives here on EVERY page. showConsole
+// adds the daemon-app operator prefs (refresh rate, daemon host) that only the console apps
+// read; docs, playground, 404, and offline get the theme row alone. console-settings.js
+// opens/closes the panel and persists poll/host; theme.js drives #theme-cycle (it owns the
+// pre-paint theme set()). Both scripts no-op when their controls are absent.
 export fun renderSettingsPanel(showConsole: bool) > str {
     var rows = "";
     if (showConsole) {
@@ -153,10 +132,9 @@ export fun renderSettingsPanel(showConsole: bool) > str {
           <label class="settings-row"><span>Daemon host</span><input id="settings-host" type="text" placeholder="127.0.0.1:7391" spellcheck="false" autocomplete="off"></label>
 `;
     }
-    // "Saved locally" rather than "in this browser": these apps install as a PWA, so the
-    // browser framing reads wrong. The reload behavior is no longer stated here - changing a
-    // console pref now raises a "reload to apply" toast (console-settings.js), so the note
-    // stays short and the same on every surface.
+    // "Saved locally" rather than "in this browser": these apps install as a PWA, so
+    // browser framing reads wrong. Changing a console pref raises a "reload to apply" toast
+    // (console-settings.js), so the note stays short and identical on every surface.
     final note = "Saved locally.";
     final tmpl = `        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
         <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
@@ -168,26 +146,19 @@ export fun renderSettingsPanel(showConsole: bool) > str {
 }
 
 // renderSiteNav renders the shared top bar (brand + section links + settings gear). One
-// definition for every page - docs pages via renderPage(), the 404, and the playground
-// (build-time injected via renderPlayground) - so adding a nav item lands everywhere
-// at once. root is the relative prefix back to gen/'s root; active is the current
-// section's key (or "" for none). withRef controls the Reference (drawer trigger)
-// button: it is shown only where the page actually ships a #ref-drawer + ref-drawer.js
-// and loads console.css (which sizes the icon button) - the docs pages and the
-// playground (whose drawer holds its "not everything runs here" module note). The 404
-// and offline pages have no reference content, so they pass false to omit the trigger
-// and its divider rather than render an oversized, dead button.
+// definition for every page, so adding a nav item lands everywhere at once. root is the
+// prefix back to gen/'s root; active is the current section's key (or ""). withRef shows
+// the Reference drawer trigger only where the page ships #ref-drawer + ref-drawer.js and
+// loads console.css (which sizes the icon button): the docs and playground. The 404 and
+// offline pages have no reference content, so they pass false to omit the button.
 export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > str {
-    // On mobile the five section links collapse behind a menu button. That button is a
-    // plain Pico .outline <button> (like the theme toggle) - NOT a <details>, whose Pico
-    // accordion styling we kept having to fight - so it inherits the button look for free
-    // and nav.js toggles the dropdown. Brand + theme toggle stay outside it, always shown.
-    // The toggle icon swaps hamburger -> X when the menu is open (CSS keys off
-    // .nav-right.nav-open); both glyphs ship in the button, one shows at a time. The
-    // "Menu" caption and the closing hint are mobile-popup only (aria-hidden on
-    // desktop). Home is an explicit link because the brand mark's accessible name is
-    // just "magus". The {{#links}} section marks the active item with aria-current;
-    // a backtick raw string holds the Mustache verbatim.
+    // On mobile the section links collapse behind a menu button - a plain Pico .outline
+    // <button>, NOT a <details> (whose accordion styling fights us), so nav.js toggles the
+    // dropdown and it inherits the button look. Brand + theme toggle stay outside, always
+    // shown. The toggle icon swaps hamburger -> X when open (CSS keys off .nav-open); both
+    // glyphs ship, one shows at a time. The "Menu" caption and closing hint are mobile-only
+    // (aria-hidden on desktop). Home is an explicit link because the brand mark's accessible
+    // name is just "magus". A backtick raw string holds the Mustache verbatim.
     final tmpl = `  <header class="site-header">
     <nav class="container">
       <ul><li><a href="{{root}}index.html" class="contrast"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="65" height="48" alt=""></picture> <strong>{{title}}</strong></a></li></ul>
@@ -205,10 +176,9 @@ export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > s
     </nav>
   </header>
 `;
-    // The nav is data-driven from Config: each entry's href is root + suffix (so it stays
-    // depth-relative), and the active section is the one whose key matches `active`. A blank
-    // entry (the console, the only link that leaves the docs) opens in a new tab; the template
-    // adds the "opens elsewhere" arrow and target=_blank off that flag.
+    // The nav is data-driven from Config: each entry's href is root + suffix (depth-relative)
+    // and the active section is the one whose key matches `active`. A blank entry (the
+    // console, the only off-docs link) opens in a new tab, with the arrow off that flag.
     final links = mut [<{str: any}>];
     foreach (nl in cfg.navLinks) {
         links.append({"href": root + nl.suffix, "label": nl.label, "current": active == nl.key, "blank": nl.blank});
@@ -216,14 +186,11 @@ export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > s
     return template.render(tmpl, {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
 }
 
-// renderReferenceDrawer returns the docs-site reference panel: the same slide-out drawer the console
-// apps use (styled by console.css, driven by ref-drawer.js), but WITHOUT data-relocate-search so the
-// docs keep their prominent top search bar in place. Its one .ref-section links the key reference
-// pages; ref-drawer.js relocates it into the drawer and the inline-browse feature opens each one in
-// the panel (no navigating away). root is the relative prefix back to gen/'s root.
-// Cached, root-templated reference content. Each doc is rendered to HTML ONCE, then its root-relative
-// links ("../X", from a depth-1 page) get a %%ROOT%% marker so renderReferenceDrawer can substitute
-// the embedding page's own root prefix per page - the same content works from any depth.
+// renderReferenceDrawer returns the docs-site reference panel: the same slide-out drawer the
+// console apps use (console.css + ref-drawer.js), but WITHOUT data-relocate-search so the docs
+// keep their top search bar. root is the prefix back to gen/'s root.
+// Reference content is rendered to HTML ONCE and cached; its root-relative links ("../X") get a
+// %%ROOT%% marker so the embedding page's own root prefix substitutes per page, working at any depth.
 var _refGlossary = "";
 var _refConventions = "";
 var _refLoaded = false;
@@ -273,20 +240,15 @@ export fun renderReferenceDrawer(root: str, site: Site) > str {
     return template.render(tmpl, {"root": root, "glossary": glossary, "conventions": conventions});
 }
 
-// renderSiteFooter renders the shared one-line attribution footer. It leads with two
-// root-relative site links (the Search tool and the /public/ file tree) so those
-// surfaces are reachable from every page, then the absolute GitHub/Buzz links; the
-// License link points at the pinned site.metaBranch (main) like the other GitHub links.
-// root is the relative prefix back to gen/'s root (so the site links resolve at any
-// page depth), matching renderSiteNav's root argument.
+// renderSiteFooter renders the shared one-line attribution footer: root-relative site links
+// (Search, /public/ files) reachable from every page, then absolute GitHub/Buzz links. The
+// License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root,
+// so the site links resolve at any depth.
 export fun renderSiteFooter(root: str, site: Site) > str {
-    // Two clusters spread across the footer's width: this site's own surfaces on
-    // the left, the project/external links on the right. Dots separate items within
-    // a cluster; the clusters divide the row without adding a second line on desktop.
-    // The middle cluster's app entry is the Console (the single entry point to the browser
-    // apps, matching the header) - the dashboard, graph, logs, and activity are its tabs.
-    // Backtick raw string holds the Mustache verbatim (a double-quoted "{{x}}" would
-    // collide with Buzz's own {expr} interpolation).
+    // Clusters spread across the footer's width: this site's surfaces, the browser apps, and
+    // the project/external links. The app entry is the Console (single entry point, matching
+    // the header); dashboard/graph/logs/activity are its tabs. Backtick raw string holds the
+    // Mustache verbatim (double-quoted "{{x}}" would collide with Buzz's {expr}).
     final tmpl = `  <footer class="site-footer container">
     <small class="footer-group"><a href="{{root}}search/">Search</a> &middot; <a href="{{root}}public/">Files</a></small>
     <small class="footer-group"><a href="{{root}}console/">Console</a> &middot; <a href="{{root}}playground/">Playground</a> &middot; <a href="{{root}}tour/">Tour</a></small>
@@ -297,11 +259,10 @@ export fun renderSiteFooter(root: str, site: Site) > str {
 }
 
 
-// renderAnnouncementBar renders a dismissible top strip announcing the newest shipped
-// release, or "" when none has shipped yet (so it stays dormant until then). The
-// version comes from loadReleases (releases/*.yaml), so it is drift-stable;
-// announcement.js hides it once the reader dismisses that version and re-shows it on
-// the next release. The GitHub tag link mirrors the releases Atom feed's convention.
+// renderAnnouncementBar renders a dismissible strip announcing the newest shipped release,
+// or "" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it
+// is drift-stable; announcement.js hides it once the reader dismisses that version and
+// re-shows it on the next release.
 export fun renderAnnouncementBar(site: Site) > str {
     if (site.releases.len() == 0) { return ""; }
     final ver = site.releases[0].version;

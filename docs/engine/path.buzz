@@ -1,9 +1,7 @@
-// engine/path.buzz - filesystem/walk predicates the content walks share: whether a
-// path is a directory, and which docs-root children belong to the SSG itself rather
-// than the docs content. Pure (os only, no Site), so it is a leaf module that both
-// engine/types.buzz (Site.collectDocPages) and render.buzz (walk/walkBlog) flat-import
-// (`import "engine/path" as _`) without an import cycle. The generated-name lists are
-// passed in from Config (generatorDirs/generatorFiles), not hardcoded here.
+// engine/path.buzz - walk predicates: is a path a directory, and which docs-root children
+// are the SSG's own files rather than content. Pure (os only, no Site) so it stays a leaf
+// that both engine/types.buzz and render.buzz flat-import without a cycle. The
+// generated-name lists come from Config (generatorDirs/generatorFiles), not hardcoded.
 import "os";
 
 // True if path is a directory.
@@ -11,17 +9,12 @@ export fun isDirectory(path: str) > bool {
     return os.execute(["test", "-d", path]) == 0;
 }
 
-// isGeneratorDir reports whether a docs-ROOT child directory belongs to the SSG
-// itself rather than the docs content. The generator now lives co-located with the
-// markdown it renders (the SSG moved from website/ into docs/), so the content walk
-// shares a tree with node_modules/ (pnpm deps), gen/ (this render's own output),
-// src/ (the client bundle sources), and tour/ (the .buzz tour scripts). Walking those
-// would ingest stray .md (package READMEs, generated index.md) as documentation pages,
-// so the content walks skip them. CRUCIAL: only these EXACT docs-root children are
-// skipped - the check is guarded by rel == "" at the call sites, NOT applied by name at
-// every depth, so a content subdir that happened to share one of these names would still
-// be walked. Real content subdirs at the root (reference/, spells/, targets/, codes/,
-// manpage/, ...) are not listed and are walked as before.
+// isGeneratorDir reports whether a docs-ROOT child directory is the SSG's own rather than
+// content. The SSG sits co-located with its markdown, so the content walk shares a tree
+// with node_modules/, gen/, src/, and tour/, whose stray .md (package READMEs, generated
+// index.md) must not be ingested as pages. CRUCIAL: call sites guard on rel == "", so only
+// EXACT docs-root children are skipped - a content subdir sharing one of these names at any
+// depth is still walked.
 export fun isGeneratorDir(name: str, dirs: [str]) > bool {
     foreach (d in dirs) {
         if (name == d) { return true; }
@@ -30,11 +23,9 @@ export fun isGeneratorDir(name: str, dirs: [str]) > bool {
 }
 
 // isGeneratorFile reports whether a docs-ROOT .md file is an SSG artifact rather than
-// content. MAGUS.md is this project's generated target catalog (a declared output,
-// refreshed by md-generate), which now sits at the docs root alongside the markdown; the
-// content walk must not render it as a doc page. It is discovered instead through
-// renderDevelopment (the /development/ project catalog). Like isGeneratorDir, this is
-// only consulted at the docs root (rel == "").
+// content. MAGUS.md (the generated target catalog) sits at the docs root but must not
+// render as a doc page; it surfaces instead via renderDevelopment. Like isGeneratorDir,
+// consulted only at the docs root (rel == "").
 export fun isGeneratorFile(name: str, files: [str]) > bool {
     foreach (f in files) {
         if (name == f) { return true; }

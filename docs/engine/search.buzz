@@ -1,6 +1,6 @@
-// engine/search.buzz - the /search/ page: renderSearchPage builds the offline
-// client-side search UI over the site's search-index.json; renderSyntaxRow is its
-// query-syntax help row. site_render calls renderSearchPage once, post-walk.
+// engine/search.buzz - the /search/ page: renderSearchPage builds the offline client-side
+// search UI over search-index.json; renderSyntaxRow is its query-syntax help row. Called
+// once post-walk.
 import "fs";
 import "io";
 import "std";
@@ -10,15 +10,13 @@ import "engine/types" as _;
 import "engine/route" as _;
 import "engine/page" as _;
 
-// renderSearchPage writes gen/search/index.html: the dedicated, deep-linkable search
-// surface. It is a tool page (no markdown source; kept out of the search index and
-// sitemap, and out of the provenance/edit chrome via the srcRel guards in renderPage()).
-// The #search-page container is the signal search.js keys off to switch from the
-// header dropdown to full-page, URL-synced (?q=) results. Emitted after the walk so
-// it is a peer of renderPublic()/render404().
+// renderSearchPage writes gen/search/index.html: the deep-linkable search surface. A tool
+// page (no markdown source; kept out of the search index, sitemap, and provenance chrome
+// via renderPage()'s srcRel guards). The #search-page container is the signal search.js
+// keys off to switch from the header dropdown to full-page, URL-synced (?q=) results.
 // renderSyntaxRow renders one Search Syntax entry: a clickable example that runs itself
-// (search.js intercepts the ?q= link) beside a plain-language description. The query
-// is url-encoded for the href and entity-escaped for its <code> display.
+// (search.js intercepts the ?q= link) beside a plain-language description. The query is
+// url-encoded for the href and entity-escaped for its <code> display.
 fun renderSyntaxRow(q: str, desc: str) > str {
     return template.render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
 `, {"qEnc": encoding.urlEncode(q), "q": q, "desc": desc});
@@ -27,14 +25,11 @@ fun renderSyntaxRow(q: str, desc: str) > str {
 
 export fun renderSearchPage(site: Site) > void {
     final root = rootPrefix("search/index.md", site);
-    // Always-open, forefront syntax reference: on the dedicated page the query
-    // language is a first-class part of the surface, not a disclosure to hunt for
-    // (the header dropdown carries only a compact hint). Each example is a real ?q=
-    // link, so it works without JS and doubles as teach-by-doing once search.js runs
-    // it in place.
-    // The query examples as a view-model of pre-rendered <dt>/<dd> rows (renderSyntaxRow
-    // does the urlEncode); the template arranges the two-column layout. Results come
-    // first in the DOM so a narrow-screen collapse stacks them above the reference.
+    // Always-open syntax reference: on the dedicated page the query language is first-class,
+    // not a disclosure to hunt for. Each example is a real ?q= link, so it works without JS
+    // and doubles as teach-by-doing once search.js runs it in place. Rows are pre-rendered
+    // <dt>/<dd> (renderSyntaxRow does the urlEncode); results come first in the DOM so a
+    // narrow-screen collapse stacks them above the reference.
     final rows = renderSyntaxRow("tag:build", "Pages carrying the exact tag \"build\".")
         + renderSyntaxRow("-tag:spell", "Exclude pages with a tag.")
         + renderSyntaxRow("tag:\"remote cache\"", "Quote values that contain spaces.")

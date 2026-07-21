@@ -1,11 +1,9 @@
-// engine/types.buzz - the docs build's data model: the Site build-state object plus
-// the small record types (BlogPost, DocPage, Release) the walk fills in. Site owns the
-// state-management and per-page navigation logic that only needs the leaf helpers below
-// (search-index bookkeeping, alias collection, the relatedness corpus, breadcrumb /
-// related / in-section nav); the build-orchestration steps that reach into git metadata
-// or the post-render integrity gates live as free functions in render.buzz, so this file
-// imports only leaf modules and never forms an import cycle. Flat-imported by render.buzz
-// and by every writer module (`import "engine/types" as _`).
+// engine/types.buzz - the docs build's data model: the Site build-state object plus the
+// record types (BlogPost, DocPage, Release) the walk fills in. Site owns the state and
+// per-page navigation logic that needs only the leaf helpers below (search-index, alias
+// collection, relatedness corpus, breadcrumb/related/section nav). The steps that reach
+// into git metadata or the post-render gates live as free functions in engine/gates.buzz,
+// so this file imports only leaf modules and never forms an import cycle.
 import "fs";
 import "io";
 import "serialize";
@@ -30,16 +28,15 @@ export object NavLink {
     blank: bool = false,
 }
 
-// Config is the whole site-specific surface the engine renders against - the single
-// swap point that makes this SSG reusable. The engine reads it only through
-// Site.config; nothing in engine/ hardcodes a URL, a nav link, or a title. The
-// concrete magus value lives in site/config.buzz and is injected by render.buzz.
+// Config is the whole site-specific surface the engine renders against - the single swap
+// point that makes this SSG reusable. The engine reads it only through Site.config; nothing
+// in engine/ hardcodes a URL, nav link, or title. magus's concrete value lives in
+// site/config.buzz, injected by render.buzz.
 //
-// baseURL is the public base (with trailing slash); leave it "" to ship the SEO
-// files, Atom feeds, and PWA manifest dark until the host is confirmed. description
-// is the belt-and-suspenders page description when a page has neither a frontmatter
-// description nor a derivable first paragraph. generatorDirs/generatorFiles name the
-// generated outputs the source walk skips so they never leak in as content.
+// baseURL is the public base (trailing slash); "" ships the SEO files, Atom feeds, and PWA
+// manifest dark until the host is confirmed. description is the fallback page description
+// when a page has neither frontmatter nor a derivable first paragraph. generatorDirs/
+// generatorFiles name the generated outputs the walk skips so they never leak in as content.
 export object Config {
     baseURL: str = "",
     title: str = "",
@@ -81,13 +78,11 @@ export object DocPage {
     srcRel: str = "",
 }
 
-// Release is one release entry read from releases/v<semver>.yaml. The body field
-// holds the trimmed markdown for the Atom feed; artifacts is the list of release
-// assets with their integrity data (name, platform, size, sha256).
-// notes* fields carry the Keep-a-Changelog sections as structured string lists;
-// yanked marks a release that should not be used (security issue, etc.).
-// These fields mirror the Go ReleaseManifest struct (cmd/magus-utils/release.go)
-// so the index.json schema is a proper frozen v1.
+// Release is one entry read from releases/v<semver>.yaml. body is the trimmed markdown for
+// the Atom feed; artifacts holds the release assets with integrity data (name, platform,
+// size, sha256); notes* carry the Keep-a-Changelog sections; yanked marks a release not to
+// be used. These fields mirror the Go ReleaseManifest struct (cmd/magus-utils/release.go)
+// so index.json stays a frozen v1 schema.
 export object Release {
     version: str = "",
     date: str = "",
@@ -97,35 +92,33 @@ export object Release {
     notesFixed: [str] = mut [<str>],
     notesRemoved: [str] = mut [<str>],
     yanked: bool = false,
-    // artifacts holds the release assets. Each entry has: name, platform, size, sha256.
-    // size and sha256 may be "" for historical releases migrated without artifact data.
+    // Each entry has name, platform, size, sha256; size/sha256 may be "" for historical
+    // releases migrated without artifact data.
     artifacts: [{str: str}] = mut [<{str: str}>],
 }
 
-// Site holds ALL the generator's state on one object instead of a scatter of module
-// globals: the input paths (set once by site_render), the per-page commit metadata,
-// the search-index records, the URL-alias / written-URL bookkeeping, and the
-// blog/doc/release collections. A single module-global instance (`site`) carries it;
-// the walk-scoped parts are reset per site_render().
+// Site holds ALL the generator's state on one object instead of scattered module globals:
+// input paths (set once by site_render), per-page commit metadata, search-index records,
+// URL-alias/written-URL bookkeeping, and the blog/doc/release collections. The walk-scoped
+// parts are reset per site_render().
 export object Site {
-    // Input paths, set once by site_render(). root is the magus/ workspace dir
-    // (relative to this project); docs and blog are source subtrees under root; out
-    // is the generated site output under this project.
+    // Input paths, set once by site_render(). root is the magus/ workspace dir (relative to
+    // this project); docs and blog are source subtrees under root; outDir is the generated
+    // output.
     root: str = "",
     docs: str = "",
     blog: str = "",
     outDir: str = "",
 
-    // The site-specific configuration this build renders against, injected once by
-    // site_render() from site/config.buzz. Immutable input, kept beside the mutable
-    // build state so every engine function that already threads a Site reaches its
-    // baseURL/title/nav/generator dirs without a global.
+    // The site-specific config, injected once by site_render() from site/config.buzz.
+    // Immutable input kept beside the mutable build state so every engine function that
+    // threads a Site reaches baseURL/title/nav/generator dirs without a global.
     config: Config = Config{},
 
-    // Per-page commit metadata, loaded lazily by loadMeta() at render time (NOT at
-    // magusfile load - these shell out to git, and a magusfile is parsed on every
-    // `magus ls`). metaHistory maps a repo-relative path to the last N commits that
-    // touched it ("full|short|stamp|subject" each), from one git-log pass.
+    // Per-page commit metadata, loaded lazily by loadMeta() at render time, NOT at magusfile
+    // load - these shell out to git, and a magusfile is parsed on every `magus ls`.
+    // metaHistory maps a repo-relative path to its last N commits ("full|short|stamp|subject"
+    // each), from one git-log pass.
     metaPrefix: str = "",
     metaBranch: str = "",
     metaFull: str = "",
@@ -147,14 +140,11 @@ export object Site {
     aliasTarget: {str: str} = mut {},
     pageUrls: {str: bool} = mut {},
 
-    // Every gen-root-relative file this render pass actually wrote, populated at the
-    // handful of choke points that own an output write (addRecord, writeAliases,
-    // renderAutoindex; a couple of one-off index.md siblings track themselves
-    // directly). pruneStaleOutputs() diffs this against what's really on disk after
-    // the render completes and deletes anything left over from a previous run whose
-    // source (a docs page, a blog post, an alias, a release) is gone - so a rename or
-    // deletion cleans up its old gen/ output without needing to nuke and rebuild the
-    // entire tree on every run.
+    // Every gen-root-relative file this render actually wrote, populated at the choke points
+    // that own a write (addRecord, writeAliases, renderAutoindex; a few one-off index.md
+    // siblings track themselves). pruneStaleOutputs() diffs this against disk and deletes
+    // leftovers from a previous run whose source is gone - so a rename or deletion cleans up
+    // its old output without nuking and rebuilding the whole tree.
     writtenPaths: {str: bool} = mut {},
 
     // Blog posts (consumed by the blog index, Atom feed, and pager). hasBlogPosts is
@@ -172,30 +162,24 @@ export object Site {
     // which matches semver descending for vX.Y.Z names).
     releases: [Release] = mut [<Release>],
 
-    // The default Content-Security-Policy meta content, computed once by
-    // computeCSP() at the top of site_render() and threaded verbatim into every
-    // page's head EXCEPT the home page (renderPage's pageTmpl for every non-home
-    // page, render404, writeOffline, and the hand-authored playground.html/
-    // graph.html - none of them embed the README's status badges, so none of them
-    // need img-src widened past same-origin). A build-once value rather than a
-    // per-page recomputation.
+    // The default CSP meta content, computed once by computeCSP() at the top of
+    // site_render() and threaded verbatim into every page's head EXCEPT home (non-home
+    // pages, render404, writeOffline, playground.html) - none embed the README's status
+    // badges, so none need img-src widened past same-origin.
     csp: str = "",
 
-    // The home-page-only Content-Security-Policy: identical to csp except its
-    // img-src also allows the two hosts the README's status badges load from (see
-    // computeCSP's doc comment). Only renderPage() reaches for this, and only when
-    // rendering README.md - every other page keeps the tighter default so an
-    // img-src GET (a channel connect-src cannot restrict) is not left open on
-    // pages that hold the reader's own dependency graph or source code.
+    // The home-only CSP: identical to csp but img-src also allows the two hosts the README's
+    // status badges load from. Only renderPage() uses it, only for README.md - every other
+    // page keeps the tighter default so an img-src GET (which connect-src can't restrict)
+    // stays closed on pages holding the reader's own graph or source.
     cspHome: str = "",
 
     // --- Methods that manage this state (pure helpers stay free functions below) ---
 
-    // addRecord appends one page's search-index record and marks its URL as written
-    // (so the alias pass can catch a redirect that shadows a real page). Called once
-    // per rendered page. Also records the page's index.html in writtenPaths (root's
-    // url is the bare "index.html" filename, every other url ends in "/") so
-    // pruneStaleOutputs knows this page is current.
+    // addRecord appends one page's search-index record and marks its URL written (so the
+    // alias pass catches a redirect shadowing a real page). Also records the index.html in
+    // writtenPaths (root's url is bare "index.html", every other ends in "/") so
+    // pruneStaleOutputs knows the page is current.
     fun addRecord(url: str, title: str, desc: str, md: str) > void {
         this.pageUrls[url] = true;
         var filePath = url;
@@ -280,9 +264,8 @@ export object Site {
             var childRel = name;
             if (rel != "") { childRel = rel + "/" + name; }
             if (isDirectory(this.root + "/" + this.docs + "/" + childRel)) {
-                // Skip the SSG's own root children (node_modules/gen/src/tour) - same skip
-                // as walk(), only at the docs root (rel == ""), so metadata collection
-                // matches what actually renders. See isGeneratorDir for why root-only.
+                // Skip the SSG's own root children (node_modules/gen/src/tour) - same skip as
+                // walk(), only at the docs root, so metadata matches what actually renders.
                 if (rel == "" and isGeneratorDir(name, this.config.generatorDirs)) { continue; }
                 this.collectDocPages(childRel);
             } else {
@@ -297,9 +280,8 @@ export object Site {
     // title (looked up in docPages via lookupTitle).
     fun renderBreadcrumb(srcRel: str, title: str, root: str) > str {
         if (srcRel == "README.md") { return ""; }
-        // The crumb <li>s are computed per branch below (titles, links, current
-        // markers); this one template wraps whichever list a branch builds. li is
-        // injected raw - it is already-assembled markup, not a value to escape.
+        // Each branch below builds its own crumb <li>s; this template wraps whichever list.
+        // li injects raw - it is assembled markup, not a value to escape.
         final bcTmpl = `    <nav class="breadcrumb" aria-label="Breadcrumb">
       <ul>{{{li}}}</ul>
     </nav>
@@ -368,12 +350,11 @@ export object Site {
         var dirCount = segs.len() - 1;                              // directory segments before the file
         if (landing and dirCount > 0) { dirCount = dirCount - 1; }  // a landing's own dir is the leaf
 
-        // Each intermediate crumb reads as the exact title of the page it links to
-        // (looked up in docPages by URL), so the trail is consistent with the site's
-        // own naming instead of a first-letter-capped URL segment. A crumb links when a
-        // real page owns that URL - whether from an in-dir index (codes/race/README.md)
-        // or a sibling-file landing (targets.md next to the targets/ subtree). Segments
-        // with no page (e.g. the bare "codes/" grouping) fall back to a capitalized label.
+        // Each intermediate crumb reads as the exact title of the page it links to (looked
+        // up in docPages by URL), not a capped URL segment. A crumb links when a real page
+        // owns that URL - an in-dir index (codes/race/README.md) or a sibling-file landing
+        // (targets.md next to targets/); segments with no page (bare "codes/") fall back to a
+        // capitalized label.
         var acc = "";
         var i = 0;
         while (i < dirCount) {
@@ -389,8 +370,7 @@ export object Site {
             i = i + 1;
         }
 
-        // The leaf is the current page's own title (faithful for both a landing and a
-        // regular page), matching how the intermediate crumbs now read.
+        // The leaf is the current page's own title, matching how the intermediate crumbs read.
         li = li + "<li aria-current=\"page\">" + title + "</li>";
         return template.render(bcTmpl, {"li": li});
     }
@@ -484,16 +464,13 @@ export object Site {
 `, {"root": root, "picks": picks});
     }
 
-    // renderSectionNav builds the "In this section" sidebar list: the pages that are
-    // direct children of this page's section overview - the nearest-ancestor overview
-    // page whose clean URL is a prefix of this one (or this page itself, when it is the
-    // overview). It gives every page in a section a consistent, structural list of its
-    // siblings, and every overview a list of its children - the down/lateral axis the
-    // breadcrumb (up) and pager (prev/next) do not provide, replacing per-page hand
-    // curation with the same corpus the orphan gate already walks. The current page is
-    // marked aria-current. "" when the page belongs to no section (a top-level page with
-    // no overview ancestor) or the section has no children. curUrl is the page's own
-    // clean URL; root is its gen-root-relative prefix (as renderRelated uses).
+    // renderSectionNav builds the "In this section" list: the direct children of this page's
+    // section overview - the nearest-ancestor overview whose clean URL is a prefix of this
+    // one (or this page itself, when it is the overview). It gives every page a structural
+    // sibling/child list - the down/lateral axis the breadcrumb (up) and pager (prev/next)
+    // don't provide. The current page is marked aria-current. "" when the page has no section
+    // (no overview ancestor) or the section has no children. curUrl is the page's clean URL;
+    // root is its gen-root-relative prefix.
     fun renderSectionNav(srcRel: str, curUrl: str, root: str) > str {
         if (curUrl == "") { return ""; }
         // The section root: this page if it is itself an overview, else the longest
@@ -528,9 +505,8 @@ export object Site {
         if (kids.len() == 0) { return ""; }
         final ordered = kids.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["url"], b["url"]); });
 
-        // Render through Mustache (like renderRelated) so {{title}} is HTML-escaped in
-        // both the link text and the title attribute - a page title is trusted but the
-        // hand-built string this replaced escaped only the attribute, not the text.
+        // Render through Mustache so {{title}} is HTML-escaped in both the link text and the
+        // title attribute.
         var picks: [{str: any}] = mut [<{str: any}>];
         foreach (k in ordered) {
             picks.append(mut {"url": k["url"], "title": k["title"], "current": k["url"] == curUrl});
@@ -556,11 +532,10 @@ export object Site {
 }
 
 
-// Tests for the Site build-state methods defined above. Run them with the
-// docs `buzz-test` target (`magus buzz -t --embedded render.buzz`), which reaches
-// this module transitively through render.buzz's flat imports; each also runs
-// standalone via `magus buzz -t --embedded engine/types.buzz`. Buzz's == is
-// identity (not structural) for maps, so assert.equal does the value comparison.
+// Tests for the Site methods above. Run via the docs `buzz-test` target
+// (`magus buzz -t --embedded render.buzz`), which reaches this module through render.buzz's
+// flat imports, or standalone (`magus buzz -t --embedded engine/types.buzz`). Buzz's == is
+// identity for maps, so assert.equal does the value comparison.
 test "Site.collectAlias trims slashes and records every alias" {
     final s = mut Site{};
     s.collectAlias("/old-path/", "new-path/");

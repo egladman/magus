@@ -15,12 +15,10 @@ import "engine/meta" as _;
 import "engine/types" as _;
 import "engine/page" as _;
 
-// renderBlogPost renders one blog/<file>.md as its own directory-index page. base
-// is the file's basename (e.g. "2026-07-01-hello-blog.md"); the written URL is date-
-// scoped, blog/<YYYY>/<MM>/<DD>/<slug>/ (via blogURLPath, from the filename's date
-// prefix), so permalinks sort by date and never collide across years. Post metadata
-// (title/date/description) is captured into site.blogPosts for the index page (and,
-// later, the Atom feed).
+// renderBlogPost renders one blog/<file>.md as its own directory-index page. base is the
+// basename (e.g. "2026-07-01-hello-blog.md"); the URL is date-scoped blog/YYYY/MM/DD/slug/
+// (via blogURLPath), so permalinks sort by date and never collide across years. Post
+// metadata is captured into site.blogPosts for the index page.
 export fun renderBlogPost(base: str, site: Site) > void {
     final rel = site.blog + "/" + base;
     final f = io.File.open(site.root + "/" + rel, io.FileMode.read);
@@ -32,15 +30,14 @@ export fun renderBlogPost(base: str, site: Site) > void {
     if (title == "") { title = deriveTitle(md, base); }
     final date = fm.q("date").stringValue();
 
-    // Frontmatter `date` is the human-facing byline; the filename's YYYY-MM-DD-
-    // prefix is the canonical URL scope. Require them to agree so the permalink and
-    // the printed date can never drift. A post with a date but no filename prefix
-    // (or a mismatched one) is a hard error, not a silent divergence.
+    // Frontmatter `date` is the byline; the filename's YYYY-MM-DD- prefix is the canonical
+    // URL scope. Require them to agree so the permalink and the printed date can't drift; a
+    // missing or mismatched prefix is a hard error, not a silent divergence.
     final dateDir = blogDateDirectory(base);
     if (date != "") {
-        // Frontmatter dates decode as full RFC3339 ("2026-07-01T00:00:00Z"); take
-        // the calendar day and re-slash it to compare against the filename's
-        // "YYYY/MM/DD" scope. (str.replace is first-match only, so build by split.)
+        // Frontmatter dates decode as full RFC3339; take the calendar day and re-slash it to
+        // compare against the filename's "YYYY/MM/DD" scope. (str.replace is first-match only,
+        // so build by split.)
         final fp = date.split("T")[0].split("-");   // ["2026","07","01"]
         var fmDir = "";
         if (fp.len() >= 3) { fmDir = fp[0] + "/" + fp[1] + "/" + fp[2]; }
@@ -57,21 +54,18 @@ export fun renderBlogPost(base: str, site: Site) > void {
     final slug = blogSlug(base);
     final urlPath = blogURLPath(base);        // "2026/07/01/hello-blog"
     final url = site.blog + "/" + urlPath + "/";
-    // Blog posts sit at gen/blog/<urlPath>/index.html. Their old flat directory was
-    // "blog"; their new clean directory is "blog/<urlPath>" (date-scoped). The link
-    // rewriter needs both so cross-references (../../documentation/) resolve at the
-    // post's real depth.
+    // Blog posts sit at gen/blog/<urlPath>/index.html. The link rewriter needs both the flat
+    // directory ("blog") and the date-scoped clean directory ("blog/<urlPath>") so
+    // cross-references (../../documentation/) resolve at the post's real depth.
     final html = renderContentHTML(markdown.toHtml(md), site.blog, site.blog + "/" + urlPath);
 
     var desc = fm.q("description").stringValue();
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = site.config.description; }
 
-    // Dateline: a scoped byline injected directly under the post's H1 - publish
-    // date (calendar day; see blogDate), author, and a permalink to the post's
-    // own canonical URL. Sitting inside the <article> right after the title, it
-    // reads as the post's metadata rather than free-floating page chrome. Guarded
-    // on there being an H1 and a date; a title-less or undated post just skips it.
+    // Dateline: a byline under the post's H1 - date, author, and a permalink to the canonical
+    // URL. Inside the <article> after the title, so it reads as post metadata, not page
+    // chrome. Guarded on an H1 and a date; a title-less or undated post skips it.
     var article = html;
     final h1End = html.indexOf("</h1>");
     if (h1End != null and date != "") {
@@ -106,10 +100,9 @@ export fun renderBlogPost(base: str, site: Site) > void {
 }
 
 
-// renderBlogPager renders the previous/next links between posts, ordered by date
-// (newest to oldest so "next" is older and "prev" is newer, matching timeline
-// intuition). Falls back to filename order when a post lacks a date. Reuses
-// renderPagerLink's climb-relative sibling link form.
+// renderBlogPager renders the prev/next links between posts, ordered by date newest-first
+// so "prev" is newer and "next" is older (timeline intuition). Falls back to filename order
+// when a post lacks a date.
 fun renderBlogPager(base: str, site: Site) > str {
     // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
     // during the walk). Newest first.
@@ -141,9 +134,9 @@ fun renderBlogPager(base: str, site: Site) > str {
     }
     if (pos < 0) { return ""; }
 
-    // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link is no longer
-    // a flat "../<slug>/"; relativePath walks from this post's dir to the target's URL
-    // and writes the minimal climb, correct across any shared date prefix.
+    // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link isn't a flat
+    // "../<slug>/": relativePath walks from this post's dir to the target and writes the
+    // minimal climb, correct across any shared date prefix.
     final fromDir = site.blog + "/" + blogURLPath(base);
     var body = "";
     // Previous = newer post (earlier in ordered), Next = older post (later).
@@ -166,10 +159,9 @@ fun renderBlogPager(base: str, site: Site) > str {
 }
 
 
-// renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the
-// collected blog posts. It runs AFTER renderBlogPost has populated site.blogPosts for
-// every post in the walk. The listing is a plain <ul> under the shared renderPage()
-// template, so it inherits nav/breadcrumb/footer for free.
+// renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected
+// posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain <ul> under
+// renderPage(), so it inherits nav/breadcrumb/footer.
 export fun renderBlogIndex(site: Site) > void {
     // Newest first, tiebreak by base for determinism.
     final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
@@ -208,11 +200,10 @@ export fun renderBlogIndex(site: Site) > void {
     final title = "Blog";
     final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
     final url = site.blog + "/";
-    // srcRel for the index page: a blog/index.md marker so renderPage() picks the "blog"
-    // active-nav key and the breadcrumb roots correctly, even though there is no
-    // source file. Alias the marker's commit-footer key to the newest post's own
-    // commit so the "Last updated" line is a stable snapshot instead of tracking
-    // HEAD (which would drift every commit and break the drift gate).
+    // srcRel is a blog/index.md marker (no source file) so renderPage() picks the "blog"
+    // nav key and roots the breadcrumb. Alias its commit-footer key to the newest post's
+    // commit so "Last updated" is a stable snapshot, not HEAD - which would drift every
+    // commit and break the drift gate.
     if (sorted.len() > 0) {
         final rec = site.metaCommits[site.metaPrefix + site.blog + "/" + sorted[0].base];
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
@@ -222,8 +213,8 @@ export fun renderBlogIndex(site: Site) > void {
     final of = io.File.open(site.outDir + "/" + site.blog + "/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
-    // The index is a real page, so it belongs in the search index and sitemap.
-    // No frontmatter tags/description — the resolved desc above rides through.
+    // A real page, so it belongs in the search index and sitemap. No frontmatter
+    // tags/description; the resolved desc above rides through.
     site.pageUrls[url] = true;
     // Build a fake mini record so addRecord's shape stays consistent.
     final recStub = "---\ntitle: " + title + "\ndescription: " + desc + "\ntags: []\n---\nBlog listing.\n";

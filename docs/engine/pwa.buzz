@@ -1,7 +1,6 @@
-// engine/pwa.buzz - the Progressive Web App wiring that makes the docs installable and
-// offline-capable: the web app manifest (writeManifest) and the service worker
-// (buildServiceWorker, which bundles src/site/service-worker.ts). Both are gated on a
-// configured base URL; run once post-walk from render.buzz.
+// engine/pwa.buzz - PWA wiring that makes the docs installable and offline-capable: the
+// web app manifest (writeManifest) and the service worker (buildServiceWorker, bundling
+// src/site/service-worker.ts). Both gated on a configured base URL, run post-walk.
 import "fs";
 import "os";
 import "crypto";
@@ -11,28 +10,23 @@ import "lib/text" as _;
 import "lib/csp" as _;
 import "engine/route" as _;
 
-// writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers
-// (mostly on Android and Windows) read to allow "install this site". Icons
-// use the gopher-magus mark; scope/start_url match the deploy base so a
-// nested install stays inside /magus/. Gated on site.config.baseURL so a same-origin
-// scope is well-defined; without it we'd default to "/" and mis-scope.
+// writeManifest writes gen/manifest.webmanifest - the PWA metadata browsers read to allow
+// "install this site". scope/start_url match the deploy base so a nested install stays
+// inside /magus/. Gated on baseURL so the scope is well-defined; without it we'd default
+// to "/" and mis-scope.
 export fun writeManifest(site: Site) > void {
     if (site.config.baseURL == "") { return; }
     final basePath = sitePathPrefix(site.config.baseURL);
     // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
     // (see gopherbuzz/testdata/54_raw_string.buzz).
-    // Icons: favicon-32 and apple-touch-icon are the legacy set; icon-192/512 target
-    // Android/Windows install prompts; icon-512-maskable carries a solid #13171f
-    // background so the gopher-magus mark stays centered in the safe zone for
-    // circular crops.
+    // Icons: favicon-32 + apple-touch-icon are the legacy set; icon-192/512 target
+    // Android/Windows install prompts; icon-512-maskable carries a solid #13171f background
+    // so the mark stays in the safe zone for circular crops.
     //
-    // background_color is the PWA splash-screen fill shown while the app boots.
-    // The manifest spec has no light/dark media-query variant (unlike theme-color
-    // below in the HTML head), so it must be one value that reads fine in both
-    // schemes. #13171f matches the docs site's own dark background and the
-    // gopher-magus icon's canvas, so dark-mode users get a seamless splash and
-    // light-mode users get a brief on-brand dark flash instead of a blinding
-    // white one.
+    // background_color is the splash-screen fill while the app boots. The manifest spec has
+    // no light/dark variant (unlike theme-color in the HTML head), so one value must read in
+    // both schemes: #13171f matches the dark background, giving dark users a seamless splash
+    // and light users a brief on-brand flash instead of a blinding white one.
     final body = "\{\n"
         + "  \"name\": \"" + site.config.title + "\",\n"
         + "  \"short_name\": \"" + site.config.title + "\",\n"
@@ -44,9 +38,9 @@ export fun writeManifest(site: Site) > void {
         + "  \"display\": \"standalone\",\n"
         + "  \"categories\": [\"developer\", \"utilities\"],\n"
         + "  \"background_color\": \"#13171f\",\n"
-        // theme_color tints the installed app's title bar / status bar. Match the
-        // dark canvas rather than an accent: the site's identity is earthy, never
-        // blue, and a neutral dark frame reads correctly in both schemes.
+        // theme_color tints the installed app's title/status bar. Match the dark canvas, not
+        // an accent: the identity is earthy, never blue, and a neutral dark frame reads in
+        // both schemes.
         + "  \"theme_color\": \"#13171f\",\n"
         + "  \"icons\": [\n"
         + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
@@ -67,10 +61,10 @@ export fun writeManifest(site: Site) > void {
 
 
 // buildServiceWorker bundles src/site/service-worker.ts to gen/service-worker.js with
-// esbuild, injecting the cache version and precache list as build-time constants
-// (--define). The version is a digest of the precached assets' own digests, so it
-// changes exactly when a cached asset does and is byte-stable otherwise - which also
-// changes the worker's bytes, the signal a browser uses to fetch the new version.
+// esbuild, injecting the cache version and precache list via --define. The version is a
+// digest of the precached assets' own digests, so it changes exactly when a cached asset
+// does (and is byte-stable otherwise) - and that byte change is the signal a browser uses
+// to fetch the new worker.
 export fun buildServiceWorker(site: Site) > void {
     if (site.config.baseURL == "") { return; }
     var manifest = "";

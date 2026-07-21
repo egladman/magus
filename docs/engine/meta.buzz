@@ -1,19 +1,15 @@
-// engine/meta.buzz - reads a page's facts from its Markdown: the title, tags,
-// page-type marker, reading-time estimate, fallback description, and the optional
-// "Added in vX.Y.Z" compatibility badge. Pure (stdlib markdown/serialize plus the
-// text helpers), so it unit-tests here and is flat-imported by render.buzz
-// (`import "engine/meta" as _`). Kept together because they all answer the same
-// question - "what does this source page say about itself" - for the head, the
-// chrome, and the search index, from one source of truth each.
+// engine/meta.buzz - reads a page's own facts from its Markdown: title, tags, page-type
+// marker, reading-time estimate, fallback description, and the optional "Added in vX.Y.Z"
+// badge. Pure (stdlib plus text helpers), so it unit-tests here and render.buzz flat-imports
+// it. One source of truth each for the head, chrome, and search index.
 import "markdown";
 import "serialize";
 import "lib/text" as _;
 import "assert";
 
-// deriveTitle reads a page title from the first H1, stripping the code backticks a
-// markdown heading like `# `fs`` carries so the title reads cleanly as plain text
-// in <title>, the breadcrumb, the pager, and the search index. (Frontmatter
-// titles bypass this and are used verbatim.)
+// deriveTitle reads the title from the first H1, stripping backticks (a heading like
+// `# `fs``) so it reads as plain text in <title>, breadcrumb, pager, and search index.
+// Frontmatter titles bypass this and are used verbatim.
 export fun deriveTitle(md: str, rel: str) > str {
     foreach (line in md.split("\n")) {
         if (line.startsWith("# ")) { return $"`".replaceAll(line.sub(2).trim(), ""); }
@@ -21,50 +17,41 @@ export fun deriveTitle(md: str, rel: str) > str {
     return rel;
 }
 
-// parseTags reads the frontmatter `tags:` list from raw markdown as [str], empty when
-// the field is absent. The one place tags are extracted so the rendered chips and
-// the search index draw from the same source (markdown.frontmatter returns the
-// YAML as JSON; serialize navigates it).
+// parseTags reads the frontmatter `tags:` list as [str] (empty when absent). The one
+// extraction point, so rendered chips and the search index draw from the same source.
 export fun parseTags(md: str) > [str] {
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     final tags: [str] = mut [];
     foreach (t in fm.q("tags").listValue()) {
         final tag = t.stringValue();
-        // A "magus" tag narrows nothing - it is the whole project. Drop it site-wide so it
-        // never renders as a chip or clutters the search index (a few docs, plus the magus
-        // module/command pages, carry it in frontmatter).
+        // A "magus" tag narrows nothing (it is the whole project), so drop it site-wide -
+        // never a chip, never in the search index.
         if (tag.lower() != "magus") { tags.append(tag); }
     }
     return tags;
 }
 
-// pageType reads the frontmatter `page_type:` marker (empty when absent). The one
-// value that matters today is "overview": a landing/index page whose job is to
-// orient and route to others (the documentation index, a section index like spells.md or
-// modules/, a diagnostics-family README). Overview pages are the hubs the Related
-// ranking favors and the roots the reachability gate trusts, so declaring the type
-// in frontmatter beats guessing it from a URL shape.
+// pageType reads the frontmatter `page_type:` marker (empty when absent). The value that
+// matters is "overview": a landing/index page that orients and routes to others. Related
+// ranking favors these hubs and the reachability gate trusts them as roots, so declaring
+// the type in frontmatter beats guessing it from a URL shape.
 export fun pageType(md: str) > str {
     final fm = serialize.jsonDecode(markdown.frontmatter(md));
     return fm.q("page_type").stringValue();
 }
 
-// readingTime estimates minutes-to-read by weighting content by type rather than
-// blindly counting words: prose reads at 220 wpm, but a fenced code block is
-// parsed line by line (not skimmed like prose) and an image or diagram costs a
-// few seconds of looking. So a page that is mostly code or figures gets a truer
-// estimate than a raw word count, which would badly under- or over-shoot it.
-// Frontmatter is stripped so YAML doesn't skew the count. Returns "" for pages too
-// short to be worth labeling. Deterministic: a pure function of the committed source.
+// readingTime estimates minutes-to-read by weighting content by type, not raw word count:
+// prose at 220 wpm, code counted by line (read deliberately, not skimmed), images costing
+// a few seconds each - so a code- or figure-heavy page gets a truer number. Frontmatter is
+// stripped so YAML doesn't skew it. "" for pages too short to label. Deterministic.
 export fun readingTime(md: str) > str {
     final text = markdown.stripFrontmatter(md);
     final WPM = 220;               // prose words per minute
     final CODE_SEC_PER_LINE = 2;   // a code line is read deliberately, not skimmed
     final IMG_SEC = 10;            // time to take in one image or diagram
 
-    // Walk line by line so fenced code (``` or ~~~) is measured by line count while
-    // prose is measured by word count. A fence marker line itself is chrome, not
-    // content; blank lines inside a fence are skipped so whitespace doesn't inflate.
+    // Walk line by line: fenced code (``` or ~~~) measured by line, prose by word. Fence
+    // markers are chrome; blank lines inside a fence are skipped so they don't inflate.
     var proseWords = 0;
     var codeLines = 0;
     var inFence = false;
@@ -103,12 +90,11 @@ export fun readingTime(md: str) > str {
     return "{mins} min read";
 }
 
-// deriveDescription is the belt-and-suspenders page description: the first
-// substantive paragraph of the rendered HTML, tags stripped, whitespace collapsed,
-// entities decoded, truncated on a word boundary. A leading image-only paragraph
-// (the hero) yields empty text and is skipped. "" when no paragraph has text, so
-// the caller can fall back to site.config.description. Runs before escapeAttr re-encodes, so the
-// decode here avoids the double-encoding the plan's risk register flags.
+// deriveDescription is the fallback page description: the first substantive paragraph of
+// the rendered HTML, tags stripped, whitespace collapsed, entities decoded, truncated on a
+// word boundary. A leading image-only paragraph (the hero) is skipped. "" when no paragraph
+// has text, so the caller can fall back to site.config.description. Decoding here (before
+// escapeAttr re-encodes) avoids double-encoding.
 export fun deriveDescription(html: str) > str {
     var rest = html;
     var open = rest.indexOf("<p>");
@@ -126,12 +112,10 @@ export fun deriveDescription(html: str) > str {
     return "";
 }
 
-// insertSinceBadge places an "Added in <version>" marker directly under the page's
-// H1 so a reader can tell whether a feature exists in their installed magus without
-// the site maintaining versioned doc variants - magus follows Go-style compatibility
-// (no v2), so one page can serve every version and just note when a thing arrived.
-// since is the frontmatter `since:` value (e.g. "v0.2.0"); no-op if the page carries
-// no `since:` or has no H1 to anchor to.
+// insertSinceBadge places an "Added in <version>" marker under the H1 so a reader can tell
+// whether a feature exists in their installed magus. magus follows Go-style compatibility
+// (no v2), so one page serves every version and just notes when a thing arrived. since is
+// the frontmatter `since:` value; no-op without a `since:` or an H1 to anchor to.
 export fun insertSinceBadge(html: str, since: str) > str {
     if (since == "") { return html; }
     final marker = html.indexOf("</h1>");

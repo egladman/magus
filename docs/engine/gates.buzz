@@ -1,14 +1,14 @@
-// engine/gates.buzz - the build-correctness layer: it produces nothing the site
-// serves, it PROVES the site is correct and records its provenance. Two jobs:
-//   1. Provenance - loadMeta/buildCommits read the git history behind each page
-//      (the "Last updated" line and its History disclosure).
-//   2. Gates - after every page is written, throw on any dangling internal link or
-//      missing asset (assetIntegrityCheck), any page unreachable by clicking from the
-//      homepage (orphanCheck), and any previously-shipped URL that has silently started
-//      404-ing (abandonedLinkCheck). pruneStaleOutputs deletes outputs whose source is
-//      gone; writeSiteManifest/updateUrlLock write the integrity manifest and URL ledger.
-// All take a `site: Site` and import engine/types for it - the reason these are free
-// functions and not Site methods (keeping engine/types.buzz leaf-only and cycle-free).
+// engine/gates.buzz - the build-correctness layer: it serves nothing, it PROVES the site
+// is correct and records its provenance. Two jobs:
+//   1. Provenance - loadMeta/buildCommits read the git history behind each page (the
+//      "Last updated" line and its History disclosure).
+//   2. Gates - after every page is written, throw on any dangling link or missing asset
+//      (assetIntegrityCheck), any page unreachable from the homepage (orphanCheck), and any
+//      previously-shipped URL that started 404-ing (abandonedLinkCheck). pruneStaleOutputs
+//      deletes outputs whose source is gone; writeSiteManifest/updateUrlLock write the
+//      integrity manifest and URL ledger.
+// All take a `site: Site` - free functions, not Site methods, so engine/types.buzz stays
+// leaf-only and cycle-free.
 import "os";
 import "fs";
 import "io";
@@ -18,11 +18,6 @@ import "lib/text" as _;
 import "lib/csp" as _;
 import "lib/html" as _;
 
-// Build-orchestration steps that operate ON a Site but reach past the leaf helpers
-// into git metadata (loadMeta) and the post-render integrity gates (assetIntegrityCheck,
-// orphanCheck) - free functions here rather than Site methods so engine/types.buzz stays
-// leaf-only and cycle-free. They call capture/buildCommits/walkGen/scanReferencesInHTML/
-// checkPathExists/pageKey, which live below in this file.
 // loadMeta populates the commit-metadata fields once, shelling out to git. Pinned
 // to the default branch so deployed links stay stable across feature-branch renders.
 export fun loadMeta(site: Site) > void {
@@ -108,10 +103,6 @@ export fun orphanCheck(site: Site) > void {
 }
 
 
-// (The per-page reading-time and tags are no longer module globals: they are passed
-// straight into renderPage() as the `reading` / `tags` arguments, so there is no
-// set-before-call / clear-after temporal coupling to get wrong.)
-
 export fun capture(cmd: str) > str {
     final tmp = os.tmpFilename("sitegen");
     final code = os.execute(["sh", "-c", cmd + " > " + tmp + " 2>/dev/null"]);
@@ -126,24 +117,23 @@ export fun capture(cmd: str) > str {
     return result.trim();
 }
 
-// Map of repo-root-relative source path -> "full|short|date" of the most recent
-// commit that touched it, built from ONE git log (newest-first, so a file's first
-// sighting wins) instead of a git call per page. ">>>" can't begin a repo path,
-// so it cleanly marks each commit header; the file names follow until the next.
-// Run with `git -C ..` so the pathspecs (README.md, docs) and written paths are
-// magus/-relative, matching site.metaPrefix.
-// HISTORY_MAX caps the per-file history depth in the "History" disclosure. The
-// full log is one git spawn, so pushing this higher is cheap; a low cap keeps
-// the rendered <details> panel from bloating on hot-edit files.
+// Map of repo-relative source path -> "full|short|date" of the newest commit that touched
+// it, from ONE git log (newest-first, first sighting wins) instead of a git call per page.
+// ">>>" can't begin a repo path, so it marks each commit header; file names follow until
+// the next. Run with `git -C ..` so pathspecs and written paths are magus/-relative,
+// matching site.metaPrefix.
+// HISTORY_MAX caps the per-file history depth in the "History" disclosure. The log is one
+// git spawn, so a higher cap is cheap; a low one keeps the <details> panel from bloating on
+// hot-edit files.
 final HISTORY_MAX = 8;
 
 // buildCommits parses one git-log pass:
-//   - metaCommits: path -> "full|short|stamp" of the FIRST (newest) sighting.
-//     Drives the always-visible "Last updated" footer line.
-//   - metaHistory: path -> list of up to HISTORY_MAX "full|short|stamp|subject"
-//     entries in newest-first order. Drives the collapsed WS R history panel.
-// The log prints "SUBJ:<one-line subject>" after each ">>>" header so the two
-// fields ride together without a second git spawn.
+//   - metaCommits: path -> "full|short|stamp" of the FIRST (newest) sighting; drives the
+//     always-visible "Last updated" footer line.
+//   - metaHistory: path -> up to HISTORY_MAX "full|short|stamp|subject" entries, newest-
+//     first; drives the collapsed history panel.
+// The log prints "SUBJ:<subject>" after each ">>>" header so both fields ride together
+// without a second git spawn.
 export fun buildCommits(site: Site) > {str: str} {
     var m: {str: str} = mut {};
     site.metaHistory = mut {};
@@ -218,16 +208,12 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
         if (raw.startsWith("http://") or raw.startsWith("https://") or raw.startsWith("//")
             or raw.startsWith("#") or raw.startsWith("mailto:") or raw.startsWith("javascript:")
             or raw.startsWith("data:") or raw.startsWith("tel:")) { continue; }
-        // Root-absolute paths (leading /) are the deploy-time reference form
-        // (WS0b's ONE deliberate exception on 404.html, WS S's manifest, etc.);
-        // they resolve at the deploy base, not against gen/'s root, so we can't
-        // check them locally without threading site.config.baseURL's basePath in. Skip.
+        // Root-absolute paths (leading /) are the deploy-time reference form (404.html's
+        // exception, the manifest, etc.); they resolve at the deploy base, not gen/'s root,
+        // so we can't check them locally without threading in basePath. Skip.
         if (raw.startsWith("/")) { continue; }
-        // References to repo source files (.go/.buzz) point at their GitHub
-        // location relative to the repo root, not to a generated site asset.
-        // magus's `markdown` module rewrites .md links but leaves .go/.buzz
-        // untouched, matching author intent. Skip so the check stays focused on
-        // real page/asset breakage.
+        // .go/.buzz refs point at their GitHub location (repo-root-relative), not a site
+        // asset - the markdown module rewrites .md links but leaves these untouched. Skip.
         if (raw.endsWith(".go") or raw.endsWith(".buzz")) { continue; }
         // Strip a URL #fragment; the file only needs to exist, the fragment is
         // client-side.
@@ -248,8 +234,8 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
     return refs;
 }
 
-// walkGen recursively enumerates every written file under gen/ so the integrity
-// check reads each once. Skips buzz.wasm (binary; slow file test suffices).
+// walkGen recursively enumerates every written file under gen/ so the integrity check
+// reads each once.
 export fun walkGen(rel: str, acc: [str], site: Site) > void {
     var dir = site.outDir;
     if (rel != "") { dir = site.outDir + "/" + rel; }
@@ -264,22 +250,17 @@ export fun walkGen(rel: str, acc: [str], site: Site) > void {
     }
 }
 
-// pruneStaleOutputs deletes gen/ output left behind by a source that no longer
-// produces it - a renamed/removed docs page, a deleted blog post, a dropped
-// frontmatter alias, a release that fell out of CHANGELOG.md. gen/ is no longer
-// wiped before each render (see the comment in site_render), so this is what keeps
-// it from silently accumulating orphans instead: walk what is really on disk,
-// and for every "<dir>/index.html" NOT in writtenPaths (this render's actual
-// output) and not in alwaysKeep, delete the whole directory - taking any sibling
-// file (an index.md, say) with it. Run before assetIntegrityCheck/orphanCheck so
-// neither gate can trip on a stale page's dangling reference to content that was
-// removed along with it.
+// pruneStaleOutputs deletes gen/ output whose source no longer produces it - a
+// renamed/removed page, a deleted post, a dropped alias, a release out of CHANGELOG.md.
+// gen/ is not wiped before each render, so this keeps it from accumulating orphans: for
+// every "<dir>/index.html" not in writtenPaths and not in alwaysKeep, delete the whole
+// directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so
+// neither trips on a stale page's dangling reference to content removed with it.
 export fun pruneStaleOutputs(site: Site) > void {
-    // Fixed, unconditional-or-deliberately-persistent outputs that are never
-    // candidates for pruning: paths a normal render always (re)writes regardless of
-    // docs/blog content (so they're never actually stale), plus the playground's
-    // committed WASM/editor bundle, which this render never writes or deletes at all
-    // (it is refreshed out of band by build-playground / build-playground-editor).
+    // Outputs never eligible for pruning: paths a normal render always rewrites regardless
+    // of docs/blog content, plus the playground's committed WASM/editor bundle, which this
+    // render never touches (build-playground / build-playground-editor refresh it out of
+    // band).
     final alwaysKeep: {str: bool} = mut {
         "index.html": true, "index.md": true, "404.html": true,
         "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
@@ -288,9 +269,9 @@ export fun pruneStaleOutputs(site: Site) > void {
         "search/index.html": true,
         "playground/index.html": true, "playground/buzz.wasm": true,
         "playground/wasm_exec.js": true, "playground/editor.js": true,
-        // /console/ is owned by the standalone console/ project (copied in at deploy). The docs render
-        // only emits a redirect stub there via the reference/console alias, which writeAliases already
-        // registers in writtenPaths, so it needs no alwaysKeep entry.
+        // /console/ is owned by the standalone console/ project (copied in at deploy). The
+        // docs render only emits a redirect stub there via the reference/console alias, which
+        // writeAliases already registers in writtenPaths - so no alwaysKeep entry needed.
     };
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);
@@ -308,19 +289,12 @@ export fun pruneStaleOutputs(site: Site) > void {
     }
 }
 
-// writeSiteManifest emits gen/site-manifest.sha256: one "<sha256>  <path>\n"
-// line (standard sha256sum(1) format, so `sha256sum -c` or a spot-check
-// `curl -s <asset-url> | sha256sum` verifies it directly - see
-// docs/reference/console.md's "Verify our claims" section) per file actually
-// shipped under gen/, repo-relative, sorted. Reuses fileSha256 - the same
-// per-file digest writeServiceWorker already computes for its cache-version
-// stamp, just surfaced for every asset instead of folded into one internal
-// checksum. Exported and called from magusfile.buzz's generate(), AFTER
-// generateJsBundles() - not from inside site_render() - because
-// generateJsBundles() writes gen/assets/mermaid.js and gen/assets/hljs.js
-// (both served assets) only after site_render() has already returned;
-// computing the manifest inside site_render would silently omit them. The
-// manifest excludes its own output path (a file cannot hash itself).
+// writeSiteManifest emits gen/site-manifest.sha256: one "<sha256>  <path>\n" line (standard
+// sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/,
+// repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from
+// site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js
+// (served assets) only after site_render() returns - computing the manifest earlier would
+// omit them. Excludes its own output path (a file cannot hash itself).
 export fun writeSiteManifest(site: Site) > void {
     final acc: [str] = mut [<str>];
     walkGen("", acc, site);

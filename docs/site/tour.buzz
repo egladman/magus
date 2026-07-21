@@ -1,7 +1,6 @@
-// site/tour.buzz - the two interactive-demo pages: the guided tour
-// (renderTourPage, with its codeTeaser/tourSrc/playgroundLink helpers) and the
-// standalone playground page (renderPlayground). Both are called once by
-// site_render and inject the shared nav/footer.
+// site/tour.buzz - the two interactive-demo pages: the guided tour (renderTourPage,
+// with codeTeaser/tourSrc/playgroundLink) and the standalone playground
+// (renderPlayground). Both called once by site_render; both inject the shared nav.
 import "fs";
 import "io";
 import "std";
@@ -13,10 +12,9 @@ import "engine/nav" as _;
 import "engine/page" as _;
 
 // TourStep is one tour card: the .buzz example file, its copy, and a cross-link to
-// the concept doc a newcomer should read next (docSlug is the clean-URL directory,
-// e.g. "targets"). It renders its own numbered card - the first of render's typed
-// value objects, putting presentation on the data it presents instead of a
-// stringly-typed {str: str} map juggled by the caller.
+// the next concept doc (docSlug is the clean-URL directory, e.g. "targets"). It
+// renders its own numbered card, keeping presentation on the typed data rather than a
+// stringly-typed {str: str} map.
 object TourStep {
     file: str = "",
     title: str = "",
@@ -24,12 +22,11 @@ object TourStep {
     docLabel: str = "",
     docSlug: str = "",
 
-    // card renders this step's numbered <li>: the code teaser, an Open-in-Playground
-    // deep link, and the concept cross-link, all resolved against root.
+    // renderCard renders this step's numbered <li>: code teaser, Open-in-Playground
+    // deep link, and concept cross-link, all resolved against root.
     fun renderCard(root: str, num: int) > str {
         final src = tourSrc(this.file);
-        // The concept cross-link rides at the end of the description as an inline
-        // link, not a separate "Read up:" line under the footer.
+        // The cross-link is inline at the end of the description, not a separate line.
         return template.render(`      <li class="tour-card">
         <div class="tour-head"><span class="tour-num">{{num}}</span><h3>{{title}}</h3></div>
         <p class="tour-desc">{{desc}} <a class="tour-learn" href="{{root}}{{docSlug}}/">{{docLabel}} <span class="xref-arrow" aria-hidden="true">&rarr;</span></a></p>
@@ -43,40 +40,32 @@ object TourStep {
 }
 
 
-// renderPlayground writes gen/playground/index.html from the hand-authored source, injecting
-// the shared nav + footer at its <!-- site-nav --> / <!-- site-footer --> placeholders.
-// The playground is a standalone page (custom head, wasm, its own scripts) so it does
-// not go through renderPage(); templating only the top nav keeps it in lockstep with every
-// other page (its bottom chrome is the console status bar, authored in playground.html, not
-// the docs footer). It sits at gen/'s root, so its nav prefix is "".
+// renderPlayground writes gen/playground/index.html from the hand-authored
+// playground.html, injecting the shared nav at its <!-- site-nav --> placeholder. The
+// playground is standalone (custom head, wasm, own scripts), so it skips renderPage();
+// templating just the nav keeps it in lockstep with every other page. Its bottom
+// chrome is the console status bar (in playground.html), not the docs footer.
 export fun renderPlayground(site: Site) > void {
     final f = io.File.open("playground.html", io.FileMode.read);
     var html = f.readAll();
     f.close();
-    // The page ships at /playground/ (a directory index like every other page), so
-    // its injected nav climbs one level to reach the site root.
+    // Ships at /playground/ (a directory index), so the nav climbs one level to root.
     final outDir = "playground";
     final root = climbFromDir(outDir);
     html = html.replace("<!-- site-nav -->", renderSiteNav(root, "playground", true, site.config));
-    // No site-footer injection: the playground wears the console apps' bottom status bar
-    // (authored directly in playground.html) instead of the docs footer, so the parse
-    // result reads in the console design language. renderSiteFooter still serves the docs
-    // pages (renderPage) and the reference drawer.
-    // The default (non-home) CSP meta - site.csp, not site.cspHome - since the
-    // playground has no reason to load an external image and holds the reader's
-    // own source, so it gets the tighter img-src, not the badge hosts. Also:
-    // playground.html's own <!-- csp --> placeholder is what
-    // CSP_INLINE_SCRIPT_SOURCES reads to compute it in the first place, so this
-    // file is both the hash's source and its sink.
+    // Default (non-home) CSP meta - site.csp, not site.cspHome: the playground never
+    // loads an external image and holds the reader's own source, so it takes the
+    // tighter img-src, not the badge hosts. playground.html's own <!-- csp -->
+    // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so
+    // this file is both the hash's source and its sink.
     html = html.replace("<!-- csp -->", "<meta http-equiv=\"Content-Security-Policy\" content=\"" + site.csp + "\">");
     fs.makeDirectory(site.outDir + "/" + outDir);
     fs.writeFile(site.outDir + "/" + outDir + "/index.html", html);
 }
 
 
-// codeTeaser pulls a short code preview from a tour example: skip the leading comment
-// block and blank lines, then take the first several real lines. Gives each card a
-// code snippet at a glance instead of the descriptive header comment.
+// codeTeaser previews a tour example: skip the leading comment block and blank lines,
+// then take the first several real lines - so the card shows code, not the header comment.
 fun codeTeaser(src: str) > str {
     var started = false;
     final kept: [str] = mut [<str>];
@@ -93,8 +82,8 @@ fun codeTeaser(src: str) > str {
 }
 
 
-// tourSrc reads one curated example from the tour/ dir (cwd-relative; build-time only,
-// the files are not written - their content rides into the page as teaser + deep-link).
+// tourSrc reads one curated example from tour/ (cwd-relative, build-time only; the
+// files aren't written - their content rides into the page as teaser + deep-link).
 fun tourSrc(file: str) > str {
     final f = io.File.open("tour/" + file, io.FileMode.read);
     final s = f.readAll();
@@ -103,9 +92,9 @@ fun tourSrc(file: str) > str {
 }
 
 
-// playgroundLink deep-links src into the playground editor. The raw source is url-safe
-// base64 (unpadded, matching src/site/run-example.ts and the wasm's applyHashSource decoder)
-// in the #source= fragment, so the code stays client-side (never hits the server/CDN).
+// playgroundLink deep-links src into the playground editor via a #source= fragment of
+// url-safe unpadded base64 (matching src/site/run-example.ts and the wasm's
+// applyHashSource decoder), so the code stays client-side, never hitting server/CDN.
 fun playgroundLink(root: str, src: str) > str {
     var enc = encoding.base64urlEncode(src);
     while (enc.endsWith("=")) { enc = enc.sub(0, enc.len() - 1); }
@@ -113,10 +102,9 @@ fun playgroundLink(root: str, src: str) > str {
 }
 
 
-// renderTourPage writes gen/tour/index.html: a numbered card grid that walks a newcomer
-// through magusfiles and Buzz. Each card carries a step number, title, one-liner, a code
-// teaser, and an Open-in-Playground deep-link. A synthesized page like the search page -
-// no .md source - so renderPage()'s srcRel guards drop its provenance/edit chrome.
+// renderTourPage writes gen/tour/index.html: a numbered card grid walking a newcomer
+// through magusfiles and Buzz. Synthesized (no .md source), so renderPage()'s srcRel
+// guards drop the provenance/edit chrome.
 export fun renderTourPage(site: Site) > void {
     final root = rootPrefix("tour/index.md", site);
     final steps: [TourStep] = mut [<TourStep>];
@@ -185,9 +173,9 @@ export fun renderTourPage(site: Site) > void {
     final of = io.File.open(site.outDir + "/tour/index.html", io.FileMode.write);
     of.write(doc);
     of.close();
-    // addRecord uses the desc arg directly and only parses this stub for tags, so the
-    // stub carries just a valid tags list (a description: line with colons would break
-    // the YAML). The body text seeds a few search terms for the page.
+    // addRecord uses the desc arg directly and parses this stub only for tags, so the
+    // stub is just a valid tags list (a description: line with colons would break the
+    // YAML). The body text seeds a few search terms.
     site.addRecord("tour/", title, desc,
         "---\ntags: [tour, getting started, examples, playground, hello world]\n---\nGuided tour of magus. Hello world, targets, spells, the Buzz language, and a full magusfile.\n");
     std.print("  tour page -> " + site.outDir + "/tour/index.html");

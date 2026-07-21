@@ -1,5 +1,5 @@
-// lib/text.buzz - pure text/path/URL helpers. No site state, so unit-tested here
-// and flat-imported by render.buzz (`import "lib/text" as _`).
+// lib/text.buzz - pure text/path/URL helpers. No site state; flat-imported by
+// render.buzz (`import "lib/text" as _`).
 import "assert";
 
 // escapeAttr makes s safe inside a double-quoted HTML attribute.
@@ -16,8 +16,8 @@ export fun splitPath(p: str) > [str] {
     return segs;
 }
 
-// relativePath returns the relative path from fromDir to toUrl (directory-index layout:
-// a trailing slash means toUrl is a directory). "./" when they resolve to the same place.
+// relativePath returns the path from fromDir to toUrl. Trailing slash on toUrl
+// means it is a directory; "./" when they resolve to the same place.
 export fun relativePath(fromDir: str, toUrl: str) > str {
     final fromSegs = splitPath(fromDir);
     final toSegs = splitPath(toUrl);
@@ -68,8 +68,8 @@ export fun pad4(n: int) > str {
     return s;
 }
 
-// strToNat converts a decimal digit string to a non-negative int.
-// Non-digit characters are ignored. Used for numeric semver segment parsing.
+// strToNat parses a decimal digit string to a non-negative int, ignoring
+// non-digits. Used for semver segment parsing.
 export fun strToNat(s: str) > int {
     var n = 0;
     var i = 0;
@@ -83,8 +83,8 @@ export fun strToNat(s: str) > int {
     return n;
 }
 
-// strLess is lexicographic string ordering by byte; buzz has no `<` on str, so
-// the sibling pager spells it out to sort filenames deterministically.
+// strLess is lexicographic byte ordering; buzz has no `<` on str, so the sibling
+// pager spells it out to sort filenames deterministically.
 export fun strLess(a: str, b: str) > bool {
     final n = a.len();
     final m = b.len();
@@ -102,9 +102,9 @@ export fun capitalizeFirst(s: str) > str {
     return s.sub(0, 1).upper() + s.sub(1);
 }
 
-// stripTags removes HTML tags from a fragment, leaving its text. The text keeps
-// the HTML-encoded entities goldmark produced, so it drops straight into a
-// double-quoted attribute (TOC link tooltips) without re-escaping.
+// stripTags removes HTML tags, leaving text. Entities goldmark produced stay
+// encoded, so the result drops into a double-quoted attribute (TOC link tooltips)
+// without re-escaping.
 export fun stripTags(s: str) > str {
     var r = s;
     var lt = r.indexOf("<");
@@ -117,24 +117,23 @@ export fun stripTags(s: str) > str {
     return r;
 }
 
-// collapseWs turns any run of whitespace (newlines/tabs/spaces goldmark left in the
-// markup) into single spaces, so a derived description reads as one clean line.
+// collapseWs folds any whitespace run into a single space, so a derived
+// description reads as one clean line.
 export fun collapseWs(s: str) > str {
     var r = s.replace("\n", " ").replace("\t", " ").replace("\r", " ");
     while (r.indexOf("  ") != null) { r = r.replace("  ", " "); }
     return r.trim();
 }
 
-// decodeEntities turns the HTML entities goldmark produces back into their characters
-// for a plain-text description. &amp; is decoded LAST so an entity like "&amp;lt;"
-// does not get double-decoded into "<".
+// decodeEntities turns HTML entities back into characters for a plain-text
+// description. &amp; decodes LAST so "&amp;lt;" is not double-decoded into "<".
 export fun decodeEntities(s: str) > str {
     return s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
         .replace("&#39;", "'").replace("&#34;", "\"").replace("&amp;", "&");
 }
 
-// truncateWords caps s at about n characters, cutting on a word boundary so the
-// description never ends mid-word. Short paragraphs (the common case) pass through.
+// truncateWords caps s at about n characters, cutting on a word boundary so it
+// never ends mid-word. Short paragraphs pass through.
 export fun truncateWords(s: str, n: int) > str {
     if (s.len() <= n) { return s; }
     final head = s.sub(0, n);

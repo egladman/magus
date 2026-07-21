@@ -1,38 +1,34 @@
-// lib/csp.buzz - Content-Security-Policy construction and the content hashing it
-// rests on. Self-contained (stdlib crypto/fs/io/encoding only), so it unit-tests here
-// and is flat-imported by render.buzz (`import "lib/csp" as _`). The site-wide policy
-// and the tighter redirect-stub policy both live here so the two never drift; the inline
-// <script> hashing is what makes "add a script, forget to regenerate" fail loudly as a
-// browser CSP violation rather than silently shipping a hole.
+// lib/csp.buzz - Content-Security-Policy construction and the content hashing it rests
+// on. Self-contained (stdlib crypto/fs/io/encoding only); flat-imported by render.buzz
+// (`import "lib/csp" as _`). Site-wide and redirect-stub policies both live here so they
+// never drift. Inline-<script> hashing makes "add a script, forget to regenerate" fail
+// loudly as a browser CSP violation rather than silently shipping a hole.
 import "crypto";
 import "fs";
 import "io";
 import "encoding";
 import "assert";
 
-// fileSha256 reads path and returns its lowercase-hex SHA-256 digest. The one
-// place file bytes get hashed for both writeServiceWorker's cache-version
-// stamp and writeSiteManifest's per-asset integrity list, so the two never
-// drift into computing "the same hash" two different ways.
+// fileSha256 reads path and returns its lowercase-hex SHA-256 digest. Single place
+// file bytes get hashed (writeServiceWorker's cache-version stamp and
+// writeSiteManifest's per-asset integrity list), so the two never compute "the same
+// hash" two different ways.
 export fun fileSha256(path: str) > str {
     return crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(path));
 }
 
-// scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the
-// same bytes a browser hashes when it evaluates a `<script>` element's
-// content against a hash-source script-src). crypto.hash returns lowercase
-// hex; CSP hash-sources are base64, so hex_decode back to raw digest bytes
-// before base64-encoding - encoding.base64Encode/hexDecode exist for exactly
-// this "reformat a digest" case, not just URL-safe payload transport.
+// scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes
+// a browser hashes against a hash-source script-src). crypto.hash returns lowercase hex;
+// CSP hash-sources are base64, so hexDecode back to raw digest bytes before
+// base64-encoding.
 export fun scriptHash(js: str) > str {
     return "sha256-" + encoding.base64Encode(encoding.hexDecode(crypto.hash(crypto.HashAlgorithm.Sha256, js)));
 }
 
-// extractInlineScripts pulls the exact text content of every attribute-less
-// `<script>...</script>` block out of html, in order. Deliberately matches
-// only the literal "<script>" open tag (no attributes) - a `<script src=...>`
-// or `<script type="module" src=...>` is an external load already covered by
-// script-src 'self', not a hash-source candidate.
+// extractInlineScripts pulls the text of every attribute-less `<script>...</script>`
+// block out of html, in order. Matches only the literal "<script>" open tag: a
+// `<script src=...>` is an external load already covered by script-src 'self', not a
+// hash-source candidate.
 export fun extractInlineScripts(html: str) > [str] {
     var scripts: [str] = mut [<str>];
     var rest = html;
@@ -48,78 +44,51 @@ export fun extractInlineScripts(html: str) > [str] {
     return scripts;
 }
 
-// CSP_INLINE_SCRIPT_SOURCES lists the source HTML files scanned for inline
-// <script> blocks whose hashes the site-wide CSP must allow. Every
-// renderPage()-based page (docs, home, search, tour, blog, /public/) carries
-// no inline script at all; only the hand-authored playground.html does today
-// (its WASM bootstrap, the syntax-overlay resize sync, draft persistence, and
-// the fullscreen toggle - 4 blocks). Adding an inline <script> to a listed
-// file, or to a new file not listed here, is a build-time correctness bug
-// that surfaces immediately as a browser CSP violation on that page instead
-// of silently working - see computeCSP's doc comment for why that is the
-// intended failure mode, not a bug to route around.
+// CSP_INLINE_SCRIPT_SOURCES lists the source HTML files scanned for inline <script>
+// blocks whose hashes the site-wide CSP must allow. Every renderPage()-based page
+// carries no inline script; only hand-authored playground.html does today (WASM
+// bootstrap, syntax-overlay resize sync, draft persistence, fullscreen toggle - 4
+// blocks). An inline <script> on a listed file, or a new unlisted file, surfaces as a
+// browser CSP violation on that page - the intended failure mode (see computeCSP).
 export final CSP_INLINE_SCRIPT_SOURCES = ["playground.html"];
 
-// CSP_IMG_SRC_DEFAULT is the img-src every page gets except the home page:
-// same-origin images plus data: URIs (inline SVG/icon data), nothing else.
-// img-src is a GET-only channel that connect-src cannot restrict (an
-// `<img src="https://host/?leaked=...">` still fires even though
-// connect-src's loopback lock would refuse the same host as a fetch target),
-// so the graph and playground pages - which hold the reader's own dependency
-// graph or source code - carry no external image allowance at all.
+// CSP_IMG_SRC_DEFAULT is the img-src every page gets except the home page: same-origin
+// plus data: URIs, nothing else. img-src is a GET-only exfiltration channel connect-src
+// cannot restrict (an `<img src="https://host/?leaked=...">` still fires), so graph and
+// playground - which hold the reader's own graph or source - carry no external image
+// allowance at all.
 export final CSP_IMG_SRC_DEFAULT = "'self' data:";
 
-// CSP_IMG_SRC_HOME extends CSP_IMG_SRC_DEFAULT with the two hosts the
-// README's status badges load from (github.com's Actions badge, pkg.go.dev's
-// reference badge) - see computeCSP's doc comment. Only the home page embeds
-// those badges, so only the home page's CSP (Site.cspHome) passes this value;
-// every other page passes CSP_IMG_SRC_DEFAULT.
+// CSP_IMG_SRC_HOME extends CSP_IMG_SRC_DEFAULT with the two hosts the README's status
+// badges load from (github.com Actions badge, pkg.go.dev reference badge). Only the home
+// page embeds them, so only its CSP (Site.cspHome) passes this value.
 export final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.go.dev";
 
-// computeCSP builds one page's Content-Security-Policy meta content (see the
-// doc comment on Site.csp/Site.cspHome for which pages get which img-src).
-// Deny-by-default (default-src 'self' - not 'none': manifest-src and the
-// same-origin-only <link rel=prefetch> hover-warm in src/site/prefetch.ts both fall
-// back to default-src per the CSP3 fetch-directive spec, and the service
-// worker registration (`navigator.serviceWorker.register('service-worker.js')`, main.js)
-// falls back through worker-src -> child-src -> default-src since neither is
-// named explicitly here - 'self' is the minimal fallback that keeps all three
-// working without opening a single directive wider than same-origin; 'none'
-// would break the service worker registration outright), then every
-// directive the site actually needs is named explicitly and nothing else is
-// permitted:
-//   - script-src: 'self' for the external bundles, 'wasm-unsafe-eval' because
-//     the Go/TinyGo WebAssembly runtime (the playground, and run-example.js's
-//     lazy "Run" buttons on docs pages) requires it to instantiate a wasm
-//     module - there is no narrower CSP source for that capability - plus one
-//     sha256- hash per inline script found in CSP_INLINE_SCRIPT_SOURCES.
-//     Hashing the ACTUAL script bytes (not a hand-copied constant) is what
-//     makes "add a script, forget to regenerate" fail loudly in the browser
-//     instead of silently shipping a hole.
-//   - style-src: 'unsafe-inline' because a few pages carry a <style> block or
-//     a style="" attribute (playground.html's layout CSS, a couple of
-//     noscript fallbacks) rather than an external sheet; CSP has no
-//     hash-source for style ATTRIBUTES (only style-src-attr's newer
-//     'unsafe-hashes', not yet universal), so a per-block hash scheme would
-//     leave the attribute case uncovered anyway.
-//   - img-src: imgSrc, verbatim (CSP_IMG_SRC_DEFAULT everywhere except the
-//     home page, which passes CSP_IMG_SRC_HOME for its two status badges -
-//     live status indicators, CI result and doc coverage, that vendoring
-//     would make permanently stale, unlike Pico/mermaid/hljs (pure
-//     libraries, vendored in Phase 0 with zero loss of freshness)). Scoping
-//     the widened allowance to the one page that actually embeds the badges
-//     keeps every other page - notably graph/playground - at same-origin-only.
-//   - connect-src: 'self' plus the loopback wildcards - the browser-enforced
-//     form of the loopback-only rule (plan 0.3), kept in sync with the
-//     literal 127.0.0.1/[::1] host check the graph explorer's live mode makes
-//     client-side. This is intentionally NOT loosened for graph.html's/
-//     playground.html's `#src=<url>` loader, which can point at an arbitrary
-//     CORS-enabled address (e.g. a raw GitHub link): a third-party #src= now
-//     fails at the browser CSP layer rather than being fetched. Both loaders
-//     already handle a fetch failure gracefully (a status message, not a
-//     crash) - see docs/reference/console.md's "Verify our claims" section.
-//   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, or
-//     <iframe> anywhere on the site.
+// computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/
+// Site.cspHome for which pages get which img-src). default-src is 'self', not 'none':
+// manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker
+// registration all fall back to default-src (via worker-src -> child-src), and 'none'
+// would break the service worker outright. 'self' is the minimal fallback that keeps
+// them working without opening any directive wider than same-origin. Every directive the
+// site needs is then named explicitly:
+//   - script-src: 'self' for bundles, 'wasm-unsafe-eval' because the Go/TinyGo wasm
+//     runtime (playground, run-example.js's "Run" buttons) needs it and there is no
+//     narrower source, plus one sha256- hash per inline script in
+//     CSP_INLINE_SCRIPT_SOURCES. Hashing the ACTUAL bytes (not a hand-copied constant)
+//     makes "add a script, forget to regenerate" fail loudly in the browser.
+//   - style-src: 'unsafe-inline' because a few pages carry a <style> block or style=""
+//     attr rather than an external sheet; CSP has no hash-source for style ATTRIBUTES
+//     (only style-src-attr's not-yet-universal 'unsafe-hashes'), so a per-block hash
+//     scheme would leave the attribute case uncovered anyway.
+//   - img-src: imgSrc verbatim (CSP_IMG_SRC_HOME only for the home page's two live
+//     status badges, which vendoring would make permanently stale; every other page,
+//     notably graph/playground, stays same-origin-only).
+//   - connect-src: 'self' plus loopback wildcards - the browser-enforced form of the
+//     loopback-only rule, matching the 127.0.0.1/[::1] check the graph explorer's live
+//     mode makes client-side. Deliberately NOT loosened for graph/playground's
+//     `#src=<url>` loader: a third-party #src= fails at the CSP layer rather than being
+//     fetched, and both loaders handle the fetch failure gracefully.
+//   - form-action/object-src/frame-src 'none': no <form>, <object>/<embed>, <iframe>.
 //   - base-uri 'self': nothing sets <base>; pins it against injection anyway.
 export fun computeCSP(imgSrc: str) > str {
     var scriptSrc = "'self' 'wasm-unsafe-eval'";
@@ -138,13 +107,11 @@ export fun computeCSP(imgSrc: str) > str {
         + "; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'";
 }
 
-// cspForRedirectStub builds the CSP a plain alias redirect page needs -
-// distinct from computeCSP's site-wide policy because a redirect stub
-// (aliasStub) loads no stylesheet, image, or external script; its only
-// content is one inline <script> whose text embeds the redirect target, so
-// it differs per stub and cannot share the single site-wide hash list. script
-// is the exact text redirectScript(rel) (lib/html.buzz) produces - the
-// same string aliasStub embeds, so the hash always matches what ships.
+// cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from
+// the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or
+// external script; its only content is one inline <script> that differs per stub, so it
+// cannot share the site-wide hash list. script is the exact text redirectScript(rel)
+// (lib/html.buzz) produces, so the hash always matches what ships.
 export fun cspForRedirectStub(script: str) > str {
     return "default-src 'none'; script-src '" + scriptHash(script) + "'"
         + "; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'";

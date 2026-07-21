@@ -1,13 +1,9 @@
-// render.buzz - the static site generator for the magus docs site.
-//
-// All the rendering machinery lives here as a self-contained library: the page
-// template, shared nav/footer, per-page renderers, the /public/ autoindex tree, the
-// sitemap and Atom feeds, the search index, and the build-time gates (asset
-// integrity, reachability, abandoned-link). magusfile.buzz imports this module and
-// its targets call the exported entry points - site_render() (which sets the input
-// paths on the Site object) and updateUrlLock(). Split out of
-// magusfile.buzz so the generator is its own module (a flat sibling, resolvable
-// since magus adopted buzz's project-relative import search paths).
+// render.buzz - the docs SSG composition root. magusfile.buzz imports it and calls the
+// exported entry points: site_render() (sets the input paths on Site and runs the whole
+// render) and updateUrlLock(). The rendering machinery lives across the engine/ and site/
+// modules flat-imported below; this file wires them and holds the Site-coupled steps that
+// must sit at the root. A flat sibling of magusfile.buzz, resolvable via buzz's
+// project-relative import search paths.
 import "markdown";
 import "fs";
 import "io";
@@ -20,50 +16,43 @@ import "template";
 import "crypto";
 import "assert";
 import "yaml";
-// Pure text, path, and URL helpers, split into their own unit-tested module. Flat
-// import (`as _`) merges its exported functions into this scope, so callers here
-// name them directly (escapeAttr, relativePath, ...) as before the extraction.
+// Text/path/URL helpers. Flat import (`as _`) merges a module's exports into this scope,
+// so callers name them unqualified (escapeAttr, relativePath, ...); same for the imports
+// below.
 import "lib/text" as _;
-// Source-path -> clean-URL mapping (the directory-index scheme and blog date
-// scoping), likewise split into its own unit-tested module and flat-imported so
-// cleanURL/cleanDepth/blogURLPath resolve here unqualified.
+// Source-path -> clean-URL mapping (directory-index scheme, blog date scoping):
+// cleanURL/cleanDepth/blogURLPath.
 import "lib/url" as _;
-// Sitemap/Atom XML serialization and Atom date normalization, split into their own
-// unit-tested module and flat-imported so escapeXml/xmlElement/atomDate resolve here
-// unqualified at their many feed-building call sites.
+// Sitemap/Atom XML serialization + Atom date normalization: escapeXml/xmlElement/atomDate.
 import "lib/feed" as _;
-// Date formatting (bylines, feed dates, recent-changes stamps), split into its own
-// unit-tested module and flat-imported so formatISO/blogDate/... resolve unqualified.
+// Date formatting (bylines, feed dates, recent-changes stamps): formatISO/blogDate/...
 import "lib/date" as _;
-// Directory-index link rewriting (resolve, old->new URL map, re-relativize), split
-// into its own unit-tested module and flat-imported so rewriteHref/resolvePath/
-// cleanTarget resolve unqualified at their call sites here.
+// Directory-index link rewriting (resolve, old->new URL map, re-relativize):
+// rewriteHref/resolvePath/cleanTarget.
 import "lib/html" as _;
-// Content-Security-Policy construction and the content hashing under it, split into
-// its own unit-tested module and flat-imported so computeCSP/scriptHash/fileSha256/
-// cspForRedirectStub and the CSP_* constants resolve here unqualified.
+// Content-Security-Policy construction + the content hashing under it:
+// computeCSP/scriptHash/fileSha256/cspForRedirectStub and the CSP_* constants.
 import "lib/csp" as _;
-// Per-page facts read from a source page's Markdown (title, tags, page_type,
-// reading time, fallback description, since-badge), flat-imported so deriveTitle/
-// parseTags/pageType/readingTime/deriveDescription/insertSinceBadge resolve here.
+// Per-page facts read from a page's Markdown (title, tags, page_type, reading time,
+// fallback description, since-badge): deriveTitle/parseTags/pageType/readingTime/
+// deriveDescription/insertSinceBadge.
 import "engine/meta" as _;
 // Pure release-data transforms (semver ordering, artifact descriptions, release.json
-// string encoding), flat-imported so semverSortKey/sortNamesSemverDesc/artifactDesc/
-// jsonStr/jsonStrList resolve here; the Site-coupled loaders/writers stay below.
+// encoding): semverSortKey/sortNamesSemverDesc/artifactDesc/jsonStr/jsonStrList. The
+// Site-coupled loaders/writers stay below.
 import "site/release" as _;
-// Filesystem/walk predicates (isDirectory + the docs-root generator-file/dir skips),
-// a leaf module shared with engine/types.buzz so the content walks resolve them here.
+// Filesystem/walk predicates (isDirectory + the docs-root generator-file/dir skips); a
+// leaf shared with engine/types.buzz.
 import "engine/path" as _;
-// The Site data model + record types (the walk's build state), shared with every
-// writer module so they can take a `site: Site` without a cycle back to this file.
+// The Site data model + record types (the walk's build state); shared with every writer
+// module so they take a `site: Site` without a cycle back to this file.
 import "engine/types" as _;
 // Path/URL routing helpers (clean URLs, ../ depth, deploy base path).
 import "engine/route" as _;
 // The persistent site chrome (nav/footer/panels/announcement/TOC) built as fragments.
 import "engine/nav" as _;
 // Build-correctness + provenance layer (integrity/orphan/abandoned gates, git metadata,
-// output pruning, the URL ledger); free functions over a Site, imported for the calls in
-// site_render below.
+// output pruning, the URL ledger); free functions over a Site.
 import "engine/gates" as _;
 import "engine/feeds" as _;
 import "engine/discovery" as _;
@@ -74,81 +63,23 @@ import "engine/blog" as _;
 import "engine/search" as _;
 import "site/tour" as _;
 import "site/development" as _;
-// The concrete site configuration (base URL, title, nav, generated-tree names); the only
-// site/-specific value the composition root injects into the Site so the engine stays generic.
+// The concrete site configuration (base URL, title, nav, generated-tree names) - the only
+// site/-specific value the composition root injects so the engine stays generic.
 import "site/config" as _;
 
-// Path config, set by site_render() from the arguments the magusfile passes in - the
-// generator does not hardcode where the workspace, docs, or output live, so it stays
-// a config-agnostic library rather than owning project layout the caller reaches into.
-// Pico CSS is vendored at assets/pico.min.css (copied to gen/assets/ on each generate).
-// Same-origin; served from this site, never fetched remotely. Version: @picocss/pico@2.1.1.
-// SRI provenance (for reference, not used with same-origin link):
+// Pico CSS is vendored at assets/pico.min.css (copied to gen/assets/ each generate).
+// Same-origin, never fetched remotely. Version: @picocss/pico@2.1.1. SRI provenance
+// (for reference; unused with a same-origin link):
 //   sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU
-// To upgrade: download the new pico.min.css into assets/ (not gen/assets/), update the
-// version comment, recompute the SRI if ever reverting to CDN delivery, and regenerate.
-// The site's base URL, title, repo, nav, and generated-tree names are no longer loose
-// constants: they live in a Config value (engine/types.buzz defines the type,
-// site/config.buzz holds magus's) that site_render injects into site.config, and every
-// engine module reads them from the Site it already threads.
-
-
-// Value objects. They must precede Site, which holds arrays of them - Buzz has no
-// forward references to types.
-
-// loadMeta/assetIntegrityCheck/orphanCheck/capture/buildCommits (+ HISTORY_MAX) moved to
-// engine/gates.buzz (the build-correctness + provenance layer).
-
-
-// isGenerated/outputName/climb/climbFromDir/sitePathPrefix/newCleanDirectory moved to
-// engine/route.buzz (path/URL routing helpers).
+// To upgrade: drop the new pico.min.css into assets/ (not gen/assets/), bump the version
+// above, recompute the SRI only if reverting to CDN delivery, and regenerate.
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-// CSP construction and content hashing are in lib/csp.buzz (flat-imported
-// above): fileSha256, scriptHash, extractInlineScripts, computeCSP,
-// cspForRedirectStub, and the CSP_* constants.
-
-
-
-// The persistent site UI (nav bar, footer, settings/reference panels, announcement,
-// TOC list, commit footer) are in engine/nav.buzz.
-
-
-
-
-
-
-
-// (defined in engine/meta.buzz)
-
-
-
-
-
-
-
-
-
-
-
-
-
-// walkBlog visits every blog/*.md post file (excluding index.md and _underscored
-// fixtures), in fs.list's sorted order — so the walk is deterministic. Posts are
-// flat: no nested subdirectories under blog/.
+// walkBlog visits every blog/*.md post (skipping index.md and _underscored fixtures) in
+// fs.list's sorted order, so the walk is deterministic. Posts are flat: no nested subdirs
+// under blog/.
 fun walkBlog(site: Site) > void {
     if (isDirectory(site.root + "/" + site.blog) == false) { return; }
     foreach (name in fs.list(site.root + "/" + site.blog)) {
@@ -158,9 +89,6 @@ fun walkBlog(site: Site) > void {
     }
     renderBlogIndex(site);
 }
-
-// isDirectory / isGeneratorDir / isGeneratorFile are in engine/path.buzz (a leaf
-// module both this file and engine/types.buzz import).
 
 // Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
 // root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).
@@ -184,12 +112,11 @@ fun walk(rel: str, site: Site) > void {
 
 
 
-// site_render rebuilds gen/ from ../docs and the root README. Pure function of
-// git history (footers) and the source tree — reproducible and gate-stable.
+// site_render rebuilds gen/ from ../docs and the root README. Pure function of git
+// history (footers) and the source tree - reproducible and gate-stable.
 export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
-    // The generator state for one render pass, created here and threaded explicitly
-    // into every renderer as a `site` argument - no module-global singleton, so two
-    // renders (or parallel sessions) never share state.
+    // Generator state for one render pass, threaded explicitly into every renderer as a
+    // `site` arg - no module-global singleton, so parallel renders never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
     var site: Site = mut Site{};
     site.config = magusConfig();
@@ -212,98 +139,82 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
             }
         }
     }
-    // Computed once, before any page renders, so every page (renderPage()'s shared
-    // head AND the hand-authored playground.html/graph.html) threads a stable
-    // string instead of recomputing per page. See Site.csp/Site.cspHome and
-    // computeCSP's doc comments for which pages get which of the two.
+    // Computed once so every page threads a stable string instead of recomputing per
+    // page. See Site.csp/Site.cspHome and computeCSP for which pages get which.
     site.csp = computeCSP(CSP_IMG_SRC_DEFAULT);
     site.cspHome = computeCSP(CSP_IMG_SRC_HOME);
-    // gen/ is NOT wiped and rebuilt from scratch: outDir is created if missing, then
-    // every render below writes/overwrites its current output in place, and
-    // pruneStaleOutputs() (called near the end of this function, once every write is
-    // known) deletes exactly the leftovers whose source has since been renamed or
-    // removed - a renamed docs page, a deleted blog post, a dropped alias, a release
-    // that fell out of CHANGELOG.md. Committed-but-not-rendered artifacts (the
-    // playground's WASM/editor bundle, rebuilt out of band by build-playground /
-    // build-playground-editor) simply persist untouched, since nothing here writes
-    // or deletes them.
+    // gen/ is NOT wiped and rebuilt: outDir is created if missing, every render below
+    // overwrites in place, and pruneStaleOutputs() (near the end, once every write is
+    // known) deletes only the leftovers whose source is gone - a renamed page, a deleted
+    // post, a dropped alias, a release out of CHANGELOG.md. Committed-but-not-rendered
+    // artifacts (the playground WASM/editor bundle) persist untouched, since nothing here
+    // writes or deletes them.
     fs.makeDirectory(site.outDir);
     std.print("generating site from " + site.root + "/" + site.docs + "/ -> " + site.outDir + "/");
 
-    // Copy static assets referenced by the root README (images, badges). Scoped
-    // delete-then-recopy (not a tracked/pruned path like everything else): cp -r
-    // alone wouldn't remove a since-deleted source image, so source-copied files
-    // are cleared first to keep this one directory-copy free of leftovers too.
-    // Preserve the committed esbuild build outputs (mermaid.js, hljs.js from
-    // build-mermaid / build-hljs) - they live in gen/assets, not site.root/assets,
-    // so a blind wipe would delete them on `serve` (which re-renders without
-    // rebuilding bundles); generate rebuilds them afterward regardless.
+    // Copy static assets the root README references (images, badges). Scoped delete-
+    // then-recopy: cp -r alone wouldn't drop a since-deleted source image, so the copied
+    // files are cleared first. Preserve the committed esbuild outputs (mermaid.js,
+    // hljs.js) - they live in gen/assets, not site.root/assets, so a blind wipe would
+    // delete them on `serve` (which re-renders without rebuilding bundles); generate
+    // rebuilds them afterward anyway.
     os.execute(["sh", "-c", "mkdir -p " + site.outDir + "/assets && find " + site.outDir + "/assets -mindepth 1 -maxdepth 1 ! -name mermaid.js ! -name hljs.js -exec rm -rf \{\} +"]);
     os.execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets/. " + site.outDir + "/assets/ || true"]);
 
-    // Bundle + minify the client-side assets with esbuild (pinned in mise.toml).
-    // The nine flat scripts became a src/ ES-module tree (feature modules + lib/);
-    // esbuild writes two outputs: theme.js (head, critical, minified — no bundle
-    // needed, it has no imports) and main.js (the deferred bundle of every feature
-    // module). mermaid is a lazy dynamic import() pointing to the same-origin
+    // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
+    // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
+    // of every feature module). mermaid is a lazy dynamic import() of the same-origin
     // gen/assets/mermaid.js bundle (built by build-mermaid); esbuild leaves dynamic
-    // imports as external runtime imports. CSS is minified per-file (not
-    // bundled). Pinned esbuild -> byte-stable output, so the drift gate holds.
+    // imports external. CSS is minified per-file, not bundled. Pinned esbuild ->
+    // byte-stable output, so the drift gate holds.
     os.execute(["sh", "-c", "esbuild src/styles/site.css --minify --outfile=" + site.outDir + "/site.css"]);
     // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
-    // layout) loaded by /dashboard/, /logs/, /graph/ (and the playground, for the status bar)
-    // but NOT the docs corpus. Site-wide-ish, so minified to gen root and enumerated in the
-    // precache/allowlist next to site.css.
+    // layout), loaded by /dashboard/, /logs/, /graph/ and the playground status bar but NOT
+    // the docs corpus. Minified to gen root, enumerated in the precache/allowlist next to
+    // site.css.
     os.execute(["sh", "-c", "esbuild src/styles/console.css --minify --outfile=" + site.outDir + "/console.css"]);
     // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
-    // drawer) that BOTH the docs pages and the console apps use. Split out of console.css so the
-    // docs corpus can load only this and drop console.css. Gen-root, precached like the others.
+    // drawer) used by BOTH docs pages and console apps. Separate from console.css so the docs
+    // corpus can load only this. Gen-root, precached like the others.
     os.execute(["sh", "-c", "esbuild src/styles/ui-panels.css --minify --outfile=" + site.outDir + "/ui-panels.css"]);
     os.execute(["sh", "-c", "esbuild src/styles/theme.css --minify --outfile=" + site.outDir + "/theme.css"]);
-    // The console surfaces (graph/logs/dashboard/activity) and their page-scoped CSS moved to the
-    // standalone top-level console/ project (its own build, deployed to /console/). The docs site no
-    // longer renders or bundles any of them.
+    // The console surfaces (graph/logs/dashboard/activity) live in the standalone console/
+    // project (its own build, deployed to /console/); the docs site renders none of them.
     os.execute(["sh", "-c", "esbuild src/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
     os.execute(["sh", "-c", "esbuild src/site/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
-    // Emit the WebAssembly playground page at gen/playground/index.html (injecting the
-    // shared nav/footer into the hand-authored playground.html). buzz.wasm,
-    // wasm_exec.js, and editor.js are committed directly in gen/playground/ - rebuilt
-    // in place by build-playground / build-playground-editor, never by this render -
-    // so renderPlayground only needs to add index.html alongside them. gen/ no longer
-    // gets wiped on every generate (see the comment above fs.makeDirectory(site.outDir)),
-    // so there is no external source copy to merge in; pruneStaleOutputs() also knows
-    // to leave these three paths alone (see its alwaysKeep set).
-    // Gather every docs page's relatedness metadata BEFORE any page renders, so each docs page's
-    // "Related" cards (renderRelated) can resolve titles/URLs against the full corpus. collectDocPages
-    // only reads frontmatter, so it is free of the render state below.
+    // buzz.wasm, wasm_exec.js, and editor.js are committed in gen/playground/ - rebuilt in
+    // place by build-playground / build-playground-editor, never by this render - so
+    // renderPlayground (below) only adds index.html alongside them. pruneStaleOutputs()
+    // leaves these three paths alone (its alwaysKeep set).
+    // Gather every docs page's relatedness metadata BEFORE any page renders, so each page's
+    // "Related" cards resolve titles/URLs against the full corpus. collectDocPages reads only
+    // frontmatter, so it is free of the render state below.
     site.collectDocPages("");
 
     renderPlayground(site);
 
-    // Load release manifests from releases/*.yaml BEFORE the walk so renderPage()
-    // knows whether the releases Atom feed will be written and can gate its
-    // <link rel=alternate> discovery tag accordingly (advertising a missing feed
-    // file would trip the asset check). Changelog-parsing no longer runs at site-build
-    // time; it runs only at release-cut time (cmd/magus-utils cut).
+    // Load release manifests from releases/*.yaml BEFORE the walk so renderPage() knows
+    // whether the releases Atom feed exists and can gate its <link rel=alternate> discovery
+    // tag (advertising a missing feed would trip the asset check). Changelog parsing runs
+    // only at release-cut time (cmd/magus-utils cut), not here.
     loadReleases(site);
 
     renderRoot(site);
     walk("", site);
     walkBlog(site);
 
-    // Build the /development/ section before writeAliases so its pages are in site.pageUrls
-    // for the collision guard and its collectAlias redirects (the retired
-    // /development/projects/ URLs) get stubs written in the same pass.
+    // Build /development/ before writeAliases so its pages are in site.pageUrls for the
+    // collision guard, and its collectAlias redirects (retired /development/projects/ URLs)
+    // get stubs in the same pass.
     renderDevelopment(site);
 
-    // Emit a redirect stub per declared frontmatter alias (after the walk, so every
-    // real page URL is known for the collision guard). Aliases stay out of the
-    // search index/sitemap/feeds — only the real page they point to appears there.
-    // The console API-reference page (docs/reference/console.md) aliases the old /console/ URL, so a
-    // redirect stub lands at gen/console/index.html here - that keeps the docs site's internal links
-    // to /console/ resolving for the asset-integrity gate. The console SPA is a SEPARATE project,
-    // copied over gen/console/ at deploy (see .github/workflows/pages.yaml), so the app wins there.
+    // Emit a redirect stub per frontmatter alias (after the walk, so every real page URL is
+    // known for the collision guard). Aliases stay out of the search index/sitemap/feeds -
+    // only their target page appears. docs/reference/console.md aliases the old /console/ URL,
+    // so a stub lands at gen/console/index.html, keeping internal links to /console/ resolving
+    // for the asset gate. The console SPA is a separate project copied over gen/console/ at
+    // deploy (.github/workflows/pages.yaml), so the app wins there.
     site.writeAliases();
 
     writeSEOFiles(site);
@@ -316,53 +227,43 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     renderTourPage(site);
     writeManifest(site);
 
-    // llms.txt: the docs index an AI agent reads to discover pages and fetch each
-    // one's Markdown at <url>index.md. A post-walk aggregate over the docs corpus,
-    // like search-index.json below.
+    // llms.txt: the index an AI agent reads to discover pages and fetch each one's Markdown
+    // at <url>index.md. A post-walk aggregate over the corpus, like search-index.json below.
     writeLLMsIndex(site);
 
-    // Flat {url, title, text, tags, description?} record per page; search.js
-    // fetches this lazily on first focus. Keys are sorted by serialize, and the
-    // walk order is fs.list's (sorted), so the file is byte-stable across runs.
+    // Flat {url, title, text, tags, description?} record per page; search.js fetches it
+    // lazily on first focus. serialize sorts keys and the walk order is fs.list's (sorted),
+    // so the file is byte-stable across runs.
     fs.writeFile(site.outDir + "/search-index.json", "[" + site.searchRecords.join(",") + "]");
 
     // Built last: the cache version digests the precached assets (incl. search-index.json
     // just above), so every one of them must already exist.
     buildServiceWorker(site);
 
-    // Clean up anything left on disk from a previous render whose source is gone
-    // (see pruneStaleOutputs' doc comment). Runs before the two gates below so
-    // neither can trip on a stale page's dangling reference to content removed
-    // along with it.
+    // Delete anything on disk from a previous render whose source is gone (see
+    // pruneStaleOutputs' doc). Runs before the gates below so neither trips on a stale
+    // page's dangling reference to content removed with it.
     pruneStaleOutputs(site);
 
-    // writeSiteManifest is NOT called here: generateJsBundles() (magusfile.buzz's
-    // generate(), which calls this function) still has to run and writes
-    // gen/assets/mermaid.js and gen/assets/hljs.js - both served assets - AFTER
-    // site_render returns. Computing the manifest here would silently miss them.
-    // See generate()'s call to render.writeSiteManifest(site) for the real call
-    // site, which runs once every write to gen/ - by any step - is done.
+    // writeSiteManifest is NOT called here: generate() (magusfile.buzz) still writes
+    // gen/assets/mermaid.js and hljs.js - both served assets - AFTER site_render returns,
+    // so computing the manifest here would miss them. generate() calls
+    // render.writeSiteManifest(site) once every write to gen/ is done.
 
-    // Reproducibility guard: throw on any dangling href/src reference. Runs after
-    // every asset + page has been written, so a missing file (renamed bundle,
-    // deleted image, forgotten alias fix) fails the build here rather than
-    // shipping a silent 404. See docs/engines.md.
+    // Reproducibility guard: throw on any dangling href/src. Runs after every asset + page
+    // is written, so a missing file (renamed bundle, deleted image, forgotten alias) fails
+    // the build here instead of shipping a 404. See docs/engines.md.
     assetIntegrityCheck(site);
 
-    // Orphan gate: after every page exists, prove each docs page is reachable by
-    // clicking from the site's front door. Runs after assetIntegrityCheck so link
-    // targets are already known-good.
+    // Orphan gate: prove each docs page is reachable by clicking from the front door. Runs
+    // after assetIntegrityCheck so link targets are already known-good.
     orphanCheck(site);
 
     // Parity gate: no previously-shipped URL may silently start 404-ing.
     abandonedLinkCheck(site);
 
     std.print("done");
-    // Hand the populated state back to the caller, which threads it into
-    // updateUrlLock (no module-global carries it between the two calls).
+    // Hand the populated state back; the caller threads it into updateUrlLock (no
+    // module-global carries it between the two calls).
     return site;
 }
-
-// checkPathExists/scanReferencesInHTML/walkGen/pruneStaleOutputs/writeSiteManifest/
-// pageKey/readURLSet/abandonedLinkCheck/updateUrlLock (+ URL_LOCK/RETIRED_URLS) moved
-// to engine/gates.buzz.

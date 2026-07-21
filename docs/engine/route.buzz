@@ -1,18 +1,13 @@
-// engine/route.buzz - path and URL routing helpers: turning a source-tree path into a
-// clean output URL, computing how many "../" a page needs to reach the site root, and
-// the deploy base path derived from the configured site URL. Site-aware (a few take the
-// Site for its docs/out dirs, or read the base URL), so it imports engine/types; kept out
-// of the leaf engine/path.buzz for exactly that reason. Flat-imported by render.buzz and
-// the writer/nav modules that resolve page URLs.
+// engine/route.buzz - path/URL routing: source path -> clean output URL, the "../" depth
+// back to site root, and the deploy base path from the configured site URL. Site-aware, so
+// it imports engine/types and stays out of the leaf engine/path.buzz.
 import "lib/url" as _;
 import "engine/types" as _;
 
-// isGenerated reports whether a page is mechanically generated rather than hand-
-// written. Generated references live under three fixed docs/ subtrees that the doc
-// generators overwrite wholesale: modules/ (cmd/magus-docs), spells/*.md
-// (cmd/magus-spelldocs; the spells.md landing itself is hand-written), and
-// manpage/ (cmd/magus-manpage). srcRel is the docs/-prefixed source path. Kept as
-// a path convention because the generated .md carries no frontmatter marker.
+// isGenerated reports whether a doc page is machine-generated. The generators overwrite
+// fixed docs/ subtrees wholesale: buzz/modules/, spells/*.md (but the spells.md landing is
+// hand-written), and manpage/, plus config.md. srcRel is the docs/-prefixed path. A path
+// convention because the generated .md carries no frontmatter marker.
 export fun isGenerated(srcRel: str, site: Site) > bool {
     return srcRel.startsWith(site.docs + "/buzz/modules/")
         or srcRel.startsWith(site.docs + "/spells/")
@@ -35,21 +30,17 @@ export fun climb(n: int) > str {
     return s;
 }
 
-// climbFromDir returns the "../" prefix that climbs from a gen-relative directory back to
-// gen's root - one "../" per path segment. So "playground" -> "../" and "console/dashboard"
-// -> "../../". The standalone/app pages derive their nav prefix from their output location
-// with this instead of a hand-maintained literal, which silently went wrong in the
-// /console/ move (the prefix and the write path drifted apart).
+// climbFromDir returns the "../" prefix from a gen-relative directory back to gen's root,
+// one "../" per segment ("console/dashboard" -> "../../"). App pages derive their nav
+// prefix from their output location so it can't drift from the write path.
 export fun climbFromDir(dir: str) > str {
     return climb(dir.split("/").len());
 }
 
-// sitePathPrefix returns the root-absolute URL path prefix for this deployment - the path
-// component of baseURL, e.g. "https://eli.gladman.cc/magus/" -> "/magus/" - or "/" when
-// baseURL is unset (an empty string splits to length 1, so the branch is skipped). Only the
-// pages that can be served at an unpredictable depth (the 404 and the SW offline fallback)
-// and the PWA manifest/service worker use this absolute scheme; every other page uses the
-// depth-relative rootPrefix. One definition so the derivation isn't copy-pasted four ways.
+// sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL
+// ("https://host/magus/" -> "/magus/"), or "/" when baseURL is unset. Used only where depth
+// is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the
+// depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.
 export fun sitePathPrefix(baseURL: str) > str {
     var basePath = "/";
     final parts = baseURL.split("://");
@@ -62,25 +53,18 @@ export fun sitePathPrefix(baseURL: str) > str {
     return basePath;
 }
 
-// rewriteLinks applies rewriteHref to every href="..." in a rendered content
-// fragment. It runs on the markdown-rendered body only (before the page template
-// wraps it), so the nav/breadcrumb/pager hrefs — built separately with clean URLs —
-// are never double-processed. oldDir/newDir are the page's old flat directory and
-// new clean directory (both gen-root-relative, "" for the home page).
-// newCleanDirectory gives a docs page's directory after the directory-index move -
-// its clean URL without the trailing slash - for rewriteLinks. It reads site state
-// (the blog dir, via cleanURL), so it stays here; the pure old-directory counterpart
-// (oldFlatDirectory) lives in lib/html.
+// newCleanDirectory gives a docs page's clean directory (its clean URL minus the trailing
+// slash), the "new dir" arg the link rewriter needs. Reads site state (blog dir via
+// cleanURL), so it lives here; the pure oldFlatDirectory counterpart is in lib/html.
 export fun newCleanDirectory(rel: str, site: Site) > str {
     final u = cleanURL(rel, site.blog);
     if (u == "") { return ""; }
     return u.sub(0, u.len() - 1);
 }
 
-// rootPrefix returns the relative path from a generated page back up to gen/'s
-// root ("" for spells.html, "../" for modules/fs.html, "../../" for
-// codes/sandbox/X.html), so the shared nav links and theme.js resolve at any
-// page depth and the site still works when served under a project subpath.
+// rootPrefix returns the relative path from a page back up to gen/'s root ("" for
+// spells.html, "../../" for codes/sandbox/X.html), so shared nav and theme.js resolve
+// at any page depth and the site works under a project subpath.
 export fun rootPrefix(srcRel: str, site: Site) > str {
     var rel = srcRel;
     if (rel.startsWith(site.docs + "/")) { rel = rel.sub((site.docs + "/").len()); }

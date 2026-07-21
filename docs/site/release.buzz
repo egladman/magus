@@ -1,16 +1,12 @@
-// site/release.buzz - pure helpers for turning releases/*.yaml into the Atom feed,
-// the /public/release/ artifact tree, and release.json: newest-first semver ordering,
-// per-artifact descriptions, and the minimal JSON string encoding release.json needs.
-// Self-contained (only the lib/text helpers), so it unit-tests here and is
-// flat-imported by render.buzz (`import "site/release" as _`). The Site-coupled
-// loaders/writers that consume these (loadReleases, renderReleasesAtom, releaseIndexJSON,
-// renderPublic) stay in render.buzz; only the pure transforms live here.
+// site/release.buzz - pure transforms over releases/*.yaml: newest-first semver
+// ordering and per-artifact descriptions. Self-contained (only lib/text), so it
+// unit-tests here; the Site-coupled loaders/writers stay in render.buzz.
 import "lib/text" as _;
 import "assert";
 
-// semverSortKey returns a zero-padded sort key for a release filename.
-// "v0.10.0.yaml" -> "0000.0010.0000", so lexicographic order matches numeric semver.
-// Unknown filename formats fall through to the original name (safe: only used for sort).
+// semverSortKey returns a zero-padded sort key: "v0.10.0.yaml" -> "0000.0010.0000",
+// so lexicographic order matches numeric semver. Unknown formats fall through to the
+// original name (safe: sort-only).
 export fun semverSortKey(name: str) > str {
     var v = name;
     if (v.startsWith("v")) { v = v.sub(1); }
@@ -24,9 +20,8 @@ export fun semverSortKey(name: str) > str {
     return key;
 }
 
-// sortNamesSemverDesc sorts a list of release filenames descending by semver
-// (newest-first). Uses selection sort; O(n^2) fine for the expected ~10-20 releases.
-// Mirrors Go's compareSemver in cmd/magus-utils/release.go.
+// sortNamesSemverDesc sorts release filenames newest-first. Selection sort; O(n^2)
+// fine for ~10-20 releases. Mirrors Go's compareSemver in cmd/magus-utils/release.go.
 export fun sortNamesSemverDesc(names: [str]) > [str] {
     var remaining: [str] = mut [<str>];
     foreach (n in names) { remaining.append(n); }
@@ -55,13 +50,13 @@ export fun sortNamesSemverDesc(names: [str]) > [str] {
     return sorted;
 }
 
-// artifactDesc returns a human-readable description for a release artifact given
-// its filename and platform string. Covers the standard release asset set.
+// artifactDesc describes a release artifact from its filename and platform, over the
+// standard release asset set.
 export fun artifactDesc(name: str, platform: str) > str {
     if (name == "SHA256SUMS")        { return "SHA-256 manifest"; }
     if (name == "SHA256SUMS.sig")    { return "Ed25519 signature of SHA256SUMS"; }
     if (name == "magus-release.pem") { return "Release signing key (SPKI PEM)"; }
-    // Tarballs: derive from platform string (e.g. "linux/amd64", "darwin/arm64").
+    // Tarballs: derive from the platform string.
     if (platform == "linux/amd64")   { return "Linux amd64 binary"; }
     if (platform == "linux/arm64")   { return "Linux arm64 binary"; }
     if (platform == "darwin/amd64")  { return "macOS Intel binary"; }
@@ -70,8 +65,8 @@ export fun artifactDesc(name: str, platform: str) > str {
     return name;
 }
 
-// releaseIndexJSON encodes its output with serialize.jsonEncode, so this module carries
-// no hand-rolled JSON string helpers.
+// releaseIndexJSON (in public.buzz) encodes via serialize.jsonEncode, so this module
+// needs no hand-rolled JSON string helpers.
 
 test "semverSortKey produces zero-padded keys for numeric semver comparison" {
     assert.equal(semverSortKey("v0.2.0.yaml"),  "0000.0002.0000", "v0.2.0");

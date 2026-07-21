@@ -1,6 +1,6 @@
-// lib/dom.buzz - a small HTML builder. Attribute values are escaped; element
-// bodies are inserted raw (they are already-built HTML). Attrs are ordered by the
-// caller, so output matches hand-written markup byte for byte.
+// lib/dom.buzz - a small HTML builder. Attribute values are escaped; element bodies
+// are inserted raw (already-built HTML). Caller orders the attrs, so output matches
+// hand-written markup byte for byte.
 import "assert";
 import "lib/text" as _;
 

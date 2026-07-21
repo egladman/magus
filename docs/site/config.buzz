@@ -1,13 +1,11 @@
-// site/config.buzz - the concrete configuration for THIS site (magus's docs). It is
-// the single swap point: the engine reads everything site-specific through a Config
-// value on the Site, so aiming this SSG at a different site means providing a different
-// Config here. Nothing under engine/ imports this file; render.buzz (the composition
-// root) calls magusConfig() and injects it into the Site once, at the top of the build.
+// site/config.buzz - configuration for THIS site (magus's docs). The single swap
+// point: engine/ reads everything site-specific through the Site's Config, so
+// retargeting this SSG means a different Config here. Nothing under engine/ imports
+// this; render.buzz injects magusConfig() into the Site once at build start.
 import "engine/types" as _;
 
-// magusConfig returns the live configuration for the magus docs site. The nav links
-// are authored in display order; Console opens in a new tab (blank) because it is a
-// standalone app, not a docs page.
+// Nav links in display order; Console opens blank (new tab) - it is a standalone app,
+// not a docs page.
 export fun magusConfig() > Config {
     final nav = mut [<NavLink>];
     nav.append(NavLink{ suffix = "index.html", label = "Home", key = "home" });
@@ -26,7 +24,7 @@ export fun magusConfig() > Config {
         generatorDirs = mut ["node_modules", "gen", "src", "tour"],
         generatorFiles = mut ["MAGUS.md"],
         // pico is same-origin (no CDN); offline/ is the navigation fallback. The heavy
-        // mermaid bundle is left out - it caches lazily on first use.
+        // mermaid bundle is omitted - it caches lazily on first use.
         precacheAssets = mut [
             "search-index.json",
             "playground/wasm_exec.js",

@@ -1,8 +1,7 @@
-// engine/discovery.buzz - the machine-readable content indexes that tell automated
-// consumers what the site holds: sitemap.xml + robots.txt for search crawlers
-// (writeSEOFiles) and llms.txt for AI agents (writeLLMsIndex, whose body is the pure,
-// unit-tested llmsIndexBody). Each reads the finished Site and writes one index;
-// flat-imported by render.buzz, run once post-walk, gated on a configured base URL.
+// engine/discovery.buzz - machine-readable content indexes: sitemap.xml + robots.txt for
+// crawlers (writeSEOFiles) and llms.txt for AI agents (writeLLMsIndex, body is the pure,
+// unit-tested llmsIndexBody). Each reads the finished Site and writes one index post-walk,
+// gated on a configured base URL.
 import "fs";
 import "assert";
 import "engine/types" as _;
@@ -10,10 +9,9 @@ import "lib/text" as _;
 import "lib/feed" as _;
 
 // writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
-// byte-stable), each as an absolute site.config.baseURL loc — the home page's "index.html" URL
-// maps to the bare site root. Aliases are deliberately absent (only canonical pages
-// belong in a sitemap). Gated on site.config.baseURL so the site can ship dark until the host
-// is confirmed. robots points crawlers at the sitemap.
+// byte-stable), each an absolute baseURL loc - "index.html" maps to the bare site root.
+// Aliases are omitted (only canonical pages belong in a sitemap). Gated on baseURL so the
+// site can ship dark until the host is confirmed. robots points crawlers at the sitemap.
 export fun writeSEOFiles(site: Site) > void {
     if (site.config.baseURL == "") { return; }
     var urls: [str] = mut [<str>];
@@ -32,12 +30,11 @@ export fun writeSEOFiles(site: Site) > void {
 }
 
 
-// llmsIndexBody builds the gen/llms.txt document (the llms.txt convention): an H1,
-// a one-line summary, then every docs page as "- [title](base+url): description",
-// sorted by URL for a byte-stable artifact like search-index.json. base is the link
-// prefix (site.config.baseURL for absolute links, else "/"). Each linked page has its Markdown
-// source at <url>index.md (emitted next to the HTML by renderFile), so an agent can
-// fetch clean Markdown per page. Kept pure so a unit test can pin the exact output.
+// llmsIndexBody builds gen/llms.txt (the llms.txt convention): an H1, a one-line summary,
+// then every docs page as "- [title](base+url): description", sorted by URL for a
+// byte-stable artifact. base is the link prefix (baseURL, else "/"). Links point at each
+// page's <url>index.md Markdown sibling, so an agent fetches clean content. Pure so a unit
+// test can pin the output.
 fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
     final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
         return strLess(a.url, b.url);
@@ -48,8 +45,8 @@ fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
         + "so an agent fetches clean content directly.\n\n"
         + "## Documentation\n\n";
     foreach (p in sorted) {
-        // Link straight to the page's Markdown (directory-style url + index.md, the
-        // sibling of index.html), not the HTML page, so no URL guessing is needed.
+        // Link straight to the page's Markdown (url + index.md), not the HTML, so no URL
+        // guessing is needed.
         var line = "- [" + p.title + "](" + base + p.url + "index.md)";
         if (p.desc != "") { line = line + ": " + p.desc; }
         body = body + line + "\n";
@@ -58,9 +55,8 @@ fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
 }
 
 
-// writeLLMsIndex writes gen/llms.txt from the collected docs corpus, mirroring the
-// post-walk search-index.json write. Links are absolute under site.config.baseURL when set so
-// an external agent can follow them; otherwise root-relative.
+// writeLLMsIndex writes gen/llms.txt from the collected docs corpus. Links are absolute
+// under baseURL when set (so an external agent can follow them), else root-relative.
 export fun writeLLMsIndex(site: Site) > void {
     var base = "/";
     if (site.config.baseURL != "") {
