@@ -17,6 +17,46 @@ export interface Launchable {
   hint: string;
 }
 
+// The launcher lede rotates a small time-of-day tagline each fresh load - a quiet sign of polish, not a
+// slogan. Each entry is dry and tool-flavored (magus is a build tool; the daemon keeps the graph warm),
+// understated to match the earthy identity. `at` gates an entry to an hour window (start inclusive, end
+// exclusive; a wrapped window like night spans midnight); `ANY_HOURS` entries are always eligible. The
+// original "See what magus is up to." stays in the pool so nothing is lost. Plain ASCII throughout.
+const ANY_HOURS: [number, number] = [0, 24];
+interface Tagline {
+  text: string;
+  at: [number, number];
+}
+const TAGLINES: Tagline[] = [
+  { text: "See what magus is up to.", at: ANY_HOURS },
+  { text: "Cache warm, spells ready.", at: ANY_HOURS },
+  { text: "The graph is warm.", at: ANY_HOURS },
+  { text: "The forge is warming up.", at: [5, 11] },
+  { text: "Fresh build, fresh coffee.", at: [5, 11] },
+  { text: "Morning. What are we building?", at: [5, 11] },
+  { text: "Deep in the afternoon build.", at: [11, 17] },
+  { text: "Plenty of daylight left to ship.", at: [11, 17] },
+  { text: "Evening. One more target?", at: [17, 22] },
+  { text: "Winding down the day's builds.", at: [17, 22] },
+  { text: "Burning the midnight build.", at: [22, 5] },
+  { text: "The daemon never sleeps.", at: [22, 5] },
+];
+
+// inWindow reports whether `hour` sits in a [start, end) window, handling a window that wraps past
+// midnight (start > end, e.g. 22..5).
+function inWindow(hour: number, [start, end]: [number, number]): boolean {
+  return start <= end ? hour >= start && hour < end : hour >= start || hour < end;
+}
+
+// launcherTagline picks a tagline eligible for the given hour, at random. `pick` is injected only so the
+// choice is testable; it defaults to Math.random. Always non-empty (the ANY_HOURS entries are eligible
+// at every hour), so it never falls back to a placeholder.
+export function launcherTagline(now: Date = new Date(), pick: () => number = Math.random): string {
+  const hour = now.getHours();
+  const eligible = TAGLINES.filter((t) => inWindow(hour, t.at));
+  return eligible[Math.floor(pick() * eligible.length)].text;
+}
+
 // Each launcher card carries its OWN earthy palette hue (--card-accent, set per card below): the small
 // icon takes it (a pop of color per tool). Decorative only - the functional UI keeps PatternFly's brand
 // accent, and semantic status color stays reserved for health.
@@ -65,7 +105,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   const title = document.createElement("h1");
   title.textContent = "What do you want to open?";
   const sub = document.createElement("p");
-  sub.textContent = "See what magus is up to.";
+  sub.textContent = launcherTagline();
 
   const gallery = document.createElement("div");
   gallery.className = "pf-v6-l-gallery pf-m-gutter";
