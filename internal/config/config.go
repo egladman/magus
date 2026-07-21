@@ -188,8 +188,8 @@ type MCP struct {
 const DefaultConsoleURL = "https://eli.gladman.cc/magus/console/"
 
 // Console controls the console service. The console mounts read-only GET endpoints on the MCP
-// HTTP server (/api/v1/graph, /api/v1/status, /api/v1/events) so a browser running the hosted
-// Graph Explorer can read the current workspace, plus the bearer-gated magus.job.v1 JobService
+// HTTP server (/api/v1/graph, /api/v1/events) plus the typed StatusService, so a browser running
+// the hosted Graph Explorer can read the current workspace, plus the bearer-gated magus.job.v1 JobService
 // for triggering maintenance jobs (the daemon's one mutating surface). Loopback only; bearer auth.
 type Console struct {
 	Enabled *bool `yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up

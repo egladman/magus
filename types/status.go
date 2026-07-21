@@ -27,15 +27,15 @@ func (b BuildInfo) Fingerprint() string {
 }
 
 // StatusReport is the canonical JSON/YAML shape returned by `magus status -o json`.
-// It is also served verbatim by GET /api/v1/status on the console so both
-// consumers share one definition. Fields are exported so pkg types can be read from
-// internal packages without importing cmd/magus.
+// The daemon serves the same data to the console over the typed StatusService (its live
+// fields are projected onto magus.status.v1.Status) so both consumers share one definition.
+// Fields are exported so pkg types can be read from internal packages without importing cmd/magus.
 type StatusReport struct {
 	Telemetry TelemetryStatus `json:"telemetry" yaml:"telemetry"`
 	Cache     CacheStatus     `json:"cache" yaml:"cache"`
 	Build     BuildStatus     `json:"build" yaml:"build"`
-	// BuildInfo is the reporting binary's identity (version/commit/date), so a client of
-	// GET /api/v1/status knows which magus it is talking to. Distinct from Build above.
+	// BuildInfo is the reporting binary's identity (version/commit/date), so a StatusService
+	// client knows which magus it is talking to. Distinct from Build above.
 	BuildInfo BuildInfo     `json:"build_info" yaml:"build_info"`
 	Pool      *StatusOutput `json:"pool,omitempty" yaml:"pool,omitempty"`
 	PoolError string        `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
@@ -86,7 +86,7 @@ type ReadinessReport struct {
 // that stays generic and quantitative (e.g. "2 of 3 up to date") because /readyz is served
 // unguarded: counts inform without identifying, but workspace roots, project or service
 // names, filesystem paths, PIDs, and raw error text must never appear here - that
-// identifying detail lives behind the bearer-guarded /api/v1/status. Never the sole
+// identifying detail lives behind the bearer-guarded StatusService. Never the sole
 // signal - a client should key off Status.
 type ReadinessComponent struct {
 	Name   string `json:"name"`   // "workspaces" | "symbol_index" | "services" | "knowledge_graph"

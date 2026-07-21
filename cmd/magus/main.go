@@ -694,13 +694,13 @@ var daemonServer *proc.Server
 // daemonRuns is the daemon's live-run registry: a capture handler folded into every adopted
 // dispatch's journal, tracking per-target execution state. startMultiWorkspaceDaemon builds
 // it and threads it onto each dispatch's context; startMCPWithDaemon hands its Snapshot to
-// the console service so /api/v1/status and the status SSE report active runs. Same process,
+// the console service so the StatusService and the status SSE report active runs. Same process,
 // sequential, so the write happens-before the reads.
 var daemonRuns *console.RunRegistry
 
 // daemonServices is the daemon's shared-service registry. startMultiWorkspaceDaemon builds
 // it (as svcReg) and points this global at it so startMCPWithDaemon can hand its Snapshot to
-// the console service, surfacing hosted services on /api/v1/status alongside the pool and
+// the console service, surfacing hosted services on the StatusService alongside the pool and
 // runs. Same process, sequential, so the write happens-before the reads.
 var daemonServices *service.Registry
 

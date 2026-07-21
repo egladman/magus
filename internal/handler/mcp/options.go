@@ -48,7 +48,7 @@ type Options struct {
 	HealthRoutes map[string]http.Handler
 
 	// StatusBase carries the static portions of a status report (telemetry,
-	// cache, build-tag flags) for the console's /api/v1/status handler.
+	// cache, build-tag flags) for the console's StatusService.
 	// Populated by the caller (cmd/magus) because it owns the selfUpdateCompiled
 	// build-tag constant and the config-to-status
 	// converters. When zero-valued the bridge returns an empty telemetry/cache

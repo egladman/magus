@@ -17,7 +17,7 @@ type collector interface {
 }
 
 // statusSource is the narrow live-pool read the sampler needs, satisfied by
-// *console.Service (the same StatusReport the /api/v1/status handler uses).
+// *console.Service (the same StatusReport the StatusService uses).
 type statusSource interface {
 	StatusReport(context.Context) types.StatusReport
 }

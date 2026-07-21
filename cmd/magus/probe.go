@@ -386,7 +386,7 @@ func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.Statu
 // "2 running, 1 failed", "watcher active, graph rebuilding") inform without identifying.
 // Never put a workspace root, project or service name, filesystem path, PID, socket path,
 // or raw error text in a Detail: the identifying per-subsystem view lives behind the
-// bearer-guarded /api/v1/status. TestHealthEndpointBodiesRedactSensitiveDetail enforces this.
+// bearer-guarded StatusService. TestHealthEndpointBodiesRedactSensitiveDetail enforces this.
 
 // workspacesComponent reports the same workspace-loaded fact the readiness gate itself
 // checks (evaluateHealth), restated as a component so the JSON body is self-describing

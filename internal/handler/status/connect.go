@@ -19,10 +19,10 @@ import (
 // stream and the base64-SSE stream reflect pool changes at the same granularity.
 const defaultStreamInterval = 2 * time.Second
 
-// ConnectService is the typed Connect surface over the SAME live status report the JSON
-// /api/v1/status route and the base64-SSE status frame already serve. It converges the
-// one-shot status onto the wire contract (magus.status.v1.Status) so the dashboard reads a
-// single typed message instead of hand-shaped JSON. Read-only: it only reports, never mutates.
+// ConnectService is the typed Connect surface over the SAME live status report the base64-SSE status
+// frame serves. It is the full replacement for the removed hand-shaped JSON /api/v1/status route:
+// the dashboard reads a single typed message (magus.status.v1.Status, plus observing_since and config on
+// the GetStatus envelope) instead of parsing JSON. Read-only: it only reports, never mutates.
 type ConnectService struct {
 	src      statusSource
 	build    types.BuildInfo
@@ -32,7 +32,7 @@ type ConnectService struct {
 
 // NewConnectService builds the StatusService Connect handler over src (the live report source,
 // satisfied by *console.Service). build stamps the reporting binary's identity onto every
-// snapshot, exactly as the JSON and SSE surfaces do.
+// snapshot, as the SSE status frame does.
 func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger) *ConnectService {
 	return &ConnectService{src: src, build: build, log: log, interval: defaultStreamInterval}
 }
@@ -41,7 +41,7 @@ var _ statusv1connect.StatusServiceHandler = (*ConnectService)(nil)
 
 // GetStatus returns the current live snapshot as a typed magus.status.v1.Status, plus the two static
 // per-session fields (observing_since, config) on the response envelope - the typed replacement for the
-// deprecated JSON /api/v1/status route, which carried the live status AND those static fields in one body.
+// removed JSON /api/v1/status route, which carried the live status AND those static fields in one body.
 func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statusv1.GetStatusRequest]) (*connect.Response[statusv1.GetStatusResponse], error) {
 	report := s.src.StatusReport(ctx)
 	resp := &statusv1.GetStatusResponse{

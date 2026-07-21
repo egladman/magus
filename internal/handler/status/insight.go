@@ -53,7 +53,7 @@ func (h *InsightHandler) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 // allowGet answers a CORS preflight (204) and rejects non-GET methods (405), returning false
-// when the caller should stop. It mirrors the method gate on the status handler.
+// when the caller should stop. It mirrors the method gate the other read handlers use.
 func allowGet(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -66,7 +66,7 @@ func allowGet(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// writeJSON marshals v and writes it as an uncached JSON body, matching the status handler's
+// writeJSON marshals v and writes it as an uncached JSON body, matching the read handlers'
 // no-store posture (these reads reflect live daemon state).
 func writeJSON(w http.ResponseWriter, v any) {
 	body, err := json.Marshal(v)
