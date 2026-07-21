@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	buzz "github.com/egladman/gopherbuzz"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

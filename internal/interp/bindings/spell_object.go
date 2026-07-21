@@ -3,9 +3,9 @@ package bindings
 import (
 	"context"
 
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/proc/run"
 	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )

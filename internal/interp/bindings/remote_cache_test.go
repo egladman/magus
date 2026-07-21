@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/cache"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"

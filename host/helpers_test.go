@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

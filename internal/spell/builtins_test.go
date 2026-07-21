@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
 
 	"github.com/stretchr/testify/assert"

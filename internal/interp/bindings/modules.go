@@ -6,11 +6,11 @@ import (
 	"sort"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
-	buzzstd "github.com/egladman/gopherbuzz/std"
-	"github.com/egladman/gopherbuzz/vm"
 	buzzgen "github.com/egladman/magus/host/gen"
 	ispell "github.com/egladman/magus/internal/spell"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // Module labels, continuing gopherbuzz's origin classification (see

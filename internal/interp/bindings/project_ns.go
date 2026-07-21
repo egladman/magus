@@ -8,12 +8,12 @@ import (
 	"slices"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/workspace"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )

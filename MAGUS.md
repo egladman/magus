@@ -34,7 +34,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **1818 nodes** and **3973 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **1836 nodes** and **4008 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -46,8 +46,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 6 | [`magus query kind:project`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project) | `docs`, `magus`, `gopherbuzz` |
-| target | 63 | [`magus query kind:target`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target) | `content-generate`, `generate`, `generate` |
+| project | 7 | [`magus query kind:project`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project) | `docs`, `notification-center-v2-plan-9e7c5d`, `libs/gopherbuzz` |
+| target | 71 | [`magus query kind:target`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target) | `content-generate`, `generate`, `generate` |
 | spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:spell) | `go`, `ts`, `docker` |
 | op | 52 | [`magus query kind:op`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
 | tool | 13 | [`magus query kind:tool`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:tool) | `sh`, `pnpm`, `go` |
@@ -56,8 +56,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method | 148 | [`magus query kind:method`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 29 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic) | `MGS5002`, `MGS2001`, `MGS4001` |
 | doc | 161 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/manpage/magus.md` |
-| file | 201 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `docs/render.buzz`, `gopherbuzz/examples/bubblegum/config.buzz`, `gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1011 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
+| file | 202 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `docs/render.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1019 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `site_render`, `sendObject` |
 | import | 91 | [`magus query kind:import`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
 | rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
 
@@ -67,10 +67,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | cmd/magus/starter | 7 | [`magus query project:cmd/magus/starter`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:cmd%2Fmagus%2Fstarter) | `format`, `ci`, `build` |
 | console | 5 | [`magus query project:console`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:console) | `build`, `ci`, `preflight` |
 | docs | 15 | [`magus query project:docs`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:docs) | `content-generate`, `generate`, `ci` |
-| gopherbuzz | 9 | [`magus query project:gopherbuzz`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:gopherbuzz) | `build`, `format`, `generate` |
+| libs/diag | 8 | [`magus query project:libs/diag`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Fdiag) | `format`, `generate`, `build` |
+| libs/gopherbuzz | 9 | [`magus query project:libs/gopherbuzz`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Fgopherbuzz) | `build`, `format`, `generate` |
 | proto | 3 | [`magus query project:proto`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:proto) | `ci`, `generate`, `lint` |
 
-## Project: magus
+## Project: notification-center-v2-plan-9e7c5d
 
 | Target | What it does |
 |---|---|
@@ -141,7 +142,20 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
 | `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
 
-## Project: gopherbuzz
+## Project: libs/diag
+
+| Target | What it does |
+|---|---|
+| `generate` | Regenerates MAGUS.md and fails on drift. |
+| `format` |  |
+| `lint` |  |
+| `build` |  |
+| `test` |  |
+| `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
+| `preflight` |  |
+| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+
+## Project: libs/gopherbuzz
 
 | Target | What it does |
 |---|---|

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // buildBuzzPry returns the magus.pry() direct callable for a Buzz session. It suspends

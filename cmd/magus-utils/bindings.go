@@ -149,8 +149,8 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&b, `import (`)
 	fmt.Fprintln(&b, `	"context"`)
 	fmt.Fprintln(&b)
-	fmt.Fprintln(&b, `	buzz "github.com/egladman/gopherbuzz"`)
-	fmt.Fprintln(&b, `	vm "github.com/egladman/gopherbuzz/vm"`)
+	fmt.Fprintln(&b, `	buzz "github.com/egladman/magus/libs/gopherbuzz"`)
+	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
 	if bytes.Contains(body.Bytes(), []byte("host.")) {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/host"`)
 	}

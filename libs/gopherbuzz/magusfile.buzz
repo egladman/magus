@@ -1,0 +1,101 @@
+// magusfile.buzz for gopherbuzz, an embedded Go module
+// (github.com/egladman/magus/libs/gopherbuzz, at libs/gopherbuzz - a separate module, but its path is
+// indicative of where it lives rather than pretending to be standalone). Sets it up as its own magus
+// project, scoped to its go.mod.
+//
+//   magus run build libs/gopherbuzz         compile the package
+//   magus run test libs/gopherbuzz          run the Go test suite
+//   magus run ci libs/gopherbuzz            lint, build, and test
+//   magus run pgo-generate libs/gopherbuzz  regenerate the VM's PGO profile
+
+import "magus";
+
+// go spell: claims **/*.go and the module files. magusfile spell: makes this file's
+// export-fun targets runnable. Both are listed because the explicit "spells" below
+// replaces the default set.
+import "magus/spell/magusfile";
+import "magus/spell/go";
+
+// os.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
+// neither streaming exec nor raw file IO). vcs.isDirty gates regenerated outputs.
+import "os";
+import "fs";
+import "vcs";
+
+magus.project({
+    "spells": [magusfile, go],
+    // Generated catalog; cached so a hit restores it without re-describing.
+    "outputs": ["MAGUS.md"],
+    "targets": {
+        // Profiles the live VM; a cache hit would replay a stale profile.
+        "pgo-generate": {"skip_cache": true},
+        // Drift-gates MAGUS.md via git status: run alone, every time.
+        "generate": {"skip_cache": true, "exclusive": true},
+    },
+});
+
+// Targets. Each delegates to the go spell's ops; gopherbuzz is a pure library, so the
+// pipeline is the Go lifecycle plus md-generate.
+
+export fun preflight(args: [str]) > void {}
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+// Drift = regeneration dirtied a file that was clean, via vcs.isDirty (not a raw
+// git/porcelain shell-out), so a locally-regenerated MAGUS.md passes whether or
+// not it is committed; only a regeneration that changes a clean file fails.
+export fun generate(args: [str]) > void {
+    magus.needs(preflight);
+    final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
+    magus.needs(md_generate);
+    if (magus.has_charm("rw")) { return; }
+
+    if (clean_before and vcs.isDirty(["MAGUS.md"])) {
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/gopherbuzz` and commit";
+    }
+}
+
+// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+export fun md_generate(args: [str]) > void {
+    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs.writeFile("MAGUS.md", doc + "\n");
+}
+export fun format(args: [str]) > void { magus.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
+export fun lint(args: [str]) > void { magus.needs(format); go["go-vet"](); }
+export fun build(args: [str]) > void { magus.needs(format); go["go-build"](); }
+export fun test(args: [str]) > void { magus.needs(format); go["go-test"](); }
+
+// The anchor `magus affected ci` keys off; fans out lint/build/test after format.
+export fun ci(args: [str]) > void {
+    magus.needs(lint, build, test);
+}
+
+// Regenerates default.pgo, the Buzz VM's PGO profile. Re-run after material changes to
+// the interpreter hot path. The canonical profile lives here; cmd/magus/default.pgo
+// symlinks to it so `go build ./cmd/magus` (-pgo=auto) applies it.
+export fun pgo_generate(args: [str]) > void {
+    // Interpreter-hot benches; 1s gives enough samples that VM.Exec dominates.
+    final bench = "Fib|LoopSum|LoopEq|MethodCall|FieldAccess|Call|ForeachMap|StringInterp";
+    // Excluded: these call range() without `import "std"` and fail at setup.
+    final skip = "DirectCall|ForeachList";
+    final tmp = "default.pgo.tmp";
+
+    // allow_failure: excluded benches exit non-zero, but only the profile matters.
+    os.exec("go", ["test", "-run=^$",
+        "-bench=" + bench,
+        "-skip=" + skip,
+        "-benchtime=1s", "-cpuprofile=" + tmp, "-o", "/dev/null", "."],
+        "", {"allow_failure": true});
+
+    if (!fs.exists(tmp)) {
+        throw "pgo-generate: no profile produced";
+    }
+    final profile = fs.readFile(tmp);
+    fs.removeAll(tmp);
+    // Commit only a non-empty profile so a failed run can't clobber a good one.
+    if (profile.len() == 0) {
+        throw "pgo-generate: empty profile produced";
+    }
+    fs.writeFile("default.pgo", profile);
+    magus.info("wrote default.pgo ({profile.len()} bytes)");
+    magus.info("verify: benchstat over -pgo=off vs -pgo=./default.pgo (-bench=Call -count=10)");
+}

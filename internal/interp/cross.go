@@ -7,7 +7,7 @@ import (
 	"slices"
 	"sync"
 
-	buzz "github.com/egladman/gopherbuzz"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
 type crossDispatchCtxKey struct{}

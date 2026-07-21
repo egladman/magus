@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	core "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/interp/engine"
+	core "github.com/egladman/magus/libs/gopherbuzz"
 )
 
 // buzzHostBindingNames lists names the magus host injects into a Buzz session;

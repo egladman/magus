@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/egladman/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // maxChunk caps a single upload chunk; callers may request less but not more.

@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/ward"

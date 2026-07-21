@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 //go:generate go run ../../cmd/magus-utils spells -spells ../../spells -out gen

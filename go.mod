@@ -9,7 +9,6 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/cbroglie/mustache v1.4.0
-	github.com/egladman/gopherbuzz v0.0.0
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/fatih/color v1.19.0
 	github.com/fsnotify/fsnotify v1.9.0
@@ -56,6 +55,7 @@ require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/egladman/magus/libs/diag v0.0.0
+	github.com/egladman/magus/libs/gopherbuzz v0.0.0
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -90,11 +90,11 @@ require (
 	google.golang.org/grpc v1.80.0 // indirect
 )
 
-replace github.com/egladman/gopherbuzz => ./gopherbuzz
-
 tool (
 	connectrpc.com/connect/cmd/protoc-gen-connect-go
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
 
 replace github.com/egladman/magus/libs/diag => ./libs/diag
+
+replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz

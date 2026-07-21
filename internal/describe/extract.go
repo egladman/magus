@@ -26,8 +26,8 @@ import (
 	"slices"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/ast"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/types"
 )
 

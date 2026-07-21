@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/ast"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
 	"github.com/egladman/magus/internal/docs"
 	ispell "github.com/egladman/magus/internal/spell"

@@ -1,6 +1,6 @@
 package bindings
 
-import "github.com/egladman/gopherbuzz/vm"
+import "github.com/egladman/magus/libs/gopherbuzz/vm"
 
 // Buzz → Go argument marshaling for host bindings.
 //

@@ -6,9 +6,9 @@ package buzz
 // engine.ReplDriver interfaces the shared REPL and magus.pry() drive against.
 
 import (
-	core "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp/engine"
+	core "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // Wrap adapts a live core.Session to the generic engine.Session (plus the

@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	buzzstd "github.com/egladman/gopherbuzz/std"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 )
 
 // cwdKey carries the default working directory for the exec primitives.

@@ -5,9 +5,9 @@ package gen
 import (
 	"context"
 
-	buzz "github.com/egladman/gopherbuzz"
-	vm "github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/host"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 )
 

@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/gopherbuzz/token"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 )
 
 // CompletionKind labels a completion item so the editor can pick an icon.

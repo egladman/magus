@@ -19,8 +19,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/gopherbuzz"
 	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/libs/gopherbuzz"
 )
 
 func runSpells(args []string) error {

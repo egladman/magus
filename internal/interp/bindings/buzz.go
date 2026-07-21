@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/host"
 	buzzgen "github.com/egladman/magus/host/gen"
 	"github.com/egladman/magus/internal/interp"
 	ispell "github.com/egladman/magus/internal/spell"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )

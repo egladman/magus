@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
-	core "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp/engine"
+	core "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 func init() {

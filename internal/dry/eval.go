@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strconv"
 
-	buzz "github.com/egladman/gopherbuzz"
-	buzzstd "github.com/egladman/gopherbuzz/std"
-	vm "github.com/egladman/gopherbuzz/vm"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	hostgen "github.com/egladman/magus/host/gen"
 )

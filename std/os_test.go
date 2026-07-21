@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	buzzstd "github.com/egladman/gopherbuzz/std"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/proc/run"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

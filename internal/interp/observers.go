@@ -5,9 +5,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/observability"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // This file translates the gopherbuzz instrumentation hooks (CompileObserver,

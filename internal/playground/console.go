@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/dry"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
 // buzzLangVersion is the Buzz language version gopherbuzz implements. It mirrors

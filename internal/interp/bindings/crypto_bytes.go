@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/egladman/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // registerCryptoBytes builds the byte-level companion to the declarative crypto

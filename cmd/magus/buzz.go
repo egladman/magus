@@ -8,12 +8,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/gopherbuzz"
-	buzzstd "github.com/egladman/gopherbuzz/std"
-	vm "github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // buzzCmd runs Buzz source from a file, stdin, or an inline snippet using the

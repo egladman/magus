@@ -4,8 +4,8 @@ import (
 	"context"
 	"slices"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/vm"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // Graph is the evaluated shape of a magusfile OR a spell buffer: its registered

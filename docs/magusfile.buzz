@@ -9,7 +9,7 @@ import "http";
 // build-playground compiles the gopherbuzz Buzz VM to wasm, so it depends on
 // gopherbuzz's build. The path import binds its targets as cross-project handles
 // (gopherbuzz.build), and folds gopherbuzz into this project's affected set.
-import "project/../gopherbuzz" as gopherbuzz;
+import "project/../libs/gopherbuzz" as gopherbuzz;
 // The static site generator, a sibling module. Aliased so it does not collide with the
 // `render` target below: a same-name target shadows the import and nulls its members.
 import "render" as renderer;

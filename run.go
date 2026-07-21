@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/audit"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -29,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 
-	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
@@ -26,6 +25,7 @@ import (
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"

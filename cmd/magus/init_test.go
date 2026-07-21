@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	buzz "github.com/egladman/gopherbuzz"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

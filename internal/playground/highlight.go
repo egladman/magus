@@ -4,7 +4,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/egladman/gopherbuzz/token"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 )
 
 // Span is a classified run of source text for the editor's highlight overlay.

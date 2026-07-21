@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/spell"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"

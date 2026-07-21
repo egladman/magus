@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	buzz "github.com/egladman/gopherbuzz"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
 // TestExamplesParse walks every std/examples/**/*.buzz file and asserts each one

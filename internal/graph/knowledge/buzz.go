@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/ast"
-	"github.com/egladman/gopherbuzz/token"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )

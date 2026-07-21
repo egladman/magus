@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	buzz "github.com/egladman/gopherbuzz"
 	"github.com/egladman/magus/internal/dry"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
 // TestExamplesParseAndRecord walks every spells/examples/**/*.buzz file and

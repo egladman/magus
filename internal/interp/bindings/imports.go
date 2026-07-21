@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
-	buzz "github.com/egladman/gopherbuzz"
-	"github.com/egladman/gopherbuzz/ast"
-	"github.com/egladman/gopherbuzz/vm"
 	"github.com/egladman/magus/internal/interp"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
 )
 

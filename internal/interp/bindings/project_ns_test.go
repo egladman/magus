@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/egladman/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

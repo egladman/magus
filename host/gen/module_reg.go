@@ -3,8 +3,8 @@ package gen
 import (
 	"context"
 
-	buzz "github.com/egladman/gopherbuzz"
-	vm "github.com/egladman/gopherbuzz/vm"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // RegisterFunc installs a host module on a Buzz session and returns its module map.
