@@ -81,6 +81,9 @@ export function initRunExample(): void {
       s.onerror = function () { reject(new Error("wasm_exec.js failed to load")); };
       document.head.appendChild(s);
     });
+    // A transient load failure must not poison every later Run; drop the cache so the
+    // next click retries. The caller still sees this attempt's rejection.
+    wasmPromise.catch(() => { wasmPromise = null; });
     return wasmPromise;
   }
 
@@ -188,22 +191,24 @@ export function initRunExample(): void {
       // examples stay on the plain evalBuzz path (print output).
       const recorder = pre.hasAttribute("data-recorder");
       ensureBuzz().then(() => {
+        const buzz = window.buzz;
+        if (!buzz) throw new Error("buzz.evalBuzz not ready");
         const pnl = panel();
         const src = code.textContent ?? "";
         if (recorder) {
-          const r = window.buzz!.evalBuzzWithRecorder(src);
+          const r = buzz.evalBuzzWithRecorder(src);
           pnl.textContent = formatTrace(r);
           pnl.classList.toggle("failed", !(r && r.ok));
         } else {
-          const r = window.buzz!.evalBuzz(src);
+          const r = buzz.evalBuzz(src);
           pnl.textContent = (r && r.output) ? r.output : "(no output)";
           pnl.classList.toggle("failed", !(r && r.ok));
         }
       }).catch((e) => {
         const pnl = panel();
-        pnl.textContent = "Failed to load the Buzz runtime: " + e.message;
+        pnl.textContent = "Failed to load the Buzz runtime: " + (e instanceof Error ? e.message : String(e));
         pnl.classList.add("failed");
-      }).then(() => {
+      }).finally(() => {
         runBtn.disabled = false;
         if (span) span.textContent = oldLabel;
       });

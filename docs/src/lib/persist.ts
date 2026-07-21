@@ -20,6 +20,8 @@ export function persisted<T>(key: string, fallback: T): Persisted<T> {
   const read = (): T => {
     try {
       const raw = localStorage.getItem(full);
+      // Trusts the stored shape is still T; callers of non-primitive cells must re-validate
+      // on read (settings.ts clamps its numbers). Corrupt JSON falls through to the catch.
       return raw === null ? fallback : (JSON.parse(raw) as T);
     } catch {
       return fallback; // storage disabled or value corrupt: fall back to the default

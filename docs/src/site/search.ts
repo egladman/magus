@@ -149,8 +149,11 @@ export function initSearch(): void {
     if (loading) return;
     loading = true;
     fetch(ROOT + "search-index.json")
-      .then((r) => r.json())
-      .then((data: SearchEntry[]) => { index = data; loading = false; ready(); })
+      .then((r) => { if (!r.ok) throw new Error("search index HTTP " + r.status); return r.json(); })
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) throw new Error("search index is not an array");
+        index = data; loading = false; ready();
+      })
       .catch(() => { loading = false; if (fail) fail(); });
   }
   function loadIndex(): void {
@@ -164,10 +167,9 @@ export function initSearch(): void {
     );
   }
 
+  const HTML_ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
   function escapeHtml(s: string): string {
-    return String(s).replace(/[&<>"]/g, (c) => {
-      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as Record<string, string>)[c];
-    });
+    return String(s).replace(/[&<>"]/g, (c) => HTML_ESCAPES[c]);
   }
 
   function wordStart(hay: string, i: number): boolean { return i === 0 || /[^a-z0-9]/.test(hay.charAt(i - 1)); }
@@ -262,27 +264,30 @@ export function initSearch(): void {
     function peek(): Token | undefined { return toks[pos]; }
     function parseOr(): QueryNode | null {
       const kids = [parseAnd()];
-      while (peek() && peek()!.t === "or") { pos++; kids.push(parseAnd()); }
+      let tk;
+      while ((tk = peek()) && tk.t === "or") { pos++; kids.push(parseAnd()); }
       const k = kids.filter((x): x is QueryNode => x !== null);
       return k.length === 1 ? k[0] : (k.length ? { op: "or", kids: k } : null);
     }
     function parseAnd(): QueryNode | null {
       const kids = [parseNot()];
-      while (peek() && peek()!.t !== "or" && peek()!.t !== ")") {
-        if (peek()!.t === "and") { pos++; if (!peek() || peek()!.t === "or" || peek()!.t === ")") break; }
+      let tk;
+      while ((tk = peek()) && tk.t !== "or" && tk.t !== ")") {
+        if (tk.t === "and") { pos++; const next = peek(); if (!next || next.t === "or" || next.t === ")") break; }
         kids.push(parseNot());
       }
       const k = kids.filter((x): x is QueryNode => x !== null);
       return k.length === 1 ? k[0] : (k.length ? { op: "and", kids: k } : null);
     }
     function parseNot(): QueryNode | null {
-      if (peek() && peek()!.t === "not") { pos++; const k = parseNot(); return k ? { op: "not", kid: k } : null; }
+      const tk = peek();
+      if (tk && tk.t === "not") { pos++; const k = parseNot(); return k ? { op: "not", kid: k } : null; }
       return parsePrimary();
     }
     function parsePrimary(): QueryNode | null {
       const tk = peek();
       if (!tk) return null;
-      if (tk.t === "(") { pos++; const inner = parseOr(); if (peek() && peek()!.t === ")") pos++; return inner; }
+      if (tk.t === "(") { pos++; const inner = parseOr(); const close = peek(); if (close && close.t === ")") pos++; return inner; }
       if (tk.t === "term") {
         pos++;
         const value = tk.value ?? "";
@@ -305,7 +310,7 @@ export function initSearch(): void {
     const L = lc(e);
     if (leaf.field === "tag" || leaf.field === "tags") {
       for (let i = 0; i < L.tags.length; i++) {
-        if (leaf.wildcard ? leaf.re!.test(L.tags[i]) : L.tags[i] === leaf.value) return true;
+        if (leaf.wildcard && leaf.re ? leaf.re.test(L.tags[i]) : L.tags[i] === leaf.value) return true;
       }
       return false;
     }
@@ -313,7 +318,7 @@ export function initSearch(): void {
       : (leaf.field === "description" || leaf.field === "desc") ? L.desc
       : (leaf.field === "text" || leaf.field === "body") ? L.text
       : L.hay;
-    return leaf.wildcard ? leaf.re!.test(hay) : hay.indexOf(leaf.value) !== -1;
+    return leaf.wildcard && leaf.re ? leaf.re.test(hay) : hay.indexOf(leaf.value) !== -1;
   }
 
   // Boolean inclusion: evaluate the AST against a record. Missing node = matches all.
@@ -331,7 +336,7 @@ export function initSearch(): void {
   function scoreLeaf(leaf: TermNode, e: SearchEntry): number {
     const L = lc(e), v = leaf.value;
     function hit(hay: string, base: number, ws: number): number {
-      if (leaf.wildcard) return leaf.re!.test(hay) ? base : 0;
+      if (leaf.wildcard) return leaf.re && leaf.re.test(hay) ? base : 0;
       const idx = hay.indexOf(v);
       return idx === -1 ? 0 : base + (wordStart(hay, idx) ? ws : 0);
     }

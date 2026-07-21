@@ -40,8 +40,9 @@
 
   function get(): Theme {
     try {
-      return (localStorage.getItem("theme") || "auto") as Theme;
-    } catch (e) {
+      const v = localStorage.getItem("theme");
+      return v === "light" || v === "dark" ? v : "auto"; // storage is cross-version writable; validate
+    } catch {
       return "auto";
     }
   }
@@ -69,10 +70,10 @@
   function set(t: Theme): void {
     if (t === "auto") {
       root.removeAttribute("data-theme");
-      try { localStorage.removeItem("theme"); } catch (e) { /* ignore */ }
+      try { localStorage.removeItem("theme"); } catch { /* ignore */ }
     } else {
       root.setAttribute("data-theme", t);
-      try { localStorage.setItem("theme", t); } catch (e) { /* ignore */ }
+      try { localStorage.setItem("theme", t); } catch { /* ignore */ }
     }
     updateThemeColorMeta(t);
     // Reflect the current mode on the gear's cycle button (it may not exist yet at

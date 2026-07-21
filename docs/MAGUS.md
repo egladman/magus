@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|---|
 | `generate` | generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed. |
 | `format` |  |
-| `lint` |  |
+| `lint` | lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
 | `build` |  |
 | `test` |  |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off. |

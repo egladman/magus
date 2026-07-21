@@ -146,7 +146,7 @@ export function initScrollSpy(): void {
     if (!href) return;
     const raw = href.slice(1);
     let id: string;
-    try { id = decodeURIComponent(raw); } catch (e) { id = raw; }
+    try { id = decodeURIComponent(raw); } catch { id = raw; }
     if (id) links[id] = a;
   });
 

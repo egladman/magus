@@ -9,12 +9,12 @@
 // Modules are imported with .js specifiers even though the sources are .ts: that is
 // the standard TypeScript convention (the extension names the emitted file), and
 // esbuild resolves each to its .ts source.
-import { initNav } from "./nav.js";
-import { initTocToggle, initScrollSpy } from "./toc.js";
+import { initNav } from "./navigation.js";
+import { initTocToggle, initScrollSpy } from "./table-of-contents.js";
 import { initSearch } from "./search.js";
 // ref-drawer + console-settings live in src/ui/ (shared nav panels, styled by
 // styles/ui-panels.css) - loaded on the docs pages AND the console apps, not docs-only.
-import { initRefDrawer } from "../ui/ref-drawer.js";
+import { initRefDrawer } from "../ui/reference-drawer.js";
 import { initConsoleSettings } from "../ui/console-settings.js";
 import { initAnchors } from "./anchors.js";
 import { initCodeCopy } from "./code-copy.js";

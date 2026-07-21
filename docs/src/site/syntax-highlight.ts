@@ -28,7 +28,7 @@ export function initSyntaxHighlight(): void {
       // Minimal Buzz grammar: keywords, types, strings (plain and $"..."
       // interpolated), line/block comments, and numbers. Enough for the
       // magusfile snippets to read in color without a full language spec.
-      hljs.registerLanguage("buzz", function (hl: any) {
+      hljs.registerLanguage("buzz", function (hl) {
         return {
           name: "Buzz",
           keywords: {

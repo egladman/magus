@@ -10,6 +10,7 @@
     "build-mermaid": "esbuild src/vendor/mermaid.ts --bundle --minify --format=esm --outfile=gen/assets/mermaid.js",
     "build-hljs": "esbuild src/vendor/hljs.ts --bundle --minify --format=esm --outfile=gen/assets/hljs.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "biome check src",
     "test": "rm -rf .testcache && esbuild $(find src -name '*.test.ts') --bundle --platform=node --format=esm --outdir=.testcache && node --test $(find .testcache -name '*.test.js')"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "uplot": "1.6.31"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.3",
     "@types/d3-drag": "3.0.7",
     "@types/d3-force": "3.0.10",
     "@types/d3-selection": "3.0.11",

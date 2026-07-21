@@ -64,9 +64,13 @@ export function initRefDrawer(): void {
     return true;
   };
 
+  let openDocController: AbortController | null = null;
   const openDoc = async (url: string): Promise<void> => {
+    openDocController?.abort();   // a newer open supersedes the in-flight one (last click wins)
+    const controller = new AbortController();
+    openDocController = controller;
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) { location.href = url; return; }
       const parsed = new DOMParser().parseFromString(await res.text(), "text/html");
       const article = parsed.querySelector("main article") ?? parsed.querySelector("main");
@@ -83,10 +87,15 @@ export function initRefDrawer(): void {
       drawer.classList.add("browsing");
       // If the link carried a #anchor (a glossary term, a section), scroll that heading into view in
       // the panel so the reader lands on the exact definition; otherwise start at the top.
-      const hash = url.includes("#") ? url.slice(url.indexOf("#") + 1) : "";
+      let hash = "";
+      if (url.includes("#")) {
+        const raw = url.slice(url.indexOf("#") + 1);
+        try { hash = decodeURIComponent(raw); } catch { hash = raw; } // ids are percent-decoded
+      }
       const target = hash ? docBody.querySelector('[id="' + CSS.escape(hash) + '"]') : null;
       if (target) target.scrollIntoView(); else drawer.scrollTop = 0;
-    } catch {
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return; // superseded by a newer open
       location.href = url; // network/parse failure: just navigate there
     }
   };

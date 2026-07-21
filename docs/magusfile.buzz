@@ -39,7 +39,7 @@ magus.project({
     // input too. (pnpm is the package manager - NOT npm; there is no package-lock.json.)
     "sources": ["magusfile.buzz", "*.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
                 "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html",
-                "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "buf.gen.yaml",
+                "tour/*.buzz", "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "buf.gen.yaml",
                 // The viewer/console bundles a JS client generated FROM these .proto sources
                 // (buf.gen.yaml -> src/gen/), so a schema change reruns codegen + rebuild.
                 "../proto/magus/**/*.proto", "../proto/buf.yaml", "../proto/buf.lock",
@@ -190,7 +190,16 @@ export fun generate(args: [str]) > void {
 }
 
 export fun format(args: [str]) > void { magus.needs(generate); }
-export fun lint(args: [str]) > void { magus.needs(format); }
+// lint runs the doc formatter (prettier, via format) plus the client-side TypeScript
+// gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null
+// assertions - see biome.json). Both TS tools need node_modules, so install first like
+// the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.
+export fun lint(args: [str]) > void {
+    magus.needs(format);
+    if (!fs.isDir("node_modules")) { os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {}); }
+    os.exec("pnpm", ["run", "typecheck"], ".", {});
+    os.exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
+}
 export fun build(args: [str]) > void { magus.needs(generate); }
 
 // buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in

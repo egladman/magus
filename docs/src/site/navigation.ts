@@ -30,12 +30,12 @@ export function initNav(): void {
   });
   // Dismiss on an outside click, Escape, or after following a link in the menu.
   document.addEventListener("click", function (e: MouseEvent) {
-    if (right.classList.contains("nav-open") && !right.contains(e.target as Node)) setOpen(false);
+    if (right.classList.contains("nav-open") && !right.contains(e.target as Node | null)) setOpen(false);
   });
   document.addEventListener("keydown", function (e: KeyboardEvent) {
     if (e.key === "Escape") setOpen(false);
   });
   right.addEventListener("click", function (e: Event) {
-    if ((e.target as Element).closest(".nav-links a")) setOpen(false);
+    if (e.target instanceof Element && e.target.closest(".nav-links a")) setOpen(false);
   });
 }

@@ -8,7 +8,7 @@ import { persisted } from "./persist";
 // The insight/refresh poll interval, in ms. The live pool/health/runs arrive over the status SSE
 // (push, not polled); this governs the one pollable feed, the VCS insight lenses. Default 20s, the
 // value the transport used before this was configurable. Clamped to a sane range on read.
-export const DEFAULT_POLL_MS = 20000;
+const DEFAULT_POLL_MS = 20000;
 const MIN_POLL_MS = 2000;
 const MAX_POLL_MS = 300000;
 

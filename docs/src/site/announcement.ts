@@ -16,7 +16,7 @@ export function initAnnouncement(): void {
   const KEY = "announcement-dismissed";
 
   let dismissed = false;
-  try { dismissed = localStorage.getItem(KEY) === version; } catch (e) {}
+  try { dismissed = localStorage.getItem(KEY) === version; } catch {}
   // Reveal only when this version is undismissed. Hidden-by-default + opt-in reveal is
   // the inverse of the old "show then hide", so nothing paints that will be taken away.
   if (!dismissed) bar.classList.add("is-shown");
@@ -25,7 +25,7 @@ export function initAnnouncement(): void {
   if (close) {
     close.addEventListener("click", function () {
       bar.classList.remove("is-shown");
-      try { localStorage.setItem(KEY, version); } catch (e) {}
+      try { localStorage.setItem(KEY, version); } catch {}
     });
   }
 }
