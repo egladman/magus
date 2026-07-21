@@ -1,0 +1,80 @@
+// render_search.buzz - the /search/ page: renderSearchPage builds the offline
+// client-side search UI over the site's search-index.json; renderSyntaxRow is its
+// query-syntax help row. site_render calls renderSearchPage once, post-walk.
+import "fs";
+import "io";
+import "std";
+import "encoding";
+import "template";
+import "render_types" as _;
+import "render_route" as _;
+import "render_page" as _;
+
+// renderSearchPage writes gen/search/index.html: the dedicated, deep-linkable search
+// surface. It is a tool page (no markdown source; kept out of the search index and
+// sitemap, and out of the provenance/edit chrome via the srcRel guards in renderPage()).
+// The #search-page container is the signal search.js keys off to switch from the
+// header dropdown to full-page, URL-synced (?q=) results. Emitted after the walk so
+// it is a peer of renderPublic()/render404().
+// renderSyntaxRow renders one Search Syntax entry: a clickable example that runs itself
+// (search.js intercepts the ?q= link) beside a plain-language description. The query
+// is url-encoded for the href and entity-escaped for its <code> display.
+fun renderSyntaxRow(q: str, desc: str) > str {
+    return template.render(`        <dt><a class="syntax-example" href="?q={{qEnc}}"><code>{{q}}</code></a></dt><dd>{{desc}}</dd>
+`, {"qEnc": encoding.urlEncode(q), "q": q, "desc": desc});
+}
+
+
+export fun renderSearchPage(site: Site) > void {
+    final root = rootPrefix("search/index.md", site);
+    // Always-open, forefront syntax reference: on the dedicated page the query
+    // language is a first-class part of the surface, not a disclosure to hunt for
+    // (the header dropdown carries only a compact hint). Each example is a real ?q=
+    // link, so it works without JS and doubles as teach-by-doing once search.js runs
+    // it in place.
+    // The query examples as a view-model of pre-rendered <dt>/<dd> rows (renderSyntaxRow
+    // does the urlEncode); the template arranges the two-column layout. Results come
+    // first in the DOM so a narrow-screen collapse stacks them above the reference.
+    final rows = renderSyntaxRow("tag:build", "Pages carrying the exact tag \"build\".")
+        + renderSyntaxRow("-tag:spell", "Exclude pages with a tag.")
+        + renderSyntaxRow("tag:\"remote cache\"", "Quote values that contain spaces.")
+        + renderSyntaxRow("title:install", "Scope a term to one field: title, description, or text.")
+        + renderSyntaxRow("\"exact phrase\"", "Match words that appear together, in order.")
+        + renderSyntaxRow("cache -go", "Require a word; drop another with a leading minus.")
+        + renderSyntaxRow("tag:cache OR tag:build", "OR matches either; terms are ANDed by default.")
+        + renderSyntaxRow("tag:(cache OR build)", "Group several values for one field.")
+        + renderSyntaxRow("title:mag*", "Wildcards: * stands for any run of characters.")
+        + renderSyntaxRow("(tag:a OR tag:b) -tag:c", "Parenthesize to group; combine with exclusion.");
+    final body = template.render(`<h1>Search</h1>
+<div id="search-page">
+  <div class="search-page-inputwrap">
+    <input id="search-page-input" class="search-input" type="text" placeholder="Search docs... (try tag:cache)" autocomplete="off" spellcheck="false" aria-label="Search the documentation" aria-controls="search-page-results">
+    <ul id="search-facets" class="search-facets" role="listbox" aria-label="Tag suggestions" hidden></ul>
+  </div>
+  <div id="search-chips" class="search-chips" aria-hidden="true" hidden></div>
+  <div class="search-layout">
+    <div class="search-main">
+      <p id="search-page-status" class="search-page-status" role="status" aria-live="polite"></p>
+      <ul id="search-page-results" class="search-page-results"></ul>
+    </div>
+    <aside class="search-side">
+  <section class="search-syntax" aria-label="Search syntax">
+    <p class="search-syntax-title">Search Syntax</p>
+    <p class="search-syntax-lead">Terms are combined with AND and matched case-insensitively. Click an example to run it.</p>
+    <dl>
+{{{rows}}}    </dl>
+  </section>
+    </aside>
+  </div>
+  <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{root}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
+</div>
+`, {"root": root, "gh": GH, "rows": rows});
+    final title = "Search";
+    final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
+    final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], site);
+    fs.makeDirectory(site.outDir + "/search");
+    final of = io.File.open(site.outDir + "/search/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    std.print("  search page -> " + site.outDir + "/search/index.html");
+}

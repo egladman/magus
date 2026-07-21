@@ -1,0 +1,232 @@
+// render_blog.buzz - the blog: a single post (renderBlogPost, driven per file by
+// walkBlog), the paginated index (renderBlogIndex), and their shared prev/next
+// pager (renderBlogPager). Each post runs through renderPage like any doc.
+import "markdown";
+import "fs";
+import "io";
+import "std";
+import "serialize";
+import "template";
+import "render_text" as _;
+import "render_url" as _;
+import "render_date" as _;
+import "render_html" as _;
+import "render_meta" as _;
+import "render_types" as _;
+import "render_page" as _;
+
+// renderBlogPost renders one blog/<file>.md as its own directory-index page. base
+// is the file's basename (e.g. "2026-07-01-hello-blog.md"); the written URL is date-
+// scoped, blog/<YYYY>/<MM>/<DD>/<slug>/ (via blogURLPath, from the filename's date
+// prefix), so permalinks sort by date and never collide across years. Post metadata
+// (title/date/description) is captured into site.blogPosts for the index page (and,
+// later, the Atom feed).
+export fun renderBlogPost(base: str, site: Site) > void {
+    final rel = site.blog + "/" + base;
+    final f = io.File.open(site.root + "/" + rel, io.FileMode.read);
+    final md = f.readAll();
+    f.close();
+
+    final fm = serialize.jsonDecode(markdown.frontmatter(md));
+    var title = fm.q("title").stringValue();
+    if (title == "") { title = deriveTitle(md, base); }
+    final date = fm.q("date").stringValue();
+
+    // Frontmatter `date` is the human-facing byline; the filename's YYYY-MM-DD-
+    // prefix is the canonical URL scope. Require them to agree so the permalink and
+    // the printed date can never drift. A post with a date but no filename prefix
+    // (or a mismatched one) is a hard error, not a silent divergence.
+    final dateDir = blogDateDirectory(base);
+    if (date != "") {
+        // Frontmatter dates decode as full RFC3339 ("2026-07-01T00:00:00Z"); take
+        // the calendar day and re-slash it to compare against the filename's
+        // "YYYY/MM/DD" scope. (str.replace is first-match only, so build by split.)
+        final fp = date.split("T")[0].split("-");   // ["2026","07","01"]
+        var fmDir = "";
+        if (fp.len() >= 3) { fmDir = fp[0] + "/" + fp[1] + "/" + fp[2]; }
+        if (dateDir == null) {
+            throw "blog: " + rel + " has frontmatter date " + date
+                + " but the filename lacks a matching YYYY-MM-DD- prefix";
+        }
+        if (dateDir != fmDir) {
+            throw "blog: " + rel + " frontmatter date " + date
+                + " disagrees with the filename date prefix";
+        }
+    }
+
+    final slug = blogSlug(base);
+    final urlPath = blogURLPath(base);        // "2026/07/01/hello-blog"
+    final url = site.blog + "/" + urlPath + "/";
+    // Blog posts sit at gen/blog/<urlPath>/index.html. Their old flat directory was
+    // "blog"; their new clean directory is "blog/<urlPath>" (date-scoped). The link
+    // rewriter needs both so cross-references (../../documentation/) resolve at the
+    // post's real depth.
+    final html = renderContentHTML(markdown.toHtml(md), site.blog, site.blog + "/" + urlPath);
+
+    var desc = fm.q("description").stringValue();
+    if (desc == "") { desc = deriveDescription(html); }
+    if (desc == "") { desc = SITE_DESC; }
+
+    // Dateline: a scoped byline injected directly under the post's H1 - publish
+    // date (calendar day; see blogDate), author, and a permalink to the post's
+    // own canonical URL. Sitting inside the <article> right after the title, it
+    // reads as the post's metadata rather than free-floating page chrome. Guarded
+    // on there being an H1 and a date; a title-less or undated post just skips it.
+    var article = html;
+    final h1End = html.indexOf("</h1>");
+    if (h1End != null and date != "") {
+        final author = fm.q("author").stringValue();
+        var meta = "<p class=\"blog-post-meta\"><time datetime=\"" + blogDateAttr(date)
+            + "\">" + blogDate(date) + "</time>";
+        if (author != "") { meta = meta + " &middot; " + author; }
+        meta = meta + " &middot; <a href=\"" + SITE_URL + url + "\" rel=\"bookmark\">Permalink</a></p>\n";
+        final cut = h1End + 5;   // length of "</h1>"
+        article = html.sub(0, cut) + "\n" + meta + html.sub(cut);
+    }
+
+    // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
+    final pager = renderBlogPager(base, site);
+
+    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), site);
+    fs.makeDirectory(site.outDir + "/" + site.blog + "/" + urlPath);
+    final of = io.File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    fs.writeFile(site.outDir + "/" + site.blog + "/" + urlPath + "/index.md", md);
+
+    site.addRecord(url, title, desc, md);
+    foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
+
+    site.blogPosts.append(BlogPost{
+        base = base, slug = slug, urlPath = urlPath, title = title,
+        date = date, description = desc, url = url,
+    });
+
+    std.print("  " + rel + " -> " + site.outDir + "/" + site.blog + "/" + urlPath + "/index.html");
+}
+
+
+// renderBlogPager renders the previous/next links between posts, ordered by date
+// (newest to oldest so "next" is older and "prev" is newer, matching timeline
+// intuition). Falls back to filename order when a post lacks a date. Reuses
+// renderPagerLink's climb-relative sibling link form.
+fun renderBlogPager(base: str, site: Site) > str {
+    // Rebuild the ordering deterministically from disk (site.blogPosts may be partial
+    // during the walk). Newest first.
+    var posts: [BlogPost] = mut [<BlogPost>];
+    foreach (name in fs.list(site.root + "/" + site.blog)) {
+        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+            final f = io.File.open(site.root + "/" + site.blog + "/" + name, io.FileMode.read);
+            final md = f.readAll();
+            f.close();
+            final fm = serialize.jsonDecode(markdown.frontmatter(md));
+            var t = fm.q("title").stringValue();
+            if (t == "") { t = deriveTitle(md, name); }
+            posts.append(BlogPost{ base = name, date = fm.q("date").stringValue(), title = t });
+        }
+    }
+    if (posts.len() < 2) { return ""; }
+    // Sort by date DESC, tiebreak by filename ASC so ordering is stable when two
+    // posts share a date.
+    final ordered = posts.sort(fun (a: BlogPost, b: BlogPost) > bool {
+        if (a.date != b.date) { return strLess(b.date, a.date); }
+        return strLess(a.base, b.base);
+    });
+
+    var pos = -1;
+    var i = 0;
+    while (i < ordered.len()) {
+        if (ordered[i].base == base) { pos = i; }
+        i = i + 1;
+    }
+    if (pos < 0) { return ""; }
+
+    // Posts are date-scoped (blog/YYYY/MM/DD/slug/), so a sibling link is no longer
+    // a flat "../<slug>/"; relativePath walks from this post's dir to the target's URL
+    // and writes the minimal climb, correct across any shared date prefix.
+    final fromDir = site.blog + "/" + blogURLPath(base);
+    var body = "";
+    // Previous = newer post (earlier in ordered), Next = older post (later).
+    if (pos > 0) {
+        final prev = ordered[pos - 1];
+        final href = relativePath(fromDir, site.blog + "/" + blogURLPath(prev.base) + "/");
+        body = body + "      <a class=\"page-nav-prev\" href=\"" + href + "\">"
+            + "<span class=\"page-nav-dir\">Newer</span>"
+            + "<span class=\"page-nav-title\">" + prev.title + "</span></a>\n";
+    }
+    if (pos < ordered.len() - 1) {
+        final nxt = ordered[pos + 1];
+        final href = relativePath(fromDir, site.blog + "/" + blogURLPath(nxt.base) + "/");
+        body = body + "      <a class=\"page-nav-next\" href=\"" + href + "\">"
+            + "<span class=\"page-nav-dir\">Older</span>"
+            + "<span class=\"page-nav-title\">" + nxt.title + "</span></a>\n";
+    }
+    if (body == "") { return ""; }
+    return "    <nav class=\"page-nav\" aria-label=\"Pagination\">\n" + body + "    </nav>\n";
+}
+
+
+// renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the
+// collected blog posts. It runs AFTER renderBlogPost has populated site.blogPosts for
+// every post in the walk. The listing is a plain <ul> under the shared renderPage()
+// template, so it inherits nav/breadcrumb/footer for free.
+export fun renderBlogIndex(site: Site) > void {
+    // Newest first, tiebreak by base for determinism.
+    final sorted = site.blogPosts.sort(fun (a: BlogPost, b: BlogPost) > bool {
+        if (a.date != b.date) { return strLess(b.date, a.date); }
+        return strLess(a.base, b.base);
+    });
+
+    // View-model per post; date/description are optional (gated by hasDate/hasDesc).
+    var posts: [{str: any}] = mut [<{str: any}>];
+    foreach (p in sorted) {
+        final rec = mut {<str: any>};
+        rec["urlPath"] = p.urlPath;
+        rec["title"] = p.title;
+        rec["hasDate"] = p.date != "";
+        if (p.date != "") {
+            rec["dateAttr"] = blogDateAttr(p.date);
+            rec["dateDisplay"] = blogDate(p.date);
+        }
+        rec["hasDesc"] = p.description != "";
+        rec["description"] = p.description;
+        posts.append(rec);
+    }
+    final body = template.render(`<h1>Blog</h1>
+{{#hasPosts}}
+<ul class="blog-index">
+{{#posts}}
+  <li><a href="{{urlPath}}/"><span class="blog-index-title">{{title}}</span></a>{{#hasDate}} <time class="blog-index-date" datetime="{{dateAttr}}">{{dateDisplay}}</time>{{/hasDate}}{{#hasDesc}}<p class="blog-index-desc">{{description}}</p>{{/hasDesc}}</li>
+{{/posts}}
+</ul>
+{{/hasPosts}}
+{{^hasPosts}}
+<p>No posts yet.</p>
+{{/hasPosts}}
+`, {"hasPosts": sorted.len() > 0, "posts": posts});
+
+    final title = "Blog";
+    final desc = "The magus blog. Release notes, deep dives, and behind-the-scenes writeups.";
+    final url = site.blog + "/";
+    // srcRel for the index page: a blog/index.md marker so renderPage() picks the "blog"
+    // active-nav key and the breadcrumb roots correctly, even though there is no
+    // source file. Alias the marker's commit-footer key to the newest post's own
+    // commit so the "Last updated" line is a stable snapshot instead of tracking
+    // HEAD (which would drift every commit and break the drift gate).
+    if (sorted.len() > 0) {
+        final rec = site.metaCommits[site.metaPrefix + site.blog + "/" + sorted[0].base];
+        if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
+    }
+    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], site);
+    fs.makeDirectory(site.outDir + "/" + site.blog);
+    final of = io.File.open(site.outDir + "/" + site.blog + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // The index is a real page, so it belongs in the search index and sitemap.
+    // No frontmatter tags/description — the resolved desc above rides through.
+    site.pageUrls[url] = true;
+    // Build a fake mini record so addRecord's shape stays consistent.
+    final recStub = "---\ntitle: " + title + "\ndescription: " + desc + "\ntags: []\n---\nBlog listing.\n";
+    site.addRecord(url, title, desc, recStub);
+    std.print("  blog index -> " + site.outDir + "/" + site.blog + "/index.html");
+}

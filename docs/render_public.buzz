@@ -1,0 +1,343 @@
+// render_public.buzz - the /public/ mirror: the Apache-mod_autoindex-styled
+// directory listings (renderAutoindex), the release tree with its per-version
+// pages, the self-update index.json (releaseIndexJSON), and loadReleases, which
+// reads releases/v*.yaml into the Site. renderPublic walks it all; site_render
+// calls loadReleases and renderPublic once each.
+import "fs";
+import "io";
+import "os";
+import "serialize";
+import "template";
+import "assert";
+import "yaml";
+import "render_text" as _;
+import "render_feed" as _;
+import "render_release" as _;
+import "render_types" as _;
+import "render_page" as _;
+
+// loadReleases reads releases/v*.yaml (newest-first by numeric semver) and populates
+// site.releases. Each yaml file is authoritative for one version: version, date, body
+// (trimmed markdown for the Atom feed), notes sections (added/changed/fixed/removed),
+// yanked flag, and artifacts (list of {name, platform, size, sha256}).
+// This replaces parseChangelog: changelog-parsing now runs ONLY at cut time, never
+// at site-build time.
+export fun loadReleases(site: Site) > void {
+    site.releases = mut [<Release>];
+    final relDir = site.root + "/releases";
+    if (os.execute(["test", "-d", relDir]) != 0) { return; }
+    // Collect yaml filenames, then sort newest-first by numeric semver so
+    // v0.10.0 correctly precedes v0.2.0 (lexicographic reversal fails there).
+    var names: [str] = mut [<str>];
+    foreach (name in fs.list(relDir)) {
+        if (name.endsWith(".yaml")) { names.append(name); }
+    }
+    final sorted = sortNamesSemverDesc(names);
+    foreach (name in sorted) {
+        final path = relDir + "/" + name;
+        final f = io.File.open(path, io.FileMode.read);
+        final src = f.readAll();
+        f.close();
+        final doc = serialize.Boxed.init(yaml.parse(src));
+        final ver = doc.q("version").stringValue();
+        final date = doc.q("date").stringValue();
+        final body = doc.q("body").stringValue();
+        if (ver == "") { continue; } // skip malformed files
+        // Load structured notes sections (added/changed/fixed/removed).
+        // .list() returns null when the YAML field is absent; guard before iterating.
+        var notesAdded: [str] = mut [<str>];
+        var notesChanged: [str] = mut [<str>];
+        var notesFixed: [str] = mut [<str>];
+        var notesRemoved: [str] = mut [<str>];
+        final _addedList = doc.q("notes").q("added").list();
+        if (_addedList != null) {
+            foreach (item in _addedList) { notesAdded.append(item.stringValue()); }
+        }
+        final _changedList = doc.q("notes").q("changed").list();
+        if (_changedList != null) {
+            foreach (item in _changedList) { notesChanged.append(item.stringValue()); }
+        }
+        final _fixedList = doc.q("notes").q("fixed").list();
+        if (_fixedList != null) {
+            foreach (item in _fixedList) { notesFixed.append(item.stringValue()); }
+        }
+        final _removedList = doc.q("notes").q("removed").list();
+        if (_removedList != null) {
+            foreach (item in _removedList) { notesRemoved.append(item.stringValue()); }
+        }
+        final yanked = doc.q("yanked").booleanValue();
+        // Load artifacts: each entry has name/platform/size/sha256.
+        // .list() returns null when artifacts is absent; guard before iterating.
+        var arts: [{str: str}] = mut [<{str: str}>];
+        final artList = doc.q("artifacts").list();
+        foreach (a in artList) {
+            final artName = a.q("name").stringValue();
+            final artPlatform = a.q("platform").stringValue();
+            final artSize = a.q("size").stringValue();
+            final artSHA256 = a.q("sha256").stringValue();
+            arts.append(mut {
+                "name": artName,
+                "platform": artPlatform,
+                "size": artSize,
+                "sha256": artSHA256,
+            });
+        }
+        site.releases.append(Release{
+            version = ver,
+            date = date,
+            body = body,
+            notesAdded = notesAdded,
+            notesChanged = notesChanged,
+            notesFixed = notesFixed,
+            notesRemoved = notesRemoved,
+            yanked = yanked,
+            artifacts = arts,
+        });
+    }
+}
+
+
+// autoindex renders one Apache-`mod_autoindex`-styled listing at path (a gen-
+// root-relative dir, without trailing slash; "" for the root of the /public/
+// tree, "atom" or "release" for a subdir). entries is a list of records with
+// {name, href, size?, modified?, desc}. Every level brackets the listing with a
+// leading and trailing rule, like a real mirror index. Themed with Pico via the shared renderPage() template
+// (no bespoke color palette), so light/dark follow the site theme. rootDepth is
+// how many "../" the caller needs to reach gen/'s root, used only to preload the
+// hat asset in the shared head.
+fun renderAutoindex(path: str, entries: [{str: str}], parentHref: str, site: Site) > void {
+    // Displayed path: /public or /public/atom, always absolute with leading + trailing slash.
+    var displayPath = "/public";
+    if (path != "public") { displayPath = "/" + path; }
+    displayPath = displayPath + "/";
+
+    // The parent link and the entry rows are fixed-width text (padded columns), so
+    // buzz assembles them; the template only wraps the <pre> block. The padding must
+    // stay here - Mustache can't align columns.
+    // Sort entries by name so listings are byte-stable.
+    final sorted = entries.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["name"], b["name"]); });
+
+    // Column widths grow to the widest cell (floors: the header labels, and 30 for
+    // names to keep the classic look), so cells of any length stay aligned - a
+    // release artifact name runs past 30 chars and a full RFC3339 stamp past a bare
+    // date, either of which a fixed width would shove out of column. Two spaces
+    // separate every column; Name/Last modified are left-aligned, Size right-aligned.
+    var nameW = 30;
+    if (parentHref != "") { if (16 > nameW) { nameW = 16; } }   // len("Parent Directory")
+    var modW = 13;                                               // len("Last modified")
+    var sizeW = 4;                                               // len("Size")
+    foreach (e in sorted) {
+        if (e["name"].len() > nameW) { nameW = e["name"].len(); }
+        if (e["modified"].len() > modW) { modW = e["modified"].len(); }
+        if (e["size"].len() > sizeW) { sizeW = e["size"].len(); }
+    }
+
+    // Header, padded to the same widths as the rows below.
+    var head = "Name";
+    var hi = 4; while (hi < nameW) { head = head + " "; hi = hi + 1; }
+    head = head + "  Last modified";
+    var hj = 13; while (hj < modW) { head = head + " "; hj = hj + 1; }
+    var sizeHead = "Size";
+    var hk = 4; while (hk < sizeW) { sizeHead = " " + sizeHead; hk = hk + 1; }
+    head = head + "  " + sizeHead + "  Description";
+
+    var parent = "";
+    if (parentHref != "") {
+        var pName = "<a href=\"" + parentHref + "\">Parent Directory</a>";
+        var pi = 16; while (pi < nameW) { pName = pName + " "; pi = pi + 1; }
+        var pMod = "-"; var pj = 1; while (pj < modW) { pMod = pMod + " "; pj = pj + 1; }
+        var pSize = "-"; var pk = 1; while (pk < sizeW) { pSize = " " + pSize; pk = pk + 1; }
+        parent = pName + "  " + pMod + "  " + pSize + "  \n";
+    }
+
+    var rows = "";
+    foreach (e in sorted) {
+        final name = e["name"];
+        // The name cell pads by its visible length; the <a> tags occupy no columns.
+        var nameCell = "<a href=\"" + e["href"] + "\">" + name + "</a>";
+        var ni = name.len(); while (ni < nameW) { nameCell = nameCell + " "; ni = ni + 1; }
+        var padMod = e["modified"];
+        var mj = e["modified"].len(); while (mj < modW) { padMod = padMod + " "; mj = mj + 1; }
+        var padSize = e["size"];
+        var sk = e["size"].len(); while (sk < sizeW) { padSize = " " + padSize; sk = sk + 1; }
+        rows = rows + nameCell + "  " + padMod + "  " + padSize + "  " + e["desc"] + "\n";
+    }
+    final body = template.render(`<h1>Index of {{displayPath}}</h1>
+<pre class="autoindex"><span class="autoindex-head">{{{head}}}</span>
+<hr>
+{{{parent}}}{{{rows}}}<hr>
+</pre>
+`, {"displayPath": displayPath, "head": head, "parent": parent, "rows": rows});
+
+    fs.makeDirectory(site.outDir + "/" + path);
+    // srcMarker matches the written directory depth so rootPrefix computes the
+    // right "../" climb (public/x.md -> "../", public/atom/x.md -> "../../").
+    final srcMarker = path + "/_index.md";
+    // Alias the marker's commit footer to a real content source so it stays stable
+    // (not HEAD, which advances every commit and would break the drift gate). Use
+    // CHANGELOG.md, which the /public/ tree derives from. If not yet committed,
+    // fall back to HEAD - not a drift-gate failure, just a stale footer once, then
+    // stable.
+    final chLog = site.metaCommits[site.metaPrefix + "CHANGELOG.md"];
+    if (chLog != null) {
+        site.metaCommits[site.metaPrefix + srcMarker] = chLog;
+    } else {
+        site.metaCommits[site.metaPrefix + srcMarker] = site.metaFull + "|" + site.metaShort + "|" + site.metaStamp;
+    }
+    final doc = renderPage("Index of " + displayPath, "Index of " + displayPath, body, srcMarker, "", path + "/", "", mut [], site);
+    final of = io.File.open(site.outDir + "/" + path + "/index.html", io.FileMode.write);
+    of.write(doc);
+    of.close();
+    // Register the URL for sitemap purposes, and mark it written so
+    // pruneStaleOutputs knows a since-removed release/feed's old autoindex page
+    // should be cleaned up rather than left behind.
+    site.pageUrls[path + "/"] = true;
+    site.writtenPaths[path + "/index.html"] = true;
+}
+
+
+// releaseIndexJSON builds gen/public/release/index.json - the machine-readable release
+// manifest `magus self update` fetches (and Go signs into index.json.sig). It carries
+// only what a consumer reads: schema_version, and per release the version, an optional
+// yanked flag, and the artifact list (name/platform/size/sha256). The human-readable
+// changelog (the notes/body sections) is NOT duplicated here - it already ships in the
+// releases Atom feed and each release YAML, and nothing reads it from this manifest, so
+// carrying it was dead weight. Built with serialize.jsonEncode rather than hand-rolled
+// string concatenation: the encoder sorts keys deterministically, so the output stays
+// byte-stable for the drift gate, and there are no escaping pitfalls to get wrong.
+// Schema stays version 1: this only drops fields no consumer parsed, so an existing
+// reader (which ignores unknown/missing fields) is unaffected.
+fun releaseIndexJSON(site: Site) > str {
+    var releases: [{str: any}] = mut [<{str: any}>];
+    foreach (rel in site.releases) {
+        var arts: [{str: any}] = mut [<{str: any}>];
+        foreach (a in rel.artifacts) {
+            arts.append(mut {"name": a["name"], "platform": a["platform"], "size": a["size"], "sha256": a["sha256"]});
+        }
+        var entry: {str: any} = mut {"version": rel.version, "artifacts": arts};
+        if (rel.yanked) { entry["yanked"] = true; }   // omitted when false, matching the reader's omitempty
+        releases.append(entry);
+    }
+    final root: {str: any} = mut {"schema_version": 1, "releases": releases};
+    return serialize.jsonEncode(serialize.Boxed.init(root)) + "\n";
+}
+
+
+// renderPublic writes the nested /public/ autoindex tree: the root at /public/
+// lists atom/ + release/ subdirs plus the machine files that live at their
+// canonical spec locations (/sitemap.xml, /robots.txt); /public/atom/ lists the
+// two Atom feeds; /public/release/ is a data-driven listing of release artifacts.
+// Deterministic (no network at build).
+export fun renderPublic(site: Site) > void {
+    if (SITE_URL == "") { return; }
+
+    // /public/atom/ - the two feeds (if they were written).
+    var atomEntries: [{str: str}] = mut [<{str: str}>];
+    if (site.blogPosts.len() > 0) {
+        atomEntries.append(mut {
+            "name": "blog.atom.xml", "href": "blog.atom.xml",
+            "size": "-", "modified": atomDate(site.blogPosts[0].date),
+            "desc": "Blog posts (Atom 1.0)"
+        });
+    }
+    if (site.releases.len() > 0) {
+        atomEntries.append(mut {
+            "name": "releases.atom.xml", "href": "releases.atom.xml",
+            "size": "-", "modified": atomDate(site.releases[0].date),
+            "desc": "Releases (Atom 1.0)"
+        });
+    }
+    if (atomEntries.len() > 0) { renderAutoindex("public/atom", atomEntries, "../", site); }
+
+    // /public/release/  - per-version tree. Each released version (loaded from
+    // releases/v*.yaml by loadReleases) gets its own subdirectory listing its
+    // artifacts. Deep-links to individual assets use GH/releases/download/<ver>/<name>
+    // directly; magus-release.pem links to the local /assets/ copy (three levels up).
+    // size comes from the manifest (populated by the release-cut tool); "-" for
+    // historical releases migrated without artifact data.
+    foreach (rel in site.releases) {
+        final ver = rel.version;
+        final date = rel.date;
+        final assetBase = GH + "/releases/download/" + ver;
+        var verEntries: [{str: str}] = mut [<{str: str}>];
+        foreach (art in rel.artifacts) {
+            final artName = art["name"];
+            var artSize = art["size"];
+            if (artSize == "") { artSize = "-"; }
+            var artDate = date;
+            if (artName == "magus-release.pem") { artDate = "-"; }
+            var artHref = assetBase + "/" + artName;
+            if (artName == "magus-release.pem") { artHref = "../../../assets/magus-release.pem"; }
+            final artDesc = artifactDesc(artName, art["platform"]);
+            verEntries.append(mut {
+                "name": artName, "href": artHref,
+                "size": artSize, "modified": artDate, "desc": artDesc,
+            });
+        }
+        renderAutoindex("public/release/" + ver, verEntries, "../", site);
+    }
+
+    // /public/release/  - parent index listing every version as a subdirectory.
+    // Empty when no releases have shipped yet; just the bracketing rules remain.
+    var releaseParent: [{str: str}] = mut [<{str: str}>];
+    foreach (rel in site.releases) {
+        final ver = rel.version;
+        releaseParent.append(mut {"name": ver + "/", "href": ver + "/", "size": "-", "modified": rel.date, "desc": "Release " + ver});
+    }
+    renderAutoindex("public/release", releaseParent, "../", site);
+
+    // gen/public/release/index.json - machine-readable release index, newest-first.
+    // Schema: schema_version (1) + releases array. URL and schema are frozen at birth;
+    // additive changes only. index.json.sig (Ed25519) is written by magus-utils
+    // release-index at release time (not here; signing key is not available at
+    // site-build time). Track in writtenPaths so pruneStaleOutputs knows it is current.
+    if (site.releases.len() > 0) {
+        final idxJson = releaseIndexJSON(site);
+        fs.writeFile(site.outDir + "/public/release/index.json", idxJson);
+        site.writtenPaths["public/release/index.json"] = true;
+    }
+
+    // /public/ root.
+    var rootEntries: [{str: str}] = mut [<{str: str}>];
+    // Modified timestamps: content-derived where possible (a feed's newest entry
+    // stamp), "-" otherwise (release matrix is deferred; robots/sitemap are
+    // deterministic outputs whose only "mod time" would be build time, which would
+    // drift on every commit and break the drift gate).
+    if (atomEntries.len() > 0) {
+        rootEntries.append(mut {"name": "atom/", "href": "atom/", "size": "-", "modified": atomDate(site.blogPosts[0].date), "desc": "Atom feeds"});
+    }
+    rootEntries.append(mut {"name": "release/", "href": "release/", "size": "-", "modified": "-", "desc": "Release artifacts"});
+    rootEntries.append(mut {"name": "sitemap.xml", "href": "../sitemap.xml", "size": "-", "modified": "-", "desc": "XML sitemap"});
+    rootEntries.append(mut {"name": "robots.txt", "href": "../robots.txt", "size": "-", "modified": "-", "desc": "Robots policy"});
+    renderAutoindex("public", rootEntries, "../", site);
+}
+
+
+test "releaseIndexJSON emits the slim self-update manifest and omits the changelog prose" {
+    final s = mut Site{};
+    var added: [str] = mut [<str>];
+    added.append("first feature");
+    var artifacts: [{str: str}] = mut [<{str: str}>];
+    artifacts.append(mut {"name": "magus_v0.2.0_linux_amd64.tar.gz", "platform": "linux/amd64", "size": "12345", "sha256": "abc123"});
+    s.releases.append(Release{
+        version = "v0.2.0",
+        date = "2026-08-01",
+        notesAdded = added,
+        body = "### Added\n\n- first feature",
+        artifacts = artifacts,
+    });
+    final got = releaseIndexJSON(s);
+    // Check JSON structure via indexOf so literal braces in assertions don't need escaping.
+    // The manifest carries exactly what a consumer reads: schema_version, version, artifacts.
+    assert.equal(got.indexOf("\"schema_version\":1") != null, true, "schema_version:1 present");
+    assert.equal(got.indexOf("\"version\":\"v0.2.0\"") != null, true, "version present");
+    assert.equal(got.indexOf("\"name\":\"magus_v0.2.0_linux_amd64.tar.gz\"") != null, true, "artifact name present");
+    assert.equal(got.indexOf("\"platform\":\"linux/amd64\"") != null, true, "artifact platform present");
+    // The human-readable changelog (notes/body) and the release date are NOT duplicated
+    // into the manifest - nothing reads them from here, they ship in the Atom feed/YAML.
+    assert.equal(got.indexOf("\"notes\"") != null, false, "notes omitted");
+    assert.equal(got.indexOf("\"body\"") != null, false, "body omitted");
+    assert.equal(got.indexOf("\"date\"") != null, false, "date omitted");
+    // yanked is omitted when false (matching the reader's omitempty).
+    assert.equal(got.indexOf("yanked") != null, false, "yanked absent when false");
+}

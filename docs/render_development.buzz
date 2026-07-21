@@ -1,0 +1,147 @@
+// render_development.buzz - the /development/ section: the contributor-facing
+// pages built from the repo's own docs (renderDevelopment), each emitted through
+// renderDevelopmentPage (Markdown) or renderDevelopmentPageRaw (pre-rendered HTML).
+import "markdown";
+import "fs";
+import "io";
+import "os";
+import "template";
+import "render_text" as _;
+import "render_html" as _;
+import "render_path" as _;
+import "render_types" as _;
+import "render_page" as _;
+
+// renderDevelopmentPage renders one /development/ page from markdown through the shared
+// renderPage() pipeline (nav, TOC, theme, search index), skipping the doc-only chrome
+// renderPage() already strips for this srcRel prefix (provenance, edit link, nav
+// highlight). url ends in "/"; srcRel uses the "<dir>/_index.md" marker convention
+// so rootPrefix/renderBreadcrumb derive the right depth and trail.
+fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void {
+    final html = renderContentHTML(markdown.toHtml(md), "", "");
+    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
+    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
+    fs.makeDirectory(dir);
+    fs.writeFile(dir + "/index.html", doc);
+    site.addRecord(url, title, desc, md);
+    site.pageUrls[url] = true;
+}
+
+
+// renderDevelopmentPageRaw is renderDevelopmentPage for pages whose body is already final HTML
+// (the /development/ landing and projects index, built by hand). It skips
+// renderContentHTML - the markdown/link-rewrite pipeline that strips the trailing
+// slash off relative links - so card hrefs like "magus/" stay slash-terminated and
+// resolve without a directory redirect. searchText is the plain text indexed for
+// search (the HTML carries no useful prose otherwise).
+fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void {
+    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
+    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
+    fs.makeDirectory(dir);
+    fs.writeFile(dir + "/index.html", doc);
+    site.addRecord(url, title, desc, searchText);
+    site.pageUrls[url] = true;
+}
+
+
+// renderDevelopment writes the /development/ contributor section: one themed page per
+// project rendering that project's committed MAGUS.md (the target catalog + run-order
+// graph md_generate produces), plus a /development/ landing that links straight to
+// them. There is no separate projects index; the retired /development/projects/ URLs
+// redirect to their flattened locations. Projects are discovered as site.root plus any immediate subdir
+// carrying a MAGUS.md; fs.list is sorted, so the set and its ordering are byte-stable
+// for the drift gate. The MAGUS.md files stay committed (they serve the offline and
+// agent read paths); this renders the same source for the online reader, where the
+// Mermaid graphs and theming beat a raw file view.
+export fun renderDevelopment(site: Site) > void {
+    var projects: [{str: str}] = mut [<{str: str}>];
+    if (os.execute(["test", "-f", site.root + "/MAGUS.md"]) == 0) {
+        projects.append(mut {"name": "magus", "path": site.root + "/MAGUS.md"});
+    }
+    foreach (name in fs.list(site.root)) {
+        if (name.startsWith(".") == false and isDirectory(site.root + "/" + name)) {
+            if (os.execute(["test", "-f", site.root + "/" + name + "/MAGUS.md"]) == 0) {
+                projects.append(mut {"name": name, "path": site.root + "/" + name + "/MAGUS.md"});
+            }
+        }
+    }
+    if (projects.len() == 0) { return; }
+
+    foreach (proj in projects) {
+        final f = io.File.open(proj["path"], io.FileMode.read);
+        final md = f.readAll();
+        f.close();
+        final name = proj["name"];
+        renderDevelopmentPage(name + " targets",
+            "Target catalog and run-order graph for the " + name + " project, generated from its magusfile.",
+            md, "development/" + name + "/", "development/" + name + "/_index.md", site);
+        // The old nested URL redirects to the flattened one so inbound links survive.
+        site.collectAlias("development/projects/" + name, "development/" + name + "/");
+    }
+
+    // Project cards (reusing the Related card look), one per magus project. Built as
+    // raw HTML with slash-terminated hrefs so each card links straight to the project
+    // page. They sit directly on the /development/ landing now; the old projects index
+    // is gone and its URL redirects here.
+    var projectCards = "";
+    foreach (proj in projects) {
+        final name = proj["name"];
+        projectCards = projectCards
+            + "        <a class=\"related-card\" href=\"" + name + "/\">"
+            + "<span class=\"related-card-title\">" + escapeAttr(name) + "</span>"
+            + "<span class=\"related-card-desc\">target catalog and dependency graph</span></a>\n";
+    }
+    site.collectAlias("development/projects", "development/");
+
+    // CONTRIBUTING.md (repo root) rendered as its own page under /development/.
+    var haveContributing = false;
+    if (os.execute(["test", "-f", site.root + "/CONTRIBUTING.md"]) == 0) {
+        final cf = io.File.open(site.root + "/CONTRIBUTING.md", io.FileMode.read);
+        final contributingMd = cf.readAll();
+        cf.close();
+        renderDevelopmentPage("Contributing",
+            "How to build, test, and contribute to magus: the performance-evidence rule, the docs-site flow, and one-person-project etiquette.",
+            contributingMd, "development/contributing/", "development/contributing/_index.md", site);
+        haveContributing = true;
+    }
+
+    // Contributing is a plain prose section (a heading and a sentence linking to its
+    // page), not a card - only the per-project graphs keep the card grid below.
+    var contributingSection = "";
+    if (haveContributing) {
+        contributingSection = "<h2 id=\"contributing\">Contributing</h2>\n"
+            + "<p>The <a href=\"contributing/\">Contributing guide</a> covers the conventions worth knowing before you open a pull request: run the suite with <code>magus run ci</code>, back any performance change with benchmark evidence, and regenerate the docs site (<code>magus run generate:rw docs</code>) so the committed <code>gen/</code> tree never drifts from its source.</p>\n";
+    }
+    // Development is the contributor landing page the root README points at as the "full
+    // contributor reference", so it carries the orientation a newcomer to the codebase
+    // needs: the dogfooding framing, a build/test quickstart, the contributing rules, the
+    // per-project graphs, and a jumping-off list to the deeper reference docs. Built as
+    // raw HTML (renderDevelopmentPageRaw skips the markdown pipeline) so the card hrefs keep their
+    // trailing slash; the language-sh code block is picked up by the client highlighter.
+    final devHtml = template.render(`<h1 id="development">Development</h1>
+<p>Reference for people working <em>on</em> magus rather than building with it. magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too.</p>
+<h2 id="getting-started">Getting started</h2>
+<p>Building the <code>magus</code> binary needs only Go. The docs site and WebAssembly playground also need the Node, esbuild, and TinyGo toolchain pinned in <code>mise.toml</code>, which <a href="https://mise.jdx.dev/">mise</a> installs in one step. From a fresh clone:</p>
+<pre><code class="language-sh">git clone https://github.com/egladman/magus
+cd magus
+mise install
+go build -o magus ./cmd/magus
+magus run ci</code></pre>
+<p><code>magus run ci</code> builds, formats, lints, and tests every affected project - the same pipeline continuous integration runs. Only need the binary? Go alone is enough; skip <code>mise install</code> and drop the docs and playground targets.</p>
+{{{contributingSection}}}<h2 id="project-graphs">Project graphs</h2>
+<p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and live Mermaid diagrams.</p>
+    <div class="related-grid">
+{{{projectCards}}}    </div>
+<h2 id="reference">Reference</h2>
+<p>The deeper references a contributor reaches for once the build is running:</p>
+<ul>
+  <li><a href="../conventions/">Conventions</a> - the naming and layout rules magus expects of a workspace, and that this repository follows.</li>
+  <li><a href="../operations/">Operations</a> - the work hierarchy underneath a target: ops, plans, and the slots that bound concurrency.</li>
+  <li><a href="../config/">Configuration</a> - the <code>magus.yaml</code> keys and the <code>MAGUS_*</code> environment inventory.</li>
+  <li><a href="../wards/">Diagnostic codes</a> - the <code>MGSxxxx</code> wards, what each one catches, and how to author your own.</li>
+  <li><a href="../debugging/">Debugging</a> - dry runs, verbose output, and pry breakpoints for when a target misbehaves.</li>
+</ul>
+`, {"contributingSection": contributingSection, "projectCards": projectCards});
+    renderDevelopmentPageRaw("Development", "Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.",
+        devHtml, "Development contributing getting started build test project target catalogs conventions operations configuration diagnostic codes debugging reference", "development/", "development/_index.md", site);
+}
