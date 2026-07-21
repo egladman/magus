@@ -18,11 +18,12 @@ const bzzDocsBase = "https://github.com/egladman/magus/blob/main/libs/gopherbuzz
 // bzz is gopherbuzz's diagnostic domain: every BZZ code maps to a doc page under bzzDocsBase.
 var bzz = diag.New(func(c diag.Code) string { return bzzDocsBase + string(c) + ".md" })
 
-// BZZ diagnostic codes. Each names a distinct, common buzz authoring error; TypeError is the general
-// bucket a type error falls into until it earns a more specific code.
+// BZZ diagnostic codes. Each names a distinct, documented buzz error kind. There is deliberately NO
+// catch-all code: a type error the checker has not classified carries NO code at all (just its message),
+// matching Rust and TypeScript, where an error either earns a specific code or has none. A code is a
+// lookup handle for a documented failure, not a completeness checkbox.
 const (
 	// Type-check errors (checker.go).
-	TypeError        diag.Code = "BZZ1000" // a type error not yet given a more specific code
 	UndefinedName    diag.Code = "BZZ1001" // reference to a variable or function that is not in scope
 	UndefinedType    diag.Code = "BZZ1002" // reference to a type name that is not defined
 	NonBoolCondition diag.Code = "BZZ1003" // an if/while/for condition whose type is not bool
@@ -37,6 +38,6 @@ const (
 // allBZZCodes enumerates every BZZ code, in ascending order. Kept in sync with the const block above by
 // TestAllBZZCodesEnumerated; it is the source of truth for the doc-coverage drift test.
 var allBZZCodes = []diag.Code{
-	TypeError, UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch,
+	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch,
 	UnresolvedImport, FiberMisuse,
 }

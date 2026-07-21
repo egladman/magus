@@ -9,8 +9,8 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/types"
 )
 
-// typeError is a type-checking diagnostic. Code is its BZZ diagnostic code (defaulting to the general
-// TypeError until a site opts into a more specific one), rendered inline with a docs link.
+// typeError is a type-checking diagnostic. Code is its BZZ diagnostic code, or empty for an error kind that
+// has not been given a specific code (which then renders as a plain message, no code, no docs link).
 type typeError struct {
 	Line, Col int
 	Code      diag.Code
@@ -19,6 +19,9 @@ type typeError struct {
 
 func (e typeError) Error() string {
 	msg := fmt.Sprintf("buzz: line %d:%d: %s", e.Line, e.Col, e.Msg)
+	if e.Code == "" {
+		return msg
+	}
 	return fmt.Sprintf("[%s] %s\n  see: %s", e.Code, msg, bzz.URL(e.Code))
 }
 
@@ -112,10 +115,10 @@ func (c *checker) lookup(name string) (scopeEntry, bool) {
 	return scopeEntry{}, false
 }
 
-// errorf records a type error with the general TypeError (BZZ1000) code. Sites with a more specific code
+// errorf records a type error with NO code (an unclassified kind). Sites with a specific documented code
 // call errorfc instead.
 func (c *checker) errorf(p ast.Pos, format string, args ...any) {
-	c.errorfc(p, TypeError, format, args...)
+	c.errorfc(p, "", format, args...)
 }
 
 // errorfc records a type error under a specific BZZ code.

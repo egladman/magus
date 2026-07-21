@@ -72,3 +72,13 @@ func TestTypeErrorRendersCode(t *testing.T) {
 		}
 	}
 }
+
+// TestTypeErrorNoCodeRendersPlain pins that an unclassified error (empty Code) renders as a plain message
+// with no [BZZ] tag and no see: link - matching Rust/TS, where an error either earns a code or has none.
+func TestTypeErrorNoCodeRendersPlain(t *testing.T) {
+	got := typeError{Line: 2, Col: 1, Msg: "void function cannot return a value"}.Error()
+	want := "buzz: line 2:1: void function cannot return a value"
+	if got != want {
+		t.Errorf("Error() = %q, want exactly %q (no code, no see: link)", got, want)
+	}
+}
