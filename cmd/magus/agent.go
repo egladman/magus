@@ -58,7 +58,9 @@ var agentsSection string
 //	v8: output-control doctrine (-s/-q silence for runs, -o json as the
 //	    machine-reading default, the JSON envelope shape, MCP-first with quiet
 //	    CLI fallback); magus-vcs frontmatter name aligned with its directory
-const agentSkillVersion = 8
+//	v9: add magus-docs (navigate magus's own documentation via llms.txt /
+//	    search-index.json, the URL + section scheme, and the in-page nav axes)
+const agentSkillVersion = 9
 
 // skillDirPlatforms maps each skill-directory platform to its repo-relative
 // destination. The bytes written are identical across platforms - the Agent
@@ -115,8 +117,8 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "refactoring proposals in the graph.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "The skills are one shared source (magus-query, magus-run, magus-vcs,")
-	fmt.Fprintln(w, "magus-architecture, magus-memory); platforms differ only in where they")
-	fmt.Fprintln(w, "discover them.")
+	fmt.Fprintln(w, "magus-architecture, magus-memory, magus-docs); platforms differ only in")
+	fmt.Fprintln(w, "where they discover them.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Platforms:")
 	fmt.Fprintln(w, "  claude     write .claude/skills/ (Claude Code)")

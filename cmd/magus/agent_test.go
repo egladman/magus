@@ -38,7 +38,7 @@ func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 5, checked, "expected the magus-query, magus-run, magus-vcs, magus-architecture, and magus-memory skills")
+	assert.Equal(t, 6, checked, "expected the magus-query, magus-run, magus-vcs, magus-architecture, magus-memory, and magus-docs skills")
 }
 
 // TestAgentsSectionIsPlainASCII holds the AGENTS.md block to the same message rule.
