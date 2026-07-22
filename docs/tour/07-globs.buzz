@@ -1,7 +1,7 @@
 // Naming as a convention that pays off. Name a family of targets with a shared
 // suffix - proto-generate, mock-generate, sql-generate - and one umbrella target
 // pulls in the whole set with a single glob, instead of listing each by hand.
-// magus.glob("*-generate") resolves to every target ending in -generate, and
+// ctx.glob("*-generate") resolves to every target ending in -generate, and
 // magus.needs depends on the handles it returns - so adding sql-generate later
 // needs NO edit to `generate`. Try `run generate` and watch it fan out; `ls`
 // shows the family and its edges.
@@ -13,17 +13,17 @@ import "magus/spell/buf";
 magus.project({ "spells": [go, buf] });
 
 // One target per generator, all sharing the -generate suffix.
-export fun proto_generate(args: [str]) > void { buf["buf-generate"](); }
-export fun mock_generate(args: [str])  > void { go["go-generate"](); }
-export fun sql_generate(args: [str])   > void { go["go-generate"](); }
+export fun proto_generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](); }
+export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-generate"](); }
+export fun sql_generate(ctx: magus\Context, args: [str])   > void { go["go-generate"](); }
 
 // The umbrella: magus.glob collects every current AND future *-generate target as
 // handles, and magus.needs depends on them. glob("name") with no wildcard is
 // shorthand for "anything ending in -name", so glob("generate") would read the
 // same as glob("*-generate") here. A pattern matching nothing yields no handles,
 // so needs of it is just a no-op.
-export fun generate(args: [str]) > void {
-    magus.needs(magus.glob("*-generate"));
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-generate"));
 }
 
 // When a set is not a clean suffix family, skip the pattern and pass the target
@@ -31,7 +31,7 @@ export fun generate(args: [str]) > void {
 // (its generate and its lint), and nothing else - the handles say exactly which.
 // Either way needs only ever takes handles: a function, or the handles glob
 // resolves a pattern to.
-export fun proto_lint(args: [str]) > void { buf["buf-lint"](); }
-export fun proto_all(args: [str]) > void {
-    magus.needs(proto_generate, proto_lint);
+export fun proto_lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](); }
+export fun proto_all(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(proto_generate, proto_lint);
 }

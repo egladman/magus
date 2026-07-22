@@ -67,11 +67,13 @@ export fun rewriteHref(h: str, oldDir: str, newDir: str) > str {
     return relativePath(newDir, oldTarget) + frag;
 }
 
-// tagRunnable swaps the <pre> after a "<!-- run -->" / "<!-- run-recorder -->" marker
-// with a data-runnable <pre> so run-example.js can find opt-in blocks; drops the marker.
+// tagRunnable swaps the <pre> after a "<!-- magus-run -->" / "<!-- magus-run-recorder -->"
+// marker with a data-magus-run <pre> so run-example.js can find opt-in blocks; drops the
+// marker. Every magus-authored doc marker shares the "magus-" prefix (and mirrors to a
+// "data-magus-" attribute) so generated hooks are obviously ours.
 export fun tagRunnable(html: str) > str {
-    final recTagged = tagRunnableMarker(html, "<!-- run-recorder -->", "<pre data-runnable=\"true\" data-recorder=\"true\">");
-    return tagRunnableMarker(recTagged, "<!-- run -->", "<pre data-runnable=\"true\">");
+    final recTagged = tagRunnableMarker(html, "<!-- magus-run-recorder -->", "<pre data-magus-run=\"true\" data-magus-recorder=\"true\">");
+    return tagRunnableMarker(recTagged, "<!-- magus-run -->", "<pre data-magus-run=\"true\">");
 }
 
 // tagRunnableMarker replaces the <pre> following each marker with openTag; a marker
@@ -263,10 +265,10 @@ export fun aliasStub(rel: str, csp: str) > str {
         + "</body>\n</html>\n";
 }
 
-// tagCodeTitle wraps the <pre> after a "<!-- code-title: NAME -->" marker in a
+// tagCodeTitle wraps the <pre> after a "<!-- magus-code-title: NAME -->" marker in a
 // <figure class="code-block-titled"> with a <figcaption>; drops the marker.
 export fun tagCodeTitle(html: str) > str {
-    final open = "<!-- code-title:";
+    final open = "<!-- magus-code-title:";
     var buf = "";
     var rest = html;
     var idx = rest.indexOf(open);
@@ -428,9 +430,11 @@ test "tagAdmonition builds a callout div" {
 }
 
 test "tagRunnable tags a fenced block after a run marker" {
-    assert\equal(tagRunnable("<!-- run -->\n<pre>code</pre>"),
-        "\n<pre data-runnable=\"true\">code</pre>", "marker dropped, pre tagged");
-    assert\equal(tagRunnable("<!-- run --> text"), " text", "marker not before a fence is dropped");
+    assert\equal(tagRunnable("<!-- magus-run -->\n<pre>code</pre>"),
+        "\n<pre data-magus-run=\"true\">code</pre>", "marker dropped, pre tagged");
+    assert\equal(tagRunnable("<!-- magus-run-recorder -->\n<pre>code</pre>"),
+        "\n<pre data-magus-run=\"true\" data-magus-recorder=\"true\">code</pre>", "recorder marker tags pre with both attrs");
+    assert\equal(tagRunnable("<!-- magus-run --> text"), " text", "marker not before a fence is dropped");
     assert\equal(tagRunnable("<pre>plain</pre>"), "<pre>plain</pre>", "no marker, unchanged");
 }
 

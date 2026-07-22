@@ -84,7 +84,7 @@ func TestComplete_BuzzSchemeImport(t *testing.T) {
 }
 
 func TestComplete_Word_KeywordsModulesSymbols(t *testing.T) {
-	src := "import \"fs\";\nexport fun build(args: [str]) > void {}\nbu"
+	src := "import \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\nbu"
 	got := CompleteAt(src, len(src))
 	names := labels(got)
 	// Its own top-level function is offered.

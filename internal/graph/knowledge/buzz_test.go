@@ -12,7 +12,7 @@ func TestAssembleBuzz(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a.buzz", `import "b";
 import "magus/spell/go";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     // NOTE: build is tricky
     helper();
 }
@@ -74,7 +74,7 @@ func TestBuzzUnresolvableImportTaggedMGS7001(t *testing.T) {
 import "buzz:os";
 import "magus/target";
 import "spells/missing";
-export fun f(args: [str]) > void {}
+export fun f(ctx: magus\Context, args: [str]) > void {}
 `)
 	out := mergeAll([]Shard{assembleBuzz(root)}).Output()
 

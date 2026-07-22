@@ -4,6 +4,6 @@ import "magus/spell/rs";
 
 magus.project({ "spells": [rs] });
 
-export fun test(args: [str]) > void {
+export fun test(ctx: magus\Context, args: [str]) > void {
     rs["cargo-test"]();
 }

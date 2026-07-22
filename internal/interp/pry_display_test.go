@@ -64,7 +64,7 @@ func TestSpellModuleForkTarget(t *testing.T) {
 import "magus";
 import "magus/spell/go";
 
-export fun check(_args: [str]) > void {
+export fun check(ctx: magus\Context, _args: [str]) > void {
     if (go.name != "go") { throw "spell not found"; }
     if (go["go-vet"] == null) { throw "fork go-vet must be a function (overlay)"; }
 }
@@ -84,7 +84,7 @@ func TestSpellModuleRequireBuiltin(t *testing.T) {
 import "magus";
 import "magus/spell/docker";
 
-export fun check(_args: [str]) > void {
+export fun check(ctx: magus\Context, _args: [str]) > void {
     if (docker.name != "docker") { error("name mismatch: " + docker.name); }
     if (docker["docker-build"] == null) { throw "docker-build op must be callable as a method"; }
 }
@@ -128,7 +128,7 @@ export fun mgs_listTargets() > any {
 import "magus";
 import "spells/locreq";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     if (locreq.name != "locreq") { error("name mismatch: " + locreq.name); }
 }
 magus.project(".", {"spells": [locreq]});
@@ -147,7 +147,7 @@ func TestSpellMultipleFields(t *testing.T) {
 import "magus";
 import "magus/spell/go";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     if (go.name != "go") { error("name mismatch: " + go.name); }
     if (go["go-build"] == null) { throw "go-build must be a function"; }
     if (go["go-fmt"] == null) { throw "go-fmt must be a function"; }

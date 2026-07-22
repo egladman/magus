@@ -39,10 +39,10 @@ magus.project({
     "targets": {"regen-pgo": {"skip_cache": true}, "lint": {"slots": 4}},
 });
 
-export fun format(args: [str]) > void { go["go-fmt"](); }
-export fun lint(args: [str]) > void { magus.needs(format); go["go-vet"](); }
-export fun build(args: [str]) > void { magus.needs(format); go["go-build"](); }
-export fun ci(args: [str]) > void { magus.needs(lint, build); }
+export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](); }
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build); }
 `
 
 func TestLoadMagusfile_graph(t *testing.T) {
@@ -94,8 +94,8 @@ func TestRun_charmBranch(t *testing.T) {
 	const src = `
 import "magus/spell/docker";
 magus.project({"spells": [docker]});
-export fun image_build(args: [str]) > void {
-    if (magus.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
+export fun image_build(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
     else { docker["docker-build"]({"args": ["--load"]}); }
 }
 `
@@ -121,10 +121,10 @@ export fun image_build(args: [str]) > void {
 
 func TestLoadMagusfile_patternNeeds(t *testing.T) {
 	const src = `
-export fun proto_generate(args: [str]) > void {}
-export fun mock_generate(args: [str]) > void {}
-export fun generate(args: [str]) > void { magus.needs(magus.glob("*-generate")); }
-export fun regen(args: [str]) > void { magus.needs(magus.glob("proto-*", "mock-*")); }
+export fun proto_generate(ctx: magus\Context, args: [str]) > void {}
+export fun mock_generate(ctx: magus\Context, args: [str]) > void {}
+export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(ctx.glob("*-generate")); }
+export fun regen(ctx: magus\Context, args: [str]) > void { ctx.needs(ctx.glob("proto-*", "mock-*")); }
 `
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
@@ -145,8 +145,8 @@ export fun regen(args: [str]) > void { magus.needs(magus.glob("proto-*", "mock-*
 
 func TestRun_magusRunInvocation(t *testing.T) {
 	const src = `
-export fun image_build(args: [str]) > void {}
-export fun release(args: [str]) > void { magus.run(["image-build:cd"]); }
+export fun image_build(ctx: magus\Context, args: [str]) > void {}
+export fun release(ctx: magus\Context, args: [str]) > void { magus.run(["image-build:cd"]); }
 `
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
@@ -163,8 +163,8 @@ export fun release(args: [str]) > void { magus.run(["image-build:cd"]); }
 
 func TestRun_targetNameCasing(t *testing.T) {
 	const src = `
-export fun mock_generate(args: [str]) > void {}
-export fun image_build(args: [str]) > void {}
+export fun mock_generate(ctx: magus\Context, args: [str]) > void {}
+export fun image_build(ctx: magus\Context, args: [str]) > void {}
 `
 	for _, name := range []string{"mock-generate", "mockGenerate", "mock_generate", "MOCK_GENERATE", "MockGenerate", "image-build", "imageBuild"} {
 		r := Run(context.Background(), src, name, nil)

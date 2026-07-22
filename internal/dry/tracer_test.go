@@ -19,7 +19,7 @@ import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun build(args: [str]) > void { go["go-build"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 `
 	r := Eval(context.Background(), src, WithTracer())
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
@@ -38,8 +38,8 @@ import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun build(args: [str]) > void { go["go-build"](); }
-export fun test(args: [str]) > void { go["go-test"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
+export fun test(ctx: magus\Context, args: [str]) > void { go["go-test"](); }
 `
 	r := Eval(context.Background(), src, WithTracer())
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
@@ -59,7 +59,7 @@ import "magus/spell/acme";
 
 magus.project({ "spells": [acme] });
 
-export fun deploy(args: [str]) > void { acme["acme-ship"](); }
+export fun deploy(ctx: magus\Context, args: [str]) > void { acme["acme-ship"](); }
 `
 	// Not a built-in: without WithSpells the op call traces nothing.
 	bare := Eval(context.Background(), src, WithTracer())
@@ -76,7 +76,7 @@ export fun deploy(args: [str]) > void { acme["acme-ship"](); }
 // TestEval_tracerParseError surfaces a compile failure as a Diag instead of a
 // bogus empty trace, so a broken example shows the error rather than passing.
 func TestEval_tracerParseError(t *testing.T) {
-	r := Eval(context.Background(), "export fun build(args: [str]) > void { this is not buzz }", WithTracer())
+	r := Eval(context.Background(), "export fun build(ctx: magus\\Context, args: [str]) > void { this is not buzz }", WithTracer())
 	assert.False(t, r.OK)
 	assert.NotNil(t, r.Diag)
 }

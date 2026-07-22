@@ -174,7 +174,7 @@ func TestBuildBuzzNeeds(t *testing.T) {
 		_, err := needs(context.Background(), []vm.Value{vm.StrValue("go-build")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be a target function")
-		assert.Contains(t, err.Error(), "magus.glob(...)")
+		assert.Contains(t, err.Error(), "ctx.glob(...)")
 	})
 
 	t.Run("an anonymous function is rejected", func(t *testing.T) {

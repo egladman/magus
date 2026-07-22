@@ -29,6 +29,21 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 **Command:** `markdownlint **/*.md **/*.mdx`
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// markdownlint enforces Markdown style across the docs.
+import "magus";
+import "magus/spell/md";
+
+magus.project({ "spells": [md] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    md["markdownlint"]();
+}
+```
+
 ## prettier
 
 **Command:** `prettier --check --no-error-on-unmatched-pattern **/*.md **/*.mdx`
@@ -51,6 +66,21 @@ Replaces `--check` with `--write`.
 ```
 
 </details>
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// prettier checks Markdown formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/md";
+
+magus.project({ "spells": [md] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    md["prettier"]();
+}
+```
 
 ## typos
 

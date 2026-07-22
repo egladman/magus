@@ -1,6 +1,6 @@
 // run-example.js - "Run ▶" button on opt-in Buzz code blocks.
 //
-// The markdown render tags a fence with data-runnable="true" (via a <!-- run -->
+// The markdown render tags a fence with data-magus-run="true" (via a <!-- magus-run -->
 // author marker); this module finds those blocks, adds a Run button + an output
 // panel, and on click LAZY-LOADS the playground WASM (never on page load - the
 // ~1.9 MB artifact would regress the perf work). Subsequent runs on the page
@@ -36,7 +36,7 @@ declare global {
 }
 
 export function initRunExample(): void {
-  const blocks = document.querySelectorAll("pre[data-runnable]");
+  const blocks = document.querySelectorAll("pre[data-magus-run]");
   if (!blocks.length) return;
 
   // Resolve the playground/ folder relative to this bundle so links work under
@@ -113,11 +113,14 @@ export function initRunExample(): void {
 
   // formatTrace renders an evalBuzzWithRecorder result as text lines, matching the
   // playground console's dry-run output: any printed output first, then one line
-  // per recorded op ("[target] name detail  kind · recorded"), then a summary. On
-  // failure it shows the diagnostic; with no ops it says nothing would run.
+  // per planned op ("[target] name detail  kind · would run"), then a summary. On
+  // failure it shows the diagnostic; with no ops it says nothing would run. The
+  // "would run" / "planned, nothing executed" wording mirrors magus's own dry-run
+  // idiom ("dry run - commands shown, not executed") so the playground reads as
+  // genuine magus, not a bespoke format.
   function formatTrace(r: BuzzResult | null): string {
     if (!r) return "(no result)";
-    if (!r.ok) return (r.output ? r.output + "\n" : "") + "dry-run failed";
+    if (!r.ok) return (r.output ? r.output + "\n" : "") + "dry run failed";
     const lines: string[] = [];
     if (r.output) lines.push(r.output);
     const trace = r.trace || [];
@@ -125,11 +128,11 @@ export function initRunExample(): void {
       const op = trace[i];
       const tag = op.target ? "[" + op.target + "] " : "";
       const detail = op.detail ? " " + op.detail : "";
-      lines.push(tag + op.name + detail + "  " + op.kind + " · recorded");
+      lines.push(tag + op.name + detail + "  " + op.kind + " · would run");
     }
     const n = trace.length;
     lines.push(
-      "[pass] dry-run: " + n + " step" + (n === 1 ? "" : "s") + " recorded, nothing executed",
+      "[dry] " + n + " step" + (n === 1 ? "" : "s") + " planned, nothing executed",
     );
     return lines.join("\n");
   }
@@ -200,11 +203,11 @@ export function initRunExample(): void {
       const span = runBtn.querySelector("span");
       const oldLabel = span?.textContent ?? "";
       if (span) span.textContent = "Running…";
-      // Spell examples opt into the dry-run recorder (data-recorder): their
+      // Spell examples opt into the dry-run recorder (data-magus-recorder): their
       // targets fork tools, so evalBuzz can't run them, but evalBuzzWithRecorder
       // reports the tool invocations they WOULD trigger as a trace. Module
       // examples stay on the plain evalBuzz path (print output).
-      const recorder = pre.hasAttribute("data-recorder");
+      const recorder = pre.hasAttribute("data-magus-recorder");
       ensureBuzz()
         .then(() => {
           const buzz = window.buzz;

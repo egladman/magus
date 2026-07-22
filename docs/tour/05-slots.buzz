@@ -30,27 +30,27 @@ magus.project({
 });
 
 // A cheap check. It stays at the default of one slot; several like it run at once.
-export fun go_lint(args: [str]) > void {
+export fun go_lint(ctx: magus\Context, args: [str]) > void {
     go["go-vet"]();
 }
 
 // The greedy one: reserve 4 slots AND tell eslint to actually use 4 threads.
-export fun js_lint(args: [str]) > void {
+export fun js_lint(ctx: magus\Context, args: [str]) > void {
     ts["eslint"]({"args": ["--concurrency=" + LINT_SLOTS]});
 }
 
 // lint fans out to both. The scheduler runs the 1-slot check alongside other
 // small work, but quiets the queue around js-lint's 4-slot reservation.
-export fun lint(args: [str]) > void {
-    magus.needs(go_lint, js_lint);
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(go_lint, js_lint);
 }
 
 // The conventional anchor. Kept to lint here so the plan stays short.
-export fun ci(args: [str]) > void {
-    magus.needs(lint);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint);
 }
 
 // A stand-in release, so `graph` shows the exclusive policy in context.
-export fun release(args: [str]) > void {
-    magus.needs(ci);
+export fun release(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ci);
 }

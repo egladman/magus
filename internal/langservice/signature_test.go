@@ -19,7 +19,7 @@ func TestSignatureAt_ModuleMethod(t *testing.T) {
 }
 
 func TestSignatureAt_LocalFunction(t *testing.T) {
-	src := "export fun build(args: [str]) > void {}\nbuild("
+	src := "export fun build(ctx: magus\\Context, args: [str]) > void {}\nbuild("
 	sig := SignatureAt(src, len(src))
 	require.NotNil(t, sig)
 	assert.Contains(t, sig.Label, "build")

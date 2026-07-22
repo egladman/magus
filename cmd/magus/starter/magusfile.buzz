@@ -20,18 +20,18 @@ import "os";
 // spell's tool-native op from its body, or run a command with os.exec
 // (build below). Leave a stage as a no-op until you wire it.
 
-export fun preflight(args: [str]) > void {}
-export fun generate(args: [str]) > void { magus.needs(preflight); }
-export fun format(args: [str]) > void { magus.needs(generate); }
-export fun lint(args: [str]) > void { magus.needs(format); }
-export fun build(args: [str]) > void { magus.needs(format); os.exec("echo", ["Hello from magus"]); }
-export fun test(args: [str]) > void { magus.needs(format); }
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
+export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); }
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); os.exec("echo", ["Hello from magus"]); }
+export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off. magus does
 // not hardcode its steps — compose them here with magus.needs. magus runs
 // ci read-only. Each stage declares its own prerequisites so the DAG is expressed
 // as edges: ci fans out lint/build/test in parallel; they each wait for format,
 // which waits for generate, which waits for preflight. Shared deps run once.
-export fun ci(args: [str]) > void {
-    magus.needs(lint, build, test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test);
 }

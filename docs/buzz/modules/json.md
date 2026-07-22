@@ -27,7 +27,7 @@ Decode a JSON string into a value (map, list, string, number, or boolean).
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "json";
@@ -54,7 +54,7 @@ Encode a value as a JSON string. With no indent (or "") the output is compact; p
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "json";

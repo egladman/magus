@@ -31,7 +31,7 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
     magus.cache.remote(github);
 }
 
-// Outputs are declared per-target with magus.outputs (in each *-generate body
+// Outputs are declared per-target with ctx.outputs (in each *-generate body
 // below) rather than project-wide: each generated tree belongs to exactly one
 // generator, so snapshotting host/gen under go-build (which never writes it) is
 // both wasteful and a hazard - a go-build cache hit would restore a stale MAGUS.md.
@@ -84,8 +84,8 @@ fun ld_flags() > str {
 }
 
 // Compiles the version-stamped magus binary.
-export fun go_build(args: [str]) > void {
-    magus.needs(gopherbuzz.build);
+export fun go_build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(gopherbuzz.build);
     go["go-build"]({
         "env": {"GOEXPERIMENT": "jsonv2"},
         "args": ["-trimpath",
@@ -126,13 +126,13 @@ fun build_variant(dockerfile: str, platforms: str, tags: [str], meta: str, publi
 // Otherwise loads one single-arch image locally: CGO/glibc (Dockerfile) by default, or
 // the static/no-libc variant (Dockerfile.static) under the `static` charm — the same
 // default-cgo/opt-in-static convention as release_build() in this file.
-export fun image_build(args: [str]) > void {
-    if (magus.has_charm("cd")) {
+export fun image_build(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("cd")) {
         build_variant("Dockerfile.static", "linux/amd64,linux/arm64",
             [IMAGE + ":" + version(), IMAGE + ":latest"], "static-meta.json", true);
         build_variant("Dockerfile", "linux/amd64",
             [IMAGE + ":" + version() + "-cgo", IMAGE + ":latest-cgo"], "cgo-meta.json", true);
-    } else if (magus.has_charm("static")) {
+    } else if (ctx.has_charm("static")) {
         build_variant("Dockerfile.static", "linux/amd64", [image_tag()], "", false);
     } else {
         build_variant("Dockerfile", "linux/amd64", [image_tag()], "", false);
@@ -140,9 +140,9 @@ export fun image_build(args: [str]) > void {
 }
 
 // Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.
-export fun image_scan(args: [str]) > void {
-    magus.needs(image_build);
-    if (magus.has_charm("rw")) {
+export fun image_scan(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(image_build);
+    if (ctx.has_charm("rw")) {
         fs.makeDirectory("dist");
         os.exec("trivy", ["image",
             "--format", "sarif",
@@ -160,25 +160,25 @@ export fun image_scan(args: [str]) > void {
 // stay owned here at the root, NOT in the docs project. The docs project owns the
 // Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the
 // same internal/manpage registry by cmd/magus-manpage (see its -format flag).
-export fun man_generate(args: [str]) > void {
-    magus.outputs("manpage/*.1");
+export fun man_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("manpage/*.1");
     fs.makeDirectory("manpage");
     os.exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
 }
 
 // Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
-export fun bindings_generate(args: [str]) > void {
-    magus.outputs("host/gen/*.go");
+export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("host/gen/*.go");
     os.exec("go", ["generate", "./std/..."]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spell/gen).
-export fun spells_generate(args: [str]) > void {
+export fun spells_generate(ctx: magus\Context, args: [str]) > void {
     os.exec("go", ["generate", "./internal/spell/..."]);
 }
 
 // Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.
-export fun config_generate(args: [str]) > void {
+export fun config_generate(ctx: magus\Context, args: [str]) > void {
     os.exec("go", ["generate", "./cmd/magus/..."]);
 }
 
@@ -189,15 +189,15 @@ export fun config_generate(args: [str]) > void {
 // (man-generate above), which are a distribution artifact rather than site content.
 
 // Renders MAGUS.md via `magus describe graph`.
-export fun md_generate(args: [str]) > void {
-    magus.outputs("MAGUS.md");
+export fun md_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("MAGUS.md");
     final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in
 // GitHub Actions, appends it to the job step summary. The final CI step; never gates.
-export fun postflight(args: [str]) > void {
+export fun postflight(ctx: magus\Context, args: [str]) > void {
     final doc = magus.insight(["report", "--workspace"]).stdout; // teed to stdout, like md-generate
     final summaryPath = os.env("GITHUB_STEP_SUMMARY");
     if (summaryPath != null and ("" + summaryPath) != "") {
@@ -214,10 +214,10 @@ export fun postflight(args: [str]) > void {
 // a raw git/porcelain shell-out), so uncommitted-but-current generated files pass;
 // only a regeneration that changes a clean file fails (a generator input changed
 // but its output was not re-run and committed).
-export fun generate(args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs.isDirty() == false;
-    magus.needs(magus.glob("*-generate"));
-    if (magus.has_charm("rw")) { return; }
+    ctx.needs(ctx.glob("*-generate"));
+    if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs.isDirty()) {
         throw "generate: regeneration changed generated files; re-run "
@@ -300,12 +300,12 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
 // build:container): this is a magusfile function target with no spell, so :static
 // trips the soft undeclared-charm typo-guard warning — expected here, same as that
 // example.
-export fun release_build(goos: str, goarch: str) > void {
+export fun release_build(ctx: magus\Context, goos: str, goarch: str) > void {
     // dist/* is skip_cache (never snapshotted), but declaring it keeps
     // `magus clean --outputs` aware of the release artifacts via AllOutputs.
-    magus.outputs("dist/*");
+    ctx.outputs("dist/*");
     final p = release_target_platform(goos, goarch);
-    if (magus.has_charm("static")) {
+    if (ctx.has_charm("static")) {
         build_release_variant(p[0], p[1], false, "-static");
     } else {
         build_release_variant(p[0], p[1], true, "");
@@ -317,19 +317,19 @@ export fun release_build(goos: str, goarch: str) > void {
 // release pubkey (internal/releasekey) before the release goes out — a cheap
 // regression guard, safe to run here (unlike setup-magus, which can't depend on the
 // magus source tree since it's reused by arbitrary external repos).
-export fun release_sign(args: [str]) > void {
+export fun release_sign(ctx: magus\Context, args: [str]) > void {
     os.exec("go", ["run", "./cmd/magus-utils", "sign", fs.join("dist", "SHA256SUMS")]);
     os.exec("go", ["run", "./cmd/magus-utils", "verify",
         fs.join("dist", "SHA256SUMS"), fs.join("dist", "SHA256SUMS.sig")]);
 }
 
 // Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.
-export fun watch(args: [str]) > void {
+export fun watch(ctx: magus\Context, args: [str]) > void {
     magus.info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
     fs.watch(["cmd", "internal"], fun(changed: [str]) > bool {
         magus.info("change detected — rebuilding");
         try {
-            go_build([]);
+            go_build(ctx, []);
         } catch (e) {
             magus.warn("build failed, still watching: " + e);
         }
@@ -367,64 +367,64 @@ fun badge_color(pct: str) > str {
 // with counter statements, which shifts the source line numbers the module-doc
 // generator embeds (it reads runtime source info), tripping TestModuleDocsUpToDate.
 // Per-package leaves dependencies un-instrumented, so those links stay stable.
-export fun coverage(args: [str]) > void {
+export fun coverage(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs.isDirty([fs.join("assets", "coverage.svg")]) == false;
     go["go-test"]({"args": ["-covermode=atomic", "-coverprofile=coverage.out"]});
     final pct = total_coverage(os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
     final svg = os.exec("go", ["run", "./cmd/coverage-badge",
         "-label", "coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
     fs.writeFile(fs.join("assets", "coverage.svg"), svg);
-    if (magus.has_charm("rw")) { return; }
+    if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs.isDirty([fs.join("assets", "coverage.svg")])) {
         throw "coverage: assets/coverage.svg is stale; re-run `magus run coverage:rw` and commit the badge";
     }
 }
 
 // Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).
-export fun buzz_check(args: [str]) > void {
+export fun buzz_check(ctx: magus\Context, args: [str]) > void {
     buzz["buzz-check"]({"cwd": "cmd/magus/starter/spells"});
 }
 
 // Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).
-export fun buzz_run(args: [str]) > void {
+export fun buzz_run(ctx: magus\Context, args: [str]) > void {
     buzz["magus-buzz"]({"cwd": "cmd/magus/starter/spells"});
 }
 
 // Gates the build on workspace health by running `magus doctor`.
-export fun preflight(args: [str]) > void { magus.doctor([]); }
+export fun preflight(ctx: magus\Context, args: [str]) > void { magus.doctor([]); }
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
-export fun build(args: [str])  > void {
-    magus.needs(format);
-    if (magus.has_charm("container")) {
-        magus.needs(image_build);
+export fun build(ctx: magus\Context, args: [str])  > void {
+    ctx.needs(format);
+    if (ctx.has_charm("container")) {
+        ctx.needs(image_build);
     } else {
-        magus.needs(go_build);
+        ctx.needs(go_build);
     }
 }
 // Formats first, then runs the Go test suite.
-export fun test(args: [str])   > void { magus.needs(format); go["go-test"](); }
+export fun test(ctx: magus\Context, args: [str])   > void { ctx.needs(format); go["go-test"](); }
 // Formats first, then golangci-lint, go vet, govulncheck, markdownlint. golangci-lint
 // and govulncheck run via os.exec to pass -modfile=go.tool.mod (their deps live there,
 // not in the library go.mod).
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
-export fun lint(args: [str])   > void { magus.needs(format); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]); md.markdownlint(); }
+export fun lint(ctx: magus\Context, args: [str])   > void { ctx.needs(format); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]); md.markdownlint(); }
 // Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs.
-export fun format(args: [str]) > void { magus.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
 
 // Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate;
 // the affected/pipeline anchor - one command that also catches unregenerated output.
 // generate is a DIRECT dep (not just transitively via format) so the drift gate is a
 // first-class part of ci, independent of the mutating format/build chain. coverage
 // drift-gates assets/coverage.svg, so a stale badge fails ci instead of rotting silently.
-export fun ci(args: [str]) > void {
-    magus.needs(generate, lint, build, test, coverage);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate, lint, build, test, coverage);
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix
 // outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.
-export fun ci_shard(args: [str]) > void {
+export fun ci_shard(ctx: magus\Context, args: [str]) > void {
     var input = "";
     if (!os.stdinIsTerminal()) {
         input = io.stdin.readAll();
@@ -441,7 +441,7 @@ export fun ci_shard(args: [str]) > void {
         + "count=" + plan.q("count").integerValue() + "\n"
         + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
 
-    if (!magus.has_charm("gha")) {
+    if (!ctx.has_charm("gha")) {
         magus.info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
         return;
     }
@@ -527,7 +527,7 @@ fun rerender_docs() > void {
 //
 // This rebuilds docs/console CONTENT, never magus itself - it does NOT trip the
 // self-rebuild anti-pattern CLAUDE.md warns against.
-export fun serve(args: [str]) > void {
+export fun serve(ctx: magus\Context, args: [str]) > void {
     final DOCS_GEN = "docs/gen";
     final CONSOLE_GEN = "console/gen";
     if (!fs.isDir(DOCS_GEN)) { throw "serve: " + DOCS_GEN + " not found - run `magus run build docs` first"; }

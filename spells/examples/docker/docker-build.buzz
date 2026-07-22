@@ -5,6 +5,6 @@ import "magus/spell/docker";
 
 magus.project({ "spells": [docker] });
 
-export fun image(args: [str]) > void {
+export fun image(ctx: magus\Context, args: [str]) > void {
     docker["docker-build"]({ "args": ["-t", "app:latest", "."] });
 }

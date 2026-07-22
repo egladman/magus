@@ -79,7 +79,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 // a magusfile referencing a member this host omits would fail to evaluate. The guard
 // test TestMagusSurfaceMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members
-// (magus.project, needs, glob) are modeled into the graph.
+// (magus.project, and the ctx.needs/ctx.glob a target declares) are modeled into the graph.
 func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m := vm.NewMap()
 
@@ -91,51 +91,9 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return vm.Null, nil
 	}))
 
-	// magus.needs(fn|glob(...), ...): trace a same-project edge per target function
-	// argument, keyed by the function's declared name (FunName) run through the same
-	// normalizer as the real binding's resolveTargetFun; a magus.glob(...) list arg is
-	// flattened to its handles. Cross-project handles (import "project/...") aren't
-	// modeled in the single-file dry run - there's no sibling project to enumerate in
-	// the sandbox - so a non-function argument is skipped, best-effort.
-	m.MapSet("needs", fn("magus.needs", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		var trace func(a vm.Value)
-		trace = func(a vm.Value) {
-			if a.IsList() {
-				// A magus.glob(...) result: trace each resolved target handle.
-				for _, el := range a.ListItems() {
-					trace(el)
-				}
-				return
-			}
-			if a.IsFun() {
-				if name := a.FunName(); name != "" {
-					tr.addEdge(normalizeTarget(name))
-				}
-			}
-		}
-		for _, a := range args {
-			trace(a)
-		}
-		return vm.Null, nil
-	}))
-
-	// magus.glob(pattern, ...): expand each pattern against the discovered target set
-	// (tr.targetKeys) and RETURN the matches as target handles (synthetic function
-	// values carrying each name), so magus.needs(magus.glob("...")) traces an edge per
-	// match. Mirrors the real binding's buildBuzzGlob: a pattern resolves to handles,
-	// keeping needs monomorphic.
-	m.MapSet("glob", fn("magus.glob", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		var handles []vm.Value
-		for _, a := range args {
-			if !a.IsStr() {
-				continue
-			}
-			for _, name := range tr.matchTargets(globToRegexp(a.AsString())) {
-				handles = append(handles, fn(name, retNull))
-			}
-		}
-		return vm.ListValue(handles), nil
-	}))
+	// Dependency and footprint declarations live only on the magus.Context a target
+	// receives (ctx.needs / ctx.glob / ctx.inputs / ctx.outputs; see buildCtx), not on
+	// the magus.* global - mirroring the real bindings.
 
 	// magus.cache.<...>: a namespace in the real module (cache.remote, ...); stub as
 	// a no-op so cache.remote(github) at magusfile top level doesn't blow up.
@@ -144,17 +102,9 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("cache", cache)
 
 	// has_charm(name) reports whether name is in the active charm set (tr.charms), so
-	// a `run t:charm` dry-run takes charm-gated branches. For a plain graph/ls load
-	// the set is empty, so every branch reads as un-charmed.
-	m.MapSet("has_charm", fn("magus.has_charm", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		name := strArg(args, 0, "")
-		for _, c := range tr.charms {
-			if c == name {
-				return vm.BoolValue(true), nil
-			}
-		}
-		return vm.BoolValue(false), nil
-	}))
+	// a `run t:charm` dry-run takes charm-gated branches. The same closure backs
+	// ctx.has_charm (see buildCtx).
+	m.MapSet("has_charm", fn("magus.has_charm", traceHasCharm(tr)))
 
 	for _, level := range []string{"info", "warn", "error", "debug"} {
 		m.MapSet(level, fn("magus."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -169,7 +119,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// magus.run(argv, opts?) recursively invokes `magus run <argv>`. The dry run
 	// can't re-enter the runner, so it traces the invocation (the target and any
 	// :charm suffix from argv[0]) as an op - the one imperative alternative to a
-	// magus.needs() DAG edge.
+	// ctx.needs() DAG edge.
 	m.MapSet("run", fn("magus.run", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if ref := firstListStr(args); ref != "" {
 			target, charms := splitTargetRef(ref)
@@ -210,7 +160,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
 	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
 	// satisfy the surface parity guard, not because the dry run acts on them.
-	for _, name := range []string{"hint", "fatal", "pry", "bustCache", "inputs", "outputs"} {
+	for _, name := range []string{"hint", "fatal", "pry", "bustCache"} {
 		m.MapSet(name, fn("magus."+name, retNull))
 	}
 
@@ -218,6 +168,84 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 }
 
 func retNull(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }
+
+// traceNeeds backs ctx.needs: it traces a same-project edge per target
+// function argument, keyed by the function's declared name (FunName) run through the
+// same normalizer as the real binding's resolveTargetFun; a glob(...) list arg is
+// flattened to its handles. Cross-project handles aren't modeled in the single-file dry
+// run - there's no sibling project in the sandbox - so a non-function argument is
+// skipped, best-effort.
+func traceNeeds(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		var trace func(a vm.Value)
+		trace = func(a vm.Value) {
+			if a.IsList() {
+				for _, el := range a.ListItems() {
+					trace(el)
+				}
+				return
+			}
+			if a.IsFun() {
+				if name := a.FunName(); name != "" {
+					tr.addEdge(normalizeTarget(name))
+				}
+			}
+		}
+		for _, a := range args {
+			trace(a)
+		}
+		return vm.Null, nil
+	}
+}
+
+// traceGlob backs ctx.glob: it expands each pattern against the
+// discovered target set (tr.targetKeys) and RETURNS the matches as target handles, so
+// needs(glob("...")) traces an edge per match. Mirrors the real binding's buildBuzzGlob:
+// a pattern resolves to handles, keeping needs monomorphic.
+func traceGlob(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		var handles []vm.Value
+		for _, a := range args {
+			if !a.IsStr() {
+				continue
+			}
+			for _, name := range tr.matchTargets(globToRegexp(a.AsString())) {
+				handles = append(handles, fn(name, retNull))
+			}
+		}
+		return vm.ListValue(handles), nil
+	}
+}
+
+// traceHasCharm backs magus.has_charm and ctx.has_charm: it reports whether name is in
+// the active charm set (tr.charms), so a `run t:charm` dry-run takes charm-gated
+// branches. For a plain graph/ls load the set is empty, so every branch reads un-charmed.
+func traceHasCharm(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		name := strArg(args, 0, "")
+		for _, c := range tr.charms {
+			if c == name {
+				return vm.BoolValue(true), nil
+			}
+		}
+		return vm.BoolValue(false), nil
+	}
+}
+
+// buildCtx builds the magus.Context value a target receives as its first argument in a
+// dry run. Its methods mirror the tracing magus.* members - needs/glob trace and expand
+// graph edges, has_charm reads the active charm set - so a ctx-form body traces exactly
+// as the old global form did. inputs/outputs are inert: the dry graph reads the footprint
+// statically (describe.Extract), never by tracing the body.
+func buildCtx(tr *Tracer) vm.Value {
+	c := vm.NewMap()
+	c.MapSet("needs", fn("ctx.needs", traceNeeds(tr)))
+	c.MapSet("glob", fn("ctx.glob", traceGlob(tr)))
+	c.MapSet("has_charm", fn("ctx.has_charm", traceHasCharm(tr)))
+	c.MapSet("inputs", fn("ctx.inputs", retNull))
+	c.MapSet("outputs", fn("ctx.outputs", retNull))
+	return c
+}
 
 // captureConfigure reads a magus.project call into the project path plus
 // its options map. It mirrors the real binding: configure({...}) customizes this

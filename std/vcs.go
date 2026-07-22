@@ -74,14 +74,14 @@ var Vcs = Module{
 			Impl:    VcsIsDirty,
 		},
 		{
-			Name: "classify_drift",
-			Doc:  "Classify a generate gate's drift and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.",
+			Name: "diagnose_drift",
+			Doc:  "Diagnose why a generate gate's outputs drifted and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.",
 			Args: []Arg{
 				{Name: "outputs", Type: TypeStringSlice},
 				{Name: "inputs", Type: TypeStringSlice, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap}},
-			Impl:    VcsClassifyDrift,
+			Impl:    VcsDiagnoseDrift,
 		},
 		{
 			Name:    "metadata",
@@ -254,8 +254,7 @@ func VcsCommitDate(ctx context.Context) (string, error) {
 	return meta.CommitDate, nil
 }
 
-// VcsIsDirty reports whether the working tree has uncommitted changes.
-// VcsClassifyDrift classifies a generate gate's drift into a coded diagnostic. Given the
+// VcsDiagnoseDrift diagnoses a generate gate's drift into a coded diagnostic. Given the
 // target's declared output globs and input globs (project-relative) and the fact that the
 // tree drifted, it distinguishes the three causes the plan defines:
 //
@@ -276,9 +275,9 @@ func VcsCommitDate(ctx context.Context) (string, error) {
 //
 // drifted is false (and code/message/url empty) when the outputs are not actually dirty.
 // This composes vcs.isDirty (called on outputs and on inputs) rather than replacing it:
-// isDirty stays the general "is this path dirty" primitive; classifyDrift is the
+// isDirty stays the general "is this path dirty" primitive; diagnoseDrift is the
 // higher-level, drift-specific reading built on top of it plus the version signal.
-func VcsClassifyDrift(ctx context.Context, outputs, inputs []string) (map[string]any, error) {
+func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string]any, error) {
 	clean := map[string]any{"drifted": false, "code": "", "message": "", "url": ""}
 	v, _ := resolveVCS(ctx)
 	if v == nil {
@@ -322,6 +321,7 @@ func VcsClassifyDrift(ctx context.Context, outputs, inputs []string) (map[string
 	}, nil
 }
 
+// VcsIsDirty reports whether the working tree has uncommitted changes.
 func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {

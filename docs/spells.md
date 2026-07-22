@@ -54,9 +54,9 @@ magus.project.register(fun(p, cb) > bool { cb({ "spells": [go] }); return true; 
 
 // targets are the runnable verbs; their bodies call the spell's ops. Op keys are
 // the CLI command, so kebab names are reached by subscript (see Naming operations).
-export fun build(args: [str]) > void { go["go-build"]({ "cwd": "." }); }
-export fun lint(args: [str])  > void { go["golangci-lint"]({ "cwd": "." }); }
-export fun test(args: [str])  > void { go["go-test"]({ "cwd": "." }); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"]({ "cwd": "." }); }
+export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"]({ "cwd": "." }); }
+export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"]({ "cwd": "." }); }
 ```
 
 ```sh
@@ -149,7 +149,7 @@ import "magus/spell/go";
 import "magus/spell/docker";
 magus.project.register(fun(p, cb) > bool { cb({ "spells": [go, docker] }); return true; });   // co-bound
 
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     go["go-build"]({ "cwd": "." });
     docker.build({ "cwd": "." });        // one target, ops from two spells
 }
@@ -218,8 +218,8 @@ Then import it by path, bind it, and compose targets that call its ops:
 import "spells/ruby" as rb;
 magus.project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 
-export fun test(args: [str]) > void { rb.rspec({ "cwd": "gems/" }); }
-export fun lint(args: [str]) > void { rb.rubocop({ "cwd": "gems/" }); }
+export fun test(ctx: magus\Context, args: [str]) > void { rb.rspec({ "cwd": "gems/" }); }
+export fun lint(ctx: magus\Context, args: [str]) > void { rb.rubocop({ "cwd": "gems/" }); }
 ```
 
 For cache-correctness rules (declare every input in `needs`, declare `provides` so outputs replay, toolchain-version footguns), see [Spells in the README](../README.md#custom-spells).

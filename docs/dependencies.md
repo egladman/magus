@@ -14,7 +14,7 @@ owns that story end to end.
 
 ## The two mechanisms and the decision rule
 
-- **`magus.needs(...)`** is target-level, imperative, and blocking at its call
+- **`ctx.needs(...)`** is target-level, imperative, and blocking at its call
   site inside the target body. It says "run X before the rest of my body
   executes" - same-project or cross-project, deduped per invocation, run
   once. See [targets.md](targets.md) for the full grammar.
@@ -31,7 +31,7 @@ once - see the fold, below.
 
 ## The fold: a cross-project `needs` also declares `depends_on`
 
-A cross-project `magus.needs(alias.target)` (where `alias` is a project
+A cross-project `ctx.needs(alias.target)` (where `alias` is a project
 imported at the top of the magusfile, whose exported targets it binds as
 callable handles) is **statically extracted** and **unioned into the
 consuming project's `DependsOn`** at workspace-open time
@@ -42,8 +42,8 @@ you had also written a `depends_on` entry - you never write both.
 
 **The fold is a static read, so a computed edge is invisible.** The extractor
 reads the magusfile's AST; it resolves a same-project target passed by
-reference (`magus.needs(build)`), a cross-project handle passed as a member
-access (`magus.needs(alias.target)`), and each literal pattern given to
+reference (`ctx.needs(build)`), a cross-project handle passed as a member
+access (`ctx.needs(alias.target)`), and each literal pattern given to
 `magus.glob` inside a `magus.needs`. What it cannot evaluate is a _computed_ dependency - a
 handle stored in a variable, returned from a function, or otherwise built at
 runtime. Such a `magus.needs` call is invisible to the static graph, to
@@ -92,7 +92,7 @@ consequences worth stating plainly:
 
 The static extractor (`internal/describe/extract.go`) that powers `magus
 describe`/`magus graph` sees **both arms** of a charm-conditional `magus.needs`
-call (an `if magus.has_charm("cd") { magus.needs(...) } else { magus.needs(...) }`
+call (an `if ctx.has_charm("cd") { ctx.needs(...) } else { ctx.needs(...) }`
 shows both edges in the graph). A dry run (`magus run --dry-run`) evaluates
 the magusfile for real and sees only the **taken** branch, under whichever
 charms are active. Both are correct for what they represent: the static graph
@@ -105,7 +105,7 @@ is a bug when they do.
 - **Same-project runtime cycle.** A target that (transitively) needs itself
   fails with `buzzpool: dispatch: stack contains "<name>" (cycle detected)` -
   the ancestor stack that catches this also catches a direct self-loop
-  (`magus.needs(self)` inside `self`).
+  (`ctx.needs(self)` inside `self`).
 - **Cross-project runtime cycle.** Two projects whose `magus.needs` chains
   point back at each other fail with `cross-project cycle: <dir> target
 "<name>"`, detected by the same run's `CrossDispatch` coordinator.
@@ -122,18 +122,18 @@ is a bug when they do.
 ## `needs` and `glob`: functions and patterns, same-project globs
 
 `magus.needs` takes target **functions**: a same-project target passed by
-reference (`magus.needs(build, test)`) or a cross-project handle a project
-import binds (`magus.needs(alias.target)`), or the list of handles `magus.glob`
+reference (`ctx.needs(build, test)`) or a cross-project handle a project
+import binds (`ctx.needs(alias.target)`), or the list of handles `magus.glob`
 resolves a pattern to. It never takes a string or a query object; a mistyped
 identifier is an undefined variable and fails at **load**, not at run time. For
 patterns, resolve them to handles with `magus.glob` and pass the result to
 `magus.needs`.
 
-`magus.glob(pattern)` is **same-project only** (a cross-project edge is always a
+`ctx.glob(pattern)` is **same-project only** (a cross-project edge is always a
 handle `alias.target`) and resolves to the **handles** of the matching registered
-targets, which you feed to `magus.needs` (`magus.needs(magus.glob("*-generate"))`).
+targets, which you feed to `magus.needs` (`ctx.needs(ctx.glob("*-generate"))`).
 A pattern with no `*` is **suffix shorthand**, not a substring or exact match:
-`magus.glob("build")` compiles to `^.*-build$` and resolves
+`ctx.glob("build")` compiles to `^.*-build$` and resolves
 `go-build`/`docker-build`, but **not** a target literally named `build` - pass
 the `build` function to `magus.needs` for that. A pattern containing `*` matches
 as an ordinary anchored glob (`*-generate`). A pattern that matches nothing

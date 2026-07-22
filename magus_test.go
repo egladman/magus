@@ -730,7 +730,7 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	mkWS := func() string {
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-			[]byte("export fun build(args: [str]) > void {}\n"), 0o644))
+			[]byte("export fun build(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
 		return root
 	}
 

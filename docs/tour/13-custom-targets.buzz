@@ -10,26 +10,26 @@ import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     go["go-build"]();
 }
 
 // The conventional anchor, wired with magus.needs like always.
-export fun ci(args: [str]) > void {
-    magus.needs(build);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build);
 }
 
 // A bespoke phase. It depends on ci through the same magus.needs edge the
 // canonical targets use, then does its own extra work.
-export fun release(args: [str]) > void {
-    magus.needs(ci);
+export fun release(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ci);
     magus.info("tagging and publishing the release");
 }
 
 // A target can also invoke another imperatively with magus.run - the dynamic
 // alternative to a static magus.needs edge. `run deploy` records the nested
 // call in the plan.
-export fun deploy(args: [str]) > void {
+export fun deploy(ctx: magus\Context, args: [str]) > void {
     magus.run(["release"]);
     magus.info("rolling out to production");
 }

@@ -13,7 +13,7 @@ import (
 func TestFindMagusBzz(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte("import \"magus\";\nexport fun build(args: [str]) > void {}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
 
 	src, err := Find(dir)
 	require.NoError(t, err)
@@ -34,9 +34,9 @@ func TestParseTargetsPath(t *testing.T) {
 	dir := t.TempDir()
 	source := `
 import "magus";
-export fun build(args: [str]) > void {}
-export fun test(args: [str]) > void {}
-export fun go_vet(args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
+export fun go_vet(ctx: magus\Context, args: [str]) > void {}
 `
 	path := filepath.Join(dir, "magusfile.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(source), 0o644))
@@ -60,8 +60,8 @@ func TestRunAndParse(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.buzz")
 	content := `
 import "magus";
-export fun build(args: [str]) > void {}
-export fun test(args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	src := &Source{Dir: dir, Files: []string{path}}
@@ -87,7 +87,7 @@ func TestOsExecShExitCode(t *testing.T) {
 import "magus";
 import "os";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     var rc = os.execSh("true", "", {"allow_failure": true}).code;
     if (rc != 0) {
         throw "os.execSh('true').code = {rc}";
@@ -109,7 +109,7 @@ func TestOsWithEnvShellCapture(t *testing.T) {
 import "magus";
 import "os";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void {
         var captured = os.execSh("echo $MY_BUZZ_VAR").stdout;
         if (captured != "hello") {
@@ -129,7 +129,7 @@ func TestFsJoinBinding(t *testing.T) {
 import "magus";
 import "fs";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     var p = fs.join("a", "b", "c");
     if (p == "") {
         throw "fs.join returned empty string";
@@ -151,7 +151,7 @@ func TestFsListDirBinding(t *testing.T) {
 import "magus";
 import "fs";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     var entries = fs.listDir("subdir");
     if (entries.len() == 0) {
         throw "expected at least one entry in subdir";
@@ -172,7 +172,7 @@ func TestFsRemoveAllBinding(t *testing.T) {
 import "magus";
 import "fs";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     fs.removeAll("todelete");
 }
 `)
@@ -189,7 +189,7 @@ func TestVcsBindings(t *testing.T) {
 import "magus";
 import "vcs";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     // All may be empty or false outside a repo; just confirm they don't crash.
     var h     = vcs.shortHash();
     var b     = vcs.branch();

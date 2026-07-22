@@ -6,7 +6,7 @@ tags: [MGS1005, magusfile, cache, inputs, outputs, doctor]
 
 # MGS1005: redundant footprint glob
 
-`magus doctor` found a per-target `magus.inputs(...)` or `magus.outputs(...)`
+`magus doctor` found a per-target `ctx.inputs(...)` or `ctx.outputs(...)`
 glob that is already declared project-wide - either in the project's `sources`
 /`outputs` options or contributed by a bound spell. Under the additive footprint
 model, the per-target copy adds nothing.
@@ -15,7 +15,7 @@ model, the per-target copy adds nothing.
 [MGS1005] 1 per-target magus.inputs/outputs glob(s) duplicate a project-wide
 declaration (a no-op under the additive model); drop the duplicate (see
 .../MGS1005.md)
-  build: magus.inputs("src/**") already in project sources
+  build: ctx.inputs("src/**") already in project sources
 ```
 
 ## Why
@@ -48,14 +48,14 @@ Keep the declaration in exactly one place, chosen by scope:
 ```buzz
 // Before: "src/**" declared twice - the per-target copy is a no-op.
 magus.project({sources = ["src/**"]});
-export fun build(args: [str]) > void {
-    magus.inputs("src/**");
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs("src/**");
     go["go-build"]();
 }
 
 // After: one home. Here it affects every target, so keep it project-wide.
 magus.project({sources = ["src/**"]});
-export fun build(args: [str]) > void { go["go-build"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 ```
 
 ## What this is NOT

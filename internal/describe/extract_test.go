@@ -22,20 +22,20 @@ func TestBuild(t *testing.T) {
 
 // ── section divider ───────────────────────────────────────
 // foo does a thing. This second sentence is dropped.
-export fun foo_bar(args: [str]) > void {
-    magus.needs(baz);
-    // magus.needs(baz) — a mention in a comment must not count
+export fun foo_bar(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(baz);
+    // ctx.needs(baz) — a mention in a comment must not count
 }
 
 // separated by a blank line, so it must NOT attach
 
-export fun baz(args: [str]) > void { magus.doctor([]); }
+export fun baz(ctx: magus\Context, args: [str]) > void { magus.doctor([]); }
 
-export fun gen_all(args: [str]) > void {
-    magus.needs(magus.glob("*-gen"));
+export fun gen_all(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-gen"));
 }
 
-export fun a_gen(args: [str]) > void { go["x"](); }
+export fun a_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `
 	g := Extract(src)
 
@@ -55,15 +55,15 @@ export fun a_gen(args: [str]) > void { go["x"](); }
 // names (including the built-in "rw"), sorted and deduped, while a has_charm
 // mention in a comment or string does not count.
 func TestCharms(t *testing.T) {
-	g := Extract(`export fun build(args: [str]) > void {
-    if (magus.has_charm("container")) { magus.needs(image_build); }
-    else { magus.needs(go_build); }
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("container")) { ctx.needs(image_build); }
+    else { ctx.needs(go_build); }
 }
-export fun fmt(args: [str]) > void {
-    if (magus.has_charm("rw")) { go["go-fmt"](); }
-    // magus.has_charm("ignored") in a comment must not count
+export fun fmt(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("rw")) { go["go-fmt"](); }
+    // ctx.has_charm("ignored") in a comment must not count
 }
-export fun plain(args: [str]) > void { go["x"](); }
+export fun plain(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
 	assert.Equal(t, []string{"container"}, build.Charms)
@@ -87,19 +87,61 @@ export fun release(ctx: magus\Context, args: [str]) > void {
 	assert.Equal(t, []string{"cd"}, release.Charms, "ctx.has_charm names are extracted statically")
 }
 
+// TestHasCharmBothReceivers pins that has_charm is read through BOTH receivers: the
+// still-live magus.has_charm global query and the ctx.has_charm form. Unlike
+// needs/inputs/outputs (ctx-only now), has_charm keeps its global, so a target reading
+// either must contribute the same charm to the static inventory - or the doctor charm
+// checks and the MAGUS.md listing would silently miss a magus.has_charm read.
+func TestHasCharmBothReceivers(t *testing.T) {
+	viaCtx := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void { if (ctx.has_charm("container")) {} }
+`)
+	viaMagus := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void { if (magus.has_charm("container")) {} }
+`)
+	c, _ := nodeByName(viaCtx, "build")
+	m, _ := nodeByName(viaMagus, "build")
+	assert.Equal(t, []string{"container"}, c.Charms, "ctx.has_charm read is extracted")
+	assert.Equal(t, c.Charms, m.Charms, "magus.has_charm must yield the identical charm inventory")
+}
+
+// TestCtxFormCharmBranchSeesBothArms is the regression guard for the reason the graph
+// is read statically rather than by running the body: a target whose dependency is
+// gated on a charm declares a DIFFERENT edge per branch. The static read sees BOTH
+// (image-build AND go-build); a run/discovery under one charm configuration would see
+// only the arm it took, silently dropping the other edge from the graph and the
+// affected set.
+func TestCtxFormCharmBranchSeesBothArms(t *testing.T) {
+	g := Extract(`import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("container")) {
+        ctx.needs(image_build);
+    } else {
+        ctx.needs(go_build);
+    }
+}
+export fun image_build(ctx: magus\Context, args: [str]) > void {}
+export fun go_build(ctx: magus\Context, args: [str]) > void {}
+`)
+	build, ok := nodeByName(g, "build")
+	require.True(t, ok, "build node present")
+	assert.ElementsMatch(t, []string{"image-build", "go-build"}, build.Dependencies,
+		"both arms of the ctx.has_charm branch must be edges, not just the arm a run would take")
+}
+
 // TestInputsOutputs pins the per-target cache-footprint extraction: magus.inputs /
 // magus.outputs string-literal globs are collected per target, a mention in a comment
 // is ignored, and a target that declares neither carries empty sets.
 func TestInputsOutputs(t *testing.T) {
-	g := Extract(`export fun build(args: [str]) > void {
-    magus.inputs("src/**", "tsconfig.json");
-    magus.outputs("dist/**");
-    // magus.inputs("ignored") in a comment must not count
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs("src/**", "tsconfig.json");
+    ctx.outputs("dist/**");
+    // ctx.inputs("ignored") in a comment must not count
 }
-export fun test(args: [str]) > void {
-    magus.inputs("src/**");
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs("src/**");
 }
-export fun plain(args: [str]) > void { }
+export fun plain(ctx: magus\Context, args: [str]) > void { }
 `)
 	build, _ := nodeByName(g, "build")
 	// A bare-literal glob is a same-project input: empty Project (meaning "this target's
@@ -119,9 +161,9 @@ export fun plain(args: [str]) > void { }
 // argument that is not a string literal sets DynamicIO (the load path turns that into
 // an error), while any literal args in the same call are still collected.
 func TestInputsOutputsDynamic(t *testing.T) {
-	g := Extract(`export fun build(args: [str]) > void {
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
-    magus.inputs("src/**", extra);
+    ctx.inputs("src/**", extra);
 }
 `)
 	build, _ := nodeByName(g, "build")
@@ -129,30 +171,30 @@ func TestInputsOutputsDynamic(t *testing.T) {
 	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, build.Inputs, "literal args are still collected")
 }
 
-// TestUnreachedIO pins orphan detection: a magus.inputs/outputs reached from a target
+// TestUnreachedIO pins orphan detection: a ctx.inputs/outputs reached from a target
 // body (directly or via a bare-call helper) is NOT flagged, while one in an
 // unreferenced helper or used as a value IS - it would never enter a cache key.
 func TestUnreachedIO(t *testing.T) {
-	orphans := UnreachedIO(`export fun build(args: [str]) > void {
-    magus.inputs("src/**");
+	orphans := UnreachedIO(`export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs("src/**");
     helper();
 }
-fun helper() > void { magus.outputs("dist/**"); }
-fun orphan() > void { magus.inputs("gen/**"); }
-export fun test(args: [str]) > void {
-    final f = magus.inputs;
+fun helper() > void { ctx.outputs("dist/**"); }
+fun orphan() > void { ctx.inputs("gen/**"); }
+export fun test(ctx: magus\Context, args: [str]) > void {
+    final f = ctx.inputs;
     f("late/**");
 }
 `)
 	// build's direct inputs and helper's outputs (bare-called) are reached -> not orphans.
-	// orphan()'s inputs (never called) and test's `magus.inputs` value reference are.
+	// orphan()'s inputs (never called) and test's `ctx.inputs` value reference are.
 	require.Len(t, orphans, 2)
 	kinds := map[string]string{} // fn -> kind
 	for _, o := range orphans {
 		kinds[o.Fn] = o.Kind
 	}
-	assert.Equal(t, "inputs", kinds["orphan"], "magus.inputs in an uncalled helper is orphaned")
-	assert.Equal(t, "inputs", kinds["test"], "magus.inputs used as a value is orphaned")
+	assert.Equal(t, "inputs", kinds["orphan"], "ctx.inputs in an uncalled helper is orphaned")
+	assert.Equal(t, "inputs", kinds["test"], "ctx.inputs used as a value is orphaned")
 }
 
 // TestSpellOps pins the per-target spell extraction: bracket (`go["go-test"]`) and
@@ -163,12 +205,12 @@ func TestSpellOps(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
 import "magus/spell/md";
 import "os";
-export fun format(args: [str]) > void { go["go-fmt"](); }
-export fun lint(args: [str]) > void {
-    magus.needs(format);
+export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); md.markdownlint();
 }
-export fun scan(args: [str]) > void { os.exec("trivy", []); other["x"](); }
+export fun scan(ctx: magus\Context, args: [str]) > void { os.exec("trivy", []); other["x"](); }
 `)
 	lint, _ := nodeByName(g, "lint")
 	want := []types.TargetSpellUse{
@@ -194,17 +236,17 @@ func TestSpellOpsThroughHelper(t *testing.T) {
 import "magus/spell/cosign";
 
 fun build_variant(tag: str) > void {
-    if (magus.has_charm("sign")) { cosign["cosign-sign"](); }
+    if (ctx.has_charm("sign")) { cosign["cosign-sign"](); }
     docker["docker-buildx"]();
     self_loop();
 }
 fun self_loop() > void { self_loop(); }
 
-export fun image_build(args: [str]) > void {
-    magus.needs(preflight);
+export fun image_build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     build_variant("latest");
 }
-export fun preflight(args: [str]) > void { go["x"](); }
+export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	img, ok := nodeByName(g, "image-build")
 	require.True(t, ok, "missing image-build; got %v", g)
@@ -225,7 +267,7 @@ export fun preflight(args: [str]) > void { go["x"](); }
 // phantom spell op. Only the op string of a real bracket call is read.
 func TestSpellOpsIgnoresStringLiterals(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
-export fun help(args: [str]) > void {
+export fun help(ctx: magus\Context, args: [str]) > void {
     os.exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
     go["go-build"]();
 }
@@ -242,8 +284,8 @@ export fun help(args: [str]) > void {
 // registers targets (kebab-case), so a camelCase function and a hyphenated
 // node reconcile.
 func TestNameNormalization(t *testing.T) {
-	g := Extract(`export fun goBuild(args: [str]) > void { go["x"](); }
-export fun ci(args: [str]) > void { magus.needs(goBuild); }
+	g := Extract(`export fun goBuild(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(goBuild); }
 `)
 	_, ok := nodeByName(g, "go-build")
 	require.True(t, ok, "camelCase goBuild should normalize to go-build; got %v", g)
@@ -254,11 +296,11 @@ export fun ci(args: [str]) > void { magus.needs(goBuild); }
 // TestBraceInString guards that a `}` inside a string literal does not truncate the
 // AST body and drop the magus.needs edge that follows it.
 func TestBraceInString(t *testing.T) {
-	g := Extract(`export fun build(args: [str]) > void {
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
     os.exec("sh", ["-c", "echo }"]);
-    magus.needs(fmt);
+    ctx.needs(fmt);
 }
-export fun fmt(args: [str]) > void { go["x"](); }
+export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
 	assert.Equal(t, []string{"fmt"}, build.Dependencies, "brace in string must not truncate body")
@@ -267,10 +309,10 @@ export fun fmt(args: [str]) > void { go["x"](); }
 // TestTrailingComment guards that a magus.needs handle in a trailing inline comment
 // is prose, not an edge.
 func TestTrailingComment(t *testing.T) {
-	g := Extract(`export fun build(args: [str]) > void {
-    magus.needs(real); // magus.needs(fake)
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(real); // ctx.needs(fake)
 }
-export fun real(args: [str]) > void { go["x"](); }
+export fun real(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	build, _ := nodeByName(g, "build")
 	assert.Equal(t, []string{"real"}, build.Dependencies, "trailing comment ignored")
@@ -279,11 +321,11 @@ export fun real(args: [str]) > void { go["x"](); }
 // TestNeedsGlobMultiPattern guards multi-pattern glob: every pattern in a
 // single magus.glob call must be honored, not just the first.
 func TestNeedsGlobMultiPattern(t *testing.T) {
-	g := Extract(`export fun all(args: [str]) > void {
-    magus.needs(magus.glob("*-gen", "check-*"));
+	g := Extract(`export fun all(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-gen", "check-*"));
 }
-export fun docs_gen(args: [str]) > void { go["x"](); }
-export fun check_lint(args: [str]) > void { go["x"](); }
+export fun docs_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun check_lint(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	all, _ := nodeByName(g, "all")
 	want := []string{"docs-gen", "check-lint"}
@@ -295,13 +337,13 @@ export fun check_lint(args: [str]) > void { go["x"](); }
 // target names (a starless pattern is suffix shorthand), a multi-pattern glob
 // yields every match, and a handle in a trailing comment is prose, not an edge.
 func TestNeedsHandles(t *testing.T) {
-	g := Extract(`export fun build(args: [str]) > void { go["x"](); }
-export fun a_gen(args: [str]) > void { go["x"](); }
-export fun b_gen(args: [str]) > void { go["x"](); }
-export fun test(args: [str]) > void {
-    magus.needs(build);
-    magus.needs(magus.glob("*-gen", "b-*"));
-    // magus.needs(ignored) in a comment must not count
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun a_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun b_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build);
+    ctx.needs(ctx.glob("*-gen", "b-*"));
+    // ctx.needs(ignored) in a comment must not count
 }
 `)
 	test, ok := nodeByName(g, "test")
@@ -312,12 +354,12 @@ export fun test(args: [str]) > void {
 
 func TestExternalCrossDependencies(t *testing.T) {
 	g := Extract(`import "project/../gopherbuzz" as gopherbuzz;
-export fun build_playground(args: [str]) > void {
-    magus.needs(preflight);
-    magus.needs(gopherbuzz.build);
+export fun build_playground(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    ctx.needs(gopherbuzz.build);
     // gopherbuzz.ignored in a comment must not count
 }
-export fun preflight(args: [str]) > void { go["x"](); }
+export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	bp, ok := nodeByName(g, "build-playground")
 	require.True(t, ok, "missing build-playground; got %v", g)
@@ -333,11 +375,11 @@ export fun preflight(args: [str]) > void { go["x"](); }
 // edges, which for an external edge would pollute the affected set.
 func TestDependencyTokensInStringLiterals(t *testing.T) {
 	g := Extract(`import "project/../api" as api;
-export fun build(args: [str]) > void {
-    magus.info("run magus.needs(setup) and api.compile first");
+export fun build(ctx: magus\Context, args: [str]) > void {
+    magus.info("run ctx.needs(setup) and api.compile first");
     go["go-build"]();
 }
-export fun setup(args: [str]) > void { go["x"](); }
+export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	b, ok := nodeByName(g, "build")
 	require.True(t, ok, "missing build; got %v", g)
@@ -345,15 +387,15 @@ export fun setup(args: [str]) > void { go["x"](); }
 	assert.Empty(t, b.CrossDependencies, "the cross-project ref is inside a string literal")
 }
 
-// TestCrossFileInputs: magus.inputs(<alias>.file("lit")) and a sibling bare string
+// TestCrossFileInputs: ctx.inputs(<alias>.file("lit")) and a sibling bare string
 // literal land on the SAME Inputs list in one shape - the literal a same-project input
 // (empty Project), the alias.file a cross-project input (raw dep path + rel); the
 // recognized cross-file arg does NOT trip DynamicIO, and the .file member mints no
 // phantom cross-dependency. Same-project entries come first (arg order), cross after.
 func TestCrossFileInputs(t *testing.T) {
 	g := Extract(`import "project/../lib" as lib;
-export fun build(args: [str]) > void {
-    magus.inputs(lib.file("go.mod"), "src/**/*.go");
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs(lib.file("go.mod"), "src/**/*.go");
     go["go-build"]();
 }
 `)
@@ -371,8 +413,8 @@ export fun build(args: [str]) > void {
 // to the static read, so it trips DynamicIO exactly like any other non-literal io arg.
 func TestCrossFileInputsDynamic(t *testing.T) {
 	g := Extract(`import "project/../lib" as lib;
-export fun build(args: [str]) > void {
-    magus.inputs(lib.file(args[0]));
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs(lib.file(args[0]));
     go["go-build"]();
 }
 `)
@@ -383,15 +425,15 @@ export fun build(args: [str]) > void {
 }
 
 func TestCycle(t *testing.T) {
-	acyclic := Extract(`export fun a(args: [str]) > void { magus.needs(b); }
-export fun b(args: [str]) > void { magus.needs(c); }
-export fun c(args: [str]) > void { go["x"](); }
+	acyclic := Extract(`export fun a(ctx: magus\Context, args: [str]) > void { ctx.needs(b); }
+export fun b(ctx: magus\Context, args: [str]) > void { ctx.needs(c); }
+export fun c(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	assert.Nil(t, Cycle(acyclic), "acyclic graph reported cycle")
 
-	cyclic := Extract(`export fun a(args: [str]) > void { magus.needs(b); }
-export fun b(args: [str]) > void { magus.needs(c); }
-export fun c(args: [str]) > void { magus.needs(a); }
+	cyclic := Extract(`export fun a(ctx: magus\Context, args: [str]) > void { ctx.needs(b); }
+export fun b(ctx: magus\Context, args: [str]) > void { ctx.needs(c); }
+export fun c(ctx: magus\Context, args: [str]) > void { ctx.needs(a); }
 `)
 	c := Cycle(cyclic)
 	require.NotNil(t, c, "cyclic graph reported no cycle")
@@ -402,8 +444,8 @@ export fun c(args: [str]) > void { magus.needs(a); }
 // cycle written with mixed casing must still be detected once both sides are
 // normalized.
 func TestCycleAcrossNormalization(t *testing.T) {
-	g := Extract(`export fun aB(args: [str]) > void { magus.needs(bC); }
-export fun bC(args: [str]) > void { magus.needs(aB); }
+	g := Extract(`export fun aB(ctx: magus\Context, args: [str]) > void { ctx.needs(bC); }
+export fun bC(ctx: magus\Context, args: [str]) > void { ctx.needs(aB); }
 `)
 	assert.NotNil(t, Cycle(g), "mixed-case cycle aB→bC→aB not detected")
 }
@@ -411,8 +453,8 @@ export fun bC(args: [str]) > void { magus.needs(aB); }
 // TestDeclaredName checks the raw as-written target name is captured when the
 // normalizer rewrites it, and left empty when the spelling already matches.
 func TestDeclaredName(t *testing.T) {
-	g := Extract(`export fun goBuild(args: [str]) > void {}
-export fun build(args: [str]) > void {}
+	g := Extract(`export fun goBuild(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 	rewritten, _ := nodeByName(g, "go-build")
 	assert.Equal(t, "goBuild", rewritten.Declared, "camelCase name captured as declared")

@@ -69,8 +69,8 @@ func TestCleanOutputsRemovesMatchedFiles(t *testing.T) {
 // project-wide outputs - AllOutputs unions the per-target globs back in.
 func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun generate(args: [str]) > void {
-    magus.outputs("gen/**");
+	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("gen/**");
 }
 `
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))

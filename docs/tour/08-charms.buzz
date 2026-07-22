@@ -13,8 +13,8 @@ magus.project({ "spells": [go] });
 // Read the active charm set with has_charm, then branch. (Most real spell ops do
 // this flip internally, so you usually get rw for free; here it is spelled out so
 // the plan shows the difference.)
-export fun format(args: [str]) > void {
-    if (magus.has_charm("rw")) {
+export fun format(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("rw")) {
         go["go-fmt"]({"args": ["-w"]});   // rewrite files in place
     } else {
         go["go-fmt"]({"args": ["-l"]});   // just list what would change
@@ -23,6 +23,6 @@ export fun format(args: [str]) > void {
 
 // Charms ride down needs() edges, so a single charm on the anchor reaches the
 // whole plan: `run ci:rw` hands rw to format too. Try `run ci`, then `run ci:rw`.
-export fun ci(args: [str]) > void {
-    magus.needs(format);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
 }

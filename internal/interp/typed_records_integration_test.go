@@ -37,7 +37,7 @@ fun probe() > void {
     final r: %s = %s;
     final _ = r.%s;
 }
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     fs.writeFile("ran", "ok");
 }
 `, c.imports, c.typ, c.expr, field)

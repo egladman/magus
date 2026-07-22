@@ -4,6 +4,6 @@ import "magus/spell/ts";
 
 magus.project({ "spells": [ts] });
 
-export fun format(args: [str]) > void {
+export fun format(ctx: magus\Context, args: [str]) > void {
     ts["prettier"]();
 }

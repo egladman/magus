@@ -11,9 +11,9 @@ import (
 func TestEncodeShare_roundTrips(t *testing.T) {
 	cases := map[string]string{
 		"empty":   "",
-		"ascii":   "import \"magus\";\nexport fun ci(args: [str]) > void {}\n",
+		"ascii":   "import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n",
 		"unicode": "// magusfile — runs entirely in your browser ✨\nbuzz fibo(20)\n",
-		"large":   strings.Repeat("export fun target(args: [str]) > void { magus.info(\"hi\"); }\n", 500),
+		"large":   strings.Repeat("export fun target(ctx: magus\\Context, args: [str]) > void { magus.info(\"hi\"); }\n", 500),
 	}
 	for name, src := range cases {
 		t.Run(name, func(t *testing.T) {

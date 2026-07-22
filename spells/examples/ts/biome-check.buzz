@@ -5,6 +5,6 @@ import "magus/spell/ts";
 
 magus.project({ "spells": [ts] });
 
-export fun lint(args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void {
     ts["biome-check"]();
 }

@@ -5,6 +5,6 @@ import "magus/spell/cosign";
 
 magus.project({ "spells": [cosign] });
 
-export fun verify(args: [str]) > void {
+export fun verify(ctx: magus\Context, args: [str]) > void {
     cosign["cosign-verify"]({ "args": ["app:latest"] });
 }

@@ -47,12 +47,12 @@ a standalone target:
 
 ```buzz
 // Before: a standalone typecheck target ci must remember to add separately.
-export fun typecheck(args: [str]) > void {
+export fun typecheck(ctx: magus\Context, args: [str]) > void {
     ts["tsc"]();
 }
 
 // After: tsc composes into lint, alongside eslint - one target ci already needs.
-export fun lint(args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void {
     ts["tsc"]();
     ts["eslint"]();
 }

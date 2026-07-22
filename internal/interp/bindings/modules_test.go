@@ -126,7 +126,7 @@ func TestMagusModulesEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     final mods = magus.modules();
     if (mods.len() == 0) { magus.fatal("magus.modules() returned nothing"); }
 
@@ -150,7 +150,7 @@ func TestTemplatePartialsEndToEnd(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", "import \"magus\";\n"+
 		"import \"template\";\n"+
-		"export fun check(args: [str]) > void {\n"+
+		"export fun check(ctx: magus\\Context, args: [str]) > void {\n"+
 		"    final page = `{{>header}}[{{body}}]{{>footer}}`;\n"+
 		"    final partials = {\"header\": `<h>{{title}}</h>`, \"footer\": `<f/>`};\n"+
 		"    final got = template.renderPartials(page, {\"title\": \"magus\", \"body\": \"hi & <b>\"}, partials);\n"+

@@ -20,10 +20,10 @@ import (
 func TestDeriveCrossProjectDeps(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
-		"gopherbuzz/magusfile.buzz": "export fun build(args: [str]) > void {}\n",
+		"gopherbuzz/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
 		"web/magusfile.buzz": `import "project/../gopherbuzz" as gopherbuzz;
-export fun build(args: [str]) > void {
-    magus.needs(gopherbuzz.build);
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(gopherbuzz.build);
 }
 `,
 	}
@@ -67,13 +67,13 @@ func TestAnyProjectDeclaresCI(t *testing.T) {
 
 	t.Run("comment does not count", func(t *testing.T) {
 		t.Parallel()
-		src := "// export fun ci composes the gate\nexport fun build(args: [str]) > void {}\n"
+		src := "// export fun ci composes the gate\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"
 		assert.False(t, declares(t, src), "ci in a comment must not count as declaring ci")
 	})
 
 	t.Run("real declaration counts", func(t *testing.T) {
 		t.Parallel()
-		src := "export fun ci(args: [str]) > void {}\n"
+		src := "export fun ci(ctx: magus\\Context, args: [str]) > void {}\n"
 		assert.True(t, declares(t, src), "export fun ci must count as declaring ci")
 	})
 }

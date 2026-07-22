@@ -81,6 +81,7 @@ const (
 	RedundantFootprintGlob    DiagnosticCode = "MGS1005"
 	UnknownTarget             DiagnosticCode = "MGS1006"
 	TargetDependencyCycle     DiagnosticCode = "MGS1007"
+	TargetMissingContext      DiagnosticCode = "MGS1008"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -122,6 +123,7 @@ const (
 var allDiagnosticCodes = []DiagnosticCode{
 	NoCITarget, SpellShadowed, BespokePhaseFragmentName,
 	UnreachedFootprintDecl, RedundantFootprintGlob, UnknownTarget, TargetDependencyCycle,
+	TargetMissingContext,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	NetEgress, SandboxPolicyMismatch,

@@ -14,7 +14,7 @@
 // artifact. It ships no bundle of its own; each consumer's esbuild follows the relative
 // import into src/ and bundles it inline (the library has zero npm deps, so that
 // resolves cleanly across project dirs). Its lint target is wired into each consumer's
-// lint via magus.needs(textsearch.lint), so a lib edit pulls the consumer checks through
+// lint via ctx.needs(textsearch.lint), so a lib edit pulls the consumer checks through
 // the target graph - affected tracking is glob-based (sources), not import-graph-based.
 
 import "magus";
@@ -51,7 +51,7 @@ magus.project({
     },
 });
 
-export fun preflight(args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // install restores the dev-only gate deps (typescript + biome) with pnpm, honoring
 // .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
@@ -66,11 +66,11 @@ fun install() > void {
 // regeneration dirtied a file that was clean, via vcs.isDirty, so a locally-regenerated
 // MAGUS.md passes whether or not it is committed; only a regeneration that changes a
 // clean file fails.
-export fun generate(args: [str]) > void {
-    magus.needs(preflight);
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
-    magus.needs(md_generate);
-    if (magus.has_charm("rw")) { return; }
+    ctx.needs(md_generate);
+    if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs.isDirty(["MAGUS.md"])) {
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/textsearch` and commit";
@@ -78,7 +78,7 @@ export fun generate(args: [str]) > void {
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
-export fun md_generate(args: [str]) > void {
+export fun md_generate(ctx: magus\Context, args: [str]) > void {
     final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
@@ -86,21 +86,21 @@ export fun md_generate(args: [str]) > void {
 // lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit)
 // plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).
 // os.exec raises on a non-zero exit, so either gate fails lint.
-export fun lint(args: [str]) > void {
-    magus.needs(preflight);
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     install();
     os.exec("pnpm", ["run", "typecheck"], ".", {});
     os.exec("pnpm", ["run", "biome"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).
-export fun test(args: [str]) > void {
-    magus.needs(preflight);
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     install();
     os.exec("pnpm", ["run", "test"], ".", {});
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.
-export fun ci(args: [str]) > void {
-    magus.needs(lint, test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, test);
 }

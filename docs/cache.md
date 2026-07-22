@@ -78,13 +78,13 @@ can't feed back into its own key.
 ### Per-target inputs and outputs
 
 A spell contributes its globs to _every_ target on the project. To attach a glob
-to _one_ target, declare it in that target's body with `magus.inputs(...)` /
-`magus.outputs(...)`:
+to _one_ target, declare it in that target's body with `ctx.inputs(...)` /
+`ctx.outputs(...)`:
 
 ```buzz
-export fun build(args: [str]) > void {
-    magus.inputs("schema/**", "codegen.config.json");
-    magus.outputs("dist/**");
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs("schema/**", "codegen.config.json");
+    ctx.outputs("dist/**");
     go["go-build"]();
 }
 ```
@@ -101,7 +101,7 @@ body, so the run can't be the source of truth. magus recovers them from the
 source: it walks each target body and the helpers it calls by name, collecting the
 **string-literal** globs. Two disciplines follow, both enforced:
 
-- A **non-literal argument** (`magus.inputs(someVar)`) is a magusfile load error -
+- A **non-literal argument** (`ctx.inputs(someVar)`) is a magusfile load error -
   a computed glob is invisible to the static read, and silently dropping it would
   risk a stale hit.
 - A call the walk **can't reach** (in an unreferenced helper, or the identifier
@@ -204,7 +204,7 @@ far more often than their names alone would suggest.
 
 Per-target [`magus.inputs`/`magus.outputs`](#per-target-inputs-and-outputs) does
 **not** undo this. It _adds_ to a target's footprint; it cannot remove the
-project-wide baseline. Declaring `magus.inputs("src/**")` on `build` does not stop
+project-wide baseline. Declaring `ctx.inputs("src/**")` on `build` does not stop
 a `Dockerfile` edit from busting it, because the `docker` spell's globs are still
 in the baseline. Per-target inputs are for attaching an input a target needs that
 nothing else declares - not for narrowing below the spell baseline.

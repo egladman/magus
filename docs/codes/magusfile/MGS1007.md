@@ -17,7 +17,7 @@ and errors instead of deadlocking.
 
 ## Why
 
-Targets declare what they depend on (`magus.needs(...)`, cross-project handles).
+Targets declare what they depend on (`ctx.needs(...)`, cross-project handles).
 Magus runs a target's dependencies before the target. If A depends on B and B
 depends on A - directly, or through a longer chain A -> B -> C -> A - there is no
 valid order: each is waiting on the other. Left unchecked that is a deadlock, so

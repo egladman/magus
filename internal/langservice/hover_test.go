@@ -28,7 +28,7 @@ func TestHover_ModuleName(t *testing.T) {
 }
 
 func TestHover_LocalFunction(t *testing.T) {
-	src := "export fun build(args: [str]) > void {}\nbuild();"
+	src := "export fun build(ctx: magus\\Context, args: [str]) > void {}\nbuild();"
 	off := strings.LastIndex(src, "build") + 1
 	h := HoverAt(src, off)
 	require.NotNil(t, h)

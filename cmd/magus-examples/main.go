@@ -31,11 +31,11 @@ import "magus/spell/go";
 magus.project({ "spells": [go] });
 
 // Format the Go sources.
-export fun format(args: [str]) > void { go["go-fmt"](); }
+export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
 
 // Run the Go test suite; formats first.
-export fun test(args: [str]) > void {
-    magus.needs(format);
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     go["go-test"]();
 }
 `,

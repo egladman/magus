@@ -22,7 +22,7 @@ import "magus";
 import "os";
 import "fs";
 import "magus/target";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     final r: ExecResult = os.exec("echo", ["hi"]);
     fs.writeFile("ran", r.stdout);
 }
@@ -36,7 +36,7 @@ export fun build(args: [str]) > void {
 import "magus";
 import "os";
 import "magus/target";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     final r: ExecResult = os.exec("echo", ["hi"]);
     final x = r.stduot;
 }

@@ -5,6 +5,6 @@ import "magus/spell/cosign";
 
 magus.project({ "spells": [cosign] });
 
-export fun attest(args: [str]) > void {
+export fun attest(ctx: magus\Context, args: [str]) > void {
     cosign["cosign-attest"]({ "args": ["--predicate", "sbom.json", "--type", "cyclonedx", "app:latest"] });
 }

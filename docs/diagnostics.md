@@ -50,7 +50,7 @@ The prefix tells you the domain at a glance:
 
 The clearest expression of the philosophy is what magus does when a generated file
 drifts. A `generate` gate re-runs the generators and checks whether the tree went
-dirty. When it did, `vcs.classifyDrift` names *why*, instead of just failing:
+dirty. When it did, `vcs.diagnoseDrift` names *why*, instead of just failing:
 
 - **[MGS4006](codes/race/MGS4006.md) - stale generated output.** A declared input
   actually changed. Real drift: regenerate and commit.

@@ -37,7 +37,8 @@ func init() {
 // path; it is not used here.
 //
 // The namespace builders this calls live alongside, one file per concern:
-// project_ns.go (magus.project), target_ns.go (magus.target/needs/cache),
+// project_ns.go (magus.project), target.go (the magus.Context builder and its
+// ctx.needs/glob dependency primitives, plus cross-project handles),
 // spell_object.go (imported spell handles), modules.go (the host module surface),
 // imports.go (project/spell import resolution), and pry.go (magus.pry).
 func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) {
@@ -46,36 +47,19 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// is disabled, so the VM's hot native-dispatch arm is untouched on one-shot runs.
 	obs := interp.NewHostCallObserver(ctx)
 	// Cross-project handle registry for this session: project imports register
-	// each handle they bind, magus.needs matches passed functions against it.
+	// each handle they bind, ctx.needs matches passed functions against it.
 	ext := &externalHandles{}
 	magus := vm.NewMap()
 	magus.MapSet("project", buildProject(ctx, obs))
 	magus.MapSet("cache", buildCacheNS(ctx, obs))
-	// magus.needs(...): the one dependency primitive. Each argument is a target
-	// function - a same-project exported target by reference, a cross-project handle
-	// from a project import, or a magus.glob(...) list of target functions; the targets
-	// are awaited via the Buzz VM pool (cross-project handles dispatch through
-	// CrossDispatch).
-	magus.MapSet("needs", directVal(obs, "magus.needs", buildBuzzNeeds(targets, exports, ext)))
-	// magus.glob(...): resolve glob patterns (matched against target names) to the list
-	// of matching target function handles - the pattern resolver that feeds magus.needs
-	// (magus.needs(magus.glob("*-generate"))), so a string never enters needs itself.
-	magus.MapSet("glob", directVal(obs, "magus.glob", buildBuzzGlob(targets, exports)))
-	// magus.inputs(...) / magus.outputs(...): declare a target's cache footprint next
-	// to its body - inputs narrow the cache key, outputs the snapshot/replay set. They
-	// are read statically at load (a cache hit skips the body, so the run cannot be the
-	// source of truth); a non-literal argument is rejected there. At runtime they are
-	// no-ops so a body that reaches them on a miss just proceeds.
-	magus.MapSet("inputs", directVal(obs, "magus.inputs", buzzIONoop))
-	magus.MapSet("outputs", directVal(obs, "magus.outputs", buzzIONoop))
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
 	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,
 	// magus.bust_cache) is generated from the std.Magus descriptor like every other
 	// module, so the two can't drift and a declared method can't be silently left
 	// unbound. Merged onto the hand-built magus map above, which carries only the
-	// VM-infra members (needs/target/project/cache/pry/log) that can't share a Go
-	// Impl across the boundary.
+	// VM-infra members (project/cache/pry/log, plus the magus.Context) that can't
+	// share a Go Impl across the boundary.
 	mergeModuleMap(magus, buzzgen.RegisterMagus(ctx, sess))
 
 	// magus.modules() / magus.module(name): typed, native introspection of the host
@@ -125,11 +109,12 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	}))
 	sess.SetGlobal("magus", magus)
 
-	// The shared magus.Context value a ctx-form target receives as its first
-	// argument. Stashed under a session-global name the interp layer fetches when it
-	// dispatches (run) or discovers (graph) a ctx-form target. It closes over the
-	// same targets/exports/ext the magus.needs binding does, so a run-mode
-	// ctx.needs dispatches identically; discovery-mode methods record instead.
+	// A target declares its dependencies and cache footprint through the magus.Context
+	// it receives as its first argument (ctx.needs/glob/inputs/outputs), NOT a floating
+	// magus.* global: the signature is the contract magus reads statically to build the
+	// graph, so the declaration surface lives only on the context. The value is stashed
+	// under a session-global name execBuzzSrc fetches to prepend at dispatch; it closes
+	// over the same targets/exports/ext so ctx.needs dispatches deps through the pool.
 	sess.SetGlobal(interp.TargetContextGlobal, buildTargetContext(obs, targets, exports, ext))
 
 	// The host utilities are reached under the same bare names as Buzz's own stdlib:
@@ -162,7 +147,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// registering by value when bound via magus.project.
 	// Cross-project target imports: `import "project/<path>" as <alias>` binds a
 	// module whose members are the other project's targets as callable handles,
-	// so `magus.needs(<alias>.<target>)` declares a target-level dependency across
+	// so `ctx.needs(<alias>.<target>)` declares a target-level dependency across
 	// the project boundary (a typo in the target name fails at load, not at run
 	// time), and `<alias>.<target>()` dispatches it directly.
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {

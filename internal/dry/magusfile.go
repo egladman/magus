@@ -66,16 +66,19 @@ func evalAndProbe(ctx context.Context, src string, charms []string, spells map[s
 	}
 
 	targets = discoverTargets(sess)
-	// Publish the full target set before probing so a magus.glob in a body
+	// Publish the full target set before probing so a ctx.glob in a body
 	// can expand its pattern against it.
 	for _, t := range targets {
 		tr.targetKeys = append(tr.targetKeys, t.key)
 	}
+	// The magus.Context every target receives as its first argument; its methods trace
+	// onto tr exactly as the global magus.* members do.
+	ctxVal := buildCtx(tr)
 	for _, t := range targets {
 		tr.cur = t.key
 		// A failing body still yields the ops traced up to the failure; the
 		// graph stays useful, so probe errors are intentionally swallowed.
-		_, _ = sess.CallValue(ctx, t.val, nil)
+		_, _ = sess.CallValue(ctx, t.val, []vm.Value{ctxVal})
 	}
 	tr.cur = ""
 	return tr, targets, nil, false, nil

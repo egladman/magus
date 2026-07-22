@@ -50,9 +50,9 @@ concurrency: 4
 import "magus";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
-export fun lint(args: [str]) > void { acme.lint(); }
-export fun build(args: [str]) > void {
-    magus.needs(lint);
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint);
 }
 -- spells/acme/spell.buzz --
 import "magus/target";

@@ -126,7 +126,7 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 		Status:  StatusFail,
 		Message: "no ci target defined in any project; `magus ci` / `magus affected ci` would gate nothing (silent no-op)",
 		Details: []string{
-			`define one in your magusfile, e.g.  export fun ci(_a: [str]) > void { magus.needs(build, test, lint); }`,
+			`define one in your magusfile, e.g.  export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build, test, lint); }`,
 			"run 'magus describe targets' to see the available stages to compose",
 			fmt.Sprintf("see %s: %s", types.NoCITarget, types.CodeURL(types.NoCITarget)),
 		},
@@ -555,7 +555,7 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Che
 	}
 }
 
-// checkUnreachedFootprintDecls is MGS1004: a magus.inputs/outputs call the static
+// checkUnreachedFootprintDecls is MGS1004: a ctx.inputs/outputs call the static
 // extractor can't reach from a target body - one in an unreferenced or
 // indirectly-dispatched helper, or the identifier used as a value. Such a declaration
 // never enters a cache key, so the target silently under-declares its footprint (a
@@ -570,27 +570,27 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) Check {
 				continue
 			}
 			for _, ref := range describe.UnreachedIO(string(data)) {
-				details = append(details, fmt.Sprintf("magus.%s in %s (%s:%d)",
+				details = append(details, fmt.Sprintf("ctx.%s in %s (%s:%d)",
 					ref.Kind, ref.Fn, r.relPath(f), ref.Line))
 			}
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no unreached magus.inputs/outputs declarations"}
+		return Check{Name: name, Status: StatusOK, Message: "no unreached ctx.inputs/outputs declarations"}
 	}
 	slices.Sort(details)
 	return Check{
 		Name:   name,
 		Status: StatusFail,
 		Message: fmt.Sprintf(
-			"%d magus.inputs/outputs call(s) are not statically reachable from a target body, so they never enter a cache key; "+
+			"%d ctx.inputs/outputs call(s) are not statically reachable from a target body, so they never enter a cache key; "+
 				"call them directly in the target body (see %s)",
 			len(details), types.CodeURL(types.UnreachedFootprintDecl)),
 		Details: details,
 	}
 }
 
-// checkRedundantFootprintGlobs is MGS1005: a per-target magus.inputs/outputs glob that
+// checkRedundantFootprintGlobs is MGS1005: a per-target ctx.inputs/outputs glob that
 // is already present project-wide (in p.Sources/p.Outputs, which include the bound
 // spells' contributed globs). Under the additive footprint model the duplicate is a
 // harmless no-op, but it reads as if it narrowed something when it did not. A warning:
@@ -605,14 +605,14 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 				// source namespace; a cross-project input's Rel is relative to another
 				// project, so it can never redundantly duplicate p.Sources.
 				if ref.Project == p.Path && slices.Contains(p.Sources, ref.Glob) {
-					details = append(details, fmt.Sprintf("%s: magus.inputs(%q) already in project sources", target, ref.Glob))
+					details = append(details, fmt.Sprintf("%s: ctx.inputs(%q) already in project sources", target, ref.Glob))
 				}
 			}
 		}
 		for target, globs := range p.TargetOutputs {
 			for _, g := range globs {
 				if slices.Contains(p.Outputs, g) {
-					details = append(details, fmt.Sprintf("%s: magus.outputs(%q) already in project outputs", target, g))
+					details = append(details, fmt.Sprintf("%s: ctx.outputs(%q) already in project outputs", target, g))
 				}
 			}
 		}
@@ -625,7 +625,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 		Name:   name,
 		Status: StatusFail,
 		Message: fmt.Sprintf(
-			"%d per-target magus.inputs/outputs glob(s) duplicate a project-wide declaration (a no-op under the additive model); "+
+			"%d per-target ctx.inputs/outputs glob(s) duplicate a project-wide declaration (a no-op under the additive model); "+
 				"drop the duplicate (see %s)",
 			len(details), types.CodeURL(types.RedundantFootprintGlob)),
 		Details: details,

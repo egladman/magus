@@ -18,8 +18,8 @@ import "magus";
 import "spells/pg" as pg;
 import "spells/acme" as acme;
 magus.project({ "spells": [pg, acme] });
-export fun serve(args: [str]) > void { pg.serve(); }
-export fun lint(args: [str]) > void { acme.lint(); }
+export fun serve(ctx: magus\Context, args: [str]) > void { pg.serve(); }
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
 -- spells/pg/spell.buzz --
 import "magus/target";
 export fun mgs_getName() > str { return "pg"; }

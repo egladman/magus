@@ -76,10 +76,10 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return host.BoolVal(ret0), nil
 	}))
-	m.MapSet("classifyDrift", vm.DirectValue("vcs.classifyDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("diagnoseDrift", vm.DirectValue("vcs.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		outputs := host.StrSlice(bzArgs, 0)
 		inputs := host.StrSlice(bzArgs, 1)
-		ret0, err := std.VcsClassifyDrift(ctx, outputs, inputs)
+		ret0, err := std.VcsDiagnoseDrift(ctx, outputs, inputs)
 		if err != nil {
 			return vm.Null, err
 		}

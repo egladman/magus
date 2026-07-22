@@ -6,6 +6,6 @@ import "magus/spell/ts";
 
 magus.project({ "spells": [ts] });
 
-export fun serve(args: [str]) > void {
+export fun serve(ctx: magus\Context, args: [str]) > void {
     ts["dev-server"]();
 }

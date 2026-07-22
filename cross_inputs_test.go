@@ -12,7 +12,7 @@ import (
 )
 
 // TestCrossFileInputs is the end-to-end payoff of the unified per-target inputs: a target
-// declaring magus.inputs(<sibling>.file("go.mod"), "app/**") stores BOTH a cross-project
+// declaring ctx.inputs(<sibling>.file("go.mod"), "app/**") stores BOTH a cross-project
 // and a same-project input in ONE TargetInputs list, each carrying its owning project.
 // The cross input folds into the cache key WORKSPACE-relative (lib/go.mod, NOT
 // consumer/lib/go.mod) and unions its owning project into DependsOn; the same-project
@@ -32,13 +32,13 @@ func TestCrossFileInputs(t *testing.T) {
 	// Workspace root marker.
 	write("magusfile.buzz", "")
 	// The owning project and the file the consumer reaches for.
-	write("lib/magusfile.buzz", "export fun compile(args: [str]) > void {}\n")
+	write("lib/magusfile.buzz", "export fun compile(ctx: magus\\Context, args: [str]) > void {}\n")
 	write("lib/go.mod", "module lib\n")
 	// The consumer declares a cross-project AND a same-project input on the same target.
 	write("consumer/app/main.go", "package app\n")
 	write("consumer/magusfile.buzz", `import "project/../lib" as lib;
-export fun build(args: [str]) > void {
-    magus.inputs(lib.file("go.mod"), "app/**");
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs(lib.file("go.mod"), "app/**");
 }
 `)
 

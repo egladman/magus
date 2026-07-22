@@ -25,21 +25,19 @@ type normCtxKey struct{}
 type projectPathCtxKey struct{}
 
 // TargetContextGlobal is the session-global name under which the bindings layer
-// stashes the shared magus.Context value (see bindings.registerAllBuzz). A ctx-form
-// target function receives it as its first argument; execBuzzSrc's registration
-// wrapper and the discovery runner both fetch it with GetGlobal. The double
-// underscore keeps it out of the way of any magusfile identifier.
+// stashes the shared magus.Context value (see bindings.registerAllBuzz). A target
+// function receives it as its first argument; execBuzzSrc fetches it with GetGlobal and
+// prepends it at dispatch. The double underscore keeps it out of the way of any
+// magusfile identifier.
 const TargetContextGlobal = "__magus_target_context"
 
-// CtxFormTargetKeys returns the normalized keys of the exported targets in src
-// that use the ctx-form signature: an exported function whose FIRST parameter is
-// annotated `magus\Context` (types.ContextParamAnnot). That signature IS the target
-// contract for the new form; such a target declares its graph by RUNNING under
-// discovery mode (see DiscoverCtxNodes), not by the static AST read describe.Extract
-// does for the old global-magus form. Callers that only inspect target NAMES (e.g.
-// the ci guard, which the extractor no longer sees a ctx-form ci through) use this
-// alongside describe.Extract. Best-effort: a parse failure yields nil, matching the
-// extractor's never-error contract.
+// CtxFormTargetKeys returns the normalized keys of the exported functions in src whose
+// FIRST parameter is annotated `magus\Context` (types.ContextParamAnnot) - the target
+// contract. execBuzzSrc uses it to enforce that contract at load (an exported function
+// missing the context is rejected with MGS1008) and to prepend the context at dispatch.
+// It does NOT build the graph: the dependency graph is read statically by
+// describe.Extract, which sees ctx-form declarations directly. Best-effort: a parse
+// failure yields nil, matching the extractor's never-error contract.
 func CtxFormTargetKeys(src string) map[string]bool {
 	prog, err := buzz.ParseEmbedded(src)
 	if err != nil || prog == nil {
@@ -59,7 +57,7 @@ func CtxFormTargetKeys(src string) map[string]bool {
 	return out
 }
 
-// WithSource stores src in ctx so that bindings (e.g. magus.needs) can
+// WithSource stores src in ctx so that bindings (e.g. ctx.needs) can
 // retrieve the active magusfile source for pool lookup.
 func WithSource(ctx context.Context, src *Source) context.Context {
 	return context.WithValue(ctx, sourceCtxKey{}, src)
@@ -152,7 +150,7 @@ func Parse(ctx context.Context, src *Source) ([]Target, error) {
 
 // BuzzHostBindingsFn registers Go-backed host modules into a Buzz session.
 // targets is the session's dispatchable target registry; exports maps each
-// canonical target key to the exported function value itself, so magus.needs
+// canonical target key to the exported function value itself, so ctx.needs
 // can verify a passed function IS the exported target (nil when the session
 // has no export discovery, e.g. the REPL). parseMode=true collects names only.
 type BuzzHostBindingsFn func(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool)
@@ -251,7 +249,7 @@ func importTargetCollisionErr(name, importPath string) error {
 func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) error {
 	// Carry the target's directory on the context instead of os.Chdir-ing the whole
 	// process. The host modules (std.*) resolve relative paths against this cwd, so
-	// magusfile targets across projects (including a cross-project magus.needs that
+	// magusfile targets across projects (including a cross-project ctx.needs that
 	// re-enters the interpreter) execute concurrently without corrupting a shared
 	// process working directory.
 	if workDir != "" {
@@ -324,6 +322,16 @@ func targetCollisionErr(prev, cur, key string) error {
 		"target names are matched case- and delimiter-insensitively, so rename one", prev, cur, key)
 }
 
+// ctxlessTargetErr reports an exported magusfile function missing the magus.Context
+// first parameter every target must declare. The signature is the contract magus reads
+// statically to build the graph, so the ctx-less form is rejected at load.
+func ctxlessTargetErr(name string) error {
+	return types.DiagnosticErrorf(types.TargetMissingContext,
+		"target %q must receive a %s as its first parameter: "+
+			"change its signature to export fun %s(ctx: %s, args: [str])",
+		name, types.ContextParamAnnot, name, types.ContextParamAnnot)
+}
+
 // execBuzzSrc creates a Buzz Session, registers bindings, and executes source files.
 func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Session, map[string]vm.Callable, error) {
 	// Carry the magusfile source on the context for the whole load, so the module
@@ -355,7 +363,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 
 	targetMap := buzzSess.Targets()
 	// exportVals is filled by the export-discovery loop below, after the files
-	// execute; the bindings close over the map reference, so magus.needs sees the
+	// execute; the bindings close over the map reference, so ctx.needs sees the
 	// populated registry by the time any target body runs.
 	exportVals := map[string]vm.Value{}
 	if buzzHostBindingsFn != nil {
@@ -437,19 +445,21 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 			_ = buzzSess.Close()
 			return nil, nil, targetCollisionErr(prev, name, key)
 		}
+		// Every target must receive a magus.Context as its first parameter - the
+		// signature IS the contract magus reads statically to build the graph. Reject the
+		// old ctx-less form at load rather than dispatching it with the wrong arguments.
+		if !ctxForm[key] {
+			_ = buzzSess.Close()
+			return nil, nil, ctxlessTargetErr(name)
+		}
 		seen[key] = name
 		captured := val
 		exportVals[key] = val
-		isCtxForm := ctxForm[key]
 		targetMap[key] = func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 			return TimeCall(ctx, ModeMagusfile, func() (vm.Value, error) {
-				callArgs := args
-				if isCtxForm {
-					// Prepend the magus.Context so the body's `ctx` parameter binds it;
-					// the user args (the `[str]` second parameter) ride along after.
-					callArgs = append([]vm.Value{targetCtxVal}, args...)
-				}
-				return buzzSess.CallValue(ctx, captured, callArgs)
+				// Prepend the magus.Context so the body's `ctx` parameter binds it; the
+				// user args (the `[str]` second parameter) ride along after.
+				return buzzSess.CallValue(ctx, captured, append([]vm.Value{targetCtxVal}, args...))
 			})
 		}
 	}
@@ -476,7 +486,7 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 	buzzSess.SetIncludeDirs(nil)
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {
-		// nil exports: the REPL has no export-discovery pass, so magus.needs
+		// nil exports: the REPL has no export-discovery pass, so ctx.needs
 		// falls back to name-only resolution there.
 		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), nil, false)
 	}

@@ -27,7 +27,7 @@ Convert s to camelCase.
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "strings";
@@ -50,7 +50,7 @@ Convert s to snake_case.
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "strings";
@@ -73,7 +73,7 @@ Convert s to kebab-case.
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "strings";
@@ -96,7 +96,7 @@ Convert s to PascalCase.
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "strings";
@@ -119,7 +119,7 @@ Uppercase the first rune of s and lowercase the rest.
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "strings";
@@ -142,7 +142,7 @@ Split s into its constituent words (splitting on case changes, digits, and separ
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "strings";
@@ -170,7 +170,7 @@ Trim s to at most length runes, appending "..." when truncated.
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "strings";

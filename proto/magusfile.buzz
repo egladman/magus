@@ -33,8 +33,8 @@ magus.project({
 //      is `<gitroot>/.git#branch=<default>,subdir=proto`; resolve the git root (mind the
 //      worktree .git FILE, not a dir). The stock buf spell hardcodes ".git#branch=main"
 //      and assumes project==gitroot, so this needs a custom target, not the bare op.
-export fun generate(args: [str]) > void { buf["buf-generate"](); }
-export fun lint(args: [str]) > void { buf["buf-lint"](); }
-export fun ci(args: [str]) > void {
-    magus.needs(generate, lint);
+export fun generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](); }
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate, lint);
 }

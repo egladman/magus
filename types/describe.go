@@ -82,7 +82,7 @@ const TargetDefinition = "A target is a named operation (e.g. build, test, lint)
 	"exported function in a project's magusfile, which may compose a spell's " +
 	"tool-native operations. 'ci' is the conventional anchor that the affected set " +
 	"keys off — magus runs it read-only but does not hardcode its steps; the magusfile " +
-	"composes them with magus.needs."
+	"composes them with ctx.needs."
 
 // TargetEntry describes a single target available in the workspace.
 type TargetEntry struct {
@@ -100,7 +100,7 @@ type TargetsOutput struct {
 }
 
 // TargetGraphDefinition describes "magus describe graph".
-const TargetGraphDefinition = "The target dependency graph is the magus.needs " +
+const TargetGraphDefinition = "The target dependency graph is the ctx.needs " +
 	"DAG of a project's magusfile: each node is a target (an exported function), each " +
 	"edge a dependency it composes. It is extracted statically from the magusfile " +
 	"source, so it shows every edge — including both arms of a runtime branch — and " +
@@ -132,10 +132,10 @@ type TargetGraphNode struct {
 	// target names), each carries the other project's path, so the graph can draw a
 	// target -> target edge across project boundaries instead of a coarse project -> project one.
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
-	// Inputs are the per-target file inputs the body declares via magus.inputs(...),
+	// Inputs are the per-target file inputs the body declares via ctx.inputs(...),
 	// captured statically in ONE representation where each entry carries its owning
-	// project (InputRef). A bare-literal glob (magus.inputs("glob")) is a same-project
-	// input whose owning project is the target's own project; a magus.inputs(<alias>.
+	// project (InputRef). A bare-literal glob (ctx.inputs("glob")) is a same-project
+	// input whose owning project is the target's own project; a ctx.inputs(<alias>.
 	// file("lit")) entry is a cross-project input whose owning project is the imported
 	// one. Inputs ADD to the target's cache key - unioned onto the project-wide and
 	// spell-contributed globs, never replacing them, so the footprint can only grow. The
@@ -143,11 +143,11 @@ type TargetGraphNode struct {
 	// cross-project input only; a same-project one seeds by directory containment), and
 	// the consumes edge to the file node in the owning project.
 	Inputs []InputRef `json:"inputs,omitempty" yaml:"inputs,omitempty"`
-	// Outputs are the per-target magus.outputs(...) globs, captured statically as string
+	// Outputs are the per-target ctx.outputs(...) globs, captured statically as string
 	// literals (project-relative). They ADD to the target's snapshot/replay set - unioned
 	// onto the project-wide and spell-contributed globs, never replacing them.
 	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
-	// DynamicIO is set when a magus.inputs/outputs call carries a non-literal
+	// DynamicIO is set when a ctx.inputs/outputs call carries a non-literal
 	// argument. A computed glob is invisible to this static read, so the load path
 	// rejects it loudly rather than silently caching an under-declared footprint.
 	// Not serialized: it is a load-time validation signal, not part of the graph.
@@ -162,13 +162,13 @@ type CrossTargetRef struct {
 	Target  string `json:"target"  yaml:"target"`
 }
 
-// InputRef names one file input a target declares via magus.inputs, in a single shape
+// InputRef names one file input a target declares via ctx.inputs, in a single shape
 // that carries the owning project for both a same-project glob and a cross-project file -
 // maximally explicit: a local input's project is simply itself. Project is the owning
 // project's path; Glob is the doublestar glob (or exact file) relative to that root. For a
-// same-project input (magus.inputs("glob")) Project is empty at extraction, meaning "this
+// same-project input (ctx.inputs("glob")) Project is empty at extraction, meaning "this
 // target's own project", and is filled to the project's path when resolved. For a
-// cross-project input (magus.inputs(<alias>.file("rel"))) Project names the imported
+// cross-project input (ctx.inputs(<alias>.file("rel"))) Project names the imported
 // project (dot-/repo-relative as written in the magusfile until resolved to
 // workspace-relative, mirroring CrossTargetRef). Folding into the cache key, the
 // affected-tracking depends_on edge, and the consumes edge all read this one shape.

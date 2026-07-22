@@ -10,21 +10,21 @@ import (
 
 var largeMagefile = `
 import "magus";
-export fun go_build(args: [str]) > void {}
-export fun go_test(args: [str]) > void {}
-export fun go_lint(args: [str]) > void {}
-export fun go_vet(args: [str]) > void {}
-export fun docker_build(args: [str]) > void {}
-export fun docker_push(args: [str]) > void {}
-export fun release_tag(args: [str]) > void {}
-export fun release_sign(args: [str]) > void {}
-export fun ci_lint(args: [str]) > void {}
-export fun ci_test(args: [str]) > void {}
-export fun db_migrate(args: [str]) > void {}
-export fun db_seed(args: [str]) > void {}
-export fun build(args: [str]) > void {}
-export fun test(args: [str]) > void {}
-export fun clean(args: [str]) > void {}
+export fun go_build(ctx: magus\Context, args: [str]) > void {}
+export fun go_test(ctx: magus\Context, args: [str]) > void {}
+export fun go_lint(ctx: magus\Context, args: [str]) > void {}
+export fun go_vet(ctx: magus\Context, args: [str]) > void {}
+export fun docker_build(ctx: magus\Context, args: [str]) > void {}
+export fun docker_push(ctx: magus\Context, args: [str]) > void {}
+export fun release_tag(ctx: magus\Context, args: [str]) > void {}
+export fun release_sign(ctx: magus\Context, args: [str]) > void {}
+export fun ci_lint(ctx: magus\Context, args: [str]) > void {}
+export fun ci_test(ctx: magus\Context, args: [str]) > void {}
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {}
+export fun db_seed(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
+export fun clean(ctx: magus\Context, args: [str]) > void {}
 `
 
 func BenchmarkParse(b *testing.B) {
@@ -47,7 +47,7 @@ func BenchmarkParse(b *testing.B) {
 func BenchmarkFind(b *testing.B) {
 	dir := b.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
-	if err := os.WriteFile(path, []byte("import \"magus\";\nexport fun noop(args: [str]) > void {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("import \"magus\";\nexport fun noop(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644); err != nil {
 		b.Fatal(err)
 	}
 
@@ -68,7 +68,7 @@ func BenchmarkFind(b *testing.B) {
 func BenchmarkRunBuzzParallel(b *testing.B) {
 	const nProjects = 16
 	ctx := context.Background()
-	body := "import \"fs\";\nexport fun build(args: [str]) > void { fs.writeFile(\"out.txt\", \"x\"); }\n"
+	body := "import \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void { fs.writeFile(\"out.txt\", \"x\"); }\n"
 
 	type proj struct {
 		src *Source

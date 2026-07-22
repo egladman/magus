@@ -21,7 +21,7 @@ import (
 // actionable error instead of silently producing a phantom target.
 func TestInspect_TargetPolicyNamingUnknownTarget(t *testing.T) {
 	root := t.TempDir()
-	magusfile := `export fun build(args: [str]) > void {}
+	magusfile := `export fun build(ctx: magus\Context, args: [str]) > void {}
 
 magus.project({
     "targets": {
@@ -41,7 +41,7 @@ magus.project({
 // target the magusfile actually declares must load cleanly.
 func TestInspect_TargetPolicyNamingKnownTargetOK(t *testing.T) {
 	root := t.TempDir()
-	magusfile := `export fun build(args: [str]) > void {}
+	magusfile := `export fun build(ctx: magus\Context, args: [str]) > void {}
 
 magus.project({
     "targets": {

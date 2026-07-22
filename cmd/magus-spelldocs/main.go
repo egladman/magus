@@ -9,7 +9,7 @@
 //
 // The output under docs/spells is committed; re-run this (via `magus run
 // content-generate docs`) after changing a spell. Spell examples are marked runnable as
-// dry-run (<!-- run-recorder -->): the playground's recorder (Eval + WithTracer)
+// dry-run (<!-- magus-run-recorder -->): the playground's recorder (Eval + WithTracer)
 // records the tool invocations a target would trigger instead of executing them,
 // so a reader sees the plan without the toolchain installed.
 package main
@@ -237,7 +237,7 @@ func renderSpell(d ispell.Descriptor) string {
 			// the example under the playground's recording host (see
 			// dry.Eval + WithTracer), tracing the ops the target would
 			// fork rather than executing them.
-			fmt.Fprintln(&b, "<!-- run-recorder -->")
+			fmt.Fprintln(&b, "<!-- magus-run-recorder -->")
 			fmt.Fprintln(&b, "```buzz")
 			b.WriteString(ex)
 			if !strings.HasSuffix(ex, "\n") {

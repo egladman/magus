@@ -32,11 +32,11 @@ func TestProjectImportFileResolver(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a/magusfile.buzz", `import "magus";
 import "project/../b" as b;
-export fun build(args: [str]) > void {
-    magus.inputs(b.file("go.mod"));
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs(b.file("go.mod"));
 }`)
 	writeFile(t, root, "b/magusfile.buzz", `import "magus";
-export fun compile(args: [str]) > void {}`)
+export fun compile(ctx: magus\Context, args: [str]) > void {}`)
 	writeFile(t, root, "b/go.mod", "module b\n")
 
 	src, err := interp.Find(filepath.Join(root, "a"))
@@ -123,7 +123,7 @@ func TestBuzzSpellImport(t *testing.T) {
 import "magus/spell/go";
 import "magus/spell/docker";
 
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     if (go.name != "go") { error("go.name mismatch: " + go.name); }
     if (docker.name != "docker") { error("docker.name mismatch: " + docker.name); }
 }
@@ -171,7 +171,7 @@ export fun mgs_listTargets() > any {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     final names = widget.listTargets();
     if (names[0] != "capture") { error("listTargets mismatch"); }
     widget.capture({"cwd": "sub", "args": ["alpha", "beta"]});
@@ -203,7 +203,7 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     widget.capture({"env": {"MYVAR": "overridden"}});
 }`)
 
@@ -230,7 +230,7 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     final r = widget.hash();
     if (r.stdout != "abc123") { error("stdout mismatch: " + r.stdout); }
     if (r.code != 0) { error("code mismatch"); }
@@ -258,7 +258,7 @@ export fun mgs_listTargets() > any {
 `)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     final a = widget.emit();
     final b = widget.shout({"stdin": a.stdout});
     if (b.stdout != "ALPHA") { error("pipe mismatch: " + b.stdout); }
@@ -293,7 +293,7 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     final c = vcs.commit();
     if (c.subject != "hello") { error("subject: " + c.subject); }
     if (c.author.name != "A") { error("author: " + c.author.name); }
@@ -314,7 +314,7 @@ func TestVcsCommitEmptyOutsideRepo(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
-export fun check(args: [str]) > void {
+export fun check(ctx: magus\Context, args: [str]) > void {
     final c = vcs.commit();
     if (c == null) { magus.fatal("vcs.commit should be an empty record, not null, outside a repo"); }
     if (c.date != "") { magus.fatal("vcs.commit().date should be empty outside a repo"); }
@@ -412,7 +412,7 @@ func TestSpellImportSuggestionOnParse(t *testing.T) {
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "magus/spell/typescript";
 magus.project({"spells": [typescript]});
-export fun build(args: [str]) > void {}`)
+export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	err := parseMagusfile(t, dir)
 	require.Error(t, err)
@@ -433,7 +433,7 @@ func TestSpellImportCaughtWithTopLevelControlFlow(t *testing.T) {
 import "magus/spell/typescript";
 if (1 > 0) {}
 magus.project({"spells": [typescript]});
-export fun build(args: [str]) > void {}`)
+export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	err := parseMagusfile(t, dir)
 	require.Error(t, err)
@@ -449,7 +449,7 @@ func TestSpellImportValidOnParse(t *testing.T) {
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "magus/spell/go";
 magus.project({"spells": [go]});
-export fun build(args: [str]) > void { go["go-build"](); }`)
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
 
 	require.NoError(t, parseMagusfile(t, dir))
 }
@@ -466,9 +466,9 @@ func TestProjectImportResolvesInRunMode(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a/magusfile.buzz", `import "magus";
 import "project/../b" as b;
-export fun go(args: [str]) > void {}`)
+export fun go(ctx: magus\Context, args: [str]) > void {}`)
 	writeFile(t, root, "b/magusfile.buzz", `import "magus";
-export fun build(args: [str]) > void {}`)
+export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	src, err := interp.Find(filepath.Join(root, "a"))
 	require.NoError(t, err)
@@ -479,7 +479,7 @@ export fun build(args: [str]) > void {}`)
 
 // TestProjectImportHandleNeedsAndDirectCall exercises the new cross-project
 // dependency surface end to end: `import "project/<path>" as b` binds each of the
-// sibling's exported targets as a callable handle, so magus.needs(b.build) declares
+// sibling's exported targets as a callable handle, so ctx.needs(b.build) declares
 // the dependency (recognized by value identity through the session's handle registry)
 // and b.build() dispatches it directly. Under interp.Run there is no CrossDispatch
 // coordinator, so the actual cross dispatch no-ops; this asserts the binding,
@@ -489,18 +489,18 @@ func TestProjectImportHandleNeedsAndDirectCall(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a/magusfile.buzz", `import "magus";
 import "project/../b" as b;
-export fun go(args: [str]) > void {
-    magus.needs(b.build);
+export fun go(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(b.build);
     b.build();
 }`)
 	writeFile(t, root, "b/magusfile.buzz", `import "magus";
-export fun build(args: [str]) > void {}`)
+export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	src, err := interp.Find(filepath.Join(root, "a"))
 	require.NoError(t, err)
 	require.NoError(t,
 		interp.Run(context.Background(), src, "go", nil, filepath.Join(root, "a")),
-		"magus.needs(b.build) and the direct b.build() call must both resolve the cross handle")
+		"ctx.needs(b.build) and the direct b.build() call must both resolve the cross handle")
 }
 
 // TestSpellImportIgnoresComments is the payoff of reading the AST rather than the
@@ -512,7 +512,7 @@ func TestSpellImportIgnoresComments(t *testing.T) {
 import "magus/spell/go";
 // for a TS project you would instead: import "magus/spell/typescript";
 magus.project({"spells": [go]});
-export fun build(args: [str]) > void { go["go-build"](); }`)
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
 
 	require.NoError(t, parseMagusfile(t, dir), "a bad handle in a comment must not be flagged")
 }

@@ -84,11 +84,11 @@ True if the working tree has uncommitted changes. Pass paths to scope the check 
 
 **Returns:** bool
 
-### classify_drift
+### diagnose_drift
 
-Classify a generate gate's drift and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.
+Diagnose why a generate gate's outputs drifted and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.
 
-**Signature:** `vcs.classifyDrift(outputs, [inputs]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L281)
+**Signature:** `vcs.diagnoseDrift(outputs, [inputs]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L280)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

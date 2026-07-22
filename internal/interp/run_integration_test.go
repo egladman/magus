@@ -27,6 +27,35 @@ func runTarget(t *testing.T, dir, target string, args ...string) error {
 	return interp.Run(ctx, src, target, args, dir)
 }
 
+// TestCtxlessTargetRejected pins the ctx-form contract: an exported magusfile function
+// whose first parameter is not a magus\Context is rejected at load with MGS1008, before
+// any target dispatches. A parameterized ctx-form target and a zero-extra-arg one both
+// load and run, so the enforcement targets the missing context, not the arg shape.
+func TestCtxlessTargetRejected(t *testing.T) {
+	t.Run("ctx-less form rejected with MGS1008", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `import "magus";
+export fun build(args: [str]) > void {}
+`)
+		err := runTarget(t, dir, "build")
+		require.Error(t, err, "a ctx-less target must be rejected at load")
+		require.ErrorIs(t, err, types.TargetMissingContext, "carries the MGS1008 code")
+		assert.Contains(t, err.Error(), "magus\\Context", "names the required context type")
+	})
+
+	t.Run("ctx form loads and runs", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void { fs.writeFile("ran", "ok"); }
+`)
+		require.NoError(t, runTarget(t, dir, "build"))
+		got, err := os.ReadFile(sentinel(dir))
+		require.NoError(t, err)
+		assert.Equal(t, "ok", string(got))
+	})
+}
+
 func sentinel(dir string) string { return filepath.Join(dir, "ran") }
 
 func TestRunTopLevelTarget(t *testing.T) {
@@ -34,7 +63,7 @@ func TestRunTopLevelTarget(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     fs.writeFile("ran", "build");
 }
 `)
@@ -49,7 +78,7 @@ func TestRunPathTarget(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun db_migrate(args: [str]) > void {
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {
     fs.writeFile("ran", "db:migrate");
 }
 `)
@@ -67,7 +96,7 @@ func TestRunImportTargetCollision(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs" as render;
-export fun render(args: [str]) > void {
+export fun render(ctx: magus\Context, args: [str]) > void {
     render.writeFile("ran", "x");
 }
 `)
@@ -89,7 +118,7 @@ func TestRunImportsMagusfilesSibling(t *testing.T) {
 import "magus";
 import "fs";
 import "lib/calc";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     fs.writeFile("ran", tag);
 }
 `)
@@ -112,7 +141,7 @@ import "magus";
 import "fs";
 import "charm";
 
-export fun verify(_opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void {
     var joined = fs.join("a", "b", "c");
     var patch = charm.append(["y", "z"]);
     fs.writeFile("ran", joined + "|" + patch.ops[1].value);
@@ -135,7 +164,7 @@ import "magus";
 import "fs";
 import "markdown";
 
-export fun verify(_opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void {
     fs.writeFile("ran", markdown.toHtml("# Hi"));
 }
 `), 0o644))
@@ -157,7 +186,7 @@ import "magus";
 import "fmt";
 import "fs";
 
-export fun verify(_opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void {
     var asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
     var none = fmt.sprintf("literal");
     fs.writeFile("ran", asset + "|" + none);
@@ -182,7 +211,7 @@ import "fs";
 import "os";
 import "crypto";
 
-export fun verify(_opts: [str]) > void {
+export fun verify(ctx: magus\Context, _opts: [str]) > void {
     var joined = fs.join("a", "b", "c");
     var res = os.execSh("printf hello").stdout;
     var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "");
@@ -203,7 +232,7 @@ func TestRunTargetWithArgs(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun db_migrate(a: str, b: str, c: str) > void {
+export fun db_migrate(ctx: magus\Context, a: str, b: str, c: str) > void {
     fs.writeFile("ran", a + " " + b + " " + c);
 }
 `)
@@ -217,7 +246,7 @@ func TestRunTargetReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-export fun db_migrate(args: [str]) > void {
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {
     throw "boom";
 }
 `)
@@ -230,7 +259,7 @@ func TestRunUnknownTarget(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-export fun db_migrate(args: [str]) > void {}
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {}
 `)
 	err := runTarget(t, dir, "no-such-target")
 	assert.Error(t, err, "expected non-nil error for unknown target")
@@ -245,7 +274,7 @@ func TestParseLocalSpellFromOtherDir(t *testing.T) {
 export fun mgs_listTargets() > any { return {"build": {"bin": "echo", "args": ["hi"]}}; }`
 	magusfile := `import "magus";
 import "spells/hello";
-export fun go(_a: [str]) > void { hello.build(); }`
+export fun go(ctx: magus\Context, _a: [str]) > void { hello.build(); }`
 
 	proj := filepath.Join(t.TempDir(), "proj")
 	require.NoError(t, os.MkdirAll(filepath.Join(proj, "spells"), 0o755))
@@ -272,8 +301,8 @@ func TestNeedsNonTargetFunctionFails(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 fun helper(args: [str]) > void {}
-export fun top(args: [str]) > void {
-    magus.needs(helper);
+export fun top(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(helper);
 }
 `)
 	err := runTarget(t, dir, "top")
@@ -289,11 +318,11 @@ func TestNeedsForwardReference(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun top(_a: [str]) > void {
-    magus.needs(dep);
+export fun top(ctx: magus\Context, _a: [str]) > void {
+    ctx.needs(dep);
     fs.writeFile("ran", "top");
 }
-export fun dep(_a: [str]) > void { fs.writeFile("dep-ran", "dep"); }
+export fun dep(ctx: magus\Context, _a: [str]) > void { fs.writeFile("dep-ran", "dep"); }
 `)
 	require.NoError(t, runTarget(t, dir, "top"))
 	_, err := os.Stat(filepath.Join(dir, "dep-ran"))
@@ -307,8 +336,8 @@ func TestNeedsStringArgumentFails(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
-export fun dep(_a: [str]) > void {}
-export fun top(_a: [str]) > void { magus.needs("dep"); }
+export fun dep(ctx: magus\Context, _a: [str]) > void {}
+export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs("dep"); }
 `), 0o644))
 	err := runTarget(t, dir, "top")
 	require.Error(t, err, "expected an error for a string argument to magus.needs")
@@ -322,7 +351,7 @@ func TestNeedsAnonymousFunctionFails(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
-export fun top(_a: [str]) > void { magus.needs(fun (_a: [str]) > void {}); }
+export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(fun (_a: [str]) > void {}); }
 `), 0o644))
 	err := runTarget(t, dir, "top")
 	require.Error(t, err, "expected an error for an anonymous function argument to magus.needs")
@@ -337,8 +366,8 @@ func TestRunBuzzTargetNameCollision(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
-export fun foo_bar(_a: [str]) > void {}
-export fun fooBar(_a: [str]) > void {}
+export fun foo_bar(ctx: magus\Context, _a: [str]) > void {}
+export fun fooBar(ctx: magus\Context, _a: [str]) > void {}
 `), 0o644))
 	err := runTarget(t, dir, "foo-bar")
 	require.Error(t, err, "expected collision error")
@@ -356,7 +385,7 @@ func TestOsExitRaisesExitError(t *testing.T) {
 import "magus";
 import "os";
 
-export fun bail(_a: [str]) > void { os.exit(3); }
+export fun bail(ctx: magus\Context, _a: [str]) > void { os.exit(3); }
 `), 0o644))
 	err := runTarget(t, dir, "bail")
 	require.Error(t, err, "expected error from os.exit")
@@ -375,7 +404,7 @@ func TestOsSleep(t *testing.T) {
 import "magus";
 import "os";
 
-export fun nap(_a: [str]) > void {
+export fun nap(ctx: magus\Context, _a: [str]) > void {
     os.sleep(1.5);
     os.sleep(0);
 }
@@ -392,7 +421,7 @@ func TestOsWhich(t *testing.T) {
 import "magus";
 import "os";
 
-export fun checkwhich(_a: [str]) > void {
+export fun checkwhich(ctx: magus\Context, _a: [str]) > void {
     if (os.which("sh") == "") { os.exit(2); }
     if (os.which("definitely-no-such-cmd-zzz") != "") { os.exit(3); }
 }
@@ -408,7 +437,7 @@ func TestMagusHint(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
-export fun nudge(_a: [str]) > void {
+export fun nudge(ctx: magus\Context, _a: [str]) > void {
     magus.hint("stale generated code — run: magus run generate -- --write");
     magus.hint("stale generated code — run: magus run generate -- --write");
 }
@@ -424,7 +453,7 @@ func TestMagusFatal(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
-export fun boom(_a: [str]) > void { magus.fatal("boom"); }
+export fun boom(ctx: magus\Context, _a: [str]) > void { magus.fatal("boom"); }
 `), 0o644))
 	err := runTarget(t, dir, "boom")
 	require.Error(t, err, "expected error from magus.fatal")
@@ -442,7 +471,7 @@ func TestOsExecShShellOption(t *testing.T) {
 import "magus";
 import "os";
 
-export fun viash(_a: [str]) > void {
+export fun viash(ctx: magus\Context, _a: [str]) > void {
     os.execSh("true", "", {"shell": "sh"});
 }
 `), 0o644))
@@ -458,8 +487,8 @@ func TestNeedsDedup(t *testing.T) {
 import "magus";
 import "os";
 
-export fun dep(_a: [str]) > void { os.execSh("printf x >> mark", ""); }
-export fun top(_a: [str]) > void { magus.needs(dep, dep); }
+export fun dep(ctx: magus\Context, _a: [str]) > void { os.execSh("printf x >> mark", ""); }
+export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 `), 0o644))
 	require.NoError(t, runTarget(t, dir, "top"))
 	got, err := os.ReadFile(filepath.Join(dir, "mark"))
@@ -475,7 +504,7 @@ func TestMagusLoggingBuzz(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
 
-export fun logit(_a: [str]) > void {
+export fun logit(ctx: magus\Context, _a: [str]) > void {
     magus.info("hello");
     magus.debug("dbg", {"k": "v"});
     magus.warn("warn");
@@ -489,8 +518,8 @@ func TestParseIncludesPathTargets(t *testing.T) {
 	dir := t.TempDir()
 	writeMagusfile(t, dir, `
 import "magus";
-export fun db_migrate(args: [str]) > void {}
-export fun build(args: [str]) > void {}
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 	src, err := interp.Find(dir)
 	require.NoError(t, err)
@@ -507,7 +536,7 @@ export fun build(args: [str]) > void {}
 	assert.True(t, keys["db-migrate"], "Parse missing 'db-migrate'")
 }
 
-// TestNeedsGlobHandle covers magus.needs(magus.glob(...)) feeding a meta-target: the matched
+// TestNeedsGlobHandle covers ctx.needs(ctx.glob(...)) feeding a meta-target: the matched
 // targets run (sorted) before the body, and non-matching targets are skipped. With
 // no pool in ctx the deps run sequentially in the current VM, so the order is
 // deterministic.
@@ -519,11 +548,11 @@ import "os";
 fun note(s: str) > void {
    os.execSh("printf '%s\n' " + s + " >> ran", "");
 }
-export fun go_build(_a: [str]) > void { note("go-build"); }
-export fun image_build(_a: [str]) > void { note("image-build"); }
-export fun go_test(_a: [str]) > void { note("go-test"); }
-export fun build(_a: [str]) > void {
-   magus.needs(magus.glob("*-build"));
+export fun go_build(ctx: magus\Context, _a: [str]) > void { note("go-build"); }
+export fun image_build(ctx: magus\Context, _a: [str]) > void { note("image-build"); }
+export fun go_test(ctx: magus\Context, _a: [str]) > void { note("go-test"); }
+export fun build(ctx: magus\Context, _a: [str]) > void {
+   ctx.needs(ctx.glob("*-build"));
    note("build-body");
 }
 `)
@@ -544,7 +573,7 @@ func TestTargetNamespaceIsGone(t *testing.T) {
 	path := filepath.Join(dir, "magusfile.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(`
 import "magus";
-export fun build(_a: [str]) > void { magus.needs(magus.target.literal("build")); }
+export fun build(ctx: magus\Context, _a: [str]) > void { ctx.needs(magus.target.literal("build")); }
 `), 0o644))
 	err := runTarget(t, dir, "build")
 	assert.Error(t, err, "expected an error: the magus.target namespace was removed")
@@ -560,7 +589,7 @@ func TestRunRelativeFsResolvesToProjectDir(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     fs.mkdirall("sub");
     fs.writeFile("sub/a.txt", "alpha");
     fs.copyFile("sub/a.txt", "sub/b.txt");

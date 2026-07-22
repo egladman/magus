@@ -4,6 +4,6 @@
 
 import "magus";
 
-export fun greet(args: [str]) > void {
+export fun greet(ctx: magus\Context, args: [str]) > void {
     magus.info("hello from magus");
 }

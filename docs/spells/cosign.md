@@ -29,11 +29,61 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 **Command:** `cosign attest --yes`
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// cosign-attest attaches a signed attestation; pass the predicate file, its type,
+// and the image reference.
+import "magus";
+import "magus/spell/cosign";
+
+magus.project({ "spells": [cosign] });
+
+export fun attest(ctx: magus\Context, args: [str]) > void {
+    cosign["cosign-attest"]({ "args": ["--predicate", "sbom.json", "--type", "cyclonedx", "app:latest"] });
+}
+```
+
 ## cosign-sign
 
+--yes skips the interactive transparency-log confirmation so signing/attesting runs unattended; the caller appends the target reference and flags.
+
 **Command:** `cosign sign --yes`
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// cosign-sign signs an artifact keyless (--yes for CI); pass the image reference
+// to sign, so `magus run sign` forks `cosign sign --yes app:latest`.
+import "magus";
+import "magus/spell/cosign";
+
+magus.project({ "spells": [cosign] });
+
+export fun sign(ctx: magus\Context, args: [str]) > void {
+    cosign["cosign-sign"]({ "args": ["app:latest"] });
+}
+```
 
 ## cosign-verify
 
 **Command:** `cosign verify`
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// cosign-verify checks an image's signature; pass the image reference (add
+// --certificate-identity / --certificate-oidc-issuer for keyless verification).
+import "magus";
+import "magus/spell/cosign";
+
+magus.project({ "spells": [cosign] });
+
+export fun verify(ctx: magus\Context, args: [str]) > void {
+    cosign["cosign-verify"]({ "args": ["app:latest"] });
+}
+```
 

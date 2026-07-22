@@ -381,7 +381,7 @@ func exposeDataAPI() {
 	// would perform, so `import "magus/spell/go"; go["go-build"]()` reports a
 	// `go build` op instead of failing on a module the bare evalBuzz can't
 	// resolve. Trace entries marshal as plain objects the client renders as
-	// "[target] name detail  kind · recorded" lines.
+	// "[target] name detail  kind · would run" lines.
 	api.Set("evalBuzzWithRecorder", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) < 1 {
 			return nil

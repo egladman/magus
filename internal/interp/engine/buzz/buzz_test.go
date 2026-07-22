@@ -61,8 +61,8 @@ func TestIntegration_ParseTargets(t *testing.T) {
 	content := `
 import "magus";
 
-export fun build(args: [str]) > void {}
-export fun test(args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	src.Files = []string{path}
@@ -86,7 +86,7 @@ func TestIntegration_RunTarget(t *testing.T) {
 	// so we test that Run succeeds without error.
 	content := `
 import "magus";
-export fun greet(args: [str]) > void {}
+export fun greet(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	src := &interp.Source{Dir: dir, Files: []string{path}, Engine: "buzz"}
@@ -98,7 +98,7 @@ func TestIntegration_UnknownTarget(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
 	content := `import "magus";
-export fun build() > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	src := &interp.Source{Dir: dir, Files: []string{path}, Engine: "buzz"}
@@ -114,7 +114,7 @@ import "magus";
 magus.project(".", {
     "outputs": ["bin/*"],
 });
-export fun build(args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 	src := &interp.Source{Dir: dir, Files: []string{path}, Engine: "buzz"}

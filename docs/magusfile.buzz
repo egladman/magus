@@ -95,12 +95,12 @@ final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";         // generated site output, under this project
 
-export fun preflight(args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 // magusfile, so it stays in lockstep with the targets. generate calls it; run
 // standalone after editing targets: `magus run md-generate docs`.
-export fun md_generate(args: [str]) > void {
+export fun md_generate(ctx: magus\Context, args: [str]) > void {
     final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs.writeFile("MAGUS.md", doc + "\n");
 }
@@ -109,7 +109,7 @@ export fun md_generate(args: [str]) > void {
 // [Unreleased] section verbatim. Released sections are generated (like MAGUS.md) and
 // must not be edited by hand. generate calls this; the drift gate catches any manual
 // edit to a released section on the next render.
-export fun changelog_generate(args: [str]) > void {
+export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
     os.exec("go", ["run", "../cmd/magus-utils", "generate-changelog",
         "-releases", ROOT + "/releases", "-changelog", ROOT + "/CHANGELOG.md"], ".", {});
 }
@@ -124,8 +124,8 @@ export fun changelog_generate(args: [str]) > void {
 // manpages (docs-site content, docs/manpage/*.md); the roff manpages are a distribution
 // artifact owned by the root magusfile (man-generate). generate depends on this and
 // drift-gates the result.
-export fun content_generate(args: [str]) > void {
-    magus.outputs("buzz/modules/*.md", "spells/*.md", "spells.md", "manpage/*.md", "knowledge.md");
+export fun content_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("buzz/modules/*.md", "spells/*.md", "spells.md", "manpage/*.md", "knowledge.md");
     os.exec("go", ["run", "../cmd/magus-docs", "-out", "./buzz/modules"], ".", {});
     os.exec("go", ["run", "../cmd/magus-spelldocs", "-out", "./spells"], ".", {});
     os.exec("go", ["run", "../cmd/magus-manpage", "-format", "md", "-out", "./manpage"], ".", {});
@@ -165,16 +165,16 @@ fun generateJsBundles() > void {
 // released sections), and rebuilds the client bundles, then gates on drift: a clean
 // checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and
 // committed. The `rw` charm (`generate:rw`) keeps the result instead of gating.
-export fun generate(args: [str]) > void {
-    magus.needs(preflight);
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     // CONTENT are the derived-Markdown trees content-generate owns; they are rendered into
     // the site, so they must be fresh (and drift-gated) before the render below.
     final CONTENT = ["buzz/modules", "spells", "spells.md", "manpage"];
     final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT) == false;
     // Regenerate the docs Markdown derived from the Go tree BEFORE rendering the site.
-    magus.needs(content_generate);
-    magus.needs(md_generate);
-    magus.needs(changelog_generate);
+    ctx.needs(content_generate);
+    ctx.needs(md_generate);
+    ctx.needs(changelog_generate);
     // Regenerate the JS proto client from ../proto BEFORE the bundles that import it.
     generateProtoClient();
     final site = renderer.site_render(ROOT, DOCS, BLOG, OUT);
@@ -183,7 +183,7 @@ export fun generate(args: [str]) > void {
     // writes gen/assets/mermaid.js and gen/assets/hljs.js, so the manifest can
     // only cover every served asset once both have landed.
     renderer.writeSiteManifest(site);
-    if (magus.has_charm("rw")) {
+    if (ctx.has_charm("rw")) {
         // Record this build's URLs in the append-only ledger the abandoned-link gate
         // checks against - only under rw, so a checking render never mutates.
         renderer.updateUrlLock(site);
@@ -194,38 +194,38 @@ export fun generate(args: [str]) > void {
     }
 }
 
-export fun format(args: [str]) > void { magus.needs(generate); }
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
 // lint runs the doc formatter (prettier, via format) plus the client-side TypeScript
 // gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null
 // assertions - see biome.json). Both TS tools need node_modules, so install first like
 // the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.
-export fun lint(args: [str]) > void {
-    magus.needs(format);
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     // The site bundle imports the search grammar from the shared libs/textsearch source,
     // so gate its type-check + biome here: a lib edit fails docs lint through the graph.
-    magus.needs(textsearch.lint);
+    ctx.needs(textsearch.lint);
     if (!fs.isDir("node_modules")) { os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {}); }
     os.exec("pnpm", ["run", "typecheck"], ".", {});
     os.exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
-export fun build(args: [str]) > void { magus.needs(generate); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
 
 // buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in
 // --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises
 // on a non-zero exit, so a failing assertion fails this target.
-export fun buzz_test(args: [str]) > void {
+export fun buzz_test(ctx: magus\Context, args: [str]) > void {
     magus.cmd(["buzz", "-t", "--embedded", "render.buzz"]);
 }
 
-export fun test(args: [str]) > void {
-    magus.needs(format, buzz_test);
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format, buzz_test);
 }
 
 // 'ci' is the anchor `magus affected ci` keys off. generate is a DIRECT dep so the
 // site render, the JS bundles it builds, and the drift gate are first-class ci steps
 // (not just reached transitively through the mutating lint/build chain).
-export fun ci(args: [str]) > void {
-    magus.needs(generate, lint, build, test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate, lint, build, test);
 }
 
 // build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo
@@ -235,9 +235,9 @@ export fun ci(args: [str]) > void {
 // rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground
 // host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from
 // the same TinyGo that built the wasm.
-export fun build_playground(args: [str]) > void {
-    magus.needs(preflight);
-    magus.needs(gopherbuzz.build);
+export fun build_playground(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    ctx.needs(gopherbuzz.build);
     // Run from the module root (..) so TinyGo resolves its go.mod. -stack-size lifts
     // TinyGo's small default goroutine stack for deep magusfile evaluation;
     // -scheduler=asyncify pins the wasm default so the status banner matches the build.
@@ -255,8 +255,8 @@ export fun build_playground(args: [str]) > void {
 // into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports
 // it same-origin so diagrams and page styling work offline without any CDN. Run after
 // bumping the mermaid version in package.json; commit the regenerated artifact.
-export fun build_mermaid(args: [str]) > void {
-    magus.needs(preflight);
+export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     if (!fs.isDir("node_modules")) {
         os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
@@ -268,8 +268,8 @@ export fun build_mermaid(args: [str]) > void {
 // into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so
 // syntax highlighting works offline without any CDN. Run after bumping the version in
 // package.json; commit the regenerated artifact.
-export fun build_hljs(args: [str]) > void {
-    magus.needs(preflight);
+export fun build_hljs(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     if (!fs.isDir("node_modules")) {
         os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
@@ -283,6 +283,6 @@ export fun build_hljs(args: [str]) > void {
 // docs` on every docs/blog change - running it as its own sub-invocation is what
 // lets render.buzz's flat imports (lib/text, lib/html, ...) resolve, since
 // they are looked up relative to this project's dir, not the workspace root.
-export fun render(args: [str]) > void {
+export fun render(ctx: magus\Context, args: [str]) > void {
     renderer.site_render(ROOT, DOCS, BLOG, OUT);
 }

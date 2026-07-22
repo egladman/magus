@@ -51,14 +51,14 @@ match, node-for-node and edge-for-edge, what turbo/nx/lage derive from
 2. Each **app** (`apps/<app>`) gets a `magusfile.buzz` bound to `nextjs`. It
    declares the 20 `packages/<app>/important-feature-*` edges its `package.json`
    lists **twice**: `depends_on` (project-level, drives the affected set, S3) and
-   `magus.needs(libN.build)` (target-level handle, drives ordering and cache-key
+   `ctx.needs(libN.build)` (target-level handle, drives ordering and cache-key
    propagation, S6/S7).
 3. Each **feature lib** and **shared package** gets a leaf `magusfile.buzz` bound
    to `spells/tslib.buzz`: non-opaque (its TS sources are hashed) with a no-op
    `build` (`true`). The libs have no real build of their own (Next transpiles
    them into the app), but magus only propagates a cache key through a target
    handle, so each lib exposes a near-instant `build` for the app to
-   `magus.needs`. The 5 real `next build`s dominate the wall-clock, exactly as
+   `ctx.needs`. The 5 real `next build`s dominate the wall-clock, exactly as
    they do for turbo/nx/lage, which also build only the apps.
 
 ### Verified behaviour
@@ -67,7 +67,7 @@ match, node-for-node and edge-for-edge, what turbo/nx/lage derive from
 - a warm run is an all-hit cache replay (the declared `.next/**` outputs stay
   out of the input hash, so the build's own output never busts its key);
 - editing an app page busts only that app (S6);
-- editing a feature lib busts that lib and its app via the `magus.needs`
+- editing a feature lib busts that lib and its app via the `ctx.needs`
   cache-key propagation (S7), while sibling apps stay cached.
 
 (We verify the graph/affected/lib-cache wiring against the real checkout; the

@@ -28,10 +28,10 @@ magus.project({
     "targets": {"regen-pgo": {"skip_cache": true}, "lint": {"slots": 4}},
 });
 
-export fun format(args: [str]) > void { go["go-fmt"](); }
-export fun lint(args: [str]) > void { magus.needs(format); go["go-vet"](); }
-export fun build(args: [str]) > void { magus.needs(format); go["go-build"](); }
-export fun ci(args: [str]) > void { magus.needs(lint, build); }
+export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](); }
+export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build); }
 `
 
 func TestBanner_showsBuildLine(t *testing.T) {
@@ -81,7 +81,7 @@ func TestConsole_status(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, status, "target")
 
-	ok, status = s.SetSource(context.Background(), "export fun x(_a: [str]) > void { let ; }")
+	ok, status = s.SetSource(context.Background(), "export fun x(ctx: magus\\Context, _a: [str]) > void { let ; }")
 	require.False(t, ok, "expected parse error badge")
 	assert.True(t, strings.HasPrefix(status, "fail"), "expected parse error badge, got %q", status)
 }
@@ -101,11 +101,11 @@ func TestConsole_ls(t *testing.T) {
 func TestConsole_run(t *testing.T) {
 	s := newTestConsole(t)
 	out := joinHTML(exec(s, "run ci").Lines)
-	// deps appear before ci in the order line, and ops are recorded.
+	// deps appear before ci in the order line, and ops are shown as would-run.
 	assert.Contains(t, out, "order:", "run ci output:\n%s", out)
 	assert.Contains(t, out, "go-fmt", "run ci output:\n%s", out)
 	assert.Contains(t, out, "go-vet", "run ci output:\n%s", out)
-	assert.Contains(t, out, "recorded", "run ci should mark ops as recorded")
+	assert.Contains(t, out, "would run", "run ci should mark ops as would-run in the dry-run plan")
 }
 
 func TestConsole_evalBareExpression(t *testing.T) {
@@ -118,7 +118,7 @@ func TestConsole_evalSeesMagusfileDefs(t *testing.T) {
 	s := NewConsole(testInfo)
 	s.SetSource(context.Background(), `import "magus";
 fun triple(n: int) > int { return n * 3; }
-export fun build(_a: [str]) > void {}`)
+export fun build(ctx: magus\Context, _a: [str]) > void {}`)
 	out := joinHTML(exec(s, "triple(14)").Lines)
 	assert.Contains(t, out, "⇒ 42", "expression should see the magusfile's functions:\n%s", out)
 }

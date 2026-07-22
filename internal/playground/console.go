@@ -235,7 +235,7 @@ func (s *Console) version() []Line {
 		row("target   ", s.info.Target),
 		row("scheduler", s.info.Scheduler),
 		row("go       ", s.info.GoVersion),
-		row("mode     ", "sandbox · build steps recorded, nothing executed"),
+		row("mode     ", "sandbox · plan only, nothing executed"),
 	}
 }
 
@@ -323,7 +323,7 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 			if op.Kind == "run" {
 				// A magus.run(...) recursive target invocation, not a tool call.
 				out = append(out, Line{HTML: "  " + tag + `<span class="muted">magus run</span> <b>` +
-					esc(op.Name) + `</b>  <span class="muted">recursive invocation · recorded</span>`})
+					esc(op.Name) + `</b>  <span class="muted">recursive invocation · would run</span>`})
 				continue
 			}
 			if op.Kind == "ward" {
@@ -336,7 +336,7 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 			if op.Detail != "" {
 				detail = " " + esc(op.Detail)
 			}
-			hint := op.Kind + " · recorded"
+			hint := op.Kind + " · would run"
 			if op.Kind == "service" {
 				// A long-running, magus-supervised op shared across dependents by
 				// config fingerprint, distinct from a run-to-completion command.
@@ -361,8 +361,8 @@ func (s *Console) run(ctx context.Context, target string) []Line {
 		return out
 	}
 	n := len(r.Trace)
-	out = append(out, Line{HTML: "[pass] dry-run of " + esc(target) + ": " + strconv.Itoa(n) +
-		" step" + plural(n) + " recorded, <b>nothing executed</b>", Class: "ok"})
+	out = append(out, Line{HTML: "[dry] " + esc(target) + ": " + strconv.Itoa(n) +
+		" step" + plural(n) + " planned, <b>nothing executed</b>", Class: "ok"})
 	return out
 }
 

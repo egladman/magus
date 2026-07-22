@@ -5,6 +5,6 @@ import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun format(args: [str]) > void {
+export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"]();
 }

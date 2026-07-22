@@ -28,7 +28,7 @@ Render a Mustache template against a context value (usually a name->value map; l
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "template";
@@ -55,7 +55,7 @@ Render a Mustache template that includes partials via {{>name}}, resolving each 
 
 **Example:**
 
-<!-- run -->
+<!-- magus-run -->
 ```buzz
 import "std";
 import "template";

@@ -12,7 +12,7 @@ func TestMagusBustCacheReachable(t *testing.T) {
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     magus.bustCache();
     fs.writeFile("ran", "ok");
 }

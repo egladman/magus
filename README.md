@@ -95,8 +95,30 @@ to install. See the [Download guide](docs/download.md).
 
 ### A first look
 
-Point magus at a repo that has a `magusfile.buzz` at its root,[^playground] and each command
-returns an answer and stops:
+A `magusfile.buzz` at the repo root declares your targets as exported functions -
+each one composes operations from the spells you bind:[^playground]
+
+<!-- magus-run-recorder -->
+```buzz
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+// Every exported function is a runnable target. It receives a magus\Context -
+// the handle it declares what it needs through. magus caches each target's
+// result and runs it only when a change reaches this project.
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
+export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"](); }
+
+// 'ci' is the anchor `magus affected ci` keys off: it composes the pipeline
+// by declaring the targets it needs through the context.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build, test);
+}
+```
+
+Point magus at that repo and each command returns an answer and stops:
 
 ```sh
 magus ls                                  # which projects exist

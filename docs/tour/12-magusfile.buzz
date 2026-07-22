@@ -55,7 +55,7 @@ fun ldflags(version: str) > str {
 // and IMAGE_BUILD all define (and run) the target image-build. `magus run
 // imageBuild` and `magus run image-build` are the same command; try `run
 // mockGenerate` in the console below. Dependencies are declared with
-// magus.needs(name): needs takes the target FUNCTION itself, passed by reference
+// ctx.needs(name): needs takes the target FUNCTION itself, passed by reference
 // (an exported target of this same file - a forward reference to one declared
 // later is fine, since bodies run after the whole file loads). Because it is a
 // plain identifier, a typo is an undefined variable caught at load, and magus can
@@ -69,34 +69,34 @@ fun ldflags(version: str) > str {
 // name `magus run go-build` and the cache use.
 
 // Gate the pipeline on a healthy workspace before anything builds.
-export fun preflight(args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // Codegen is one `*-generate` target per generator. Each is ordinary cached
 // codegen: magus keys it on its inputs and its gen/** outputs, so it reruns only
 // when those inputs change. (Contrast with a drift-gate target that verifies
 // committed output is current on every run; that one would set skip_cache because
 // its point is the check, not a cacheable artifact.)
-export fun proto_generate(args: [str]) > void { buf["buf-generate"](); }
-export fun mock_generate(args: [str])  > void { go["go-generate"](); }
+export fun proto_generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](); }
+export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-generate"](); }
 
 // The umbrella `generate` target pulls in every `*-generate` target with ONE
-// pattern instead of listing each by hand: magus.glob("*-generate") resolves to
+// pattern instead of listing each by hand: ctx.glob("*-generate") resolves to
 // every target ending in -generate, and magus.needs depends on those handles, so
 // adding a `sql-generate` later needs no edit here. (glob is the pattern resolver;
 // needs itself only ever takes handles. A pattern with no `*` is suffix shorthand,
 // so "generate" would read the same here.) That is the payoff of naming targets by
 // a shared convention. Try `run generate`.
-export fun generate(args: [str]) > void {
-    magus.needs(preflight);
-    magus.needs(magus.glob("*-generate"));
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    ctx.needs(ctx.glob("*-generate"));
 }
 
 // Format every language. These ops CHECK by default; run `magus run format:rw`
 // to APPLY the fixes: the rw charm flips gofmt -l to -w, prettier --check to
 // --write, buf format to -w. The charm rides down from the run, so no branch is
 // needed here. (Try `run format` then `run format:rw` in the console to compare.)
-export fun format(args: [str]) > void {
-    magus.needs(generate);
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
     buf["buf-format"]();
     go["go-fmt"]();
     ts["prettier"]();
@@ -108,35 +108,35 @@ export fun format(args: [str]) > void {
 // LINT_SLOTS slots and runs eslint with a matching --concurrency (the cheap buf/go
 // checks stay at the default of 1 slot). `magus run lint:rw` applies the
 // auto-fixable findings where a tool supports it (e.g. golangci-lint --fix).
-export fun proto_lint(args: [str]) > void {
-    magus.needs(format);
+export fun proto_lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     buf["buf-lint"]();
 }
-export fun go_lint(args: [str]) > void {
-    magus.needs(format);
+export fun go_lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     go["go-vet"]();
     go["golangci-lint"]();
 }
-export fun js_lint(args: [str]) > void {
-    magus.needs(format);
+export fun js_lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     ts["eslint"]({"args": ["--concurrency=" + LINT_SLOTS]});
 }
 
 // The umbrella `lint` fans out across the whole family with one pattern.
-export fun lint(args: [str]) > void {
-    magus.needs(magus.glob("*-lint"));
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-lint"));
 }
 
 // Compile the version-stamped server binary and type-check the client.
-export fun build(args: [str]) > void {
-    magus.needs(format);
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     go["go-build"]({"args": ["-ldflags", ldflags(VERSION), "-o", "bin/api", "./cmd/api"]});
     ts["tsc"]();
 }
 
 // Run both suites.
-export fun test(args: [str]) > void {
-    magus.needs(format);
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
     go["go-test"]();
     ts["vitest"]();
 }
@@ -144,18 +144,18 @@ export fun test(args: [str]) > void {
 // The conventional anchor `magus affected ci` keys off. It declares no work of
 // its own; it fans out to lint, build, and test, which share the format ->
 // generate -> preflight spine and each run once. Try `run ci` to see the plan.
-export fun ci(args: [str]) > void {
-    magus.needs(lint, build, test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test);
 }
 
 // Build the container image from the compiled binary. Default: a single-arch
 // image loaded into the local daemon. Under the `cd` charm: a multi-arch image
 // pushed to the registry. Kept as its own target so `magus run image-build`
 // works standalone.
-export fun image_build(args: [str]) > void {
-    magus.needs(build);
+export fun image_build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build);
     final tag = IMAGE + ":" + VERSION;
-    if (magus.has_charm("cd")) {
+    if (ctx.has_charm("cd")) {
         docker["docker-build"]({"args": ["--platform", "linux/amd64,linux/arm64", "--push", "-t", tag, "."]});
     } else {
         docker["docker-build"]({"args": ["--load", "-t", tag, "."]});
@@ -168,6 +168,6 @@ export fun image_build(args: [str]) > void {
 // push. (magus.run(["image-build:cd"]) would instead invoke it imperatively with
 // the charm pinned in the call, but an imperative call is not a static edge, so it
 // would not appear in the graph. Both are valid; needs keeps the DAG complete.)
-export fun release(args: [str]) > void {
-    magus.needs(image_build);
+export fun release(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(image_build);
 }

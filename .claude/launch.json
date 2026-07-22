@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "gen-wave0j", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "8295", "--directory", "website/gen"], "port": 8295 }
+    { "name": "docs-gen", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "8295", "--directory", "docs/gen"], "port": 8295 }
   ]
 }

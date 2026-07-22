@@ -320,7 +320,7 @@ func renderModule(m std.Module) string {
 			// Per-method example, if one exists at
 			//   std/examples/<module>/<method>.buzz
 			// WASM-compatible modules (dry.WASMCompatibleMagusModules) get a
-			// "<!-- run -->" marker so the site generator makes the block
+			// "<!-- magus-run -->" marker so the site generator makes the block
 			// Run-clickable, evaluating it in the in-page WASM playground.
 			// The IO-heavy leaves (fs, os, http, archive, env, vcs, magus) do
 			// real filesystem/network/process IO the browser sandbox can't
@@ -329,7 +329,7 @@ func renderModule(m std.Module) string {
 				fmt.Fprintln(&b, "**Example:**")
 				fmt.Fprintln(&b)
 				if _, ok := dry.WASMCompatibleMagusModules[m.Name]; ok {
-					fmt.Fprintln(&b, "<!-- run -->")
+					fmt.Fprintln(&b, "<!-- magus-run -->")
 				}
 				fmt.Fprintln(&b, "```buzz")
 				fmt.Fprint(&b, ex)

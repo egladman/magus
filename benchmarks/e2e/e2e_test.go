@@ -42,10 +42,10 @@ func TestRunMultipleTargetsRunsAllProjectTargetPairs(t *testing.T) {
 	body := `
 import "magus";
 import "fs";
-export fun alpha(args: [str]) > void {
+export fun alpha(ctx: magus\Context, args: [str]) > void {
     fs.writeFile("ran-alpha", "1");
 }
-export fun beta(args: [str]) > void {
+export fun beta(ctx: magus\Context, args: [str]) > void {
     fs.writeFile("ran-beta", "1");
 }
 `
@@ -146,7 +146,7 @@ func TestExplicitRegisterDoesNotDoubleBind(t *testing.T) {
 import "os";
 import "magus/spell/magusfile";
 magus.project("svc", {"spells": [magusfile]});
-export fun hit(args: [str]) > void {
+export fun hit(ctx: magus\Context, args: [str]) > void {
     os.execSh("printf x >> count", "");
 }
 `
@@ -184,7 +184,7 @@ func TestBuiltinSpellVersionProbeIsDataDriven(t *testing.T) {
 // owns by the time Run returns.
 func TestRunWithReportWriter(t *testing.T) {
 	root := t.TempDir()
-	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(args: [str]) > void {}\n")
+	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
@@ -222,13 +222,13 @@ import "os";
 fun record(name: str) > void {
     os.execSh("printf '%s\n' " + name + " >> ci-order", "");
 }
-export fun build(args: [str]) > void { record("build"); }
-export fun test(args: [str]) > void {
-    magus.needs(build);
+export fun build(ctx: magus\Context, args: [str]) > void { record("build"); }
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build);
     record("test");
 }
-export fun ci(args: [str]) > void {
-    magus.needs(test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(test);
 }
 `
 	writeProject(t, root, "svc", body)

@@ -1,8 +1,8 @@
 // Package describe extracts a magusfile's target dependency graph statically,
 // without evaluating any target body. Every `export fun` is a node, its leading
 // doc comment is the node's description, and the target functions its body
-// passes to `magus.needs(...)` (plus the patterns it passes to
-// `magus.needs(magus.glob(...))`) are its edges. Because it reads
+// passes to `ctx.needs(...)` (plus the patterns it passes to
+// `ctx.needs(ctx.glob(...))`) are its edges. Because it reads
 // the source rather than running it, it is deterministic and sees *both* arms of
 // a runtime branch (e.g. the `container` charm toggle on `build`) — a runtime
 // trace would only ever see the arm taken.
@@ -38,8 +38,8 @@ import (
 // project's magusfile sources (load order).
 //
 // Each node's Dependencies are the resolved dependency target names — exact edges
-// first (target functions passed to magus.needs, in source order), then the names
-// matched by each magus.glob pattern; self-edges and duplicates are dropped.
+// first (target functions passed to ctx.needs, in source order), then the names
+// matched by each ctx.glob pattern; self-edges and duplicates are dropped.
 // CrossDependencies hold cross-project edges (from project imports). Charms are the
 // has_charm names the body reads, sorted.
 func Extract(source string) []types.TargetGraphNode {
@@ -48,7 +48,7 @@ func Extract(source string) []types.TargetGraphNode {
 }
 
 // extractNodes is the shared core: it returns the target nodes, the set of
-// magus.inputs/outputs member-access positions the per-target walk *attributed* to some
+// ctx.inputs/outputs member-access positions the per-target walk *attributed* to some
 // target (reached by the body/helper walk), and the parsed program. UnreachedIO diffs
 // every io member access in the program against the attributed set to find the ones the
 // static read can't see. Extract discards the latter two. prog is nil on a parse failure.
@@ -89,8 +89,8 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 	}
 
 	// Second pass: build each node by walking its body, resolving every edge straight
-	// into its Dependencies — exact edges (target functions passed to magus.needs)
-	// by name, pattern edges (magus.needs(magus.glob(...))) by matching the names collected above.
+	// into its Dependencies — exact edges (target functions passed to ctx.needs)
+	// by name, pattern edges (ctx.needs(ctx.glob(...))) by matching the names collected above.
 	var nodes []types.TargetGraphNode
 	for _, stmt := range prog.Stmts {
 		fn, ok := stmt.(*ast.FunDecl)
@@ -116,13 +116,13 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 			ast.Inspect(body, func(n ast.Node) bool {
 				switch e := n.(type) {
 				case *ast.CallExpr:
-					// Exact edges: target functions passed to magus.needs(...). An
+					// Exact edges: target functions passed to ctx.needs(...). An
 					// identifier argument naming an exported target (any casing) is an
 					// edge; a project-import member argument (<alias>.<target>) is
 					// collected as a cross edge by the MemberExpr case below. A computed
 					// handle (a variable holding the function) is invisible to this
 					// static read, the same way any non-literal argument is.
-					if magusCall(e, "needs") {
+					if ctxCall(e, "needs") {
 						for _, a := range e.Args {
 							switch arg := a.(type) {
 							case *ast.IdentExpr:
@@ -131,12 +131,12 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									node.Dependencies = appendUniq(node.Dependencies, key)
 								}
 							case *ast.CallExpr:
-								// Pattern edges: magus.needs(magus.glob("...")). glob resolves
+								// Pattern edges: ctx.needs(ctx.glob("...")). glob resolves
 								// the pattern to target handles; read each literal pattern the
 								// same way the runtime matcher does. A project-import member
 								// (<alias>.<target>) is a MemberExpr arg, collected as a cross
 								// edge by the MemberExpr walk case below.
-								if magusCall(arg, "glob") {
+								if ctxCall(arg, "glob") {
 									for _, ga := range arg.Args {
 										if lit, ok := ga.(*ast.StringLit); ok {
 											node.Dependencies = appendMatching(node.Dependencies, names, node.Name, targetPatternRe(lit.Val))
@@ -149,13 +149,13 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					if name, ok := charmCall(e); ok {
 						node.Charms = appendUniq(node.Charms, name)
 					}
-					// Per-target cache footprint: magus.inputs(...) / magus.outputs(...).
+					// Per-target cache footprint: ctx.inputs(...) / ctx.outputs(...).
 					// Every argument must be a string literal; a non-literal one is not
 					// collected, so len(globs) < len(args) means the call had a computed
 					// argument - flag DynamicIO so the load path can reject it (a computed
 					// glob is invisible to this static read).
 					if kind, globs, ok := ioCall(e); ok {
-						// Record the callee (magus.inputs) position so UnreachedIO knows this
+						// Record the callee (ctx.inputs) position so UnreachedIO knows this
 						// call was reached; keyed on the MemberExpr, matching its full-program scan.
 						attributedIO[ast.NodePos(e.Callee)] = true
 						// recognized counts every argument the static read could attribute:
@@ -238,7 +238,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 	return nodes, attributedIO, prog
 }
 
-// IORef is one magus.inputs/outputs member access UnreachedIO found that the static
+// IORef is one ctx.inputs/outputs member access UnreachedIO found that the static
 // extractor could not attribute to a target: Kind is "inputs" or "outputs", Fn the
 // enclosing function's raw name, Line its 1-based source line.
 type IORef struct {
@@ -247,7 +247,7 @@ type IORef struct {
 	Line int
 }
 
-// UnreachedIO returns every magus.inputs/outputs member access in source that the
+// UnreachedIO returns every ctx.inputs/outputs member access in source that the
 // per-target walk did not reach - a call in an unreferenced or indirectly-dispatched
 // helper, or the identifier used as a value. Such a declaration never enters any cache
 // key, so surfacing it turns a silent footprint omission into a diagnostic (the loud
@@ -269,7 +269,7 @@ func UnreachedIO(source string) []IORef {
 			if !ok || (me.Name != "inputs" && me.Name != "outputs") {
 				return true
 			}
-			if id, ok := me.Object.(*ast.IdentExpr); !ok || id.Name != "magus" {
+			if id, ok := me.Object.(*ast.IdentExpr); !ok || id.Name != "ctx" {
 				return true
 			}
 			if pos := ast.NodePos(me); !attributed[pos] {
@@ -288,17 +288,19 @@ type spellHit struct {
 	spell, op string
 }
 
-// magusCall reports whether e is a magus.<name>(...) call.
-func magusCall(e *ast.CallExpr, name string) bool {
+// ctxCall reports whether e is a ctx.<name>(...) call - a target declaring through the
+// magus.Context it received (ctx.needs, ctx.glob). The declaration surface lives only on
+// the context, read here statically off the source text so the graph never runs a body.
+func ctxCall(e *ast.CallExpr, name string) bool {
 	me, ok := e.Callee.(*ast.MemberExpr)
 	if !ok || me.Name != name {
 		return false
 	}
 	id, ok := me.Object.(*ast.IdentExpr)
-	return ok && id.Name == "magus"
+	return ok && id.Name == "ctx"
 }
 
-// ioCall recognizes a magus.inputs(...) / magus.outputs(...) call and returns its
+// ioCall recognizes a ctx.inputs(...) / ctx.outputs(...) call and returns its
 // kind ("inputs"/"outputs") and the string-literal glob arguments. ok is false for any
 // other call. Only string literals are collected; the caller detects a non-literal
 // (dynamic) argument as len(globs) < len(e.Args) and rejects it at load. A call with no
@@ -314,7 +316,7 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 		return "", nil, false
 	}
 	id, ok := me.Object.(*ast.IdentExpr)
-	if !ok || id.Name != "magus" {
+	if !ok || id.Name != "ctx" {
 		return "", nil, false
 	}
 	for _, a := range e.Args {
@@ -325,10 +327,10 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 	return me.Name, globs, true
 }
 
-// crossFileArg recognizes a <alias>.file("literal") argument to magus.inputs, where
+// crossFileArg recognizes a <alias>.file("literal") argument to ctx.inputs, where
 // <alias> names a project import in aliases. It returns the cross-project file input as
 // an InputRef (the dep project path as written and the file path relative to it) so
-// magus.inputs(alias.file("x")) registers a cross-project input without hand-counting
+// ctx.inputs(alias.file("x")) registers a cross-project input without hand-counting
 // "..". ok is false for any other argument shape - notably a computed, non-literal rel,
 // which the caller treats as dynamic (DynamicIO).
 func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool) {
@@ -367,12 +369,12 @@ func appendUniqRef(s []types.InputRef, ref types.InputRef) []types.InputRef {
 	return append(s, ref)
 }
 
-// charmCall recognizes a magus.has_charm("name") call and returns the charm name.
-// charmCall returns the literal charm name a has_charm read names, and ok=true. It
-// matches both the old global form (magus.has_charm("x")) and the ctx-form
-// (ctx.has_charm("x")) so a ctx-form target's charm reads are visible to the static
-// charm inventory (the charm/target-collision and has_charm-typo doctor checks), the
-// same names discovery records on the node at run time.
+// charmCall returns the literal charm name a has_charm("name") read names, and ok=true.
+// It matches both receivers a target can read a charm through - the magus.has_charm
+// global query and the ctx.has_charm form on the received context - so either makes the
+// charm visible to the static charm inventory (the charm/target-collision and
+// has_charm-typo doctor checks). Unlike needs/inputs/outputs, has_charm keeps its global
+// form, so both spellings must be scanned.
 func charmCall(e *ast.CallExpr) (string, bool) {
 	me, ok := e.Callee.(*ast.MemberExpr)
 	if !ok || me.Name != "has_charm" {
@@ -560,7 +562,7 @@ func firstSentence(s string) string {
 	return s
 }
 
-// targetPatternRe compiles a magus.glob pattern to an anchored regexp with
+// targetPatternRe compiles a ctx.glob pattern to an anchored regexp with
 // the runtime matcher's semantics (bindings' compileTargetPatterns): a pattern
 // with no "*" is suffix shorthand ("build" matches names ending in "-build"),
 // a pattern with "*" is a glob ("*" matches any run). Both forms are

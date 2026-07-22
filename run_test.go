@@ -188,11 +188,11 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 // step.Outputs), joined to the project path, without leaking to a sibling target.
 func TestInputsOutputsColocation(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun build(args: [str]) > void {
-    magus.inputs("src/**", "tsconfig.json");
-    magus.outputs("dist/**");
+	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs("src/**", "tsconfig.json");
+    ctx.outputs("dist/**");
 }
-export fun test(args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
 `
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
 
@@ -221,9 +221,9 @@ export fun test(args: [str]) > void {}
 // error, because a computed footprint is invisible to the static cache read.
 func TestInputsDynamicArgIsLoadError(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun build(args: [str]) > void {
+	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
-    magus.inputs(extra);
+    ctx.inputs(extra);
 }
 `
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))

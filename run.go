@@ -172,7 +172,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	if projects := m.targetProjects(targets); len(projects) > 0 {
 		if has, scanErr := anyProjectDeclaresCI(projects); !has && scanErr == nil {
 			interactive.Emit(os.Stderr, "define a ci target in your magusfile to compose the gate, e.g.  "+
-				"export fun ci(_a: [str]) > void { magus.needs(build, test, lint); }  "+
+				"export fun ci(ctx: magus\\Context, args: [str]) > void { ctx.needs(build, test, lint); }  "+
 				"(run 'magus describe targets' to see available stages)")
 			return types.DiagnosticErrorf(types.NoCITarget,
 				"no %q target defined in the selected project(s); it is the anchor %q and %q key off, "+
@@ -203,17 +203,12 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 			}
 			source := concatSource(src)
 			for _, n := range describe.Extract(source) {
-				// Node names are already normalized by the extractor, so this
-				// matches the run path's target-name resolution.
+				// The extractor emits a node for every exported function (ctx-form
+				// included) with names already normalized, so this matches the run
+				// path's target-name resolution.
 				if n.Name == types.TargetCI {
 					return true, nil
 				}
-			}
-			// A ctx-form ci is invisible to the static extractor (it declares its deps
-			// through the injected ctx, not global magus.needs); recognize it by the
-			// signature contract, which is a name-only check here.
-			if interp.CtxFormTargetKeys(source)[types.TargetCI] {
-				return true, nil
 			}
 		}
 	}

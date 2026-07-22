@@ -5,6 +5,6 @@ import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun tidy(args: [str]) > void {
+export fun tidy(ctx: magus\Context, args: [str]) > void {
     go["go-mod-tidy"]();
 }

@@ -18,7 +18,7 @@ import (
 
 // resolveProjectImport resolves `import "project/<path>"` to a module of the named
 // project's targets, each a callable cross-project handle: a function value that
-// dispatches the target across the boundary when invoked, and that magus.needs
+// dispatches the target across the boundary when invoked, and that ctx.needs
 // recognizes by identity (via ext) to declare the dependency. The path is
 // dot-relative to the importing magusfile's directory (matching how the graph and
 // runtime resolve cross deps). Target names are read statically by scanning the
@@ -57,7 +57,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 			// Member key is the raw `export fun` identifier (so <alias>.build_playground
 			// resolves); the handle's target is the kebab-normalized run name. Each
 			// member is a real function value: invoking it dispatches the cross-project
-			// target, and magus.needs recognizes it by identity through ext.
+			// target, and ctx.needs recognizes it by identity through ext.
 			for _, stmt := range prog.Stmts {
 				fn, ok := stmt.(*ast.FunDecl)
 				if !ok || !fn.IsExported {
@@ -75,8 +75,8 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 	// The reserved `.file(rel)` member: a general cross-project path resolver, not a
 	// target. It returns the authoritative WORKSPACE-relative path of a file in the
 	// imported project, resolved with the SAME file.Resolve formula the static extractor
-	// uses so a magus.inputs(<alias>.file(...)) declaration agrees between static
-	// analysis and runtime. The returned path is a usable value: pass it to magus.inputs
+	// uses so a ctx.inputs(<alias>.file(...)) declaration agrees between static
+	// analysis and runtime. The returned path is a usable value: pass it to ctx.inputs
 	// to declare a cross-project input, or use it directly (e.g. an exec argv). It
 	// registers nothing itself.
 	// Set after the target loop so it reserves the name even if a target is called file.

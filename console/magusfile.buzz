@@ -39,7 +39,7 @@ magus.project({
     },
 });
 
-export fun preflight(args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // install restores the pinned build-only deps with pnpm (esbuild + the surfaces' d3/uplot/protobuf
 // clients), honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
@@ -51,8 +51,8 @@ fun install() > void {
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).
-export fun test(args: [str]) > void {
-    magus.needs(preflight);
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     install();
     os.exec("pnpm", ["run", "test"], ".", {});
 }
@@ -61,12 +61,12 @@ export fun test(args: [str]) > void {
 // assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes
 // dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result
 // instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
-export fun build(args: [str]) > void {
-    magus.needs(preflight);
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     final clean_before = vcs.isDirty(["gen"]) == false;
     install();
     os.exec("pnpm", ["run", "build"], ".", {});
-    if (magus.has_charm("rw")) {
+    if (ctx.has_charm("rw")) {
         return;
     }
     if (clean_before and vcs.isDirty(["gen"])) {
@@ -78,17 +78,17 @@ export fun build(args: [str]) > void {
 // same way a Go project's lint runs `go vet`. Composing tsc into lint (rather than a standalone
 // `typecheck` target) means `magus affected ci`, which needs lint, always covers it - a type error
 // fails lint. The console has no separate linter yet; if one lands it composes in here beside tsc.
-export fun lint(args: [str]) > void {
-    magus.needs(preflight);
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     // The Reference drawer imports the search grammar from the shared libs/textsearch
     // source, so gate its type-check + biome here: a lib edit fails console lint too.
-    magus.needs(textsearch.lint);
+    ctx.needs(textsearch.lint);
     install();
     os.exec("pnpm", ["run", "typecheck"], ".", {});
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the
 // build-plus-drift-gate, all first-class ci steps.
-export fun ci(args: [str]) > void {
-    magus.needs(lint, test, build);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, test, build);
 }

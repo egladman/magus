@@ -107,7 +107,7 @@ Two entry points into an interactive Buzz REPL, sharing one evaluator:
 - **`magus.pry()`** - `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
 
 ```buzz
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     os.exec("go", ["generate", "./..."]);
     magus.pry();   // execution pauses here; inspect or modify state
     os.exec("go", ["build", "./..."]);

@@ -4,6 +4,6 @@ import "magus/spell/buzz";
 
 magus.project({ "spells": [buzz] });
 
-export fun run_buzz(args: [str]) > void {
+export fun run_buzz(ctx: magus\Context, args: [str]) > void {
     buzz["magus-buzz"]();
 }

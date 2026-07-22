@@ -75,7 +75,7 @@ type Project struct {
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via
-	// magus.inputs(...), keyed by normalized target name (DefaultTargetNameNormalizer,
+	// ctx.inputs(...), keyed by normalized target name (DefaultTargetNameNormalizer,
 	// matching the TargetPolicies key space buildStep looks up). ONE representation
 	// covers both a same-project glob and a cross-project file: each InputRef carries its
 	// owning project (workspace-relative once resolved) and the glob/file relative to
@@ -86,12 +86,12 @@ type Project struct {
 	// same-project input needs no such edge (it seeds by directory containment).
 	// Populated statically at load from describe.Extract.
 	TargetInputs   map[string][]InputRef
-	TargetOutputs  map[string][]string // per-target magus.outputs globs (project-root relative), added to the snapshot/replay set
+	TargetOutputs  map[string][]string // per-target ctx.outputs globs (project-root relative), added to the snapshot/replay set
 	ResolvedSpells []*Spell            // set at the end of magus.Open; immutable thereafter
 }
 
 // AllOutputs is the project's full set of declared output globs: the project-wide
-// Outputs plus every per-target magus.outputs glob (TargetOutputs), deduplicated and
+// Outputs plus every per-target ctx.outputs glob (TargetOutputs), deduplicated and
 // project-root relative. It is the "what files does this project generate" view -
 // consumed by `magus clean --outputs`, output-ownership lookup, and the merge driver -
 // as opposed to the per-target cache view (buildStep's step.Outputs), which stays scoped

@@ -4,6 +4,6 @@ import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     go["go-build"]();
 }

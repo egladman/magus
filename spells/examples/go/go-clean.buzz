@@ -4,6 +4,6 @@ import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-export fun clean(args: [str]) > void {
+export fun clean(ctx: magus\Context, args: [str]) > void {
     go["go-clean"]();
 }

@@ -4,6 +4,6 @@ import "magus/spell/py";
 
 magus.project({ "spells": [py] });
 
-export fun format(args: [str]) > void {
+export fun format(ctx: magus\Context, args: [str]) > void {
     py["ruff-format"]();
 }

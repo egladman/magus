@@ -4,6 +4,6 @@ import "magus/spell/buf";
 
 magus.project({ "spells": [buf] });
 
-export fun generate(args: [str]) > void {
+export fun generate(ctx: magus\Context, args: [str]) > void {
     buf["buf-generate"]();
 }

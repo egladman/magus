@@ -1,4 +1,4 @@
-// Targets depend on other targets. magus.needs(build) declares an edge - you pass
+// Targets depend on other targets. ctx.needs(build) declares an edge - you pass
 // the target function itself, so a typo is an undefined variable caught at load,
 // not a run-time miss. magus runs dependencies first, deduplicated and in parallel
 // wherever the graph allows. `ci` is the conventional anchor your pipeline (and
@@ -7,15 +7,15 @@
 
 import "magus";
 
-export fun build(args: [str]) > void {
+export fun build(ctx: magus\Context, args: [str]) > void {
     magus.info("compiling");
 }
 
-export fun test(args: [str]) > void {
-    magus.needs(build);
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build);
     magus.info("testing");
 }
 
-export fun ci(args: [str]) > void {
-    magus.needs(build, test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build, test);
 }
