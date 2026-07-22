@@ -365,13 +365,18 @@ func appendUniqRef(s []types.InputRef, ref types.InputRef) []types.InputRef {
 }
 
 // charmCall recognizes a magus.has_charm("name") call and returns the charm name.
+// charmCall returns the literal charm name a has_charm read names, and ok=true. It
+// matches both the old global form (magus.has_charm("x")) and the ctx-form
+// (ctx.has_charm("x")) so a ctx-form target's charm reads are visible to the static
+// charm inventory (the charm/target-collision and has_charm-typo doctor checks), the
+// same names discovery records on the node at run time.
 func charmCall(e *ast.CallExpr) (string, bool) {
 	me, ok := e.Callee.(*ast.MemberExpr)
 	if !ok || me.Name != "has_charm" {
 		return "", false
 	}
 	id, ok := me.Object.(*ast.IdentExpr)
-	if !ok || id.Name != "magus" {
+	if !ok || (id.Name != "magus" && id.Name != "ctx") {
 		return "", false
 	}
 	if len(e.Args) == 0 {

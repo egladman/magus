@@ -73,6 +73,20 @@ export fun plain(args: [str]) > void { go["x"](); }
 	assert.Empty(t, plain.Charms)
 }
 
+// TestCtxFormCharms checks that a ctx-form target's ctx.has_charm reads are extracted
+// too, so the static charm inventory (the doctor's charm/target-collision and
+// has_charm-typo checks) sees them - the receiver is ctx, not magus, but the charm
+// name is a real read all the same.
+func TestCtxFormCharms(t *testing.T) {
+	g := Extract(`import "magus";
+export fun release(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("cd")) { ctx.outputs("dist/pkg.tar.gz"); }
+}
+`)
+	release, _ := nodeByName(g, "release")
+	assert.Equal(t, []string{"cd"}, release.Charms, "ctx.has_charm names are extracted statically")
+}
+
 // TestInputsOutputs pins the per-target cache-footprint extraction: magus.inputs /
 // magus.outputs string-literal globs are collected per target, a mention in a comment
 // is ignored, and a target that declares neither carries empty sets.
