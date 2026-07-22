@@ -96,6 +96,8 @@ const (
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
 	MissingDependencyDetected DiagnosticCode = "MGS4004"
+	EnvironmentalDrift        DiagnosticCode = "MGS4005"
+	StaleGeneratedOutput      DiagnosticCode = "MGS4006"
 	NearDuplicateServices     DiagnosticCode = "MGS5001"
 	ServiceOpDetached         DiagnosticCode = "MGS5002"
 	CommandOpNeverExits       DiagnosticCode = "MGS5003"
@@ -125,6 +127,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	NetEgress, SandboxPolicyMismatch,
 	DescendantBoundaryCrossed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
+	EnvironmentalDrift, StaleGeneratedOutput,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,

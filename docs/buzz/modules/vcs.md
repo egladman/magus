@@ -24,7 +24,7 @@ Version-control queries for the current working tree.
 
 Absolute path of the repository root.
 
-**Signature:** `vcs.root() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L167)
+**Signature:** `vcs.root() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L177)
 
 **Returns:** string
 
@@ -32,7 +32,7 @@ Absolute path of the repository root.
 
 List files changed against the given base (defaults to vcs.base).
 
-**Signature:** `vcs.diff([base]) → []string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L180)
+**Signature:** `vcs.diff([base]) → []string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L190)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -44,7 +44,7 @@ List files changed against the given base (defaults to vcs.base).
 
 Short commit hash, or empty on error.
 
-**Signature:** `vcs.shortHash() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L196)
+**Signature:** `vcs.shortHash() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L206)
 
 **Returns:** string
 
@@ -52,7 +52,7 @@ Short commit hash, or empty on error.
 
 Full commit hash, or empty on error.
 
-**Signature:** `vcs.hash() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L209)
+**Signature:** `vcs.hash() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L219)
 
 **Returns:** string
 
@@ -60,7 +60,7 @@ Full commit hash, or empty on error.
 
 Current branch, or empty on error.
 
-**Signature:** `vcs.branch() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L222)
+**Signature:** `vcs.branch() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L232)
 
 **Returns:** string
 
@@ -68,7 +68,7 @@ Current branch, or empty on error.
 
 Commit date string, or empty on error.
 
-**Signature:** `vcs.commitDate() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L235)
+**Signature:** `vcs.commitDate() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L245)
 
 **Returns:** string
 
@@ -76,7 +76,7 @@ Commit date string, or empty on error.
 
 True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty(["MAGUS.md"]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.
 
-**Signature:** `vcs.isDirty([paths]) → bool` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L248)
+**Signature:** `vcs.isDirty([paths]) → bool` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L325)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -84,11 +84,24 @@ True if the working tree has uncommitted changes. Pass paths to scope the check 
 
 **Returns:** bool
 
+### classify_drift
+
+Classify a generate gate's drift and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.
+
+**Signature:** `vcs.classifyDrift(outputs, [inputs]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L281)
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `outputs` | `[]string` |  | |
+| `inputs` | `[]string` | yes | |
+
+**Returns:** map[string]any
+
 ### metadata
 
 Full metadata table: short_hash, hash, branch, commit_date, is_dirty.
 
-**Signature:** `vcs.metadata() → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L268)
+**Signature:** `vcs.metadata() → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L345)
 
 **Returns:** map[string]any
 
@@ -96,7 +109,7 @@ Full metadata table: short_hash, hash, branch, commit_date, is_dirty.
 
 Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == "") rather than for null.
 
-**Signature:** `vcs.commit([rev]) → any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L296)
+**Signature:** `vcs.commit([rev]) → any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L373)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -108,7 +121,7 @@ Resolve a revision (a VCS-native rev expression; omit for the current revision) 
 
 Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.
 
-**Signature:** `vcs.history([limit]) → any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L310)
+**Signature:** `vcs.history([limit]) → any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L387)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -120,7 +133,7 @@ Up to limit recent commits, newest first; each is the same record vcs.commit ret
 
 Absolute path to the active VCS executable (git/hg/jj), or "" if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).
 
-**Signature:** `vcs.exe() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L340)
+**Signature:** `vcs.exe() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L417)
 
 **Returns:** string
 
@@ -128,7 +141,7 @@ Absolute path to the active VCS executable (git/hg/jj), or "" if unresolved. Let
 
 Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). "" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.
 
-**Signature:** `vcs.describe() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L326)
+**Signature:** `vcs.describe() → string` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L403)
 
 **Returns:** string
 

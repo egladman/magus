@@ -81,6 +81,9 @@ func runCLI() int {
 	args := expandVerbosityArgs(os.Args[1:])
 
 	rootCtx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	// Stamp the binary's version onto the root context so host methods (the drift
+	// classifier) can tell a dev build from the pinned release without importing main.
+	rootCtx = types.WithMagusVersion(rootCtx, version)
 
 	res, exitCode := startup(rootCtx, args)
 
