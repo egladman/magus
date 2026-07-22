@@ -369,8 +369,18 @@ fun badge_color(pct: str) > str {
 // Per-package leaves dependencies un-instrumented, so those links stay stable.
 export fun coverage(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs.isDirty([fs.join("assets", "coverage.svg")]) == false;
-    go["go-test"]({"args": ["-covermode=atomic", "-coverprofile=coverage.out"]});
+    // -race here is how ci race-checks the suite (ci needs coverage): magus is a
+    // concurrency orchestrator, so its own tests run under the detector. atomic
+    // covermode is already required by -race, and local `magus run test` stays fast
+    // because it does not run coverage.
+    go["go-test"]({"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     final pct = total_coverage(os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
+    // Soft coverage floor: ci fails when total statement coverage regresses below
+    // this, not only when the badge is stale. Raise it as coverage climbs; lower it
+    // here deliberately if a drop is intended.
+    if (std.parseInt(pct.split(".")[0]) < 55) {
+        throw "coverage: " + pct + "% is below the 55% floor; investigate the regression or lower the floor deliberately";
+    }
     final svg = os.exec("go", ["run", "./cmd/coverage-badge",
         "-label", "go coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
     fs.writeFile(fs.join("assets", "coverage.svg"), svg);
