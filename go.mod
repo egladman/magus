@@ -19,7 +19,6 @@ require (
 	github.com/klauspost/pgzip v1.2.6
 	github.com/mark3labs/mcp-go v0.48.0
 	github.com/minio/selfupdate v0.6.0
-	github.com/narqo/go-badge v0.0.0-20230821190521-c9a75c019a59
 	github.com/pelletier/go-toml/v2 v2.3.0
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/samber/lo v1.53.0
@@ -89,7 +88,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
@@ -109,7 +107,6 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/image v0.38.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect

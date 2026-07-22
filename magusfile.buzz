@@ -20,6 +20,8 @@ import "magus/spell/cosign";
 import "magus/spell/buzz";
 import "magus/spell/md";
 
+import "badge" as badge;
+
 // gopherbuzz is embedded (require + replace); binds its targets as cross-project handles.
 import "project/libs/gopherbuzz" as gopherbuzz;
 
@@ -354,17 +356,6 @@ fun total_coverage(func_out: str) > str {
     return cell;
 }
 
-// Maps a coverage percentage to a go-badge color name.
-fun badge_color(pct: str) > str {
-    final whole = std.parseInt(pct.split(".")[0]);
-    if (whole >= 90) { return "brightgreen"; }
-    if (whole >= 80) { return "green"; }
-    if (whole >= 70) { return "yellowgreen"; }
-    if (whole >= 60) { return "yellow"; }
-    if (whole >= 50) { return "orange"; }
-    return "red";
-}
-
 // coverage runs the suite with per-package coverage and rewrites the
 // assets/coverage.svg badge. Like `generate`, it then drift-gates: a clean checkout
 // only goes dirty if the committed badge was stale, so `ci` (which depends on this)
@@ -389,9 +380,7 @@ export fun coverage(ctx: magus\Context, args: [str]) > void {
     if (std.parseInt(pct.split(".")[0]) < 55) {
         throw "coverage: " + pct + "% is below the 55% floor; investigate the regression or lower the floor deliberately";
     }
-    final svg = os.exec("go", ["run", "./cmd/coverage-badge",
-        "-label", "go coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
-    fs.writeFile(fs.join("assets", "coverage.svg"), svg);
+    fs.writeFile(fs.join("assets", "coverage.svg"), badge.coverage("go coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs.isDirty([fs.join("assets", "coverage.svg")])) {
         throw "coverage: assets/coverage.svg is stale; re-run `magus run coverage:rw` and commit the badge";
