@@ -27,9 +27,14 @@ import (
 // describe.Extract. The two node sets are merged by the caller. Best-effort on
 // missing/ill-formed sources (returns what it can); a body that errors under
 // discovery is surfaced so a genuine authoring bug is not silently dropped.
-func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode, error) {
+// It also returns the per-target execution policy each ctx-form target declared via
+// ctx.skip_cache/exclusive/slots, keyed by normalized target name, for the caller to
+// fold into Project.TargetPolicies alongside the old global-magus form. A target that
+// declared no policy gets no entry (matching the old form). The policy map is separate
+// from the nodes so TargetGraphNode stays a pure graph type carrying no run policy.
+func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode, map[string]types.Target, error) {
 	if src == nil || src.Engine != "buzz" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	// Resolve the body's relative reads against the project dir, mirroring the run
 	// path (runBuzz), without an os.Chdir of the whole process.
@@ -64,18 +69,19 @@ func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode
 		}
 	}
 	if len(ctxForm) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	buzzSess, _, err := execBuzzSrc(ctx, src, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() { _ = buzzSess.Close() }()
 
 	targetCtxVal := buzzSess.GetGlobal(TargetContextGlobal)
 	exports := buzzSess.Exports()
 	var nodes []types.TargetGraphNode
+	policies := map[string]types.Target{}
 	for name, val := range exports {
 		key := norm.NormalizeTargetName(name)
 		if !ctxForm[key] || !val.IsFun() {
@@ -87,14 +93,29 @@ func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode
 		// body reads its declarations, not its runtime args.
 		args := []vm.Value{targetCtxVal, vm.ListValue(nil)}
 		if _, cerr := buzzSess.CallValue(dctx, val, args); cerr != nil {
-			return nil, fmt.Errorf("discover target %q: %w", key, cerr)
+			return nil, nil, fmt.Errorf("discover target %q: %w", key, cerr)
 		}
 		nodes = append(nodes, nodeFromRecord(key, docs[key], rec))
+		if pol, ok := policyFromRecord(rec); ok {
+			policies[key] = pol
+		}
 	}
 	slices.SortFunc(nodes, func(a, b types.TargetGraphNode) int {
 		return strings.Compare(a.Name, b.Name)
 	})
-	return nodes, nil
+	return nodes, policies, nil
+}
+
+// policyFromRecord returns the per-target execution policy a discovery record
+// declared via ctx.skip_cache/exclusive/slots, and whether any was set. A target
+// that declared none gets no entry, mirroring the old form where only a target named
+// in magus.project's targets map carries a policy. Only the author-facing policy
+// fields are set; the CI-only FailOnDrift/RetryOnVolatile are not ctx-declarable.
+func policyFromRecord(rec *types.DiscoveryRecord) (types.Target, bool) {
+	if !rec.SkipCache && !rec.Exclusive && rec.Slots == 0 {
+		return types.Target{}, false
+	}
+	return types.Target{SkipCache: rec.SkipCache, Exclusive: rec.Exclusive, Slots: rec.Slots}, true
 }
 
 // nodeFromRecord assembles a target graph node from a discovery record. Dependency

@@ -265,18 +265,22 @@ func gitRoot(dir string) string {
 // and magus.project() evaluation take when the interpreter is absent. Best-effort even
 // when linked: a discovery failure logs and yields just the old-form nodes, so a
 // discovery bug degrades that project's footprint/graph rather than failing the load.
-func nodesWithDiscovery(ctx context.Context, src *interp.Source, projectPath string) []types.TargetGraphNode {
+// It also returns the per-target execution policy the ctx-form targets declared
+// (ctx.skip_cache/exclusive/slots), for the footprint path to fold into
+// Project.TargetPolicies; the graph path ignores it. Nil when the interpreter is not
+// linked or discovery failed.
+func nodesWithDiscovery(ctx context.Context, src *interp.Source, projectPath string) ([]types.TargetGraphNode, map[string]types.Target) {
 	nodes := describe.Extract(concatSource(src))
 	if !interp.Available() {
-		return nodes
+		return nodes, nil
 	}
-	if dnodes, derr := interp.DiscoverCtxNodes(ctx, src); derr == nil {
-		nodes = append(nodes, dnodes...)
-	} else {
+	dnodes, policies, derr := interp.DiscoverCtxNodes(ctx, src)
+	if derr != nil {
 		slog.Warn("magus: ctx-form target discovery failed; graph omits its ctx-form targets",
 			slog.String("project", projectPath), slog.String("error", derr.Error()))
+		return nodes, nil
 	}
-	return nodes
+	return append(nodes, dnodes...), policies
 }
 
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
@@ -293,7 +297,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			if src.Engine != "buzz" {
 				continue
 			}
-			for _, n := range nodesWithDiscovery(ctx, src, p.Path) {
+			nodes, policies := nodesWithDiscovery(ctx, src, p.Path)
+			for _, n := range nodes {
 				for _, ref := range n.CrossDependencies {
 					// Skip a self-resolving import (r == p.Path): a self-edge is both
 					// unnecessary and rejected by the depgraph as a self-loop - same guard
@@ -342,6 +347,21 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					p.TargetOutputs[n.Name] = appendUniq(p.TargetOutputs[n.Name], g)
 				}
 			}
+			// A ctx-form target declares run policy through ctx.skip_cache/exclusive/slots;
+			// fold it into the same TargetPolicies map the old global-magus form populates,
+			// composing with any existing entry rather than replacing it.
+			for name, ctxPol := range policies {
+				if p.TargetPolicies == nil {
+					p.TargetPolicies = map[string]types.Target{}
+				}
+				pol := p.TargetPolicies[name]
+				pol.SkipCache = pol.SkipCache || ctxPol.SkipCache
+				pol.Exclusive = pol.Exclusive || ctxPol.Exclusive
+				if ctxPol.Slots != 0 {
+					pol.Slots = ctxPol.Slots
+				}
+				p.TargetPolicies[name] = pol
+			}
 		}
 		if len(extra) > 0 {
 			p.DependsOn = append(p.DependsOn, extra...)
@@ -389,7 +409,7 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 			// workspace directory name (e.g. "magus"). A non-root RelPath is kept as-is.
 			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
 			if src.Engine == "buzz" {
-				nodes := nodesWithDiscovery(context.Background(), src, p.Path)
+				nodes, _ := nodesWithDiscovery(context.Background(), src, p.Path)
 				resolveNodeRefs(nodes, p.Path)
 				entry.Nodes = nodes
 				entry.Cycle = describe.Cycle(nodes)

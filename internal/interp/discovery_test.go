@@ -67,7 +67,7 @@ export fun release(ctx: magus\Context, args: [str]) > void {
 export fun helper(args: [str]) > void {}
 `)
 
-	nodes, err := DiscoverCtxNodes(context.Background(), src)
+	nodes, policies, err := DiscoverCtxNodes(context.Background(), src)
 	require.NoError(t, err)
 
 	by := nodesByName(nodes)
@@ -89,6 +89,12 @@ export fun helper(args: [str]) > void {}
 	// guarded output is not recorded, but the charm name IS recorded on the node.
 	assert.Equal(t, []string{"cd"}, by["release"].Charms)
 	assert.Empty(t, by["release"].Outputs, "the has_charm(cd) branch is not taken under discovery")
+
+	// ctx.skip_cache()/ctx.slots(2) on build become a TargetPolicies entry; format,
+	// which declared no policy, gets none.
+	assert.Equal(t, types.Target{SkipCache: true, Slots: 2}, policies["build"])
+	_, hasFormat := policies["format"]
+	assert.False(t, hasFormat, "a target that declared no policy gets no entry")
 }
 
 // TestDiscoverCtxNodesNoSideEffects proves discovery does not execute the body's
@@ -107,7 +113,7 @@ export fun gen(ctx: magus\Context, args: [str]) > void {
 }
 `)
 
-	nodes, err := DiscoverCtxNodes(context.Background(), src)
+	nodes, _, err := DiscoverCtxNodes(context.Background(), src)
 	require.NoError(t, err)
 	require.Len(t, nodes, 1)
 	assert.Equal(t, []string{"out.txt"}, nodes[0].Outputs)
@@ -126,7 +132,7 @@ export fun build(args: [str]) > void { magus.needs(format); }
 export fun format(args: [str]) > void {}
 `)
 
-	nodes, err := DiscoverCtxNodes(context.Background(), src)
+	nodes, _, err := DiscoverCtxNodes(context.Background(), src)
 	require.NoError(t, err)
 	assert.Nil(t, nodes, "a magusfile with no ctx-form targets discovers no nodes")
 }
