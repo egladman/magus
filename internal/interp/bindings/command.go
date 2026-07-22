@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/serviceident"
 	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,6 +45,18 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 	dir := opts.cwd
 	if dir == "" {
 		dir = "."
+	}
+	// Resolve a relative dir against the context working directory (the project dir
+	// the magusfile runner set via std.WithCwd), matching os.exec's resolvePath. Without
+	// this, a spell op invoked from a subproject target (e.g. go["go-run"] from docs/)
+	// would run in the process cwd, not the project dir, so its relative paths would
+	// miss. Absolute dirs pass through unchanged (the scip op passes one).
+	if !filepath.IsAbs(dir) {
+		base, err := std.EffectiveCwd(ctx)
+		if err != nil {
+			return run.ExecResult{}, err
+		}
+		dir = filepath.Join(base, dir)
 	}
 	args, err := resolveCharmArgs(ctx, tgt.Args, tgt.Charms)
 	if err != nil {

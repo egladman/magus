@@ -2,9 +2,11 @@ package bindings
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,6 +28,22 @@ func serviceOp() types.SpellOp {
 		Command: types.Command{Bin: "true"},
 		Service: &types.Service{Command: types.Command{Bin: "true"}},
 	}
+}
+
+// TestRunCommandResolvesCwdAgainstContext proves a command op with no explicit cwd
+// runs in the context working directory (the project dir the magusfile runner sets via
+// std.WithCwd), not the process cwd. This is what lets a spell op invoked from a
+// subproject target - go["go-run"] from docs/ - resolve its relative paths correctly.
+func TestRunCommandResolvesCwdAgainstContext(t *testing.T) {
+	dir := t.TempDir()
+	ctx := std.WithCwd(context.Background(), dir)
+
+	op := types.SpellOp{Command: types.Command{Bin: "sh", Args: []string{"-c", "echo hi > marker.txt"}}}
+	_, err := runCommand(ctx, op, commandOpts{})
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(dir, "marker.txt"),
+		"an op with no explicit cwd must run in the context cwd, not the process cwd")
 }
 
 // TestRunCommandSupervisesServiceDependency proves runCommand routes a service op to
