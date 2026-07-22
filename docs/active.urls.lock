@@ -26,6 +26,7 @@ buzz/modules/time/
 buzz/modules/toml/
 buzz/modules/uuid/
 buzz/modules/vcs/
+buzz/modules/xml/
 buzz/modules/yaml/
 cache/
 charms/

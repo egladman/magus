@@ -6,14 +6,14 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
-  <title>http module - magus</title>
-  <meta name="description" content="HTTP client with automatic retry on transient errors.">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/buzz/modules/http/">
+  <title>xml module - magus</title>
+  <meta name="description" content="Build, serialize, and parse XML/SVG.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/buzz/modules/xml/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
-  <meta property="og:title" content="http module - magus">
-  <meta property="og:description" content="HTTP client with automatic retry on transient errors.">
-  <meta property="og:url" content="https://eli.gladman.cc/magus/buzz/modules/http/">
+  <meta property="og:title" content="xml module - magus">
+  <meta property="og:description" content="Build, serialize, and parse XML/SVG.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/buzz/modules/xml/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../public/atom/releases.atom.xml">
@@ -67,11 +67,11 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Buzz</li><li><a href="../../../buzz/modules/">magus stdlib</a></li><li aria-current="page">http module</li></ul>
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li>Buzz</li><li><a href="../../../buzz/modules/">magus stdlib</a></li><li aria-current="page">xml module</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/buzz/modules/http.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/buzz/modules/xml.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -84,7 +84,7 @@
           <li><a href="../../../buzz/modules/env/" title="env module">env module</a></li>
           <li><a href="../../../buzz/modules/fmt/" title="fmt module">fmt module</a></li>
           <li><a href="../../../buzz/modules/fs/" title="fs module">fs module</a></li>
-          <li><a href="../../../buzz/modules/http/" aria-current="page" title="http module">http module</a></li>
+          <li><a href="../../../buzz/modules/http/" title="http module">http module</a></li>
           <li><a href="../../../buzz/modules/json/" title="json module">json module</a></li>
           <li><a href="../../../buzz/modules/magus/" title="magus module">magus module</a></li>
           <li><a href="../../../buzz/modules/markdown/" title="markdown module">markdown module</a></li>
@@ -98,30 +98,26 @@
           <li><a href="../../../buzz/modules/toml/" title="toml module">toml module</a></li>
           <li><a href="../../../buzz/modules/uuid/" title="uuid module">uuid module</a></li>
           <li><a href="../../../buzz/modules/vcs/" title="vcs module">vcs module</a></li>
-          <li><a href="../../../buzz/modules/xml/" title="xml module">xml module</a></li>
+          <li><a href="../../../buzz/modules/xml/" aria-current="page" title="xml module">xml module</a></li>
           <li><a href="../../../buzz/modules/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#get" title="get">get</a></li><li><a href="#post" title="post">post</a></li><li><a href="#request" title="request">request</a></li><li><a href="#server" title="server">server</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#render" title="render">render</a></li><li><a href="#element" title="element">element</a></li><li><a href="#parse" title="parse">parse</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
-<h1 id="http">http</h1>
-<p>HTTP client with automatic retry on transient errors.</p>
+<h1 id="xml">xml</h1>
+<p>Build, serialize, and parse XML/SVG.</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;http&quot;</code>) and call methods in <code>camelCase</code> (<code>http.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;xml&quot;</code>) and call methods in <code>camelCase</code> (<code>xml.someMethod</code>).</p>
 </blockquote>
-<!-- -->
-<div class="admonition admonition-note"><p class="admonition-title">Note</p>
-<p>The examples below are reference-only. <code>http</code> performs real IO (filesystem, process, network, or environment access) that the in-browser playground's sandbox cannot provide, so it is not registered there and its examples have no Run button. Pure-compute modules such as <code>strings</code> and <code>json</code> run their examples live in the page.</p>
-</div>
 <h2 id="methods">Methods</h2>
-<h3 id="get">get</h3>
-<p>Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code>http.get(url, [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L112" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<h3 id="render">render</h3>
+<p>Serialize an XML node to a string. A node is a string (text) or an element map {&quot;tag&quot;: name, &quot;attrs&quot;: [name, value, ...], &quot;children&quot;: [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.</p>
+<p><strong>Signature:</strong> <code>xml.render(node) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L74" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -133,37 +129,17 @@
 </thead>
 <tbody>
 <tr>
-<td><code>url</code></td>
-<td><code>string</code></td>
+<td><code>node</code></td>
+<td><code>any</code></td>
 <td></td>
-<td></td>
-</tr>
-<tr>
-<td><code>headers</code></td>
-<td><code>map[string]string</code></td>
-<td>yes</td>
-<td></td>
-</tr>
-<tr>
-<td><code>opts</code></td>
-<td><code>map[string]any</code></td>
-<td>yes</td>
 <td></td>
 </tr>
 </tbody>
 </table></figure>
-<p><strong>Returns:</strong> map[string]any</p>
-<p><strong>Example:</strong></p>
-<pre><code class="language-buzz">import &quot;std&quot;;
-import &quot;http&quot;;
-
-final r = http.get(&quot;https://api.github.com/repos/egladman/magus&quot;);
-std.print(r.status);
-std.print(r.body.sub(0, 80) + &quot;...&quot;);
-</code></pre>
-<h3 id="post">post</h3>
-<p>Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code>http.post(url, body, [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L118" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Returns:</strong> string</p>
+<h3 id="element">element</h3>
+<p>Build an element node from a tag, a flat [name, value, ...] attribute list, and a list of child nodes (elements or strings). Sugar for the {&quot;tag&quot;, &quot;attrs&quot;, &quot;children&quot;} map that render consumes.</p>
+<p><strong>Signature:</strong> <code>xml.element(tag, attrs, children) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L61" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -175,47 +151,29 @@ std.print(r.body.sub(0, 80) + &quot;...&quot;);
 </thead>
 <tbody>
 <tr>
-<td><code>url</code></td>
+<td><code>tag</code></td>
 <td><code>string</code></td>
 <td></td>
 <td></td>
 </tr>
 <tr>
-<td><code>body</code></td>
-<td><code>string</code></td>
+<td><code>attrs</code></td>
+<td><code>[]string</code></td>
 <td></td>
 <td></td>
 </tr>
 <tr>
-<td><code>headers</code></td>
-<td><code>map[string]string</code></td>
-<td>yes</td>
+<td><code>children</code></td>
+<td><code>any</code></td>
 <td></td>
-</tr>
-<tr>
-<td><code>opts</code></td>
-<td><code>map[string]any</code></td>
-<td>yes</td>
 <td></td>
 </tr>
 </tbody>
 </table></figure>
-<p><strong>Returns:</strong> map[string]any</p>
-<p><strong>Example:</strong></p>
-<pre><code class="language-buzz">import &quot;http&quot;;
-
-// Post JSON with a curl-style opts map for retry behaviour.
-// Escape { and } as \{ \} so Buzz does not try to interpolate them.
-final r = http.post(
-    &quot;https://httpbin.org/post&quot;,
-    &quot;\{\&quot;target\&quot;:\&quot;build\&quot;\}&quot;,
-    {&quot;Content-Type&quot;: &quot;application/json&quot;},
-    {&quot;retry&quot;: 3, &quot;timeout&quot;: 10},
-);
-</code></pre>
-<h3 id="request">request</h3>
-<p>Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code>http.request(method, url, [body], [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L124" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Returns:</strong> any</p>
+<h3 id="parse">parse</h3>
+<p>Parse an XML string into a node tree: each element becomes {&quot;tag&quot;: name, &quot;attrs&quot;: [name, value, ...], &quot;children&quot;: [node, ...]}, character data becomes a string. The inverse shape of render.</p>
+<p><strong>Signature:</strong> <code>xml.parse(s) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L132" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -227,85 +185,20 @@ final r = http.post(
 </thead>
 <tbody>
 <tr>
-<td><code>method</code></td>
+<td><code>s</code></td>
 <td><code>string</code></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td><code>url</code></td>
-<td><code>string</code></td>
-<td></td>
-<td></td>
-</tr>
-<tr>
-<td><code>body</code></td>
-<td><code>string</code></td>
-<td>yes</td>
-<td></td>
-</tr>
-<tr>
-<td><code>headers</code></td>
-<td><code>map[string]string</code></td>
-<td>yes</td>
-<td></td>
-</tr>
-<tr>
-<td><code>opts</code></td>
-<td><code>map[string]any</code></td>
-<td>yes</td>
-<td></td>
-</tr>
-</tbody>
-</table></figure>
-<p><strong>Returns:</strong> map[string]any</p>
-<p><strong>Example:</strong></p>
-<pre><code class="language-buzz">import &quot;http&quot;;
-
-// request lets you pick any method; useful for PUT/PATCH/DELETE.
-final r = http.request(
-    &quot;PUT&quot;,
-    &quot;https://httpbin.org/put&quot;,
-    &quot;hello&quot;,
-    { &quot;Content-Type&quot;: &quot;text/plain&quot; },
-    { &quot;timeout&quot;: 10 },
-);
-</code></pre>
-<h3 id="server">server</h3>
-<p>Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -&gt; dir, e.g. {&quot;/&quot;: &quot;docs/gen&quot;, &quot;/console/&quot;: &quot;console/gen&quot;}) serves multiple roots where a request routes to the LONGEST matching prefix, so &quot;/console/&quot; wins over &quot;/&quot; for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.</p>
-<p><strong>Signature:</strong> <code>http.server(opts) → int</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L136" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Optional</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>opts</code></td>
-<td><code>map[string]any</code></td>
 <td></td>
 <td></td>
 </tr>
 </tbody>
 </table></figure>
-<p><strong>Returns:</strong> int</p>
-<p><strong>Example:</strong></p>
-<pre><code class="language-buzz">import &quot;http&quot;;
-
-// Serve the current build output over http on port 8080 for quick sharing.
-// Blocks until the process exits.
-http.server({&quot;dir&quot;: &quot;dist/&quot;, &quot;port&quot;: 8080});
-</code></pre>
+<p><strong>Returns:</strong> any</p>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../fs/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">fs module</span></a>
-      <a class="page-nav-next" href="../json/"><span class="page-nav-dir">Next</span><span class="page-nav-title">json module</span></a>
+      <a class="page-nav-prev" href="../vcs/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">vcs module</span></a>
+      <a class="page-nav-next" href="../yaml/"><span class="page-nav-dir">Next</span><span class="page-nav-title">yaml module</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -318,8 +211,8 @@ http.server({&quot;dir&quot;: &quot;dist/&quot;, &quot;port&quot;: 8080});
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22http%22">http</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-15T23:00:02Z">July 15, 2026, 11:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/40867b28aeae537f8e3e807343175138f173cc64" data-tooltip="40867b28aeae537f8e3e807343175138f173cc64" title="40867b28aeae537f8e3e807343175138f173cc64">40867b28</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a8035bd7681363aedf5847d5d2fb5a6e67e2f11c"><code>a8035bd7</code></a> <small><time datetime="2026-07-08T00:52:01Z">Jul 8, 2026</time></small> - fix golangci-lint findings across cmd/magus, std, internal/knowledge, internal/serviceident, internal/spell, project, and run.go; fix markdownlint (MD025 frontmatter-title collision, adjacent-blockquote merging, fenced-code language, code-span spacing, bare $ prompts) and regenerate downstream docs, website, and coverage badge</li><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/buzz/modules/http.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/buzz/modules/http.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22xml%22">xml</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
+    <small>Last updated <time datetime="2026-07-22T20:31:06Z">July 22, 2026, 8:31 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a01db122d587c5607712965b1b6dc67ce15abb06" data-tooltip="a01db122d587c5607712965b1b6dc67ce15abb06" title="a01db122d587c5607712965b1b6dc67ce15abb06">a01db122</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

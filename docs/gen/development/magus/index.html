@@ -126,7 +126,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <p>Prefer a picture? Explore this graph in the <a href="https://eli.gladman.cc/magus/console/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>2027 nodes</strong> and <strong>4297 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2042 nodes</strong> and <strong>4320 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -151,7 +151,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">77</td>
+<td style="text-align:right">78</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:target</code></a></td>
 <td><code>content-generate</code>, <code>generate</code>, <code>generate</code></td>
 </tr>
@@ -181,13 +181,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>module</td>
-<td style="text-align:right">22</td>
+<td style="text-align:right">23</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:module</code></a></td>
 <td><code>fs</code>, <code>charm</code>, <code>vcs</code></td>
 </tr>
 <tr>
 <td>method</td>
-<td style="text-align:right">149</td>
+<td style="text-align:right">152</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:method</code></a></td>
 <td><code>archive.compress</code>, <code>archive.uncompress</code>, <code>charm.after</code></td>
 </tr>
@@ -211,19 +211,19 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>file</td>
-<td style="text-align:right">222</td>
+<td style="text-align:right">223</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:file</code></a></td>
 <td><code>libs/gopherbuzz/examples/bubblegum/config.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code>, <code>magusfile.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1035</td>
+<td style="text-align:right">1043</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:function</code></a></td>
 <td><code>sel</code>, <code>sendObject</code>, <code>send</code></td>
 </tr>
 <tr>
 <td>import</td>
-<td style="text-align:right">110</td>
+<td style="text-align:right">111</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:import</code></a></td>
 <td><code>std</code>, <code>magus</code>, <code>fs</code></td>
 </tr>
@@ -247,7 +247,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>.</td>
-<td style="text-align:right">24</td>
+<td style="text-align:right">25</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:." rel="noopener noreferrer" target="_blank" data-external><code>magus query project:.</code></a></td>
 <td><code>generate</code>, <code>format</code>, <code>image-build</code></td>
 </tr>
@@ -387,6 +387,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tr>
 <td><code>spells-generate</code></td>
 <td>Regenerates the compiled built-in spell bytecode (internal/spell/gen).</td>
+</tr>
+<tr>
+<td><code>mocks-generate</code></td>
+<td>Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.</td>
 </tr>
 <tr>
 <td><code>config-generate</code></td>

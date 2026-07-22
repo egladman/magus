@@ -29,6 +29,7 @@
 - [toml module](https://eli.gladman.cc/magus/buzz/modules/toml/index.md): TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).
 - [uuid module](https://eli.gladman.cc/magus/buzz/modules/uuid/index.md): Unique identifiers and random tokens (v4 random, v7 time-ordered, plus raw random hex/tokens).
 - [vcs module](https://eli.gladman.cc/magus/buzz/modules/vcs/index.md): Version-control queries for the current working tree.
+- [xml module](https://eli.gladman.cc/magus/buzz/modules/xml/index.md): Build, serialize, and parse XML/SVG.
 - [yaml module](https://eli.gladman.cc/magus/buzz/modules/yaml/index.md): YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).
 - [Cache model](https://eli.gladman.cc/magus/cache/index.md): How magus computes a content-addressed cache key from a target's declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.
 - [Charms](https://eli.gladman.cc/magus/charms/index.md): Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target's argument vector at run time.

@@ -34,7 +34,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **2027 nodes** and **4297 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2043 nodes** and **4324 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -47,24 +47,24 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 8 | [`magus query kind:project`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project) | `docs`, `magus`, `libs/gopherbuzz` |
-| target | 77 | [`magus query kind:target`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target) | `content-generate`, `generate`, `generate` |
+| target | 78 | [`magus query kind:target`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target) | `content-generate`, `generate`, `generate` |
 | spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:spell) | `go`, `ts`, `docker` |
 | op | 53 | [`magus query kind:op`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
 | tool | 13 | [`magus query kind:tool`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:tool) | `sh`, `go`, `pnpm` |
 | charm | 5 | [`magus query kind:charm`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:charm) | `rw`, `static`, `cd` |
-| module | 22 | [`magus query kind:module`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `vcs` |
-| method | 149 | [`magus query kind:method`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
+| module | 23 | [`magus query kind:module`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `vcs` |
+| method | 152 | [`magus query kind:method`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 40 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic) | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 183 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/manpage/magus.md` |
+| doc | 184 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/manpage/magus.md` |
 | dir | 94 | [`magus query kind:dir`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:dir) | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/buzz/modules` |
-| file | 222 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1035 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `sendObject`, `send` |
-| import | 110 | [`magus query kind:import`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
+| file | 223 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
+| function | 1043 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `sendObject`, `send` |
+| import | 111 | [`magus query kind:import`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
 | rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 24 | [`magus query project:.`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:.) | `generate`, `format`, `image-build` |
+| . | 25 | [`magus query project:.`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:.) | `generate`, `format`, `image-build` |
 | cmd/magus/starter | 7 | [`magus query project:cmd/magus/starter`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:cmd%2Fmagus%2Fstarter) | `format`, `ci`, `build` |
 | console | 5 | [`magus query project:console`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:console) | `build`, `ci`, `lint` |
 | docs | 15 | [`magus query project:docs`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:docs) | `content-generate`, `generate`, `ci` |
@@ -98,6 +98,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `bindings-generate` | Regenerates the Go host bindings (std -> host/gen) from std.Module declarations. |
 | `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spell/gen). |
+| `mocks-generate` | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. |
 | `config-generate` | Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go. |
 | `md-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `coverage` | coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge. |

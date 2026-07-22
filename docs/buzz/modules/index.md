@@ -81,6 +81,7 @@ These are the runtime utility modules. Import each under its bare name - `import
 | [`template`](template.md) | Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache). |
 | [`toml`](toml.md) | TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2). |
 | [`uuid`](uuid.md) | Unique identifiers and random tokens (v4 random, v7 time-ordered, plus raw random hex/tokens). |
+| [`xml`](xml.md) | Build, serialize, and parse XML/SVG. |
 
 ## See also
 

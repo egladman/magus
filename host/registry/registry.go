@@ -35,6 +35,7 @@ var Modules = map[string]ModuleReg{
 	"crypto":   {gen.RegisterCrypto, true},
 	"env":      {gen.RegisterEnv, true},
 	"json":     {gen.RegisterJson, true},
+	"xml":      {gen.RegisterXml, true},
 	"time":     {gen.RegisterTime, true},
 	"fmt":      {gen.RegisterFmt, true},
 	"markdown": {gen.RegisterMarkdown, true},

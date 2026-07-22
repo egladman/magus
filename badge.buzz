@@ -1,0 +1,131 @@
+// badge builds a flat coverage-badge SVG in Buzz using the xml host module. Text width is
+// approximate - a fixed width per glyph, no font metrics - so a badge renders a touch wide,
+// which is fine.
+
+import "xml";
+import "std";
+import "assert";
+
+final GLYPH_WIDTH = 7;    // estimated px per glyph at the 11px font
+final SIDE_PADDING = 13;  // fixed px padding per cell
+
+fun text_width(s: str) > int {
+    return s.len() * GLYPH_WIDTH + SIDE_PADDING;
+}
+
+// halve turns a doubled coordinate back into "42" or "40.5". Positions are kept as 2x ints
+// so a half-pixel midpoint survives integer division.
+fun halve(doubled: int) > str {
+    final whole = doubled / 2;
+    if (doubled % 2 == 1) {
+        return "{whole}.5";
+    }
+    return "{whole}";
+}
+
+// whole_percent reads a figure's integer part ("56.8" -> 56). std\parseInt returns null on
+// non-numeric input, which we turn into a clear error so a bad figure fails loudly instead
+// of rendering wrong.
+fun whole_percent(figure: str) > int !> str {
+    final n = std\parseInt(figure.split(".")[0]);
+    if (n == null) {
+        throw "badge: coverage figure \"{figure}\" is not a number";
+    }
+    return n!;
+}
+
+// normalize_percent drops a trailing "%", so "56.8" and "56.8%" both work. The figure stays
+// a string and is shown verbatim; a float round-trip would drift "100.0" to "100".
+fun normalize_percent(percent: str) > str {
+    if (percent.endsWith("%")) {
+        return percent.sub(0, len: percent.len() - 1);
+    }
+    return percent;
+}
+
+// severity_color maps coverage to color: red below 50, up through orange, yellow,
+// yellowgreen, green, to brightgreen at 90.
+fun severity_color(figure: str) > str !> str {
+    final whole = whole_percent(figure);
+    if (whole >= 90) { return "#4c1"; }     // brightgreen
+    if (whole >= 80) { return "#97ca00"; }  // green
+    if (whole >= 70) { return "#a4a61d"; }  // yellowgreen
+    if (whole >= 60) { return "#dfb317"; }  // yellow
+    if (whole >= 50) { return "#fe7d37"; }  // orange
+    return "#e05d44";                       // red
+}
+
+// coverage is the only public entry: a label, a percentage figure ("56.8", trailing "%"
+// optional), and a corner radius (3 = rounded, 0 = square). The color is derived from the
+// figure, never passed. Throws on a non-numeric figure.
+export fun coverage(label: str, percent: str, radius: int) > str !> str {
+    final figure = normalize_percent(percent);
+    return flat_badge(label, value: "{figure}%", color: severity_color(figure), radius: radius);
+}
+
+// flat_badge builds the SVG: a grey label cell, a colored value cell, centered text. Private
+// - the color arrives already derived.
+fun flat_badge(label: str, value: str, color: str, radius: int) > str {
+    final label_width = text_width(label);
+    final value_width = text_width(value);
+    final total_width = label_width + value_width;
+    final label_center_x = halve(label_width + 2);
+    final value_center_x = halve(2 * label_width + value_width - 2);
+
+    final tree = xml\element("svg", attrs: ["xmlns", "http://www.w3.org/2000/svg", "xmlns:xlink", "http://www.w3.org/1999/xlink", "width", "{total_width}", "height", "20"], children: [
+        xml\element("linearGradient", attrs: ["id", "smooth", "x2", "0", "y2", "100%"], children: [
+            xml\element("stop", attrs: ["offset", "0", "stop-color", "#bbb", "stop-opacity", ".1"], children: []),
+            xml\element("stop", attrs: ["offset", "1", "stop-opacity", ".1"], children: []),
+        ]),
+        xml\element("mask", attrs: ["id", "round"], children: [
+            xml\element("rect", attrs: ["width", "{total_width}", "height", "20", "rx", "{radius}", "fill", "#fff"], children: []),
+        ]),
+        xml\element("g", attrs: ["mask", "url(#round)"], children: [
+            xml\element("rect", attrs: ["width", "{label_width}", "height", "20", "fill", "#555"], children: []),
+            xml\element("rect", attrs: ["x", "{label_width}", "width", "{value_width}", "height", "20", "fill", color], children: []),
+            xml\element("rect", attrs: ["width", "{total_width}", "height", "20", "fill", "url(#smooth)"], children: []),
+        ]),
+        xml\element("g", attrs: ["fill", "#fff", "text-anchor", "middle", "font-family", "DejaVu Sans,Verdana,Geneva,sans-serif", "font-size", "11"], children: [
+            xml\element("text", attrs: ["x", label_center_x, "y", "15", "fill", "#010101", "fill-opacity", ".3"], children: [label]),
+            xml\element("text", attrs: ["x", label_center_x, "y", "14"], children: [label]),
+            xml\element("text", attrs: ["x", value_center_x, "y", "15", "fill", "#010101", "fill-opacity", ".3"], children: [value]),
+            xml\element("text", attrs: ["x", value_center_x, "y", "14"], children: [value]),
+        ]),
+    ]);
+    return xml\render(tree);
+}
+
+test "text_width estimates width from length" {
+    assert\equal(text_width("56.8%"), want: 48, message: "5 glyphs + padding");
+    assert\equal(text_width("go coverage"), want: 90, message: "11 glyphs + padding");
+}
+
+test "coverage derives color and value, accepting a trailing percent" {
+    final b = coverage("go coverage", percent: "56.8%", radius: 3);   // 56 -> orange, % dropped
+    assert\contains(b, item: `fill="#fe7d37"`, message: "orange from 56.8");
+    assert\contains(b, item: `>56.8%<`, message: "single percent shown");
+    assert\contains(b, item: `>go coverage<`, message: "label");
+    assert\contains(b, item: `rx="3"`, message: "flat corner");
+}
+
+test "coverage rejects a non-numeric figure" {
+    assert\throws(fun () > void !> str { final _ = coverage("go coverage", percent: "n/a", radius: 3); }, message: "non-numeric figure errors");
+}
+
+test "halve renders whole and half coordinates" {
+    assert\equal(halve(84), want: "42", message: "whole");
+    assert\equal(halve(81), want: "40.5", message: "half");
+}
+
+test "radius 0 is square" {
+    assert\contains(coverage("go coverage", percent: "56.8", radius: 0), item: `rx="0"`, message: "square");
+}
+
+test "severity_color maps the scale" {
+    assert\equal(severity_color("92.0"), want: "#4c1", message: "90+");
+    assert\equal(severity_color("85"), want: "#97ca00", message: "80s");
+    assert\equal(severity_color("72.1"), want: "#a4a61d", message: "70s");
+    assert\equal(severity_color("61"), want: "#dfb317", message: "60s");
+    assert\equal(severity_color("56.8"), want: "#fe7d37", message: "50s");
+    assert\equal(severity_color("40"), want: "#e05d44", message: "below 50");
+}
