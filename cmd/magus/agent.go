@@ -353,5 +353,6 @@ func printAgentInstallNextSteps(written []string) {
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
 	interactive.Emit(os.Stderr, "the skills point at MAGUS.md's routing table:  magus describe graph -o markdown")
-	interactive.Emit(os.Stderr, "safety: consider one line in your CLAUDE.md/AGENTS.md - \"git is the orchestrator's job; never delegate it to a subagent, and never whole-tree stash/reset to verify a build (it can wipe a concurrent agent's work).\"")
+	interactive.Emit(os.Stderr, "safety: consider a line in your CLAUDE.md/AGENTS.md so parallel agents cannot wipe each other's work:")
+	interactive.Emit(os.Stderr, "  \"Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work.\"")
 }
