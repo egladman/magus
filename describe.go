@@ -68,8 +68,8 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 // workspace declares, plus the reserved built-ins and any workspace default, and for
 // each the project/target/spell declarations that give it a patch. defaults is the
 // workspace default_charms set, so the report can mark which charms apply to every
-// run without a :suffix. It is the transpose of DescribeTarget: one charm, every
-// target that declares it, rather than one target and the charms it declares.
+// run without a :suffix. It is the transpose of DescribeTarget: one charm and
+// every target that declares it.
 func (m *Magus) DescribeCharms(defaults []string) types.CharmsOutput {
 	defaultSet := map[string]struct{}{}
 	for _, c := range defaults {

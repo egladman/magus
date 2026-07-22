@@ -105,14 +105,14 @@ import "magus/spell/go";
 
 magus.project({ "spells": [go] });
 
-// Every exported function is a runnable target. It receives a magus\Context -
-// the handle it declares what it needs through. magus caches each target's
+// Every exported function is a runnable target. It receives a magus\Context,
+// the handle it uses to declare what it needs. magus caches each target's
 // result and runs it only when a change reaches this project.
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"](); }
 
 // 'ci' is the anchor `magus affected ci` keys off: it composes the pipeline
-// by declaring the targets it needs through the context.
+// by declaring the targets it needs.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build, test);
 }

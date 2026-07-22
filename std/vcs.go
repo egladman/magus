@@ -274,9 +274,9 @@ func VcsCommitDate(ctx context.Context) (string, error) {
 //	{ drifted: bool, code: str, message: str, url: str }
 //
 // drifted is false (and code/message/url empty) when the outputs are not actually dirty.
-// This composes vcs.isDirty (called on outputs and on inputs) rather than replacing it:
+// It composes vcs.isDirty (called on outputs and inputs) rather than replacing it:
 // isDirty stays the general "is this path dirty" primitive; diagnoseDrift is the
-// higher-level, drift-specific reading built on top of it plus the version signal.
+// drift-specific reading on top of it plus the version signal.
 func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string]any, error) {
 	clean := map[string]any{"drifted": false, "code": "", "message": "", "url": ""}
 	v, _ := resolveVCS(ctx)

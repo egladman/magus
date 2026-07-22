@@ -522,10 +522,10 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("fs.watch: at least one path is required")
 	}
-	// Under dry-run tracing a target body is evaluated to learn its
-	// declarations, not to run - and fs.watch otherwise blocks indefinitely on its
-	// event loop. Return immediately (callback never invoked) so discovering a
-	// watch/serve target records its declarations without hanging.
+	// Under dry-run tracing a target body is evaluated to learn its declarations,
+	// not to run, and fs.watch would otherwise block forever on its event loop.
+	// Return immediately (callback never invoked) so discovering a watch/serve
+	// target does not hang.
 	if types.Tracing(ctx) {
 		return nil
 	}
