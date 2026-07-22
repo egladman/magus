@@ -1,4 +1,4 @@
-import { must } from "../../lib/must";
+import { must } from "../../lib/guards";
 // surface.ts - the Settings surface: a console tab gathering every browser-side console setting under a
 // TRANSACTIONAL, staged-config model. Controls edit an in-memory DRAFT seeded from the
 // committed (live) values; the page shows the pending diff and three actions - Save & Apply (persist +

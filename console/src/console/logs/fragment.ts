@@ -1,4 +1,4 @@
-import { must } from "../../lib/must";
+import { must } from "../../lib/guards";
 // fragment.ts - URL-fragment codec for the log viewer. Everything the viewer loads rides
 // the #-fragment (never transmitted to a server): a magus.viewer.v1 Journal is gzip+base64url
 // encoded (matches internal/render EncodeFragmentRaw), and the deep-link parameters (ref,

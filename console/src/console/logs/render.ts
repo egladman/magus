@@ -1,4 +1,4 @@
-import { must } from "../../lib/must";
+import { must } from "../../lib/guards";
 // render.ts - the pretty/raw log views and the DOM plumbing around them. render() is the one
 // entry every mode calls to repaint the body: it dispatches to the waterfall in timeline mode,
 // to a flat line-numbered dump in raw mode, and otherwise to the stylized structural view

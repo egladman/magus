@@ -1,4 +1,3 @@
-import { must } from "../lib/must";
 // actions.ts - the Actions surface: a first-class tab listing EVERY registered command, grouped by
 // area. It is the command companion to the keyboard cheat sheet (cheatsheet.ts): where that one shows
 // only the commands that HAVE a chord (a keybinding reference, opened by holding "?"), this one is the
@@ -94,8 +93,12 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
       const groups = new Map<string, Command[]>();
       for (const cmd of deps.commands()) {
         const group = cmd.group || "General";
-        if (!groups.has(group)) groups.set(group, []);
-        must(groups.get(group)).push(cmd);
+        let list = groups.get(group);
+        if (!list) {
+          list = [];
+          groups.set(group, list);
+        }
+        list.push(cmd);
       }
       if (groups.size === 0) {
         root.append(h("p", undefined, "No commands are registered."));

@@ -1,4 +1,4 @@
-import { must } from "../../lib/must";
+import { must } from "../../lib/guards";
 // demo.ts - the daemon-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
 // magus.viewer.v1 Journals and REVEAL the primary one incrementally so the page feels like a live run
 // streaming in. The primary (streamed) invocation is the failing svc/api:test run an agent kicked off

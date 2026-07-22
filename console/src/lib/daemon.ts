@@ -1,4 +1,4 @@
-import { errName } from "./must";
+import { errName } from "./guards";
 // daemon.ts - the ONE audited module for addressing and talking to a magus daemon.
 //
 // Every surface (dashboard, graph explorer, log viewer, activity, the shell) imports

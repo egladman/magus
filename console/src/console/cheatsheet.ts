@@ -1,4 +1,3 @@
-import { must } from "../lib/must";
 // cheatsheet.ts - a read-only keyboard cheat sheet: a centered card listing every command and its
 // current chord, grouped by area. It reads the live command list + merged keymap, so it always shows
 // the effective bindings. Open it by holding "?" (Shift+/) or the footer button; dismiss with the X,
@@ -85,8 +84,12 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
       const chord = formatChord(keymap[cmd.id] ?? "", deps.mac);
       if (chord === "") continue;
       const group = cmd.group || "General";
-      if (!groups.has(group)) groups.set(group, []);
-      must(groups.get(group)).push({ label: cmd.label, chord });
+      let list = groups.get(group);
+      if (!list) {
+        list = [];
+        groups.set(group, list);
+      }
+      list.push({ label: cmd.label, chord });
     }
     if (groups.size === 0) {
       body.append(h("p", "console-cheatsheet-box__empty", "No keyboard shortcuts are bound."));

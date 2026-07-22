@@ -1,4 +1,4 @@
-import { must } from "../../lib/must";
+import { must } from "../../lib/guards";
 // waterfall.ts - the trace-waterfall (Timeline) view. A Datadog-style waterfall of the
 // invocation: the magus OTel model is invocation=trace, target-exec=span, step=child span. The
 // magus.viewer.v1 wire format carries no explicit trace_id/span_id, so the span tree is

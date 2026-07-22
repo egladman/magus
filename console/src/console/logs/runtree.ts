@@ -1,4 +1,4 @@
-import { must } from "../../lib/must";
+import { must } from "../../lib/guards";
 // runtree.ts - the Log Viewer's run browser: a PatternFly TreeView down the left of the viewer that
 // lists prior runs (project -> target -> run) so a reader can browse recent captured output and open
 // any one. It reads the daemon's read-only /api/v1/outputs feed (the local output store's retained

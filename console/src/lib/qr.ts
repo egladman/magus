@@ -1,4 +1,4 @@
-import { must } from "./must";
+import { must } from "./guards";
 // qr.ts - a tiny, dependency-free QR code encoder, vendored so "share to phone"
 // can draw a scannable code with no npm dependency and no network fetch.
 //

@@ -1,4 +1,4 @@
-import { must } from "../lib/must";
+import { must } from "../lib/guards";
 // demo-scenario.ts - the ONE fabricated workspace every console surface's demo derives from.
 //
 // The console has four daemon-free showcases (logs waterfall, recent-runs tree, activity trail,

@@ -1,4 +1,4 @@
-import { must } from "../../lib/must";
+import { must } from "../../lib/guards";
 // search.ts - find-in-page over the rendered log body. Case-insensitive substring highlight
 // that wraps matches in <mark> (preserving the surrounding ANSI-colored spans), tracks an
 // active match, and steps through them (Enter / prev / next), expanding a collapsed section so

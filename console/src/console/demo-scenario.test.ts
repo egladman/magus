@@ -6,7 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { must } from "../lib/must";
+import { must } from "../lib/guards";
 import {
   scenarioRuns,
   scenarioActivity,

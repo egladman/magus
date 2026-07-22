@@ -1,4 +1,4 @@
-import { must } from "../../lib/must";
+import { must } from "../../lib/guards";
 // main.ts - the Log Viewer composition root. A purpose-built, read-only viewer for a magus
 // run's captured output: the #data= fragment carries a magus.viewer.v1 Journal (protobuf,
 // gzip+base64url), decoded here and rendered pretty from its STRUCTURE (per-target groups, exec

@@ -1,4 +1,4 @@
-import { must } from "../lib/must";
+import { must } from "../lib/guards";
 // tileView.ts - the DOM renderer for one tab's split-pane layout. A tab's body is a Pane tree
 // (tiling.ts): a single leaf when un-split (the common case) or a tree of splits after the operator
 // tiles it. This module renders that tree into nested CSS grids with draggable dividers, mounts a

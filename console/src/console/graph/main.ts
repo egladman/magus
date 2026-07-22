@@ -1,4 +1,4 @@
-import { must, errMessage } from "../../lib/must";
+import { must, errMessage } from "../../lib/guards";
 // main.ts - the /graph/ page's interactive knowledge-graph view.
 //
 // The page is DATA-AGNOSTIC (like /playground): it renders whatever node-link
@@ -62,7 +62,7 @@ import {
 } from "./types.js";
 import { LAYERED_MAX, layoutLayered } from "./layout.js";
 import { toMermaid } from "./mermaid.js";
-import { detectFlavor, targetGraphToNodeLink } from "./target-adapter.js";
+import { detectFlavor, isTargetGraphOutput, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
@@ -1600,14 +1600,12 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   if (askPanel) askPanel.open = true;
   // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
   // path is unchanged; the targets path is converted client-side.
-  const flavor = detectFlavor(data);
-  graphFlavor = flavor;
-  let raw: GraphPayload = data as GraphPayload;
-  if (flavor === "targets") {
-    const tg = data as TargetGraphOutput;
-    const nl = targetGraphToNodeLink(tg);
+  graphFlavor = detectFlavor(data);
+  let raw: GraphPayload;
+  if (isTargetGraphOutput(data)) {
+    const nl = targetGraphToNodeLink(data);
     raw = { nodes: nl.nodes, links: nl.links };
-    const nProjects = (tg.projects || []).length;
+    const nProjects = (data.projects || []).length;
     const nTargets = nl.nodes.filter((n) => n.kind === "target").length;
     statusMsg =
       "target graph - " +
@@ -1619,6 +1617,8 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
       " target" +
       (nTargets === 1 ? "" : "s") +
       (nl.cycleWarnings.length ? "; " + nl.cycleWarnings.join("; ") : "");
+  } else {
+    raw = data;
   }
   graph = prepareGraph(raw);
   // Clear any layout-reversed flags from a previous layered pass.
@@ -1665,7 +1665,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   const requestedLayout =
     fragParams.layout === "force" || fragParams.layout === "layered"
       ? fragParams.layout
-      : flavor === "targets"
+      : graphFlavor === "targets"
         ? "layered"
         : "force";
   layoutMode = requestedLayout;
@@ -2284,11 +2284,14 @@ function renderViewCommand(name: string | null, nodeId?: string | null, nodeTo?:
     escapeHtml(args) +
     "</span>" +
     '<button type="button" class="console-graph-views__copy" title="Copy this command to the clipboard" aria-label="Copy command">&#10697;</button>';
-  wrap.querySelector<HTMLElement>(".console-graph-views__copy")?.addEventListener("click", () => {
-    navigator.clipboard.writeText(cmd).then(() => {
-      setStatus("Copied: " + cmd);
-    });
-  });
+  must(wrap.querySelector<HTMLElement>(".console-graph-views__copy")).addEventListener(
+    "click",
+    () => {
+      navigator.clipboard.writeText(cmd).then(() => {
+        setStatus("Copied: " + cmd);
+      });
+    },
+  );
 }
 
 // Update the search-box copy button with the full command to copy.
@@ -2658,7 +2661,7 @@ function recomputeLiveMatchSet() {
 function liveApplyGraphUpdate(data: GraphPayload) {
   const flavor = detectFlavor(data);
   graphFlavor = flavor;
-  let raw: GraphPayload = data as GraphPayload;
+  let raw: GraphPayload = data;
   if (flavor === "targets") {
     const nl = targetGraphToNodeLink(data);
     raw = { nodes: nl.nodes, links: nl.links };
@@ -3338,9 +3341,10 @@ function bootWireEvents() {
       searchEl.value = q;
       applyQuery(q);
       searchEl.focus();
-      document
-        .querySelector<HTMLElement>(".console-graph-app")
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      must(document.querySelector<HTMLElement>(".console-graph-app")).scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
     }),
   );
 

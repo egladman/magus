@@ -11,6 +11,7 @@ import type {
   GLink,
   GNodeInput,
   GraphFlavor,
+  GraphPayload,
   TargetGraphOutput,
   TargetGraphProject,
 } from "./types.js";
@@ -22,6 +23,14 @@ export function detectFlavor(raw: { projects?: unknown; definition?: unknown }):
   return Array.isArray(raw.projects) && typeof raw.definition === "string"
     ? "targets"
     : "knowledge";
+}
+
+// isTargetGraphOutput is detectFlavor as a type predicate, so a caller can branch on it
+// to narrow a raw graph input to the target shape without an `as` cast.
+export function isTargetGraphOutput(
+  raw: GraphPayload | TargetGraphOutput,
+): raw is TargetGraphOutput {
+  return detectFlavor(raw) === "targets";
 }
 
 // targetGraphToNodeLink converts a TargetGraphOutput to the { nodes, links }
