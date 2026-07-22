@@ -71,6 +71,7 @@ Start here to understand the model magus is built on.
 - [Services](services.md) - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
 - [Wards](wards.md) - coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).
 - [Knowledge graph](knowledge.md) - the deterministic, cache-backed graph of the magus domain that `magus query`/`explain`/`path` and agents read instead of grepping.
+- [Diagnostics](diagnostics.md) - every error is a pointable coded diagnostic (`MGSxxxx`) with a handwritten resolution page and a queryable graph node, written for a human to act on rather than parse.
 - [Engines](engines.md) - how magus loads and evaluates a magusfile.
 
 ## Going further
