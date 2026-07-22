@@ -80,22 +80,29 @@ const SURFACE_ICONS: Record<string, string> = {
   // Log viewer: stacked text lines.
   logs: '<path d="M4 5h16M4 10h10M4 15h13M4 19h7"/>',
   // Graph explorer: three connected nodes; the lead node pulses on hover.
-  graph: '<circle data-motion="pulse" cx="6" cy="7" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="15" cy="18" r="2.2"/><path d="M8 8l6 9M8 7l8-1"/>',
+  graph:
+    '<circle data-motion="pulse" cx="6" cy="7" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="15" cy="18" r="2.2"/><path d="M8 8l6 9M8 7l8-1"/>',
   // Dashboard: a small bar chart on a baseline (live stats); the tall bar grows on hover.
-  dashboard: '<path d="M3 21h18"/><rect x="5" y="11" width="4" height="8" rx="1"/><rect data-motion="bars" x="10" y="6" width="4" height="13" rx="1"/><rect x="15" y="14" width="4" height="5" rx="1"/>',
+  dashboard:
+    '<path d="M3 21h18"/><rect x="5" y="11" width="4" height="8" rx="1"/><rect data-motion="bars" x="10" y="6" width="4" height="13" rx="1"/><rect x="15" y="14" width="4" height="5" rx="1"/>',
   // Activity: a waveform; it breathes on hover.
   activity: '<path data-motion="wave" d="M3 12h3l2-5 3 10 3-8 2 3h5"/>',
   // Actions: a lightning bolt; it flickers on hover.
   actions: '<path data-motion="bolt" d="M13 2L4 14h6l-1 8 9-12h-6z"/>',
   // Settings: a proper cog (not the sun-like spoked glyph); the whole icon turns on hover.
-  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  settings:
+    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 };
 
 // buildLauncher builds the launcher DOM as the outlet's empty state. `surfaces` is what it offers to
 // open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
 // #console-outlet-content as a sibling of the tab panes, shown only when no tab is active.
-export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => void, launchDemo: () => void): HTMLElement {
+export function buildLauncher(
+  surfaces: Launchable[],
+  open: (pageId: string) => void,
+  launchDemo: () => void,
+): HTMLElement {
   // data-surface tags the empty state; its heading/lede layout is ID-scoped in console.css. The
   // launcher is a PatternFly Gallery of clickable Cards - the [data-open] hook the click handler keys
   // on rides on each card, and the whole card is the keyboard-reachable target (tabindex + Enter/Space).
@@ -112,7 +119,9 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   // Every card's kebab menu registers its closer here so an outside click / Escape can shut whichever
   // one is open, and opening one closes the rest.
   const menuClosers: (() => void)[] = [];
-  const closeAllMenus = (except?: () => void): void => { for (const c of menuClosers) if (c !== except) c(); };
+  const closeAllMenus = (except?: () => void): void => {
+    for (const c of menuClosers) if (c !== except) c();
+  };
   for (const s of surfaces) {
     const card = document.createElement("div");
     card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
@@ -158,13 +167,20 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
       mark.className = "console-launcher-card__watermark";
       mark.innerHTML =
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + glyph + "</svg>";
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        glyph +
+        "</svg>";
       card.append(mark);
     }
     card.addEventListener("click", () => open(s.pageId));
     // Enter/Space open the surface only when the CARD itself is focused - a key press on the kebab or a
     // menu item bubbles here too, so guard on the target to avoid a stray open.
-    card.addEventListener("keydown", (ev) => { if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); open(s.pageId); } });
+    card.addEventListener("keydown", (ev) => {
+      if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) {
+        ev.preventDefault();
+        open(s.pageId);
+      }
+    });
 
     // The kebab: a top-right three-dot button opening a one-item menu ("Open in a new window"). It stops
     // propagation so its click never reaches the card's own open-as-tab handler, and it is a real button
@@ -192,13 +208,33 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
     menu.append(openWin);
 
     let menuOpen = false;
-    const setMenu = (v: boolean): void => { menuOpen = v; menu.hidden = !v; kebab.setAttribute("aria-expanded", v ? "true" : "false"); };
+    const setMenu = (v: boolean): void => {
+      menuOpen = v;
+      menu.hidden = !v;
+      kebab.setAttribute("aria-expanded", v ? "true" : "false");
+    };
     const closeMenu = (): void => setMenu(false);
     menuClosers.push(closeMenu);
-    kebab.addEventListener("click", (ev) => { ev.stopPropagation(); const willOpen = !menuOpen; closeAllMenus(); setMenu(willOpen); if (willOpen) openWin.focus(); });
-    kebab.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && menuOpen) { ev.stopPropagation(); closeMenu(); kebab.focus(); } });
+    kebab.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const willOpen = !menuOpen;
+      closeAllMenus();
+      setMenu(willOpen);
+      if (willOpen) openWin.focus();
+    });
+    kebab.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && menuOpen) {
+        ev.stopPropagation();
+        closeMenu();
+        kebab.focus();
+      }
+    });
     menu.addEventListener("click", (ev) => ev.stopPropagation());
-    openWin.addEventListener("click", (ev) => { ev.stopPropagation(); closeMenu(); openSurfaceWindow(s.pageId); });
+    openWin.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      closeMenu();
+      openSurfaceWindow(s.pageId);
+    });
     card.append(kebab, menu);
 
     gallery.append(card);
@@ -210,11 +246,18 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   // inside its menu is left for that element's own handler (the toggle, or an item), so those never
   // self-close here.
   document.addEventListener("pointerdown", (ev) => {
-    const el = ev.target instanceof Element ? ev.target : (ev.target instanceof Node ? ev.target.parentElement : null);
+    const el =
+      ev.target instanceof Element
+        ? ev.target
+        : ev.target instanceof Node
+          ? ev.target.parentElement
+          : null;
     if (el?.closest("[data-card-kebab], [data-card-menu]")) return;
     closeAllMenus();
   });
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeAllMenus(); });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") closeAllMenus();
+  });
 
   // A quiet corner affordance to launch the full demo: opens every surface with representative,
   // daemon-free demo data (see main.ts's launchDemo). It sits bottom-right of the launcher and reveals

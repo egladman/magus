@@ -15,8 +15,13 @@ function stubStorage(): { writes: string[] } {
   const writes: string[] = [];
   (globalThis as { localStorage?: unknown }).localStorage = {
     getItem: (k: string): string | null => (store.has(k) ? (store.get(k) as string) : null),
-    setItem: (k: string, v: string): void => { store.set(k, v); writes.push(v); },
-    removeItem: (k: string): void => { store.delete(k); },
+    setItem: (k: string, v: string): void => {
+      store.set(k, v);
+      writes.push(v);
+    },
+    removeItem: (k: string): void => {
+      store.delete(k);
+    },
   };
   return { writes };
 }
@@ -58,7 +63,9 @@ test("persisted: subscribers are notified before the durable write runs", () => 
   const { writes } = stubStorage();
   const cell = persisted<number>("t-sub", 0);
   let writesAtNotify = -1;
-  cell.subscribe(() => { writesAtNotify = writes.length; });
+  cell.subscribe(() => {
+    writesAtNotify = writes.length;
+  });
   cell.set(9);
   // The subscriber runs synchronously inside set(), before the queued microtask writes to storage.
   assert.equal(writesAtNotify, 0);
@@ -68,7 +75,9 @@ test("persisted: persistOnly writes storage without updating current or notifyin
   const { writes } = stubStorage();
   const cell = persisted<number>("t-saveonly", 1);
   let notified = false;
-  cell.subscribe(() => { notified = true; });
+  cell.subscribe(() => {
+    notified = true;
+  });
   cell.persistOnly(7);
   assert.equal(cell.get(), 1); // the live value is untouched (Save does not hot-reload the session)
   assert.equal(notified, false); // no subscriber fires

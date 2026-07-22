@@ -77,7 +77,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the
 // same way a Go project's lint runs `go vet`. Composing tsc into lint (rather than a standalone
 // `typecheck` target) means `magus affected ci`, which needs lint, always covers it - a type error
-// fails lint. The console has no separate linter yet; if one lands it composes in here beside tsc.
+// fails lint. Biome (bans any/non-null, enforces formatting) composes in beside tsc, mirroring the docs site.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // The Reference drawer imports the search grammar from the shared libs/textsearch
@@ -85,6 +85,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(textsearch.lint);
     install();
     os.exec("pnpm", ["run", "typecheck"], ".", {});
+    os.exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the

@@ -15,16 +15,22 @@
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import type { Store } from "../../lib/store";
 import type {
-  DashboardState, StatusView, MetricsView, SampleView, InsightView,
-  RunView, TargetRunView, TargetState,
+  DashboardState,
+  StatusView,
+  MetricsView,
+  SampleView,
+  InsightView,
+  RunView,
+  TargetRunView,
+  TargetState,
 } from "./state";
 import { SCENARIO_CATALOG, WORKSPACE_ROOT, scenarioInsight } from "../demo-scenario";
 
 const CAPACITY = 8;
 const TICK_MS = 1000;
 const LOG_TICK_MS = 500; // faster cadence for the streaming log preview so it reads as live
-const LOG_MAX = 200;     // rolling captured-output buffer kept for the activity preview
-const HISTORY = 200;     // seed samples (~a GitHub-year strip fills fast at ~1/s)
+const LOG_MAX = 200; // rolling captured-output buffer kept for the activity preview
+const HISTORY = 200; // seed samples (~a GitHub-year strip fills fast at ~1/s)
 
 // A rotating catalog of plausible captured-output lines (build / test / lint / cache / sandbox) the
 // demo activity preview streams. They echo the shared scenario's acme monorepo (svc/api, web/app,
@@ -46,13 +52,18 @@ const LOG_SNIPPETS: string[] = [
   "[sandbox] apply rules=read:512 write:88 exec:12",
 ];
 
-export interface DemoHandle { stop(): void; }
+export interface DemoHandle {
+  stop(): void;
+}
 
 // A deterministic-enough jitter without importing anything: a tiny LCG seeded from a
 // counter so the walk looks organic across reloads without Math.random's noise.
 function makeRng(seed: number): () => number {
   let s = seed >>> 0;
-  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0x1_0000_0000; };
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0x1_0000_0000;
+  };
 }
 
 // The dashboard is a LIVE board, so its gantt keeps churning past the scenario's fixed history; it
@@ -90,7 +101,11 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   let invN = 0;
   const runs: RunView[] = [];
 
-  function newTarget(state: TargetState, startMs: number | null, endMs: number | null): TargetRunView {
+  function newTarget(
+    state: TargetState,
+    startMs: number | null,
+    endMs: number | null,
+  ): TargetRunView {
     const c = nextCat();
     const durationMs = endMs != null && startMs != null ? endMs - startMs : 0;
     return {
@@ -119,8 +134,13 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   // Seed a couple of finished runs behind "now" so the timeline isn't empty on frame 1.
   (function seedRuns(): void {
     const past = startRun(t0 - 46_000);
-    for (const t of past.targets) { t.state = "passed"; t.terminal = true; }
-    past.targets[0].endMs = t0 - 42_000; past.targets[0].startMs = t0 - 46_000; past.targets[0].durationMs = 4000;
+    for (const t of past.targets) {
+      t.state = "passed";
+      t.terminal = true;
+    }
+    past.targets[0].endMs = t0 - 42_000;
+    past.targets[0].startMs = t0 - 46_000;
+    past.targets[0].durationMs = 4000;
     past.targets[1] = newTarget("cached", t0 - 42_000, t0 - 41_800);
     past.targets.push(newTarget("passed", t0 - 41_000, t0 - 35_500));
     startRun(t0 - 9_000); // the live run: [running, queued]
@@ -164,41 +184,158 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         graphQuery: { count: 212 + (j >> 2), p50: 0.031, p95: 0.11, p99: 0.28, max: 0.61 },
       },
       remote: {
-        hits: 1873, misses: 402, errors: 1, hitRate: 1873 / (1873 + 402),
-        durationP50: 0.043, durationP95: 0.21, ioCount: 2276, bytesTotal: 5_912_334_221,
+        hits: 1873,
+        misses: 402,
+        errors: 1,
+        hitRate: 1873 / (1873 + 402),
+        durationP50: 0.043,
+        durationP95: 0.21,
+        ioCount: 2276,
+        bytesTotal: 5_912_334_221,
       },
       // Per-target aggregates over the acme monorepo the scenario describes. svc/api:test carries a
       // few errors (it flapped) and a lower cache-hit rate; the cached-heavy build/typecheck targets
       // sit high - reconciling, roughly, with the run history and the volatility lens.
       targetStats: [
-        { project: "svc/api", target: "test", spell: "go-test", count: 188, p50: 3.6, p95: 5.4, p99: 7.1, cacheHitRate: 0.41, success: 184, errors: 4 },
-        { project: "svc/api", target: "build", spell: "go-build", count: 342, p50: 0.42, p95: 1.1, p99: 2.0, cacheHitRate: 0.88, success: 342, errors: 0 },
-        { project: "web/app", target: "build", spell: "esbuild", count: 96, p50: 0.83, p95: 1.9, p99: 2.7, cacheHitRate: 0.72, success: 96, errors: 0 },
-        { project: "web/app", target: "typecheck", spell: "tsc", count: 74, p50: 2.3, p95: 3.4, p99: 4.6, cacheHitRate: 0.55, success: 73, errors: 1 },
-        { project: "lib/core", target: "lint", spell: "golangci", count: 129, p50: 0.6, p95: 1.2, p99: 2.1, cacheHitRate: 0.61, success: 129, errors: 0 },
+        {
+          project: "svc/api",
+          target: "test",
+          spell: "go-test",
+          count: 188,
+          p50: 3.6,
+          p95: 5.4,
+          p99: 7.1,
+          cacheHitRate: 0.41,
+          success: 184,
+          errors: 4,
+        },
+        {
+          project: "svc/api",
+          target: "build",
+          spell: "go-build",
+          count: 342,
+          p50: 0.42,
+          p95: 1.1,
+          p99: 2.0,
+          cacheHitRate: 0.88,
+          success: 342,
+          errors: 0,
+        },
+        {
+          project: "web/app",
+          target: "build",
+          spell: "esbuild",
+          count: 96,
+          p50: 0.83,
+          p95: 1.9,
+          p99: 2.7,
+          cacheHitRate: 0.72,
+          success: 96,
+          errors: 0,
+        },
+        {
+          project: "web/app",
+          target: "typecheck",
+          spell: "tsc",
+          count: 74,
+          p50: 2.3,
+          p95: 3.4,
+          p99: 4.6,
+          cacheHitRate: 0.55,
+          success: 73,
+          errors: 1,
+        },
+        {
+          project: "lib/core",
+          target: "lint",
+          spell: "golangci",
+          count: 129,
+          p50: 0.6,
+          p95: 1.2,
+          p99: 2.1,
+          cacheHitRate: 0.61,
+          success: 129,
+          errors: 0,
+        },
       ],
       // The MCP tools the scenario's agent actually called (magus_run_target, magus_query,
       // magus_output), so the metrics tile names the same tools the activity trail records - including
       // the one magus_output error (the pruned-ref lookup).
       mcpTools: [
-        { tool: "magus_run_target", calls: 63, errors: 1, inputP50: 205, inputP95: 320, inputTotal: 13_104, outputP50: 4_120, outputP95: 9_800, outputTotal: 271_402, durationP50: 2.1, durationP95: 4.4 },
-        { tool: "magus_query", calls: 214, errors: 0, inputP50: 84, inputP95: 190, inputTotal: 19_006, outputP50: 1_640, outputP95: 6_210, outputTotal: 402_118, durationP50: 0.034, durationP95: 0.09 },
-        { tool: "magus_output", calls: 41, errors: 1, inputP50: 44, inputP95: 60, inputTotal: 1_920, outputP50: 3_200, outputP95: 9_100, outputTotal: 158_400, durationP50: 0.008, durationP95: 0.02 },
+        {
+          tool: "magus_run_target",
+          calls: 63,
+          errors: 1,
+          inputP50: 205,
+          inputP95: 320,
+          inputTotal: 13_104,
+          outputP50: 4_120,
+          outputP95: 9_800,
+          outputTotal: 271_402,
+          durationP50: 2.1,
+          durationP95: 4.4,
+        },
+        {
+          tool: "magus_query",
+          calls: 214,
+          errors: 0,
+          inputP50: 84,
+          inputP95: 190,
+          inputTotal: 19_006,
+          outputP50: 1_640,
+          outputP95: 6_210,
+          outputTotal: 402_118,
+          durationP50: 0.034,
+          durationP95: 0.09,
+        },
+        {
+          tool: "magus_output",
+          calls: 41,
+          errors: 1,
+          inputP50: 44,
+          inputP95: 60,
+          inputTotal: 1_920,
+          outputP50: 3_200,
+          outputP95: 9_100,
+          outputTotal: 158_400,
+          durationP50: 0.008,
+          durationP95: 0.02,
+        },
       ],
       buzz: {
-        execCount: 8123 + j * 2, execP50: 0.0007, execP95: 0.004,
-        compileCount: 412, compileP50: 0.0031, compileP95: 0.012,
-        hostCallCount: 20_114, hostCallP50: 0.00002, hostCallP95: 0.0004,
-        sessionPoolReuse: 3901, sessionPoolIdle: 6, sessionPoolEvictions: 42,
-        sessionWarmP50: 0.0009, sessionWarmP95: 0.006,
-        importCount: 733, importP50: 0.0004, importP95: 0.003,
-        spellResolveCount: 1288, spellResolveP50: 0.0002, spellResolveP95: 0.0012,
-        jitRuns: 61, vmFaults: 0,
+        execCount: 8123 + j * 2,
+        execP50: 0.0007,
+        execP95: 0.004,
+        compileCount: 412,
+        compileP50: 0.0031,
+        compileP95: 0.012,
+        hostCallCount: 20_114,
+        hostCallP50: 0.00002,
+        hostCallP95: 0.0004,
+        sessionPoolReuse: 3901,
+        sessionPoolIdle: 6,
+        sessionPoolEvictions: 42,
+        sessionWarmP50: 0.0009,
+        sessionWarmP95: 0.006,
+        importCount: 733,
+        importP50: 0.0004,
+        importP95: 0.003,
+        spellResolveCount: 1288,
+        spellResolveP50: 0.0002,
+        spellResolveP95: 0.0012,
+        jitRuns: 61,
+        vmFaults: 0,
       },
       sandbox: {
-        applyP50: 0.0011, applyP95: 0.0068,
-        rulesRead: 5120, rulesWrite: 880, rulesExec: 311, envRules: 96,
-        checksAllow: 41_882, checksDeny: 7, envDropped: 214,
+        applyP50: 0.0011,
+        applyP95: 0.0068,
+        rulesRead: 5120,
+        rulesWrite: 880,
+        rulesExec: 311,
+        envRules: 96,
+        checksAllow: 41_882,
+        checksDeny: 7,
+        envDropped: 214,
       },
     };
   }
@@ -213,19 +350,38 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   const insight: InsightView = {
     commits: si.commits,
     hotspots: si.hotspots.map((n) => ({
-      name: n.name, churn: n.churn, authors: n.authors, blastRadius: n.blastRadius, lastCommit: date(n.lastCommitMs),
+      name: n.name,
+      churn: n.churn,
+      authors: n.authors,
+      blastRadius: n.blastRadius,
+      lastCommit: date(n.lastCommitMs),
     })),
     affinity: si.affinity.map((p) => ({ a: p.a, b: p.b, count: p.count, hidden: p.hidden })),
     ownership: si.ownership.map((o) => ({
-      path: o.path, primary: o.primary, primaryShare: o.primaryShare, authors: o.authors, busFactor1: o.busFactor1, stale: o.stale,
+      path: o.path,
+      primary: o.primary,
+      primaryShare: o.primaryShare,
+      authors: o.authors,
+      busFactor1: o.busFactor1,
+      stale: o.stale,
     })),
-    trend: si.trend.map((t) => ({ path: t.path, delta: t.delta, recent: t.recent, earlier: t.earlier })),
+    trend: si.trend.map((t) => ({
+      path: t.path,
+      delta: t.delta,
+      recent: t.recent,
+      earlier: t.earlier,
+    })),
     volatility: {
       threshold: si.volatility.threshold,
       targets: si.volatility.targets.map((v) => ({
         label: v.project ? v.project + ":" + v.target : v.target,
-        score: v.score, volatile: v.volatile, pass: v.pass, fail: v.fail,
-        volatileCount: v.volatileCount, samples: v.samples, lastPass: date(v.lastPassMs),
+        score: v.score,
+        volatile: v.volatile,
+        pass: v.pass,
+        fail: v.fail,
+        volatileCount: v.volatileCount,
+        samples: v.samples,
+        lastPass: date(v.lastPassMs),
       })),
     },
   };
@@ -233,28 +389,39 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   // ---- seed the sample strip ----------------------------------------------
   const samples: SampleView[] = [];
   {
-    let h = hits - 900, m = misses - 130;
+    let h = hits - 900,
+      m = misses - 130;
     for (let i = HISTORY; i > 0; i--) {
       const r = Math.round(1 + rng() * (CAPACITY - 1));
       const q = rng() < 0.12 ? Math.round(rng() * 3) : 0;
       h += Math.round(rng() * 6);
       m += Math.round(rng() * 2);
-      samples.push({ at: t0 - i * 1000, running: r, capacity: CAPACITY, queued: q, cacheHits: h, cacheMisses: m, cacheSrc: "status" });
+      samples.push({
+        at: t0 - i * 1000,
+        running: r,
+        capacity: CAPACITY,
+        queued: q,
+        cacheHits: h,
+        cacheMisses: m,
+        cacheSrc: "status",
+      });
     }
-    hits = h; misses = m;
+    hits = h;
+    misses = m;
   }
 
   // ---- status builder -----------------------------------------------------
   function buildStatus(now: number): StatusView {
-    const runningTargets = runs
-      .flatMap((run) => run.targets
+    const runningTargets = runs.flatMap((run) =>
+      run.targets
         .filter((t) => t.state === "running")
         .map((t) => ({
           args: t.project ? ["run", t.target, t.project] : ["run", t.target],
           step: t.target === "test" ? "go test ./..." : "",
           startTime: t.startMs != null ? timestampFromMs(t.startMs) : undefined,
           invocation: run.inv,
-        })));
+        })),
+    );
     // Derive the pool counts from the SAME runs the Live activity shows, so the hero's RUNNING count
     // equals the number of running targets listed (and QUEUED likewise), never a stale static number.
     const running = runningTargets.length;
@@ -270,12 +437,40 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       // itself) sits idle beside it. So the workspaces tile names the same root the rest of the board
       // describes.
       workspaces: [
-        { root: WORKSPACE_ROOT, hits: Math.round(hits * 0.82), misses: Math.round(misses * 0.8), errors, lastAccessTime: timestampFromMs(now - 1200) },
-        { root: "~/Repos/magus", hits: Math.round(hits * 0.18), misses: Math.round(misses * 0.2), errors: 0, lastAccessTime: timestampFromMs(now - 38_000) },
+        {
+          root: WORKSPACE_ROOT,
+          hits: Math.round(hits * 0.82),
+          misses: Math.round(misses * 0.8),
+          errors,
+          lastAccessTime: timestampFromMs(now - 1200),
+        },
+        {
+          root: "~/Repos/magus",
+          hits: Math.round(hits * 0.18),
+          misses: Math.round(misses * 0.2),
+          errors: 0,
+          lastAccessTime: timestampFromMs(now - 38_000),
+        },
       ],
       services: [
-        { id: "svc9f21", label: "postgres:16", command: "docker run postgres:16", ports: ["5432"], state: "running", dependents: 3, startedAt: timestampFromMs(now - 214_000) },
-        { id: "svc4c08", label: "redis:7", command: "docker run redis:7-alpine", ports: ["6379"], state: "idle", dependents: 0, startedAt: timestampFromMs(now - 88_000) },
+        {
+          id: "svc9f21",
+          label: "postgres:16",
+          command: "docker run postgres:16",
+          ports: ["5432"],
+          state: "running",
+          dependents: 3,
+          startedAt: timestampFromMs(now - 214_000),
+        },
+        {
+          id: "svc4c08",
+          label: "redis:7",
+          command: "docker run redis:7-alpine",
+          ports: ["6379"],
+          state: "idle",
+          dependents: 0,
+          startedAt: timestampFromMs(now - 88_000),
+        },
       ],
       magusVersion: "0.2.0",
       daemonVersion: "0.2.0",
@@ -310,7 +505,15 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     if (rng() < 0.03) errors += 1;
     sizeBytes += Math.round(rng() * 40_000);
     // Append a live utilization sample; keep the strip bounded.
-    samples.push({ at: now, running, capacity: CAPACITY, queued, cacheHits: hits, cacheMisses: misses, cacheSrc: "status" });
+    samples.push({
+      at: now,
+      running,
+      capacity: CAPACITY,
+      queued,
+      cacheHits: hits,
+      cacheMisses: misses,
+      cacheSrc: "status",
+    });
     if (samples.length > HISTORY + 120) samples.shift();
 
     store.set({
@@ -328,6 +531,14 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   const timer = window.setInterval(publish, TICK_MS);
   // The log preview streams on its own faster tick, pushing only the logLines slice so the
   // tail scrolls smoothly between the ~1s status frames.
-  const logTimer = window.setInterval(() => { appendLog(); store.set({ logLines: logBuf.slice() }); }, LOG_TICK_MS);
-  return { stop() { window.clearInterval(timer); window.clearInterval(logTimer); } };
+  const logTimer = window.setInterval(() => {
+    appendLog();
+    store.set({ logLines: logBuf.slice() });
+  }, LOG_TICK_MS);
+  return {
+    stop() {
+      window.clearInterval(timer);
+      window.clearInterval(logTimer);
+    },
+  };
 }

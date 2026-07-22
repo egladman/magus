@@ -7,13 +7,21 @@
 //   knowledge: KnowledgeGraphOutput  { definition, nodes, links, ... }
 //   targets:   TargetGraphOutput     { definition, projects[] }
 
-import type { GLink, GNode, GraphFlavor } from "./types.js";
+import type {
+  GLink,
+  GNodeInput,
+  GraphFlavor,
+  TargetGraphOutput,
+  TargetGraphProject,
+} from "./types.js";
 
 // detectFlavor tells the two shapes apart so the existing knowledge-graph path stays
 // byte-identical in behavior; the target path is converted client-side via
 // targetGraphToNodeLink before entering prepareGraph.
-export function detectFlavor(raw: any): GraphFlavor {
-  return Array.isArray(raw.projects) && typeof raw.definition === "string" ? "targets" : "knowledge";
+export function detectFlavor(raw: { projects?: unknown; definition?: unknown }): GraphFlavor {
+  return Array.isArray(raw.projects) && typeof raw.definition === "string"
+    ? "targets"
+    : "knowledge";
 }
 
 // targetGraphToNodeLink converts a TargetGraphOutput to the { nodes, links }
@@ -26,12 +34,12 @@ export function detectFlavor(raw: any): GraphFlavor {
 //
 // All edges carry confidence "high" + score 1 so existing code paths that
 // inspect those fields keep working.
-export function targetGraphToNodeLink(tg: any): {
-  nodes: GNode[];
+export function targetGraphToNodeLink(tg: TargetGraphOutput): {
+  nodes: GNodeInput[];
   links: GLink[];
   cycleWarnings: string[];
 } {
-  const nodes: GNode[] = [];
+  const nodes: GNodeInput[] = [];
   const links: GLink[] = [];
   const nodeIds = new Set<string>(); // for skipping dangling edges
 
@@ -80,12 +88,18 @@ export function targetGraphToNodeLink(tg: any): {
   }
 
   // Pass 3: build edges.
-  const cycleProjects: any[] = []; // projects with a non-empty cycle field
+  const cycleProjects: TargetGraphProject[] = []; // projects with a non-empty cycle field
   for (const p of tg.projects || []) {
     // Containment: project -> each of its targets.
     for (const n of p.nodes || []) {
       const targetId = p.path + "#" + n.name;
-      links.push({ source: p.path, target: targetId, relation: "contains", confidence: "high", score: 1 });
+      links.push({
+        source: p.path,
+        target: targetId,
+        relation: "contains",
+        confidence: "high",
+        score: 1,
+      });
     }
 
     // Build a set of cycle-edge pairs for this project (consecutive pairs in
@@ -120,20 +134,38 @@ export function targetGraphToNodeLink(tg: any): {
         // The cross-project target node may or may not be in this graph; only
         // emit the edge if the destination node exists (avoid phantom nodes).
         if (!nodeIds.has(dstId)) continue;
-        links.push({ source: srcId, target: dstId, relation: "depends_on", confidence: "high", score: 1 });
+        links.push({
+          source: srcId,
+          target: dstId,
+          relation: "depends_on",
+          confidence: "high",
+          score: 1,
+        });
       }
 
       // Spell edges: target -> spell node.
       for (const s of n.spells || []) {
         const spellId = "spell:" + s.spell;
-        links.push({ source: srcId, target: spellId, relation: "uses", confidence: "high", score: 1 });
+        links.push({
+          source: srcId,
+          target: spellId,
+          relation: "uses",
+          confidence: "high",
+          score: 1,
+        });
       }
     }
 
     // Project-level depends_on edges (project -> project).
     for (const q of p.depends_on || []) {
       if (!nodeIds.has(q)) continue;
-      links.push({ source: p.path, target: q, relation: "depends_on", confidence: "high", score: 1 });
+      links.push({
+        source: p.path,
+        target: q,
+        relation: "depends_on",
+        confidence: "high",
+        score: 1,
+      });
     }
 
     // Track projects with cycles for the status warning.
@@ -150,7 +182,9 @@ export function targetGraphToNodeLink(tg: any): {
   }
 
   // Emit cycle warnings on the status line (deferred; boot reads this).
-  const cycleWarnings = cycleProjects.map((p) => "cycle detected in " + p.path + ": " + (p.cycle || []).join(" -> "));
+  const cycleWarnings = cycleProjects.map(
+    (p) => "cycle detected in " + p.path + ": " + (p.cycle || []).join(" -> "),
+  );
 
   return { nodes, links, cycleWarnings };
 }

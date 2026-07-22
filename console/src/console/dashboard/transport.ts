@@ -19,13 +19,22 @@ import { createClient, type Client } from "@connectrpc/connect";
 import { StatusSchema, StatusService, type Status } from "../../gen/magus/status/v1/status_pb";
 import { MetricsService } from "../../gen/magus/metrics/v1/metrics_pb";
 import {
-  authHeaders, createDaemonTransport, fetchSSE, getLiveToken, type SSEHeaders,
+  authHeaders,
+  createDaemonTransport,
+  fetchSSE,
+  getLiveToken,
+  type SSEHeaders,
 } from "../../lib/daemon";
 import { getPollMs } from "../../lib/settings";
 import type { Store } from "../../lib/store";
 import {
-  mapStatus, mapSnapshot, mapSample, mapInsight,
-  type DashboardState, type SampleView, type InsightWire,
+  mapStatus,
+  mapSnapshot,
+  mapSample,
+  mapInsight,
+  type DashboardState,
+  type SampleView,
+  type InsightWire,
 } from "./state";
 
 const GRID_MAX = 7 * 52; // ~a GitHub year of columns; the rolling sample window
@@ -77,8 +86,14 @@ export class DashboardTransport {
   }
 
   disconnect(): void {
-    if (this.statusAbort) { this.statusAbort.abort(); this.statusAbort = null; }
-    if (this.statusRetry) { clearTimeout(this.statusRetry); this.statusRetry = null; }
+    if (this.statusAbort) {
+      this.statusAbort.abort();
+      this.statusAbort = null;
+    }
+    if (this.statusRetry) {
+      clearTimeout(this.statusRetry);
+      this.statusRetry = null;
+    }
     this.stopMetrics();
     this.stopInsight();
   }
@@ -162,8 +177,14 @@ export class DashboardTransport {
   }
 
   private stopMetrics(): void {
-    if (this.metricsAbort) { this.metricsAbort.abort(); this.metricsAbort = null; }
-    if (this.metricsRetry) { clearTimeout(this.metricsRetry); this.metricsRetry = null; }
+    if (this.metricsAbort) {
+      this.metricsAbort.abort();
+      this.metricsAbort = null;
+    }
+    if (this.metricsRetry) {
+      clearTimeout(this.metricsRetry);
+      this.metricsRetry = null;
+    }
   }
 
   private async runMetrics(host: string, signal: AbortSignal): Promise<void> {
@@ -183,7 +204,8 @@ export class DashboardTransport {
     if (this.stopped || this.metricsRetry) return;
     this.metricsRetry = setTimeout(() => {
       this.metricsRetry = null;
-      if (this.metricsAbort && !this.metricsAbort.signal.aborted) void this.runMetrics(host, this.metricsAbort.signal);
+      if (this.metricsAbort && !this.metricsAbort.signal.aborted)
+        void this.runMetrics(host, this.metricsAbort.signal);
     }, RECONNECT_MS);
   }
 
@@ -201,8 +223,14 @@ export class DashboardTransport {
 
   private stopInsight(): void {
     this.insightHost = null;
-    if (this.insightAbort) { this.insightAbort.abort(); this.insightAbort = null; }
-    if (this.insightTimer) { clearInterval(this.insightTimer); this.insightTimer = null; }
+    if (this.insightAbort) {
+      this.insightAbort.abort();
+      this.insightAbort = null;
+    }
+    if (this.insightTimer) {
+      clearInterval(this.insightTimer);
+      this.insightTimer = null;
+    }
   }
 
   // refreshInsight forces an out-of-band refetch (the section's refresh button).
@@ -218,7 +246,8 @@ export class DashboardTransport {
     this.insightAbort = new AbortController();
     try {
       const res = await fetch("http://" + host + "/api/v1/insight", {
-        headers: authHeaders(), signal: this.insightAbort.signal,
+        headers: authHeaders(),
+        signal: this.insightAbort.signal,
       });
       if (!res.ok) return; // keep the last insight on screen; the next poll retries
       const raw = (await res.json()) as InsightWire;
@@ -238,13 +267,16 @@ export class DashboardTransport {
       const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
       const resp = await client.getStatus({});
       const ts = resp.observingSince;
-      if (ts) this.store.set({ observingSince: Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6) });
+      if (ts)
+        this.store.set({ observingSince: Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6) });
       if (resp.config) {
-        this.store.set({ config: {
-          defaultCharms: resp.config.defaultCharms,
-          concurrency: resp.config.concurrency,
-          sandbox: resp.config.sandbox,
-        } });
+        this.store.set({
+          config: {
+            defaultCharms: resp.config.defaultCharms,
+            concurrency: resp.config.concurrency,
+            sandbox: resp.config.sandbox,
+          },
+        });
       }
     } catch {
       // Network blip or abort: leave observingSince null; nothing on the board depends on it.
@@ -258,7 +290,8 @@ export class DashboardTransport {
     this.seeded = true;
     // Any live samples appended before the Backfill land after history.
     this.samples = history.concat(this.samples);
-    if (this.samples.length > GRID_MAX) this.samples = this.samples.slice(this.samples.length - GRID_MAX);
+    if (this.samples.length > GRID_MAX)
+      this.samples = this.samples.slice(this.samples.length - GRID_MAX);
     if (this.samples.length) this.lastSampleAt = this.samples[this.samples.length - 1].at;
     this.store.set({ samples: this.samples });
   }

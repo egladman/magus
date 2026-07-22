@@ -1,3 +1,4 @@
+import { must, errMessage } from "../../lib/must";
 // main.ts - the /graph/ page's interactive knowledge-graph view.
 //
 // The page is DATA-AGNOSTIC (like /playground): it renders whatever node-link
@@ -17,18 +18,48 @@
 // it). Colors come from the console's PatternFly-native CSS tokens read off the
 // live page (readTheme), re-read on a theme toggle. The canvas is progressive
 // enhancement over a semantic node list; the explain card is plain HTML.
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY } from "d3-force";
-import { zoom as d3zoom, zoomIdentity } from "d3-zoom";
+import {
+  forceSimulation,
+  forceLink,
+  forceManyBody,
+  forceCenter,
+  forceCollide,
+  forceX,
+  forceY,
+  type Simulation,
+  type ForceManyBody,
+  type ForceLink,
+  type ForceX,
+  type ForceY,
+} from "d3-force";
+import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from "d3-zoom";
 import { drag as d3drag } from "d3-drag";
 import { select } from "d3-selection";
 // The loopback lock, the shared bearer token, and the fetch-based SSE reader used to
 // be copy-pasted into all three tool pages; they now live in one audited module.
 // (The ConnectRPC transport this module also exports is tree-shaken out here - the
 // graph explorer only uses these four primitives.)
-import { daemonAttach, consumeLiveToken, getLiveToken, fetchSSE, authHeaders, isRemembered, setRemembered, wantsDemo, createDaemonTransport } from "../../lib/daemon";
+import {
+  daemonAttach,
+  consumeLiveToken,
+  getLiveToken,
+  fetchSSE,
+  authHeaders,
+  isRemembered,
+  setRemembered,
+  wantsDemo,
+  createDaemonTransport,
+} from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../../gen/magus/status/v1/status_pb";
-import type { GLink, GNode, GraphFlavor } from "./types.js";
+import {
+  type GLink,
+  type GNode,
+  type GraphFlavor,
+  type GraphPayload,
+  type TargetGraphOutput,
+  endpointId,
+} from "./types.js";
 import { LAYERED_MAX, layoutLayered } from "./layout.js";
 import { toMermaid } from "./mermaid.js";
 import { detectFlavor, targetGraphToNodeLink } from "./target-adapter.js";
@@ -39,10 +70,18 @@ import { attachHelpPopover } from "../../ui/help-popover";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
 // the SSE handler writes for the view code to read, and the PWA File Handling API entry point.
+// LaunchQueue/LaunchParams are the minimal shape of the (not-yet-standard-typed) File Handling
+// API this code touches; a launched file arrives as a FileSystemFileHandle.
+interface LaunchParams {
+  files?: readonly FileSystemFileHandle[];
+}
+interface LaunchQueue {
+  setConsumer(consumer: (params: LaunchParams) => void): void;
+}
 declare global {
   interface Window {
-    _liveAffectedIds?: any;
-    launchQueue?: any;
+    _liveAffectedIds?: Set<string>;
+    launchQueue?: LaunchQueue;
   }
 }
 
@@ -54,13 +93,33 @@ declare global {
 // code-symbol kind introduced by `magus refs`; it lives in lazy @symbols shards
 // and may appear in graphs exported with those shards loaded.
 const KINDS = [
-  "project", "spell", "op", "charm", "target",
-  "module", "method", "import", "function",
-  "file", "doc", "rationale", "diagnostic", "symbol",
+  "project",
+  "spell",
+  "op",
+  "charm",
+  "target",
+  "module",
+  "method",
+  "import",
+  "function",
+  "file",
+  "doc",
+  "rationale",
+  "diagnostic",
+  "symbol",
 ];
 
 // Relations, for grouping edges in the explain card. Order = display order.
-const RELATIONS = ["depends_on", "contains", "imports", "calls", "uses", "references", "documents", "rationale_for"];
+const RELATIONS = [
+  "depends_on",
+  "contains",
+  "imports",
+  "calls",
+  "uses",
+  "references",
+  "documents",
+  "rationale_for",
+];
 
 // ---- element handles (the DOM contract with graph.html) --------------------
 const el = (id: string): HTMLElement | null => document.getElementById(id);
@@ -69,7 +128,7 @@ const el = (id: string): HTMLElement | null => document.getElementById(id);
 // log viewer's idiom. User overrides ride the shared "keymap" cell (one keymap across the console).
 const GRAPH_KEYMAP: Keymap = {
   "graph.search": "/", // focus the node search
-  "graph.fit": "f",    // zoom to fit
+  "graph.fit": "f", // zoom to fit
   "graph.layout": "l", // toggle force / layered layout
 };
 const keymapCell = persisted<Keymap>("keymap", {});
@@ -104,20 +163,23 @@ function resolveDom(): void {
   ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
 }
 
-// Graph is the loaded node-link graph plus the relation index the query grammar reads.
-// The index signature keeps the monolith's incidental scratch fields legal.
+// Graph is the loaded node-link graph plus the byId lookup, blob-URL base, and the
+// lazily-built relation/adjacency indexes the query grammar and draw code read.
 interface Graph {
   nodes: GNode[];
   links: GLink[];
+  byId: Map<string, GNode>;
+  sourceBase: string;
   relIndex?: Map<string, Set<string>>;
-  [k: string]: any;
+  adj?: Map<string, Set<string>>;
 }
 // graph is null until the first load, but every reader runs post-load (boot gates on it),
 // so it is typed non-null - `null as any` keeps the runtime null + the `if (!graph)` guards
 // that remain, without forcing a null-narrow at the ~100 unguarded property accesses.
+// biome-ignore lint/suspicious/noExplicitAny: deliberate escape hatch - graph is runtime-null until the first load, but is typed non-null so the ~100 post-load property accesses need no null-narrowing; the surviving if(!graph) guards keep the pre-load callers safe.
 let graph: Graph = null as any; // { nodes, links }
-let sim: any = null;
-let zoomBehavior: any = null; // the ONE d3-zoom instance (shared so centerOn stays in sync)
+let sim: Simulation<GNode, GLink> | null = null;
+let zoomBehavior: ZoomBehavior<HTMLCanvasElement, unknown> | null = null; // the ONE d3-zoom instance (shared so centerOn stays in sync)
 let transform = zoomIdentity;
 let selected: string | null = null; // selected node id
 let query = ""; // current search string (lowercased)
@@ -183,10 +245,20 @@ const idleAlpha = () => (reducedMotion.matches ? 0 : 0.006);
 // var() chains to concrete colors (the same read the uPlot charts use). The
 // per-kind fills read through --gk-<kind>, aliased in graph.css to the
 // --console-node-<kind> palette.
-let theme: any = null;
-function readTheme() {
+interface Theme {
+  bg: string;
+  text: string;
+  muted: string;
+  border: string;
+  accent: string;
+  font: string;
+  kindColor: Record<string, string>;
+}
+let theme: Theme | null = null;
+function readTheme(): Theme {
   const cs = getComputedStyle(root);
-  const v = (name: string, fallback: string): string => cs.getPropertyValue(name).trim() || fallback;
+  const v = (name: string, fallback: string): string =>
+    cs.getPropertyValue(name).trim() || fallback;
   const kindColor: Record<string, string> = {};
   for (const k of KINDS) kindColor[k] = v("--gk-" + k, "#888");
   theme = {
@@ -198,18 +270,21 @@ function readTheme() {
     font: v("--pf-t--global--font--family--body", "system-ui, sans-serif"),
     kindColor,
   };
+  return theme;
 }
 
 // ---- data loading ----------------------------------------------------------
 // Decode a `#data=` fragment: base64url -> bytes -> gunzip -> JSON. Uses the
 // browser's DecompressionStream (widely supported); the whole path is local, so
 // nothing is fetched and nothing is sent.
-async function decodeFragment(b64url: string): Promise<any> {
+async function decodeFragment(b64url: string): Promise<GraphPayload> {
   const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const stream = new Response(bytes).body!.pipeThrough(new DecompressionStream("gzip"));
+  const body = new Response(bytes).body;
+  if (!body) throw new Error("no response body to decode");
+  const stream = body.pipeThrough(new DecompressionStream("gzip"));
   const text = await new Response(stream).text();
   return JSON.parse(text);
 }
@@ -222,20 +297,28 @@ function hashParams(): Record<string, string> {
     const eq = part.indexOf("=");
     // Keep a bare token (no "=") with an empty value, matching lib/daemon's parseHash,
     // so the shared `#demo` fragment (which has no "=") is detected by wantsDemo.
-    if (eq < 0) { out[part] = ""; continue; }
+    if (eq < 0) {
+      out[part] = "";
+      continue;
+    }
     out[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
   }
   return out;
 }
 
-async function loadGraph() {
+async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   const params = hashParams();
   if (params.data) {
     try {
       setStatus("Decoding local graph...");
       return { data: await decodeFragment(params.data), source: "local" };
-    } catch (e: any) {
-      setStatus("Could not decode the graph in the link (" + e.message + ").", true);
+    } catch (e) {
+      setStatus(
+        "Could not decode the graph in the link (" +
+          (e instanceof Error ? errMessage(e) : String(e)) +
+          ").",
+        true,
+      );
     }
   }
   // #src= fetches the JSON from an address: a loopback server (`magus graph open
@@ -255,11 +338,19 @@ async function loadGraph() {
       const r = await fetch(params.src, { headers: { Accept: "application/json" } });
       if (!r.ok) throw new Error("HTTP " + r.status);
       return { data: await r.json(), source: loopback ? "loopback" : "remote" };
-    } catch (e: any) {
+    } catch (e) {
       let hint = "";
       if (loopback) hint = " Is `magus graph open --serve` still running?";
-      else if (localhostHost) hint = " The policy allows 127.0.0.1/[::1], not the `localhost` hostname - use `magus graph open --serve` or edit the URL to use 127.0.0.1.";
-      setStatus("Could not fetch the graph from that URL (" + e.message + ")." + hint, true);
+      else if (localhostHost)
+        hint =
+          " The policy allows 127.0.0.1/[::1], not the `localhost` hostname - use `magus graph open --serve` or edit the URL to use 127.0.0.1.";
+      setStatus(
+        "Could not fetch the graph from that URL (" +
+          (e instanceof Error ? errMessage(e) : String(e)) +
+          ")." +
+          hint,
+        true,
+      );
     }
   }
   // Fetch the committed demo graph for the demo button (#demo) AND for any content deep link
@@ -277,8 +368,11 @@ async function loadGraph() {
       const r = await fetch(new URL("./graph.json", import.meta.url));
       if (!r.ok) throw new Error("HTTP " + r.status);
       return { data: await r.json(), source: "demo" };
-    } catch (e: any) {
-      setStatus("Could not load the demo graph (" + e.message + ").", true);
+    } catch (e) {
+      setStatus(
+        "Could not load the demo graph (" + (e instanceof Error ? errMessage(e) : String(e)) + ").",
+        true,
+      );
     }
   }
   // No usable fragment: DON'T auto-fetch the demo (that download is wasted on a cold visit).
@@ -298,17 +392,23 @@ function setStatus(msg: string, isError?: boolean) {
 // (drives node radius) and adjacency (drives the explain card + neighbor
 // highlight). Nodes/links carry id references in the JSON; d3-force's forceLink
 // will replace link.source/target with the node objects in place.
-function prepareGraph(raw: any) {
-  const nodes: GNode[] = raw.nodes.map((n: any) => ({ ...n }));
-  const byId = new Map(nodes.map((n) => [n.id, n]));
+function prepareGraph(raw: GraphPayload) {
+  const rawNodes = raw.nodes;
+  if (!rawNodes) throw new Error("graph payload has no nodes");
+  // x/y/fx/fy land on each node from d3-force (or the layered layout) before any read; the
+  // cast asserts that prepared invariant here so the copies satisfy GNode without a per-field seed.
+  const nodes: GNode[] = rawNodes.map((n) => ({ ...n }) as GNode);
+  const byId = new Map(nodes.map((n): [string, GNode] => [n.id, n]));
   const links: GLink[] = (raw.links || raw.edges || [])
-    .filter((e: any) => byId.has(e.source) && byId.has(e.target))
-    .map((e: any) => ({ ...e }));
+    .filter((e) => byId.has(endpointId(e.source)) && byId.has(endpointId(e.target)))
+    .map((e) => ({ ...e }));
   const degree = new Map<string, number>();
   for (const n of nodes) degree.set(n.id, 0);
   for (const e of links) {
-    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
-    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+    const s = endpointId(e.source);
+    const t = endpointId(e.target);
+    degree.set(s, (degree.get(s) ?? 0) + 1);
+    degree.set(t, (degree.get(t) ?? 0) + 1);
   }
   for (const n of nodes) {
     n.degree = degree.get(n.id) || 0;
@@ -321,12 +421,21 @@ function prepareGraph(raw: any) {
   return { nodes, links, byId, sourceBase };
 }
 
+// A row in the explain card's incident-edge list: the relation, the other endpoint id,
+// and the edge confidence.
+interface IncidentRow {
+  rel: string;
+  other: string;
+  confidence?: string;
+}
+
 // Edges touching a node, split by direction, for the explain card.
 function incidentEdges(id: string) {
-  const out: any[] = [], inc: any[] = [];
+  const out: IncidentRow[] = [],
+    inc: IncidentRow[] = [];
   for (const e of graph.links) {
-    const s = e.source.id || e.source;
-    const t = e.target.id || e.target;
+    const s = endpointId(e.source);
+    const t = endpointId(e.target);
     if (s === id) out.push({ rel: e.relation, other: t, confidence: e.confidence });
     if (t === id) inc.push({ rel: e.relation, other: s, confidence: e.confidence });
   }
@@ -339,10 +448,19 @@ function incidentEdges(id: string) {
 function adjacency() {
   if (!graph.adj) {
     const adj = new Map<string, Set<string>>();
-    const add = (a: string, b: string) => { let s = adj.get(a); if (!s) { s = new Set(); adj.set(a, s); } s.add(b); };
+    const add = (a: string, b: string) => {
+      let s = adj.get(a);
+      if (!s) {
+        s = new Set();
+        adj.set(a, s);
+      }
+      s.add(b);
+    };
     for (const e of graph.links) {
-      const s = e.source.id || e.source, t = e.target.id || e.target;
-      add(s, t); add(t, s);
+      const s = endpointId(e.source),
+        t = endpointId(e.target);
+      add(s, t);
+      add(t, s);
     }
     graph.adj = adj;
   }
@@ -361,7 +479,10 @@ function neighborhood(id: string, depth: number) {
     const next = [];
     for (const nid of frontier) {
       for (const nb of adjacency().get(nid) || []) {
-        if (!set.has(nb)) { set.add(nb); next.push(nb); }
+        if (!set.has(nb)) {
+          set.add(nb);
+          next.push(nb);
+        }
       }
     }
     frontier = next;
@@ -375,17 +496,17 @@ function neighborhood(id: string, depth: number) {
 // Returns false (with a status message) when the scale guard fires.
 // Stops the force simulation so no ticks disturb the fixed positions.
 function applyLayeredMode() {
-  const visNodes = matchSet
-    ? graph.nodes.filter((n) => matchSet!.has(n.id))
-    : graph.nodes;
+  const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
       "layered layout is capped at 500 nodes - narrow with a query or the local graph (the CLI applies the same rule to -o mermaid)",
-      true
+      true,
     );
     return false;
   }
-  if (sim) { sim.stop(); }
+  if (sim) {
+    sim?.stop();
+  }
   layoutLayered(visNodes, graph.links);
   draw();
   return true;
@@ -398,11 +519,12 @@ function switchLayout(mode: string) {
   if (btn) {
     const label = btn.querySelector<HTMLElement>(".pf-v6-c-button__text") ?? btn;
     label.textContent = mode === "layered" ? "Force" : "Layered";
-    btn.title = mode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
+    btn.title =
+      mode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
   }
   // Show/hide force sliders: hidden in layered mode.
   const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
-  if (forceControls) forceControls.hidden = (mode === "layered");
+  if (forceControls) forceControls.hidden = mode === "layered";
 
   updateHash();
 
@@ -412,15 +534,25 @@ function switchLayout(mode: string) {
       layoutMode = "force";
       syncLayoutToggle();
       // Clear fixed positions so the sim can move nodes.
-      for (const n of graph.nodes) { n.fx = null; n.fy = null; }
-      if (sim) { sim.alpha(0.5).restart(); } else { startSimulation(); }
+      for (const n of graph.nodes) {
+        n.fx = null;
+        n.fy = null;
+      }
+      if (sim) {
+        sim.alpha(0.5).restart();
+      } else {
+        startSimulation();
+      }
       // Don't write layout=layered to the hash.
       updateHash();
       draw();
     }
   } else {
     // Force mode: clear fixed positions so the simulation takes over.
-    for (const n of graph.nodes) { n.fx = null; n.fy = null; }
+    for (const n of graph.nodes) {
+      n.fx = null;
+      n.fy = null;
+    }
     if (sim) {
       sim.alpha(0.5).restart();
     } else {
@@ -440,13 +572,22 @@ function resizeCanvas() {
 }
 
 function startSimulation() {
-  if (sim) sim.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
+  if (sim) sim?.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
   const { w, h } = resizeCanvas();
-  sim = forceSimulation(graph.nodes as any)
-    .force("link", forceLink(graph.links as any).id((d: any) => d.id).distance(40).strength(0.4))
+  sim = forceSimulation<GNode, GLink>(graph.nodes)
+    .force(
+      "link",
+      forceLink<GNode, GLink>(graph.links)
+        .id((d) => d.id)
+        .distance(40)
+        .strength(0.4),
+    )
     .force("charge", forceManyBody().strength(-60).distanceMax(400))
     .force("center", forceCenter(w / 2, h / 2))
-    .force("collide", forceCollide().radius((d: any) => d.r + 2))
+    .force(
+      "collide",
+      forceCollide<GNode>().radius((d) => d.r + 2),
+    )
     .force("x", forceX(w / 2).strength(0.02))
     .force("y", forceY(h / 2).strength(0.02))
     .alphaTarget(idleAlpha()) // decay toward a small floor, not 0, so it keeps gently moving
@@ -454,7 +595,7 @@ function startSimulation() {
 }
 
 function draw() {
-  if (!theme) readTheme();
+  const th = theme ?? readTheme();
   const dpr = window.devicePixelRatio || 1;
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -470,13 +611,20 @@ function draw() {
   // matching subgraph stands out instead of a full bright web.
   // projectionActive: hide all non-projection nodes/edges from the draw.
   // (Same flag computed below for nodes; computed here first for edges.)
-  const projectionActive = !projectionUnfolded && projectionSet && !query && !focusId && !activeView;
+  // projectionActive is the projection id set when the default projection is showing, else null;
+  // holding the Set (not a bool) lets its truthiness narrow away the nullable in the checks below.
+  const projectionActive: Set<string> | null =
+    !projectionUnfolded && projectionSet && !query && !focusId && !activeView
+      ? projectionSet
+      : null;
   ctx.lineWidth = 0.6 / transform.k;
   for (const e of graph.links) {
-    const s = e.source, t = e.target;
+    // By draw time d3-force has resolved source/target from id strings to the node objects.
+    const s = e.source as GNode,
+      t = e.target as GNode;
     if (s.x == null || t.x == null) continue; // not "!s.x": a node validly at x=0 must still draw
     // Default projection: only draw edges where both endpoints are in the projection.
-    if (projectionActive && !(projectionSet!.has(s.id) && projectionSet!.has(t.id))) continue;
+    if (projectionActive && !(projectionActive.has(s.id) && projectionActive.has(t.id))) continue;
     let active;
     if (highlight) active = s.id === highlight || t.id === highlight;
     else if (matchSet && !projectionActive) {
@@ -485,7 +633,7 @@ function draw() {
       if (!(matchSet.has(s.id) && matchSet.has(t.id))) continue;
       active = true;
     } else active = true;
-    ctx.strokeStyle = active ? theme.muted : theme.border;
+    ctx.strokeStyle = active ? th.muted : th.border;
     ctx.globalAlpha = active ? 0.55 : 0.1;
     // Cycle edges (from the target-graph adapter) get a dashed stroke so they
     // stand out from normal dependency edges. Layout-reversed edges (cycle-break
@@ -513,9 +661,11 @@ function draw() {
       const tipNode = isReversed ? t : s;
       // Direction vector from the other end toward the tip.
       const fromNode = isReversed ? s : t;
-      const dx = tipNode.x - fromNode.x, dy = tipNode.y - fromNode.y;
+      const dx = tipNode.x - fromNode.x,
+        dy = tipNode.y - fromNode.y;
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const ux = dx / len, uy = dy / len;
+      const ux = dx / len,
+        uy = dy / len;
       // Place the tip at the node's edge (radius + small gap).
       const tipR = tipNode.r || 5;
       const tipX = tipNode.x - ux * (tipR + 1 / transform.k);
@@ -523,13 +673,14 @@ function draw() {
       const aLen = 8 / transform.k; // arrowhead length
       const aWid = 4 / transform.k; // arrowhead half-width
       // Perpendicular vector.
-      const px = -uy, py = ux;
+      const px = -uy,
+        py = ux;
       ctx.beginPath();
       ctx.moveTo(tipX, tipY);
       ctx.lineTo(tipX - ux * aLen + px * aWid, tipY - uy * aLen + py * aWid);
       ctx.lineTo(tipX - ux * aLen - px * aWid, tipY - uy * aLen - py * aWid);
       ctx.closePath();
-      ctx.fillStyle = active ? theme.muted : theme.border;
+      ctx.fillStyle = active ? th.muted : th.border;
       ctx.fill();
     }
   }
@@ -541,12 +692,12 @@ function draw() {
   for (const n of graph.nodes) {
     if (n.x == null) continue;
     // Default projection: hide non-project nodes entirely (not dimmed; truly absent).
-    if (projectionActive && !projectionSet!.has(n.id)) continue;
+    if (projectionActive && !projectionActive.has(n.id)) continue;
     let alpha = 1;
     if (highlight) alpha = n.id === highlight || (near && near.has(n.id)) ? 1 : 0.15;
     else if (matchSet && !projectionActive) alpha = matchSet.has(n.id) ? 1 : 0.12;
     ctx.globalAlpha = alpha;
-    const nodeColor = groupColorFor(n) || theme.kindColor[n.kind] || "#888";
+    const nodeColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
     ctx.beginPath();
     ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
     ctx.fillStyle = nodeColor;
@@ -565,7 +716,7 @@ function draw() {
     }
     if (n.id === selected) {
       ctx.lineWidth = 2 / transform.k;
-      ctx.strokeStyle = theme.accent;
+      ctx.strokeStyle = th.accent;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
       ctx.stroke();
@@ -581,30 +732,33 @@ function draw() {
   // the selection, or a zoomed-in view; and culled to the viewport first so the overlap
   // scan stays cheap. Boxes are compared in world units (the same scale as the on-screen
   // 11px text), so the overlap test is zoom-consistent.
-  ctx.fillStyle = theme.text;
-  ctx.font = "500 " + (11 / transform.k) + "px " + theme.font;
+  ctx.fillStyle = th.text;
+  ctx.font = "500 " + 11 / transform.k + "px " + th.font;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  const vw = canvas.width / dpr, vh = canvas.height / dpr; // viewport in CSS px
+  const vw = canvas.width / dpr,
+    vh = canvas.height / dpr; // viewport in CSS px
   const labelPad = 2 / transform.k;
   const lineH = 13 / transform.k; // ~1.2x the 11px font, in world units
   const labelCandidates = [];
   for (const n of graph.nodes) {
     if (n.x == null) continue;
-    if (projectionActive && !projectionSet!.has(n.id)) continue;
+    if (projectionActive && !projectionActive.has(n.id)) continue;
     const show = n.id === highlight || n.degree > 24 || transform.k > 2.2;
     if (!show) continue;
     if (matchSet && !projectionActive && !matchSet.has(n.id) && n.id !== highlight) continue;
     // Viewport cull (CSS px): drop off-screen labels so the greedy scan below only
     // weighs what's actually visible.
-    const cx = transform.x + n.x * transform.k, cy = transform.y + n.y * transform.k;
+    const cx = transform.x + n.x * transform.k,
+      cy = transform.y + n.y * transform.k;
     if (cx < -120 || cx > vw + 20 || cy < -20 || cy > vh + 20) continue;
     labelCandidates.push(n);
   }
   // Priority order: the selected node always wins a slot, then denser (more-connected)
   // nodes, so the labels we keep are the ones carrying the most signal.
-  labelCandidates.sort((a, b) =>
-    ((b.id === highlight ? 1 : 0) - (a.id === highlight ? 1 : 0)) || b.degree - a.degree);
+  labelCandidates.sort(
+    (a, b) => (b.id === highlight ? 1 : 0) - (a.id === highlight ? 1 : 0) || b.degree - a.degree,
+  );
   const placedLabels = [];
   for (const n of labelCandidates) {
     const lx = n.x + n.r + labelPad;
@@ -612,7 +766,10 @@ function draw() {
     const lw = ctx.measureText(n.label).width;
     let clash = false;
     for (const p of placedLabels) {
-      if (lx < p.x + p.w && lx + lw > p.x && ly < p.y + lineH && ly + lineH > p.y) { clash = true; break; }
+      if (lx < p.x + p.w && lx + lw > p.x && ly < p.y + lineH && ly + lineH > p.y) {
+        clash = true;
+        break;
+      }
     }
     if (clash) continue;
     placedLabels.push({ x: lx, y: ly, w: lw });
@@ -622,7 +779,7 @@ function draw() {
 }
 
 // ---- interaction -----------------------------------------------------------
-function nodeAtPointer(event: any) {
+function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
   const rect = canvas.getBoundingClientRect();
   const px = (event.clientX - rect.left - transform.x) / transform.k;
   const py = (event.clientY - rect.top - transform.y) / transform.k;
@@ -630,27 +787,34 @@ function nodeAtPointer(event: any) {
   // the node positions. Fall back to a manual scan when sim is null (shouldn't
   // happen, but be safe).
   if (sim) return sim.find(px, py, 30 / transform.k);
-  let best = null, bestDist = 30 / transform.k;
+  let best = null,
+    bestDist = 30 / transform.k;
   for (const n of graph.nodes) {
     if (n.x == null) continue;
     const d = Math.sqrt((n.x - px) ** 2 + (n.y - py) ** 2);
-    if (d < bestDist) { bestDist = d; best = n; }
+    if (d < bestDist) {
+      bestDist = d;
+      best = n;
+    }
   }
   return best;
 }
 
 function setupZoomDrag() {
-  zoomBehavior = d3zoom()
+  zoomBehavior = d3zoom<HTMLCanvasElement, unknown>()
     .scaleExtent([0.1, 8])
     .filter((event) => !event.button && event.type !== "dblclick")
-    .on("zoom", (event) => { transform = event.transform; draw(); });
+    .on("zoom", (event) => {
+      transform = event.transform;
+      draw();
+    });
   select(canvas).call(zoomBehavior);
 
-  const dragBehavior = d3drag()
-    .subject((event) => nodeAtPointer(event.sourceEvent))
+  const dragBehavior = d3drag<HTMLCanvasElement, unknown, GNode | undefined>()
+    .subject((event) => nodeAtPointer(event.sourceEvent) ?? undefined)
     .on("start", (event) => {
       if (!event.subject) return;
-      if (layoutMode !== "layered" && !event.active) sim.alphaTarget(0.2).restart();
+      if (layoutMode !== "layered" && !event.active) sim?.alphaTarget(0.2).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
     })
@@ -659,7 +823,11 @@ function setupZoomDrag() {
       event.subject.fx = (event.x - transform.x) / transform.k;
       event.subject.fy = (event.y - transform.y) / transform.k;
       // In layered mode the sim is stopped; draw manually on each drag event.
-      if (layoutMode === "layered") { event.subject.x = event.subject.fx; event.subject.y = event.subject.fy; draw(); }
+      if (layoutMode === "layered") {
+        event.subject.x = event.subject.fx;
+        event.subject.y = event.subject.fy;
+        draw();
+      }
     })
     .on("end", (event) => {
       if (!event.subject) return;
@@ -668,11 +836,11 @@ function setupZoomDrag() {
         draw();
         return;
       }
-      if (!event.active) sim.alphaTarget(idleAlpha()); // back to the gentle floor, not a dead stop
+      if (!event.active) sim?.alphaTarget(idleAlpha()); // back to the gentle floor, not a dead stop
       event.subject.fx = null;
       event.subject.fy = null;
     });
-  select(canvas).call(dragBehavior as any);
+  select(canvas).call(dragBehavior);
 
   canvas.addEventListener("click", (event) => {
     const n = nodeAtPointer(event);
@@ -688,19 +856,27 @@ function setupZoomDrag() {
   canvas.addEventListener("mousemove", (event) => {
     const n = nodeAtPointer(event);
     const id = n ? n.id : null;
-    if (id !== hoverId) { hoverId = id; canvas.style.cursor = id ? "pointer" : "grab"; draw(); }
+    if (id !== hoverId) {
+      hoverId = id;
+      canvas.style.cursor = id ? "pointer" : "grab";
+      draw();
+    }
   });
 }
 
 // ---- explain card ----------------------------------------------------------
-function escapeHtml(s: any) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function escapeHtml(s: unknown) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 // safeUrl returns u only if it is an http(s) URL, else null - a graph.json is
 // untrusted input (a visitor can drop any file), so attrs.url must not become a
 // `javascript:` href.
-function safeUrl(u: any) {
+function safeUrl(u: string) {
   try {
     const p = new URL(u, location.href);
     return p.protocol === "http:" || p.protocol === "https:" ? u : null;
@@ -714,24 +890,39 @@ function safeUrl(u: any) {
 function nodeRefHtml(id: string) {
   const n = graph.byId.get(id);
   const label = n ? n.label : id;
-  return '<button type="button" class="console-graph-card__ref" data-id="' + escapeHtml(id) + '">' + escapeHtml(label) + "</button>";
+  return (
+    '<button type="button" class="console-graph-card__ref" data-id="' +
+    escapeHtml(id) +
+    '">' +
+    escapeHtml(label) +
+    "</button>"
+  );
 }
 
-function relSectionHtml(title: any, rows: any) {
+function relSectionHtml(title: string, rows: IncidentRow[]) {
   if (!rows.length) return "";
-  const byRel = new Map();
+  const byRel = new Map<string, IncidentRow[]>();
   for (const r of rows) {
     if (!byRel.has(r.rel)) byRel.set(r.rel, []);
-    byRel.get(r.rel).push(r);
+    byRel.get(r.rel)?.push(r);
   }
   let html = "<dt>" + escapeHtml(title) + "</dt><dd>";
   const rels = [...byRel.keys()].sort((a, b) => RELATIONS.indexOf(a) - RELATIONS.indexOf(b));
   for (const rel of rels) {
     const items = byRel.get(rel);
-    html += '<div class="console-graph-card__relgroup"><span class="console-graph-card__relname">' + escapeHtml(rel) +
-      ' <span class="console-graph-card__relcount">(' + items.length + ")</span></span> ";
-    html += items.slice(0, 40).map((r: any) => nodeRefHtml(r.other)).join(" ");
-    if (items.length > 40) html += " <span class=\"console-graph-card__muted\">+" + (items.length - 40) + " more</span>";
+    if (!items) continue;
+    html +=
+      '<div class="console-graph-card__relgroup"><span class="console-graph-card__relname">' +
+      escapeHtml(rel) +
+      ' <span class="console-graph-card__relcount">(' +
+      items.length +
+      ")</span></span> ";
+    html += items
+      .slice(0, 40)
+      .map((r) => nodeRefHtml(r.other))
+      .join(" ");
+    if (items.length > 40)
+      html += ' <span class="console-graph-card__muted">+' + (items.length - 40) + " more</span>";
     html += "</div>";
   }
   return html + "</dd>";
@@ -739,9 +930,14 @@ function relSectionHtml(title: any, rows: any) {
 
 function renderCard(id: string | null) {
   const n = id ? graph.byId.get(id) : null;
-  if (!n) { cardEl.innerHTML = ""; cardEl.hidden = true; document.body.toggleAttribute("data-has-card", false); return; }
+  if (!n) {
+    cardEl.innerHTML = "";
+    cardEl.hidden = true;
+    document.body.toggleAttribute("data-has-card", false);
+    return;
+  }
   document.body.toggleAttribute("data-has-card", true);
-  const { out, inc } = incidentEdges(id!);
+  const { out, inc } = incidentEdges(n.id);
   let html = "";
   html += '<p class="console-graph-card__section">Node details</p>';
   html += '<header class="console-graph-card__head">';
@@ -763,11 +959,20 @@ function renderCard(id: string | null) {
     // sibling attrs.url case below); fall back to the plain path when it is not an http(s) URL.
     const sourceHref = base ? safeUrl(base + "/" + path) : null;
     html += sourceHref
-      ? '<dt>source</dt><dd><a href="' + escapeHtml(sourceHref) + '" target="_blank" rel="noopener"><code>' + escapeHtml(n.source) + "</code></a></dd>"
+      ? '<dt>source</dt><dd><a href="' +
+        escapeHtml(sourceHref) +
+        '" target="_blank" rel="noopener"><code>' +
+        escapeHtml(n.source) +
+        "</code></a></dd>"
       : "<dt>source</dt><dd><code>" + escapeHtml(n.source) + "</code></dd>";
   }
   if (n.attrs && n.attrs.url && safeUrl(n.attrs.url)) {
-    html += '<dt>reference</dt><dd><a href="' + escapeHtml(n.attrs.url) + '" target="_blank" rel="noopener">' + escapeHtml(n.attrs.url) + "</a></dd>";
+    html +=
+      '<dt>reference</dt><dd><a href="' +
+      escapeHtml(n.attrs.url) +
+      '" target="_blank" rel="noopener">' +
+      escapeHtml(n.attrs.url) +
+      "</a></dd>";
   }
   html += relSectionHtml("outgoing", out);
   html += relSectionHtml("incoming", inc);
@@ -777,11 +982,13 @@ function renderCard(id: string | null) {
   // a link-styled action (not a chunky button) so it sits quietly in the dense card and
   // doesn't compete with the canvas toolbar's Copy as Mermaid; still a <button> because
   // it acts (copies to clipboard) rather than navigates.
-  html += '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__mermaidlink" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="console-graph-card__copyglyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button></div>';
+  html +=
+    '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__mermaidlink" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="console-graph-card__copyglyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button></div>';
   cardEl.innerHTML = html;
   cardEl.hidden = false;
-  cardEl.querySelectorAll<HTMLElement>(".console-graph-card__ref").forEach((b) =>
-    b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true)));
+  cardEl
+    .querySelectorAll<HTMLElement>(".console-graph-card__ref")
+    .forEach((b) => b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true)));
   const mermaidCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__mermaidlink");
   if (mermaidCardBtn) mermaidCardBtn.addEventListener("click", copyAsMermaid);
 }
@@ -796,11 +1003,20 @@ function selectNode(id: string | null, center: boolean) {
       projectionUnfolded = true;
       projectionSet = null;
       // Release any nodes that were parked off-screen by the projection.
-      for (const nd of graph.nodes) { if (nd.fx === -1e6) { nd.fx = null; nd.fy = null; } }
+      for (const nd of graph.nodes) {
+        if (nd.fx === -1e6) {
+          nd.fx = null;
+          nd.fy = null;
+        }
+      }
       const projectNeighborhood = new Set([id]);
       for (const e of graph.links) {
-        const s = e.source.id || e.source, t = e.target.id || e.target;
-        if ((s === id && e.relation === "contains") || (t === id && e.relation === "depends_on" && s === id)) {
+        const s = endpointId(e.source),
+          t = endpointId(e.target);
+        if (
+          (s === id && e.relation === "contains") ||
+          (t === id && e.relation === "depends_on" && s === id)
+        ) {
           projectNeighborhood.add(t);
         }
         if (t === id && e.relation === "contains") projectNeighborhood.add(s);
@@ -850,7 +1066,9 @@ function centerOn(id: string) {
   const n = graph.byId.get(id);
   if (!n || n.x == null || !zoomBehavior) return;
   const { w, h } = resizeCanvas();
-  transform = zoomIdentity.translate(w / 2 - n.x * transform.k, h / 2 - n.y * transform.k).scale(transform.k);
+  transform = zoomIdentity
+    .translate(w / 2 - n.x * transform.k, h / 2 - n.y * transform.k)
+    .scale(transform.k);
   // Drive the REAL zoom behavior (not a throwaway d3zoom()) so a later pan/zoom
   // continues from here instead of snapping back to a stale internal transform.
   select(canvas).call(zoomBehavior.transform, transform);
@@ -858,18 +1076,27 @@ function centerOn(id: string) {
 
 // fitView frames a set of nodes (or all when ids is null) in the viewport - the
 // zoom-to-fit / reset-view action. Reuses the shared zoomBehavior + transform.
-function fitView(ids: any) {
+function fitView(ids: Set<string> | null) {
   const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
   if (!pts.length || !zoomBehavior) return;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
   for (const n of pts) {
-    minX = Math.min(minX, n.x - n.r); maxX = Math.max(maxX, n.x + n.r);
-    minY = Math.min(minY, n.y - n.r); maxY = Math.max(maxY, n.y + n.r);
+    minX = Math.min(minX, n.x - n.r);
+    maxX = Math.max(maxX, n.x + n.r);
+    minY = Math.min(minY, n.y - n.r);
+    maxY = Math.max(maxY, n.y + n.r);
   }
   const { w, h } = resizeCanvas();
   const pad = 48;
-  const k = Math.max(0.1, Math.min(8, Math.min((w - 2 * pad) / (maxX - minX || 1), (h - 2 * pad) / (maxY - minY || 1))));
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const k = Math.max(
+    0.1,
+    Math.min(8, Math.min((w - 2 * pad) / (maxX - minX || 1), (h - 2 * pad) / (maxY - minY || 1))),
+  );
+  const cx = (minX + maxX) / 2,
+    cy = (minY + maxY) / 2;
   transform = zoomIdentity.translate(w / 2 - cx * k, h / 2 - cy * k).scale(k);
   select(canvas).call(zoomBehavior.transform, transform);
   draw();
@@ -880,7 +1107,8 @@ function fitView(ids: any) {
 // dim-non-matches / hide-outside-edges rendering isolates the neighborhood. It
 // also selects the node (explain card) and fits the view.
 function focusNode(id: string, depth: number) {
-  if (!graph.byId.has(id)) return;
+  const focusNodeObj = graph.byId.get(id);
+  if (!focusNodeObj) return;
   focusId = id;
   focusDepth = depth;
   matchSet = neighborhood(id, depth);
@@ -891,8 +1119,17 @@ function focusNode(id: string, depth: number) {
   setListExpanded(true);
   renderList();
   syncListSelection();
-  const n = graph.byId.get(id);
-  setStatus("Local graph around " + n.label + " - " + matchSet.size + " nodes within " + depth + " hop" + (depth === 1 ? "" : "s") + ". Press Esc to clear, [ / ] to change depth.");
+  setStatus(
+    "Local graph around " +
+      focusNodeObj.label +
+      " - " +
+      matchSet.size +
+      " nodes within " +
+      depth +
+      " hop" +
+      (depth === 1 ? "" : "s") +
+      ". Press Esc to clear, [ / ] to change depth.",
+  );
   // Re-run layered layout on the new (local) subset when in layered mode.
   if (layoutMode === "layered") {
     for (const e of graph.links) delete e.layoutReversed;
@@ -914,8 +1151,12 @@ function clearFocusOrQuery() {
   setStatus("");
   // Clear any active view.
   if (activeView) {
-    activeView = null; viewNode = null; viewNodeTo = null;
-    document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => b.removeAttribute("data-active"));
+    activeView = null;
+    viewNode = null;
+    viewNodeTo = null;
+    document
+      .querySelectorAll<HTMLElement>(".console-graph-views__chip")
+      .forEach((b) => b.removeAttribute("data-active"));
     renderViewCommand(null, null, null);
   }
   renderList();
@@ -938,9 +1179,14 @@ function applyLens(name: string) {
 // based on whether the current graph has DurationMs timing data. Called after
 // each graph load (boot and replaceGraph) so the button tracks the data.
 function syncConditionalViews() {
-  const hasDuration = graph && graph.nodes.some((n) =>
-    (n.DurationMs || 0) > 0 || (n.duration_ms || 0) > 0 || (Number((n.attrs && n.attrs.DurationMs) || 0) > 0)
-  );
+  const hasDuration =
+    graph &&
+    graph.nodes.some(
+      (n) =>
+        (n.DurationMs || 0) > 0 ||
+        (n.duration_ms || 0) > 0 ||
+        Number((n.attrs && n.attrs.DurationMs) || 0) > 0,
+    );
   document.querySelectorAll<HTMLElement>("[data-view='critical']").forEach((btn) => {
     btn.toggleAttribute("data-conditional", !hasDuration);
   });
@@ -950,15 +1196,32 @@ function syncConditionalViews() {
 // Each group paints every node matching a query one chosen color, ON TOP of the
 // kind palette - so several groups can coexist (unlike the single match set). The
 // groups reuse the same query grammar (parseQuery/termMatches) as the filter box.
-const groups: any[] = []; // { query, color, terms }
+// A parsed query term: an optional field filter, the lowercased value, and whether a
+// leading `-` negated it.
+interface QueryTerm {
+  field: string | null;
+  value: string;
+  negated: boolean;
+}
 
-function groupColorFor(node: any) {
+// A color group paints every node its query (or nodeSet) matches one color, layered
+// over the kind palette. nodeSet is set by presets that match ids directly.
+interface ColorGroup {
+  query: string;
+  color: string;
+  terms: QueryTerm[];
+  nodeSet?: Set<string>;
+}
+
+const groups: ColorGroup[] = []; // { query, color, terms }
+
+function groupColorFor(node: GNode) {
   for (const g of groups) {
     // Groups with a nodeSet (e.g. depth preset) match directly by id, bypassing
     // the query grammar so a fake `layer:N` string doesn't silently match nothing.
     if (g.nodeSet) {
       if (g.nodeSet.has(node.id)) return g.color;
-    } else if (g.terms.length && g.terms.every((t: any) => termMatches(node, t))) {
+    } else if (g.terms.length && g.terms.every((t) => termMatches(node, t))) {
       return g.color;
     }
   }
@@ -969,7 +1232,11 @@ function addGroup() {
   const q = (el("group-query") as HTMLInputElement).value.trim();
   if (!q) return;
   if (!graph.relIndex) graph.relIndex = relationIndex();
-  groups.push({ query: q, color: (el("group-color") as HTMLInputElement).value, terms: parseQuery(q) });
+  groups.push({
+    query: q,
+    color: (el("group-color") as HTMLInputElement).value,
+    terms: parseQuery(q),
+  });
   (el("group-query") as HTMLInputElement).value = "";
   renderGroups();
   draw();
@@ -977,13 +1244,26 @@ function addGroup() {
 
 function renderGroups() {
   const list = el("group-list") as HTMLElement;
-  list.innerHTML = groups.map((g, i) =>
-    '<span class="console-graph-colorgroup__chip"><span class="console-graph-colorgroup__swatch" style="background:' + escapeHtml(g.color) + '"></span>' +
-    escapeHtml(g.query) +
-    '<button type="button" class="pf-v6-c-button pf-m-plain pf-m-small console-graph-colorgroup__remove" data-i="' + i + '" aria-label="Remove group">' +
-    '<span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button></span>').join("");
+  list.innerHTML = groups
+    .map(
+      (g, i) =>
+        '<span class="console-graph-colorgroup__chip"><span class="console-graph-colorgroup__swatch" style="background:' +
+        escapeHtml(g.color) +
+        '"></span>' +
+        escapeHtml(g.query) +
+        '<button type="button" class="pf-v6-c-button pf-m-plain pf-m-small console-graph-colorgroup__remove" data-i="' +
+        i +
+        '" aria-label="Remove group">' +
+        '<span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button></span>',
+    )
+    .join("");
   list.querySelectorAll<HTMLElement>(".console-graph-colorgroup__remove").forEach((b) =>
-    b.addEventListener("click", () => { groups.splice(+b.dataset.i!, 1); renderGroups(); draw(); }));
+    b.addEventListener("click", () => {
+      groups.splice(Number(b.dataset.i), 1);
+      renderGroups();
+      draw();
+    }),
+  );
 }
 
 // ---- query grammar (the browser twin of `magus query`) ---------------------
@@ -999,16 +1279,22 @@ function renderGroups() {
 const QUERY_FIELDS = ["kind", "project", "relation", "id", "symbol"];
 
 function parseQuery(str: string) {
-  const terms = [];
+  const terms: QueryTerm[] = [];
   let i = 0;
   while (i < str.length) {
     while (i < str.length && /\s/.test(str[i])) i++;
     if (i >= str.length) break;
     let negated = false;
-    if (str[i] === "-") { negated = true; i++; }
-    let field = null;
+    if (str[i] === "-") {
+      negated = true;
+      i++;
+    }
+    let field: string | null = null;
     const fm = /^([a-zA-Z]+):/.exec(str.slice(i));
-    if (fm && QUERY_FIELDS.includes(fm[1].toLowerCase())) { field = fm[1].toLowerCase(); i += fm[0].length; }
+    if (fm && QUERY_FIELDS.includes(fm[1].toLowerCase())) {
+      field = fm[1].toLowerCase();
+      i += fm[0].length;
+    }
     let value;
     if (str[i] === '"') {
       const end = str.indexOf('"', i + 1);
@@ -1027,43 +1313,65 @@ function parseQuery(str: string) {
 
 // relIndex: node id -> Set of relations of edges touching it (for relation:).
 function relationIndex() {
-  const idx = new Map();
-  const add = (id: string, rel: string) => { let s = idx.get(id); if (!s) { s = new Set(); idx.set(id, s); } s.add(rel); };
+  const idx = new Map<string, Set<string>>();
+  const add = (id: string, rel: string) => {
+    let s = idx.get(id);
+    if (!s) {
+      s = new Set<string>();
+      idx.set(id, s);
+    }
+    s.add(rel);
+  };
   for (const e of graph.links) {
-    add(e.source.id || e.source, e.relation);
-    add(e.target.id || e.target, e.relation);
+    add(endpointId(e.source), e.relation);
+    add(endpointId(e.target), e.relation);
   }
   return idx;
 }
 
-function termMatches(node: any, term: any) {
+function termMatches(node: GNode, term: QueryTerm) {
   const v = term.value;
   let hit;
   switch (term.field) {
-    case "kind": hit = node.kind === v; break;
+    case "kind":
+      hit = node.kind === v;
+      break;
     case "project":
       // Knowledge-graph ids: project nodes are "project:<name>", target nodes
       // are "target:<project>:<name>". Target-graph ids: project nodes are the
       // raw path (e.g. "."), target/spell nodes carry attrs.project = path.
-      hit = node.id === "project:" + v ||
+      hit =
+        node.id === "project:" + v ||
         (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":")) ||
         (node.attrs && (node.attrs.project || "").toLowerCase() === v) ||
         node.id.toLowerCase() === v;
       break;
-    case "relation": hit = graph.relIndex!.has(node.id) && graph.relIndex!.get(node.id)!.has(v); break;
-    case "id": hit = node.id.toLowerCase().includes(v); break;
+    case "relation": {
+      // relIndex is always built by the callers that run relation queries; treat an
+      // absent index as no match rather than asserting it non-null.
+      const rel = graph.relIndex;
+      hit = !!rel && (rel.get(node.id)?.has(v) ?? false);
+      break;
+    }
+    case "id":
+      hit = node.id.toLowerCase().includes(v);
+      break;
     // symbol: prefix targets SCIP code-symbol nodes by their symbol: id prefix.
     // The CLI treats `symbol:` as free text (no typed field); the box accepts a superset
     // syntactically (restricts to kind=symbol + id substring), but the CLI accepts the query.
-    case "symbol": hit = node.kind === "symbol" && node.id.toLowerCase().includes("symbol:" + v); break;
+    case "symbol":
+      hit = node.kind === "symbol" && node.id.toLowerCase().includes("symbol:" + v);
+      break;
     default:
-      hit = node.id.toLowerCase().includes(v) || node.label.toLowerCase().includes(v) ||
+      hit =
+        node.id.toLowerCase().includes(v) ||
+        node.label.toLowerCase().includes(v) ||
         (node.doc && node.doc.toLowerCase().includes(v));
   }
   return term.negated ? !hit : hit;
 }
 
-function applyQuery(q: any) {
+function applyQuery(q: string) {
   focusId = null; // typing a query exits focus/lens/view mode
   // Typing a query unfolds the projection (user is exploring details).
   if (!projectionUnfolded && q.trim()) {
@@ -1074,14 +1382,19 @@ function applyQuery(q: any) {
   }
   // Clear active view when query is typed.
   if (activeView) {
-    activeView = null; viewNode = null; viewNodeTo = null;
-    document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => b.removeAttribute("data-active"));
+    activeView = null;
+    viewNode = null;
+    viewNodeTo = null;
+    document
+      .querySelectorAll<HTMLElement>(".console-graph-views__chip")
+      .forEach((b) => b.removeAttribute("data-active"));
     renderViewCommand(null, null, null);
   }
   query = q.trim();
   const terms = query ? parseQuery(query) : [];
-  if (!terms.length) { matchSet = null; }
-  else {
+  if (!terms.length) {
+    matchSet = null;
+  } else {
     if (!graph.relIndex) graph.relIndex = relationIndex();
     matchSet = new Set();
     for (const n of graph.nodes) {
@@ -1100,8 +1413,11 @@ function applyQuery(q: any) {
       layoutMode = "force";
       syncLayoutToggle();
       // Clear pinned positions so the force sim can move all nodes.
-      for (const n of graph.nodes) { n.fx = null; n.fy = null; }
-      if (sim) sim.alpha(0.3).restart();
+      for (const n of graph.nodes) {
+        n.fx = null;
+        n.fy = null;
+      }
+      if (sim) sim?.alpha(0.3).restart();
     }
     return;
   }
@@ -1131,9 +1447,9 @@ function positionNodeListOverlay() {
   if (left + w > window.innerWidth - margin) left = window.innerWidth - margin - w;
   if (left < margin) left = margin;
   listEl.style.left = left + "px";
-  listEl.style.top = (r.bottom + 6) + "px";
+  listEl.style.top = r.bottom + 6 + "px";
 }
-function setListExpanded(v: any) {
+function setListExpanded(v: boolean) {
   listExpanded = v;
   listEl.hidden = !v;
   const btn = el("list-toggle");
@@ -1144,30 +1460,53 @@ function setListExpanded(v: any) {
 // The node list is the accessible twin of the canvas: it always reflects the
 // current query (or the highest-degree nodes when there is no query).
 function renderList() {
-  const pool = matchSet
-    ? graph.nodes.filter((n) => matchSet!.has(n.id))
-    : graph.nodes.slice();
+  const ms = matchSet;
+  const pool = ms ? graph.nodes.filter((n) => ms.has(n.id)) : graph.nodes.slice();
   pool.sort((a, b) => b.degree - a.degree || a.label.localeCompare(b.label));
   const shown = pool.slice(0, 300);
   countEl.textContent = matchSet
     ? matchSet.size + " match" + (matchSet.size === 1 ? "" : "es")
-    : graph.nodes.length + " node" + (graph.nodes.length === 1 ? "" : "s") +
-      ", " + graph.links.length + " edge" + (graph.links.length === 1 ? "" : "s");
+    : graph.nodes.length +
+      " node" +
+      (graph.nodes.length === 1 ? "" : "s") +
+      ", " +
+      graph.links.length +
+      " edge" +
+      (graph.links.length === 1 ? "" : "s");
   // Compact rows: a kind-colored dot (keyed to the legend) + the label. The kind
   // name lives in the title tooltip rather than a column, to keep rows dense.
-  listEl.innerHTML = shown.map((n) =>
-    '<li><button type="button" class="console-graph-nodelist__pill" data-id="' + escapeHtml(n.id) + '"' +
-    ' title="' + escapeHtml(n.kind + " · " + n.label) + '"' +
-    (n.id === selected ? ' aria-current="true"' : "") + ">" +
-    '<span class="console-graph-kinddot" data-kind="' + escapeHtml(n.kind) + '"></span>' +
-    "<span class=\"console-graph-nodelist__label\">" + escapeHtml(n.label) + "</span>" +
-    "</button></li>").join("");
+  listEl.innerHTML = shown
+    .map(
+      (n) =>
+        '<li><button type="button" class="console-graph-nodelist__pill" data-id="' +
+        escapeHtml(n.id) +
+        '"' +
+        ' title="' +
+        escapeHtml(n.kind + " · " + n.label) +
+        '"' +
+        (n.id === selected ? ' aria-current="true"' : "") +
+        ">" +
+        '<span class="console-graph-kinddot" data-kind="' +
+        escapeHtml(n.kind) +
+        '"></span>' +
+        '<span class="console-graph-nodelist__label">' +
+        escapeHtml(n.label) +
+        "</span>" +
+        "</button></li>",
+    )
+    .join("");
   if (pool.length > shown.length) {
-    listEl.innerHTML += '<li class="console-graph-nodelist__more">+' + (pool.length - shown.length) + " more (refine the search)</li>";
+    listEl.innerHTML +=
+      '<li class="console-graph-nodelist__more">+' +
+      (pool.length - shown.length) +
+      " more (refine the search)</li>";
   }
   listEl.querySelectorAll<HTMLElement>(".console-graph-nodelist__pill").forEach((b) => {
     b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true));
-    b.addEventListener("dblclick", () => focusNode(b.dataset.id!, focusDepth));
+    b.addEventListener("dblclick", () => {
+      const id = b.dataset.id;
+      if (id) focusNode(id, focusDepth);
+    });
   });
 }
 
@@ -1183,10 +1522,23 @@ function renderLegend() {
   for (const n of graph.nodes) counts.set(n.kind, (counts.get(n.kind) || 0) + 1);
   // Each legend row is a button that filters to kind:<k> (the CLI query it maps to),
   // so clicking a color isolates that kind - a quick, Obsidian-style filter.
-  legendEl.innerHTML = KINDS.filter((k) => counts.has(k)).map((k) =>
-    '<li><button type="button" class="console-graph-legend__row" data-kind="' + escapeHtml(k) + '" title="Filter to kind:' + escapeHtml(k) + '">' +
-    '<span class="console-graph-kinddot" data-kind="' + escapeHtml(k) + '"></span>' +
-    escapeHtml(k) + ' <span class="console-graph-legend__count">' + counts.get(k) + "</span></button></li>").join("");
+  legendEl.innerHTML = KINDS.filter((k) => counts.has(k))
+    .map(
+      (k) =>
+        '<li><button type="button" class="console-graph-legend__row" data-kind="' +
+        escapeHtml(k) +
+        '" title="Filter to kind:' +
+        escapeHtml(k) +
+        '">' +
+        '<span class="console-graph-kinddot" data-kind="' +
+        escapeHtml(k) +
+        '"></span>' +
+        escapeHtml(k) +
+        ' <span class="console-graph-legend__count">' +
+        counts.get(k) +
+        "</span></button></li>",
+    )
+    .join("");
   legendEl.querySelectorAll<HTMLElement>(".console-graph-legend__row").forEach((b) =>
     b.addEventListener("click", () => {
       const q = "kind:" + b.dataset.kind;
@@ -1194,7 +1546,8 @@ function renderLegend() {
       const next = query === q ? "" : q;
       searchEl.value = next;
       applyQuery(next);
-    }));
+    }),
+  );
 }
 
 // Reflect selection, query, layout mode, active view, and color preset in the
@@ -1216,7 +1569,7 @@ function updateHash() {
   }
   // Only serialize the layout key when it differs from the flavor default, so
   // clean URLs stay clean. (targets -> layered default; knowledge -> force default).
-  const defaultLayout = (graphFlavor === "targets") ? "layered" : "force";
+  const defaultLayout = graphFlavor === "targets" ? "layered" : "force";
   if (layoutMode !== defaultLayout) parts.push("layout=" + layoutMode);
   if (activePreset) parts.push("preset=" + encodeURIComponent(activePreset));
   const next = parts.length ? "#" + parts.join("&") : "#";
@@ -1232,7 +1585,10 @@ function applyDeepLinks() {
     activateView(params.view, params.node || null, params.to || null);
     return; // view takes precedence over q/node
   }
-  if (params.q) { searchEl.value = params.q; applyQuery(params.q); }
+  if (params.q) {
+    searchEl.value = params.q;
+    applyQuery(params.q);
+  }
   if (params.node && graph.byId.has(params.node)) selectNode(params.node, true);
   // Restore layout mode from the fragment (#layout=force or #layout=layered).
   // Only switch when the value is valid and differs from the current mode.
@@ -1248,7 +1604,7 @@ function applyDeepLinks() {
 
 // Swap in a graph loaded from a local file (the Open-file button and drag-drop
 // share this). Resets view state and restarts the layout.
-function replaceGraph(data: any, statusMsg: string) {
+function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string) {
   // A locally opened/dropped file supersedes whatever provenance badge was
   // showing for the graph that loaded at boot.
   updateSnapshotBadge(null);
@@ -1260,14 +1616,22 @@ function replaceGraph(data: any, statusMsg: string) {
   // path is unchanged; the targets path is converted client-side.
   const flavor = detectFlavor(data);
   graphFlavor = flavor;
-  let raw = data;
+  let raw: GraphPayload = data as GraphPayload;
   if (flavor === "targets") {
-    const nl = targetGraphToNodeLink(data);
+    const tg = data as TargetGraphOutput;
+    const nl = targetGraphToNodeLink(tg);
     raw = { nodes: nl.nodes, links: nl.links };
-    const nProjects = (data.projects || []).length;
+    const nProjects = (tg.projects || []).length;
     const nTargets = nl.nodes.filter((n) => n.kind === "target").length;
-    statusMsg = "target graph - " + nProjects + " project" + (nProjects === 1 ? "" : "s") +
-      " - " + nTargets + " target" + (nTargets === 1 ? "" : "s") +
+    statusMsg =
+      "target graph - " +
+      nProjects +
+      " project" +
+      (nProjects === 1 ? "" : "s") +
+      " - " +
+      nTargets +
+      " target" +
+      (nTargets === 1 ? "" : "s") +
       (nl.cycleWarnings.length ? "; " + nl.cycleWarnings.join("; ") : "");
   }
   graph = prepareGraph(raw);
@@ -1279,18 +1643,27 @@ function replaceGraph(data: any, statusMsg: string) {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   // Reset Phase 5 view/projection state.
-  activeView = null; viewNode = null; viewNodeTo = null;
+  activeView = null;
+  viewNode = null;
+  viewNodeTo = null;
   activePreset = null;
   groups.splice(0, groups.length);
   projectionUnfolded = false;
   projectionSet = null;
-  document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => b.removeAttribute("data-active"));
-  document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => b.removeAttribute("data-active"));
+  document
+    .querySelectorAll<HTMLElement>(".console-graph-views__chip")
+    .forEach((b) => b.removeAttribute("data-active"));
+  document
+    .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
+    .forEach((b) => b.removeAttribute("data-active"));
   renderViewCommand(null, null, null);
   // Apply projection: show only projects by default if the count is small.
   const ps = buildProjectionSet();
-  if (ps) { projectionUnfolded = false; projectionSet = ps; matchSet = new Set(ps); }
-  else projectionUnfolded = true;
+  if (ps) {
+    projectionUnfolded = false;
+    projectionSet = ps;
+    matchSet = new Set(ps);
+  } else projectionUnfolded = true;
   const ub = el("projection-unfold-btn");
   if (ub) ub.hidden = projectionUnfolded;
   renderCard(null);
@@ -1303,14 +1676,17 @@ function replaceGraph(data: any, statusMsg: string) {
   // Default layout mode per flavor: targets -> layered, knowledge -> force.
   // Check if the URL fragment requests a specific mode (user override persists).
   const fragParams = hashParams();
-  const requestedLayout = (fragParams.layout === "force" || fragParams.layout === "layered")
-    ? fragParams.layout
-    : (flavor === "targets" ? "layered" : "force");
+  const requestedLayout =
+    fragParams.layout === "force" || fragParams.layout === "layered"
+      ? fragParams.layout
+      : flavor === "targets"
+        ? "layered"
+        : "force";
   layoutMode = requestedLayout;
   syncLayoutToggle();
   if (layoutMode === "layered") {
     startSimulation(); // initializes node positions even if we stop it
-    sim.stop();
+    sim?.stop();
     if (!applyLayeredMode()) {
       // Scale guard fired; fall back to force.
       layoutMode = "force";
@@ -1323,7 +1699,12 @@ function replaceGraph(data: any, statusMsg: string) {
   // Park hidden nodes after the sim is built (projection reduces the visible set).
   if (!projectionUnfolded && projectionSet) {
     for (const n of graph.nodes) {
-      if (!projectionSet.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
+      if (!projectionSet.has(n.id)) {
+        n.fx = -1e6;
+        n.fy = -1e6;
+        n.x = -1e6;
+        n.y = -1e6;
+      }
     }
   }
   draw();
@@ -1337,10 +1718,13 @@ function syncLayoutToggle() {
   if (btn) {
     const label = btn.querySelector<HTMLElement>(".pf-v6-c-button__text") ?? btn;
     label.textContent = layoutMode === "layered" ? "Force" : "Layered";
-    btn.title = layoutMode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
+    btn.title =
+      layoutMode === "layered"
+        ? "Switch to force-directed simulation"
+        : "Switch to layered DAG layout";
   }
   const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
-  if (forceControls) forceControls.hidden = (layoutMode === "layered");
+  if (forceControls) forceControls.hidden = layoutMode === "layered";
 }
 
 // loadDemoGraph swaps the committed demo graph in place via renderLoadedGraph. NOT a page reload: the SPA
@@ -1358,8 +1742,8 @@ async function loadDemoGraph(): Promise<void> {
     // zero viewport and the graph lands cramped in a corner.
     await waitForCanvasWidth();
     renderLoadedGraph({ data, source: "demo" });
-  } catch (e: any) {
-    setStatus("Could not load the demo graph (" + e.message + ").", true);
+  } catch (e) {
+    setStatus("Could not load the demo graph (" + errMessage(e) + ").", true);
   }
 }
 
@@ -1375,18 +1759,20 @@ function waitForCanvasWidth(): Promise<void> {
   });
 }
 
-async function readGraphFile(file: any) {
+async function readGraphFile(file: File | undefined) {
   if (!file) return;
   // A user graph supersedes the empty state: dismiss it if it's still up.
   const empty = el("graph-empty-state");
   if (empty) empty.hidden = true;
   try {
-    replaceGraph(JSON.parse(await file.text()), "Loaded " + file.name + " (local file; it stays on your machine).");
-  } catch (e: any) {
-    setStatus("Could not read " + file.name + ": " + e.message, true);
+    replaceGraph(
+      JSON.parse(await file.text()),
+      "Loaded " + file.name + " (local file; it stays on your machine).",
+    );
+  } catch (e) {
+    setStatus("Could not read " + file.name + ": " + errMessage(e), true);
   }
 }
-
 
 // ---- Phase 5: default projection -------------------------------------------
 // On first load with no fragment directives, show only project nodes + project
@@ -1400,14 +1786,20 @@ function buildProjectionSet() {
   // Build the set of project ids + any node clicked open.
   const projectIds = new Set(graph.nodes.filter((n) => n.kind === "project").map((n) => n.id));
   if (projectIds.size === 0) return null; // no project nodes; show everything
-  if (projectIds.size > 50) return null;  // already small; show everything
+  if (projectIds.size > 50) return null; // already small; show everything
   return projectIds;
 }
 
 function updateProjectionStatus() {
   if (!projectionSet || projectionUnfolded) return;
   const n = projectionSet.size;
-  setStatus("Showing " + n + " project" + (n === 1 ? "" : "s") + ". Click a project node to expand, or Show full graph.");
+  setStatus(
+    "Showing " +
+      n +
+      " project" +
+      (n === 1 ? "" : "s") +
+      ". Click a project node to expand, or Show full graph.",
+  );
 }
 
 function unfoldProjection() {
@@ -1419,7 +1811,10 @@ function unfoldProjection() {
   // Release all parked nodes so the force sim (or layered layout) can place them.
   if (graph) {
     for (const n of graph.nodes) {
-      if (n.fx === -1e6) { n.fx = null; n.fy = null; }
+      if (n.fx === -1e6) {
+        n.fx = null;
+        n.fy = null;
+      }
     }
   }
   renderList();
@@ -1427,7 +1822,10 @@ function unfoldProjection() {
   if (btn) btn.hidden = true;
   setStatus("");
   updateHash();
-  if (layoutMode === "layered") { for (const e of graph.links) delete e.layoutReversed; applyLayeredMode(); } else draw();
+  if (layoutMode === "layered") {
+    for (const e of graph.links) delete e.layoutReversed;
+    applyLayeredMode();
+  } else draw();
 }
 
 // ---- Phase 5: views ---------------------------------------------------------
@@ -1439,11 +1837,15 @@ function transitiveDependents(nodeId: string) {
   // Build reverse adjacency for depends_on edges only.
   const revAdj = new Map();
   for (const e of graph.links) {
-    const s = e.source.id || e.source;
-    const t = e.target.id || e.target;
+    const s = endpointId(e.source);
+    const t = endpointId(e.target);
     if (e.relation !== "depends_on") continue;
     // In depends_on: source depends on target. Reverse: target -> source (dependents).
-    let set = revAdj.get(t); if (!set) { set = new Set(); revAdj.set(t, set); }
+    let set = revAdj.get(t);
+    if (!set) {
+      set = new Set();
+      revAdj.set(t, set);
+    }
     set.add(s);
   }
   const visited = new Set([nodeId]);
@@ -1452,7 +1854,10 @@ function transitiveDependents(nodeId: string) {
     const next = [];
     for (const id of frontier) {
       for (const dep of revAdj.get(id) || []) {
-        if (!visited.has(dep)) { visited.add(dep); next.push(dep); }
+        if (!visited.has(dep)) {
+          visited.add(dep);
+          next.push(dep);
+        }
       }
     }
     frontier = next;
@@ -1464,17 +1869,30 @@ function transitiveDependents(nodeId: string) {
 function shortestDependsOnPath(fromId: string, toId: string) {
   if (fromId === toId) return [fromId];
   // Build adjacency for depends_on (directed).
-  const fwdAdj = new Map(), bwdAdj = new Map();
+  const fwdAdj = new Map(),
+    bwdAdj = new Map();
   for (const e of graph.links) {
-    const s = e.source.id || e.source, t = e.target.id || e.target;
+    const s = endpointId(e.source),
+      t = endpointId(e.target);
     if (e.relation !== "depends_on") continue;
-    let sf = fwdAdj.get(s); if (!sf) { sf = new Set(); fwdAdj.set(s, sf); } sf.add(t);
-    let sb = bwdAdj.get(t); if (!sb) { sb = new Set(); bwdAdj.set(t, sb); } sb.add(s);
+    let sf = fwdAdj.get(s);
+    if (!sf) {
+      sf = new Set();
+      fwdAdj.set(s, sf);
+    }
+    sf.add(t);
+    let sb = bwdAdj.get(t);
+    if (!sb) {
+      sb = new Set();
+      bwdAdj.set(t, sb);
+    }
+    sb.add(s);
   }
   // BFS from fromId (forward), also from toId (backward). Meet in middle.
   const fwd = new Map([[fromId, [fromId]]]);
   const bwd = new Map([[toId, [toId]]]);
-  let fQueue = [fromId], bQueue = [toId];
+  let fQueue = [fromId],
+    bQueue = [toId];
   for (let step = 0; step < graph.nodes.length; step++) {
     // Advance the smaller frontier first.
     if (!fQueue.length && !bQueue.length) break;
@@ -1482,8 +1900,12 @@ function shortestDependsOnPath(fromId: string, toId: string) {
       const next = [];
       for (const n of fQueue) {
         for (const nb of fwdAdj.get(n) || []) {
-          if (!fwd.has(nb)) { fwd.set(nb, [...fwd.get(n)!, nb]); next.push(nb); }
-          if (bwd.has(nb)) return [...fwd.get(nb)!.slice(0, -1), ...bwd.get(nb)!.slice().reverse()];
+          if (!fwd.has(nb)) {
+            fwd.set(nb, [...(fwd.get(n) ?? []), nb]);
+            next.push(nb);
+          }
+          if (bwd.has(nb))
+            return [...(fwd.get(nb) ?? []).slice(0, -1), ...(bwd.get(nb) ?? []).slice().reverse()];
         }
       }
       fQueue = next;
@@ -1492,10 +1914,14 @@ function shortestDependsOnPath(fromId: string, toId: string) {
       const next = [];
       for (const n of bQueue) {
         for (const nb of bwdAdj.get(n) || []) {
-          if (!bwd.has(nb)) { bwd.set(nb, [...bwd.get(n)!, nb]); next.push(nb); }
+          if (!bwd.has(nb)) {
+            bwd.set(nb, [...(bwd.get(n) ?? []), nb]);
+            next.push(nb);
+          }
           // Drop the meet node (nb) from the forward path to avoid duplication:
           // fwd.get(nb) ends at nb, bwd.get(nb) also starts at nb after reverse.
-          if (fwd.has(nb)) return [...fwd.get(nb)!.slice(0, -1), ...bwd.get(nb)!.slice().reverse()];
+          if (fwd.has(nb))
+            return [...(fwd.get(nb) ?? []).slice(0, -1), ...(bwd.get(nb) ?? []).slice().reverse()];
         }
       }
       bQueue = next;
@@ -1507,15 +1933,24 @@ function shortestDependsOnPath(fromId: string, toId: string) {
 // Longest duration-weighted chain (critical path) using node.DurationMs.
 // Returns an array of node ids, or null if no duration data is present.
 function criticalPath() {
-  const hasDuration = graph.nodes.some((n) => n.DurationMs > 0 || (n.attrs && Number(n.attrs.DurationMs) > 0));
+  const hasDuration = graph.nodes.some(
+    (n) => (n.DurationMs || 0) > 0 || (n.attrs && Number(n.attrs.DurationMs) > 0),
+  );
   if (!hasDuration) return null;
-  const dur = (n: any) => +(n.DurationMs || (n.attrs && n.attrs.DurationMs) || 0);
+  const dur = (n: GNode | undefined) =>
+    +((n && (n.DurationMs || (n.attrs && n.attrs.DurationMs))) || 0);
   // Longest path in DAG (depends_on subgraph), weighted by node duration.
-  const fwdAdj = new Map();
+  const fwdAdj = new Map<string, Set<string>>();
   for (const e of graph.links) {
-    const s = e.source.id || e.source, t = e.target.id || e.target;
+    const s = endpointId(e.source),
+      t = endpointId(e.target);
     if (e.relation !== "depends_on") continue;
-    let sf = fwdAdj.get(s); if (!sf) { sf = new Set(); fwdAdj.set(s, sf); } sf.add(t);
+    let sf = fwdAdj.get(s);
+    if (!sf) {
+      sf = new Set<string>();
+      fwdAdj.set(s, sf);
+    }
+    sf.add(t);
   }
   const memo = new Map<string, { cost: number; next: string | null }>();
   const onStack = new Set<string>(); // nodes on the current recursion stack: guards depends_on cycles
@@ -1523,7 +1958,7 @@ function criticalPath() {
     const cached = memo.get(id);
     if (cached) return cached;
     onStack.add(id);
-    const self = dur(graph.byId.get(id) || {});
+    const self = dur(graph.byId.get(id));
     let best: { cost: number; next: string | null } = { cost: self, next: null };
     for (const nb of fwdAdj.get(id) || []) {
       if (onStack.has(nb)) continue; // back-edge: skip to break the cycle
@@ -1537,18 +1972,27 @@ function criticalPath() {
   }
   // Find roots (no incoming depends_on).
   const hasIncoming = new Set();
-  for (const e of graph.links) { if (e.relation === "depends_on") hasIncoming.add(e.target.id || e.target); }
+  for (const e of graph.links) {
+    if (e.relation === "depends_on") hasIncoming.add(endpointId(e.target));
+  }
   const roots = graph.nodes.filter((n) => !hasIncoming.has(n.id));
-  let bestRoot = null, bestCost = -Infinity;
+  let bestRoot = null,
+    bestCost = -Infinity;
   for (const r of roots) {
     const { cost } = dp(r.id);
-    if (cost > bestCost) { bestCost = cost; bestRoot = r.id; }
+    if (cost > bestCost) {
+      bestCost = cost;
+      bestRoot = r.id;
+    }
   }
   if (!bestRoot) return null;
   // Reconstruct path.
   const path = [];
   let cur: string | null = bestRoot;
-  while (cur) { path.push(cur); cur = dp(cur).next; }
+  while (cur) {
+    path.push(cur);
+    cur = dp(cur).next;
+  }
   return path.length > 1 ? path : null;
 }
 
@@ -1562,7 +2006,9 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   projectionUnfolded = true; // a view always shows the full graph context
   projectionSet = null;
   matchSet = null;
-  if (searchEl) { searchEl.value = ""; }
+  if (searchEl) {
+    searchEl.value = "";
+  }
   query = "";
 
   // Sync button active state and show the clear button.
@@ -1578,65 +2024,118 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   switch (name) {
     case "blast": {
       if (!nodeId) {
-        setStatus("Click a node to see what depends on it (blast view). CLI: magus explain <node-id>");
-        renderList(); draw(); updateHash();
+        setStatus(
+          "Click a node to see what depends on it (blast view). CLI: magus explain <node-id>",
+        );
+        renderList();
+        draw();
+        updateHash();
         return;
       }
       const deps = transitiveDependents(nodeId);
       matchSet = deps;
       const n = graph.byId ? graph.byId.get(nodeId) : null;
-      setStatus("What breaks if you change " + (n ? n.label : nodeId) + "? " + (deps.size - 1) + " dependent" + (deps.size - 1 === 1 ? "" : "s") + ".");
+      setStatus(
+        "What breaks if you change " +
+          (n ? n.label : nodeId) +
+          "? " +
+          (deps.size - 1) +
+          " dependent" +
+          (deps.size - 1 === 1 ? "" : "s") +
+          ".",
+      );
       break;
     }
     case "trace": {
       if (!nodeId || !nodeTo) {
-        setStatus("Click two nodes to find the path between them (trace view). CLI: magus path <a> <b>");
-        renderList(); draw(); updateHash();
+        setStatus(
+          "Click two nodes to find the path between them (trace view). CLI: magus path <a> <b>",
+        );
+        renderList();
+        draw();
+        updateHash();
         return;
       }
       const path = shortestDependsOnPath(nodeId, nodeTo);
       if (!path) {
         const na = graph.byId ? graph.byId.get(nodeId) : null;
         const nb = graph.byId ? graph.byId.get(nodeTo) : null;
-        setStatus("No depends_on path from " + (na ? na.label : nodeId) + " to " + (nb ? nb.label : nodeTo) + ".");
+        setStatus(
+          "No depends_on path from " +
+            (na ? na.label : nodeId) +
+            " to " +
+            (nb ? nb.label : nodeTo) +
+            ".",
+        );
         matchSet = new Set([nodeId, nodeTo]);
       } else {
         matchSet = new Set(path);
-        setStatus("Path: " + path.map((id) => { const n = graph.byId.get(id); return n ? n.label : id; }).join(" -> "));
+        setStatus(
+          "Path: " +
+            path
+              .map((id) => {
+                const n = graph.byId.get(id);
+                return n ? n.label : id;
+              })
+              .join(" -> "),
+        );
       }
       break;
     }
     case "critical": {
       const path = criticalPath();
       if (!path) {
-        setStatus("No duration data in this graph. Run `magus graph deps -o json` after a build to include timing.");
+        setStatus(
+          "No duration data in this graph. Run `magus graph deps -o json` after a build to include timing.",
+        );
         matchSet = null;
       } else {
         matchSet = new Set(path);
-        setStatus("Critical path: " + path.length + " node" + (path.length === 1 ? "" : "s") + " (longest duration-weighted chain).");
+        setStatus(
+          "Critical path: " +
+            path.length +
+            " node" +
+            (path.length === 1 ? "" : "s") +
+            " (longest duration-weighted chain).",
+        );
       }
       break;
     }
     case "hubs": {
-      const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree).slice(0, 12);
+      const top = graph.nodes
+        .slice()
+        .sort((a, b) => b.degree - a.degree)
+        .slice(0, 12);
       matchSet = new Set(top.map((n) => n.id));
       setStatus("What's a hub? The " + matchSet.size + " highest-degree nodes.");
       break;
     }
     case "orphans": {
       matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
-      setStatus("What's dead? " + matchSet.size + " orphan node" + (matchSet.size === 1 ? "" : "s") + " with no edges.");
+      setStatus(
+        "What's dead? " +
+          matchSet.size +
+          " orphan node" +
+          (matchSet.size === 1 ? "" : "s") +
+          " with no edges.",
+      );
       break;
     }
     case "affected": {
       // Live mode: affected set is provided by caller or stored in window._liveAffectedIds.
-      const aff = (typeof nodeId === "object" && nodeId) ? nodeId : window._liveAffectedIds;
+      const aff = typeof nodeId === "object" && nodeId ? nodeId : window._liveAffectedIds;
       if (!aff || !aff.size) {
         setStatus("no affected nodes in current diff", true);
         matchSet = null;
       } else {
         matchSet = aff;
-        setStatus("What does my diff touch? " + aff.size + " affected node" + (aff.size === 1 ? "" : "s") + " (live workspace).");
+        setStatus(
+          "What does my diff touch? " +
+            aff.size +
+            " affected node" +
+            (aff.size === 1 ? "" : "s") +
+            " (live workspace).",
+        );
       }
       break;
     }
@@ -1652,7 +2151,9 @@ function clearView() {
   activeView = null;
   viewNode = null;
   viewNodeTo = null;
-  document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => b.removeAttribute("data-active"));
+  document
+    .querySelectorAll<HTMLElement>(".console-graph-views__chip")
+    .forEach((b) => b.removeAttribute("data-active"));
   const cvb = el("clear-view-btn");
   if (cvb) cvb.hidden = true;
   renderViewCommand(null, null, null);
@@ -1675,7 +2176,7 @@ function clearView() {
 // "Earn the prompt" rule (section 0.5): a surface shows the prompt ONLY when its
 // behavior corresponds to a real CLI behavior backed by the drift fixture.
 
-function shellQuote(s: any) {
+function shellQuote(s: string) {
   // Single-quote wrap if the value contains spaces, quotes, or other special chars.
   if (/[\s'"\\$`!;|&<>(){}*?[\]#~%]/.test(s)) return "'" + s.replace(/'/g, "'\\''") + "'";
   return s;
@@ -1728,7 +2229,8 @@ function mermaidScope() {
   }
   const nodeSet = new Set(nodes.map((n) => n.id));
   const links = graph.links.filter((e) => {
-    const s = e.source.id || e.source, t = e.target.id || e.target;
+    const s = endpointId(e.source),
+      t = endpointId(e.target);
     return nodeSet.has(s) && nodeSet.has(t);
   });
   return { nodes, links, refused: null };
@@ -1736,18 +2238,26 @@ function mermaidScope() {
 
 // copyAsMermaid: compute scope, emit mermaid, copy to clipboard, set status.
 function copyAsMermaid() {
-  if (!navigator.clipboard) { setStatus("clipboard unavailable in this context", true); return; }
+  if (!navigator.clipboard) {
+    setStatus("clipboard unavailable in this context", true);
+    return;
+  }
   const { nodes, links, refused } = mermaidScope();
   if (refused) {
     setStatus(refused, true);
     return;
   }
   const text = toMermaid(nodes, links, graphFlavor);
-  navigator.clipboard.writeText("```mermaid\n" + text + "\n```").then(() => {
-    setStatus("Mermaid diagram copied (" + nodes.length + " nodes) - paste into a GitHub comment or PR.");
-  }).catch((err) => {
-    setStatus("Could not copy to clipboard: " + err.message, true);
-  });
+  navigator.clipboard
+    .writeText("```mermaid\n" + text + "\n```")
+    .then(() => {
+      setStatus(
+        "Mermaid diagram copied (" + nodes.length + " nodes) - paste into a GitHub comment or PR.",
+      );
+    })
+    .catch((err) => {
+      setStatus("Could not copy to clipboard: " + err.message, true);
+    });
 }
 
 // Build the full CLI command string for copy-to-clipboard.
@@ -1769,16 +2279,26 @@ function renderViewCommand(name: string | null, nodeId?: string | null, nodeTo?:
   const wrap = el("view-cmd");
   if (!wrap) return;
   const cmd = viewCommandStr(name, nodeId, nodeTo);
-  if (!cmd) { wrap.hidden = true; return; }
+  if (!cmd) {
+    wrap.hidden = true;
+    return;
+  }
   const verb = name === "blast" ? "magus explain" : name === "trace" ? "magus path" : null;
-  if (!verb) { wrap.hidden = true; return; }
+  if (!verb) {
+    wrap.hidden = true;
+    return;
+  }
   const args = cmd.slice(verb.length).trim();
   wrap.hidden = false;
   wrap.innerHTML =
-    '<span class="console-graph-prompt__ps1" aria-hidden="true">' + escapeHtml(verb) + ' <span class="console-graph-prompt__chevron">&#10095;</span></span>' +
-    '<span class="console-graph-views__cmdargs">' + escapeHtml(args) + '</span>' +
+    '<span class="console-graph-prompt__ps1" aria-hidden="true">' +
+    escapeHtml(verb) +
+    ' <span class="console-graph-prompt__chevron">&#10095;</span></span>' +
+    '<span class="console-graph-views__cmdargs">' +
+    escapeHtml(args) +
+    "</span>" +
     '<button type="button" class="console-graph-views__copy" title="Copy this command to the clipboard" aria-label="Copy command">&#10697;</button>';
-  wrap.querySelector<HTMLElement>(".console-graph-views__copy")!.addEventListener("click", () => {
+  wrap.querySelector<HTMLElement>(".console-graph-views__copy")?.addEventListener("click", () => {
     navigator.clipboard.writeText(cmd).then(() => {
       setStatus("Copied: " + cmd);
     });
@@ -1799,8 +2319,11 @@ function updateSearchCopyBtn() {
 // After a graph loads, compute 3 quick facts and show clickable suggestion chips.
 function renderSuggestions() {
   const wrap = el("suggestions");
-  if (!wrap || !graph) { if (wrap) wrap.hidden = true; return; }
-  const chips: any[] = [];
+  if (!wrap || !graph) {
+    if (wrap) wrap.hidden = true;
+    return;
+  }
+  const chips: { text: string; action: () => void }[] = [];
 
   // 1. Highest-degree node ("biggest hub").
   if (graph.nodes.length > 1) {
@@ -1818,7 +2341,7 @@ function renderSuggestions() {
   if (hasCycle) {
     // Find the first cycle edge source as the starting point for a trace.
     const cycleEdge = graph.links.find((e) => e.cycle);
-    const src = cycleEdge ? (cycleEdge.source.id || cycleEdge.source) : null;
+    const src = cycleEdge ? endpointId(cycleEdge.source) : null;
     chips.push({
       text: "A dependency cycle was detected - trace its path?",
       action: src ? () => activateView("trace", src) : () => activateView("hubs"),
@@ -1829,19 +2352,33 @@ function renderSuggestions() {
   const orphans = graph.nodes.filter((n) => n.degree === 0);
   if (orphans.length > 0 && chips.length < 3) {
     chips.push({
-      text: orphans.length + " node" + (orphans.length === 1 ? "" : "s") + " with no edges - what's dead?",
+      text:
+        orphans.length +
+        " node" +
+        (orphans.length === 1 ? "" : "s") +
+        " with no edges - what's dead?",
       action: () => activateView("orphans"),
     });
   }
 
-  if (!chips.length) { wrap.hidden = true; return; }
+  if (!chips.length) {
+    wrap.hidden = true;
+    return;
+  }
   wrap.hidden = false;
-  wrap.innerHTML = chips.map((c, i) =>
-    '<button type="button" class="pf-v6-c-button pf-m-link pf-m-inline console-graph-sidebar__suggestion" data-i="' + i + '"><span class="pf-v6-c-button__text">' + escapeHtml(c.text) + '</span></button>'
-  ).join("");
+  wrap.innerHTML = chips
+    .map(
+      (c, i) =>
+        '<button type="button" class="pf-v6-c-button pf-m-link pf-m-inline console-graph-sidebar__suggestion" data-i="' +
+        i +
+        '"><span class="pf-v6-c-button__text">' +
+        escapeHtml(c.text) +
+        "</span></button>",
+    )
+    .join("");
   wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
     b.addEventListener("click", () => {
-      chips[+b.dataset.i!].action();
+      chips[Number(b.dataset.i)].action();
       wrap.hidden = true; // hide after first use
     });
   });
@@ -1852,14 +2389,36 @@ function renderSuggestions() {
 // emits the same group entries the user could type by hand. The active preset
 // serializes into the fragment as #preset=<id>.
 
-const COLOR_PRESETS = [
+// A preset emits color-group entries (like the ones a user could type by hand); a
+// depth preset also carries a nodeSet so it can match ids directly.
+interface PresetGroup {
+  query: string;
+  color: string;
+  nodeSet?: Set<string>;
+}
+interface ColorPreset {
+  id: string;
+  label: string;
+  groups: () => PresetGroup[];
+}
+
+const COLOR_PRESETS: ColorPreset[] = [
   {
     id: "spell",
     label: "Color by spell",
     groups: () => {
       // One color per distinct spell in the graph.
       const spellIds = graph.nodes.filter((n) => n.kind === "spell").map((n) => n.id);
-      const palette = ["#8b5cf6", "#a855f7", "#6366f1", "#0891b2", "#059669", "#d97706", "#dc2626", "#ec4899"];
+      const palette = [
+        "#8b5cf6",
+        "#a855f7",
+        "#6366f1",
+        "#0891b2",
+        "#059669",
+        "#d97706",
+        "#dc2626",
+        "#ec4899",
+      ];
       return spellIds.map((id, i) => ({
         query: "id:" + id,
         color: palette[i % palette.length],
@@ -1871,7 +2430,16 @@ const COLOR_PRESETS = [
     label: "Color by project",
     groups: () => {
       const projects = graph.nodes.filter((n) => n.kind === "project").map((n) => n.id);
-      const palette = ["#2563eb", "#0a7ea4", "#059669", "#d97706", "#dc2626", "#8b5cf6", "#0891b2", "#ca8a04"];
+      const palette = [
+        "#2563eb",
+        "#0a7ea4",
+        "#059669",
+        "#d97706",
+        "#dc2626",
+        "#8b5cf6",
+        "#0891b2",
+        "#ca8a04",
+      ];
       return projects.map((id, i) => {
         // Knowledge-graph project ids are "project:<name>"; the project: field
         // matcher prepends "project:" again, producing "project:project:web" which
@@ -1892,9 +2460,15 @@ const COLOR_PRESETS = [
       const ids = new Set(graph.nodes.map((n) => n.id));
       const fwdAdj = new Map();
       for (const e of graph.links) {
-        const s = e.source.id || e.source, t = e.target.id || e.target;
+        const s = endpointId(e.source),
+          t = endpointId(e.target);
         if (e.relation !== "depends_on" || !ids.has(s) || !ids.has(t)) continue;
-        let sf = fwdAdj.get(s); if (!sf) { sf = new Set(); fwdAdj.set(s, sf); } sf.add(t);
+        let sf = fwdAdj.get(s);
+        if (!sf) {
+          sf = new Set();
+          fwdAdj.set(s, sf);
+        }
+        sf.add(t);
       }
       const layers = new Map();
       function layer(id: string) {
@@ -1915,16 +2489,23 @@ const COLOR_PRESETS = [
       const byLayer = new Map();
       for (const [id, l] of layers) {
         if (typeof l !== "number" || id.endsWith("_done")) continue;
-        let s = byLayer.get(l); if (!s) { s = []; byLayer.set(l, s); } s.push(id);
+        let s = byLayer.get(l);
+        if (!s) {
+          s = [];
+          byLayer.set(l, s);
+        }
+        s.push(id);
       }
       const maxLayer = Math.max(...byLayer.keys(), 0);
       // Return one entry per layer; each entry carries a nodeSet so groupColorFor
       // can match directly without going through parseQuery/termMatches (which
       // would require a real `layer:` query field that doesn't exist in the CLI).
-      return [...byLayer.entries()].sort((a, b) => a[0] - b[0]).map(([l, ids_]) => {
-        const idx = Math.round((l / Math.max(maxLayer, 1)) * (palette.length - 1));
-        return { query: "layer:" + l, color: palette[idx], nodeSet: new Set(ids_) };
-      });
+      return [...byLayer.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([l, ids_]) => {
+          const idx = Math.round((l / Math.max(maxLayer, 1)) * (palette.length - 1));
+          return { query: "layer:" + l, color: palette[idx], nodeSet: new Set(ids_) };
+        });
     },
   },
 ];
@@ -1939,20 +2520,25 @@ function applyPreset(presetId: string) {
   if (activePreset === presetId) {
     // Toggle off.
     activePreset = null;
-    document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => b.removeAttribute("data-active"));
-    renderGroups(); draw(); updateHash();
+    document
+      .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
+      .forEach((b) => b.removeAttribute("data-active"));
+    renderGroups();
+    draw();
+    updateHash();
     return;
   }
   activePreset = presetId;
-  document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) =>
-    b.toggleAttribute("data-active", b.dataset.preset === presetId));
+  document
+    .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
+    .forEach((b) => b.toggleAttribute("data-active", b.dataset.preset === presetId));
   if (!graph.relIndex) graph.relIndex = relationIndex();
   const newGroups = preset.groups();
   for (const g of newGroups) {
     // Preserve a nodeSet when the preset provides one (e.g. depth: direct id set,
     // bypasses query grammar so the coloring works even for large layers).
-    const entry: any = { query: g.query, color: g.color, terms: parseQuery(g.query) };
-    if ((g as any).nodeSet) entry.nodeSet = (g as any).nodeSet;
+    const entry: ColorGroup = { query: g.query, color: g.color, terms: parseQuery(g.query) };
+    if (g.nodeSet) entry.nodeSet = g.nodeSet;
     groups.push(entry);
   }
   renderGroups();
@@ -1966,10 +2552,18 @@ function applyPreset(presetId: string) {
 // (imported at the top of this file) - the ONE audited copy of host resolution, the
 // loopback lock, the shared bearer token, and the fetch-based SSE reader.
 
+// A captured node position, keyed by node id, carried across a live refresh.
+interface NodePos {
+  x: number;
+  y: number;
+  fx: number | null;
+  fy: number | null;
+}
+
 // capturePositions: before replacing the graph on a live refresh, record existing
 // node positions keyed by id so they can be applied to the new graph.
 function capturePositions() {
-  const pos = new Map();
+  const pos = new Map<string, NodePos>();
   if (graph) {
     for (const n of graph.nodes) {
       if (n.x != null) pos.set(n.id, { x: n.x, y: n.y, fx: n.fx, fy: n.fy });
@@ -1978,13 +2572,17 @@ function capturePositions() {
   return pos;
 }
 
-function applyPositions(newNodes: any, prevPos: any) {
+function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
   if (!prevPos || !prevPos.size) return;
   for (const n of newNodes) {
     const p = prevPos.get(n.id);
     if (p) {
-      n.x = p.x; n.y = p.y;
-      if (p.fx != null && p.fx !== -1e6) { n.fx = p.fx; n.fy = p.fy; }
+      n.x = p.x;
+      n.y = p.y;
+      if (p.fx != null && p.fx !== -1e6) {
+        n.fx = p.fx;
+        n.fy = p.fy;
+      }
     }
     // New nodes: the simulation will place them; no hint needed.
   }
@@ -2017,7 +2615,10 @@ function recomputeLiveMatchSet() {
         break;
       }
       case "hubs": {
-        const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree).slice(0, 12);
+        const top = graph.nodes
+          .slice()
+          .sort((a, b) => b.degree - a.degree)
+          .slice(0, 12);
         matchSet = new Set(top.map((n) => n.id));
         break;
       }
@@ -2026,7 +2627,7 @@ function recomputeLiveMatchSet() {
         break;
       case "affected": {
         const aff = window._liveAffectedIds;
-        matchSet = (aff && aff.size) ? aff : null;
+        matchSet = aff && aff.size ? aff : null;
         break;
       }
       default:
@@ -2036,7 +2637,10 @@ function recomputeLiveMatchSet() {
   }
   if (query) {
     const terms = parseQuery(query);
-    if (!terms.length) { matchSet = null; return; }
+    if (!terms.length) {
+      matchSet = null;
+      return;
+    }
     if (!graph.relIndex) graph.relIndex = relationIndex();
     matchSet = new Set();
     for (const n of graph.nodes) {
@@ -2046,8 +2650,14 @@ function recomputeLiveMatchSet() {
   }
   if (!projectionUnfolded) {
     const ps = buildProjectionSet();
-    if (ps) { projectionSet = ps; matchSet = new Set(ps); }
-    else { projectionUnfolded = true; projectionSet = null; matchSet = null; }
+    if (ps) {
+      projectionSet = ps;
+      matchSet = new Set(ps);
+    } else {
+      projectionUnfolded = true;
+      projectionSet = null;
+      matchSet = null;
+    }
     return;
   }
   matchSet = null;
@@ -2059,10 +2669,10 @@ function recomputeLiveMatchSet() {
 // is a full reset for the "open a different file" case - does NOT reset
 // activeView/query/activePreset/projectionUnfolded/layoutMode/search. Positions
 // carry over by node id via capturePositions/applyPositions (unchanged).
-function liveApplyGraphUpdate(data: any) {
+function liveApplyGraphUpdate(data: GraphPayload) {
   const flavor = detectFlavor(data);
   graphFlavor = flavor;
-  let raw = data;
+  let raw: GraphPayload = data as GraphPayload;
   if (flavor === "targets") {
     const nl = targetGraphToNodeLink(data);
     raw = { nodes: nl.nodes, links: nl.links };
@@ -2088,17 +2698,17 @@ function liveApplyGraphUpdate(data: any) {
   startSimulation();
   applyPositions(graph.nodes, prevPos);
   if (layoutMode === "layered") {
-    sim.stop();
+    sim?.stop();
     for (const e of graph.links) delete e.layoutReversed;
     if (!applyLayeredMode()) {
       layoutMode = "force";
       syncLayoutToggle();
       startSimulation();
       applyPositions(graph.nodes, prevPos);
-      sim.alpha(0.3).restart();
+      sim?.alpha(0.3).restart();
     }
   } else {
-    sim.alpha(0.3).restart();
+    sim?.alpha(0.3).restart();
   }
   draw();
   updateLiveBadge();
@@ -2117,14 +2727,18 @@ async function liveRefetchGraph() {
   let resp;
   try {
     resp = await fetch(url, { headers });
-  } catch (e: any) {
+  } catch {
     return; // network error on refetch; SSE reconnect will handle it
   }
   if (resp.status === 304) return; // graph unchanged; ETag matched
   if (!resp.ok) return;
   liveETag = resp.headers.get("ETag") || null;
   let data;
-  try { data = await resp.json(); } catch { return; }
+  try {
+    data = await resp.json();
+  } catch {
+    return;
+  }
   liveApplyGraphUpdate(data);
 }
 
@@ -2137,48 +2751,62 @@ function liveConnect() {
   const url = "http://" + liveHost + "/api/v1/events";
   const headers = authHeaders(liveToken);
 
-  fetchSSE(url, headers, (eventType) => {
-    if (eventType === "graph") {
+  fetchSSE(
+    url,
+    headers,
+    (eventType) => {
+      if (eventType === "graph") {
+        liveRefetchGraph();
+      } else if (eventType === "status") {
+        fetchLiveStatus();
+      }
+    },
+    (err) => {
+      // Stream ended or errored: flip to disconnected, schedule reconnect.
+      liveConnected = false;
+      updateLiveBadge();
+      showDisconnectBanner();
+      clearTimeout(liveReconnectTimer ?? undefined);
+      liveReconnectTimer = setTimeout(
+        () => {
+          liveConnect();
+        },
+        Math.min(liveReconnectDelay, 30000),
+      );
+      liveReconnectDelay = Math.min(liveReconnectDelay * 2, 30000);
+    },
+    liveSseAbort.signal,
+    () => {
+      // Stream opened successfully: reset backoff, clear the disconnect banner,
+      // and refresh once. Without this, a reconnect after a gap (or the very
+      // first connect racing the skeleton render) leaves the view stale until
+      // the NEXT graph event, which may be minutes away.
+      liveConnected = true;
+      liveReconnectDelay = 1000;
+      clearDisconnectBanner();
+      updateLiveBadge();
       liveRefetchGraph();
-    } else if (eventType === "status") {
       fetchLiveStatus();
-    }
-  }, (err) => {
-    // Stream ended or errored: flip to disconnected, schedule reconnect.
-    liveConnected = false;
-    updateLiveBadge();
-    showDisconnectBanner();
-    clearTimeout(liveReconnectTimer ?? undefined);
-    liveReconnectTimer = setTimeout(() => {
-      liveConnect();
-    }, Math.min(liveReconnectDelay, 30000));
-    liveReconnectDelay = Math.min(liveReconnectDelay * 2, 30000);
-  }, liveSseAbort.signal, () => {
-    // Stream opened successfully: reset backoff, clear the disconnect banner,
-    // and refresh once. Without this, a reconnect after a gap (or the very
-    // first connect racing the skeleton render) leaves the view stale until
-    // the NEXT graph event, which may be minutes away.
-    liveConnected = true;
-    liveReconnectDelay = 1000;
-    clearDisconnectBanner();
-    updateLiveBadge();
-    liveRefetchGraph();
-    fetchLiveStatus();
-  });
+    },
+  );
 }
 
 function showDisconnectBanner() {
   const banner = el("live-disconnect-banner");
   if (!banner) return;
   const now = new Date();
-  const hhmm = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
+  const hhmm =
+    now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
   banner.textContent = "disconnected - showing workspace as of " + hhmm + ", reconnecting...";
   banner.hidden = false;
 }
 
 function clearDisconnectBanner() {
   const banner = el("live-disconnect-banner");
-  if (banner) { banner.textContent = ""; banner.hidden = true; }
+  if (banner) {
+    banner.textContent = "";
+    banner.hidden = true;
+  }
 }
 
 function updateLiveBadge() {
@@ -2187,7 +2815,8 @@ function updateLiveBadge() {
     if (liveHost) {
       const ws = liveWorkspaceName || liveHost;
       const content = badge.querySelector<HTMLElement>(".pf-v6-c-label__content");
-      if (content) content.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
+      if (content)
+        content.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
       badge.hidden = false;
       // Blue PF Label when connected, grey while (re)connecting or disconnected.
       badge.classList.toggle("pf-m-blue", liveConnected);
@@ -2257,7 +2886,9 @@ async function fetchLiveStatus() {
     // "affected" view button stays disabled (see the `disabled` attribute in
     // graph.html) until a real Affected computation is wired server-side.
     updateLiveBadge();
-  } catch { /* network error; badge stays */ }
+  } catch {
+    /* network error; badge stays */
+  }
 }
 
 // ---- boot ------------------------------------------------------------------
@@ -2288,16 +2919,16 @@ function computeDefaultProjection(hasFragmentDirective: boolean) {
 // applyLayoutAndSimulation picks the layout mode (fragment override, else the
 // per-flavor default), starts the force simulation, and runs the layered
 // layout with its scale-guard fallback. Shared by boot() and bootLive().
-function applyLayoutAndSimulation(requestedLayout: string, flavor: any) {
+function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) {
   if (requestedLayout === "force" || requestedLayout === "layered") {
     layoutMode = requestedLayout;
   } else {
-    layoutMode = (flavor === "targets") ? "layered" : "force";
+    layoutMode = flavor === "targets" ? "layered" : "force";
   }
   syncLayoutToggle();
   startSimulation();
   if (layoutMode === "layered") {
-    sim.stop();
+    sim?.stop();
     if (!applyLayeredMode()) {
       // Scale guard fired; fall back to force.
       layoutMode = "force";
@@ -2315,7 +2946,12 @@ function applyLayoutAndSimulation(requestedLayout: string, flavor: any) {
 function parkHiddenNodes() {
   if (!projectionUnfolded && projectionSet) {
     for (const n of graph.nodes) {
-      if (!projectionSet.has(n.id)) { n.fx = -1e6; n.fy = -1e6; n.x = -1e6; n.y = -1e6; }
+      if (!projectionSet.has(n.id)) {
+        n.fx = -1e6;
+        n.fy = -1e6;
+        n.x = -1e6;
+        n.y = -1e6;
+      }
     }
   }
 }
@@ -2338,7 +2974,7 @@ function finishInteractiveSetup() {
 
 // renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
 // excluding the one-time interaction wiring, so the demo button can re-run it in place.
-function renderLoadedGraph(loaded: { data: any; source: string }): void {
+function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void {
   const flavor = detectFlavor(loaded.data);
   graphFlavor = flavor;
   let rawForPrepare = loaded.data;
@@ -2354,7 +2990,13 @@ function renderLoadedGraph(loaded: { data: any; source: string }): void {
   // not the projects-only projection. computeDefaultProjection otherwise keeps the full graph unless it
   // trips the large-graph perf guard.
   const bootParams = hashParams();
-  const hasFragmentDirective = !!(bootParams.view || bootParams.q || bootParams.node || bootParams.data || bootParams.src);
+  const hasFragmentDirective = !!(
+    bootParams.view ||
+    bootParams.q ||
+    bootParams.node ||
+    bootParams.data ||
+    bootParams.src
+  );
   computeDefaultProjection(hasFragmentDirective);
 
   const unfoldBtn = el("projection-unfold-btn");
@@ -2365,18 +3007,28 @@ function renderLoadedGraph(loaded: { data: any; source: string }): void {
   // Status line: targets flavor shows a summary; knowledge/demo shows a brief confirmation or nothing.
   if (flavor === "targets") {
     const nProjects = (loaded.data.projects || []).length;
-    const nTargets = rawForPrepare.nodes.filter((n: any) => n.kind === "target").length;
-    const base = "target graph - " + nProjects + " project" + (nProjects === 1 ? "" : "s") +
-      " - " + nTargets + " target" + (nTargets === 1 ? "" : "s");
+    const nTargets = (rawForPrepare.nodes || []).filter((n) => n.kind === "target").length;
+    const base =
+      "target graph - " +
+      nProjects +
+      " project" +
+      (nProjects === 1 ? "" : "s") +
+      " - " +
+      nTargets +
+      " target" +
+      (nTargets === 1 ? "" : "s");
     if (!projectionUnfolded) updateProjectionStatus();
     else setStatus(cycleWarnings.length ? base + "; " + cycleWarnings.join("; ") : base);
   } else {
     if (!projectionUnfolded) updateProjectionStatus();
-    else setStatus(loaded.source === "local"
-      ? "Your workspace graph - it never left your machine."
-      : loaded.source === "loopback"
-      ? "Your workspace graph, served over loopback - it never left your network."
-      : "");
+    else
+      setStatus(
+        loaded.source === "local"
+          ? "Your workspace graph - it never left your machine."
+          : loaded.source === "loopback"
+            ? "Your workspace graph, served over loopback - it never left your network."
+            : "",
+      );
   }
 
   renderLegend();
@@ -2389,7 +3041,12 @@ function renderLoadedGraph(loaded: { data: any; source: string }): void {
   // Wow reveal: once the cold force layout has spread out, frame the whole graph so it lands centered and
   // fully in view instead of cropped to a corner. Only for the default full-graph view - a deep link or
   // the perf-guard projection already frames its own subset, and layered layout is framed by applyLayeredMode.
-  if (projectionUnfolded && !hasFragmentDirective && layoutMode !== "layered" && graph.nodes.length) {
+  if (
+    projectionUnfolded &&
+    !hasFragmentDirective &&
+    layoutMode !== "layered" &&
+    graph.nodes.length
+  ) {
     setTimeout(() => fitView(null), 700);
   }
 }
@@ -2416,21 +3073,24 @@ export async function activate() {
 
   // Drag-drop a graph.json onto the canvas.
   canvas.addEventListener("dragover", (e) => e.preventDefault());
-  canvas.addEventListener("drop", (e) => { e.preventDefault(); readGraphFile(e.dataTransfer!.files[0]); });
+  canvas.addEventListener("drop", (e) => {
+    e.preventDefault();
+    readGraphFile(must(e.dataTransfer).files[0]);
+  });
 
   // File handler: when the installed PWA is launched with "Open with" on a .json file,
   // the browser delivers it here via launchQueue. Uses the same readGraphFile path as
   // drag-drop so behavior is identical. Feature-detected; no effect in browsers that
   // lack the File Handling API (all non-Chromium, and Chromium without the PWA installed).
   if ("launchQueue" in window) {
-    window.launchQueue.setConsumer(async (launchParams: any) => {
+    window.launchQueue?.setConsumer(async (launchParams: LaunchParams) => {
       if (!launchParams.files || launchParams.files.length === 0) return;
       try {
         const fileHandle = launchParams.files[0];
         const f = await fileHandle.getFile();
         readGraphFile(f);
-      } catch (e: any) {
-        setStatus("Could not open the launched file: " + e.message, true);
+      } catch (e) {
+        setStatus("Could not open the launched file: " + errMessage(e), true);
       }
     });
   }
@@ -2449,7 +3109,10 @@ export async function activate() {
   } finally {
     if (loadingEl) loadingEl.hidden = true;
   }
-  if (!loaded) { document.body.classList.add("graph-empty"); return; }
+  if (!loaded) {
+    document.body.classList.add("graph-empty");
+    return;
+  }
 
   // Run boot's data-to-view pipeline, then the one-time interaction wiring. Splitting the two lets the
   // demo button re-run just the render (renderLoadedGraph) in place, without re-wiring listeners.
@@ -2512,15 +3175,21 @@ function bootWireEvents() {
   // Wire view buttons (.console-graph-views__chip). Blast and trace need node-picking mode.
   document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => {
     b.addEventListener("click", () => {
-      const v = b.dataset.view!;
+      const v = b.dataset.view;
+      if (!v) return;
       if ((b as HTMLButtonElement).disabled || b.hasAttribute("data-disabled")) return;
-      if (activeView === v) { clearView(); return; }
+      if (activeView === v) {
+        clearView();
+        return;
+      }
       if (v === "blast" || v === "trace") {
         // Enter picking mode: status tells user to click a node.
         activeView = v;
         viewNode = null;
         viewNodeTo = null;
-        document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((x) => x.toggleAttribute("data-active", x.dataset.view === v));
+        document
+          .querySelectorAll<HTMLElement>(".console-graph-views__chip")
+          .forEach((x) => x.toggleAttribute("data-active", x.dataset.view === v));
         renderViewCommand(v, null, null);
         if (v === "blast") setStatus("Click a node to see what breaks if you change it.");
         else setStatus("Click the first node for the path (trace view).");
@@ -2530,10 +3199,13 @@ function bootWireEvents() {
         // when not in live mode shows a hint.
         const aff = window._liveAffectedIds;
         if (!aff || !aff.size) {
-          setStatus("affected view: requires live mode (magus graph open --live) with a computed diff.", true);
+          setStatus(
+            "affected view: requires live mode (magus graph open --live) with a computed diff.",
+            true,
+          );
           return;
         }
-        activateView("affected", aff);
+        activateView("affected");
       } else {
         activateView(v);
       }
@@ -2554,12 +3226,15 @@ function bootWireEvents() {
   // would just be redundant rather than harmful, but there's no reason to keep both around.
   if (!overlayResizeWired) {
     overlayResizeWired = true;
-    window.addEventListener("resize", () => { if (listExpanded) positionNodeListOverlay(); });
+    window.addEventListener("resize", () => {
+      if (listExpanded) positionNodeListOverlay();
+    });
   }
 
   // Zoom-to-fit: frame the current matches (or the whole graph) in the viewport.
   const fitBtn = el("fit-btn");
-  if (fitBtn) fitBtn.addEventListener("click", () => fitView(matchSet && matchSet.size ? matchSet : null));
+  if (fitBtn)
+    fitBtn.addEventListener("click", () => fitView(matchSet && matchSet.size ? matchSet : null));
 
   // Mobile-only legend toggle: on narrow screens the kind legend is collapsed off
   // the canvas by default (CSS) so it doesn't cover the graph; this flips it open.
@@ -2577,33 +3252,65 @@ function bootWireEvents() {
   // Lenses (magus graph stats parity): hubs / orphans set the match set. The lens
   // buttons are marked by their data-lens hook (no presentational class of their own).
   document.querySelectorAll<HTMLElement>("[data-lens]").forEach((b) =>
-    b.addEventListener("click", () => applyLens(b.dataset.lens!)));
+    b.addEventListener("click", () => {
+      const lens = b.dataset.lens;
+      if (lens) applyLens(lens);
+    }),
+  );
 
   // Phase 5: color preset buttons.
   document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => {
-    b.addEventListener("click", () => applyPreset(b.dataset.preset!));
+    b.addEventListener("click", () => {
+      const preset = b.dataset.preset;
+      if (preset) applyPreset(preset);
+    });
   });
 
   // Color groups: add a query -> color painting.
   const groupAdd = el("group-add");
+  const groupQuery = el("group-query");
   if (groupAdd) {
     groupAdd.addEventListener("click", addGroup);
-    el("group-query")!.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addGroup(); } });
+    groupQuery?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addGroup();
+      }
+    });
   }
 
   // Live force sliders: adjust the running simulation and gently reheat.
   const wireForce = (id: string, apply: (v: number) => void) => {
     const input = el(id) as HTMLInputElement | null;
     if (!input) return;
-    input.addEventListener("input", () => { if (sim) { apply(+input.value); sim.alpha(0.3).restart(); } });
+    input.addEventListener("input", () => {
+      if (sim) {
+        apply(+input.value);
+        sim?.alpha(0.3).restart();
+      }
+    });
   };
-  wireForce("force-charge", (v: any) => sim.force("charge").strength(-v));
-  wireForce("force-link", (v: any) => sim.force("link").distance(v));
-  wireForce("force-gravity", (v: any) => { sim.force("x").strength(v / 100); sim.force("y").strength(v / 100); });
+  // d3's untyped `force(name)` accessor returns the base Force; cast to the concrete
+  // force type to reach its strength/distance setters. sim is non-null when wireForce
+  // invokes these (it guards on it), so the optional chain never short-circuits.
+  wireForce("force-charge", (v) =>
+    (sim?.force("charge") as ForceManyBody<GNode> | undefined)?.strength(-v),
+  );
+  wireForce("force-link", (v) =>
+    (sim?.force("link") as ForceLink<GNode, GLink> | undefined)?.distance(v),
+  );
+  wireForce("force-gravity", (v) => {
+    (sim?.force("x") as ForceX<GNode> | undefined)?.strength(v / 100);
+    (sim?.force("y") as ForceY<GNode> | undefined)?.strength(v / 100);
+  });
 
   // Keyboard: Esc clears a focus/query; [ and ] shrink/grow the focus depth.
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { clearFocusOrQuery(); if (searchEl.blur) searchEl.blur(); return; }
+    if (e.key === "Escape") {
+      clearFocusOrQuery();
+      if (searchEl.blur) searchEl.blur();
+      return;
+    }
     if (e.target === searchEl) return; // don't hijack typing
     if (e.key === "[") changeFocusDepth(-1);
     else if (e.key === "]") changeFocusDepth(1);
@@ -2612,10 +3319,28 @@ function bootWireEvents() {
   // Command surface + keybindings, the same shape as the log viewer: each action is a named command
   // (dispatching to the existing control) bound to a single key that dodges browser combos and is
   // guarded against typing. The user's overrides ride the shared persisted keymap.
-  const clickGraph = (id: string): void => { const b = el(id) as HTMLButtonElement | null; if (b && !b.disabled) b.click(); };
-  registerCommand({ id: "graph.search", label: "Focus search", group: "Graph", run: () => searchEl.focus() });
-  registerCommand({ id: "graph.fit", label: "Zoom to fit", group: "Graph", run: () => clickGraph("fit-btn") });
-  registerCommand({ id: "graph.layout", label: "Toggle layout", group: "Graph", run: () => clickGraph("layout-toggle-btn") });
+  const clickGraph = (id: string): void => {
+    const b = el(id) as HTMLButtonElement | null;
+    if (b && !b.disabled) b.click();
+  };
+  registerCommand({
+    id: "graph.search",
+    label: "Focus search",
+    group: "Graph",
+    run: () => searchEl.focus(),
+  });
+  registerCommand({
+    id: "graph.fit",
+    label: "Zoom to fit",
+    group: "Graph",
+    run: () => clickGraph("fit-btn"),
+  });
+  registerCommand({
+    id: "graph.layout",
+    label: "Toggle layout",
+    group: "Graph",
+    run: () => clickGraph("layout-toggle-btn"),
+  });
   installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
 
   // Query-syntax reference: each example runs itself in the filter (teach-by-doing).
@@ -2627,8 +3352,11 @@ function bootWireEvents() {
       searchEl.value = q;
       applyQuery(q);
       searchEl.focus();
-      document.querySelector<HTMLElement>(".console-graph-app")!.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }));
+      document
+        .querySelector<HTMLElement>(".console-graph-app")
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }),
+  );
 
   // "Copy as Mermaid" toolbar button: emit the current scope as a mermaid diagram.
   const copyMermaidBtn = el("copy-mermaid-btn");
@@ -2637,7 +3365,7 @@ function bootWireEvents() {
   // "Open file" toolbar button proxies to the hidden <input type=file>.
   const openBtn = el("open-file-btn");
   if (openBtn && fileInput) openBtn.addEventListener("click", () => fileInput.click());
-  if (fileInput) fileInput.addEventListener("change", () => readGraphFile(fileInput.files![0]));
+  if (fileInput) fileInput.addEventListener("change", () => readGraphFile(fileInput.files?.[0]));
 
   // "Explore the magus graph" fetches the committed demo graph.json on demand and renders it in place
   // (loadDemoGraph), dismissing the empty state.
@@ -2661,7 +3389,10 @@ function bootWireEvents() {
       fsBtn.setAttribute("aria-pressed", on ? "true" : "false");
       // The canvas is sized to its box; refit after the panel resizes.
       resizeCanvas();
-      if (sim) { sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2)); sim.alpha(0.15).restart(); }
+      if (sim) {
+        sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2));
+        sim.alpha(0.15).restart();
+      }
       draw();
     });
   } else if (fsBtn) {
@@ -2670,8 +3401,19 @@ function bootWireEvents() {
 
   // Re-read the console tokens and repaint on a theme toggle.
   let t = 0;
-  const rerender = () => { clearTimeout(t); t = setTimeout(() => { readTheme(); renderLegend(); renderList(); draw(); }, 0); };
-  new MutationObserver(rerender).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  const rerender = () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      readTheme();
+      renderLegend();
+      renderList();
+      draw();
+    }, 0);
+  };
+  new MutationObserver(rerender).observe(root, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
 
   // Keep the canvas bitmap in lockstep with its CSS box. A ResizeObserver (not just
@@ -2689,7 +3431,10 @@ function bootWireEvents() {
     requestAnimationFrame(() => {
       resizePending = false;
       resizeCanvas();
-      if (sim) { sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2)); sim.alpha(0.1).restart(); }
+      if (sim) {
+        sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2));
+        sim.alpha(0.1).restart();
+      }
       draw();
     });
   };
@@ -2700,19 +3445,35 @@ function bootWireEvents() {
   stageResizeObserver.observe(canvas);
   lifecycleAbort = new AbortController();
   const lifecycleSignal = lifecycleAbort.signal;
-  window.addEventListener("hashchange", () => { suppressHash = true; applyDeepLinks(); suppressHash = false; }, { signal: lifecycleSignal });
+  window.addEventListener(
+    "hashchange",
+    () => {
+      suppressHash = true;
+      applyDeepLinks();
+      suppressHash = false;
+    },
+    { signal: lifecycleSignal },
+  );
 
   // Keep the gentle wobble from being a background CPU drain: stop the sim while
   // the tab is hidden, resume when it returns. Also honor a live change to the
   // reduced-motion preference. In layered mode the sim stays stopped (no wobble).
-  document.addEventListener("visibilitychange", () => {
-    if (!sim) return;
-    if (document.hidden) sim.stop();
-    else if (layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
-  }, { signal: lifecycleSignal });
-  reducedMotion.addEventListener("change", () => {
-    if (sim && layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
-  }, { signal: lifecycleSignal });
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (!sim) return;
+      if (document.hidden) sim?.stop();
+      else if (layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
+    },
+    { signal: lifecycleSignal },
+  );
+  reducedMotion.addEventListener(
+    "change",
+    () => {
+      if (sim && layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
+    },
+    { signal: lifecycleSignal },
+  );
 
   // Wire the layout toggle button.
   const layoutToggleBtn = el("layout-toggle-btn");
@@ -2759,7 +3520,10 @@ async function bootLive() {
   }
   liveToken = getLiveToken();
   if (!liveToken) {
-    setStatus("live mode: no token found. Re-run magus graph open --live to get a fresh link.", true);
+    setStatus(
+      "live mode: no token found. Re-run magus graph open --live to get a fresh link.",
+      true,
+    );
     document.body.classList.add("graph-empty");
     return true;
   }
@@ -2769,7 +3533,7 @@ async function bootLive() {
   try {
     const skeletonUrl = "http://" + liveHost + "/api/v1/graph?level=projects";
     const skeletonResp = await fetch(skeletonUrl, {
-      headers: authHeaders(liveToken)
+      headers: authHeaders(liveToken),
     });
     if (!skeletonResp.ok) throw new Error("HTTP " + skeletonResp.status);
     liveETag = skeletonResp.headers.get("ETag") || null;
@@ -2803,7 +3567,10 @@ async function bootLive() {
         const ff = detectFlavor(fullData);
         graphFlavor = ff;
         let rr = fullData;
-        if (ff === "targets") { const nl = targetGraphToNodeLink(fullData); rr = { nodes: nl.nodes, links: nl.links }; }
+        if (ff === "targets") {
+          const nl = targetGraphToNodeLink(fullData);
+          rr = { nodes: nl.nodes, links: nl.links };
+        }
         graph = prepareGraph(rr);
       }
     }
@@ -2817,7 +3584,8 @@ async function bootLive() {
     if (!projectionUnfolded) updateProjectionStatus();
     else setStatus("live workspace connected");
 
-    renderLegend(); renderList();
+    renderLegend();
+    renderList();
 
     applyLayoutAndSimulation(params.layout, graphFlavor);
     parkHiddenNodes();
@@ -2829,9 +3597,17 @@ async function bootLive() {
     // Wire all common event listeners.
     bootWireEvents();
     return true;
-  } catch (e: any) {
-    setStatus("live mode: could not connect to daemon at " + liveHost + ": " + e.message + ". Start it with: magus server start", true);
-    liveHost = null; liveToken = null;
+  } catch (e) {
+    setStatus(
+      "live mode: could not connect to daemon at " +
+        liveHost +
+        ": " +
+        errMessage(e) +
+        ". Start it with: magus server start",
+      true,
+    );
+    liveHost = null;
+    liveToken = null;
     return false; // fall through to normal load
   }
 }
@@ -2842,11 +3618,23 @@ async function bootLive() {
 // lifecycle listeners (via the one AbortController). Idempotent. The standalone page never calls it (the
 // graph lives for the page's lifetime); the console's graph PageModule calls it on deactivate.
 export function deactivate(): void {
-  if (sim) sim.stop();
-  if (liveSseAbort) { liveSseAbort.abort(); liveSseAbort = null; }
-  if (liveReconnectTimer) { clearTimeout(liveReconnectTimer); liveReconnectTimer = null; }
-  if (stageResizeObserver) { stageResizeObserver.disconnect(); stageResizeObserver = null; }
-  if (lifecycleAbort) { lifecycleAbort.abort(); lifecycleAbort = null; }
+  if (sim) sim?.stop();
+  if (liveSseAbort) {
+    liveSseAbort.abort();
+    liveSseAbort = null;
+  }
+  if (liveReconnectTimer) {
+    clearTimeout(liveReconnectTimer);
+    liveReconnectTimer = null;
+  }
+  if (stageResizeObserver) {
+    stageResizeObserver.disconnect();
+    stageResizeObserver = null;
+  }
+  if (lifecycleAbort) {
+    lifecycleAbort.abort();
+    lifecycleAbort = null;
+  }
 }
 
 // Standalone auto-boot: only when the scaffold is already in the document at load. In the console the

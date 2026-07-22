@@ -21,11 +21,19 @@ import { encodeToCanvas } from "../lib/qr";
 export async function openShareDialog(): Promise<void> {
   const host = resolveDaemonHost();
   if (!host) {
-    showToast("Share", "No daemon is connected, so there is nothing to share. Set the daemon address in Settings first.", "error");
+    showToast(
+      "Share",
+      "No daemon is connected, so there is nothing to share. Set the daemon address in Settings first.",
+      "error",
+    );
     return;
   }
   if (!getLiveToken()) {
-    showToast("Share", "The daemon needs an auth token to share. Open the console via a live link with a token.", "error");
+    showToast(
+      "Share",
+      "The daemon needs an auth token to share. Open the console via a live link with a token.",
+      "error",
+    );
     return;
   }
 
@@ -37,7 +45,11 @@ export async function openShareDialog(): Promise<void> {
       cache: "no-store",
     });
   } catch {
-    showToast("Share", "Could not reach the daemon to start a share. Is it still running?", "error");
+    showToast(
+      "Share",
+      "Could not reach the daemon to start a share. Is it still running?",
+      "error",
+    );
     return;
   }
   if (!res.ok) {
@@ -116,7 +128,8 @@ function renderShareDialog(url: string, expiresAt: string, superseded: boolean):
   // The one disclosure line Eli asked for: network requirement + lifetime + read-only.
   const note = document.createElement("p");
   note.className = "console-share-dialog__note";
-  note.textContent = "Your phone must be on the same network as this machine. The link works for 15 minutes and is read-only.";
+  note.textContent =
+    "Your phone must be on the same network as this machine. The link works for 15 minutes and is read-only.";
   dialog.append(note);
 
   const expiry = formatExpiry(expiresAt);

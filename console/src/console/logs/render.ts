@@ -1,3 +1,4 @@
+import { must } from "../../lib/must";
 // render.ts - the pretty/raw log views and the DOM plumbing around them. render() is the one
 // entry every mode calls to repaint the body: it dispatches to the waterfall in timeline mode,
 // to a flat line-numbered dump in raw mode, and otherwise to the stylized structural view
@@ -26,14 +27,14 @@ export function render(): void {
   if (!state.pretty) {
     // RAW: in Journal mode, the exact reconstructed output (what `magus query <ref>` prints);
     // in heuristic mode, the parsed section lines. Flat, line-numbered, no folds/badges.
-    const flat = state.rawLines || state.model!.sections.flatMap((s) => s.lines);
+    const flat = state.rawLines || must(state.model).sections.flatMap((s) => s.lines);
     let n = 0;
     for (const raw of flat) bodyEl.appendChild(renderSectionLine(raw, ++n, onLineNumberClick));
     applyLineHighlight();
     return;
   }
 
-  const model = state.model!;
+  const model = must(state.model);
   // The active filter narrows the pretty view: non-matching lines and whole target groups are
   // hidden. lineNo still advances over hidden rows so line numbers (and #L links) stay stable.
   const q = state.filterParsed;
@@ -48,7 +49,10 @@ export function render(): void {
       for (const raw of sec.lines) {
         const n = ++lineNo;
         const keep = !filtering || (q.groups.length === 0 && matchAllTexts(q, stripAnsi(raw)));
-        if (keep) { bodyEl.appendChild(renderSectionLine(raw, n, onLineNumberClick)); shown++; }
+        if (keep) {
+          bodyEl.appendChild(renderSectionLine(raw, n, onLineNumberClick));
+          shown++;
+        }
       }
       continue;
     }
@@ -105,7 +109,8 @@ export function render(): void {
     head.setAttribute("aria-expanded", cached ? "false" : "true");
     const count = document.createElement("span");
     count.className = "console-render-section__count";
-    count.textContent = bodyLines.length > 0 ? bodyLines.length + (bodyLines.length === 1 ? " line" : " lines") : "";
+    count.textContent =
+      bodyLines.length > 0 ? bodyLines.length + (bodyLines.length === 1 ? " line" : " lines") : "";
 
     const actions = document.createElement("span");
     actions.className = "console-render-section__actions";
@@ -190,7 +195,7 @@ export function applyLineHighlight(): void {
   if (!range) return;
   let first: HTMLElement | null = null;
   for (const ln of bodyEl.querySelectorAll(".console-render-line__gutter")) {
-    const n = parseInt(ln.textContent!, 10);
+    const n = parseInt(must(ln.textContent), 10);
     if (!(n >= range.start && n <= range.end)) continue;
     const row = ln.parentElement as HTMLElement; // .console-render-line, or the section head button for a head row
     row.setAttribute("data-highlight", "");

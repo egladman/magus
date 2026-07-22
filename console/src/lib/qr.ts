@@ -1,3 +1,4 @@
+import { must } from "./must";
 // qr.ts - a tiny, dependency-free QR code encoder, vendored so "share to phone"
 // can draw a scannable code with no npm dependency and no network fetch.
 //
@@ -87,9 +88,30 @@ const SPECS: Record<number, VersionSpec> = {
   5: { ecPerBlock: 24, groups: [{ blocks: 2, dataPerBlock: 43 }], align: [6, 30] },
   6: { ecPerBlock: 16, groups: [{ blocks: 4, dataPerBlock: 27 }], align: [6, 34] },
   7: { ecPerBlock: 18, groups: [{ blocks: 4, dataPerBlock: 31 }], align: [6, 22, 38] },
-  8: { ecPerBlock: 22, groups: [{ blocks: 2, dataPerBlock: 38 }, { blocks: 2, dataPerBlock: 39 }], align: [6, 24, 42] },
-  9: { ecPerBlock: 22, groups: [{ blocks: 3, dataPerBlock: 36 }, { blocks: 2, dataPerBlock: 37 }], align: [6, 26, 46] },
-  10: { ecPerBlock: 26, groups: [{ blocks: 4, dataPerBlock: 43 }, { blocks: 1, dataPerBlock: 44 }], align: [6, 28, 50] },
+  8: {
+    ecPerBlock: 22,
+    groups: [
+      { blocks: 2, dataPerBlock: 38 },
+      { blocks: 2, dataPerBlock: 39 },
+    ],
+    align: [6, 24, 42],
+  },
+  9: {
+    ecPerBlock: 22,
+    groups: [
+      { blocks: 3, dataPerBlock: 36 },
+      { blocks: 2, dataPerBlock: 37 },
+    ],
+    align: [6, 26, 46],
+  },
+  10: {
+    ecPerBlock: 26,
+    groups: [
+      { blocks: 4, dataPerBlock: 43 },
+      { blocks: 1, dataPerBlock: 44 },
+    ],
+    align: [6, 28, 50],
+  },
 };
 
 function dataCapacity(version: number): number {
@@ -190,7 +212,7 @@ function placeFinder(grid: Grid, reserved: boolean[][], r0: number, c0: number):
       const inner = r >= 0 && r <= 6 && c >= 0 && c <= 6;
       const isDark =
         inner &&
-        ((r === 0 || r === 6 || c === 0 || c === 6) || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
+        (r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
       grid[rr][cc] = isDark ? 1 : 0;
       reserved[rr][cc] = true;
     }
@@ -205,7 +227,10 @@ function placeAlignment(grid: Grid, reserved: boolean[][], centers: number[]): v
       let overlaps = false;
       for (let dr = -2; dr <= 2 && !overlaps; dr++) {
         for (let dc = -2; dc <= 2; dc++) {
-          if (reserved[r + dr]?.[c + dc]) { overlaps = true; break; }
+          if (reserved[r + dr]?.[c + dc]) {
+            overlaps = true;
+            break;
+          }
         }
       }
       if (overlaps) continue;
@@ -224,8 +249,14 @@ function placeTiming(grid: Grid, reserved: boolean[][]): void {
   const size = grid.length;
   for (let i = 8; i < size - 8; i++) {
     const v = i % 2 === 0 ? 1 : 0;
-    if (!reserved[6][i]) { grid[6][i] = v; reserved[6][i] = true; }
-    if (!reserved[i][6]) { grid[i][6] = v; reserved[i][6] = true; }
+    if (!reserved[6][i]) {
+      grid[6][i] = v;
+      reserved[6][i] = true;
+    }
+    if (!reserved[i][6]) {
+      grid[i][6] = v;
+      reserved[i][6] = true;
+    }
   }
 }
 
@@ -270,15 +301,24 @@ function placeData(grid: Grid, reserved: boolean[][], codewords: number[]): void
 
 function maskFn(mask: number, r: number, c: number): boolean {
   switch (mask) {
-    case 0: return (r + c) % 2 === 0;
-    case 1: return r % 2 === 0;
-    case 2: return c % 3 === 0;
-    case 3: return (r + c) % 3 === 0;
-    case 4: return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
-    case 5: return ((r * c) % 2) + ((r * c) % 3) === 0;
-    case 6: return (((r * c) % 2) + ((r * c) % 3)) % 2 === 0;
-    case 7: return (((r + c) % 2) + ((r * c) % 3)) % 2 === 0;
-    default: return false;
+    case 0:
+      return (r + c) % 2 === 0;
+    case 1:
+      return r % 2 === 0;
+    case 2:
+      return c % 3 === 0;
+    case 3:
+      return (r + c) % 3 === 0;
+    case 4:
+      return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+    case 5:
+      return ((r * c) % 2) + ((r * c) % 3) === 0;
+    case 6:
+      return (((r * c) % 2) + ((r * c) % 3)) % 2 === 0;
+    case 7:
+      return (((r + c) % 2) + ((r * c) % 3)) % 2 === 0;
+    default:
+      return false;
   }
 }
 
@@ -325,8 +365,14 @@ function penalty(grid: Grid): number {
       let prev = -1;
       for (let i = 0; i < size; i++) {
         const v = along ? grid[r][i] : grid[i][r];
-        if (v === prev) { run++; if (run === 5) score += 3; else if (run > 5) score += 1; }
-        else { run = 1; prev = v; }
+        if (v === prev) {
+          run++;
+          if (run === 5) score += 3;
+          else if (run > 5) score += 1;
+        } else {
+          run = 1;
+          prev = v;
+        }
       }
     }
   }
@@ -356,7 +402,7 @@ function penalty(grid: Grid): number {
   const percent = (dark * 100) / (size * size);
   const prev5 = Math.floor(percent / 5) * 5;
   const next5 = prev5 + 5;
-  score += Math.min(Math.abs(prev5 - 50), Math.abs(next5 - 50)) / 5 * 10;
+  score += (Math.min(Math.abs(prev5 - 50), Math.abs(next5 - 50)) / 5) * 10;
   return score;
 }
 
@@ -370,7 +416,9 @@ export function encodeMatrix(text: string): number[][] {
   const size = version * 4 + 17;
 
   // Build function patterns once; data placement is repeated per candidate mask.
-  const baseReserved: boolean[][] = Array.from({ length: size }, () => new Array<boolean>(size).fill(false));
+  const baseReserved: boolean[][] = Array.from({ length: size }, () =>
+    new Array<boolean>(size).fill(false),
+  );
   const base = newGrid(size);
   placeFinder(base, baseReserved, 0, 0);
   placeFinder(base, baseReserved, 0, size - 7);
@@ -393,11 +441,14 @@ export function encodeMatrix(text: string): number[][] {
     }
     placeFormat(grid, mask);
     const sc = penalty(grid);
-    if (sc < bestScore) { bestScore = sc; best = grid; }
+    if (sc < bestScore) {
+      bestScore = sc;
+      best = grid;
+    }
   }
 
   const out: number[][] = [];
-  for (let r = 0; r < size; r++) out.push(Array.from(best![r]));
+  for (let r = 0; r < size; r++) out.push(Array.from(must(best)[r]));
   return out;
 }
 

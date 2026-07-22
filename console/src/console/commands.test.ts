@@ -4,9 +4,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  advanceSequence, chordFromEvent, conflicts, dispatchCommand, formatChord, hasSequenceWithPrefix,
-  listCommands, mergeKeymap, normalizeChord, normalizeSequence, registerCommand, resolveCommand,
-  unregisterCommand, type Keymap, type KeyChord,
+  advanceSequence,
+  chordFromEvent,
+  conflicts,
+  dispatchCommand,
+  formatChord,
+  hasSequenceWithPrefix,
+  listCommands,
+  mergeKeymap,
+  normalizeChord,
+  normalizeSequence,
+  registerCommand,
+  resolveCommand,
+  unregisterCommand,
+  type Keymap,
+  type KeyChord,
 } from "./commands";
 
 function evt(partial: Partial<KeyChord>): KeyChord {
@@ -23,10 +35,13 @@ test("normalizeChord canonicalizes modifier aliases, order, and key case", () =>
 });
 
 test("chordFromEvent folds the accelerator per platform", () => {
-  assert.equal(chordFromEvent(evt({ metaKey: true, key: "K" }), true), "mod+k");   // mac: Cmd -> mod
-  assert.equal(chordFromEvent(evt({ metaKey: true, key: "K" }), false), "k");       // non-mac: Cmd ignored
-  assert.equal(chordFromEvent(evt({ ctrlKey: true, key: "k" }), false), "mod+k");   // non-mac: Ctrl -> mod
-  assert.equal(chordFromEvent(evt({ ctrlKey: true, shiftKey: true, key: "\\" }), false), "mod+shift+\\");
+  assert.equal(chordFromEvent(evt({ metaKey: true, key: "K" }), true), "mod+k"); // mac: Cmd -> mod
+  assert.equal(chordFromEvent(evt({ metaKey: true, key: "K" }), false), "k"); // non-mac: Cmd ignored
+  assert.equal(chordFromEvent(evt({ ctrlKey: true, key: "k" }), false), "mod+k"); // non-mac: Ctrl -> mod
+  assert.equal(
+    chordFromEvent(evt({ ctrlKey: true, shiftKey: true, key: "\\" }), false),
+    "mod+shift+\\",
+  );
   assert.equal(chordFromEvent(evt({ altKey: true, key: "ArrowLeft" }), false), "alt+ArrowLeft");
 });
 
@@ -35,7 +50,10 @@ test("chordFromEvent recovers the physical letter for an alt-chord from e.code",
   assert.equal(chordFromEvent(evt({ altKey: true, key: "˙", code: "KeyH" }), true), "alt+h");
   assert.equal(chordFromEvent(evt({ altKey: true, key: "¬", code: "KeyL" }), true), "alt+l");
   // A digit alt-chord recovers too; shift still layers.
-  assert.equal(chordFromEvent(evt({ altKey: true, shiftKey: true, code: "Digit2", key: "@" }), false), "alt+shift+2");
+  assert.equal(
+    chordFromEvent(evt({ altKey: true, shiftKey: true, code: "Digit2", key: "@" }), false),
+    "alt+shift+2",
+  );
   // Without alt, e.code is ignored - the typed key wins (so shifted symbols keep working).
   assert.equal(chordFromEvent(evt({ metaKey: true, key: "K", code: "KeyK" }), true), "mod+k");
 });
@@ -53,13 +71,13 @@ test("a bare modifier press yields no chord", () => {
   assert.equal(chordFromEvent(evt({ metaKey: true, key: "Meta" }), true), "");
 });
 
-test("mergeKeymap: user overrides win, including \"\" to disable; unmentioned keep default", () => {
+test('mergeKeymap: user overrides win, including "" to disable; unmentioned keep default', () => {
   const defaults = { "logs.fold": "mod+k", "logs.raw": "mod+r", "logs.filter": "/" };
   const user = { "logs.raw": "Cmd+Shift+R", "logs.fold": "" };
   assert.deepEqual(mergeKeymap(defaults, user), {
-    "logs.fold": "",                 // user disabled it
-    "logs.raw": "mod+shift+r",        // user rebind, normalized
-    "logs.filter": "/",              // untouched default
+    "logs.fold": "", // user disabled it
+    "logs.raw": "mod+shift+r", // user rebind, normalized
+    "logs.filter": "/", // untouched default
   });
 });
 
@@ -68,7 +86,7 @@ test("resolveCommand reverse-looks-up a chord, skipping disabled entries", () =>
   assert.equal(resolveCommand(keymap, "mod+r"), "logs.raw");
   assert.equal(resolveCommand(keymap, "/"), "logs.filter");
   assert.equal(resolveCommand(keymap, "mod+x"), null); // unbound
-  assert.equal(resolveCommand(keymap, ""), null);       // the disabled sentinel never resolves
+  assert.equal(resolveCommand(keymap, ""), null); // the disabled sentinel never resolves
 });
 
 test("conflicts finds duplicate bindings, excluding self and disabled", () => {
@@ -94,7 +112,13 @@ test("the registry registers, dispatches, replaces by id, and unregisters", () =
 
 test("dispatchCommand forwards its argument", () => {
   let seen: unknown = null;
-  registerCommand({ id: "test.arg", label: "Arg", run: (arg) => { seen = arg; } });
+  registerCommand({
+    id: "test.arg",
+    label: "Arg",
+    run: (arg) => {
+      seen = arg;
+    },
+  });
   dispatchCommand("test.arg", "left");
   assert.equal(seen, "left");
   unregisterCommand("test.arg");
@@ -105,20 +129,20 @@ test("dispatchCommand forwards its argument", () => {
 test("normalizeSequence canonicalizes each chord and collapses whitespace", () => {
   assert.equal(normalizeSequence("Ctrl+X o"), "mod+x o");
   assert.equal(normalizeSequence("Ctrl+X   Ctrl+O"), "mod+x mod+o"); // runs of space collapse to one
-  assert.equal(normalizeSequence("mod+k"), "mod+k");                  // a single chord is unchanged
-  assert.equal(normalizeSequence("  "), "");                          // empty stays the disabled sentinel
+  assert.equal(normalizeSequence("mod+k"), "mod+k"); // a single chord is unchanged
+  assert.equal(normalizeSequence("  "), ""); // empty stays the disabled sentinel
 });
 
 test("resolveCommand matches an exact sequence, not a mere prefix", () => {
   const km = { "pane.next": "mod+x o", "bar.open": "mod+k" };
   assert.equal(resolveCommand(km, "Ctrl+X o"), "pane.next"); // normalized before comparing
-  assert.equal(resolveCommand(km, "mod+x"), null);            // the prefix alone is not a binding
-  assert.equal(resolveCommand(km, "mod+k"), "bar.open");      // single chords still resolve
+  assert.equal(resolveCommand(km, "mod+x"), null); // the prefix alone is not a binding
+  assert.equal(resolveCommand(km, "mod+k"), "bar.open"); // single chords still resolve
 });
 
 test("hasSequenceWithPrefix detects a longer binding sharing the run", () => {
   const km = { a: "mod+x o", b: "mod+k" };
-  assert.equal(hasSequenceWithPrefix(km, "mod+x"), true);   // "mod+x o" extends "mod+x"
+  assert.equal(hasSequenceWithPrefix(km, "mod+x"), true); // "mod+x o" extends "mod+x"
   assert.equal(hasSequenceWithPrefix(km, "mod+x o"), false); // nothing extends the full binding
   assert.equal(hasSequenceWithPrefix(km, "mod+k"), false);
   assert.equal(hasSequenceWithPrefix(km, ""), false);
@@ -150,9 +174,9 @@ test("advanceSequence waits on a prefix, then fires the full sequence", () => {
   const km: Keymap = { "pane.next": "mod+x o" };
   const first = advanceSequence([], "mod+x", km);
   assert.equal(first.fire, null);
-  assert.equal(first.consumed, true);          // the prefix is swallowed (no browser cut)
+  assert.equal(first.consumed, true); // the prefix is swallowed (no browser cut)
   assert.deepEqual(first.pending, ["mod+x"]);
-  assert.equal(first.waitFor, null);           // "mod+x" alone is not a binding
+  assert.equal(first.waitFor, null); // "mod+x" alone is not a binding
   const second = advanceSequence(first.pending, "o", km);
   assert.equal(second.fire, "pane.next");
   assert.deepEqual(second.pending, []);
@@ -161,9 +185,9 @@ test("advanceSequence waits on a prefix, then fires the full sequence", () => {
 test("advanceSequence carries waitFor when the prefix is itself a complete binding", () => {
   const km: Keymap = { short: "mod+x", long: "mod+x o" };
   const out = advanceSequence([], "mod+x", km);
-  assert.equal(out.fire, null);        // hold, because a longer binding could still complete
+  assert.equal(out.fire, null); // hold, because a longer binding could still complete
   assert.deepEqual(out.pending, ["mod+x"]);
-  assert.equal(out.waitFor, "short");  // but on timeout, the short binding fires
+  assert.equal(out.waitFor, "short"); // but on timeout, the short binding fires
 });
 
 test("advanceSequence re-evaluates a chord that breaks a prefix, not swallowing it", () => {

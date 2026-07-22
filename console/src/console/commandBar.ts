@@ -73,7 +73,10 @@ export function matchCommands(commands: Command[], query: string): CommandMatch[
     if (!m) continue;
     out.push({ command, hits: m.hits.filter((i) => i < token.length), score: m.score });
   }
-  out.sort((a, b) => b.score - a.score || displayToken(a.command.id).length - displayToken(b.command.id).length);
+  out.sort(
+    (a, b) =>
+      b.score - a.score || displayToken(a.command.id).length - displayToken(b.command.id).length,
+  );
   return out;
 }
 
@@ -88,7 +91,9 @@ function highlightToken(token: string, hits: number[]): DocumentFragment {
     let j = i;
     while (j < token.length && hit.has(j) === on) j++;
     const slice = token.slice(i, j);
-    frag.append(on ? h("span", "console-shell-commandbar__hit", slice) : document.createTextNode(slice));
+    frag.append(
+      on ? h("span", "console-shell-commandbar__hit", slice) : document.createTextNode(slice),
+    );
     i = j;
   }
   return frag;
@@ -224,16 +229,33 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
     bar.hidden = true;
   }
 
-  input.addEventListener("input", () => { selected = 0; syncTyped(); renderItems(); });
+  input.addEventListener("input", () => {
+    selected = 0;
+    syncTyped();
+    renderItems();
+  });
   // Local keyboard handling, dmenu-style: Left/Right walk the horizontal row (Up/Down alias to them,
   // Tab/Shift+Tab too), Enter runs the selection, Esc closes. Tab is captured so focus never leaves
   // the bar while it is open. Stop propagation so the global keybinding listener does not also act on
   // these while the command bar owns focus.
   input.addEventListener("keydown", (ev) => {
-    if (ev.key === "ArrowRight" || ev.key === "ArrowDown" || (ev.key === "Tab" && !ev.shiftKey)) { ev.preventDefault(); move(1); }
-    else if (ev.key === "ArrowLeft" || ev.key === "ArrowUp" || (ev.key === "Tab" && ev.shiftKey)) { ev.preventDefault(); move(-1); }
-    else if (ev.key === "Enter") { ev.preventDefault(); if (filtered[selected]) run(filtered[selected].command.id); }
-    else if (ev.key === "Escape") { ev.preventDefault(); close(); }
+    if (ev.key === "ArrowRight" || ev.key === "ArrowDown" || (ev.key === "Tab" && !ev.shiftKey)) {
+      ev.preventDefault();
+      move(1);
+    } else if (
+      ev.key === "ArrowLeft" ||
+      ev.key === "ArrowUp" ||
+      (ev.key === "Tab" && ev.shiftKey)
+    ) {
+      ev.preventDefault();
+      move(-1);
+    } else if (ev.key === "Enter") {
+      ev.preventDefault();
+      if (filtered[selected]) run(filtered[selected].command.id);
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      close();
+    }
     ev.stopPropagation();
   });
   // A click anywhere off the bar dismisses it (dmenu drops on focus loss); a click on the bar stays.

@@ -22,7 +22,10 @@ test("signal: get returns the current value; set updates it and notifies subscri
 test("signal: a listener unsubscribing itself mid-notify does not skip the others", () => {
   const s = signal(0);
   const seen: string[] = [];
-  const offA = s.subscribe(() => { seen.push("a"); offA(); });
+  const offA = s.subscribe(() => {
+    seen.push("a");
+    offA();
+  });
   s.subscribe(() => seen.push("b"));
   s.set(1);
   assert.deepEqual(seen, ["a", "b"]); // b still ran despite a removing itself

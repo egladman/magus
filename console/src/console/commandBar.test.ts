@@ -7,7 +7,12 @@ import assert from "node:assert/strict";
 import { matchCommands, displayToken } from "./commandBar";
 import type { Command } from "./commands";
 
-const cmd = (id: string, label: string, group?: string): Command => ({ id, label, group, run() {} });
+const cmd = (id: string, label: string, group?: string): Command => ({
+  id,
+  label,
+  group,
+  run() {},
+});
 const cmds: Command[] = [
   cmd("console.tab.new", "New tab", "Tabs"),
   cmd("console.tab.close", "Close pane or tab", "Tabs"),
@@ -22,14 +27,23 @@ test("displayToken drops the console namespace prefix and leaves bare ids alone"
 
 test("an empty query returns every command in registry order, unscored", () => {
   const r = matchCommands(cmds, "");
-  assert.deepEqual(r.map((m) => m.command.id), cmds.map((c) => c.id));
-  assert.deepEqual(r.map((m) => m.score), [0, 0, 0, 0]);
+  assert.deepEqual(
+    r.map((m) => m.command.id),
+    cmds.map((c) => c.id),
+  );
+  assert.deepEqual(
+    r.map((m) => m.score),
+    [0, 0, 0, 0],
+  );
   assert.deepEqual(r[0].hits, []);
 });
 
 test("a subsequence over the token matches and reports its hit positions", () => {
   const r = matchCommands(cmds, "split");
-  assert.deepEqual(r.map((m) => m.command.id), ["console.pane.split"]);
+  assert.deepEqual(
+    r.map((m) => m.command.id),
+    ["console.pane.split"],
+  );
   // "split" lands on s p l i t in "pane.split" (indices 5..9).
   assert.deepEqual(r[0].hits, [5, 6, 7, 8, 9]);
 });
@@ -49,7 +63,10 @@ test("token-start matches outrank scattered mid-string ones", () => {
 
 test("a command is findable by its prose label, but label hits are not reported for token highlight", () => {
   const r = matchCommands(cmds, "keyboard");
-  assert.deepEqual(r.map((m) => m.command.id), ["console.cheatsheet.toggle"]);
+  assert.deepEqual(
+    r.map((m) => m.command.id),
+    ["console.cheatsheet.toggle"],
+  );
   assert.deepEqual(r[0].hits, []); // the match is in the label, past the token, so nothing to highlight
 });
 

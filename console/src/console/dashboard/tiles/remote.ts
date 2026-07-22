@@ -9,7 +9,9 @@ import { Card, type Tile } from "./card";
 
 export function remoteTile(): Tile {
   const card = new Card("remote", "Remote cache", {
-    term: "Remote cache", label: "remote cache", note: "get / put over the network",
+    term: "Remote cache",
+    label: "remote cache",
+    note: "get / put over the network",
   });
   const strip = new StatStrip([
     { key: "hits", label: "Hits", accent: "hit" },

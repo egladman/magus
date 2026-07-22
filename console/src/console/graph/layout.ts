@@ -22,7 +22,7 @@
 // and selection operate on the same draw() function unchanged. Drag updates
 // n.fx/n.fy directly.
 
-import type { GLink, GNode } from "./types.js";
+import { type GLink, type GNode, endpointId } from "./types.js";
 
 export const LAYERED_COL_W = 180; // horizontal spacing between layers (columns)
 export const LAYERED_ROW_H = 48; // vertical spacing between nodes within a layer
@@ -38,8 +38,8 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   const depEdges: { s: string; t: string; linkRef: GLink }[] = [];
   for (const e of links) {
     if (e.relation !== "depends_on") continue;
-    const s = e.source.id || e.source;
-    const t = e.target.id || e.target;
+    const s = endpointId(e.source);
+    const t = endpointId(e.target);
     if (!ids.has(s) || !ids.has(t)) continue;
     if (s === t) continue; // self-loop: skip to prevent infinite recursion in getLayer
     depEdges.push({ s, t, linkRef: e });
@@ -61,7 +61,7 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   // Sorting by original targetId gives deterministic traversal order.
   const outSnap = new Map<string, { origTarget: string; edgeRef: (typeof depEdges)[number] }[]>();
   for (const id of ids) outSnap.set(id, []);
-  for (const e of depEdges) outSnap.get(e.s)!.push({ origTarget: e.t, edgeRef: e });
+  for (const e of depEdges) outSnap.get(e.s)?.push({ origTarget: e.t, edgeRef: e });
   for (const arr of outSnap.values())
     arr.sort((a, b) => (a.origTarget < b.origTarget ? -1 : a.origTarget > b.origTarget ? 1 : 0));
 
@@ -111,12 +111,13 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
     // A dependent's predecessor is its dependency: layer(dependent) = 1 + layer(dependency).
     // This puts dependencies at lower x (left) and dependents at higher x (right),
     // matching the Go emitter (dependency --> dependent, LR direction).
-    predMap.get(e.s)!.add(e.t);
+    predMap.get(e.s)?.add(e.t);
   }
 
   const layerOf = new Map<string, number>(); // nodeId -> layer index
   function getLayer(id: string): number {
-    if (layerOf.has(id)) return layerOf.get(id)!;
+    const cached = layerOf.get(id);
+    if (cached !== undefined) return cached;
     const preds = predMap.get(id) || new Set<string>();
     // Guard against any residual cycle (reversed edges should have eliminated
     // them, but be safe): if no preds, layer = 0.
@@ -135,7 +136,7 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   const layerGroups = new Map<number, string[]>(); // layer -> [nodeId, ...]
   for (const [id, l] of layerOf) {
     if (!layerGroups.has(l)) layerGroups.set(l, []);
-    layerGroups.get(l)!.push(id);
+    layerGroups.get(l)?.push(id);
   }
   for (const arr of layerGroups.values()) arr.sort();
 
@@ -147,7 +148,7 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   // pos[id] = current order index within its layer.
   const pos = new Map<string, number>();
   for (const l of sortedLayers) {
-    layerGroups.get(l)!.forEach((id, i) => pos.set(id, i));
+    layerGroups.get(l)?.forEach((id, i) => pos.set(id, i));
   }
 
   // Build directed edge sets for sweep (predecessor in layer l-1, successor in l+1).
@@ -158,8 +159,8 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
     prevMap.set(id, []);
   }
   for (const e of depEdges) {
-    succMap.get(e.s)!.push(e.t);
-    prevMap.get(e.t)!.push(e.s);
+    succMap.get(e.s)?.push(e.t);
+    prevMap.get(e.t)?.push(e.s);
   }
 
   function barycentricSort(arr: string[], neighborFn: (id: string) => string[]): string[] {
@@ -183,7 +184,8 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
 
   for (const { order, neighborFn } of sweeps) {
     for (const l of order) {
-      const arr = layerGroups.get(l)!;
+      const arr = layerGroups.get(l);
+      if (!arr) continue;
       const sorted = barycentricSort(arr, neighborFn);
       layerGroups.set(l, sorted);
       sorted.forEach((id, i) => pos.set(id, i));
@@ -198,7 +200,8 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
   for (const l of sortedLayers) {
-    const arr = layerGroups.get(l)!;
+    const arr = layerGroups.get(l);
+    if (!arr) continue;
     const layerH = arr.length * LAYERED_ROW_H;
     const yOffset = (totalH - layerH) / 2 + LAYERED_ROW_H / 2;
     for (let i = 0; i < arr.length; i++) {

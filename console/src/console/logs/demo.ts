@@ -1,3 +1,4 @@
+import { must } from "../../lib/must";
 // demo.ts - the daemon-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
 // magus.viewer.v1 Journals and REVEAL the primary one incrementally so the page feels like a live run
 // streaming in. The primary (streamed) invocation is the failing svc/api:test run an agent kicked off
@@ -13,13 +14,24 @@
 
 import { create } from "@bufbuild/protobuf";
 import type { Journal } from "../../gen/magus/viewer/v1/viewer_pb";
-import { EventSchema, JournalSchema, Kind, Status, Stream, Trigger } from "../../gen/magus/viewer/v1/viewer_pb";
+import {
+  EventSchema,
+  JournalSchema,
+  Kind,
+  Status,
+  Stream,
+  Trigger,
+} from "../../gen/magus/viewer/v1/viewer_pb";
 import { state } from "./state";
 import { emptyEl, setRefIdentity } from "./dom";
 import { tsMs } from "./waterfall";
 import { scheduleLiveRender, setLiveStatus } from "./live";
 import {
-  scenarioRuns, INV_TEST_BREAK, INV_CI, type RunState, type ScenarioRun,
+  scenarioRuns,
+  INV_TEST_BREAK,
+  INV_CI,
+  type RunState,
+  type ScenarioRun,
 } from "../demo-scenario";
 
 // demoTs / demoDur build protobuf Timestamp / Duration inits ({seconds: bigint, nanos}) from a
@@ -58,7 +70,9 @@ function buildJournal(
 ): Journal {
   const base = Date.now();
   const events = [];
-  events.push(create(EventSchema, { kind: Kind.STARTED, time: demoTs(base), command, magusVersion: "demo" }));
+  events.push(
+    create(EventSchema, { kind: Kind.STARTED, time: demoTs(base), command, magusVersion: "demo" }),
+  );
   events.push(create(EventSchema, { kind: Kind.SCOPE, time: demoTs(base), text: scopeText }));
 
   let maxEnd = 0;
@@ -68,32 +82,80 @@ function buildJournal(
     const execs = run.execs ?? [];
     for (let i = 0; i < execs.length; i++) {
       const at = at0 + Math.round((run.durationMs * i) / Math.max(1, execs.length));
-      events.push(create(EventSchema, { kind: Kind.EXEC, time: demoTs(at), project: run.project, target: run.target, text: execs[i] }));
+      events.push(
+        create(EventSchema, {
+          kind: Kind.EXEC,
+          time: demoTs(at),
+          project: run.project,
+          target: run.target,
+          text: execs[i],
+        }),
+      );
     }
     const end = at0 + run.durationMs;
     maxEnd = Math.max(maxEnd, end - base);
     if (run.stdout) {
-      events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 10), project: run.project, target: run.target, stream: Stream.STDOUT, text: run.stdout }));
+      events.push(
+        create(EventSchema, {
+          kind: Kind.OUTPUT,
+          time: demoTs(end - 10),
+          project: run.project,
+          target: run.target,
+          stream: Stream.STDOUT,
+          text: run.stdout,
+        }),
+      );
     }
     if (run.stderr) {
       for (const line of run.stderr.split("\n")) {
-        events.push(create(EventSchema, { kind: Kind.OUTPUT, time: demoTs(end - 8), project: run.project, target: run.target, stream: Stream.STDERR, text: line }));
+        events.push(
+          create(EventSchema, {
+            kind: Kind.OUTPUT,
+            time: demoTs(end - 8),
+            project: run.project,
+            target: run.target,
+            stream: Stream.STDERR,
+            text: line,
+          }),
+        );
       }
     }
     if (run.state === "failed") anyFail = true;
-    events.push(create(EventSchema, { kind: Kind.RESULT, time: demoTs(end), project: run.project, target: run.target, status: STATUS[run.state], ref: run.ref, duration: demoDur(run.durationMs) }));
+    events.push(
+      create(EventSchema, {
+        kind: Kind.RESULT,
+        time: demoTs(end),
+        project: run.project,
+        target: run.target,
+        status: STATUS[run.state],
+        ref: run.ref,
+        duration: demoDur(run.durationMs),
+      }),
+    );
   }
-  events.push(create(EventSchema, { kind: Kind.FINISHED, time: demoTs(base + maxEnd), level: anyFail ? "error" : "info" }));
+  events.push(
+    create(EventSchema, {
+      kind: Kind.FINISHED,
+      time: demoTs(base + maxEnd),
+      level: anyFail ? "error" : "info",
+    }),
+  );
   events.sort((a, b) => (tsMs(a.time) || 0) - (tsMs(b.time) || 0));
 
-  const invocation = { id: invId, command, startTime: demoTs(base), endTime: demoTs(base + maxEnd), magusVersion: "demo" };
+  const invocation = {
+    id: invId,
+    command,
+    startTime: demoTs(base),
+    endTime: demoTs(base + maxEnd),
+    magusVersion: "demo",
+  };
   return create(JournalSchema, { invocation, events });
 }
 
 // brokenTestJournal is the primary streamed invocation: the agent-driven svc/api:test run that FAILs.
 function brokenTestJournal(): Journal {
   const runs = scenarioRuns(Date.now());
-  const test = runs.find((r) => r.inv === INV_TEST_BREAK)!;
+  const test = must(runs.find((r) => r.inv === INV_TEST_BREAK));
   return buildJournal(
     [{ run: test, start: 0 }],
     INV_TEST_BREAK,
@@ -132,7 +194,7 @@ export function startDemo(): void {
   state.livePaused = false;
   state.currentJournal = null; // waterfallSource then reads the live buffer, as in a real live run
   state.currentJournals = [sibling]; // the completed sibling invocation, rendered as its own group
-  state.timeline = true;       // open straight into the waterfall so it visibly fills in
+  state.timeline = true; // open straight into the waterfall so it visibly fills in
   state.currentRef = "";
   if (emptyEl) emptyEl.hidden = true;
   // No real identity in demo mode - an empty value hides the ref pill entirely (setRefIdentity)

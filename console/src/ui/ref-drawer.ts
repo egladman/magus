@@ -85,11 +85,15 @@ export function wireDrawerToggle(opts: {
       opts.onClose?.();
       // Only pull focus back to the trigger when it currently sits inside the panel, so closing via an
       // outside click on some other control does not yank focus away from where the user just went.
-      if (document.activeElement instanceof HTMLElement && panel.contains(document.activeElement)) trigger.focus();
+      if (document.activeElement instanceof HTMLElement && panel.contains(document.activeElement))
+        trigger.focus();
     }
   };
 
-  trigger.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(!open);
+  });
 
   // Outside pointerdown dismisses. A click on the trigger is handled by its own listener, so ignore it
   // here to avoid a double-toggle.
@@ -107,7 +111,12 @@ export function wireDrawerToggle(opts: {
   });
 
   render();
-  return { open: () => setOpen(true), close: () => setOpen(false), toggle: () => setOpen(!open), isOpen: () => open };
+  return {
+    open: () => setOpen(true),
+    close: () => setOpen(false),
+    toggle: () => setOpen(!open),
+    isOpen: () => open,
+  };
 }
 
 // ref-drawer.ts - the console's right-side Reference panel, built on a PatternFly Drawer
@@ -147,7 +156,11 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     document.querySelector<HTMLElement>("#console-outlet-content div[data-tab-id]:not([hidden])");
 
   const collect = (pane: HTMLElement | null): HTMLElement[] =>
-    pane ? [...pane.querySelectorAll<HTMLElement>("[data-ref-section]")].filter((b) => b.id !== "ask-panel") : [];
+    pane
+      ? [...pane.querySelectorAll<HTMLElement>("[data-ref-section]")].filter(
+          (b) => b.id !== "ask-panel",
+        )
+      : [];
 
   // The shell's own reference (chords, tabs and panes) is not surface-specific, so it trails EVERY
   // surface's sections rather than belonging to one - and it is the whole of what the launcher shows,
@@ -175,7 +188,9 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
       clone.removeAttribute("id");
       clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
       if (clone instanceof HTMLDetailsElement) clone.open = true;
-      clone.querySelectorAll("details").forEach((d) => { (d as HTMLDetailsElement).open = true; });
+      clone.querySelectorAll("details").forEach((d) => {
+        (d as HTMLDetailsElement).open = true;
+      });
       bodyEl.append(clone);
     }
   };
@@ -195,12 +210,21 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     if (pane && blocks.length === 0) {
       const obs = new MutationObserver(() => {
         const found = collect(pane);
-        if (found.length > 0) { obs.disconnect(); watcher = null; paint([...found, ...shellBlocks()]); }
+        if (found.length > 0) {
+          obs.disconnect();
+          watcher = null;
+          paint([...found, ...shellBlocks()]);
+        }
       });
       watcher = obs;
       obs.observe(pane, { childList: true, subtree: true });
       // Stop watching a genuinely reference-less surface after it has had time to mount.
-      setTimeout(() => { if (watcher === obs) { obs.disconnect(); watcher = null; } }, 3000);
+      setTimeout(() => {
+        if (watcher === obs) {
+          obs.disconnect();
+          watcher = null;
+        }
+      }, 3000);
     }
   };
 
@@ -219,7 +243,11 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
       const val = src.getAttribute(attr);
       if (val === null) continue;
       const live = pane.querySelector<HTMLElement>(`[${attr}="${CSS.escape(val)}"]`);
-      if (live) { e.preventDefault(); live.click(); return; }
+      if (live) {
+        e.preventDefault();
+        live.click();
+        return;
+      }
     }
   });
 
@@ -253,16 +281,27 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
       '<circle class="pf-v6-c-spinner__path" cx="50" cy="50" r="45" fill="none"></circle></svg>';
     resultsEl.before(spinnerEl);
 
-    const showNote = (text: string): void => { noteEl.textContent = text; noteEl.hidden = false; };
-    const clearNote = (): void => { noteEl.hidden = true; noteEl.textContent = ""; };
+    const showNote = (text: string): void => {
+      noteEl.textContent = text;
+      noteEl.hidden = false;
+    };
+    const clearNote = (): void => {
+      noteEl.hidden = true;
+      noteEl.textContent = "";
+    };
 
     // markMatches builds a fragment with the query's positive terms wrapped in <mark>, so the matched
     // text stands out in a result's title/snippet. Text-node based (never innerHTML from the index), so
     // it cannot inject markup. Case-insensitive; longer terms first so they win an overlap.
     const markMatches = (text: string, terms: string[]): DocumentFragment => {
       const frag = document.createDocumentFragment();
-      const uniq = [...new Set(terms.filter((t) => t.length >= 2))].sort((a, b) => b.length - a.length);
-      if (uniq.length === 0) { frag.append(text); return frag; }
+      const uniq = [...new Set(terms.filter((t) => t.length >= 2))].sort(
+        (a, b) => b.length - a.length,
+      );
+      if (uniq.length === 0) {
+        frag.append(text);
+        return frag;
+      }
       const esc = uniq.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
       const re = new RegExp("(" + esc.join("|") + ")", "ig");
       let last = 0;
@@ -284,14 +323,18 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     const renderPreview = (raw: string): void => {
       const parts = searcher.describeQuery(raw);
       previewEl.replaceChildren();
-      if (parts.length === 0) { previewEl.hidden = true; return; }
+      if (parts.length === 0) {
+        previewEl.hidden = true;
+        return;
+      }
       for (const p of parts) {
         const chip = document.createElement("span");
         chip.className = "console-shell-refsearch__chip";
         if (p.neg) chip.dataset.neg = "";
         const scope = document.createElement("span");
         scope.className = "console-shell-refsearch__chip-scope";
-        scope.textContent = (p.neg ? "exclude " : "") + (p.field ? p.field : (p.phrase ? "phrase" : "text"));
+        scope.textContent =
+          (p.neg ? "exclude " : "") + (p.field ? p.field : p.phrase ? "phrase" : "text");
         const val = document.createElement("span");
         val.className = "console-shell-refsearch__chip-value";
         val.textContent = p.value + (p.wildcard ? " *" : "");
@@ -301,13 +344,16 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
       previewEl.hidden = false;
     };
 
-    const optionEls = (): HTMLAnchorElement[] =>
-      [...resultsEl.querySelectorAll<HTMLAnchorElement>('a[role="option"]')];
+    const optionEls = (): HTMLAnchorElement[] => [
+      ...resultsEl.querySelectorAll<HTMLAnchorElement>('a[role="option"]'),
+    ];
     const highlight = (): void => {
       const opts = optionEls();
       opts.forEach((a, i) => {
-        if (i === sel) { a.setAttribute("aria-selected", "true"); a.scrollIntoView({ block: "nearest" }); }
-        else a.removeAttribute("aria-selected");
+        if (i === sel) {
+          a.setAttribute("aria-selected", "true");
+          a.scrollIntoView({ block: "nearest" });
+        } else a.removeAttribute("aria-selected");
       });
       if (sel >= 0 && opts[sel]) searchInput.setAttribute("aria-activedescendant", opts[sel].id);
       else searchInput.removeAttribute("aria-activedescendant");
@@ -327,19 +373,34 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     // console-relative path when the site-root sibling is absent (standalone dev).
     const docBase = (url: string): string => {
       const rel = url.replace(/^\//, "");
-      try { return new URL("../" + rel, window.location.href).href; } catch { return "../" + rel; }
+      try {
+        return new URL("../" + rel, window.location.href).href;
+      } catch {
+        return "../" + rel;
+      }
     };
 
     const render = (): void => {
       const raw = searchInput.value.trim();
-      if (!raw) { closeResults(); clearNote(); return; }
+      if (!raw) {
+        closeResults();
+        clearNote();
+        return;
+      }
       renderPreview(raw); // show how the query parsed as soon as there is a query, even while loading
       const res = searcher.runSearch(raw);
       if (res === null) {
         // The index is not loaded. loaded=false: a fetch is pending -> show the spinner; the input
         // handler re-renders when it lands. loaded=true with no index: the docs index is unreachable.
-        if (loaded) { spinnerEl.hidden = true; closeResults(); renderPreview(raw); showNote("Search needs the docs site."); }
-        else { spinnerEl.hidden = false; resultsEl.hidden = true; }
+        if (loaded) {
+          spinnerEl.hidden = true;
+          closeResults();
+          renderPreview(raw);
+          showNote("Search needs the docs site.");
+        } else {
+          spinnerEl.hidden = false;
+          resultsEl.hidden = true;
+        }
         return;
       }
       spinnerEl.hidden = true;
@@ -391,13 +452,19 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     window.addEventListener("pagehide", () => loadAbort.abort(), { once: true });
     const ensureIndex = (): void => {
       if (loaded) return;
-      searcher.load(loadAbort.signal).then(() => { loaded = true; render(); }).catch((err) => {
-        loaded = true;
-        // Degrade to the unreachable-note (render() shows it), but surface the real reason so a
-        // genuine index-pipeline failure (bad JSON, a moved path) is not silently invisible.
-        if (!loadAbort.signal.aborted) console.error("docs search index failed to load", err);
-        render();
-      });
+      searcher
+        .load(loadAbort.signal)
+        .then(() => {
+          loaded = true;
+          render();
+        })
+        .catch((err) => {
+          loaded = true;
+          // Degrade to the unreachable-note (render() shows it), but surface the real reason so a
+          // genuine index-pipeline failure (bad JSON, a moved path) is not silently invisible.
+          if (!loadAbort.signal.aborted) console.error("docs search index failed to load", err);
+          render();
+        });
     };
 
     let debounce: ReturnType<typeof setTimeout> | undefined;
@@ -406,13 +473,25 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
       clearTimeout(debounce);
       debounce = setTimeout(render, 90);
     });
-    searchInput.addEventListener("focus", () => { ensureIndex(); if (searchInput.value.trim()) render(); });
+    searchInput.addEventListener("focus", () => {
+      ensureIndex();
+      if (searchInput.value.trim()) render();
+    });
     searchInput.addEventListener("keydown", (e: KeyboardEvent) => {
       const opts = optionEls();
-      if (e.key === "ArrowDown" && opts.length) { e.preventDefault(); sel = (sel + 1) % opts.length; highlight(); }
-      else if (e.key === "ArrowUp" && opts.length) { e.preventDefault(); sel = (sel <= 0 ? opts.length : sel) - 1; highlight(); }
-      else if (e.key === "Enter") {
-        if (sel >= 0 && opts[sel]) { e.preventDefault(); window.open(opts[sel].href, "_blank", "noopener"); }
+      if (e.key === "ArrowDown" && opts.length) {
+        e.preventDefault();
+        sel = (sel + 1) % opts.length;
+        highlight();
+      } else if (e.key === "ArrowUp" && opts.length) {
+        e.preventDefault();
+        sel = (sel <= 0 ? opts.length : sel) - 1;
+        highlight();
+      } else if (e.key === "Enter") {
+        if (sel >= 0 && opts[sel]) {
+          e.preventDefault();
+          window.open(opts[sel].href, "_blank", "noopener");
+        }
       } else if (e.key === "Escape" && !resultsEl.hidden) {
         // Swallow Escape while a result list is open so it closes the list, not the whole panel.
         e.stopPropagation();
@@ -445,11 +524,18 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     isOpen = open;
     if (open) refresh();
     // Closing a pinned panel also unpins it, so it does not spring back on the next open.
-    if (!open && pinned) { pinned = false; pinnedCell.set(false); }
+    if (!open && pinned) {
+      pinned = false;
+      pinnedCell.set(false);
+    }
     render();
     // Move focus into the panel on open (the close button), back to the trigger on close.
     if (open) requestAnimationFrame(() => closeBtn?.focus());
-    else if (document.activeElement instanceof HTMLElement && panel.contains(document.activeElement)) trigger.focus();
+    else if (
+      document.activeElement instanceof HTMLElement &&
+      panel.contains(document.activeElement)
+    )
+      trigger.focus();
   };
 
   const togglePin = (): void => {
@@ -465,7 +551,10 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   // Break out to a tab: promote the console-wide reference into its own persistent, tileable tab, then
   // close the panel (its content now lives in the tab). main.ts supplies onBreakOut (it opens the
   // reference surface below).
-  breakoutBtn?.addEventListener("click", () => { opts.onBreakOut?.(); setOpen(false); });
+  breakoutBtn?.addEventListener("click", () => {
+    opts.onBreakOut?.();
+    setOpen(false);
+  });
 
   // Outside-click closes an unpinned panel. A click on the trigger is handled by its own listener,
   // so ignore it here to avoid a double-toggle.
@@ -490,7 +579,8 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   if (splitter) {
     const MIN_W = 280;
     const widthCell = persisted("ref-width", 0); // 0 = "use the PF default until first drag"
-    const maxW = (): number => Math.min(760, Math.max(MIN_W, Math.round(drawer.getBoundingClientRect().width * 0.85)));
+    const maxW = (): number =>
+      Math.min(760, Math.max(MIN_W, Math.round(drawer.getBoundingClientRect().width * 0.85)));
     const applyWidth = (w: number): void => {
       const clamped = Math.max(MIN_W, Math.min(maxW(), Math.round(w)));
       panel.style.setProperty("--pf-v6-c-drawer__panel--md--FlexBasis", clamped + "px");
@@ -529,16 +619,27 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     splitter.addEventListener("keydown", (e: KeyboardEvent) => {
       const cur = panel.getBoundingClientRect().width;
       const step = e.shiftKey ? 48 : 16;
-      if (e.key === "ArrowLeft") { applyWidth(cur + step); e.preventDefault(); }
-      else if (e.key === "ArrowRight") { applyWidth(cur - step); e.preventDefault(); }
-      else if (e.key === "Home") { applyWidth(maxW()); e.preventDefault(); }
-      else if (e.key === "End") { applyWidth(MIN_W); e.preventDefault(); }
+      if (e.key === "ArrowLeft") {
+        applyWidth(cur + step);
+        e.preventDefault();
+      } else if (e.key === "ArrowRight") {
+        applyWidth(cur - step);
+        e.preventDefault();
+      } else if (e.key === "Home") {
+        applyWidth(maxW());
+        e.preventDefault();
+      } else if (e.key === "End") {
+        applyWidth(MIN_W);
+        e.preventDefault();
+      }
     });
   }
 
   // main.ts dispatches this when the active tab changes; a docked/open panel re-reads the new
   // surface's help sections.
-  document.addEventListener("console:activetab", () => { if (isOpen) refresh(); });
+  document.addEventListener("console:activetab", () => {
+    if (isOpen) refresh();
+  });
 
   // Apply the persisted (pinned) state without animating the slide on load.
   drawer.classList.add("console-shell-refdrawer--instant");
@@ -554,7 +655,11 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
 // pageId alone (no payload), so it must re-derive stable content on every mount/reload - and the shell
 // reference is exactly that. main.ts registers it (kept out of the launcher SURFACES list, so it has no
 // card and is reachable only via the drawer's break-out button) and opens it single-instance.
-const noRefSearch: SearchProvider<null> = { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) };
+const noRefSearch: SearchProvider<null> = {
+  placeholder: "",
+  parse: () => null,
+  apply: () => ({ matches: 0 }),
+};
 
 export function referenceSurface(): PageModule<null, null> {
   return {
@@ -573,7 +678,9 @@ export function referenceSurface(): PageModule<null, null> {
         clone.removeAttribute("id");
         clone.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
         if (clone instanceof HTMLDetailsElement) clone.open = true;
-        clone.querySelectorAll("details").forEach((d) => { (d as HTMLDetailsElement).open = true; });
+        clone.querySelectorAll("details").forEach((d) => {
+          (d as HTMLDetailsElement).open = true;
+        });
         body.append(clone);
       }
       root.append(body);

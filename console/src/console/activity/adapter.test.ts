@@ -5,16 +5,32 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
 import {
-  activityToModel, clockTime, durText, eventSection, groupEventsByKind, humanBytes, kindLabel, tsMillis,
+  activityToModel,
+  clockTime,
+  durText,
+  eventSection,
+  groupEventsByKind,
+  humanBytes,
+  kindLabel,
+  tsMillis,
 } from "./adapter";
 
 // ev builds a minimal ActivityEvent for the pure adapter. Casts through unknown because the
 // generated Message carries a $typeName the adapter never reads; tests are excluded from tsc.
 function ev(partial: Partial<ActivityEvent>): ActivityEvent {
   return {
-    kind: Kind.MCP_TOOL_CALL, actor: "", action: "", outcome: Outcome.OK, error: "",
-    requestRef: "", responseRef: "", preview: "", requestBytes: 0n, responseBytes: 0n,
-    workspace: "", ...partial,
+    kind: Kind.MCP_TOOL_CALL,
+    actor: "",
+    action: "",
+    outcome: Outcome.OK,
+    error: "",
+    requestRef: "",
+    responseRef: "",
+    preview: "",
+    requestBytes: 0n,
+    responseBytes: 0n,
+    workspace: "",
+    ...partial,
   } as unknown as ActivityEvent;
 }
 
@@ -51,7 +67,9 @@ test("clockTime formats HH:MM:SS and empties a null instant", () => {
 });
 
 test("an ok mcp call accents pass and heads with action+actor", () => {
-  const sec = eventSection(ev({ action: "magus_query", actor: "agent:claude", outcome: Outcome.OK }));
+  const sec = eventSection(
+    ev({ action: "magus_query", actor: "agent:claude", outcome: Outcome.OK }),
+  );
   assert.equal(sec.meta?.status, "pass");
   assert.equal(sec.meta?.label, "mcp");
   assert.equal(sec.lines[0], sec.title);
@@ -60,18 +78,27 @@ test("an ok mcp call accents pass and heads with action+actor", () => {
 });
 
 test("an errored call accents fail and leads its body with the error text", () => {
-  const sec = eventSection(ev({ action: "magus_run", outcome: Outcome.ERROR, error: "target not found" }));
+  const sec = eventSection(
+    ev({ action: "magus_run", outcome: Outcome.ERROR, error: "target not found" }),
+  );
   assert.equal(sec.meta?.status, "fail");
   assert.match(sec.title, / - error/);
   assert.equal(sec.lines[1], "target not found");
 });
 
 test("payload sizes, refs, preview lines, and workspace populate the body", () => {
-  const sec = eventSection(ev({
-    action: "magus_output", kind: Kind.MCP_TOOL_CALL,
-    requestBytes: 40n, requestRef: "mcpaaaa", responseBytes: 2048n, responseRef: "mcpbbbb",
-    preview: "line one\nline two", workspace: "/repo/magus",
-  }));
+  const sec = eventSection(
+    ev({
+      action: "magus_output",
+      kind: Kind.MCP_TOOL_CALL,
+      requestBytes: 40n,
+      requestRef: "mcpaaaa",
+      responseBytes: 2048n,
+      responseRef: "mcpbbbb",
+      preview: "line one\nline two",
+      workspace: "/repo/magus",
+    }),
+  );
   const body = sec.lines.slice(1);
   assert.ok(body.some((l) => l.includes("request 40 B") && l.includes("mcpaaaa")));
   assert.ok(body.some((l) => l.includes("response 2.0 KB") && l.includes("mcpbbbb")));
@@ -96,10 +123,16 @@ test("groupEventsByKind buckets in fixed order, drops empty kinds, keeps origina
   const groups = groupEventsByKind(events);
   // MCP leads the fixed order even though a Job appeared first in the page; Config/Token have no
   // events and are absent.
-  assert.deepEqual(groups.map((g) => g.label), ["MCP tool calls", "Jobs", "Sandbox denials"]);
+  assert.deepEqual(
+    groups.map((g) => g.label),
+    ["MCP tool calls", "Jobs", "Sandbox denials"],
+  );
   // Jobs bucket keeps page order and original indices (0 then 2).
   const jobs = groups.find((g) => g.label === "Jobs");
-  assert.deepEqual(jobs?.events.map((e) => e.index), [0, 2]);
+  assert.deepEqual(
+    jobs?.events.map((e) => e.index),
+    [0, 2],
+  );
   assert.equal(jobs?.events[0].event.action, "j0");
   // The sandbox denial keeps its index 3, so the view can reach section 3.
   assert.equal(groups.find((g) => g.label === "Sandbox denials")?.events[0].index, 3);
@@ -107,14 +140,15 @@ test("groupEventsByKind buckets in fixed order, drops empty kinds, keeps origina
 
 test("groupEventsByKind collects an unknown kind under Other", () => {
   const groups = groupEventsByKind([ev({ kind: Kind.UNSPECIFIED, action: "x" })]);
-  assert.deepEqual(groups.map((g) => g.label), ["Other"]);
+  assert.deepEqual(
+    groups.map((g) => g.label),
+    ["Other"],
+  );
   assert.equal(groups[0].events[0].index, 0);
 });
 
 test("activityToModel titles every section and counts them", () => {
-  const model = activityToModel([
-    ev({ action: "a" }), ev({ action: "b", outcome: Outcome.ERROR }),
-  ]);
+  const model = activityToModel([ev({ action: "a" }), ev({ action: "b", outcome: Outcome.ERROR })]);
   assert.equal(model.sections.length, 2);
   assert.equal(model.titled, 2);
   assert.equal(model.sections[0].title, model.sections[0].lines[0]);

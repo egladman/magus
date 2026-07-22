@@ -48,8 +48,14 @@ export function setBtnLabel(btn: HTMLElement | null, text: string): void {
 // own :has(:not(:empty)) rule already collapses the row on an empty value, so this keeps the pill
 // itself consistent with that.
 export function setRefIdentity(value: string, labeled: boolean): void {
-  if (refLabelEl) { refLabelEl.hidden = !labeled; refLabelEl.textContent = labeled ? "Reference ID:" : ""; }
-  if (refEl) { refEl.hidden = !value; refEl.textContent = value; }
+  if (refLabelEl) {
+    refLabelEl.hidden = !labeled;
+    refLabelEl.textContent = labeled ? "Reference ID:" : "";
+  }
+  if (refEl) {
+    refEl.hidden = !value;
+    refEl.textContent = value;
+  }
 }
 
 export function setStatus(msg: string, isErr?: boolean): void {
@@ -58,7 +64,10 @@ export function setStatus(msg: string, isErr?: boolean): void {
   statusEl.toggleAttribute("data-error", !!isErr);
   // The separate live event-count pill is a live-mode thing; keep it out of ref/error status.
   const countEl = el("log-count");
-  if (countEl) { countEl.textContent = ""; countEl.hidden = true; }
+  if (countEl) {
+    countEl.textContent = "";
+    countEl.hidden = true;
+  }
 }
 
 // flashBtnLabel swaps a toolbar button's label to a transient message (e.g. "Copied") and reverts
@@ -76,10 +85,15 @@ export function copyToClipboard(text: string, btn: HTMLElement | null): void {
     if (!btn) return;
     const prev = btn.textContent;
     btn.textContent = ok ? "copied" : "failed";
-    setTimeout(() => { btn.textContent = prev; }, 1200);
+    setTimeout(() => {
+      btn.textContent = prev;
+    }, 1200);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
+    navigator.clipboard.writeText(text).then(
+      () => done(true),
+      () => done(false),
+    );
   } else {
     done(false);
   }
@@ -92,7 +106,9 @@ export function copyToClipboard(text: string, btn: HTMLElement | null): void {
 // drives the switch through the button's own click handler - the single source of truth.
 function toggleGroupButtons(id: string): HTMLButtonElement[] {
   const g = document.getElementById(id);
-  return g ? Array.from(g.querySelectorAll<HTMLButtonElement>(".pf-v6-c-toggle-group__button")) : [];
+  return g
+    ? Array.from(g.querySelectorAll<HTMLButtonElement>(".pf-v6-c-toggle-group__button"))
+    : [];
 }
 
 export function toggleGroupValue(id: string): boolean {
@@ -121,5 +137,7 @@ export function flipToggleGroup(id: string): void {
 
 export function isTyping(node: EventTarget | null): boolean {
   const t = (node && (node as HTMLElement).tagName) || "";
-  return t === "INPUT" || t === "TEXTAREA" || (node !== null && (node as HTMLElement).isContentEditable);
+  return (
+    t === "INPUT" || t === "TEXTAREA" || (node !== null && (node as HTMLElement).isContentEditable)
+  );
 }

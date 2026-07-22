@@ -1,3 +1,4 @@
+import { must } from "../../lib/must";
 // search.ts - find-in-page over the rendered log body. Case-insensitive substring highlight
 // that wraps matches in <mark> (preserving the surrounding ANSI-colored spans), tracks an
 // active match, and steps through them (Enter / prev / next), expanding a collapsed section so
@@ -39,7 +40,7 @@ function highlightIn(lc: Element, needle: string): void {
   let n: Node | null;
   while ((n = walker.nextNode())) textNodes.push(n);
   for (const node of textNodes) {
-    const text = node.nodeValue!;
+    const text = must(node.nodeValue);
     const lower = text.toLowerCase();
     let idx = lower.indexOf(needle);
     if (idx < 0) continue;
@@ -63,7 +64,7 @@ export function clearMarks(): void {
   for (const mark of searchMarks) {
     const parent = mark.parentNode as (Node & ParentNode) | null;
     if (!parent) continue;
-    parent.replaceChild(document.createTextNode(mark.textContent!), mark);
+    parent.replaceChild(document.createTextNode(must(mark.textContent)), mark);
     parent.normalize();
   }
   searchMarks = [];
@@ -72,7 +73,8 @@ export function clearMarks(): void {
 
 export function setActiveMark(i: number): void {
   if (!searchMarks.length) return;
-  if (activeMark >= 0 && searchMarks[activeMark]) searchMarks[activeMark].removeAttribute("data-active");
+  if (activeMark >= 0 && searchMarks[activeMark])
+    searchMarks[activeMark].removeAttribute("data-active");
   activeMark = (i + searchMarks.length) % searchMarks.length;
   const mark = searchMarks[activeMark];
   mark.setAttribute("data-active", "");

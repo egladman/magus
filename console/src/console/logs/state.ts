@@ -140,9 +140,13 @@ export const state: ViewerState = {
 export function waterfallSource(): Source[] {
   const out: Source[] = [];
   if (state.currentJournals) {
-    state.currentJournals.forEach((j) => out.push({ events: j.events || [], invocation: j.invocation }));
+    state.currentJournals.forEach((j) =>
+      out.push({ events: j.events || [], invocation: j.invocation }),
+    );
   } else if (state.currentJournal) {
-    return [{ events: state.currentJournal.events || [], invocation: state.currentJournal.invocation }];
+    return [
+      { events: state.currentJournal.events || [], invocation: state.currentJournal.invocation },
+    ];
   }
   if (state.currentJournals || state.liveEvents.length || state.liveInvocation) {
     out.push({ events: state.liveEvents, invocation: state.liveInvocation });

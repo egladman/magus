@@ -55,8 +55,12 @@ export interface Scope {
 export function scope(): Scope {
   const disposers: Disposer[] = [];
   return {
-    add(d: Disposer): void { disposers.push(d); },
-    dispose(): void { for (const d of disposers.splice(0)) d(); },
+    add(d: Disposer): void {
+      disposers.push(d);
+    },
+    dispose(): void {
+      for (const d of disposers.splice(0)) d();
+    },
   };
 }
 
@@ -65,7 +69,9 @@ export function scope(): Scope {
 // Reactivity is added AFTER via bind(), never inside h() - so a reader sees exactly what updates.
 // Typed to the element so callers get the right HTMLElement subtype.
 export function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K, className?: string, text?: string,
+  tag: K,
+  className?: string,
+  text?: string,
 ): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (className) e.className = className;

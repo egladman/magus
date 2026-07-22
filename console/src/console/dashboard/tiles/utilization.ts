@@ -51,7 +51,10 @@ export function utilizationTile(): Tile {
   // dashboard.css (no inline styles).
   for (let i = 0; i < 5; i++) ramp.append(h("i"));
   scale.append(ramp, document.createTextNode(" full"));
-  legend.append(scale, h("span", "console-dashboard-legend console-dashboard-legend--queued", "queued"));
+  legend.append(
+    scale,
+    h("span", "console-dashboard-legend console-dashboard-legend--queued", "queued"),
+  );
   body.append(grid, legend);
 
   card.append(header, body, footer);
@@ -65,7 +68,8 @@ export function utilizationTile(): Tile {
     let u: number;
     if (s.capacity > 0) u = Math.min(1, s.running / s.capacity);
     else u = s.running > 0 ? Math.min(1, s.running / Math.max(peakRunning, 1)) : 0;
-    const base = s.queued > 0 ? cssVar("--console-status-queued") : cssVar("--console-status-running");
+    const base =
+      s.queued > 0 ? cssVar("--console-status-queued") : cssVar("--console-status-running");
     const opacity = s.running <= 0 && s.queued <= 0 ? 0.06 : 0.15 + 0.85 * u;
     return { fill: base, opacity };
   }
@@ -73,7 +77,8 @@ export function utilizationTile(): Tile {
   function render(): void {
     peakRunning = 1;
     for (const s of samples) if (s.running > peakRunning) peakRunning = s.running;
-    const SQ = 12, GAP = 3;
+    const SQ = 12,
+      GAP = 3;
     const n = samples.length;
     const cols = Math.max(1, Math.ceil(n / GRID_ROWS));
     const w = Math.max(1, cols * (SQ + GAP) - GAP);
@@ -87,7 +92,8 @@ export function utilizationTile(): Tile {
     const frag = document.createDocumentFragment();
     for (let i = 0; i < n; i++) {
       const s = samples[i];
-      const col = Math.floor(i / GRID_ROWS), row = i % GRID_ROWS;
+      const col = Math.floor(i / GRID_ROWS),
+        row = i % GRID_ROWS;
       const { fill, opacity } = utilColor(s);
       const r = document.createElementNS(SVGNS, "rect");
       r.setAttribute("x", String(col * (SQ + GAP)));
@@ -113,7 +119,12 @@ export function utilizationTile(): Tile {
 
   return {
     el: card,
-    update(s: DashboardState) { samples = s.samples; render(); },
-    destroy() { offTheme(); },
+    update(s: DashboardState) {
+      samples = s.samples;
+      render();
+    },
+    destroy() {
+      offTheme();
+    },
   };
 }

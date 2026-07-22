@@ -20,9 +20,21 @@ import { h } from "../view";
 // FILE_ORDER fixes the display order and the explicit per-file labels the section shows. Each
 // label names the file's role so the control's purpose is obvious on its own.
 const FILE_ORDER: { file: MemoryFile; title: string; blurb: string }[] = [
-  { file: MemoryFile.STATUS, title: "Status snapshot", blurb: "The current state agents overwrite each session." },
-  { file: MemoryFile.PROGRESS, title: "Progress journal", blurb: "A dated log of work done, appended over time." },
-  { file: MemoryFile.DECISIONS, title: "Decision log", blurb: "Dated decisions with the reasoning behind them." },
+  {
+    file: MemoryFile.STATUS,
+    title: "Status snapshot",
+    blurb: "The current state agents overwrite each session.",
+  },
+  {
+    file: MemoryFile.PROGRESS,
+    title: "Progress journal",
+    blurb: "A dated log of work done, appended over time.",
+  },
+  {
+    file: MemoryFile.DECISIONS,
+    title: "Decision log",
+    blurb: "Dated decisions with the reasoning behind them.",
+  },
 ];
 
 // sizeLabel renders a byte count compactly (B / KB).
@@ -48,7 +60,12 @@ function renderMarkdown(text: string): HTMLElement {
   const doc = h("div", "console-settings-memory__doc");
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   let list: HTMLElement | null = null;
-  const closeList = (): void => { if (list) { doc.append(list); list = null; } };
+  const closeList = (): void => {
+    if (list) {
+      doc.append(list);
+      list = null;
+    }
+  };
   for (const raw of lines) {
     const line = raw.trimEnd();
     const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
@@ -76,26 +93,41 @@ function renderMarkdown(text: string): HTMLElement {
 // surface calls on teardown so a late RPC never renders into a detached node. opts.onDenied fires
 // when the daemon declines the memory service to this client (a phone-share session): the caller
 // hides the whole section, so the SERVER decides whether the memory view is offered.
-export function buildMemorySection(host: string | null, opts: { onDenied?: () => void } = {}): { el: HTMLElement; destroy(): void } {
+export function buildMemorySection(
+  host: string | null,
+  opts: { onDenied?: () => void } = {},
+): { el: HTMLElement; destroy(): void } {
   const body = h("div", "console-settings-memory");
   let stale = false;
 
   if (!host) {
-    body.append(buildEmpty(
-      "Not connected to a daemon",
-      "Connect the console to a running daemon to view and edit agent memory. Open the console from a magus link, or set the daemon host on the General tab.",
-    ));
-    return { el: body, destroy() { stale = true; } };
+    body.append(
+      buildEmpty(
+        "Not connected to a daemon",
+        "Connect the console to a running daemon to view and edit agent memory. Open the console from a magus link, or set the daemon host on the General tab.",
+      ),
+    );
+    return {
+      el: body,
+      destroy() {
+        stale = true;
+      },
+    };
   }
 
-  const client: Client<typeof MemoryService> = createClient(MemoryService, createDaemonTransport(host, getLiveToken()));
+  const client: Client<typeof MemoryService> = createClient(
+    MemoryService,
+    createDaemonTransport(host, getLiveToken()),
+  );
 
   // load lists the files (for the on-disk dir + metadata), then fetches each file's content, and
   // rebuilds the section. Called on mount and after every save/delete so the view stays current.
   async function load(): Promise<void> {
     try {
       const list = await client.listMemory({});
-      const docs = await Promise.all(FILE_ORDER.map((f) => client.getMemory({ file: f.file }).then((r) => r.doc)));
+      const docs = await Promise.all(
+        FILE_ORDER.map((f) => client.getMemory({ file: f.file }).then((r) => r.doc)),
+      );
       if (stale) return;
       body.replaceChildren();
       const dir = h("p", "console-settings-memory__dir");
@@ -111,18 +143,30 @@ export function buildMemorySection(host: string | null, opts: { onDenied?: () =>
       if (stale) return;
       // The daemon declined the service to this client (a read-only phone share): hide the section
       // entirely rather than show a failure - the server has decided the memory view is not offered.
-      if (isCapabilityDenied(e)) { opts.onDenied?.(); return; }
+      if (isCapabilityDenied(e)) {
+        opts.onDenied?.();
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
-      body.replaceChildren(buildEmpty(
-        "Could not load memory",
-        "The daemon at " + host + " did not answer the memory service (" + msg + "). Start it with: magus server start.",
-      ));
+      body.replaceChildren(
+        buildEmpty(
+          "Could not load memory",
+          "The daemon at " +
+            host +
+            " did not answer the memory service (" +
+            msg +
+            "). Start it with: magus server start.",
+        ),
+      );
     }
   }
 
   // buildFileCard renders one memory file: a header (label, blurb, metadata) with Edit and Delete
   // actions over a body that is either the rendered markdown, an empty note, or the edit form.
-  function buildFileCard(meta: { file: MemoryFile; title: string; blurb: string }, doc: MemoryDoc | undefined): HTMLElement {
+  function buildFileCard(
+    meta: { file: MemoryFile; title: string; blurb: string },
+    doc: MemoryDoc | undefined,
+  ): HTMLElement {
     const card = h("div", "console-settings-memory__card");
 
     const head = h("div", "console-settings-memory__head");
@@ -133,11 +177,19 @@ export function buildMemorySection(host: string | null, opts: { onDenied?: () =>
       h("p", "console-settings-memory__meta", doc ? modifiedLabel(doc) : "Not written yet"),
     );
     const actions = h("div", "console-settings-memory__actions");
-    const editBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Edit") as HTMLButtonElement;
+    const editBtn = h(
+      "button",
+      "pf-v6-c-button pf-m-secondary pf-m-small",
+      "Edit",
+    ) as HTMLButtonElement;
     editBtn.type = "button";
     editBtn.title = "Edit the " + meta.title.toLowerCase();
     editBtn.setAttribute("aria-label", "Edit the " + meta.title.toLowerCase());
-    const deleteBtn = h("button", "pf-v6-c-button pf-m-link pf-m-danger pf-m-small", "Delete") as HTMLButtonElement;
+    const deleteBtn = h(
+      "button",
+      "pf-v6-c-button pf-m-link pf-m-danger pf-m-small",
+      "Delete",
+    ) as HTMLButtonElement;
     deleteBtn.type = "button";
     deleteBtn.title = "Delete the " + meta.title.toLowerCase() + " file";
     deleteBtn.setAttribute("aria-label", "Delete the " + meta.title.toLowerCase() + " file");
@@ -151,7 +203,13 @@ export function buildMemorySection(host: string | null, opts: { onDenied?: () =>
     if (doc && doc.exists && content.trim() !== "") {
       bodyBox.append(renderMarkdown(content));
     } else {
-      bodyBox.append(h("p", "console-settings-memory__empty", "This file is empty. Agents write to it as they work, or you can add content with Edit."));
+      bodyBox.append(
+        h(
+          "p",
+          "console-settings-memory__empty",
+          "This file is empty. Agents write to it as they work, or you can add content with Edit.",
+        ),
+      );
     }
     card.append(bodyBox);
 
@@ -169,9 +227,17 @@ export function buildMemorySection(host: string | null, opts: { onDenied?: () =>
       area.setAttribute("aria-label", "Edit the " + meta.title.toLowerCase());
       control.append(area);
       const editActions = h("div", "console-settings-memory__editactions");
-      const saveBtn = h("button", "pf-v6-c-button pf-m-primary pf-m-small", "Save") as HTMLButtonElement;
+      const saveBtn = h(
+        "button",
+        "pf-v6-c-button pf-m-primary pf-m-small",
+        "Save",
+      ) as HTMLButtonElement;
       saveBtn.type = "button";
-      const cancelBtn = h("button", "pf-v6-c-button pf-m-link pf-m-small", "Cancel") as HTMLButtonElement;
+      const cancelBtn = h(
+        "button",
+        "pf-v6-c-button pf-m-link pf-m-small",
+        "Cancel",
+      ) as HTMLButtonElement;
       cancelBtn.type = "button";
       editActions.append(saveBtn, cancelBtn);
       form.append(control, editActions);
@@ -193,7 +259,11 @@ export function buildMemorySection(host: string | null, opts: { onDenied?: () =>
             saveBtn.disabled = false;
             cancelBtn.disabled = false;
             const msg = e instanceof Error ? e.message : String(e);
-            showToast("Agent memory", "Could not save " + meta.title.toLowerCase() + ": " + msg, "error");
+            showToast(
+              "Agent memory",
+              "Could not save " + meta.title.toLowerCase() + ": " + msg,
+              "error",
+            );
           },
         );
       });
@@ -201,7 +271,14 @@ export function buildMemorySection(host: string | null, opts: { onDenied?: () =>
     editBtn.addEventListener("click", enterEdit);
 
     deleteBtn.addEventListener("click", () => {
-      if (!confirm("Delete the " + meta.title.toLowerCase() + "? This removes the file from disk and cannot be undone.")) return;
+      if (
+        !confirm(
+          "Delete the " +
+            meta.title.toLowerCase() +
+            "? This removes the file from disk and cannot be undone.",
+        )
+      )
+        return;
       deleteBtn.disabled = true;
       void client.deleteMemory({ file: meta.file }).then(
         () => {
@@ -213,7 +290,11 @@ export function buildMemorySection(host: string | null, opts: { onDenied?: () =>
           if (stale) return;
           deleteBtn.disabled = false;
           const msg = e instanceof Error ? e.message : String(e);
-          showToast("Agent memory", "Could not delete " + meta.title.toLowerCase() + ": " + msg, "error");
+          showToast(
+            "Agent memory",
+            "Could not delete " + meta.title.toLowerCase() + ": " + msg,
+            "error",
+          );
         },
       );
     });
@@ -222,7 +303,12 @@ export function buildMemorySection(host: string | null, opts: { onDenied?: () =>
   }
 
   void load();
-  return { el: body, destroy() { stale = true; } };
+  return {
+    el: body,
+    destroy() {
+      stale = true;
+    },
+  };
 }
 
 // buildEmpty renders the shared console empty state: a PF EmptyState with a title and body line.

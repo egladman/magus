@@ -1,3 +1,4 @@
+import { must } from "../../lib/must";
 // runtree.ts - the Log Viewer's run browser: a PatternFly TreeView down the left of the viewer that
 // lists prior runs (project -> target -> run) so a reader can browse recent captured output and open
 // any one. It reads the daemon's read-only /api/v1/outputs feed (the local output store's retained
@@ -57,7 +58,11 @@ export async function fetchRuns(host: string, token: string | null): Promise<Run
 
 // fetchRunOutput reads one run's verbatim captured output text (GET /api/v1/output?ref=). Returns null
 // on any failure, so a stale tree selection surfaces an honest "could not load" rather than a hang.
-export async function fetchRunOutput(host: string, token: string | null, ref: string): Promise<string | null> {
+export async function fetchRunOutput(
+  host: string,
+  token: string | null,
+  ref: string,
+): Promise<string | null> {
   try {
     const res = await fetch("http://" + host + "/api/v1/output?ref=" + encodeURIComponent(ref), {
       headers: authHeaders(token),
@@ -90,7 +95,15 @@ export function relTime(ms: number, now: number): string {
   if (hr < 24) return hr + "h ago";
   const d = new Date(ms);
   const pad = (n: number): string => (n < 10 ? "0" + n : String(n));
-  return pad(d.getMonth() + 1) + "/" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  return (
+    pad(d.getMonth() + 1) +
+    "/" +
+    pad(d.getDate()) +
+    " " +
+    pad(d.getHours()) +
+    ":" +
+    pad(d.getMinutes())
+  );
 }
 
 // demoRuns projects the shared scenario's run history (demo-scenario.ts) into the tree's row shape
@@ -131,14 +144,18 @@ export function chevron(): SVGElement {
 // A PF tree node. Branches (project/target) toggle expansion; leaves (a run) select and fire onSelect.
 interface NodeSpec {
   label: string;
-  count?: number;          // a child count badge (branches)
+  count?: number; // a child count badge (branches)
   status?: "pass" | "fail"; // a leaf's outcome dot
   title?: string;
   children?: NodeSpec[];
-  run?: RunSummary;        // set on a leaf: what selecting it opens
+  run?: RunSummary; // set on a leaf: what selecting it opens
 }
 
-function makeNode(spec: NodeSpec, onSelect: (run: RunSummary) => void, expanded: boolean): HTMLLIElement {
+function makeNode(
+  spec: NodeSpec,
+  onSelect: (run: RunSummary) => void,
+  expanded: boolean,
+): HTMLLIElement {
   const li = document.createElement("li");
   li.className = "pf-v6-c-tree-view__list-item";
   li.setAttribute("role", "treeitem");
@@ -195,7 +212,7 @@ function makeNode(spec: NodeSpec, onSelect: (run: RunSummary) => void, expanded:
     const group = document.createElement("ul");
     group.className = "pf-v6-c-tree-view__list";
     group.setAttribute("role", "group");
-    for (const child of spec.children!) group.append(makeNode(child, onSelect, false));
+    for (const child of must(spec.children)) group.append(makeNode(child, onSelect, false));
     li.append(group);
     node.addEventListener("click", () => {
       const open = li.classList.toggle("pf-m-expanded");
@@ -206,7 +223,9 @@ function makeNode(spec: NodeSpec, onSelect: (run: RunSummary) => void, expanded:
     node.addEventListener("click", () => {
       // Single selection: clear the prior current node, mark this one.
       const root = li.closest(".pf-v6-c-tree-view");
-      root?.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current").forEach((n) => n.classList.remove("pf-m-current"));
+      root
+        ?.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current")
+        .forEach((n) => n.classList.remove("pf-m-current"));
       node.classList.add("pf-m-current");
       onSelect(run);
     });
@@ -217,7 +236,13 @@ function makeNode(spec: NodeSpec, onSelect: (run: RunSummary) => void, expanded:
 // renderRunTree (re)builds the tree into container from runs, grouped project -> target -> run. The
 // first project and its first target start expanded so the newest runs are visible without a click.
 // runs arrive newest-first (the daemon sorts them), so each target's leaves keep that order.
-export function renderRunTree(container: HTMLElement, runs: RunSummary[], onSelect: (run: RunSummary) => void, now: number, emptyNote?: string): void {
+export function renderRunTree(
+  container: HTMLElement,
+  runs: RunSummary[],
+  onSelect: (run: RunSummary) => void,
+  now: number,
+  emptyNote?: string,
+): void {
   container.replaceChildren();
   if (runs.length === 0) {
     const empty = document.createElement("p");
@@ -235,7 +260,10 @@ export function renderRunTree(container: HTMLElement, runs: RunSummary[], onSele
     const proj = r.project || "(workspace)";
     const tgt = bareTarget(r.target) || "(run)";
     let targets = byProject.get(proj);
-    if (!targets) { targets = new Map(); byProject.set(proj, targets); }
+    if (!targets) {
+      targets = new Map();
+      byProject.set(proj, targets);
+    }
     const list = targets.get(tgt) ?? [];
     if (list.length === 0) targets.set(tgt, list);
     list.push(r);
@@ -251,7 +279,15 @@ export function renderRunTree(container: HTMLElement, runs: RunSummary[], onSele
         children: list.map((r) => ({
           label: relTime(r.timestamp_ms, now),
           status: r.failed ? "fail" : "pass",
-          title: (r.failed ? "failed" : "passed") + " - " + tgt + " - " + Math.round(r.duration_ms) + "ms - " + r.ref + (r.error ? " - " + r.error : ""),
+          title:
+            (r.failed ? "failed" : "passed") +
+            " - " +
+            tgt +
+            " - " +
+            Math.round(r.duration_ms) +
+            "ms - " +
+            r.ref +
+            (r.error ? " - " + r.error : ""),
           run: r,
         })),
       });
@@ -268,8 +304,13 @@ export function renderRunTree(container: HTMLElement, runs: RunSummary[], onSele
     const li = makeNode(p, onSelect, pi === 0);
     // Expand the first target of the first project too, so the newest runs show on open.
     if (pi === 0) {
-      const firstTarget = li.querySelector<HTMLLIElement>(".pf-v6-c-tree-view__list > .pf-v6-c-tree-view__list-item");
-      if (firstTarget) { firstTarget.classList.add("pf-m-expanded"); firstTarget.setAttribute("aria-expanded", "true"); }
+      const firstTarget = li.querySelector<HTMLLIElement>(
+        ".pf-v6-c-tree-view__list > .pf-v6-c-tree-view__list-item",
+      );
+      if (firstTarget) {
+        firstTarget.classList.add("pf-m-expanded");
+        firstTarget.setAttribute("aria-expanded", "true");
+      }
     }
     list.append(li);
   });
@@ -310,8 +351,8 @@ function iconButton(id: string, label: string, title: string, paths: string[]): 
 // browser and the activity view's event index are the same frame (both load logs.css, so both reuse
 // the .console-log-runs styles); only what fills treeBox differs.
 export interface CollapsiblePanel {
-  head: HTMLElement;         // the header row, so a caller can inject extra chrome (e.g. a count)
-  treeBox: HTMLElement;      // the caller (re)renders its tree into this
+  head: HTMLElement; // the header row, so a caller can inject extra chrome (e.g. a count)
+  treeBox: HTMLElement; // the caller (re)renders its tree into this
   refreshBtn: HTMLButtonElement;
   // applyDefault sets the open state after a (re)load from whether the panel now has content: an
   // empty panel collapses (to the rail, or fully hidden when hideWhenEmpty), a populated one opens -
@@ -348,7 +389,10 @@ export function mountCollapsiblePanel(opts: {
   const title = document.createElement("span");
   title.className = "console-log-runs__title";
   title.textContent = opts.title;
-  const refreshBtn = iconButton("", "Refresh", "Refresh", ["M21 12a9 9 0 1 1-2.64-6.36", "M21 3v6h-6"]);
+  const refreshBtn = iconButton("", "Refresh", "Refresh", [
+    "M21 12a9 9 0 1 1-2.64-6.36",
+    "M21 3v6h-6",
+  ]);
   const hideBtn = iconButton("", "Hide the panel", "Hide the panel", ["M15 18l-6-6 6-6"]);
   head.append(title, refreshBtn, hideBtn);
 
@@ -371,13 +415,21 @@ export function mountCollapsiblePanel(opts: {
     reopen.hidden = state !== "closed";
   };
   hideBtn.addEventListener("click", () => apply("closed"));
-  reopen.addEventListener("click", () => { userOpened = true; apply("open"); });
+  reopen.addEventListener("click", () => {
+    userOpened = true;
+    apply("open");
+  });
   refreshBtn.addEventListener("click", opts.onRefresh);
 
   return {
-    head, treeBox, refreshBtn,
+    head,
+    treeBox,
+    refreshBtn,
     applyDefault: (hasContent: boolean): void => {
-      if (!hasContent) { apply(opts.hideWhenEmpty ? "hidden" : "closed"); return; }
+      if (!hasContent) {
+        apply(opts.hideWhenEmpty ? "hidden" : "closed");
+        return;
+      }
       apply(userOpened || !narrow.matches ? "open" : "closed");
     },
   };
@@ -393,21 +445,32 @@ export function initRunBrowser(deps: RunBrowserDeps): { refresh: () => void } {
     scroll: deps.scroll,
     title: "Recent runs",
     label: "Recent runs",
-    onRefresh: () => { void load(); },
+    onRefresh: () => {
+      void load();
+    },
     hideWhenEmpty: false,
   });
   if (!panel) return { refresh: () => {} };
   const runsPanel = panel; // narrowed non-null, so the load() closure below sees a definite panel
 
   async function load(): Promise<void> {
-    const runs = deps.demo ? demoRuns(deps.nowMs) : deps.host ? await fetchRuns(deps.host, deps.token) : [];
-    const note = !deps.host && !deps.demo
-      ? "No daemon connected. Set a daemon address in Settings, or launch the demo."
-      : undefined;
+    const runs = deps.demo
+      ? demoRuns(deps.nowMs)
+      : deps.host
+        ? await fetchRuns(deps.host, deps.token)
+        : [];
+    const note =
+      !deps.host && !deps.demo
+        ? "No daemon connected. Set a daemon address in Settings, or launch the demo."
+        : undefined;
     renderRunTree(runsPanel.treeBox, runs, deps.onOpenRun, deps.nowMs, note);
     runsPanel.applyDefault(runs.length > 0);
   }
 
   void load();
-  return { refresh: () => { void load(); } };
+  return {
+    refresh: () => {
+      void load();
+    },
+  };
 }

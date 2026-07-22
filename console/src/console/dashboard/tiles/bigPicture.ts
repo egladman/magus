@@ -97,14 +97,21 @@ function bigPictureIcon(): SVGElement {
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");
   const screen = document.createElementNS(NS, "rect");
-  screen.setAttribute("x", "2"); screen.setAttribute("y", "4");
-  screen.setAttribute("width", "20"); screen.setAttribute("height", "13"); screen.setAttribute("rx", "2");
+  screen.setAttribute("x", "2");
+  screen.setAttribute("y", "4");
+  screen.setAttribute("width", "20");
+  screen.setAttribute("height", "13");
+  screen.setAttribute("rx", "2");
   const neck = document.createElementNS(NS, "line");
-  neck.setAttribute("x1", "12"); neck.setAttribute("y1", "17");
-  neck.setAttribute("x2", "12"); neck.setAttribute("y2", "20");
+  neck.setAttribute("x1", "12");
+  neck.setAttribute("y1", "17");
+  neck.setAttribute("x2", "12");
+  neck.setAttribute("y2", "20");
   const base = document.createElementNS(NS, "line");
-  base.setAttribute("x1", "8"); base.setAttribute("y1", "20");
-  base.setAttribute("x2", "16"); base.setAttribute("y2", "20");
+  base.setAttribute("x1", "8");
+  base.setAttribute("y1", "20");
+  base.setAttribute("x2", "16");
+  base.setAttribute("y2", "20");
   svg.append(screen, neck, base);
   return svg;
 }
@@ -169,11 +176,13 @@ export function dashboardHeader(): Tile {
     const roots = lastWorkspaces.map((w) => w.root).join("\n");
     if (roots === lastRoots) return; // same set: the toggle group already reflects it
     lastRoots = roots;
-    wsWrap.replaceChildren(toggleGroup<string>(
-      "Active workspace",
-      lastWorkspaces.map((w) => ({ value: w.root, label: wsLabel(w.root), title: w.root })),
-      activeWorkspace,
-    ));
+    wsWrap.replaceChildren(
+      toggleGroup<string>(
+        "Active workspace",
+        lastWorkspaces.map((w) => ({ value: w.root, label: wsLabel(w.root), title: w.root })),
+        activeWorkspace,
+      ),
+    );
   }
   // Entering/leaving Big Picture must show/hide the workspace picker immediately, not on the
   // next ~1s status tick.
@@ -222,9 +231,10 @@ export function bigPictureTile(): Tile {
     const cards = workspaces.map((w) => {
       const card = h("div", "console-dashboard-bigpicture__wscard");
       card.title = w.root;
-      const stats = w.hits != null
-        ? fmtCount(w.hits) + " hits, " + fmtCount(w.misses ?? 0) + " misses"
-        : "idle";
+      const stats =
+        w.hits != null
+          ? fmtCount(w.hits) + " hits, " + fmtCount(w.misses ?? 0) + " misses"
+          : "idle";
       card.append(
         h("div", "console-dashboard-bigpicture__wsroot", wsLabel(w.root)),
         h("div", "console-dashboard-bigpicture__wsstats", stats),
@@ -240,7 +250,8 @@ export function bigPictureTile(): Tile {
     running.n.textContent = String(status.pool.running);
     queued.n.textContent = String(status.pool.queued);
     hitRate.n.textContent = fmtPct(status.cache.hitRate);
-    busy.n.textContent = status.pool.capacity > 0 ? fmtPct(status.pool.running / status.pool.capacity) : "-";
+    busy.n.textContent =
+      status.pool.capacity > 0 ? fmtPct(status.pool.running / status.pool.capacity) : "-";
     fail.wrap.dataset.n = failing > 0 ? "some" : "none";
 
     const v = verdictFor(status, failing);
@@ -253,7 +264,9 @@ export function bigPictureTile(): Tile {
 
   return {
     el: root,
-    update(s: DashboardState) { if (s.status) render(s.status); },
+    update(s: DashboardState) {
+      if (s.status) render(s.status);
+    },
     destroy() {},
   };
 }

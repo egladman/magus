@@ -60,7 +60,11 @@ export function persisted<T>(key: string, fallback: T): Persisted<T> {
   let writeChain: Promise<void> = Promise.resolve();
   const enqueueWrite = (value: T): void => {
     writeChain = writeChain.then(() => {
-      try { localStorage.setItem(full, JSON.stringify(value)); } catch { /* best-effort: keep the in-memory value */ }
+      try {
+        localStorage.setItem(full, JSON.stringify(value));
+      } catch {
+        /* best-effort: keep the in-memory value */
+      }
     });
   };
 

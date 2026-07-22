@@ -90,7 +90,9 @@ export function attachHelpPopover(trigger: HTMLElement, opts: HelpPopoverOptions
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === "Escape" && open) setOpen(false, true);
   };
-  const onReflow = (): void => { if (open) place(); };
+  const onReflow = (): void => {
+    if (open) place();
+  };
 
   trigger.addEventListener("click", onTrigger);
   document.addEventListener("click", onDocClick);

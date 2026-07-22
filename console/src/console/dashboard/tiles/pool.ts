@@ -17,11 +17,17 @@ export function poolTile(): Tile {
   queuedLg.hidden = true;
   const queuedCount = h("span", undefined, "0");
   queuedLg.append(document.createTextNode("queued "), queuedCount);
-  legend.append(h("span", "console-dashboard-legend console-dashboard-legend--running", "running"), h("span", "console-dashboard-legend console-dashboard-legend--free", "free"), queuedLg);
+  legend.append(
+    h("span", "console-dashboard-legend console-dashboard-legend--running", "running"),
+    h("span", "console-dashboard-legend console-dashboard-legend--free", "free"),
+    queuedLg,
+  );
   card.body.append(grid, legend);
 
   function render(pool: PoolView): void {
-    const cap = pool.capacity, used = pool.running, queued = pool.queued;
+    const cap = pool.capacity,
+      used = pool.running,
+      queued = pool.queued;
     card.setNote(cap > 0 ? `${used} / ${cap} slots` : `${used} running, unlimited`);
     const slots = cap > 0 ? cap : used;
     const total = Math.min(slots + queued, SLOT_CAP);
@@ -39,7 +45,9 @@ export function poolTile(): Tile {
 
   return {
     el: card.el,
-    update(s: DashboardState) { if (s.status) render(s.status.pool); },
+    update(s: DashboardState) {
+      if (s.status) render(s.status.pool);
+    },
     destroy() {},
   };
 }

@@ -8,7 +8,13 @@
 // lib/daemon.ts, shared with the graph explorer and log viewer.
 
 import {
-  parseHash, daemonAttach, validateLoopbackHost, normalizeDaemonHost, consumeLiveToken, wantsDemo, logsLink,
+  parseHash,
+  daemonAttach,
+  validateLoopbackHost,
+  normalizeDaemonHost,
+  consumeLiveToken,
+  wantsDemo,
+  logsLink,
 } from "../../lib/daemon";
 import { createStore } from "../../lib/store";
 import { persisted } from "../../lib/persist";
@@ -44,14 +50,23 @@ import { getDefaultHost } from "../../lib/settings";
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
-function setText(id: string, text: string): void { const e = opt(id); if (e) e.textContent = text; }
+function setText(id: string, text: string): void {
+  const e = opt(id);
+  if (e) e.textContent = text;
+}
 
 // ---- daemon persistence ----------------------------------------------------
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const DISCONNECT_GRACE = 3; // consecutive stream failures before the pill flips to "disconnected"
-function saveDaemon(host: string): void { daemonCell.set(host); }
-function savedDaemon(): string | null { return daemonCell.get(); }
-function forgetDaemon(): void { daemonCell.set(null); }
+function saveDaemon(host: string): void {
+  daemonCell.set(host);
+}
+function savedDaemon(): string | null {
+  return daemonCell.get();
+}
+function forgetDaemon(): void {
+  daemonCell.set(null);
+}
 
 // ---- store + transport -----------------------------------------------------
 const store = createStore<DashboardState>(initialState());
@@ -92,7 +107,8 @@ function renderStatusBar(s: DashboardState): void {
   // (the old latch only ever revealed, leaving stale tiles up when the daemon dropped). Show tiles only
   // with a status frame in hand AND a live link (connected/demo) or a brief reconnect blip; else the door.
   const reconnecting = s.conn.state === "disconnected" && s.conn.detail === "reconnecting";
-  const showPanels = !!s.status && (s.conn.state === "connected" || s.conn.state === "demo" || reconnecting);
+  const showPanels =
+    !!s.status && (s.conn.state === "connected" || s.conn.state === "demo" || reconnecting);
   el("dash-connect").hidden = showPanels;
   el("dash-panels").hidden = !showPanels;
 
@@ -113,22 +129,33 @@ function renderStatusBar(s: DashboardState): void {
     c.dataset.health = s.status ? s.status.health.cls : "ok";
   } else {
     const map: Record<string, string> = {
-      connecting: "connecting...", connected: "connected",
-      disconnected: s.conn.detail || "reconnecting", none: "not connected",
+      connecting: "connecting...",
+      connected: "connected",
+      disconnected: s.conn.detail || "reconnecting",
+      none: "not connected",
     };
     c.textContent = map[s.conn.state] || s.conn.state;
     c.dataset.state = s.conn.state;
-    if (s.conn.state === "connected" && s.status) { c.dataset.health = s.status.health.cls; } else { delete c.dataset.health; }
+    if (s.conn.state === "connected" && s.status) {
+      c.dataset.health = s.status.health.cls;
+    } else {
+      delete c.dataset.health;
+    }
   }
-
 
   // Observing-since: a brief note of when the daemon began collecting these counters, so it is
   // clear the numbers are cumulative from then and are NOT persisted across daemon restarts.
   const obs = el("console-observing");
   if (s.observingSince) {
-    const t = new Date(s.observingSince).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const t = new Date(s.observingSince).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
     obs.textContent = "observing since " + t;
-    obs.title = "The telemetry and cache counters are cumulative since the daemon started observing (" + t + "). They are not persisted across daemon restarts.";
+    obs.title =
+      "The telemetry and cache counters are cumulative since the daemon started observing (" +
+      t +
+      "). They are not persisted across daemon restarts.";
     obs.hidden = false;
   } else {
     obs.hidden = true;
@@ -149,8 +176,20 @@ function wireNotifications(): void {
     if (s.conn.state === "demo" || !s.status) return;
     const cls = s.status.health.cls;
     if (cls !== lastHealth) {
-      if (cls === "warn") notify({ source: "Dashboard", kind: "error", key: "dash:health:warn", message: "Daemon health degraded. Some components are not fully ready." });
-      else if (cls === "fail") notify({ source: "Dashboard", kind: "error", key: "dash:health:down", message: "Daemon health is down. It is not serving requests." });
+      if (cls === "warn")
+        notify({
+          source: "Dashboard",
+          kind: "error",
+          key: "dash:health:warn",
+          message: "Daemon health degraded. Some components are not fully ready.",
+        });
+      else if (cls === "fail")
+        notify({
+          source: "Dashboard",
+          kind: "error",
+          key: "dash:health:down",
+          message: "Daemon health is down. It is not serving requests.",
+        });
       lastHealth = cls;
     }
     for (const run of s.status.runs) {
@@ -158,9 +197,10 @@ function wireNotifications(): void {
         if (t.state !== "failed") continue;
         const ref = t.outputRef;
         const key = ref ? "fail:" + ref : "dash:fail:" + run.inv + ":" + t.label;
-        const link = ref && s.liveHost
-          ? { label: "Open in log viewer", href: logsLink(s.liveHost, { ref }) }
-          : undefined;
+        const link =
+          ref && s.liveHost
+            ? { label: "Open in log viewer", href: logsLink(s.liveHost, { ref }) }
+            : undefined;
         notify({ source: "Dashboard", kind: "error", key, message: t.label + " failed.", link });
       }
     }
@@ -216,13 +256,22 @@ function mountTiles(): void {
 
   // Ordered, full-width by default (pool/cacheStats opt into the half-width pair row).
   const ordered: Tile[] = [
-    attention, activity,
-    pool, cacheStats,
+    attention,
+    activity,
+    pool,
+    cacheStats,
     remote,
     gantt,
-    cacheRate, utilization,
-    targets, workspaces, services, config,
-    latency, buzz, sandbox, mcp,
+    cacheRate,
+    utilization,
+    targets,
+    workspaces,
+    services,
+    config,
+    latency,
+    buzz,
+    sandbox,
+    mcp,
   ];
   for (const t of ordered) host.append(t.el);
 
@@ -252,7 +301,11 @@ function mountTiles(): void {
   // actual display:none). Bound once here, un-disposed on a later remount - the same lifetime
   // the store.subscribe calls above already have (mountTiles rebuilds the whole panel host on
   // re-mount).
-  const boardEls: HTMLElement[] = [...ordered.map((t) => t.el), insight.el, ...insight.tiles.map((t) => t.el)];
+  const boardEls: HTMLElement[] = [
+    ...ordered.map((t) => t.el),
+    insight.el,
+    ...insight.tiles.map((t) => t.el),
+  ];
   bind(viewMode, (mode) => {
     for (const e of boardEls) e.toggleAttribute("data-view-hide", mode !== "board");
     bigPicture.el.toggleAttribute("data-view-hide", mode !== "bigPicture");
@@ -265,7 +318,7 @@ function mountTiles(): void {
 // No socket is opened; the connection pill reads "demo data".
 let demo: DemoHandle | null = null;
 function beginDemo(): void {
-  transport.stop();      // make sure no resume loop is racing the demo feed
+  transport.stop(); // make sure no resume loop is racing the demo feed
   demo?.stop();
   setConn({ state: "demo" });
   // Synthesize an observing-since ~92 minutes back so the demo shows the same since-caption a live
@@ -294,7 +347,10 @@ function onLiveOpen(host: string): void {
 function onLiveError(host: string): void {
   failCount++;
   if (everConnected) {
-    setConn({ state: "disconnected", detail: failCount >= DISCONNECT_GRACE ? "disconnected" : "reconnecting" });
+    setConn({
+      state: "disconnected",
+      detail: failCount >= DISCONNECT_GRACE ? "disconnected" : "reconnecting",
+    });
   } else if (failCount >= DISCONNECT_GRACE) {
     setConn({ state: "disconnected", detail: "disconnected" });
     showResume(host, true);
@@ -312,9 +368,12 @@ function showResume(host: string | null, failed: boolean): void {
   form.hidden = false;
   (el("dash-resume-host") as HTMLInputElement).value = host || "";
   setText("dash-connect-title", failed ? "Couldn't reach the daemon" : "Reconnect to the daemon");
-  setText("dash-connect-sub", failed
-    ? "The saved address didn't respond. Confirm it below, or start the daemon and open the link it prints."
-    : "Resume your last daemon, or start a new one below.");
+  setText(
+    "dash-connect-sub",
+    failed
+      ? "The saved address didn't respond. Confirm it below, or start the daemon and open the link it prints."
+      : "Resume your last daemon, or start a new one below.",
+  );
 }
 
 // wireDemoButton wires the empty-state "See a demo" button. It enters the showcase in place by calling
@@ -325,7 +384,10 @@ function showResume(host: string | null, failed: boolean): void {
 function wireDemoButton(): void {
   const btn = opt("dash-demo-btn");
   if (!btn) return;
-  btn.addEventListener("click", () => { history.replaceState(null, "", "#demo"); beginDemo(); });
+  btn.addEventListener("click", () => {
+    history.replaceState(null, "", "#demo");
+    beginDemo();
+  });
 }
 
 function wireResumeForm(): void {
@@ -347,8 +409,10 @@ function wireResumeForm(): void {
     forgetDaemon();
     form.hidden = true;
     setText("dash-connect-title", "No daemon connected");
-    setText("dash-connect-sub",
-      "The dashboard streams a running magus daemon's pool, cache, and health. Start the daemon, then open the live link it prints.");
+    setText(
+      "dash-connect-sub",
+      "The dashboard streams a running magus daemon's pool, cache, and health. Start the daemon, then open the live link it prints.",
+    );
     setConn({ state: "none" });
   });
 }
@@ -378,12 +442,17 @@ export function activate(): void {
   mountTiles();
   // Subscribe the notification watcher once per page lifetime: the module-scoped store outlives a
   // console tab close/reopen, so re-subscribing on every activate() would double-fire.
-  if (!notificationsWired) { notificationsWired = true; wireNotifications(); }
+  if (!notificationsWired) {
+    notificationsWired = true;
+    wireNotifications();
+  }
   wireResumeForm();
   wireDemoButton();
 
   const badge = opt("offline-badge");
-  const updateOffline = (): void => { if (badge) badge.hidden = navigator.onLine; };
+  const updateOffline = (): void => {
+    if (badge) badge.hidden = navigator.onLine;
+  };
   updateOffline();
   window.addEventListener("online", updateOffline);
   window.addEventListener("offline", updateOffline);
@@ -407,8 +476,10 @@ export function activate(): void {
   if (params.port !== undefined) {
     setConn({ state: "disconnected", detail: "invalid port" });
     setText("dash-connect-title", "Can't connect");
-    setText("dash-connect-sub",
-      "The #port must be a plain port number (1-65535). Re-open the link magus printed.");
+    setText(
+      "dash-connect-sub",
+      "The #port must be a plain port number (1-65535). Re-open the link magus printed.",
+    );
     return;
   }
 

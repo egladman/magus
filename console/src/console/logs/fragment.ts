@@ -1,3 +1,4 @@
+import { must } from "../../lib/must";
 // fragment.ts - URL-fragment codec for the log viewer. Everything the viewer loads rides
 // the #-fragment (never transmitted to a server): a magus.viewer.v1 Journal is gzip+base64url
 // encoded (matches internal/render EncodeFragmentRaw), and the deep-link parameters (ref,
@@ -25,7 +26,7 @@ function gunzipFragment(b64url: string): ReadableStream<Uint8Array> {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new Response(bytes).body!.pipeThrough(new DecompressionStream("gzip"));
+  return must(new Response(bytes).body).pipeThrough(new DecompressionStream("gzip"));
 }
 
 // --- Fragment encode (the inverse of decodeFragmentBytes) ---------------------
@@ -33,7 +34,7 @@ function gunzipFragment(b64url: string): ReadableStream<Uint8Array> {
 // here round-trips through the same decode path. Local only: the Share button never leaves
 // the page. base64url = RawURLEncoding (base64, then +/- and //_ swaps, no "=" padding).
 export async function encodeFragmentBytes(bytes: Uint8Array): Promise<string> {
-  const stream = new Response(bytes).body!.pipeThrough(new CompressionStream("gzip"));
+  const stream = must(new Response(bytes).body).pipeThrough(new CompressionStream("gzip"));
   const gz = new Uint8Array(await new Response(stream).arrayBuffer());
   let bin = "";
   for (let i = 0; i < gz.length; i++) bin += String.fromCharCode(gz[i]);

@@ -30,16 +30,16 @@
 //   shapeSubroutine ->  id[["label"]]
 //   shapeBox        ->  id["label"]  (default)
 
-import type { GLink, GNode, GraphFlavor } from "./types.js";
+import { type GLink, type GNode, type GraphFlavor, endpointId } from "./types.js";
 
 export function toMermaid(nodes: GNode[], links: GLink[], flavor: GraphFlavor): string {
   // Stable ordering: sort nodes and links by id for determinism.
   const sortedNodes = [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const sortedLinks = [...links].sort((a, b) => {
-    const as = a.source.id || a.source,
-      at = a.target.id || a.target;
-    const bs = b.source.id || b.source,
-      bt = b.target.id || b.target;
+    const as = endpointId(a.source),
+      at = endpointId(a.target);
+    const bs = endpointId(b.source),
+      bt = endpointId(b.target);
     if (as < bs) return -1;
     if (as > bs) return 1;
     if (at < bt) return -1;
@@ -87,8 +87,8 @@ export function toMermaid(nodes: GNode[], links: GLink[], flavor: GraphFlavor): 
     // Edges
     const seen = new Set<string>();
     for (const e of sortedLinks) {
-      const s = alias.get(e.source.id || e.source);
-      const t = alias.get(e.target.id || e.target);
+      const s = alias.get(endpointId(e.source));
+      const t = alias.get(endpointId(e.target));
       if (!s || !t || s === t) continue;
       const key = s + "\x00" + t;
       if (seen.has(key)) continue;
@@ -101,12 +101,15 @@ export function toMermaid(nodes: GNode[], links: GLink[], flavor: GraphFlavor): 
     // classDefs - exact names from targetgraph.go targetRoleClasses / externalClass / spellClass
     lines.push("  classDef anchor fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px");
     lines.push("  classDef target fill:#e2e8f0,color:#0f172a,stroke:#94a3b8");
-    lines.push("  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3");
+    lines.push(
+      "  classDef external fill:#fef9c3,color:#713f12,stroke:#ca8a04,stroke-dasharray:5 3",
+    );
     lines.push("  classDef spell fill:#ede9fe,color:#4c1d95,stroke:#a78bfa");
     // class assignments
     const byClass: Record<string, string[]> = { anchor: [], target: [], external: [], spell: [] };
     for (const n of sortedNodes) {
-      const a = alias.get(n.id)!;
+      const a = alias.get(n.id);
+      if (!a) continue;
       if (n.kind === "spell") {
         byClass.spell.push(a);
       } else if (n.kind === "project") {
@@ -145,8 +148,8 @@ export function toMermaid(nodes: GNode[], links: GLink[], flavor: GraphFlavor): 
     // Edges
     const seen = new Set<string>();
     for (const e of sortedLinks) {
-      const s = alias.get(e.source.id || e.source);
-      const t = alias.get(e.target.id || e.target);
+      const s = alias.get(endpointId(e.source));
+      const t = alias.get(endpointId(e.target));
       if (!s || !t || s === t) continue;
       const key = s + "\x00" + t + "\x00" + (e.relation || "");
       if (seen.has(key)) continue;
@@ -180,11 +183,13 @@ export function toMermaid(nodes: GNode[], links: GLink[], flavor: GraphFlavor): 
     for (const n of sortedNodes) {
       const cls = "kind_" + mermaidID(n.kind);
       if (!byKind.has(cls)) byKind.set(cls, []);
-      byKind.get(cls)!.push(alias.get(n.id)!);
+      const a = alias.get(n.id);
+      if (a) byKind.get(cls)?.push(a);
     }
     const sortedKinds = [...byKind.keys()].sort();
     for (const k of sortedKinds) {
-      lines.push("  class " + byKind.get(k)!.join(",") + " " + k);
+      const arr = byKind.get(k);
+      if (arr) lines.push("  class " + arr.join(",") + " " + k);
     }
   }
 

@@ -53,7 +53,11 @@ export function sectionMeta(sec: Section): { label: string; status: string } {
 export function targetRelevant(q: ParsedQuery, t: TargetSpan): boolean {
   if (q.empty) return true;
   if (!matchGroup(q, t.label, t.status || "running")) return false;
-  return q.texts.length === 0 || matchAllTexts(q, t.label) || t.steps.some((s) => matchAllTexts(q, s.label));
+  return (
+    q.texts.length === 0 ||
+    matchAllTexts(q, t.label) ||
+    t.steps.some((s) => matchAllTexts(q, s.label))
+  );
 }
 
 // setQueryFragment mirrors the active filter to #q= via replaceState (no history spam),
@@ -81,7 +85,10 @@ export function renderFilterChips(): void {
   const host = el("filter-chips");
   if (!host) return;
   host.textContent = "";
-  if (state.filterParsed.empty) { host.hidden = true; return; }
+  if (state.filterParsed.empty) {
+    host.hidden = true;
+    return;
+  }
   const parts: { field?: string; value?: string; text?: string }[] = [
     ...state.filterParsed.groups.map((g) => ({ field: g.key, value: g.value })),
     ...state.filterParsed.texts.map((t) => ({ text: t })),

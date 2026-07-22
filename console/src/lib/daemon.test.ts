@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  validateLoopbackHost, normalizeDaemonHost, daemonAttach, enterSharedModeIfNeeded, isSharedMode,
+  validateLoopbackHost,
+  normalizeDaemonHost,
+  daemonAttach,
+  enterSharedModeIfNeeded,
+  isSharedMode,
 } from "./daemon";
 
 // The loopback lock and the #port/shared-mode grammar. validateLoopbackHost is the pure
@@ -69,7 +73,10 @@ test("daemonAttach expands #port to the literal loopback IP, rejecting a bad por
 function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
   const g = globalThis as unknown as Record<string, unknown>;
   const saved: Record<string, unknown> = {
-    location: g.location, sessionStorage: g.sessionStorage, localStorage: g.localStorage, history: g.history,
+    location: g.location,
+    sessionStorage: g.sessionStorage,
+    localStorage: g.localStorage,
+    history: g.history,
   };
   const store = (): Storage => {
     const m = new Map<string, string>();
@@ -99,10 +106,13 @@ function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
 // Kept LAST: enterSharedModeIfNeeded only ever sets the module shared/own-origin flags to
 // true, so once shared mode is entered it stays entered for the rest of this module's tests.
 test("shared mode resolves the daemon to the page's own LAN origin (not loopback)", () => {
-  withBrowserGlobals({ host: "192.168.1.42:8787", hostname: "192.168.1.42", hash: "#token=abc123" }, () => {
-    assert.equal(enterSharedModeIfNeeded(), true); // non-loopback origin + token -> read-only shared view
-    assert.equal(isSharedMode(), true);
-    // The phone must keep talking to the EXACT LAN IP:port it loaded from - never 127.0.0.1.
-    assert.equal(daemonAttach({}), "192.168.1.42:8787");
-  });
+  withBrowserGlobals(
+    { host: "192.168.1.42:8787", hostname: "192.168.1.42", hash: "#token=abc123" },
+    () => {
+      assert.equal(enterSharedModeIfNeeded(), true); // non-loopback origin + token -> read-only shared view
+      assert.equal(isSharedMode(), true);
+      // The phone must keep talking to the EXACT LAN IP:port it loaded from - never 127.0.0.1.
+      assert.equal(daemonAttach({}), "192.168.1.42:8787");
+    },
+  );
 });

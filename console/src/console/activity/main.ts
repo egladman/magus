@@ -10,12 +10,24 @@
 // long-lived stream yet).
 
 import { createClient } from "@connectrpc/connect";
-import { ActivityService, Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
+import {
+  ActivityService,
+  Kind,
+  Outcome,
+  type ActivityEvent,
+} from "../../gen/magus/activity/v1/activity_pb";
 import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
 import { notify } from "../../lib/notifications";
 import { buildSection } from "../render/sections";
 import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "../logs/runtree";
-import { parseHash, wantsDemo, daemonAttach, validateLoopbackHost, consumeLiveToken, createDaemonTransport } from "../../lib/daemon";
+import {
+  parseHash,
+  wantsDemo,
+  daemonAttach,
+  validateLoopbackHost,
+  consumeLiveToken,
+  createDaemonTransport,
+} from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 import { demoEvents } from "./demo";
@@ -53,11 +65,13 @@ function buildScaffold(host: HTMLElement): Refs {
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
   const emptyIcon = h("div", "pf-v6-c-empty-state__icon");
   emptyIcon.setAttribute("aria-hidden", "true");
-  emptyIcon.innerHTML = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/></svg>';
+  emptyIcon.innerHTML =
+    '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/></svg>';
   const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "No daemon connected");
   const emptyBody = h("div", "pf-v6-c-empty-state__body");
   const emptySub = h("p");
-  emptySub.textContent = "The activity trail records what the daemon did: MCP calls, jobs, config changes.";
+  emptySub.textContent =
+    "The activity trail records what the daemon did: MCP calls, jobs, config changes.";
   // Two "ways" mirroring the log viewer / graph empty state - a command to go live, or the demo button.
   // The data-empty-* hooks pick up the shared grid + mobile stacking from logs.css, so it matches logs.
   const emptyActions = h("div", "pf-v6-c-empty-state__actions");
@@ -107,7 +121,12 @@ function notifyDenials(events: ActivityEvent[]): void {
     if (ev.kind !== Kind.SANDBOX_DENIAL) continue;
     const ms = tsMillis(ev.time);
     const action = ev.action || "a sandboxed operation";
-    notify({ source: "Activity Trail", kind: "error", key: "sandbox:" + (ms ?? 0) + ":" + action, message: "Sandbox denied " + action + "." });
+    notify({
+      source: "Activity Trail",
+      kind: "error",
+      key: "sandbox:" + (ms ?? 0) + ":" + action,
+      message: "Sandbox denied " + action + ".",
+    });
   }
 }
 
@@ -124,7 +143,12 @@ function leafLabel(ev: ActivityEvent, now: number): string {
 // by kind (a branch per kind with a count badge) over per-event leaves. Selecting a leaf calls
 // onSelect(index) with the event's position in the page, so the caller can reveal that section. The
 // first kind starts expanded so the newest events show without a click.
-function renderIndexTree(container: HTMLElement, events: ActivityEvent[], now: number, onSelect: (index: number) => void): void {
+function renderIndexTree(
+  container: HTMLElement,
+  events: ActivityEvent[],
+  now: number,
+  onSelect: (index: number) => void,
+): void {
   container.replaceChildren();
   const groups = groupEventsByKind(events);
   if (groups.length === 0) return; // the panel is hidden when empty; no note needed
@@ -184,7 +208,9 @@ function renderIndexTree(container: HTMLElement, events: ActivityEvent[], now: n
       leaf.append(lContent);
       lNode.addEventListener("click", () => {
         const root = leaf.closest(".pf-v6-c-tree-view");
-        root?.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current").forEach((n) => n.classList.remove("pf-m-current"));
+        root
+          ?.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current")
+          .forEach((n) => n.classList.remove("pf-m-current"));
         lNode.classList.add("pf-m-current");
         onSelect(index);
       });
@@ -235,7 +261,9 @@ export function activate(host: HTMLElement): () => void {
     const model = activityToModel(events);
     // The adapter puts the ok/error accent in meta.status; buildSection defaults its accent from a
     // "[status]" title token (which the trail deliberately omits), so pass it through explicitly.
-    const sectionEls: HTMLElement[] = model.sections.map((sec) => buildSection(sec, { status: sec.meta?.status }));
+    const sectionEls: HTMLElement[] = model.sections.map((sec) =>
+      buildSection(sec, { status: sec.meta?.status }),
+    );
     for (const el of sectionEls) refs.body.append(el);
     const has = events.length > 0;
     refs.empty.hidden = has;
@@ -253,7 +281,10 @@ export function activate(host: HTMLElement): () => void {
     refs.emptyTitle.textContent = title;
     refs.emptySub.textContent = sub;
     conn.textContent = connText;
-    if (panel) { renderIndexTree(panel.treeBox, [], Date.now(), () => {}); panel.applyDefault(false); }
+    if (panel) {
+      renderIndexTree(panel.treeBox, [], Date.now(), () => {});
+      panel.applyDefault(false);
+    }
   }
 
   async function loadLive(daemonHost: string): Promise<void> {
@@ -265,12 +296,24 @@ export function activate(host: HTMLElement): () => void {
       render(resp.events);
       notifyDenials(resp.events);
       if (resp.events.length === 0) {
-        showEmpty("No activity yet", "The daemon is connected but has not recorded any actions in this session.", "0 events");
+        showEmpty(
+          "No activity yet",
+          "The daemon is connected but has not recorded any actions in this session.",
+          "0 events",
+        );
       }
     } catch (e) {
       if (stale) return;
       const msg = e instanceof Error ? e.message : String(e);
-      showEmpty("Could not reach the daemon", "The daemon at " + daemonHost + " did not answer (" + msg + "). Start it with: magus server start", "not connected");
+      showEmpty(
+        "Could not reach the daemon",
+        "The daemon at " +
+          daemonHost +
+          " did not answer (" +
+          msg +
+          "). Start it with: magus server start",
+        "not connected",
+      );
     }
   }
 
@@ -280,16 +323,28 @@ export function activate(host: HTMLElement): () => void {
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
-    if (wantsDemo(params)) { render(demoEvents(Date.now())); return; }
+    if (wantsDemo(params)) {
+      render(demoEvents(Date.now()));
+      return;
+    }
     const linked = daemonAttach(params);
     const remembered = daemonCell.get();
     const daemonHost = linked ?? (remembered ? validateLoopbackHost(remembered) : null);
-    if (daemonHost) { void loadLive(daemonHost); return; }
-    showEmpty("No daemon connected", "The activity trail records what the daemon did: MCP calls, jobs, config changes.", "not connected");
+    if (daemonHost) {
+      void loadLive(daemonHost);
+      return;
+    }
+    showEmpty(
+      "No daemon connected",
+      "The activity trail records what the daemon did: MCP calls, jobs, config changes.",
+      "not connected",
+    );
   }
 
   refs.demoBtn.addEventListener("click", () => render(demoEvents(Date.now())));
   load();
 
-  return () => { stale = true; };
+  return () => {
+    stale = true;
+  };
 }

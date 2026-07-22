@@ -1,3 +1,4 @@
+import { must } from "../lib/must";
 // tileView.ts - the DOM renderer for one tab's split-pane layout. A tab's body is a Pane tree
 // (tiling.ts): a single leaf when un-split (the common case) or a tree of splits after the operator
 // tiles it. This module renders that tree into nested CSS grids with draggable dividers, mounts a
@@ -17,9 +18,19 @@
 // streamer in another pane stays quiet, matching the single-tab behavior.
 
 import {
-  leaves, splitLeaf, closePane, setRatio, setLeafPage, pickAxis, neighborInDirection,
-  swapLeaves, siblingLeafId,
-  type Pane, type Split, type Leaf, type Direction,
+  leaves,
+  splitLeaf,
+  closePane,
+  setRatio,
+  setLeafPage,
+  pickAxis,
+  neighborInDirection,
+  swapLeaves,
+  siblingLeafId,
+  type Pane,
+  type Split,
+  type Leaf,
+  type Direction,
 } from "./tiling";
 import type { PageController } from "./page";
 import { h } from "./view";
@@ -137,9 +148,10 @@ export function createTileView(deps: TileDeps): TileView {
       const rect = container.getBoundingClientRect();
       d.setPointerCapture(ev.pointerId);
       const onMove = (e: PointerEvent): void => {
-        const ratio = axis === "row"
-          ? (e.clientX - rect.left) / rect.width
-          : (e.clientY - rect.top) / rect.height;
+        const ratio =
+          axis === "row"
+            ? (e.clientX - rect.left) / rect.width
+            : (e.clientY - rect.top) / rect.height;
         tree = setRatio(tree, splitId, ratio);
         const updated = splitById(tree, splitId);
         if (updated) applyGrid(container, updated);
@@ -192,11 +204,20 @@ export function createTileView(deps: TileDeps): TileView {
     const live = new Set(leaves(tree).map((l) => l.id));
     // Prune panes whose leaf is gone (closed): tear the surface down and drop the runtime.
     for (const [id, p] of [...panes]) {
-      if (!live.has(id)) { p.controller?.deactivate(); panes.delete(id); }
+      if (!live.has(id)) {
+        p.controller?.deactivate();
+        panes.delete(id);
+      }
     }
     // Prune split containers no longer in the tree.
     const liveSplits = new Set<string>();
-    (function collect(p: Pane): void { if (p.kind === "split") { liveSplits.add(p.id); collect(p.a); collect(p.b); } })(tree);
+    (function collect(p: Pane): void {
+      if (p.kind === "split") {
+        liveSplits.add(p.id);
+        collect(p.a);
+        collect(p.b);
+      }
+    })(tree);
     for (const id of [...splitEls.keys()]) if (!liveSplits.has(id)) splitEls.delete(id);
     // Now that hosts are attached and visible, fill each leaf: launcher for an empty pane, else mount.
     for (const leaf of leaves(tree)) syncLeaf(leaf);
@@ -215,7 +236,10 @@ export function createTileView(deps: TileDeps): TileView {
       p.host.replaceChildren();
       p.pageId = leaf.pageId;
     }
-    if (leaf.pageId === "") { renderLauncher(leaf.id); return; }
+    if (leaf.pageId === "") {
+      renderLauncher(leaf.id);
+      return;
+    }
     if (p.controller || mounting.has(leaf.id)) return;
     void mountLeaf(leaf.id);
   }
@@ -230,7 +254,10 @@ export function createTileView(deps: TileDeps): TileView {
     p.host.replaceChildren();
     const controller = await deps.mountSurface(p.pageId, p.host);
     mounting.delete(leafId);
-    if (!panes.has(leafId)) { controller?.deactivate(); return; }
+    if (!panes.has(leafId)) {
+      controller?.deactivate();
+      return;
+    }
     p.controller = controller;
     applyVisibility();
   }
@@ -258,9 +285,18 @@ export function createTileView(deps: TileDeps): TileView {
       const titleEl = h("div", "pf-v6-c-card__title");
       titleEl.append(h("span", "pf-v6-c-card__title-text", s.label));
       item.append(titleEl, h("div", "pf-v6-c-card__body", s.hint));
-      const choose = (): void => { tree = setLeafPage(tree, leafId, s.pageId); commit(); render(); };
+      const choose = (): void => {
+        tree = setLeafPage(tree, leafId, s.pageId);
+        commit();
+        render();
+      };
       item.addEventListener("click", choose);
-      item.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); choose(); } });
+      item.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          choose();
+        }
+      });
       list.append(item);
     }
     p.host.replaceChildren(wrap, list);
@@ -319,9 +355,12 @@ export function createTileView(deps: TileDeps): TileView {
     if (!from) return;
     const candidates = leaves(tree)
       .filter((l) => l.id !== focusId)
-      .map((l) => ({ id: l.id, rect: panes.get(l.id)!.host.getBoundingClientRect() }));
+      .map((l) => ({ id: l.id, rect: must(panes.get(l.id)).host.getBoundingClientRect() }));
     const target = neighborInDirection(from.host.getBoundingClientRect(), candidates, dir);
-    if (target) { setFocus(target); panes.get(target)?.host.focus(); }
+    if (target) {
+      setFocus(target);
+      panes.get(target)?.host.focus();
+    }
   }
 
   // move relocates the focused pane's SURFACE to the neighbor slot in a screen direction, using the
@@ -335,7 +374,7 @@ export function createTileView(deps: TileDeps): TileView {
     if (!from) return;
     const candidates = leaves(tree)
       .filter((l) => l.id !== focusId)
-      .map((l) => ({ id: l.id, rect: panes.get(l.id)!.host.getBoundingClientRect() }));
+      .map((l) => ({ id: l.id, rect: must(panes.get(l.id)).host.getBoundingClientRect() }));
     const target = neighborInDirection(from.host.getBoundingClientRect(), candidates, dir);
     if (!target) return;
     tree = swapLeaves(tree, focusId, target);
@@ -348,7 +387,10 @@ export function createTileView(deps: TileDeps): TileView {
   // split several times and the nearest screen-direction neighbor is not the pane you came from.
   function focusParent(): void {
     const sib = siblingLeafId(tree, focusId);
-    if (sib) { setFocus(sib); panes.get(sib)?.host.focus(); }
+    if (sib) {
+      setFocus(sib);
+      panes.get(sib)?.host.focus();
+    }
   }
 
   // snapshot exposes the live tree + focus for a read-only renderer (the Panes tray's spatial map).
@@ -432,7 +474,19 @@ export function createTileView(deps: TileDeps): TileView {
 
   render();
   return {
-    el, split, closeFocused, focus, move, focusParent, snapshot, focusLeaf, swap,
-    leafPageId, adopt, closeLeaf, setVisible, deactivate,
+    el,
+    split,
+    closeFocused,
+    focus,
+    move,
+    focusParent,
+    snapshot,
+    focusLeaf,
+    swap,
+    leafPageId,
+    adopt,
+    closeLeaf,
+    setVisible,
+    deactivate,
   };
 }

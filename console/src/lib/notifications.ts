@@ -90,7 +90,7 @@ export interface NotificationStore {
   // notify admits an input, returning the created Notification, or null when it was deduped away.
   notify(input: NotifyInput): Notification | null;
   list(): Notification[]; // newest first
-  unseenCount(): number;  // important, not yet seen
+  unseenCount(): number; // important, not yet seen
   markAllSeen(): void;
   dismiss(id: string): void;
   // dismissOlderThan drops every entry older than maxAgeMs (measured from `now`, injectable for tests),
@@ -122,7 +122,9 @@ export function createNotificationStore(): NotificationStore {
   const listeners = new Set<() => void>();
   let seq = 0;
 
-  const emit = (): void => { for (const fn of listeners) fn(); };
+  const emit = (): void => {
+    for (const fn of listeners) fn();
+  };
 
   return {
     notify(input: NotifyInput): Notification | null {
@@ -131,7 +133,7 @@ export function createNotificationStore(): NotificationStore {
       const kind = input.kind ?? "ok";
       const important = input.important ?? kind === "error";
       const n: Notification = {
-        id: "n" + (++seq),
+        id: "n" + ++seq,
         source: input.source,
         kind,
         message: input.message,
@@ -147,11 +149,19 @@ export function createNotificationStore(): NotificationStore {
       emit();
       return n;
     },
-    list(): Notification[] { return items.slice(); },
-    unseenCount(): number { return items.reduce((acc, n) => acc + (n.important && !n.seen ? 1 : 0), 0); },
+    list(): Notification[] {
+      return items.slice();
+    },
+    unseenCount(): number {
+      return items.reduce((acc, n) => acc + (n.important && !n.seen ? 1 : 0), 0);
+    },
     markAllSeen(): void {
       let changed = false;
-      for (const n of items) if (!n.seen) { n.seen = true; changed = true; }
+      for (const n of items)
+        if (!n.seen) {
+          n.seen = true;
+          changed = true;
+        }
       if (changed) emit();
     },
     dismiss(id: string): void {
@@ -170,7 +180,10 @@ export function createNotificationStore(): NotificationStore {
       items = [];
       emit();
     },
-    subscribe(fn: () => void): () => void { listeners.add(fn); return () => listeners.delete(fn); },
+    subscribe(fn: () => void): () => void {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
   };
 }
 
@@ -266,8 +279,10 @@ export interface NotificationCenter {
 }
 
 function svgBell(): string {
-  return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>';
+  return (
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>'
+  );
 }
 
 function relTime(at: number, now: number): string {
@@ -290,7 +305,8 @@ export function mountNotificationCenter(): NotificationCenter {
   // Record every notification raised anywhere (surfaces + toasts) into the one store.
   document.addEventListener(NOTIFY_EVENT, (e) => {
     const detail = (e as CustomEvent<NotifyInput>).detail;
-    if (detail && typeof detail.message === "string" && typeof detail.source === "string") store.notify(detail);
+    if (detail && typeof detail.message === "string" && typeof detail.source === "string")
+      store.notify(detail);
   });
 
   const actions = document.getElementById("console-actions");
@@ -306,7 +322,10 @@ export function mountNotificationCenter(): NotificationCenter {
   bell.setAttribute("aria-expanded", "false");
   bell.setAttribute("aria-label", "Notifications");
   bell.title = "Notifications";
-  bell.innerHTML = '<span class="pf-v6-c-button__icon">' + svgBell() + '</span><span class="console-shell-notify__dot" aria-hidden="true"></span>';
+  bell.innerHTML =
+    '<span class="pf-v6-c-button__icon">' +
+    svgBell() +
+    '</span><span class="console-shell-notify__dot" aria-hidden="true"></span>';
   if (actions) {
     const gear = document.getElementById("settings-btn");
     actions.insertBefore(bell, gear); // before the gear; insertBefore(node, null) appends if gear absent
@@ -349,20 +368,42 @@ export function mountNotificationCenter(): NotificationCenter {
   olderMenu.hidden = true;
   const HOUR_MS = 60 * 60 * 1000;
   let olderOpen = false;
-  const setOlder = (v: boolean): void => { olderOpen = v; olderMenu.hidden = !v; olderBtn.setAttribute("aria-expanded", v ? "true" : "false"); };
-  for (const [label, hours] of [["Older than 1 hour", 1], ["Older than 3 hours", 3], ["Older than 6 hours", 6]] as const) {
+  const setOlder = (v: boolean): void => {
+    olderOpen = v;
+    olderMenu.hidden = !v;
+    olderBtn.setAttribute("aria-expanded", v ? "true" : "false");
+  };
+  for (const [label, hours] of [
+    ["Older than 1 hour", 1],
+    ["Older than 3 hours", 3],
+    ["Older than 6 hours", 6],
+  ] as const) {
     const mi = document.createElement("button");
     mi.className = "console-shell-notify__older-item";
     mi.type = "button";
     mi.setAttribute("role", "menuitem");
     mi.textContent = label;
-    mi.addEventListener("click", () => { store.dismissOlderThan(hours * HOUR_MS); setOlder(false); });
+    mi.addEventListener("click", () => {
+      store.dismissOlderThan(hours * HOUR_MS);
+      setOlder(false);
+    });
     olderMenu.append(mi);
   }
-  olderBtn.addEventListener("click", (e) => { e.stopPropagation(); setOlder(!olderOpen); });
+  olderBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOlder(!olderOpen);
+  });
   olderMenu.addEventListener("click", (e) => e.stopPropagation());
-  document.addEventListener("pointerdown", (e) => { if (olderOpen && e.target instanceof Node && !olderWrap.contains(e.target)) setOlder(false); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && olderOpen) { e.stopPropagation(); setOlder(false); olderBtn.focus(); } });
+  document.addEventListener("pointerdown", (e) => {
+    if (olderOpen && e.target instanceof Node && !olderWrap.contains(e.target)) setOlder(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && olderOpen) {
+      e.stopPropagation();
+      setOlder(false);
+      olderBtn.focus();
+    }
+  });
   olderWrap.append(olderBtn, olderMenu);
 
   const clearBtn = document.createElement("button");
@@ -382,7 +423,8 @@ export function mountNotificationCenter(): NotificationCenter {
   // overrides.css, like the Applications menu). Fall back to the body if the control group is absent.
   (actions ?? document.body).append(panel);
 
-  const svgClose = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  const svgClose =
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 
   const renderList = (): void => {
     const items = store.list();
@@ -390,7 +432,8 @@ export function mountNotificationCenter(): NotificationCenter {
     if (items.length === 0) {
       const empty = document.createElement("p");
       empty.className = "console-shell-notify__empty";
-      empty.textContent = "Nothing to report. Failures, sandbox denials, and daemon health changes show up here.";
+      empty.textContent =
+        "Nothing to report. Failures, sandbox denials, and daemon health changes show up here.";
       listEl.append(empty);
       clearBtn.hidden = true;
       olderWrap.hidden = true;
@@ -437,8 +480,12 @@ export function mountNotificationCenter(): NotificationCenter {
         link.textContent = n.link.label;
         const nlink = n.link;
         link.addEventListener("click", () => {
-          if (nlink.run) { link.disabled = true; void Promise.resolve(nlink.run()).finally(() => { link.disabled = false; }); }
-          else if (nlink.href) location.assign(nlink.href);
+          if (nlink.run) {
+            link.disabled = true;
+            void Promise.resolve(nlink.run()).finally(() => {
+              link.disabled = false;
+            });
+          } else if (nlink.href) location.assign(nlink.href);
         });
         meta.append(link);
       }
@@ -449,7 +496,7 @@ export function mountNotificationCenter(): NotificationCenter {
       dismiss.type = "button";
       dismiss.setAttribute("aria-label", "Dismiss this notification");
       dismiss.title = "Dismiss";
-      dismiss.innerHTML = '<span class="pf-v6-c-button__icon">' + svgClose + '</span>';
+      dismiss.innerHTML = '<span class="pf-v6-c-button__icon">' + svgClose + "</span>";
       dismiss.addEventListener("click", () => store.dismiss(n.id));
 
       item.append(dot, body, dismiss);
@@ -459,11 +506,19 @@ export function mountNotificationCenter(): NotificationCenter {
 
   const renderBell = (): void => {
     const unseen = store.unseenCount();
-    if (unseen > 0) { bell.dataset.unseen = ""; bell.title = "Notifications (" + unseen + " unread)"; }
-    else { delete bell.dataset.unseen; bell.title = "Notifications"; }
+    if (unseen > 0) {
+      bell.dataset.unseen = "";
+      bell.title = "Notifications (" + unseen + " unread)";
+    } else {
+      delete bell.dataset.unseen;
+      bell.title = "Notifications";
+    }
   };
 
-  store.subscribe(() => { renderBell(); if (!panel.hidden) renderList(); });
+  store.subscribe(() => {
+    renderBell();
+    if (!panel.hidden) renderList();
+  });
   renderBell();
 
   // Reuse the Reference panel's pop-out mechanics: Escape / outside-click dismiss, focus into the panel
@@ -472,8 +527,11 @@ export function mountNotificationCenter(): NotificationCenter {
   const toggle = wireDrawerToggle({
     trigger: bell,
     panel,
-    focusTarget: () => clearBtn.hidden ? panel : clearBtn,
-    onOpen: () => { renderList(); store.markAllSeen(); },
+    focusTarget: () => (clearBtn.hidden ? panel : clearBtn),
+    onOpen: () => {
+      renderList();
+      store.markAllSeen();
+    },
   });
 
   let seeded = false;
@@ -483,9 +541,27 @@ export function mountNotificationCenter(): NotificationCenter {
     // History tier only - demo data must not light the bell. A plausible slice of the demo workspace's
     // recent activity so the panel reads as lived-in offline.
     const now = Date.now();
-    store.notify({ source: "Dashboard", kind: "ok", message: "Reconnected to the daemon at 127.0.0.1:7391.", at: now - 6 * 60_000, key: "demo:reconnect" });
-    store.notify({ source: "Log Viewer", kind: "warn", message: "svc/api:build finished with warnings (2 deprecations).", at: now - 4 * 60_000, key: "demo:build-warn" });
-    store.notify({ source: "Settings", kind: "ok", message: "Console settings applied.", at: now - 90_000, key: "demo:settings" });
+    store.notify({
+      source: "Dashboard",
+      kind: "ok",
+      message: "Reconnected to the daemon at 127.0.0.1:7391.",
+      at: now - 6 * 60_000,
+      key: "demo:reconnect",
+    });
+    store.notify({
+      source: "Log Viewer",
+      kind: "warn",
+      message: "svc/api:build finished with warnings (2 deprecations).",
+      at: now - 4 * 60_000,
+      key: "demo:build-warn",
+    });
+    store.notify({
+      source: "Settings",
+      kind: "ok",
+      message: "Console settings applied.",
+      at: now - 90_000,
+      key: "demo:settings",
+    });
   };
 
   return {

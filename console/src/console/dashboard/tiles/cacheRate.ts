@@ -16,8 +16,12 @@ import type uPlot from "uplot";
 export function cacheRateTile(): Tile {
   let chart: TimeChart;
   const card = new Card("cache", "Cache hit-rate", {
-    term: "Cache", note: "per-interval hits / (hits + misses)",
-    onReveal: () => { chart.build(); chart.resize(); },
+    term: "Cache",
+    note: "per-interval hits / (hits + misses)",
+    onReveal: () => {
+      chart.build();
+      chart.resize();
+    },
   });
   const plot = h("div", "console-dashboard-chart__plot");
   const legend = h("div", "console-dashboard-chart__legend");
@@ -25,20 +29,32 @@ export function cacheRateTile(): Tile {
   card.body.append(plot, legend);
 
   chart = new TimeChart(plot, {
-    series: [{ label: "hit rate", colorVar: "--console-status-ok", fillVar: "--console-status-ok", width: 1.75 }],
+    series: [
+      {
+        label: "hit rate",
+        colorVar: "--console-status-ok",
+        fillVar: "--console-status-ok",
+        width: 1.75,
+      },
+    ],
     yFormat: (v) => v + "%",
     ySize: 44,
     yRange: [0, 100],
   });
 
   function derive(samples: SampleView[]): uPlot.AlignedData {
-    const t: number[] = [], rate: (number | null)[] = [];
+    const t: number[] = [],
+      rate: (number | null)[] = [];
     for (let i = 1; i < samples.length; i++) {
-      const a = samples[i - 1], b = samples[i];
+      const a = samples[i - 1],
+        b = samples[i];
       t.push(b.at / 1000);
       // Refuse to diff across a counter-source boundary: the two feeds have
       // different baselines, so their difference is meaningless. Emit a gap.
-      if (a.cacheSrc !== b.cacheSrc) { rate.push(null); continue; }
+      if (a.cacheSrc !== b.cacheSrc) {
+        rate.push(null);
+        continue;
+      }
       const dh = Math.max(0, b.cacheHits - a.cacheHits);
       const dm = Math.max(0, b.cacheMisses - a.cacheMisses);
       const total = dh + dm;
@@ -57,6 +73,10 @@ export function cacheRateTile(): Tile {
       chart.build(); // idempotent; defers itself until the container is visible
       chart.setData(derive(s.samples));
     },
-    destroy() { window.removeEventListener("resize", onResize); offTheme(); chart.destroy(); },
+    destroy() {
+      window.removeEventListener("resize", onResize);
+      offTheme();
+      chart.destroy();
+    },
   };
 }

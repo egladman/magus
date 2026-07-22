@@ -73,12 +73,22 @@ export function listCommands(): Command[] {
 // fold to "mod". Returns "" for an empty spec (the disabled sentinel).
 export function normalizeChord(spec: string): Chord {
   if (spec.trim() === "") return "";
-  const parts = spec.split("+").map((p) => p.trim()).filter((p) => p.length > 0);
+  const parts = spec
+    .split("+")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
   const mods = new Set<Modifier>();
   let key = "";
   for (const p of parts) {
     const low = p.toLowerCase();
-    if (low === "mod" || low === "cmd" || low === "command" || low === "meta" || low === "ctrl" || low === "control") {
+    if (
+      low === "mod" ||
+      low === "cmd" ||
+      low === "command" ||
+      low === "meta" ||
+      low === "ctrl" ||
+      low === "control"
+    ) {
       mods.add("mod");
     } else if (low === "alt" || low === "option" || low === "opt") {
       mods.add("alt");
@@ -189,7 +199,8 @@ export function conflicts(keymap: Keymap, chord: Chord, exceptId?: string): stri
   if (target === "") return [];
   const out: string[] = [];
   for (const [id, bound] of Object.entries(keymap)) {
-    if (id !== exceptId && bound !== "" && seqConflict(normalizeSequence(bound), target)) out.push(id);
+    if (id !== exceptId && bound !== "" && seqConflict(normalizeSequence(bound), target))
+      out.push(id);
   }
   return out;
 }
@@ -197,19 +208,27 @@ export function conflicts(keymap: Keymap, chord: Chord, exceptId?: string): stri
 // The human labels for the non-modifier keys formatChord prettifies (an arrow, a space, escape).
 // Everything else formats from its stored token (a single letter uppercased, a named key verbatim).
 const KEY_LABELS: Record<string, string> = {
-  ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down", " ": "Space", Escape: "Esc",
+  ArrowLeft: "Left",
+  ArrowRight: "Right",
+  ArrowUp: "Up",
+  ArrowDown: "Down",
+  " ": "Space",
+  Escape: "Esc",
 };
 
 // formatSingleChord renders ONE stored chord ("mod+shift+k") for display ("Cmd+Shift+K" on macOS,
 // "Ctrl+Shift+K" elsewhere).
 function formatSingleChord(chord: Chord, mac: boolean): string {
-  return chord.split("+").map((t) => {
-    if (t === "mod") return mac ? "Cmd" : "Ctrl";
-    if (t === "alt") return mac ? "Option" : "Alt";
-    if (t === "shift") return "Shift";
-    if (KEY_LABELS[t]) return KEY_LABELS[t];
-    return t.length === 1 ? t.toUpperCase() : t;
-  }).join("+");
+  return chord
+    .split("+")
+    .map((t) => {
+      if (t === "mod") return mac ? "Cmd" : "Ctrl";
+      if (t === "alt") return mac ? "Option" : "Alt";
+      if (t === "shift") return "Shift";
+      if (KEY_LABELS[t]) return KEY_LABELS[t];
+      return t.length === 1 ? t.toUpperCase() : t;
+    })
+    .join("+");
 }
 
 // formatChord renders a stored binding for display - what the command bar and the keybinding editor
@@ -219,7 +238,11 @@ function formatSingleChord(chord: Chord, mac: boolean): string {
 // binding (deliberately unbound) renders as "".
 export function formatChord(chord: Chord, mac: boolean): string {
   if (chord === "") return "";
-  return chord.split(SEQ_SEP).filter((c) => c.length > 0).map((c) => formatSingleChord(c, mac)).join(" ");
+  return chord
+    .split(SEQ_SEP)
+    .filter((c) => c.length > 0)
+    .map((c) => formatSingleChord(c, mac))
+    .join(" ");
 }
 
 // --- Installation (the only DOM-touching part) ------------------------------
@@ -235,7 +258,9 @@ export function isMac(): boolean {
 // types into the filter/search box (mirrors logs/dom.ts's guard).
 function isTyping(node: EventTarget | null): boolean {
   const t = (node && (node as HTMLElement).tagName) || "";
-  return t === "INPUT" || t === "TEXTAREA" || (node !== null && (node as HTMLElement).isContentEditable);
+  return (
+    t === "INPUT" || t === "TEXTAREA" || (node !== null && (node as HTMLElement).isContentEditable)
+  );
 }
 
 // How long a partial sequence waits for its next chord before it lapses. Emacs-ish: long enough to
@@ -282,14 +307,17 @@ export function advanceSequence(pending: Chord[], chord: Chord, keymap: Keymap):
 // is skipped. Returns a teardown that removes the listener and clears any pending sequence.
 export function installKeybindings(keymap: () => Keymap): () => void {
   const mac = isMac();
-  let pending: Chord[] = [];          // chords pressed so far in the in-progress sequence
+  let pending: Chord[] = []; // chords pressed so far in the in-progress sequence
   let pendingExact: string | null = null; // command the current run already fully binds (fires on timeout)
   let timer: number | null = null;
 
   const reset = (): void => {
     pending = [];
     pendingExact = null;
-    if (timer !== null) { clearTimeout(timer); timer = null; }
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
   };
   const armTimeout = (): void => {
     if (timer !== null) clearTimeout(timer);
@@ -306,10 +334,22 @@ export function installKeybindings(keymap: () => Keymap): () => void {
     if (chord === "") return; // a bare modifier: keep any pending sequence alive, consume nothing
     const out = advanceSequence(pending, chord, keymap());
     if (out.consumed) e.preventDefault();
-    if (out.fire) { reset(); dispatchCommand(out.fire); return; }
-    if (out.pending.length > 0) { pending = out.pending; pendingExact = out.waitFor; armTimeout(); return; }
+    if (out.fire) {
+      reset();
+      dispatchCommand(out.fire);
+      return;
+    }
+    if (out.pending.length > 0) {
+      pending = out.pending;
+      pendingExact = out.waitFor;
+      armTimeout();
+      return;
+    }
     reset();
   };
   document.addEventListener("keydown", onKeyDown);
-  return () => { reset(); document.removeEventListener("keydown", onKeyDown); };
+  return () => {
+    reset();
+    document.removeEventListener("keydown", onKeyDown);
+  };
 }

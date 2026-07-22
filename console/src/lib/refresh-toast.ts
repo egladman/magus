@@ -55,7 +55,12 @@ export interface ToastOptions {
 // timing is unchanged; recording is a side effect. An optional deep link is rendered as an action on
 // BOTH the toast and the recorded entry. Only error-kind toasts light the bell's unseen-dot (see
 // notifications.ts).
-export function showToast(source: string, message: string, kind: "ok" | "warn" | "error" = "ok", opts: ToastOptions = {}): void {
+export function showToast(
+  source: string,
+  message: string,
+  kind: "ok" | "warn" | "error" = "ok",
+  opts: ToastOptions = {},
+): void {
   const ms = opts.ms ?? (kind === "ok" ? 2600 : 6000);
   document.querySelector(".console-shell-toast--transient")?.remove();
   const toast = document.createElement("div");
@@ -73,7 +78,10 @@ export function showToast(source: string, message: string, kind: "ok" | "warn" |
     const action = document.createElement("button");
     action.type = "button";
     action.textContent = link.label;
-    action.addEventListener("click", () => { if (link.run) void link.run(); else if (link.href) location.assign(link.href); });
+    action.addEventListener("click", () => {
+      if (link.run) void link.run();
+      else if (link.href) location.assign(link.href);
+    });
     toast.appendChild(action);
   }
   document.body.appendChild(toast);

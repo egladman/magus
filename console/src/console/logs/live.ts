@@ -46,7 +46,8 @@ export function connectLive(host: string, params: ViewerParams): void {
     "http://" + host + "/events",
     headers,
     onLiveEvent,
-    (e) => setLiveStatus(/stream ended|done/i.test((e && e.message) || "") ? "done" : "disconnected"),
+    (e) =>
+      setLiveStatus(/stream ended|done/i.test((e && e.message) || "") ? "done" : "disconnected"),
     state.liveAbort.signal,
     () => setLiveStatus("streaming"),
   );
@@ -76,7 +77,13 @@ function onLiveEvent(type: string, data: string): void {
     const link = liveNotifyHost
       ? { label: "Open in log viewer", href: logsLink(liveNotifyHost, { ref: ev.ref }) }
       : undefined;
-    notify({ source: "Log Viewer", kind: "error", key: "fail:" + ev.ref, message: label + " failed.", link });
+    notify({
+      source: "Log Viewer",
+      kind: "error",
+      key: "fail:" + ev.ref,
+      message: label + " failed.",
+      link,
+    });
   }
   // Author-declared markers: a build that prints `magus:alert:`/`magus:notice:` raises a bell/history
   // notification, matched frontend-side off the verbatim output line (no backend push). Keyed on the
@@ -84,7 +91,8 @@ function onLiveEvent(type: string, data: string): void {
   // distinct alerts with identical text collapsing to one is the accepted, lesser evil.
   if (ev.kind === Kind.OUTPUT && ev.text) {
     const marker = matchAuthorMarker(ev.text);
-    if (marker) notify({ ...marker, key: (marker.important ? "alert:" : "notice:") + marker.message });
+    if (marker)
+      notify({ ...marker, key: (marker.important ? "alert:" : "notice:") + marker.message });
   }
   state.liveEvents.push(ev);
   scheduleLiveRender();
@@ -105,7 +113,9 @@ export function scheduleLiveRender(): void {
     setLiveStatus(state.liveAbort && state.liveAbort.signal.aborted ? "done" : "streaming");
     updateTimelineControl();
     const foldBtn = el("fold-all-btn");
-    if (foldBtn) (foldBtn as HTMLButtonElement).disabled = state.timeline || state.model.titled === 0 || !state.pretty;
+    if (foldBtn)
+      (foldBtn as HTMLButtonElement).disabled =
+        state.timeline || state.model.titled === 0 || !state.pretty;
     const copyBtn = el("copy-all-btn");
     if (copyBtn) (copyBtn as HTMLButtonElement).disabled = false;
     const shareBtn = el("share-btn");
@@ -123,13 +133,21 @@ export function setLiveStatus(linkState: string): void {
   const conn = document.getElementById("console-conn");
   if (!conn) return;
   if (linkState === "streaming") {
-    conn.textContent = "connected"; conn.dataset.state = "connected"; delete conn.dataset.health;
+    conn.textContent = "connected";
+    conn.dataset.state = "connected";
+    delete conn.dataset.health;
   } else if (linkState === "connecting") {
-    conn.textContent = "connecting..."; conn.dataset.state = "connecting"; delete conn.dataset.health;
+    conn.textContent = "connecting...";
+    conn.dataset.state = "connecting";
+    delete conn.dataset.health;
   } else if (linkState === "done") {
-    conn.textContent = "done"; conn.dataset.state = "connected"; delete conn.dataset.health;
+    conn.textContent = "done";
+    conn.dataset.state = "connected";
+    delete conn.dataset.health;
   } else if (linkState === "disconnected") {
-    conn.textContent = "disconnected"; conn.dataset.state = "disconnected"; delete conn.dataset.health;
+    conn.textContent = "disconnected";
+    conn.dataset.state = "disconnected";
+    delete conn.dataset.health;
   }
   // The event count sits on the FAR RIGHT of the bar (its own item, like observing-since), not
   // appended to the connection state.

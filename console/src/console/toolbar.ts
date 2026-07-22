@@ -102,7 +102,10 @@ function setupOne(group: HTMLElement): void {
     if (!panel.contains(t) && !toggle.contains(t)) setExpanded(false);
   });
   document.addEventListener("keydown", (ev) => {
-    if (expanded && (ev as KeyboardEvent).key === "Escape") { setExpanded(false); toggle.focus(); }
+    if (expanded && (ev as KeyboardEvent).key === "Escape") {
+      setExpanded(false);
+      toggle.focus();
+    }
   });
 }
 

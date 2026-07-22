@@ -17,7 +17,10 @@ test("openTab into an empty workspace appends and activates", () => {
 test("openTab appends in order and activates the new tab", () => {
   let ws = openTab(emptyWorkspace, tab("a"));
   ws = openTab(ws, tab("b"));
-  assert.deepEqual(ws.tabs.map((t) => t.id), ["a", "b"]);
+  assert.deepEqual(
+    ws.tabs.map((t) => t.id),
+    ["a", "b"],
+  );
   assert.equal(ws.activeId, "b");
 });
 
@@ -39,7 +42,10 @@ test("closeTab of the active middle tab focuses the left neighbor", () => {
   let ws = openTab(openTab(openTab(emptyWorkspace, tab("a")), tab("b")), tab("c"));
   ws = setActive(ws, "b");
   ws = closeTab(ws, "b");
-  assert.deepEqual(ws.tabs.map((t) => t.id), ["a", "c"]);
+  assert.deepEqual(
+    ws.tabs.map((t) => t.id),
+    ["a", "c"],
+  );
   assert.equal(ws.activeId, "a");
 });
 
@@ -76,7 +82,10 @@ test("setActive to an unknown id is a no-op", () => {
 test("setLayout records a tab's split tree and leaves its siblings untouched", () => {
   const ws = openTab(openTab(emptyWorkspace, tab("a")), tab("b"));
   const split: Pane = {
-    kind: "split", id: "s1", dir: "row", ratio: 0.5,
+    kind: "split",
+    id: "s1",
+    dir: "row",
+    ratio: 0.5,
     a: { kind: "leaf", id: "a", pageId: "a" },
     b: { kind: "leaf", id: "p2", pageId: "logs" },
   };

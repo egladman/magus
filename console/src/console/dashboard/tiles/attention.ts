@@ -31,7 +31,11 @@ export function countFailing(status: StatusView): number {
   return n;
 }
 
-export interface Verdict { state: "clear" | "warn" | "attention"; line: string; sub: string; }
+export interface Verdict {
+  state: "clear" | "warn" | "attention";
+  line: string;
+  sub: string;
+}
 
 // verdictFor derives the one-line headline + detail from a status frame and its failing count, in
 // priority order: failing targets, then an unhealthy daemon, then all clear. Exported so the
@@ -41,17 +45,28 @@ export function verdictFor(status: StatusView, failing: number): Verdict {
   const down = status.health.cls === "fail";
   const degraded = status.health.cls === "warn";
   if (failing > 0) {
-    return { state: "attention", line: "Attention needed", sub: failing === 1 ? "1 target is failing" : failing + " targets are failing" };
+    return {
+      state: "attention",
+      line: "Attention needed",
+      sub: failing === 1 ? "1 target is failing" : failing + " targets are failing",
+    };
   }
   if (down || degraded) {
-    return { state: "warn", line: down ? "Daemon down" : "Daemon degraded", sub: "The pool is up but the daemon reports " + status.health.label + "." };
+    return {
+      state: "warn",
+      line: down ? "Daemon down" : "Daemon degraded",
+      sub: "The pool is up but the daemon reports " + status.health.label + ".",
+    };
   }
   return {
     state: "clear",
     line: "All clear",
-    sub: running > 0
-      ? (running === 1 ? "1 target running, nothing failing" : running + " targets running, nothing failing")
-      : "Nothing failing, pool is idle",
+    sub:
+      running > 0
+        ? running === 1
+          ? "1 target running, nothing failing"
+          : running + " targets running, nothing failing"
+        : "Nothing failing, pool is idle",
   };
 }
 
@@ -116,7 +131,9 @@ export function attentionTile(): Tile {
 
   return {
     el: root,
-    update(s: DashboardState) { if (s.status) render(s.status, s.liveHost); },
+    update(s: DashboardState) {
+      if (s.status) render(s.status, s.liveHost);
+    },
     destroy() {},
   };
 }

@@ -67,13 +67,19 @@ export function neighborInDirection(
     const tx = rect.left + rect.width / 2;
     const ty = rect.top + rect.height / 2;
     const inPlane =
-      dir === "left" ? tx < cx - 4
-      : dir === "right" ? tx > cx + 4
-      : dir === "up" ? ty < cy - 4
-      : ty > cy + 4;
+      dir === "left"
+        ? tx < cx - 4
+        : dir === "right"
+          ? tx > cx + 4
+          : dir === "up"
+            ? ty < cy - 4
+            : ty > cy + 4;
     if (!inPlane) continue;
     const dist = Math.abs(tx - cx) + Math.abs(ty - cy);
-    if (dist < bestDist) { bestDist = dist; best = id; }
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = id;
+    }
   }
   return best;
 }

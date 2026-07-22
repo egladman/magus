@@ -14,14 +14,14 @@ import { logsLink } from "../../../lib/daemon";
 const SVGNS = "http://www.w3.org/2000/svg";
 
 const WINDOW_MS = 60_000; // rolling window: last 60s to now
-const VIEW_W = 720;       // viewBox width; the SVG scales to the tile via its viewBox
-const LABEL_W = 150;      // left gutter for target labels
+const VIEW_W = 720; // viewBox width; the SVG scales to the tile via its viewBox
+const LABEL_W = 150; // left gutter for target labels
 const RIGHT_PAD = 12;
-const AXIS_H = 14;        // top strip for the time-axis tick labels
-const RUN_H = 16;         // a run-group header row
-const ROW_H = 18;         // one target row
+const AXIS_H = 14; // top strip for the time-axis tick labels
+const RUN_H = 16; // a run-group header row
+const ROW_H = 18; // one target row
 const BAR_H = 10;
-const MIN_BAR_W = 2;      // instant (cached) bars stay visible
+const MIN_BAR_W = 2; // instant (cached) bars stay visible
 const PLOT_W = VIEW_W - RIGHT_PAD - LABEL_W;
 const TICK_MS = WINDOW_MS; // full window per axis tick
 
@@ -64,8 +64,11 @@ export function ganttTile(): Tile {
   const empty = h("p", "console-dashboard-row__empty", "No active runs.");
   const legend = h("div", "console-dashboard-gantt__legend");
   for (const [cls, text] of [
-    ["running", "running"], ["queued", "queued"], ["passed", "passed"],
-    ["failed", "failed"], ["cached", "cached"],
+    ["running", "running"],
+    ["queued", "queued"],
+    ["passed", "passed"],
+    ["failed", "failed"],
+    ["cached", "cached"],
   ] as const) {
     legend.append(h("span", "console-dashboard-legend console-dashboard-legend--" + cls, text));
   }
@@ -113,7 +116,13 @@ export function ganttTile(): Tile {
     }
   }
 
-  function drawBar(root: SVGElement, t: TargetRunView, rowY: number, t0: number, now: number): void {
+  function drawBar(
+    root: SVGElement,
+    t: TargetRunView,
+    rowY: number,
+    t0: number,
+    now: number,
+  ): void {
     const span = barSpan(t, now);
     if (!span) return;
     const x1 = timeX(span.s, t0, now);
@@ -129,7 +138,7 @@ export function ganttTile(): Tile {
     rect.setAttribute("rx", "2");
     rect.setAttribute("class", "console-dashboard-gantt__bar");
     rect.setAttribute("data-state", t.state);
-    const elapsed = t.durationMs > 0 ? t.durationMs : (t.startMs != null ? now - t.startMs : 0);
+    const elapsed = t.durationMs > 0 ? t.durationMs : t.startMs != null ? now - t.startMs : 0;
     const dur = fmtDurMs(elapsed);
     const title = svg("title");
     title.textContent = t.label + " - " + t.state + (dur ? " (" + dur + ")" : "");
@@ -159,15 +168,17 @@ export function ganttTile(): Tile {
     // left with no visible targets. Otherwise stale terminal bars clamp to
     // MIN_BAR_W stubs and pile up against the left gutter forever.
     const visibleRuns = runs
-      .map((r) => ({ ...r, targets: r.targets
-        .filter((t) => {
-          const span = barSpan(t, now);
-          return !span || span.e >= t0;
-        })
-        // Sort by start time so the timeline reads as a top-left to bottom-right cascade;
-        // queued/not-yet-started targets (no startMs) sort last, keeping their insertion
-        // order via the stable sort.
-        .sort((a, b) => (a.startMs ?? Infinity) - (b.startMs ?? Infinity)),
+      .map((r) => ({
+        ...r,
+        targets: r.targets
+          .filter((t) => {
+            const span = barSpan(t, now);
+            return !span || span.e >= t0;
+          })
+          // Sort by start time so the timeline reads as a top-left to bottom-right cascade;
+          // queued/not-yet-started targets (no startMs) sort last, keeping their insertion
+          // order via the stable sort.
+          .sort((a, b) => (a.startMs ?? Infinity) - (b.startMs ?? Infinity)),
       }))
       .filter((r) => r.targets.length > 0);
     const nTargets = visibleRuns.reduce((n, r) => n + r.targets.length, 0);
@@ -178,7 +189,8 @@ export function ganttTile(): Tile {
       return;
     }
 
-    const totalH = AXIS_H + visibleRuns.reduce((n, r) => n + RUN_H + r.targets.length * ROW_H, 0) + 4;
+    const totalH =
+      AXIS_H + visibleRuns.reduce((n, r) => n + RUN_H + r.targets.length * ROW_H, 0) + 4;
     const root = svg("svg");
     root.setAttribute("viewBox", "0 0 " + VIEW_W + " " + totalH);
     root.setAttribute("class", "console-dashboard-gantt__svg");
@@ -216,12 +228,20 @@ export function ganttTile(): Tile {
     }
 
     wrap.replaceChildren(root);
-    card.setNote(visibleRuns.length + (visibleRuns.length === 1 ? " run" : " runs") + ", " + running + " running");
+    card.setNote(
+      visibleRuns.length +
+        (visibleRuns.length === 1 ? " run" : " runs") +
+        ", " +
+        running +
+        " running",
+    );
   }
 
   // A light 1s ticker advances the running bars and rolls the window forward even when
   // no new status frame has arrived; cleared on destroy.
-  const ticker = window.setInterval(() => { if (runs.length) render(); }, 1000);
+  const ticker = window.setInterval(() => {
+    if (runs.length) render();
+  }, 1000);
 
   return {
     el: card.el,
@@ -231,6 +251,8 @@ export function ganttTile(): Tile {
       liveHost = s.liveHost;
       render();
     },
-    destroy() { window.clearInterval(ticker); },
+    destroy() {
+      window.clearInterval(ticker);
+    },
   };
 }

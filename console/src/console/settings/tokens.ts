@@ -22,9 +22,12 @@ import { h } from "../view";
 // unspecified/unknown scope falls back to a plain "Token" so a future class still renders.
 function scopeLabel(scope: TokenScope): string {
   switch (scope) {
-    case TokenScope.CONNECTOR: return "Connector";
-    case TokenScope.SHARE_READ: return "Share to phone";
-    default: return "Token";
+    case TokenScope.CONNECTOR:
+      return "Connector";
+    case TokenScope.SHARE_READ:
+      return "Share to phone";
+    default:
+      return "Token";
   }
 }
 
@@ -43,19 +46,32 @@ function expiryLabel(t: TokenInfo): string {
 // renders into a detached node. opts.onDenied fires when the daemon declines the token service to
 // this client (a phone-share session): the caller hides the whole section, so the SERVER, not a
 // client-side mode guess, decides whether token management is offered.
-export function buildTokensSection(host: string | null, opts: { onDenied?: () => void } = {}): { el: HTMLElement; destroy(): void } {
+export function buildTokensSection(
+  host: string | null,
+  opts: { onDenied?: () => void } = {},
+): { el: HTMLElement; destroy(): void } {
   const body = h("div", "console-settings-tokens");
   let stale = false;
 
   if (!host) {
-    body.append(buildEmpty(
-      "Not connected to a daemon",
-      "Connect the console to a running daemon to list and revoke its access tokens. Open the console from a magus link, or set the daemon host on the General tab.",
-    ));
-    return { el: body, destroy() { stale = true; } };
+    body.append(
+      buildEmpty(
+        "Not connected to a daemon",
+        "Connect the console to a running daemon to list and revoke its access tokens. Open the console from a magus link, or set the daemon host on the General tab.",
+      ),
+    );
+    return {
+      el: body,
+      destroy() {
+        stale = true;
+      },
+    };
   }
 
-  const client: Client<typeof TokenService> = createClient(TokenService, createDaemonTransport(host, getLiveToken()));
+  const client: Client<typeof TokenService> = createClient(
+    TokenService,
+    createDaemonTransport(host, getLiveToken()),
+  );
 
   // renderList repaints the whole body from a fresh ListTokens. It is called on mount and after
   // every successful revoke, so the list always reflects the daemon's current tokens.
@@ -66,10 +82,12 @@ export function buildTokensSection(host: string | null, opts: { onDenied?: () =>
       const tokens = resp.tokens;
       body.replaceChildren();
       if (tokens.length === 0) {
-        body.append(buildEmpty(
-          "No connector or share tokens",
-          "The daemon has no connector tokens and no active share. Mint a connector token from the CLI with: magus config mcp connector. The built-in operator token is managed by the CLI and is never shown here.",
-        ));
+        body.append(
+          buildEmpty(
+            "No connector or share tokens",
+            "The daemon has no connector tokens and no active share. Mint a connector token from the CLI with: magus config mcp connector. The built-in operator token is managed by the CLI and is never shown here.",
+          ),
+        );
         return;
       }
       body.append(buildTable(tokens));
@@ -77,12 +95,21 @@ export function buildTokensSection(host: string | null, opts: { onDenied?: () =>
       if (stale) return;
       // The daemon declined the service to this client (a read-only phone share): hide the section
       // entirely rather than show a failure - the server has decided token management is not offered.
-      if (isCapabilityDenied(e)) { opts.onDenied?.(); return; }
+      if (isCapabilityDenied(e)) {
+        opts.onDenied?.();
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
-      body.replaceChildren(buildEmpty(
-        "Could not load tokens",
-        "The daemon at " + host + " did not answer the token service (" + msg + "). It must be running with connector auth. Start it with: magus server start.",
-      ));
+      body.replaceChildren(
+        buildEmpty(
+          "Could not load tokens",
+          "The daemon at " +
+            host +
+            " did not answer the token service (" +
+            msg +
+            "). It must be running with connector auth. Start it with: magus server start.",
+        ),
+      );
     }
   }
 
@@ -111,18 +138,34 @@ export function buildTokensSection(host: string | null, opts: { onDenied?: () =>
       label.append(h("span", "pf-v6-c-label__content", scopeLabel(t.scope)));
       type.append(label);
 
-      const name = h("span", "console-settings-tokens__cell console-settings-tokens__name", t.name || "(unnamed)");
+      const name = h(
+        "span",
+        "console-settings-tokens__cell console-settings-tokens__name",
+        t.name || "(unnamed)",
+      );
       name.setAttribute("role", "cell");
 
-      const fp = h("span", "console-settings-tokens__cell console-settings-tokens__fp", t.identifier);
+      const fp = h(
+        "span",
+        "console-settings-tokens__cell console-settings-tokens__fp",
+        t.identifier,
+      );
       fp.setAttribute("role", "cell");
 
-      const exp = h("span", "console-settings-tokens__cell console-settings-tokens__expiry", expiryLabel(t));
+      const exp = h(
+        "span",
+        "console-settings-tokens__cell console-settings-tokens__expiry",
+        expiryLabel(t),
+      );
       exp.setAttribute("role", "cell");
 
       const actionCell = h("span", "console-settings-tokens__cell");
       actionCell.setAttribute("role", "cell");
-      const revoke = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Revoke") as HTMLButtonElement;
+      const revoke = h(
+        "button",
+        "pf-v6-c-button pf-m-secondary pf-m-small",
+        "Revoke",
+      ) as HTMLButtonElement;
       revoke.type = "button";
       // The label already reads "Revoke"; the descriptive title/aria-label names WHICH token so the
       // control's effect is unambiguous (the repo's explicit-labelling standard).
@@ -144,8 +187,12 @@ export function buildTokensSection(host: string | null, opts: { onDenied?: () =>
     const who = t.name ? t.name : scopeLabel(t.scope);
     const isShare = t.scope === TokenScope.SHARE_READ;
     const detail = isShare
-      ? "Revoke the share token \"" + who + "\"? This also closes the phone share listener immediately."
-      : "Revoke connector token \"" + who + "\"? Any client using it will stop working. This cannot be undone - mint a new one from the CLI if needed.";
+      ? 'Revoke the share token "' +
+        who +
+        '"? This also closes the phone share listener immediately.'
+      : 'Revoke connector token "' +
+        who +
+        '"? Any client using it will stop working. This cannot be undone - mint a new one from the CLI if needed.';
     if (!confirm(detail)) return;
     btn.disabled = true;
     try {
@@ -162,7 +209,12 @@ export function buildTokensSection(host: string | null, opts: { onDenied?: () =>
   }
 
   void renderList();
-  return { el: body, destroy() { stale = true; } };
+  return {
+    el: body,
+    destroy() {
+      stale = true;
+    },
+  };
 }
 
 // buildEmpty renders the shared console empty state: a PF EmptyState with a title and a body
@@ -172,7 +224,11 @@ function buildEmpty(title: string, sub: string): HTMLElement {
   const content = h("div", "pf-v6-c-empty-state__content");
   content.append(
     h("h2", "pf-v6-c-empty-state__title-text", title),
-    (() => { const b = h("div", "pf-v6-c-empty-state__body"); b.append(h("p", "", sub)); return b; })(),
+    (() => {
+      const b = h("div", "pf-v6-c-empty-state__body");
+      b.append(h("p", "", sub));
+      return b;
+    })(),
   );
   wrap.append(content);
   return wrap;

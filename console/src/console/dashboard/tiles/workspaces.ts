@@ -48,11 +48,16 @@ export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
 
   // Repaint the highlight the instant the switcher's pick changes, not on the next status tick.
   let lastStatus: DashboardState["status"] = null;
-  activeWorkspace?.subscribe(() => { if (lastStatus) render(lastStatus.workspaces); });
+  activeWorkspace?.subscribe(() => {
+    if (lastStatus) render(lastStatus.workspaces);
+  });
 
   return {
     el: card.el,
-    update(s: DashboardState) { lastStatus = s.status; if (s.status) render(s.status.workspaces); },
+    update(s: DashboardState) {
+      lastStatus = s.status;
+      if (s.status) render(s.status.workspaces);
+    },
     destroy() {},
   };
 }

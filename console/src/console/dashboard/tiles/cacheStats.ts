@@ -31,7 +31,9 @@ export function cacheStatsTile(): Tile {
 
   return {
     el: card.el,
-    update(s: DashboardState) { if (s.status) render(s.status.cache); },
+    update(s: DashboardState) {
+      if (s.status) render(s.status.cache);
+    },
     destroy() {},
   };
 }

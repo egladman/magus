@@ -12,7 +12,16 @@ import { openTab, closeTab, setActive, setLayout, workspaceStore, type TabState 
 import { createTabBar } from "./tabBar";
 import { buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
-import { registerCommand, dispatchCommand, listCommands, installKeybindings, mergeKeymap, formatChord, isMac, type Keymap } from "./commands";
+import {
+  registerCommand,
+  dispatchCommand,
+  listCommands,
+  installKeybindings,
+  mergeKeymap,
+  formatChord,
+  isMac,
+  type Keymap,
+} from "./commands";
 import { createCommandBar } from "./commandBar";
 import { createKeybindingsOverlay } from "./keybindings";
 import { settingsSurface } from "./settings/surface";
@@ -26,7 +35,18 @@ import { mountNotificationCenter, notify } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
-import { parseHash, wantsDemo, getLiveToken, resolveDaemonHost, createDaemonTransport, fetchReadiness, isSharedMode, enterSharedModeIfNeeded, type ReadinessReport, type ReadinessComponent } from "../lib/daemon";
+import {
+  parseHash,
+  wantsDemo,
+  getLiveToken,
+  resolveDaemonHost,
+  createDaemonTransport,
+  fetchReadiness,
+  isSharedMode,
+  enterSharedModeIfNeeded,
+  type ReadinessReport,
+  type ReadinessComponent,
+} from "../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../gen/magus/status/v1/status_pb";
 import { openShareDialog } from "./share";
@@ -71,12 +91,12 @@ const KEYMAP_PRESETS: Record<string, Keymap> = {
   default: {},
   emacs: {
     "console.actionBar.open": "alt+x", // M-x
-    "console.tab.close": "mod+x 0",    // C-x 0  (delete window)
-    "console.tab.next": "mod+x o",     // C-x o  (other window)
-    "console.tab.prev": "mod+x p",     // C-x p
-    "console.pane.split": "mod+x 2",   // C-x 2  (split)
+    "console.tab.close": "mod+x 0", // C-x 0  (delete window)
+    "console.tab.next": "mod+x o", // C-x o  (other window)
+    "console.tab.prev": "mod+x p", // C-x p
+    "console.pane.split": "mod+x 2", // C-x 2  (split)
     "console.pane.toggleSplitMode": "mod+x 3", // C-x 3
-    "console.pane.focusLeft": "shift+ArrowLeft",   // windmove
+    "console.pane.focusLeft": "shift+ArrowLeft", // windmove
     "console.pane.focusDown": "shift+ArrowDown",
     "console.pane.focusUp": "shift+ArrowUp",
     "console.pane.focusRight": "shift+ArrowRight",
@@ -88,12 +108,12 @@ const KEYMAP_PRESETS: Record<string, Keymap> = {
   },
   vim: {
     "console.actionBar.open": "mod+p", // fzf-style palette
-    "console.tab.close": "mod+w c",    // C-w c  (close window)
-    "console.tab.next": "g t",         // gt
-    "console.tab.prev": "g shift+t",   // gT
-    "console.pane.split": "mod+w s",   // C-w s  (split)
+    "console.tab.close": "mod+w c", // C-w c  (close window)
+    "console.tab.next": "g t", // gt
+    "console.tab.prev": "g shift+t", // gT
+    "console.pane.split": "mod+w s", // C-w s  (split)
     "console.pane.toggleSplitMode": "mod+w v", // C-w v
-    "console.pane.focusLeft": "mod+w h",  // C-w h
+    "console.pane.focusLeft": "mod+w h", // C-w h
     "console.pane.focusDown": "mod+w j",
     "console.pane.focusUp": "mod+w k",
     "console.pane.focusRight": "mod+w l",
@@ -110,7 +130,7 @@ const KEYMAP_PRESETS: Record<string, Keymap> = {
     "console.tab.prev": "mod+alt+ArrowLeft",
     "console.pane.split": "mod+\\",
     "console.pane.toggleSplitMode": "mod+k mod+\\",
-    "console.pane.focusLeft": "mod+k mod+ArrowLeft",   // C-k C-arrow  (focus group)
+    "console.pane.focusLeft": "mod+k mod+ArrowLeft", // C-k C-arrow  (focus group)
     "console.pane.focusDown": "mod+k mod+ArrowDown",
     "console.pane.focusUp": "mod+k mod+ArrowUp",
     "console.pane.focusRight": "mod+k mod+ArrowRight",
@@ -133,15 +153,21 @@ const KEYMAP_PRESET_LIST: { id: string; label: string }[] = [
 // keyboard toggle or an explicit pick, sticks across every tab and reload rather than resetting.
 const splitMode = persisted<"row" | "col">("split-mode", "row");
 
-const registry = new Map<string, PageModule<any, any>>();
-function register(m: PageModule<any, any>): void { registry.set(m.id, m); }
+const registry = new Map<string, PageModule<unknown, unknown>>();
+function register(m: PageModule<unknown, unknown>): void {
+  registry.set(m.id, m);
+}
 
 // The surfaces the home launcher offers (and the console can open). Ordered to tell the
 // operator's story: what is magus doing now (dashboard), what just happened (activity),
 // drill into one run (logs), then understand the workspace (graph), then the meta surfaces.
 const SURFACES: Launchable[] = [
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
-  { pageId: "activity", label: "Activity Trail", hint: "A history of magus actions, user-triggered and scheduled" },
+  {
+    pageId: "activity",
+    label: "Activity Trail",
+    hint: "A history of magus actions, user-triggered and scheduled",
+  },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
@@ -177,8 +203,11 @@ function consoleBasePath(): string {
   return segs.join("/") + "/";
 }
 
-
-interface Mounted { host: HTMLElement; status: HTMLElement; tile: TileView; }
+interface Mounted {
+  host: HTMLElement;
+  status: HTMLElement;
+  tile: TileView;
+}
 
 // The status bar shows the connected daemon's build: its version inline, the full fingerprint on
 // hover. Read via the StatusService GetStatus RPC (build) - the running binary reports its own
@@ -203,12 +232,19 @@ function setBuild(version: string, fingerprint: string): void {
 
 function loadBuildInfo(): void {
   const params = parseHash();
-  if (wantsDemo(params)) { setBuild("v0.2.0", "magus v0.2.0 (a1b2c3d) built 2026-07-16T00:00:00Z"); return; }
+  if (wantsDemo(params)) {
+    setBuild("v0.2.0", "magus v0.2.0 (a1b2c3d) built 2026-07-16T00:00:00Z");
+    return;
+  }
   const host = resolveDaemonHost(params);
   if (!host) return;
   const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
-  client.getStatus({})
-    .then((res) => { const b = res.status?.build; if (b?.version) setBuild(b.version, b.fingerprint || ""); })
+  client
+    .getStatus({})
+    .then((res) => {
+      const b = res.status?.build;
+      if (b?.version) setBuild(b.version, b.fingerprint || "");
+    })
     .catch(() => {});
 }
 
@@ -261,11 +297,16 @@ function phoneIcon(): SVGElement {
   const NS = "http://www.w3.org/2000/svg";
   const svg = svgIcon();
   const rect = document.createElementNS(NS, "rect");
-  rect.setAttribute("x", "7"); rect.setAttribute("y", "2");
-  rect.setAttribute("width", "10"); rect.setAttribute("height", "20"); rect.setAttribute("rx", "2");
+  rect.setAttribute("x", "7");
+  rect.setAttribute("y", "2");
+  rect.setAttribute("width", "10");
+  rect.setAttribute("height", "20");
+  rect.setAttribute("rx", "2");
   const line = document.createElementNS(NS, "line");
-  line.setAttribute("x1", "11"); line.setAttribute("y1", "18");
-  line.setAttribute("x2", "13"); line.setAttribute("y2", "18");
+  line.setAttribute("x1", "11");
+  line.setAttribute("y1", "18");
+  line.setAttribute("x2", "13");
+  line.setAttribute("y2", "18");
   svg.append(rect, line);
   return svg;
 }
@@ -278,15 +319,22 @@ function panesIcon(mode: "row" | "col"): SVGElement {
   const NS = "http://www.w3.org/2000/svg";
   const svg = svgIcon();
   const rect = document.createElementNS(NS, "rect");
-  rect.setAttribute("x", "3"); rect.setAttribute("y", "4");
-  rect.setAttribute("width", "18"); rect.setAttribute("height", "16"); rect.setAttribute("rx", "2");
+  rect.setAttribute("x", "3");
+  rect.setAttribute("y", "4");
+  rect.setAttribute("width", "18");
+  rect.setAttribute("height", "16");
+  rect.setAttribute("rx", "2");
   const line = document.createElementNS(NS, "line");
   if (mode === "row") {
-    line.setAttribute("x1", "12"); line.setAttribute("y1", "4");
-    line.setAttribute("x2", "12"); line.setAttribute("y2", "20");
+    line.setAttribute("x1", "12");
+    line.setAttribute("y1", "4");
+    line.setAttribute("x2", "12");
+    line.setAttribute("y2", "20");
   } else {
-    line.setAttribute("x1", "3"); line.setAttribute("y1", "12");
-    line.setAttribute("x2", "21"); line.setAttribute("y2", "12");
+    line.setAttribute("x1", "3");
+    line.setAttribute("y1", "12");
+    line.setAttribute("x2", "21");
+    line.setAttribute("y2", "12");
   }
   svg.append(rect, line);
   return svg;
@@ -342,7 +390,8 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   const left = document.createElement("div");
   left.dataset.cluster = "";
   const conn = document.createElement("span");
-  conn.id = "console-conn"; conn.setAttribute("aria-live", "polite");
+  conn.id = "console-conn";
+  conn.setAttribute("aria-live", "polite");
   conn.textContent = "not connected";
   // Start in the honest not-connected state so the liveness dot reads RED until something proves a link,
   // rather than the muted default color. A surface overwrites data-state the instant it mounts; the
@@ -373,10 +422,14 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     left.append(viewOnly);
   }
   const right = document.createElement("div");
-  right.dataset.cluster = ""; right.className = "console-shell-statusbar__right";
+  right.dataset.cluster = "";
+  right.className = "console-shell-statusbar__right";
   for (const id of ["console-count", "console-observing"] as const) {
     const s = document.createElement("span");
-    s.id = id; s.dataset.item = ""; s.hidden = true; s.setAttribute("aria-live", "polite");
+    s.id = id;
+    s.dataset.item = "";
+    s.hidden = true;
+    s.setAttribute("aria-live", "polite");
     right.append(s);
   }
   // Panes tray toggle: opens the popup that drives split/focus/move/close without a keyboard - the
@@ -459,7 +512,11 @@ function openDaemonSettings(): void {
   const deadline = Date.now() + 800;
   const tryFocus = (): void => {
     const input = document.getElementById("console-settings-host") as HTMLInputElement | null;
-    if (input) { input.scrollIntoView({ block: "center" }); input.focus(); return; }
+    if (input) {
+      input.scrollIntoView({ block: "center" });
+      input.focus();
+      return;
+    }
     if (Date.now() < deadline) requestAnimationFrame(tryFocus);
   };
   requestAnimationFrame(tryFocus);
@@ -481,23 +538,39 @@ function openKeybindings(cmdId?: string): void {
   // exists defer the scroll/highlight ONE frame so it lands after the surface's mount/enter layout has
   // settled (scrolling mid-mount left the row off-center or clipped). Give up quietly past the deadline.
   const deadline = Date.now() + 4000;
-  const reveal = (el: HTMLElement, block: ScrollLogicalPosition, highlightRow?: HTMLElement): void => {
+  const reveal = (
+    el: HTMLElement,
+    block: ScrollLogicalPosition,
+    highlightRow?: HTMLElement,
+  ): void => {
     requestAnimationFrame(() => {
       el.scrollIntoView({ block });
       if (highlightRow) {
         highlightRow.dataset.kbHighlight = "";
-        setTimeout(() => { delete highlightRow.dataset.kbHighlight; }, 1200);
+        setTimeout(() => {
+          delete highlightRow.dataset.kbHighlight;
+        }, 1200);
         highlightRow.querySelector("button")?.focus();
       }
     });
   };
   const tryFocus = (): void => {
     if (cmdId) {
-      const row = document.querySelector<HTMLElement>('[data-surface="settings"] [data-kbeditor] [data-command="' + cmdId + '"]');
-      if (row) { reveal(row, "center", row); return; }
+      const row = document.querySelector<HTMLElement>(
+        '[data-surface="settings"] [data-kbeditor] [data-command="' + cmdId + '"]',
+      );
+      if (row) {
+        reveal(row, "center", row);
+        return;
+      }
     } else {
-      const editor = document.querySelector<HTMLElement>('[data-surface="settings"] [data-kbeditor]');
-      if (editor) { reveal(editor, "start"); return; }
+      const editor = document.querySelector<HTMLElement>(
+        '[data-surface="settings"] [data-kbeditor]',
+      );
+      if (editor) {
+        reveal(editor, "start");
+        return;
+      }
     }
     if (Date.now() < deadline) requestAnimationFrame(tryFocus);
   };
@@ -526,7 +599,9 @@ function readinessHealth(report: ReadinessReport): "ok" | "warn" | "fail" {
 // summarizeComponents renders each component as "name status (detail)", joined with "; " - compact
 // enough for a tooltip line. Components with no detail (the common "ok" case) omit the parenthetical.
 function summarizeComponents(components: ReadinessComponent[]): string {
-  return components.map((c) => c.name + " " + c.status + (c.detail ? " (" + c.detail + ")" : "")).join("; ");
+  return components
+    .map((c) => c.name + " " + c.status + (c.detail ? " (" + c.detail + ")" : ""))
+    .join("; ");
 }
 
 // formatReadinessTitle builds the #console-conn tooltip sentence for one probe outcome. ageSec is how
@@ -534,9 +609,19 @@ function summarizeComponents(components: ReadinessComponent[]): string {
 // reads as "how stale is this the moment you're seeing it"). A null report - old daemon or genuinely
 // unreachable, indistinguishable from the browser's side - gets an actionable sentence rather than a
 // guessed cause, always ending in the click hint so the enrichment doubles as a discoverability nudge.
-function formatReadinessTitle(report: ReadinessReport | null, ageSec: number, host: string): string {
+function formatReadinessTitle(
+  report: ReadinessReport | null,
+  ageSec: number,
+  host: string,
+): string {
   if (!report) {
-    return "Not connected to " + host + ". Daemon health unavailable (update the daemon to see component status), last tried " + ageSec + "s ago. Click to change the daemon address.";
+    return (
+      "Not connected to " +
+      host +
+      ". Daemon health unavailable (update the daemon to see component status), last tried " +
+      ageSec +
+      "s ago. Click to change the daemon address."
+    );
   }
   const statusLine = report.ready ? "200 (ready)" : "503 (not ready)";
   const summary = summarizeComponents(report.components);
@@ -544,7 +629,11 @@ function formatReadinessTitle(report: ReadinessReport | null, ageSec: number, ho
   return summary ? base + " " + summary + "." : base;
 }
 
-export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statusHost: HTMLElement): void {
+export function startConsole(
+  tabBarHost: HTMLElement,
+  outlet: HTMLElement,
+  statusHost: HTMLElement,
+): void {
   // Snapshot the boot fragment BEFORE enterSharedModeIfNeeded consumes/strips the #token= (below), so the
   // attach-visibility notification further down can still tell it booted attached and name the port.
   const bootParams = parseHash();
@@ -592,7 +681,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // mountSurface is how a tile mounts one surface into a pane host: resolve the registered module and
   // activate it, returning its controller (or null if unknown). A tile calls this per leaf, so all
   // the per-surface lazy-import machinery (standalone/moduleSurface) is reused unchanged.
-  async function mountSurface(pageId: string, host: HTMLElement): Promise<PageController<unknown, unknown> | null> {
+  async function mountSurface(
+    pageId: string,
+    host: HTMLElement,
+  ): Promise<PageController<unknown, unknown> | null> {
     const m = registry.get(pageId);
     if (!m) return null;
     return (await m.activate(host)) as PageController<unknown, unknown>;
@@ -697,7 +789,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
 
   // reveal shows a tab's pane, mounting it lazily if it is a restored tab not yet mounted.
   function reveal(id: string): void {
-    if (mounts.has(id)) { show(id); return; }
+    if (mounts.has(id)) {
+      show(id);
+      return;
+    }
     const tab = ws.get().tabs.find((t) => t.id === id);
     if (tab) mount(tab);
   }
@@ -804,12 +899,21 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // (loopback attach) reports its own value; a #token adoption has no port in the fragment, so the page's
   // own origin is what it is talking to - its port when there is one, else the origin host (a daemon on a
   // default port has an empty location.port). No notification without an attach directive.
-  const attached = (bootParams.port !== undefined && bootParams.port !== "") || bootParams.token !== undefined;
+  const attached =
+    (bootParams.port !== undefined && bootParams.port !== "") || bootParams.token !== undefined;
   if (attached) {
-    const where = bootParams.port !== undefined && bootParams.port !== ""
-      ? "port " + bootParams.port
-      : (location.port ? "port " + location.port : (location.host || "the daemon origin"));
-    notify({ source: "Console", kind: "ok", message: "Connected to daemon on " + where + ".", key: "console:attached:" + where });
+    const where =
+      bootParams.port !== undefined && bootParams.port !== ""
+        ? "port " + bootParams.port
+        : location.port
+          ? "port " + location.port
+          : location.host || "the daemon origin";
+    notify({
+      source: "Console",
+      kind: "ok",
+      message: "Connected to daemon on " + where + ".",
+      key: "console:attached:" + where,
+    });
   }
 
   // Shell-side watchers (share-connect + storage thresholds). Skipped in the daemon-free demo (they would
@@ -826,47 +930,133 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // state, and once a tab is open the command bar is how another surface is launched. Each opens
   // (or focuses, if already open) that single-instance surface as a tab.
   for (const s of SURFACES) {
-    registerCommand({ id: "console.open." + s.pageId, label: "Open " + s.label, group: "Open", run: () => open(s.pageId) });
+    registerCommand({
+      id: "console.open." + s.pageId,
+      label: "Open " + s.label,
+      group: "Open",
+      run: () => open(s.pageId),
+    });
   }
   // mod+w closes the smallest thing: the focused PANE, falling through to the whole tab only when
   // that was the tab's last pane (closeFocused returns true) or the tab is un-tiled (no tile).
-  registerCommand({ id: "console.tab.close", label: "Close pane or tab", group: "Tabs", run: () => {
-    const t = activeTile();
-    if (t && !t.closeFocused()) return;
-    const a = ws.get().activeId; if (a) closeTabById(a);
-  } });
-  registerCommand({ id: "console.tab.next", label: "Next tab", group: "Tabs", run: () => cycleTab(1) });
-  registerCommand({ id: "console.tab.prev", label: "Previous tab", group: "Tabs", run: () => cycleTab(-1) });
+  registerCommand({
+    id: "console.tab.close",
+    label: "Close pane or tab",
+    group: "Tabs",
+    run: () => {
+      const t = activeTile();
+      if (t && !t.closeFocused()) return;
+      const a = ws.get().activeId;
+      if (a) closeTabById(a);
+    },
+  });
+  registerCommand({
+    id: "console.tab.next",
+    label: "Next tab",
+    group: "Tabs",
+    run: () => cycleTab(1),
+  });
+  registerCommand({
+    id: "console.tab.prev",
+    label: "Previous tab",
+    group: "Tabs",
+    run: () => cycleTab(-1),
+  });
   // Tiling: split the focused pane (in the persisted default direction, or a forced axis), move focus
   // between panes, move a pane's SURFACE into a neighbor's slot, and jump back across the nearest
   // divider to the pane the current one was split from. Each targets the active tab's tile (tileView.ts
   // owns the tree ops). splitHorizontal/splitVertical double as "set the default": picking one
   // explicitly re-asserts it as splitMode, so the tray icon and the bare mod+\\ chord both follow the
   // last explicit choice, whichever surface (popup, command bar, tab context menu) made it.
-  registerCommand({ id: "console.pane.split", label: "Split pane", group: "Panes", run: () => activeTile()?.split(splitMode.get()) });
-  registerCommand({ id: "console.pane.splitHorizontal", label: "Split horizontal", group: "Panes", run: () => {
-    splitMode.set("row");
-    activeTile()?.split("row");
-    refreshPanesTray();
-  } });
-  registerCommand({ id: "console.pane.splitVertical", label: "Split vertical", group: "Panes", run: () => {
-    splitMode.set("col");
-    activeTile()?.split("col");
-    refreshPanesTray();
-  } });
-  registerCommand({ id: "console.pane.toggleSplitMode", label: "Toggle split mode", group: "Panes", run: () => {
-    splitMode.set(splitMode.get() === "row" ? "col" : "row");
-    refreshPanesTray();
-  } });
-  registerCommand({ id: "console.pane.focusLeft", label: "Focus pane left", group: "Panes", run: () => activeTile()?.focus("left") });
-  registerCommand({ id: "console.pane.focusDown", label: "Focus pane down", group: "Panes", run: () => activeTile()?.focus("down") });
-  registerCommand({ id: "console.pane.focusUp", label: "Focus pane up", group: "Panes", run: () => activeTile()?.focus("up") });
-  registerCommand({ id: "console.pane.focusRight", label: "Focus pane right", group: "Panes", run: () => activeTile()?.focus("right") });
-  registerCommand({ id: "console.pane.moveLeft", label: "Move pane left", group: "Panes", run: () => activeTile()?.move("left") });
-  registerCommand({ id: "console.pane.moveDown", label: "Move pane down", group: "Panes", run: () => activeTile()?.move("down") });
-  registerCommand({ id: "console.pane.moveUp", label: "Move pane up", group: "Panes", run: () => activeTile()?.move("up") });
-  registerCommand({ id: "console.pane.moveRight", label: "Move pane right", group: "Panes", run: () => activeTile()?.move("right") });
-  registerCommand({ id: "console.pane.focusParent", label: "Focus parent", group: "Panes", run: () => activeTile()?.focusParent() });
+  registerCommand({
+    id: "console.pane.split",
+    label: "Split pane",
+    group: "Panes",
+    run: () => activeTile()?.split(splitMode.get()),
+  });
+  registerCommand({
+    id: "console.pane.splitHorizontal",
+    label: "Split horizontal",
+    group: "Panes",
+    run: () => {
+      splitMode.set("row");
+      activeTile()?.split("row");
+      refreshPanesTray();
+    },
+  });
+  registerCommand({
+    id: "console.pane.splitVertical",
+    label: "Split vertical",
+    group: "Panes",
+    run: () => {
+      splitMode.set("col");
+      activeTile()?.split("col");
+      refreshPanesTray();
+    },
+  });
+  registerCommand({
+    id: "console.pane.toggleSplitMode",
+    label: "Toggle split mode",
+    group: "Panes",
+    run: () => {
+      splitMode.set(splitMode.get() === "row" ? "col" : "row");
+      refreshPanesTray();
+    },
+  });
+  registerCommand({
+    id: "console.pane.focusLeft",
+    label: "Focus pane left",
+    group: "Panes",
+    run: () => activeTile()?.focus("left"),
+  });
+  registerCommand({
+    id: "console.pane.focusDown",
+    label: "Focus pane down",
+    group: "Panes",
+    run: () => activeTile()?.focus("down"),
+  });
+  registerCommand({
+    id: "console.pane.focusUp",
+    label: "Focus pane up",
+    group: "Panes",
+    run: () => activeTile()?.focus("up"),
+  });
+  registerCommand({
+    id: "console.pane.focusRight",
+    label: "Focus pane right",
+    group: "Panes",
+    run: () => activeTile()?.focus("right"),
+  });
+  registerCommand({
+    id: "console.pane.moveLeft",
+    label: "Move pane left",
+    group: "Panes",
+    run: () => activeTile()?.move("left"),
+  });
+  registerCommand({
+    id: "console.pane.moveDown",
+    label: "Move pane down",
+    group: "Panes",
+    run: () => activeTile()?.move("down"),
+  });
+  registerCommand({
+    id: "console.pane.moveUp",
+    label: "Move pane up",
+    group: "Panes",
+    run: () => activeTile()?.move("up"),
+  });
+  registerCommand({
+    id: "console.pane.moveRight",
+    label: "Move pane right",
+    group: "Panes",
+    run: () => activeTile()?.move("right"),
+  });
+  registerCommand({
+    id: "console.pane.focusParent",
+    label: "Focus parent",
+    group: "Panes",
+    run: () => activeTile()?.focusParent(),
+  });
 
   // The command bar: a searchable overlay over every registered command. Register it AFTER the
   // other commands so it lists them; it reads the live command list + merged keymap on each open.
@@ -877,17 +1067,34 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     onRun: (id) => dispatchCommand(id),
   });
   document.body.append(commandBar.el);
-  registerCommand({ id: "console.actionBar.open", label: "Action bar", group: "General", run: () => commandBar.open() });
+  registerCommand({
+    id: "console.actionBar.open",
+    label: "Action bar",
+    group: "General",
+    run: () => commandBar.open(),
+  });
 
   // Mirror the title-bar bell as a palette command, so the notification history is reachable by keyboard
   // like every other action.
-  registerCommand({ id: "console.notifications.open", label: "Notifications", group: "General", run: () => notifications.toggle() });
+  registerCommand({
+    id: "console.notifications.open",
+    label: "Notifications",
+    group: "General",
+    run: () => notifications.toggle(),
+  });
 
   // Share to phone: a loopback-console affordance only (the status-bar phone button is likewise gated
   // out in shared mode). Register the palette mirror only when NOT shared - a phone viewing over the
   // LAN is a read-only viewer and the daemon rejects the loopback-guarded trigger anyway.
   if (!shared) {
-    registerCommand({ id: "console.share", label: "Share to phone", group: "General", run: () => { void openShareDialog(); } });
+    registerCommand({
+      id: "console.share",
+      label: "Share to phone",
+      group: "General",
+      run: () => {
+        void openShareDialog();
+      },
+    });
   }
 
   // The title-bar trigger (index.html #console-commandbar-btn) opens the same action bar, so it is
@@ -895,7 +1102,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   const commandBarBtn = document.getElementById("console-commandbar-btn");
   if (commandBarBtn) {
     commandBarBtn.addEventListener("click", () => commandBar.open());
-    const chord = formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())["console.actionBar.open"] ?? "", isMac());
+    const chord = formatChord(
+      mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())["console.actionBar.open"] ?? "",
+      isMac(),
+    );
     if (chord) commandBarBtn.title = "Action bar (" + chord + ")";
   }
 
@@ -906,7 +1116,8 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // tab. Built AFTER the pane
   // commands above so every id it dispatches exists. chordFor mirrors the commandBarBtn tooltip's
   // chord lookup, stamped into each control's title so the tray also teaches its keyboard equivalent.
-  const chordFor = (id: string): string => formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac());
+  const chordFor = (id: string): string =>
+    formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac());
 
   const panesPopup = document.createElement("div");
   panesPopup.id = "console-panespopup";
@@ -958,20 +1169,34 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // for a custom drag between sibling elements. A short pointer path (under 4px) is a tap, not a drag,
   // so a plain click still just focuses.
   function wirePaneCellDrag(cell: HTMLElement, id: string, onTap: () => void): void {
-    let startX = 0, startY = 0, moved = false;
+    let startX = 0,
+      startY = 0,
+      moved = false;
     let dropTarget: HTMLElement | null = null;
-    const clearDrop = (): void => { dropTarget?.removeAttribute("data-drop"); dropTarget = null; };
+    const clearDrop = (): void => {
+      dropTarget?.removeAttribute("data-drop");
+      dropTarget = null;
+    };
     cell.addEventListener("pointerdown", (ev) => {
-      startX = ev.clientX; startY = ev.clientY; moved = false;
+      startX = ev.clientX;
+      startY = ev.clientY;
+      moved = false;
       cell.setPointerCapture(ev.pointerId);
     });
     cell.addEventListener("pointermove", (ev) => {
       if (!cell.hasPointerCapture(ev.pointerId)) return;
       if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 4) moved = true;
       if (!moved) return;
-      const under = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>("[data-pane-cell]") ?? null;
+      const under =
+        document
+          .elementFromPoint(ev.clientX, ev.clientY)
+          ?.closest<HTMLElement>("[data-pane-cell]") ?? null;
       const next = under && under !== cell ? under : null;
-      if (next !== dropTarget) { clearDrop(); dropTarget = next; dropTarget?.setAttribute("data-drop", ""); }
+      if (next !== dropTarget) {
+        clearDrop();
+        dropTarget = next;
+        dropTarget?.setAttribute("data-drop", "");
+      }
     });
     cell.addEventListener("pointerup", (ev) => {
       cell.releasePointerCapture(ev.pointerId);
@@ -982,7 +1207,9 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
         // swapping within the map - the strip sits outside the popup entirely, so this is the one
         // place a map drag reaches past its own tree. Checked before the swap; a drop elsewhere on
         // the same tab (or nowhere) falls through to the ordinary in-map behavior below.
-        const tabId = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>("[data-tab-id]")?.dataset.tabId;
+        const tabId = document
+          .elementFromPoint(ev.clientX, ev.clientY)
+          ?.closest<HTMLElement>("[data-tab-id]")?.dataset.tabId;
         const activeTabId = ws.get().activeId;
         if (tabId && activeTabId && tabId !== activeTabId) {
           moveSurfaceToTab(activeTabId, id, tabId);
@@ -990,7 +1217,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
         }
         if (target) {
           const dropId = target.dataset.paneCell;
-          if (dropId) { activeTile()?.swap(id, dropId); renderPanesMap(); }
+          if (dropId) {
+            activeTile()?.swap(id, dropId);
+            renderPanesMap();
+          }
         }
       } else {
         onTap();
@@ -1017,7 +1247,8 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
       b.dataset.split = dir;
       b.textContent = glyph;
       b.setAttribute("aria-label", label);
-      const commandId = dir === "row" ? "console.pane.splitHorizontal" : "console.pane.splitVertical";
+      const commandId =
+        dir === "row" ? "console.pane.splitHorizontal" : "console.pane.splitVertical";
       const chord = chordFor(commandId);
       b.title = chord ? label + " (" + chord + ")" : label;
       b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
@@ -1051,8 +1282,16 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     text.className = "console-shell-panesmap__celllabel";
     text.textContent = label;
     cell.append(text);
-    const focusThis = (): void => { activeTile()?.focusLeaf(leaf.id); renderPanesMap(); };
-    cell.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); focusThis(); } });
+    const focusThis = (): void => {
+      activeTile()?.focusLeaf(leaf.id);
+      renderPanesMap();
+    };
+    cell.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        focusThis();
+      }
+    });
     wirePaneCellDrag(cell, leaf.id, focusThis);
     if (leaf.id === focusId) cell.append(buildSplitControls());
     return cell;
@@ -1139,7 +1378,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // leave it docked to nothing.
   closePaneBtn.addEventListener("click", () => {
     dispatchCommand("console.tab.close");
-    if (panesAnchor && !panesAnchor.isConnected) { closePanesPopup(); return; }
+    if (panesAnchor && !panesAnchor.isConnected) {
+      closePanesPopup();
+      return;
+    }
     renderPanesMap();
   });
 
@@ -1166,14 +1408,17 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // edge so it stays a small tray control. Recomputed on open and on resize while the popup is open.
   const PANES_MAP_CAP = 220;
   function sizePanesMap(): void {
-    const vw = window.innerWidth, vh = window.innerHeight;
+    const vw = window.innerWidth,
+      vh = window.innerHeight;
     if (vw <= 0 || vh <= 0) return;
     const w = vw >= vh ? PANES_MAP_CAP : Math.round(PANES_MAP_CAP * (vw / vh));
     const h = vw >= vh ? Math.round(PANES_MAP_CAP * (vh / vw)) : PANES_MAP_CAP;
     panesMap.style.width = w + "px";
     panesMap.style.height = h + "px";
   }
-  window.addEventListener("resize", () => { if (!panesPopup.hidden) sizePanesMap(); });
+  window.addEventListener("resize", () => {
+    if (!panesPopup.hidden) sizePanesMap();
+  });
 
   // refreshPanesTray repaints every MOUNTED tab's tray icon (not just the docked one - a hidden tab's
   // status bar is still a live element, just detached, so its icon would go stale until that tab is
@@ -1209,7 +1454,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     panesAnchor = null;
   }
   function togglePanesPopup(anchor: HTMLElement): void {
-    if (!panesPopup.hidden && panesAnchor === anchor) { closePanesPopup(); return; }
+    if (!panesPopup.hidden && panesAnchor === anchor) {
+      closePanesPopup();
+      return;
+    }
     closePanesPopup(); // a different tab's tray button while open: close-then-reopen re-anchors it
     openPanesPopup(anchor);
   }
@@ -1234,10 +1482,21 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // The console's own editable commands (those with a CONSOLE_KEYMAP default). Shared by the modal
   // overlay and the Settings surface's embedded editor - both drive the one shared keymap cell, so
   // the two never fork. Snapshotted here, after every CONSOLE_KEYMAP command is registered.
-  const editableCommands = listCommands().filter((c) => Object.prototype.hasOwnProperty.call(CONSOLE_KEYMAP, c.id));
-  const keybindings = createKeybindingsOverlay({ commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell });
+  const editableCommands = listCommands().filter((c) =>
+    Object.prototype.hasOwnProperty.call(CONSOLE_KEYMAP, c.id),
+  );
+  const keybindings = createKeybindingsOverlay({
+    commands: editableCommands,
+    defaults: CONSOLE_KEYMAP,
+    keymap: keymapCell,
+  });
   document.body.append(keybindings.el);
-  registerCommand({ id: "console.settings.keybindings", label: "Edit keybindings", group: "General", run: () => keybindings.open() });
+  registerCommand({
+    id: "console.settings.keybindings",
+    label: "Edit keybindings",
+    group: "General",
+    run: () => keybindings.open(),
+  });
 
   // A read-only, hold-to-reveal cheat sheet (hold "?"). It teaches the effective bindings and is
   // deliberately separate from the editor above - reading the same live command list + merged keymap.
@@ -1250,7 +1509,12 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
   // Make the cheat sheet a first-class command (discoverable in the command bar, bindable) and drive it from the
   // status-bar button. One delegated click on the footer covers every tab's button (present and future),
   // since makeStatusBar rebuilds a button per tab but they all toggle the single shared cheat sheet.
-  registerCommand({ id: "console.cheatsheet.toggle", label: "Keyboard shortcuts", group: "General", run: () => cheatsheet.toggle() });
+  registerCommand({
+    id: "console.cheatsheet.toggle",
+    label: "Keyboard shortcuts",
+    group: "General",
+    run: () => cheatsheet.toggle(),
+  });
   statusHost.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
     if (t.closest("[data-cheatsheet-toggle]")) cheatsheet.toggle();
@@ -1318,16 +1582,23 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
       // At ZERO tabs the launcher's default bar has no surface behind it, so the poller owns the text +
       // state outright (a reachable+ready daemon reads "connected", otherwise "disconnected" = red).
       if (ws.get().activeId == null) {
-        conn.textContent = report ? (report.ready ? "daemon ready" : "daemon not ready") : "not connected";
+        conn.textContent = report
+          ? report.ready
+            ? "daemon ready"
+            : "daemon not ready"
+          : "not connected";
         conn.dataset.state = report?.ready ? "connected" : "disconnected";
       }
       // Keep the accessible name naming the address it is probing: connected reads "Connected to <host>",
       // anything else falls back to the not-connected hint (which also names <host>). Read AFTER the
       // zero-tab state update above, and runs regardless of tab count so an open-but-disconnected surface
       // still surfaces the address on the conn item.
-      conn.setAttribute("aria-label", conn.dataset.state === "connected"
-        ? "Connected to " + host + ". Click to change the daemon address."
-        : notConnectedHint(host));
+      conn.setAttribute(
+        "aria-label",
+        conn.dataset.state === "connected"
+          ? "Connected to " + host + ". Click to change the daemon address."
+          : notConnectedHint(host),
+      );
       // Health enrichment runs regardless of tab count, gated on the (surface- or poller-set) data-state.
       enrichConnHealth(conn, report);
     });
@@ -1345,7 +1616,10 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     const m = registry.get(pageId);
     if (!m) return;
     const hostTab = ws.get().tabs.find((t) => tabHostsSurface(t, pageId));
-    if (hostTab) { activateTab(hostTab.id); return; }
+    if (hostTab) {
+      activateTab(hostTab.id);
+      return;
+    }
     const tab: TabState = { id: pageId + "-" + Date.now().toString(36), pageId, title: m.title };
     ws.set(openTab(ws.get(), tab));
     mount(tab);
@@ -1358,25 +1632,64 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
     return ids.includes(pageId);
   }
 
-  register(standaloneSurface({ id: "logs", title: "Log Viewer", dir: "logs", bundle: "log-viewer.js", css: "logs.css" }));
-  register(standaloneSurface({ id: "dashboard", title: "Dashboard", dir: "dashboard", bundle: "dashboard.js", css: "dashboard.css" }));
-  register(standaloneSurface({ id: "graph", title: "Graph Explorer", dir: "graph", bundle: "explorer.js", css: "graph.css" }));
-  register(moduleSurface({ id: "activity", title: "Activity Trail", bundle: "activity/activity.js", css: "logs/logs.css" }));
+  register(
+    standaloneSurface({
+      id: "logs",
+      title: "Log Viewer",
+      dir: "logs",
+      bundle: "log-viewer.js",
+      css: "logs.css",
+    }),
+  );
+  register(
+    standaloneSurface({
+      id: "dashboard",
+      title: "Dashboard",
+      dir: "dashboard",
+      bundle: "dashboard.js",
+      css: "dashboard.css",
+    }),
+  );
+  register(
+    standaloneSurface({
+      id: "graph",
+      title: "Graph Explorer",
+      dir: "graph",
+      bundle: "explorer.js",
+      css: "graph.css",
+    }),
+  );
+  register(
+    moduleSurface({
+      id: "activity",
+      title: "Activity Trail",
+      bundle: "activity/activity.js",
+      css: "logs/logs.css",
+    }),
+  );
   // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static
   // catalogue over the console's own live command list + keymap, the same deps the keyboard cheat
   // sheet above reads, so a separate bundle would get nothing but import overhead.
-  register(createActionsSurface({
-    commands: listCommands,
-    keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
-    mac: isMac(),
-    run: (id) => dispatchCommand(id),
-    editableIds: new Set(editableCommands.map((c) => c.id)),
-    onEditKeybindings: openKeybindings,
-  }));
+  register(
+    createActionsSurface({
+      commands: listCommands,
+      keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
+      mac: isMac(),
+      run: (id) => dispatchCommand(id),
+      editableIds: new Set(editableCommands.map((c) => c.id)),
+      onEditKeybindings: openKeybindings,
+    }),
+  );
   // Settings is registered from the shell bundle (not a lazy surface bundle) so its Keybindings
   // editor drives the SAME live keymap cell installKeybindings reads - a separate bundle would get its
   // own non-syncing persisted("keymap"). The shell injects the editable command list, defaults, and cell.
-  register(settingsSurface({ keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell }, presets: KEYMAP_PRESETS, presetList: KEYMAP_PRESET_LIST }));
+  register(
+    settingsSurface({
+      keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell },
+      presets: KEYMAP_PRESETS,
+      presetList: KEYMAP_PRESET_LIST,
+    }),
+  );
   // The Reference surface backs the drawer's "break out to tab" button. Registered but NOT in SURFACES:
   // no launcher card, no app-menu row, no Open command - reachable only via that button, single-instance.
   register(referenceSurface());
@@ -1439,6 +1752,7 @@ export function startConsole(tabBarHost: HTMLElement, outlet: HTMLElement, statu
 const tabBarHost = document.getElementById("console-tabs");
 // The outlet is the PF Drawer's __content (panes mount here); the Reference panel is the
 // Drawer's __panel sibling. Falls back to #console-outlet if the drawer markup is absent.
-const outlet = document.getElementById("console-outlet-content") ?? document.getElementById("console-outlet");
+const outlet =
+  document.getElementById("console-outlet-content") ?? document.getElementById("console-outlet");
 const statusHost = document.getElementById("console-statusbar");
 if (tabBarHost && outlet && statusHost) startConsole(tabBarHost, outlet, statusHost);

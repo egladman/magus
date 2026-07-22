@@ -6,8 +6,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildSettingsEnvelope, computePendingChanges, diffLines, importSettings, SETTINGS_SCHEMA_VERSION,
-  type DiffContext, type Settings,
+  buildSettingsEnvelope,
+  computePendingChanges,
+  diffLines,
+  importSettings,
+  SETTINGS_SCHEMA_VERSION,
+  type DiffContext,
+  type Settings,
 } from "./model";
 
 const base: Settings = {
@@ -55,7 +60,10 @@ test("import: unknown keys are ignored but reported, known keys still apply", ()
 });
 
 test("import: a present-but-wrong-typed known key is reported as skipped, valid ones still apply", () => {
-  const raw = JSON.stringify({ schemaVersion: 1, settings: { poll: "fast", host: "10.0.0.2:9000" } });
+  const raw = JSON.stringify({
+    schemaVersion: 1,
+    settings: { poll: "fast", host: "10.0.0.2:9000" },
+  });
   const res = importSettings(raw, base);
   assert.ok(res.ok);
   assert.equal(res.next.host, "10.0.0.2:9000");
@@ -66,7 +74,10 @@ test("import: a present-but-wrong-typed known key is reported as skipped, valid 
 });
 
 test("import: a malformed keymap is reported as skipped, not partially applied", () => {
-  const raw = JSON.stringify({ schemaVersion: 1, settings: { host: "localhost:1", keymap: { a: 3 } } });
+  const raw = JSON.stringify({
+    schemaVersion: 1,
+    settings: { host: "localhost:1", keymap: { a: 3 } },
+  });
   const res = importSettings(raw, base);
   assert.ok(res.ok);
   assert.deepEqual(res.next.keymap, base.keymap); // whole keymap kept, not the half-parsed one
@@ -126,7 +137,10 @@ test("import: forward-compat - a newer schemaVersion still applies its known key
 });
 
 test("import: the current schemaVersion is not flagged as newer", () => {
-  const raw = JSON.stringify({ schemaVersion: SETTINGS_SCHEMA_VERSION, settings: { host: "localhost:1" } });
+  const raw = JSON.stringify({
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    settings: { host: "localhost:1" },
+  });
   const res = importSettings(raw, base);
   assert.ok(res.ok);
   assert.equal(res.newerSchema, undefined);
@@ -139,14 +153,17 @@ test("import: invalid JSON is a hard error", () => {
 });
 
 test("import: a non-object / missing settings object is a hard error", () => {
-  for (const raw of ["42", "\"str\"", "null", "[]", "{}", JSON.stringify({ schemaVersion: 1 })]) {
+  for (const raw of ["42", '"str"', "null", "[]", "{}", JSON.stringify({ schemaVersion: 1 })]) {
     const res = importSettings(raw, base);
     assert.equal(res.ok, false, "expected error for " + raw);
   }
 });
 
 test("import: a disabled binding (empty-string chord) survives the keymap type check", () => {
-  const raw = JSON.stringify({ schemaVersion: 1, settings: { keymap: { "console.pane.split": "" } } });
+  const raw = JSON.stringify({
+    schemaVersion: 1,
+    settings: { keymap: { "console.pane.split": "" } },
+  });
   const res = importSettings(raw, base);
   assert.ok(res.ok);
   assert.deepEqual(res.next.keymap, { "console.pane.split": "" });
@@ -185,14 +202,21 @@ test("computePendingChanges: scalar edits become readable before -> after entrie
 test("computePendingChanges: host uses the display label (empty renders as loopback)", () => {
   const draft: Settings = { ...base, host: "" };
   const changes = computePendingChanges(base, draft, diffCtx);
-  assert.deepEqual(changes, [{ key: "host", label: "Daemon host", before: "127.0.0.1:7391", after: "loopback" }]);
+  assert.deepEqual(changes, [
+    { key: "host", label: "Daemon host", before: "127.0.0.1:7391", after: "loopback" },
+  ]);
 });
 
 test("computePendingChanges: a keybinding rebind is one entry per command, by effective chord", () => {
   const draft: Settings = { ...base, keymap: { "console.tab.close": "mod+shift+w" } };
   const changes = computePendingChanges(base, draft, diffCtx);
   assert.deepEqual(changes, [
-    { key: "keymap:console.tab.close", label: "Keybinding Close pane or tab", before: "mod+w", after: "mod+shift+w" },
+    {
+      key: "keymap:console.tab.close",
+      label: "Keybinding Close pane or tab",
+      before: "mod+w",
+      after: "mod+shift+w",
+    },
   ]);
 });
 
@@ -201,7 +225,12 @@ test("computePendingChanges: dropping an override back to the default is a real 
   const draft: Settings = { ...base, keymap: {} }; // no override -> effective falls to the default "mod+w"
   const changes = computePendingChanges(committed, draft, diffCtx);
   assert.deepEqual(changes, [
-    { key: "keymap:console.tab.close", label: "Keybinding Close pane or tab", before: "mod+shift+w", after: "mod+w" },
+    {
+      key: "keymap:console.tab.close",
+      label: "Keybinding Close pane or tab",
+      before: "mod+shift+w",
+      after: "mod+w",
+    },
   ]);
 });
 
@@ -209,7 +238,12 @@ test("computePendingChanges: disabling a binding reads as None", () => {
   const draft: Settings = { ...base, keymap: { "console.tab.close": "" } };
   const changes = computePendingChanges(base, draft, diffCtx);
   assert.deepEqual(changes, [
-    { key: "keymap:console.tab.close", label: "Keybinding Close pane or tab", before: "mod+w", after: "None" },
+    {
+      key: "keymap:console.tab.close",
+      label: "Keybinding Close pane or tab",
+      before: "mod+w",
+      after: "None",
+    },
   ]);
 });
 
@@ -252,6 +286,12 @@ test("diffLines: reflects a real settings envelope value change", () => {
   const after = JSON.stringify(buildSettingsEnvelope({ ...base, theme: "light" }), null, 2);
   const diff = diffLines(before, after);
   // exactly the theme line flips: one del carrying "dark", one add carrying "light", nothing else changes.
-  assert.deepEqual(diff.filter((l) => l.kind === "del").map((l) => l.text.trim()), ['"theme": "dark",']);
-  assert.deepEqual(diff.filter((l) => l.kind === "add").map((l) => l.text.trim()), ['"theme": "light",']);
+  assert.deepEqual(
+    diff.filter((l) => l.kind === "del").map((l) => l.text.trim()),
+    ['"theme": "dark",'],
+  );
+  assert.deepEqual(
+    diff.filter((l) => l.kind === "add").map((l) => l.text.trim()),
+    ['"theme": "light",'],
+  );
 });

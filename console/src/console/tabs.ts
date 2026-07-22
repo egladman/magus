@@ -69,7 +69,10 @@ export function setActive(ws: Workspace, id: string): Workspace {
 // untouched, so it composes with the tab reducers above.
 export function setLayout(ws: Workspace, tabId: string, layout: Pane): Workspace {
   if (!ws.tabs.some((t) => t.id === tabId)) return ws;
-  return { tabs: ws.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)), activeId: ws.activeId };
+  return {
+    tabs: ws.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
+    activeId: ws.activeId,
+  };
 }
 
 // workspaceStore is the durable cell the console binds to: read-modify-write it with the

@@ -36,10 +36,22 @@ export function stripAnsi(s: string): string {
 }
 
 const FG: Record<number, string> = {
-  30: "console-render-ansi__fg--black", 31: "console-render-ansi__fg--red", 32: "console-render-ansi__fg--green", 33: "console-render-ansi__fg--yellow",
-  34: "console-render-ansi__fg--blue", 35: "console-render-ansi__fg--magenta", 36: "console-render-ansi__fg--cyan", 37: "console-render-ansi__fg--white",
-  90: "console-render-ansi__fg--black", 91: "console-render-ansi__fg--red", 92: "console-render-ansi__fg--green", 93: "console-render-ansi__fg--yellow",
-  94: "console-render-ansi__fg--blue", 95: "console-render-ansi__fg--magenta", 96: "console-render-ansi__fg--cyan", 97: "console-render-ansi__fg--white",
+  30: "console-render-ansi__fg--black",
+  31: "console-render-ansi__fg--red",
+  32: "console-render-ansi__fg--green",
+  33: "console-render-ansi__fg--yellow",
+  34: "console-render-ansi__fg--blue",
+  35: "console-render-ansi__fg--magenta",
+  36: "console-render-ansi__fg--cyan",
+  37: "console-render-ansi__fg--white",
+  90: "console-render-ansi__fg--black",
+  91: "console-render-ansi__fg--red",
+  92: "console-render-ansi__fg--green",
+  93: "console-render-ansi__fg--yellow",
+  94: "console-render-ansi__fg--blue",
+  95: "console-render-ansi__fg--magenta",
+  96: "console-render-ansi__fg--cyan",
+  97: "console-render-ansi__fg--white",
 };
 
 // parseAnsi splits a line into {text, cls[]} runs by tracking SGR state across the
@@ -68,13 +80,17 @@ export function parseAnsi(line: string): AnsiSeg[] {
 function applySGR(state: SgrState, params: string): void {
   const codes = params === "" ? [0] : params.split(";").map((n) => parseInt(n, 10));
   for (const c of codes) {
-    if (c === 0) { state.bold = state.dim = state.italic = state.underline = false; state.fg = null; }
-    else if (c === 1) state.bold = true;
+    if (c === 0) {
+      state.bold = state.dim = state.italic = state.underline = false;
+      state.fg = null;
+    } else if (c === 1) state.bold = true;
     else if (c === 2) state.dim = true;
     else if (c === 3) state.italic = true;
     else if (c === 4) state.underline = true;
-    else if (c === 22) { state.bold = false; state.dim = false; }
-    else if (c === 23) state.italic = false;
+    else if (c === 22) {
+      state.bold = false;
+      state.dim = false;
+    } else if (c === 23) state.italic = false;
     else if (c === 24) state.underline = false;
     else if (c === 39) state.fg = null;
     else if (FG[c]) state.fg = FG[c];

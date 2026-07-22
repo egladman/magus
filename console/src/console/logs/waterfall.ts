@@ -1,3 +1,4 @@
+import { must } from "../../lib/must";
 // waterfall.ts - the trace-waterfall (Timeline) view. A Datadog-style waterfall of the
 // invocation: the magus OTel model is invocation=trace, target-exec=span, step=child span. The
 // magus.viewer.v1 wire format carries no explicit trace_id/span_id, so the span tree is
@@ -19,12 +20,12 @@ import { render } from "./render";
 import type { Timestamp, Duration } from "@bufbuild/protobuf/wkt";
 
 const WF_NS = "http://www.w3.org/2000/svg";
-const WF_VIEW_W = 900;   // viewBox width; the SVG scales to the panel via its viewBox
-const WF_LABEL_W = 230;  // left gutter for span labels (indented for steps)
-const WF_RIGHT = 64;     // right gutter for the per-target duration text
-const WF_AXIS_H = 18;    // top strip for the time axis
-const WF_ROW_H = 20;     // one span row
-const WF_BAR_H = 11;     // a target bar
+const WF_VIEW_W = 900; // viewBox width; the SVG scales to the panel via its viewBox
+const WF_LABEL_W = 230; // left gutter for span labels (indented for steps)
+const WF_RIGHT = 64; // right gutter for the per-target duration text
+const WF_AXIS_H = 18; // top strip for the time axis
+const WF_ROW_H = 20; // one span row
+const WF_BAR_H = 11; // a target bar
 const WF_STEP_BAR_H = 7; // a step (child-span) bar
 const WF_PLOT_W = WF_VIEW_W - WF_RIGHT - WF_LABEL_W;
 
@@ -78,12 +79,14 @@ function wfTrunc(s: string, max: number): string {
 // time domain across all of them - the shared axis a multi-invocation waterfall plots on.
 export function buildSpansMulti(sources: Source[]): SpanMulti {
   const groups: SpanMulti["groups"] = [];
-  let t0 = Infinity, t1 = -Infinity;
+  let t0 = Infinity,
+    t1 = -Infinity;
   for (const s of sources) {
     const sp = buildSpans(s.events, s.invocation);
     if (!sp.targets.length) continue;
     groups.push({ label: cmdLabel(s.invocation && s.invocation.command), targets: sp.targets });
-    t0 = Math.min(t0, sp.t0); t1 = Math.max(t1, sp.t1);
+    t0 = Math.min(t0, sp.t0);
+    t1 = Math.max(t1, sp.t1);
   }
   if (!isFinite(t0)) t0 = 0;
   if (!isFinite(t1) || t1 <= t0) t1 = t0 + 1;
@@ -110,20 +113,39 @@ function buildSpans(events: Event[], invocation: InvocationView): SpanTree {
   let maxT = -Infinity;
   for (const ev of events || []) {
     const t = tsMs(ev.time);
-    if (t !== null) { if (t < minT) minT = t; if (t > maxT) maxT = t; }
+    if (t !== null) {
+      if (t < minT) minT = t;
+      if (t > maxT) maxT = t;
+    }
     if (ev.kind !== Kind.EXEC && ev.kind !== Kind.OUTPUT && ev.kind !== Kind.RESULT) continue;
     const key = ev.project + " " + ev.target;
     let g = groups.get(key);
-    if (!g) { g = { project: ev.project, target: ev.target, execs: [], result: null, first: null, last: null }; groups.set(key, g); order.push(g); }
-    if (t !== null) { if (g.first === null) g.first = t; g.last = t; }
+    if (!g) {
+      g = {
+        project: ev.project,
+        target: ev.target,
+        execs: [],
+        result: null,
+        first: null,
+        last: null,
+      };
+      groups.set(key, g);
+      order.push(g);
+    }
+    if (t !== null) {
+      if (g.first === null) g.first = t;
+      g.last = t;
+    }
     if (ev.kind === Kind.EXEC) g.execs.push({ t, text: ev.text });
-    else if (ev.kind === Kind.RESULT) g.result = { t, dur: durMs(ev.duration), status: ev.status, ref: ev.ref };
+    else if (ev.kind === Kind.RESULT)
+      g.result = { t, dur: durMs(ev.duration), status: ev.status, ref: ev.ref };
   }
 
   const targets: TargetSpan[] = [];
   for (const g of order) {
     let e = g.result && g.result.t !== null ? g.result.t : g.last;
-    const s = g.result && g.result.t !== null && g.result.dur > 0 ? g.result.t - g.result.dur : g.first;
+    const s =
+      g.result && g.result.t !== null && g.result.dur > 0 ? g.result.t - g.result.dur : g.first;
     if (s === null) continue; // no timing at all for this group; nothing to plot
     if (e === null || e < s) e = s;
     const label = (g.project && g.project !== "." ? g.project + ":" : "") + (g.target || "output");
@@ -134,7 +156,14 @@ function buildSpans(events: Event[], invocation: InvocationView): SpanTree {
       const ee = i + 1 < timed.length ? timed[i + 1].t : e;
       steps.push({ label: timed[i].text || "step", s: ss, e: Math.max(ss, ee) });
     }
-    targets.push({ label, status: g.result ? statusName(g.result.status) : "", ref: g.result ? g.result.ref : "", s, e, steps });
+    targets.push({
+      label,
+      status: g.result ? statusName(g.result.status) : "",
+      ref: g.result ? g.result.ref : "",
+      s,
+      e,
+      steps,
+    });
   }
 
   // Axis: the invocation frame when present, else the observed event range. Target spans are
@@ -180,7 +209,8 @@ export function renderWaterfall(): void {
   const dom = focusFor(multi);
   const q = state.filterParsed;
   const filtering = !q.empty;
-  const outOfWin = (s: number, e: number): boolean => !!state.focusWin && (e < dom.t0 || s > dom.t1);
+  const outOfWin = (s: number, e: number): boolean =>
+    !!state.focusWin && (e < dom.t0 || s > dom.t1);
   // Multiple invocations get a labelled group header each; a single one renders headerless.
   const showHeaders = multi.groups.length > 1;
 
@@ -189,14 +219,21 @@ export function renderWaterfall(): void {
   const nMatch = filtering ? allTargets.filter((t) => targetRelevant(q, t)).length : nt;
   const caption = document.createElement("p");
   caption.className = "console-log-waterfall__caption";
-  caption.textContent = (showHeaders ? multi.groups.length + " invocations, " : "") +
-    nt + (nt === 1 ? " target" : " targets") + " over " + durMsText(total) +
+  caption.textContent =
+    (showHeaders ? multi.groups.length + " invocations, " : "") +
+    nt +
+    (nt === 1 ? " target" : " targets") +
+    " over " +
+    durMsText(total) +
     (filtering ? " - " + nMatch + " matching" : "") +
     (state.focusWin ? " - focused to " + durMsText(dom.t1 - dom.t0) : "");
   bodyEl.appendChild(caption);
 
   let rows = 0;
-  for (const g of multi.groups) { rows += showHeaders ? 1 : 0; for (const t of g.targets) rows += 1 + t.steps.length; }
+  for (const g of multi.groups) {
+    rows += showHeaders ? 1 : 0;
+    for (const t of g.targets) rows += 1 + t.steps.length;
+  }
   const h = WF_AXIS_H + rows * WF_ROW_H + 6;
 
   const root = wfSvg("svg") as SVGSVGElement;
@@ -210,18 +247,33 @@ export function renderWaterfall(): void {
 
   let y = WF_AXIS_H + 2;
   for (const g of multi.groups) {
-    if (showHeaders) { drawWfGroupHead(root, g.label, y); y += WF_ROW_H; }
+    if (showHeaders) {
+      drawWfGroupHead(root, g.label, y);
+      y += WF_ROW_H;
+    }
     for (const t of g.targets) {
       // Dim non-matching (filter) OR out-of-window (time focus) spans instead of removing them,
       // so the row layout stays stable and the waterfall reads as a focused view.
       const tRelevant = targetRelevant(q, t);
       const tDim = (filtering && !tRelevant) || outOfWin(t.s, t.e);
-      drawWfRow(root, { label: t.label, s: t.s, e: t.e, status: t.status, step: false, dim: tDim }, y, dom);
+      drawWfRow(
+        root,
+        { label: t.label, s: t.s, e: t.e, status: t.status, step: false, dim: tDim },
+        y,
+        dom,
+      );
       y += WF_ROW_H;
       for (const st of t.steps) {
-        const sRelevant = tRelevant && (q.texts.length === 0 || matchAllTexts(q, st.label) || matchAllTexts(q, t.label));
+        const sRelevant =
+          tRelevant &&
+          (q.texts.length === 0 || matchAllTexts(q, st.label) || matchAllTexts(q, t.label));
         const sDim = (filtering && !sRelevant) || outOfWin(st.s, st.e);
-        drawWfRow(root, { label: st.label, s: st.s, e: st.e, status: "", step: true, dim: sDim }, y, dom);
+        drawWfRow(
+          root,
+          { label: st.label, s: st.s, e: st.e, status: "", step: true, dim: sDim },
+          y,
+          dom,
+        );
         y += WF_ROW_H;
       }
     }
@@ -273,27 +325,41 @@ function attachWfBrush(root: SVGSVGElement, dom: Domain, h: number): void {
     rect.setAttribute("y", "0");
     rect.setAttribute("height", String(h));
     const x = svgXOf(sx);
-    rect.setAttribute("x", String(x)); rect.setAttribute("width", "0");
+    rect.setAttribute("x", String(x));
+    rect.setAttribute("width", "0");
     root.appendChild(rect);
     root.setPointerCapture(ev.pointerId);
   });
   root.addEventListener("pointermove", (ev) => {
     if (sx === null || !rect) return;
-    const a = svgXOf(sx), b = svgXOf(ev.clientX);
+    const a = svgXOf(sx),
+      b = svgXOf(ev.clientX);
     rect.setAttribute("x", String(Math.min(a, b)));
     rect.setAttribute("width", String(Math.abs(b - a)));
   });
   const finish = (ev: PointerEvent): void => {
     if (sx === null) return;
-    const a = toTime(sx), b = toTime(ev.clientX);
-    sx = null; if (rect) { rect.remove(); rect = null; }
+    const a = toTime(sx),
+      b = toTime(ev.clientX);
+    sx = null;
+    if (rect) {
+      rect.remove();
+      rect = null;
+    }
     if (Math.abs(b - a) < (dom.t1 - dom.t0) * 0.01) return; // too small: treat as a click
     state.focusWin = { a: Math.min(a, b), b: Math.max(a, b) };
-    const sel = el("time-range"); if (sel) (sel as HTMLSelectElement).value = "custom";
+    const sel = el("time-range");
+    if (sel) (sel as HTMLSelectElement).value = "custom";
     render();
   };
   root.addEventListener("pointerup", finish);
-  root.addEventListener("pointercancel", () => { sx = null; if (rect) { rect.remove(); rect = null; } });
+  root.addEventListener("pointercancel", () => {
+    sx = null;
+    if (rect) {
+      rect.remove();
+      rect = null;
+    }
+  });
 }
 
 // updateFocusUI reflects the focus window into the readout + reset, and enables the time-range
@@ -305,8 +371,11 @@ export function updateFocusUI(spans: SpanMulti | null): void {
   const active = state.timeline && !!spans && !!spans.groups && spans.groups.length > 0;
   if (sel) (sel as HTMLSelectElement).disabled = !active;
   if (win) {
-    if (state.focusWin && active) { const d = focusFor(spans!); win.textContent = durMsText(d.t1 - d.t0) + " window"; win.hidden = false; }
-    else win.hidden = true;
+    if (state.focusWin && active) {
+      const d = focusFor(must(spans));
+      win.textContent = durMsText(d.t1 - d.t0) + " window";
+      win.hidden = false;
+    } else win.hidden = true;
   }
   if (reset) reset.hidden = !(state.focusWin && active);
 }
@@ -314,14 +383,19 @@ export function updateFocusUI(spans: SpanMulti | null): void {
 // clearFocus resets to the full run.
 export function clearFocus(): void {
   state.focusWin = null;
-  const sel = el("time-range"); if (sel) (sel as HTMLSelectElement).value = "all";
+  const sel = el("time-range");
+  if (sel) (sel as HTMLSelectElement).value = "all";
   if (state.model) render();
 }
 
 // applyTimeRange sets the focus window from a wall-clock preset (seconds back from the latest
 // event), or clears it for "all". Invocation-agnostic: it is a window over event time.
 export function applyTimeRange(value: string): void {
-  if (value === "all" || value === "custom") { if (value === "all") state.focusWin = null; if (state.model) render(); return; }
+  if (value === "all" || value === "custom") {
+    if (value === "all") state.focusWin = null;
+    if (state.model) render();
+    return;
+  }
   const secs = Number(value);
   const multi = buildSpansMulti(waterfallSource());
   if (!multi.groups.length || !Number.isFinite(secs)) return;
@@ -338,7 +412,11 @@ function drawWfAxis(root: SVGSVGElement, sp: Domain, h: number): void {
   line.setAttribute("class", "console-log-waterfall__axisline");
   root.appendChild(line);
   const total = sp.t1 - sp.t0;
-  const ticks: [number, string][] = [[sp.t0, "0"], [sp.t0 + total / 2, durMsText(total / 2)], [sp.t1, durMsText(total)]];
+  const ticks: [number, string][] = [
+    [sp.t0, "0"],
+    [sp.t0 + total / 2, durMsText(total / 2)],
+    [sp.t1, durMsText(total)],
+  ];
   for (const [t, txt] of ticks) {
     const x = wfTimeX(t, sp);
     const grid = wfSvg("line");
@@ -365,7 +443,11 @@ function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void
   const label = wfSvg("text");
   label.setAttribute("x", String(row.step ? 20 : 6));
   label.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
-  label.setAttribute("class", "console-log-waterfall__label " + (row.step ? "console-log-waterfall__label--step" : "console-log-waterfall__label--target"));
+  label.setAttribute(
+    "class",
+    "console-log-waterfall__label " +
+      (row.step ? "console-log-waterfall__label--step" : "console-log-waterfall__label--target"),
+  );
   if (dim) label.setAttribute("data-dim", "");
   label.textContent = wfTrunc(row.label || "-", row.step ? 30 : 26);
   const lt = wfSvg("title");
@@ -382,7 +464,10 @@ function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void
   rect.setAttribute("width", Math.max(2, x2 - x1).toFixed(2));
   rect.setAttribute("height", String(bh));
   rect.setAttribute("rx", "2");
-  rect.setAttribute("class", "console-log-waterfall__bar" + (row.step ? " console-log-waterfall__bar--step" : ""));
+  rect.setAttribute(
+    "class",
+    "console-log-waterfall__bar" + (row.step ? " console-log-waterfall__bar--step" : ""),
+  );
   if (row.status) rect.setAttribute("data-status", row.status);
   if (dim) rect.setAttribute("data-dim", "");
   const rt = wfSvg("title");

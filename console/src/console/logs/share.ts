@@ -53,7 +53,8 @@ function shareBytes(): Uint8Array {
 export function graphTarget(): { project: string; target: string } | null {
   if (!state.currentRef || !state.currentJournal) return null;
   for (const ev of state.currentJournal.events || []) {
-    if (ev.kind === Kind.RESULT && ev.project && ev.target) return { project: ev.project, target: ev.target };
+    if (ev.kind === Kind.RESULT && ev.project && ev.target)
+      return { project: ev.project, target: ev.target };
   }
   return null;
 }

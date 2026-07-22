@@ -94,7 +94,9 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
   ctxContent.append(ctxList);
   ctx.append(ctxContent);
 
-  const closeCtx = (): void => { ctx.hidden = true; };
+  const closeCtx = (): void => {
+    ctx.hidden = true;
+  };
   const ctxItem = (label: string, run: () => void): HTMLLIElement => {
     const li = document.createElement("li");
     li.className = "pf-v6-c-menu__list-item";
@@ -110,7 +112,10 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
     text.textContent = label;
     main.append(text);
     b.append(main);
-    b.addEventListener("click", () => { closeCtx(); run(); });
+    b.addEventListener("click", () => {
+      closeCtx();
+      run();
+    });
     li.append(b);
     return li;
   };
@@ -136,8 +141,20 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
   // cannot stack duplicates.
   document.body.append(ctx);
   const ac = new AbortController();
-  document.addEventListener("click", (e) => { if (!ctx.hidden && !ctx.contains(e.target as Node)) closeCtx(); }, { signal: ac.signal });
-  document.addEventListener("keydown", (e: KeyboardEvent) => { if (e.key === "Escape") closeCtx(); }, { signal: ac.signal });
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!ctx.hidden && !ctx.contains(e.target as Node)) closeCtx();
+    },
+    { signal: ac.signal },
+  );
+  document.addEventListener(
+    "keydown",
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeCtx();
+    },
+    { signal: ac.signal },
+  );
 
   function render(): void {
     bar.replaceChildren();
@@ -176,11 +193,17 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       // a drag, so right-click still reaches the contextmenu handler above undisturbed.
       let dragMoved = false;
       let dropTarget: HTMLElement | null = null;
-      const clearTabDrop = (): void => { dropTarget?.removeAttribute("data-tab-drop"); dropTarget = null; };
-      let startX = 0, startY = 0;
+      const clearTabDrop = (): void => {
+        dropTarget?.removeAttribute("data-tab-drop");
+        dropTarget = null;
+      };
+      let startX = 0,
+        startY = 0;
       link.addEventListener("pointerdown", (ev) => {
         if (ev.button !== 0) return;
-        startX = ev.clientX; startY = ev.clientY; dragMoved = false;
+        startX = ev.clientX;
+        startY = ev.clientY;
+        dragMoved = false;
         link.setPointerCapture(ev.pointerId);
       });
       link.addEventListener("pointermove", (ev) => {
@@ -190,9 +213,16 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
           link.setAttribute("data-dragging", "");
         }
         if (!dragMoved) return;
-        const under = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>("[data-tab-id]") ?? null;
+        const under =
+          document
+            .elementFromPoint(ev.clientX, ev.clientY)
+            ?.closest<HTMLElement>("[data-tab-id]") ?? null;
         const next = under && under !== link ? under : null;
-        if (next !== dropTarget) { clearTabDrop(); dropTarget = next; dropTarget?.setAttribute("data-tab-drop", ""); }
+        if (next !== dropTarget) {
+          clearTabDrop();
+          dropTarget = next;
+          dropTarget?.setAttribute("data-tab-drop", "");
+        }
       });
       link.addEventListener("pointerup", (ev) => {
         link.releasePointerCapture(ev.pointerId);
@@ -211,15 +241,30 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       // suppressed once (dragMoved reset here, not in pointerup, so the flag survives to be read here).
       // A plain click (no movement) still selects, unchanged.
       link.addEventListener("click", (ev) => {
-        if (dragMoved) { dragMoved = false; ev.preventDefault(); ev.stopPropagation(); return; }
+        if (dragMoved) {
+          dragMoved = false;
+          ev.preventDefault();
+          ev.stopPropagation();
+          return;
+        }
         select(v.id);
       });
       // Roving keyboard (WAI-ARIA tablist): Enter/Space activate; Left/Right move focus between
       // tabs, Home/End jump to the ends. Focus follows the arrow but activation stays on
       // Enter/Space/click, so arrowing past tabs does not thrash the outlet.
       link.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(v.id); return; }
-        if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight" && ev.key !== "Home" && ev.key !== "End") return;
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          select(v.id);
+          return;
+        }
+        if (
+          ev.key !== "ArrowLeft" &&
+          ev.key !== "ArrowRight" &&
+          ev.key !== "Home" &&
+          ev.key !== "End"
+        )
+          return;
         const tabs = [...list.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
         const here = tabs.indexOf(link);
         if (here < 0) return;
@@ -244,7 +289,10 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       xicon.className = "pf-v6-c-tabs__item-action-icon";
       xicon.append(closeIcon());
       x.append(xicon);
-      x.addEventListener("click", (ev) => { ev.stopPropagation(); close(v.id); });
+      x.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        close(v.id);
+      });
       action.append(x);
 
       item.append(link, action);
@@ -264,5 +312,12 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
   // subscription so destroy() drops it cleanly (the reference use of the console/view primitives).
   const sc = scope();
   sc.add(bind(ws, render));
-  return { el: bar, destroy: () => { sc.dispose(); ac.abort(); ctx.remove(); } };
+  return {
+    el: bar,
+    destroy: () => {
+      sc.dispose();
+      ac.abort();
+      ctx.remove();
+    },
+  };
 }

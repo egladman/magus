@@ -6,9 +6,17 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { must } from "../lib/must";
 import {
-  scenarioRuns, scenarioActivity, scenarioInsight, PRUNED_REF, WORKSPACE,
-  INV_BUILD_FRESH, INV_TEST_FIX, INV_TEST_BREAK, INV_CI,
+  scenarioRuns,
+  scenarioActivity,
+  scenarioInsight,
+  PRUNED_REF,
+  WORKSPACE,
+  INV_BUILD_FRESH,
+  INV_TEST_FIX,
+  INV_TEST_BREAK,
+  INV_CI,
 } from "./demo-scenario";
 
 const NOW = 1_760_000_000_000; // a fixed anchor; every assertion is relative to it
@@ -36,8 +44,14 @@ test("run refs are unique and the CI sweep shares one invocation", () => {
   assert.equal(refs.size, runs.length, "no duplicate refs");
   const ci = runs.filter((r) => r.inv === INV_CI);
   assert.ok(ci.length >= 3, "the sweep is several targets under one invocation");
-  assert.ok(ci.some((r) => r.state === "cached"), "the sweep is mostly cache hits");
-  assert.ok(ci.every((r) => r.state !== "failed"), "the sweep is green");
+  assert.ok(
+    ci.some((r) => r.state === "cached"),
+    "the sweep is mostly cache hits",
+  );
+  assert.ok(
+    ci.every((r) => r.state !== "failed"),
+    "the sweep is green",
+  );
 });
 
 test("the pruned ref is deliberately absent from the run list", () => {
@@ -55,20 +69,24 @@ test("activity is newest-first, all in the scenario workspace", () => {
 
 test("each run-driving MCP call ties to its run by ref, timing, and duration", () => {
   const runs = scenarioRuns(NOW);
-  const byInv = (inv: string) => runs.find((r) => r.inv === inv)!;
+  const byInv = (inv: string) => must(runs.find((r) => r.inv === inv));
   const events = scenarioActivity(NOW);
   const runCalls = events.filter((e) => e.kind === "mcp" && e.action === "magus_run_target");
   assert.equal(runCalls.length, 3, "fresh build, the fix, and the break");
 
-  for (const [inv, ok] of [[INV_BUILD_FRESH, true], [INV_TEST_FIX, true], [INV_TEST_BREAK, false]] as const) {
+  for (const [inv, ok] of [
+    [INV_BUILD_FRESH, true],
+    [INV_TEST_FIX, true],
+    [INV_TEST_BREAK, false],
+  ] as const) {
     const run = byInv(inv);
     const call = runCalls.find((c) => c.responseRef === run.ref);
     assert.ok(call, "a call points at " + run.ref);
-    assert.equal(call!.ok, ok, run.ref + " outcome matches the run");
+    assert.equal(call.ok, ok, run.ref + " outcome matches the run");
     // The call is recorded at the run's START, so it sits just before the run's completion.
-    assert.equal(call!.timeMs, run.startMs, "call time is the run start");
-    assert.ok(call!.timeMs < run.endMs, "call sits before the run's completion timestamp");
-    assert.equal(call!.durationMs, run.durationMs, "durations agree across surfaces");
+    assert.equal(call.timeMs, run.startMs, "call time is the run start");
+    assert.ok(call.timeMs < run.endMs, "call sits before the run's completion timestamp");
+    assert.equal(call.durationMs, run.durationMs, "durations agree across surfaces");
   }
 });
 
@@ -77,24 +95,33 @@ test("the failed output lookup names the pruned ref; the sandbox denial mirrors 
   const events = scenarioActivity(NOW);
   const lookup = events.find((e) => e.action === "magus_output");
   assert.ok(lookup && !lookup.ok, "the lookup failed");
-  assert.match(lookup!.error!, new RegExp(PRUNED_REF), "it names the pruned ref");
+  assert.match(must(lookup.error), new RegExp(PRUNED_REF), "it names the pruned ref");
 
   const denial = events.find((e) => e.kind === "sandbox");
   const generate = runs.find((r) => r.target === "generate");
   assert.ok(denial && generate, "both the denial and the denied run exist");
-  assert.equal(generate!.state, "failed");
+  assert.equal(generate.state, "failed");
   // Same instant and same story on both surfaces.
-  assert.equal(denial!.timeMs, generate!.endMs);
-  assert.match(generate!.error!, /sandbox/);
+  assert.equal(denial.timeMs, generate.endMs);
+  assert.match(must(generate.error), /sandbox/);
 });
 
 test("insight names scenario files, dates derive from now, and svc/api:test is the volatile one", () => {
   const si = scenarioInsight(NOW);
-  assert.ok(si.hotspots.some((h) => h.name === "lib/core/users.go"), "the edit that broke the test leads");
+  assert.ok(
+    si.hotspots.some((h) => h.name === "lib/core/users.go"),
+    "the edit that broke the test leads",
+  );
   for (const h of si.hotspots) {
-    assert.ok(h.lastCommitMs <= NOW && NOW - h.lastCommitMs < 4 * 60 * 60_000, "commit instants derive from now");
+    assert.ok(
+      h.lastCommitMs <= NOW && NOW - h.lastCommitMs < 4 * 60 * 60_000,
+      "commit instants derive from now",
+    );
   }
   const flaky = si.volatility.targets.find((t) => t.volatile);
-  assert.ok(flaky && flaky.project === "svc/api" && flaky.target === "test", "svc/api:test is volatile");
-  assert.ok(flaky!.lastPassMs <= NOW, "last pass derives from now");
+  assert.ok(
+    flaky && flaky.project === "svc/api" && flaky.target === "test",
+    "svc/api:test is volatile",
+  );
+  assert.ok(flaky.lastPassMs <= NOW, "last pass derives from now");
 });

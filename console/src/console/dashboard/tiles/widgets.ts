@@ -127,8 +127,11 @@ export class SortableTable<T> {
   }
 
   private toggleSort(key: string): void {
-    if (this.sortKey === key) this.sortDir = (this.sortDir === 1 ? -1 : 1);
-    else { this.sortKey = key; this.sortDir = 1; }
+    if (this.sortKey === key) this.sortDir = this.sortDir === 1 ? -1 : 1;
+    else {
+      this.sortKey = key;
+      this.sortDir = 1;
+    }
     this.syncHeaders();
     this.render();
   }
@@ -143,9 +146,11 @@ export class SortableTable<T> {
   private render(): void {
     const col = this.cols.find((c) => c.key === this.sortKey) ?? this.cols[0];
     const sorted = this.rows.slice().sort((a, b) => {
-      const va = col.sort(a), vb = col.sort(b);
+      const va = col.sort(a),
+        vb = col.sort(b);
       let cmp: number;
-      if (typeof va === "number" && typeof vb === "number") cmp = vb - va; // numbers: high-to-low as "desc"
+      if (typeof va === "number" && typeof vb === "number")
+        cmp = vb - va; // numbers: high-to-low as "desc"
       else cmp = String(va) < String(vb) ? -1 : String(va) > String(vb) ? 1 : 0;
       return this.sortDir === 1 ? cmp : -cmp;
     });

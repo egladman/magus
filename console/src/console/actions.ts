@@ -1,3 +1,4 @@
+import { must } from "../lib/must";
 // actions.ts - the Actions surface: a first-class tab listing EVERY registered command, grouped by
 // area. It is the command companion to the keyboard cheat sheet (cheatsheet.ts): where that one shows
 // only the commands that HAVE a chord (a keybinding reference, opened by holding "?"), this one is the
@@ -29,7 +30,11 @@ export interface ActionsSurfaceDeps {
 
 // The surface has no search grammar of its own (the list is short and grouped, not filtered) - the
 // same no-op provider standalone.ts's wrapped apps opt into.
-const noSearch: SearchProvider<null> = { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) };
+const noSearch: SearchProvider<null> = {
+  placeholder: "",
+  parse: () => null,
+  apply: () => ({ matches: 0 }),
+};
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -68,8 +73,18 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
       // The banner replaces the old read-only lede: this surface now runs actions, not just lists
       // them, so it leads with that plus the one place shortcuts are changed.
       const banner = h("div", "console-actions__banner");
-      banner.append(h("p", undefined, "Click an action to run it. To change a shortcut, edit your keybindings."));
-      const editKeybindingsBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Edit keybindings");
+      banner.append(
+        h(
+          "p",
+          undefined,
+          "Click an action to run it. To change a shortcut, edit your keybindings.",
+        ),
+      );
+      const editKeybindingsBtn = h(
+        "button",
+        "pf-v6-c-button pf-m-secondary pf-m-small",
+        "Edit keybindings",
+      );
       editKeybindingsBtn.type = "button";
       editKeybindingsBtn.addEventListener("click", () => deps.onEditKeybindings());
       banner.append(editKeybindingsBtn);
@@ -80,7 +95,7 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
       for (const cmd of deps.commands()) {
         const group = cmd.group || "General";
         if (!groups.has(group)) groups.set(group, []);
-        groups.get(group)!.push(cmd);
+        must(groups.get(group)).push(cmd);
       }
       if (groups.size === 0) {
         root.append(h("p", undefined, "No commands are registered."));
@@ -102,7 +117,10 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
           const runRow = (): void => deps.run(cmd.id);
           row.addEventListener("click", runRow);
           row.addEventListener("keydown", (ev) => {
-            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); runRow(); }
+            if (ev.key === "Enter" || ev.key === " ") {
+              ev.preventDefault();
+              runRow();
+            }
           });
           row.append(h("code", "console-commands-token", displayToken(cmd.id)));
           row.append(h("span", "console-commands-label", cmd.label));
@@ -120,7 +138,10 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
           // the open.* rows and other chordless one-offs get no edit control. stopPropagation keeps a
           // click on this nested real <button> from also firing the row's own run handler.
           if (deps.editableIds.has(cmd.id)) {
-            const editBtn = h("button", "pf-v6-c-button pf-m-plain pf-m-small console-commands-editbtn");
+            const editBtn = h(
+              "button",
+              "pf-v6-c-button pf-m-plain pf-m-small console-commands-editbtn",
+            );
             editBtn.type = "button";
             editBtn.setAttribute("aria-label", "Edit shortcut for " + cmd.label);
             editBtn.title = "Edit shortcut";
@@ -143,7 +164,9 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
       host.append(root);
       return {
         search: noSearch,
-        deactivate() { host.replaceChildren(); },
+        deactivate() {
+          host.replaceChildren();
+        },
       };
     },
   };

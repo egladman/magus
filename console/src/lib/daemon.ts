@@ -1,3 +1,4 @@
+import { errName } from "./must";
 // daemon.ts - the ONE audited module for addressing and talking to a magus daemon.
 //
 // Every surface (dashboard, graph explorer, log viewer, activity, the shell) imports
@@ -43,8 +44,12 @@ import { getDefaultHost } from "./settings";
 // mode guess. A plain outage (Unavailable, network error) is NOT a denial; it keeps its empty state.
 export function isCapabilityDenied(e: unknown): boolean {
   if (!(e instanceof ConnectError)) return false;
-  return e.code === Code.Unauthenticated || e.code === Code.PermissionDenied
-    || e.code === Code.Unimplemented || e.code === Code.NotFound;
+  return (
+    e.code === Code.Unauthenticated ||
+    e.code === Code.PermissionDenied ||
+    e.code === Code.Unimplemented ||
+    e.code === Code.NotFound
+  );
 }
 
 // ---- hash params -----------------------------------------------------------
@@ -59,14 +64,21 @@ export function parseHash(): HashParams {
   // decodeURIComponent throw; keep the raw text rather than aborting boot, since
   // parseHash runs before any surface mounts.
   const decode = (s: string): string => {
-    try { return decodeURIComponent(s); } catch { return s; }
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
   };
   const h = location.hash.replace(/^#/, "");
   const params: HashParams = {};
   for (const part of h.split("&")) {
     if (!part) continue;
     const i = part.indexOf("=");
-    if (i < 0) { params[part] = ""; continue; }
+    if (i < 0) {
+      params[part] = "";
+      continue;
+    }
     params[decode(part.slice(0, i))] = decode(part.slice(i + 1));
   }
   return params;
@@ -143,7 +155,11 @@ function loopbackPort(host: string): string | null {
   // Parse for the port rather than splitting on the last ":" - a bracketed IPv6 host ("[::1]")
   // with no port would otherwise slice a colon from inside the brackets. URL.port is "" when the
   // host carries no explicit port.
-  try { return new URL("http://" + norm).port || null; } catch { return null; }
+  try {
+    return new URL("http://" + norm).port || null;
+  } catch {
+    return null;
+  }
 }
 
 // logsLink builds a log-viewer deep-link ("../logs/#...") for the daemon the console is
@@ -197,7 +213,10 @@ export function enterSharedModeIfNeeded(): boolean {
   const params = parseHash();
   // An explicit #port attach reaches a loopback daemon from wherever the console is hosted:
   // full control, and the daemon is 127.0.0.1 (not this origin). Just consume any token.
-  if (params.port !== undefined) { consumeLiveToken(params); return false; }
+  if (params.port !== undefined) {
+    consumeLiveToken(params);
+    return false;
+  }
   if (params.token === undefined && getLiveToken() === null) return false; // not our flow
 
   ownOrigin = true;
@@ -255,20 +274,40 @@ export type ProbeResult = { ok: true; url: string } | { ok: false; reason: strin
 export async function probeDaemon(hostPort: string, timeoutMs = 3000): Promise<ProbeResult> {
   const host = normalizeDaemonHost(hostPort);
   if (!host) {
-    return { ok: false, reason: "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port - hostnames (including localhost) are not accepted." };
+    return {
+      ok: false,
+      reason:
+        "Not a loopback address. Use a port (for example 8787) or 127.0.0.1 or [::1] with a port - hostnames (including localhost) are not accepted.",
+    };
   }
   const url = "http://" + host + "/livez";
   try {
-    await fetch(url, { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
+    await fetch(url, {
+      mode: "no-cors",
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     return { ok: true, url };
-  } catch (e: any) {
-    if (e && (e.name === "TimeoutError" || e.name === "AbortError")) {
-      return { ok: false, reason: "No response from " + url + " within " + Math.round(timeoutMs / 1000) + "s. Check the port, or something is dropping the connection." };
+  } catch (e) {
+    if (errName(e) === "TimeoutError" || errName(e) === "AbortError") {
+      return {
+        ok: false,
+        reason:
+          "No response from " +
+          url +
+          " within " +
+          Math.round(timeoutMs / 1000) +
+          "s. Check the port, or something is dropping the connection.",
+      };
     }
     // Deliberately no status code or errno: an opaque request surfaces one bare TypeError for every
     // network-layer failure (refused, CORS-blocked, mixed content). The browser withholds the detail, so
     // naming a cause here would be a guess.
-    return { ok: false, reason: "Could not reach " + url + ". Is the daemon running? Start it with: magus server start" };
+    return {
+      ok: false,
+      reason:
+        "Could not reach " + url + ". Is the daemon running? Start it with: magus server start",
+    };
   }
 }
 
@@ -295,13 +334,18 @@ export type ReadinessReport = { ready: boolean; components: ReadinessComponent[]
 // console.error), so a caller can fall back to the existing SSE-derived connection state without
 // spamming the console for anyone still on an older release. 200 and 503 both carry a valid body (503
 // just means "not ready yet"), so both are treated as a successful read.
-export async function fetchReadiness(host: string, timeoutMs = 3000): Promise<ReadinessReport | null> {
+export async function fetchReadiness(
+  host: string,
+  timeoutMs = 3000,
+): Promise<ReadinessReport | null> {
   if (!host) return null;
   // Defense in depth: the caller passes an already-resolved host (resolveDaemonHost), but re-verify
   // it is literal loopback OR the page's OWN origin before attaching the bearer token, so a future
   // caller that ever passes a raw string can never send the token to a third-party host. The
   // shared-mode LAN host is same-origin, so it passes here where validateLoopbackHost alone would not.
-  const safe = validateLoopbackHost(host) ?? (typeof location !== "undefined" && host === location.host ? host : null);
+  const safe =
+    validateLoopbackHost(host) ??
+    (typeof location !== "undefined" && host === location.host ? host : null);
   if (!safe) return null;
   const url = "http://" + safe + "/readyz";
   try {
@@ -310,7 +354,7 @@ export async function fetchReadiness(host: string, timeoutMs = 3000): Promise<Re
     const body = await res.json();
     if (typeof body !== "object" || body === null || typeof body.ready !== "boolean") return null;
     const components: ReadinessComponent[] = Array.isArray(body.components)
-      ? body.components.map((c: any) => ({
+      ? body.components.map((c: Record<string, unknown>) => ({
           name: String(c?.name ?? ""),
           status: String(c?.status ?? ""),
           detail: String(c?.detail ?? ""),
@@ -338,7 +382,11 @@ const REMEMBER_KEY = "magus-live-remember";
 export function consumeLiveToken(params: HashParams): void {
   if (!params.token) return;
   const store = isRemembered() ? localStorage : sessionStorage;
-  try { store.setItem(TOKEN_KEY, params.token); } catch { /* storage disabled: token lives only for this call chain */ }
+  try {
+    store.setItem(TOKEN_KEY, params.token);
+  } catch {
+    /* storage disabled: token lives only for this call chain */
+  }
   const kept: string[] = [];
   for (const k of Object.keys(params)) {
     if (k === "token") continue;
@@ -358,7 +406,11 @@ export function getLiveToken(): string | null {
 }
 
 export function isRemembered(): boolean {
-  try { return localStorage.getItem(REMEMBER_KEY) === "1"; } catch { return false; }
+  try {
+    return localStorage.getItem(REMEMBER_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 // setRemembered promotes/demotes the token between session and local storage when
@@ -373,7 +425,9 @@ export function setRemembered(on: boolean): void {
       localStorage.removeItem(REMEMBER_KEY);
       localStorage.removeItem(TOKEN_KEY);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // authHeaders builds the Authorization header for a live-mode fetch, or {} when
@@ -416,13 +470,19 @@ export async function fetchSSE(
     return;
   }
   if (onOpen) onOpen();
-  if (!response.body) { onError(new Error("no stream body")); return; }
+  if (!response.body) {
+    onError(new Error("no stream body"));
+    return;
+  }
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";
   try {
     while (true) {
       const { value, done } = await reader.read();
-      if (done) { onError(new Error("stream ended")); return; }
+      if (done) {
+        onError(new Error("stream ended"));
+        return;
+      }
       buf += value;
       // A frame ends at the first blank line, spelled either "\n\n" (magus's
       // framing) or "\r\n\r\n" (CRLF framing). Split on whichever boundary comes
@@ -431,9 +491,13 @@ export async function fetchSSE(
         const lf = buf.indexOf("\n\n");
         const crlf = buf.indexOf("\r\n\r\n");
         let boundary: number, sep: number;
-        if (crlf >= 0 && (lf < 0 || crlf < lf)) { boundary = crlf; sep = 4; }
-        else if (lf >= 0) { boundary = lf; sep = 2; }
-        else break;
+        if (crlf >= 0 && (lf < 0 || crlf < lf)) {
+          boundary = crlf;
+          sep = 4;
+        } else if (lf >= 0) {
+          boundary = lf;
+          sep = 2;
+        } else break;
         const chunk = buf.slice(0, boundary);
         buf = buf.slice(boundary + sep);
         if (!chunk.trim()) continue;
@@ -452,7 +516,8 @@ export async function fetchSSE(
       }
     }
   } catch (e) {
-    if (!(e instanceof Error) || e.name !== "AbortError") onError(e instanceof Error ? e : new Error(String(e)));
+    if (!(e instanceof Error) || e.name !== "AbortError")
+      onError(e instanceof Error ? e : new Error(String(e)));
   }
 }
 
@@ -469,7 +534,10 @@ function makeBearerInterceptor(token: string | null): Interceptor {
 // createDaemonTransport points a browser-native Connect transport at the daemon
 // origin, with the bearer interceptor pre-wired. Callers pass an already-resolved
 // host (resolveDaemonHost/daemonAttach) - never a raw fragment string.
-export function createDaemonTransport(host: string, token: string | null = getLiveToken()): Transport {
+export function createDaemonTransport(
+  host: string,
+  token: string | null = getLiveToken(),
+): Transport {
   return createConnectTransport({
     baseUrl: "http://" + host,
     interceptors: [makeBearerInterceptor(token)],

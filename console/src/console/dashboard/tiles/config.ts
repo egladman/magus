@@ -43,13 +43,23 @@ export function configTile(): Tile {
     }
     const rows = [
       row("Default charms", pills),
-      row("Concurrency", h("span", "console-dashboard-config__value", c.concurrency ? String(c.concurrency) : "auto")),
+      row(
+        "Concurrency",
+        h(
+          "span",
+          "console-dashboard-config__value",
+          c.concurrency ? String(c.concurrency) : "auto",
+        ),
+      ),
       row("Sandbox", h("span", "console-dashboard-config__value", c.sandbox ? "on" : "off")),
     ];
     // The daemon's magus version lives here with the rest of the config, not as a stray number card.
     // Show the daemon version too only when it differs from the reported magus version.
     if (version) {
-      const v = daemonVersion && daemonVersion !== version ? version + " (daemon " + daemonVersion + ")" : version;
+      const v =
+        daemonVersion && daemonVersion !== version
+          ? version + " (daemon " + daemonVersion + ")"
+          : version;
       rows.push(row("magus version", h("span", "console-dashboard-config__value", v)));
     }
     body.replaceChildren(...rows);

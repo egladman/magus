@@ -17,7 +17,10 @@ const GLOSSARY_BASE = "../glossary/#";
 // slugify mirrors the site's heading-id rule: lowercase, non-alphanumerics to
 // single hyphens, trimmed. "Output reference" -> "output-reference".
 export function slugify(term: string): string {
-  return term.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return term
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 export function glossaryUrl(term: string, slug?: string): string {
@@ -27,7 +30,10 @@ export function glossaryUrl(term: string, slug?: string): string {
 // glossaryLink returns an <a> for the term's glossary entry. ref-drawer.ts intercepts .gloss-link
 // clicks to open the definition inline in the reference panel (see its page-wide handler); with no
 // drawer it navigates to the glossary page normally.
-export function glossaryLink(term: string, opts: { label?: string; slug?: string } = {}): HTMLAnchorElement {
+export function glossaryLink(
+  term: string,
+  opts: { label?: string; slug?: string } = {},
+): HTMLAnchorElement {
   const a = document.createElement("a");
   a.className = "console-render-glosslink";
   a.href = glossaryUrl(term, opts.slug);

@@ -16,7 +16,9 @@ import { createDaemonTransport, getLiveToken, resolveDaemonHost } from "./daemon
 import { showToast } from "./refresh-toast";
 import {
   type NotificationStore,
-  estimateStorageBytes, humanBytes, daemonCacheOverThreshold,
+  estimateStorageBytes,
+  humanBytes,
+  daemonCacheOverThreshold,
   LOCALSTORAGE_WARN_BYTES,
 } from "./notifications";
 
@@ -24,16 +26,26 @@ const POLL_MS = 30_000;
 
 // checkLocalStorageAlert warns once when the console's own localStorage footprint nears the browser quota.
 // Runs on mount regardless of daemon connectivity - it is the console's storage, not the daemon's.
-export function checkLocalStorageAlert(store: NotificationStore, area: Pick<Storage, "length" | "key" | "getItem"> = localStorage): void {
+export function checkLocalStorageAlert(
+  store: NotificationStore,
+  area: Pick<Storage, "length" | "key" | "getItem"> = localStorage,
+): void {
   let bytes = 0;
-  try { bytes = estimateStorageBytes(area); } catch { return; }
+  try {
+    bytes = estimateStorageBytes(area);
+  } catch {
+    return;
+  }
   if (bytes < LOCALSTORAGE_WARN_BYTES) return;
   store.notify({
     source: "Console",
     kind: "warn",
     important: true,
     key: "storage:local",
-    message: "The console's local storage is large (" + humanBytes(bytes) + "). Consider clearing old saved data if it keeps growing.",
+    message:
+      "The console's local storage is large (" +
+      humanBytes(bytes) +
+      "). Consider clearing old saved data if it keeps growing.",
   });
 }
 
@@ -45,20 +57,34 @@ async function revokeActiveShareToken(host: string): Promise<void> {
   try {
     const resp = await tokens.listTokens({});
     const share = resp.tokens.find((t) => t.scope === TokenScope.SHARE_READ);
-    if (!share) { showToast("Share", "No active share token to revoke."); return; }
+    if (!share) {
+      showToast("Share", "No active share token to revoke.");
+      return;
+    }
     await tokens.revokeToken({ identifier: share.identifier });
     showToast("Share", "Revoked the share token; the phone listener is closed.");
   } catch (e) {
-    showToast("Share", "Could not revoke the share token: " + (e instanceof Error ? e.message : String(e)), "error");
+    showToast(
+      "Share",
+      "Could not revoke the share token: " + (e instanceof Error ? e.message : String(e)),
+      "error",
+    );
   }
 }
 
 // pollShareConnect raises a bell notification for each share.open event newer than the watch baseline - a
 // device that connected SINCE the console opened, so old history is not resurfaced as a fresh alert. The
 // store dedupes by key, so re-seeing the same event across polls does not re-fire.
-async function pollShareConnect(host: string, store: NotificationStore, baselineMs: number): Promise<void> {
+async function pollShareConnect(
+  host: string,
+  store: NotificationStore,
+  baselineMs: number,
+): Promise<void> {
   const activity = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
-  const resp = await activity.listActivity({ pageSize: 20, filter: { kinds: [Kind.TOKEN_LIFECYCLE], actions: ["share.open"], actors: [] } });
+  const resp = await activity.listActivity({
+    pageSize: 20,
+    filter: { kinds: [Kind.TOKEN_LIFECYCLE], actions: ["share.open"], actors: [] },
+  });
   for (const ev of resp.events) {
     if (ev.action !== "share.open") continue;
     const ms = ev.time ? Number(ev.time.seconds) * 1000 : 0;
@@ -68,7 +94,10 @@ async function pollShareConnect(host: string, store: NotificationStore, baseline
       kind: "warn",
       important: true,
       key: "share.open:" + ms + ":" + (ev.preview || ""),
-      message: "A device opened your share link" + (ev.preview ? " (" + ev.preview + ")" : "") + ". Revoke the share if this was not you.",
+      message:
+        "A device opened your share link" +
+        (ev.preview ? " (" + ev.preview + ")" : "") +
+        ". Revoke the share if this was not you.",
       link: { label: "Revoke share", run: () => revokeActiveShareToken(host) },
     });
   }
@@ -89,7 +118,11 @@ async function pollDaemonStorage(host: string, store: NotificationStore): Promis
     kind: "warn",
     important: true,
     key: "storage:daemon",
-    message: "The daemon cache is large (" + humanBytes(size) + (capBytes > 0 ? " of a " + humanBytes(capBytes) + " cap" : "") + "). Run the clear-cache job from Activity or rotate logs to reclaim space.",
+    message:
+      "The daemon cache is large (" +
+      humanBytes(size) +
+      (capBytes > 0 ? " of a " + humanBytes(capBytes) + " cap" : "") +
+      "). Run the clear-cache job from Activity or rotate logs to reclaim space.",
   });
 }
 
@@ -104,9 +137,15 @@ export function startShellWatch(store: NotificationStore): () => void {
     if (!host) return;
     // Each watcher is independent and best-effort: one failing (or the daemon being unreachable) must not
     // stop the other or tear down the ticker.
-    await Promise.allSettled([pollShareConnect(host, store, baselineMs), pollDaemonStorage(host, store)]);
+    await Promise.allSettled([
+      pollShareConnect(host, store, baselineMs),
+      pollDaemonStorage(host, store),
+    ]);
   };
   const timer = setInterval(() => void tick(), POLL_MS);
   void tick();
-  return () => { stopped = true; clearInterval(timer); };
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }

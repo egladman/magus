@@ -44,7 +44,10 @@ export function initAppMenu(): void {
     link.addEventListener("click", () => setOpen(false));
   }
 
-  btn.addEventListener("click", (e) => { e.stopPropagation(); setOpen(!open); });
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setOpen(!open);
+  });
   document.addEventListener("click", (e) => {
     if (!open) return;
     const t = e.target as Node;

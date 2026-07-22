@@ -46,7 +46,11 @@ export function fillAnsi(host: HTMLElement, raw: string): void {
 // renderLine builds one ".log-line" row: a line-number gutter (when lineNo is a number)
 // plus the ANSI/badge-rendered content. onClick, when given, fires on a line-number click
 // (the log viewer's GitHub-style #L deep-link); the activity view omits both.
-export function renderLine(raw: string, lineNo: number | null, onClick?: (n: number, ev: MouseEvent) => void): HTMLElement {
+export function renderLine(
+  raw: string,
+  lineNo: number | null,
+  onClick?: (n: number, ev: MouseEvent) => void,
+): HTMLElement {
   const line = document.createElement("div");
   line.className = "console-render-line";
   if (lineNo !== null) {
@@ -123,7 +127,8 @@ export function buildSection(sec: Section, opts: BuildSectionOpts = {}): HTMLEle
 
   const count = document.createElement("span");
   count.className = "console-render-section__count";
-  count.textContent = bodyLines.length > 0 ? bodyLines.length + (bodyLines.length === 1 ? " line" : " lines") : "";
+  count.textContent =
+    bodyLines.length > 0 ? bodyLines.length + (bodyLines.length === 1 ? " line" : " lines") : "";
 
   const actions = document.createElement("span");
   actions.className = "console-render-section__actions";
@@ -159,10 +164,15 @@ export function copyText(text: string, btn: HTMLElement): void {
   const done = (ok: boolean): void => {
     const prev = btn.textContent;
     btn.textContent = ok ? "copied" : "failed";
-    setTimeout(() => { btn.textContent = prev; }, 1200);
+    setTimeout(() => {
+      btn.textContent = prev;
+    }, 1200);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
+    navigator.clipboard.writeText(text).then(
+      () => done(true),
+      () => done(false),
+    );
   } else {
     done(false);
   }

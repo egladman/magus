@@ -13,12 +13,18 @@ import type { RenderModel, Section } from "../render/model";
 // kindLabel is the short source tag shown in the head (the enum's stable, terse name).
 export function kindLabel(kind: Kind): string {
   switch (kind) {
-    case Kind.MCP_TOOL_CALL: return "mcp";
-    case Kind.JOB: return "job";
-    case Kind.CONFIG_CHANGE: return "config";
-    case Kind.TOKEN_LIFECYCLE: return "token";
-    case Kind.SANDBOX_DENIAL: return "sandbox";
-    default: return "event";
+    case Kind.MCP_TOOL_CALL:
+      return "mcp";
+    case Kind.JOB:
+      return "job";
+    case Kind.CONFIG_CHANGE:
+      return "config";
+    case Kind.TOKEN_LIFECYCLE:
+      return "token";
+    case Kind.SANDBOX_DENIAL:
+      return "sandbox";
+    default:
+      return "event";
   }
 }
 
@@ -72,8 +78,18 @@ export function eventSection(ev: ActivityEvent): Section {
   const body: string[] = [];
   if (ev.error) body.push(ev.error);
   const sizes: string[] = [];
-  if (ev.requestBytes > 0n) sizes.push("request " + humanBytes(Number(ev.requestBytes)) + (ev.requestRef ? "  " + ev.requestRef : ""));
-  if (ev.responseBytes > 0n) sizes.push("response " + humanBytes(Number(ev.responseBytes)) + (ev.responseRef ? "  " + ev.responseRef : ""));
+  if (ev.requestBytes > 0n)
+    sizes.push(
+      "request " +
+        humanBytes(Number(ev.requestBytes)) +
+        (ev.requestRef ? "  " + ev.requestRef : ""),
+    );
+  if (ev.responseBytes > 0n)
+    sizes.push(
+      "response " +
+        humanBytes(Number(ev.responseBytes)) +
+        (ev.responseRef ? "  " + ev.responseRef : ""),
+    );
   if (sizes.length) body.push(sizes.join("   "));
   if (ev.preview) for (const line of ev.preview.split("\n")) body.push(line);
   if (ev.workspace) body.push("workspace: " + ev.workspace);

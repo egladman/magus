@@ -19,15 +19,23 @@ export interface Tile {
 // Collapsed-card persistence: a set of card ids, stored as a JSON array in a durable
 // cell. Super-basic UI state; a storage-disabled browser degrades to no persistence.
 const collapsedCell = persisted<string[]>("dashboard-collapsed", []);
-function loadCollapsed(): Set<string> { return new Set(collapsedCell.get()); }
-function saveCollapsed(set: Set<string>): void { collapsedCell.set([...set]); }
+function loadCollapsed(): Set<string> {
+  return new Set(collapsedCell.get());
+}
+function saveCollapsed(set: Set<string>): void {
+  collapsedCell.set([...set]);
+}
 
 // A default-collapsed card (a heavy metric family) folds itself on FIRST sight only, so
 // the user's later expand sticks. `seeded` records which ids have had their default
 // applied; once seeded, the collapsed set alone (which the toggle edits) is authoritative.
 const seededCell = persisted<string[]>("dashboard-collapse-seeded", []);
-function loadSeeded(): Set<string> { return new Set(seededCell.get()); }
-function saveSeeded(set: Set<string>): void { seededCell.set([...set]); }
+function loadSeeded(): Set<string> {
+  return new Set(seededCell.get());
+}
+function saveSeeded(set: Set<string>): void {
+  seededCell.set([...set]);
+}
 
 export interface CardOptions {
   // A magus glossary term to deep-link from the heading (linked ONCE per tile).
@@ -132,8 +140,13 @@ export class Card {
     collapse.addEventListener("click", () => {
       const collapsed = section.hasAttribute("data-collapsed");
       const set = loadCollapsed();
-      if (collapsed) { section.removeAttribute("data-collapsed"); set.delete(id); }
-      else { section.dataset.collapsed = ""; set.add(id); }
+      if (collapsed) {
+        section.removeAttribute("data-collapsed");
+        set.delete(id);
+      } else {
+        section.dataset.collapsed = "";
+        set.add(id);
+      }
       collapse.setAttribute("aria-expanded", collapsed ? "true" : "false");
       saveCollapsed(set);
       if (collapsed) opts.onReveal?.();

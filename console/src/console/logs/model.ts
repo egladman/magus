@@ -58,23 +58,34 @@ interface EventGroup {
 // output events are body lines, and the result event sets the status badge/accent in a
 // synthesized head line the existing renderer understands. Reused by the static and live
 // paths, so it must be a pure function of the events seen so far.
-export function buildModelFromEvents(events: Source["events"], invocation: InvocationView): BuiltModel {
+export function buildModelFromEvents(
+  events: Source["events"],
+  invocation: InvocationView,
+): BuiltModel {
   const groups = new Map<string, EventGroup>();
   const order: EventGroup[] = [];
   const preamble: string[] = [];
   const rawLines: string[] = [];
   const cmd = invocation && invocation.command;
   if (cmd && cmd.verb) {
-    preamble.push("$ magus " + cmd.verb + (cmd.args && cmd.args.length ? " " + cmd.args.join(" ") : ""));
+    preamble.push(
+      "$ magus " + cmd.verb + (cmd.args && cmd.args.length ? " " + cmd.args.join(" ") : ""),
+    );
   }
   for (const ev of events) {
     if (ev.kind === Kind.OUTPUT || ev.kind === Kind.EXEC || ev.kind === Kind.RESULT) {
       const key = ev.project + " " + ev.target;
       let g = groups.get(key);
-      if (!g) { g = { project: ev.project, target: ev.target, body: [], result: null }; groups.set(key, g); order.push(g); }
+      if (!g) {
+        g = { project: ev.project, target: ev.target, body: [], result: null };
+        groups.set(key, g);
+        order.push(g);
+      }
       if (ev.kind === Kind.EXEC) g.body.push("$ " + ev.text);
-      else if (ev.kind === Kind.OUTPUT) { g.body.push(ev.text); rawLines.push(ev.text); }
-      else g.result = { status: ev.status, duration: ev.duration, ref: ev.ref };
+      else if (ev.kind === Kind.OUTPUT) {
+        g.body.push(ev.text);
+        rawLines.push(ev.text);
+      } else g.result = { status: ev.status, duration: ev.duration, ref: ev.ref };
     } else if (ev.kind === Kind.WARN) {
       preamble.push("[warn] " + ev.text);
     } else if (ev.kind === Kind.SCOPE && ev.text) {
@@ -89,12 +100,21 @@ export function buildModelFromEvents(events: Source["events"], invocation: Invoc
     // so it need not re-parse them out of the rendered title. "" status (no result yet) reads
     // as "running". Preamble sections have no meta and so never match a target:/status: term.
     const label = (g.project && g.project !== "." ? g.project + ":" : "") + (g.target || "output");
-    sections.push({ title, lines: [title, ...g.body], meta: { label, status: statusName(g.result ? g.result.status : Status.UNSPECIFIED) || "running" } });
+    sections.push({
+      title,
+      lines: [title, ...g.body],
+      meta: {
+        label,
+        status: statusName(g.result ? g.result.status : Status.UNSPECIFIED) || "running",
+      },
+    });
   }
   const titled = sections.filter((s) => s.title !== null).length;
   const summary =
-    order.length + (order.length === 1 ? " target, " : " targets, ") +
-    rawLines.length + (rawLines.length === 1 ? " line" : " lines");
+    order.length +
+    (order.length === 1 ? " target, " : " targets, ") +
+    rawLines.length +
+    (rawLines.length === 1 ? " line" : " lines");
   return { sections, titled, rawLines, summary };
 }
 

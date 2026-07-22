@@ -26,7 +26,11 @@ export interface StandaloneSurface {
 
 // The console owns one shared search box, but these apps carry their own filter controls, so a
 // wrapped surface opts out of the shared box for now (wiring the two is a later refinement).
-const noSearch: SearchProvider<null> = { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) };
+const noSearch: SearchProvider<null> = {
+  placeholder: "",
+  parse: () => null,
+  apply: () => ({ matches: 0 }),
+};
 
 // The shape the factory calls on a dynamically imported app bundle. A streaming surface (the
 // dashboard) also exports setVisible so it can suppress its shared-status-bar writes while its tab is
@@ -50,7 +54,9 @@ export interface ModuleSurface {
 
 // The shape moduleSurface calls on a host-building bundle: activate(host) builds into host and returns
 // an optional teardown run on close.
-interface HostModule { activate(host: HTMLElement): (() => void) | void; }
+interface HostModule {
+  activate(host: HTMLElement): (() => void) | void;
+}
 
 // moduleSurface wraps a page-less surface: the console dynamically imports its bundle by URL (kept
 // lazy, like the others) and calls its exported activate(host). Symmetric with standaloneSurface but
@@ -114,7 +120,8 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
       const res = await fetch(artUrl("scaffold.html"));
       const doc = new DOMParser().parseFromString(await res.text(), "text/html");
       const main = doc.querySelector("main");
-      if (!main) throw new Error(s.id + " scaffold.html missing its <main> (built to gen/" + s.dir + "/)");
+      if (!main)
+        throw new Error(s.id + " scaffold.html missing its <main> (built to gen/" + s.dir + "/)");
       host.append(document.importNode(main, true));
       mod.activate();
       return {
@@ -126,7 +133,10 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
         // via its exported deactivate(), THEN detach its DOM - so closing a tab/pane leaves nothing
         // streaming or ticking in the background. A static surface exports no deactivate; the DOM detach
         // still happens.
-        deactivate() { mod.deactivate?.(); host.replaceChildren(); },
+        deactivate() {
+          mod.deactivate?.();
+          host.replaceChildren();
+        },
       };
     },
   };

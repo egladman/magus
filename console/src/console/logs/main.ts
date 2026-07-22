@@ -1,3 +1,4 @@
+import { must } from "../../lib/must";
 // main.ts - the Log Viewer composition root. A purpose-built, read-only viewer for a magus
 // run's captured output: the #data= fragment carries a magus.viewer.v1 Journal (protobuf,
 // gzip+base64url), decoded here and rendered pretty from its STRUCTURE (per-target groups, exec
@@ -20,8 +21,18 @@ import { initRunBrowser, fetchRunOutput, type RunSummary } from "./runtree";
 import { decodeFragmentBytes, viewerParams } from "./fragment";
 import { state, waterfallSource } from "./state";
 import {
-  bodyEl, copyToClipboard, el, emptyEl, flipToggleGroup, panelEl, resolveDom, scrollEl,
-  setBtnLabel, setRefIdentity, setStatus, setToggleGroup,
+  bodyEl,
+  copyToClipboard,
+  el,
+  emptyEl,
+  flipToggleGroup,
+  panelEl,
+  resolveDom,
+  scrollEl,
+  setBtnLabel,
+  setRefIdentity,
+  setStatus,
+  setToggleGroup,
 } from "./dom";
 import { stripAnsi } from "../render/ansi";
 import { buildModel, buildModelMulti } from "./model";
@@ -66,14 +77,21 @@ function wireRunBrowser(): void {
     token,
     demo,
     nowMs: Date.now(),
-    onOpenRun: (run) => { void openRun(run, demo, host, token); },
+    onOpenRun: (run) => {
+      void openRun(run, demo, host, token);
+    },
   });
 }
 
 // openRun loads one browsed run's captured output into the viewer. A demo run (or demo mode) renders a
 // synthetic sample so the showcase is self-contained; a real run fetches its verbatim bytes from the
 // daemon. Either way it flows through loadText, so the viewer renders it exactly like a pasted log.
-async function openRun(run: RunSummary, demo: boolean, host: string, token: string | null): Promise<void> {
+async function openRun(
+  run: RunSummary,
+  demo: boolean,
+  host: string,
+  token: string | null,
+): Promise<void> {
   // A browsed run takes over the viewer, so end any in-progress #demo stream first - otherwise its
   // interval keeps re-rendering the showcase waterfall over the run we just loaded. Drop back to the
   // log view too: a stored run is verbatim text (no per-step timing to plot), so the timeline the demo
@@ -102,14 +120,38 @@ function demoRunText(run: RunSummary): string {
   const t = run.target.split(":")[0];
   const head = "$ magus run " + t + " " + run.project + "\n";
   if (run.failed) {
-    return head +
-      "==> " + run.project + ":" + t + "\n" +
+    return (
+      head +
+      "==> " +
+      run.project +
+      ":" +
+      t +
+      "\n" +
       (run.error ? run.error + "\n" : "one or more checks failed\n") +
-      "FAIL " + run.project + ":" + t + " (" + Math.round(run.duration_ms) + "ms)\n";
+      "FAIL " +
+      run.project +
+      ":" +
+      t +
+      " (" +
+      Math.round(run.duration_ms) +
+      "ms)\n"
+    );
   }
-  return head +
-    "==> " + run.project + ":" + t + "\n" +
-    "ok  " + run.project + ":" + t + " (" + Math.round(run.duration_ms) + "ms)\n";
+  return (
+    head +
+    "==> " +
+    run.project +
+    ":" +
+    t +
+    "\n" +
+    "ok  " +
+    run.project +
+    ":" +
+    t +
+    " (" +
+    Math.round(run.duration_ms) +
+    "ms)\n"
+  );
 }
 
 // --- Zoom -------------------------------------------------------------------
@@ -164,7 +206,11 @@ function wireZoom(): void {
     ctl.className = "console-log-zoom console-shell-statusbar__item";
     ctl.setAttribute("role", "group");
     ctl.setAttribute("aria-label", "Zoom");
-    ctl.append(zoomSeg("out", "-", "Zoom out"), zoomSeg("reset", "100%", "Reset zoom"), zoomSeg("in", "+", "Zoom in"));
+    ctl.append(
+      zoomSeg("out", "-", "Zoom out"),
+      zoomSeg("reset", "100%", "Reset zoom"),
+      zoomSeg("in", "+", "Zoom in"),
+    );
     // Buttons fire click on Enter/Space natively, so a delegated click handler is all we need.
     ctl.addEventListener("click", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-zoom]") as HTMLElement | null;
@@ -176,9 +222,24 @@ function wireZoom(): void {
     });
     right.prepend(ctl);
   }
-  registerCommand({ id: "logs.zoomIn", label: "Zoom in", group: "Log Viewer", run: () => setZoom(zoomCell.get() + ZOOM_STEP) });
-  registerCommand({ id: "logs.zoomOut", label: "Zoom out", group: "Log Viewer", run: () => setZoom(zoomCell.get() - ZOOM_STEP) });
-  registerCommand({ id: "logs.zoomReset", label: "Reset zoom", group: "Log Viewer", run: () => setZoom(1) });
+  registerCommand({
+    id: "logs.zoomIn",
+    label: "Zoom in",
+    group: "Log Viewer",
+    run: () => setZoom(zoomCell.get() + ZOOM_STEP),
+  });
+  registerCommand({
+    id: "logs.zoomOut",
+    label: "Zoom out",
+    group: "Log Viewer",
+    run: () => setZoom(zoomCell.get() - ZOOM_STEP),
+  });
+  registerCommand({
+    id: "logs.zoomReset",
+    label: "Reset zoom",
+    group: "Log Viewer",
+    run: () => setZoom(1),
+  });
   applyZoom();
 }
 
@@ -190,13 +251,13 @@ function wireZoom(): void {
 // keyboard-driven reader, like less/gh) and deliberately avoiding browser-owned combos
 // (mod+r reload, mod+t/mod+shift+t tab). A user override lives in the shared persisted keymap.
 const LOGS_KEYMAP: Keymap = {
-  "logs.filter": "/",     // focus the filter box
-  "logs.raw": "r",        // toggle raw / pretty
-  "logs.timeline": "t",   // toggle timeline / log
-  "logs.fold": "f",       // collapse / expand all
-  "logs.zoomIn": "=",     // enlarge the view (text bigger / waterfall magnified)
-  "logs.zoomOut": "-",    // shrink the view
-  "logs.zoomReset": "0",  // back to 100%
+  "logs.filter": "/", // focus the filter box
+  "logs.raw": "r", // toggle raw / pretty
+  "logs.timeline": "t", // toggle timeline / log
+  "logs.fold": "f", // collapse / expand all
+  "logs.zoomIn": "=", // enlarge the view (text bigger / waterfall magnified)
+  "logs.zoomOut": "-", // shrink the view
+  "logs.zoomReset": "0", // back to 100%
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 
@@ -208,10 +269,33 @@ function clickControl(id: string): void {
 }
 
 function wireCommands(): void {
-  registerCommand({ id: "logs.filter", label: "Focus filter", group: "Log Viewer", run: () => { const f = el("log-filter") || el("log-search"); if (f) f.focus(); } });
-  registerCommand({ id: "logs.raw", label: "Toggle raw / pretty", group: "Log Viewer", run: () => flipToggleGroup("view-mode") });
-  registerCommand({ id: "logs.timeline", label: "Toggle timeline / log", group: "Log Viewer", run: () => flipToggleGroup("timeline-mode") });
-  registerCommand({ id: "logs.fold", label: "Collapse / expand all", group: "Log Viewer", run: () => clickControl("fold-all-btn") });
+  registerCommand({
+    id: "logs.filter",
+    label: "Focus filter",
+    group: "Log Viewer",
+    run: () => {
+      const f = el("log-filter") || el("log-search");
+      if (f) f.focus();
+    },
+  });
+  registerCommand({
+    id: "logs.raw",
+    label: "Toggle raw / pretty",
+    group: "Log Viewer",
+    run: () => flipToggleGroup("view-mode"),
+  });
+  registerCommand({
+    id: "logs.timeline",
+    label: "Toggle timeline / log",
+    group: "Log Viewer",
+    run: () => flipToggleGroup("timeline-mode"),
+  });
+  registerCommand({
+    id: "logs.fold",
+    label: "Collapse / expand all",
+    group: "Log Viewer",
+    run: () => clickControl("fold-all-btn"),
+  });
   installKeybindings(() => mergeKeymap(LOGS_KEYMAP, keymapCell.get()));
 }
 
@@ -310,7 +394,9 @@ function finishLoad(ref: string, statusMsg: string): void {
   render();
   setStatus(statusMsg);
   const foldBtn = el("fold-all-btn");
-  if (foldBtn) (foldBtn as HTMLButtonElement).disabled = state.timeline || state.model!.titled === 0 || !state.pretty;
+  if (foldBtn)
+    (foldBtn as HTMLButtonElement).disabled =
+      state.timeline || must(state.model).titled === 0 || !state.pretty;
   const copyBtn = el("copy-all-btn");
   if (copyBtn) (copyBtn as HTMLButtonElement).disabled = false;
   const cmdBtn = el("copy-cmd-btn");
@@ -385,7 +471,8 @@ function wireControls(): void {
   };
   const syncFold = (): void => {
     const fold = el("fold-all-btn");
-    if (fold) fold.hidden = state.timeline || !state.model || state.model.titled === 0 || !state.pretty;
+    if (fold)
+      fold.hidden = state.timeline || !state.model || state.model.titled === 0 || !state.pretty;
   };
 
   // Pretty <-> raw. Raw shows the exact captured text (flat, no folds/badges); pretty is the
@@ -393,7 +480,9 @@ function wireControls(): void {
   const viewGroup = el("view-mode");
   if (viewGroup) {
     viewGroup.addEventListener("click", (ev) => {
-      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(".pf-v6-c-toggle-group__button");
+      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+        ".pf-v6-c-toggle-group__button",
+      );
       if (!btn || btn.disabled) return;
       const raw = btn.dataset.mode === "raw";
       if (state.pretty === !raw) return; // already selected
@@ -410,7 +499,9 @@ function wireControls(): void {
   const timelineGroup = el("timeline-mode");
   if (timelineGroup) {
     timelineGroup.addEventListener("click", (ev) => {
-      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(".pf-v6-c-toggle-group__button");
+      const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+        ".pf-v6-c-toggle-group__button",
+      );
       if (!btn || btn.disabled) return;
       const timeline = btn.dataset.mode === "timeline";
       if (state.timeline === timeline) return;
@@ -445,7 +536,10 @@ function wireControls(): void {
       t = setTimeout(() => runSearch((searchEl as HTMLInputElement).value.trim()), 120);
     });
     searchEl.addEventListener("keydown", (ev) => {
-      if ((ev as KeyboardEvent).key === "Enter") { ev.preventDefault(); stepActiveMark((ev as KeyboardEvent).shiftKey ? -1 : 1); }
+      if ((ev as KeyboardEvent).key === "Enter") {
+        ev.preventDefault();
+        stepActiveMark((ev as KeyboardEvent).shiftKey ? -1 : 1);
+      }
     });
   }
   // Filter syntax help: the "?" trigger's title= is a tooltip only (invisible on touch, no click
@@ -464,13 +558,18 @@ function wireControls(): void {
     });
     // Escape clears the filter (and the #q= fragment) for a quick reset.
     filterEl.addEventListener("keydown", (ev) => {
-      if ((ev as KeyboardEvent).key === "Escape") { ev.preventDefault(); (filterEl as HTMLInputElement).value = ""; applyFilterFromInput(""); }
+      if ((ev as KeyboardEvent).key === "Escape") {
+        ev.preventDefault();
+        (filterEl as HTMLInputElement).value = "";
+        applyFilterFromInput("");
+      }
     });
   }
 
   // Time range: the wall-clock preset picker and the brushed-window reset.
   const timeSel = el("time-range");
-  if (timeSel) timeSel.addEventListener("change", () => applyTimeRange((timeSel as HTMLSelectElement).value));
+  if (timeSel)
+    timeSel.addEventListener("change", () => applyTimeRange((timeSel as HTMLSelectElement).value));
   const focusResetBtn = el("console-log-focus__reset");
   if (focusResetBtn) focusResetBtn.addEventListener("click", clearFocus);
 
@@ -495,7 +594,10 @@ function wireControls(): void {
 function wireFullscreen(): void {
   const btn = el("fullscreen-btn");
   const panel = panelEl;
-  if (!btn || !panel || !panel.requestFullscreen) { if (btn) (btn as HTMLButtonElement).disabled = true; return; }
+  if (!btn || !panel || !panel.requestFullscreen) {
+    if (btn) (btn as HTMLButtonElement).disabled = true;
+    return;
+  }
   btn.addEventListener("click", () => {
     if (document.fullscreenElement) document.exitFullscreen();
     else panel.requestFullscreen();
@@ -513,7 +615,10 @@ function wireFullscreen(): void {
 function wireInput(): void {
   const panel = panelEl;
   if (panel) {
-    panel.addEventListener("dragover", (ev) => { ev.preventDefault(); panel.setAttribute("data-drag-over", ""); });
+    panel.addEventListener("dragover", (ev) => {
+      ev.preventDefault();
+      panel.setAttribute("data-drag-over", "");
+    });
     panel.addEventListener("dragleave", () => panel.removeAttribute("data-drag-over"));
     panel.addEventListener("drop", (ev) => {
       ev.preventDefault();
@@ -537,7 +642,10 @@ export function activate(): void {
 // connection open. Static logs (the common case) never open a stream, so this is a no-op then. The
 // console's logs PageModule calls it on deactivate; the standalone page does not.
 export function deactivate(): void {
-  if (state.liveAbort) { state.liveAbort.abort(); state.liveAbort = null; }
+  if (state.liveAbort) {
+    state.liveAbort.abort();
+    state.liveAbort = null;
+  }
 }
 
 // Standalone auto-boot: only when the scaffold is already in the document at load. In the console the

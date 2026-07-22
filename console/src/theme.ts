@@ -24,9 +24,11 @@
   // pre-paint from <head> so there is no radius flash. iPadOS reports as "MacIntel"; the Mac match
   // covers it.
   try {
-    const plat = (navigator.platform || navigator.userAgent || "");
+    const plat = navigator.platform || navigator.userAgent || "";
     if (/Mac|iPhone|iPad|iPod/i.test(plat)) root.setAttribute("data-platform", "apple");
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    /* ignore */
+  }
 
   function get(): Theme {
     try {
@@ -61,8 +63,10 @@
   // it). "auto" follows the OS via prefers-color-scheme (see the matchMedia listener below, which
   // re-applies on OS change while in auto); the early set() runs from <head> before paint, so a fresh
   // load in OS-dark applies the class with no flash. Verified light + dark + the auto/light/dark cycle.
-  const darkMql = typeof window !== "undefined" && window.matchMedia
-    ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  const darkMql =
+    typeof window !== "undefined" && window.matchMedia
+      ? window.matchMedia("(prefers-color-scheme: dark)")
+      : null;
   function applyPfTheme(t: Theme): void {
     const dark = t === "dark" || (t === "auto" && !!darkMql && darkMql.matches);
     root.classList.toggle("pf-v6-theme-dark", dark);
@@ -76,10 +80,18 @@
   function set(t: Theme): void {
     if (t === "auto") {
       root.removeAttribute("data-theme");
-      try { localStorage.removeItem("theme"); } catch (e) { /* ignore */ }
+      try {
+        localStorage.removeItem("theme");
+      } catch (e) {
+        /* ignore */
+      }
     } else {
       root.setAttribute("data-theme", t);
-      try { localStorage.setItem("theme", t); } catch (e) { /* ignore */ }
+      try {
+        localStorage.setItem("theme", t);
+      } catch (e) {
+        /* ignore */
+      }
     }
     applyPfTheme(t);
     updateThemeColorMeta(t);
@@ -89,7 +101,9 @@
 
   // While in auto, follow live OS theme flips so the PatternFly dark class tracks prefers-color-scheme.
   if (darkMql) {
-    const onOsChange = (): void => { if (get() === "auto") applyPfTheme("auto"); };
+    const onOsChange = (): void => {
+      if (get() === "auto") applyPfTheme("auto");
+    };
     if (darkMql.addEventListener) darkMql.addEventListener("change", onOsChange);
     else if (darkMql.addListener) darkMql.addListener(onOsChange); // older Safari
   }
@@ -106,7 +120,9 @@
       try {
         if (t === "auto") localStorage.removeItem("theme");
         else localStorage.setItem("theme", t);
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     } else {
       set(t);
     }

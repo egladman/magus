@@ -1,3 +1,4 @@
+import { must } from "../lib/must";
 // cheatsheet.ts - a read-only keyboard cheat sheet: a centered card listing every command and its
 // current chord, grouped by area. It reads the live command list + merged keymap, so it always shows
 // the effective bindings. Open it by holding "?" (Shift+/) or the footer button; dismiss with the X,
@@ -25,7 +26,9 @@ export interface Cheatsheet {
 // isTyping mirrors commands.ts's guard: never hijack "?" while the operator is typing it into a field.
 function isTyping(node: EventTarget | null): boolean {
   const t = (node && (node as HTMLElement).tagName) || "";
-  return t === "INPUT" || t === "TEXTAREA" || (node !== null && (node as HTMLElement).isContentEditable);
+  return (
+    t === "INPUT" || t === "TEXTAREA" || (node !== null && (node as HTMLElement).isContentEditable)
+  );
 }
 
 // createCheatsheet builds the overlay once (the console appends el) and owns its hold-to-reveal key
@@ -53,7 +56,11 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
   closeBtn.addEventListener("click", () => hide());
   const body = h("div", "pf-v6-c-modal-box__body console-cheatsheet-box__body");
-  const foot = h("p", "console-cheatsheet-box__hint", "Press Esc or click outside to dismiss. Open the action bar to rebind.");
+  const foot = h(
+    "p",
+    "console-cheatsheet-box__hint",
+    "Press Esc or click outside to dismiss. Open the action bar to rebind.",
+  );
   box.append(head, closeBtn, body, foot);
   bullseye.append(box);
   overlay.append(bullseye);
@@ -63,7 +70,9 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   // for the trailing "click" event, so that click lands on the now-exposed toggle button underneath
   // and immediately reopens it (flash-and-stay-open). "click" fires only after the full gesture,
   // while the backdrop is still on top, so the toggle button never sees the event.
-  overlay.addEventListener("click", (ev) => { if (!box.contains(ev.target as Node)) hide(); });
+  overlay.addEventListener("click", (ev) => {
+    if (!box.contains(ev.target as Node)) hide();
+  });
 
   // render paints the grouped rows from the current commands + effective keymap. Commands with no
   // (effective) chord are omitted - this is a keybinding sheet, not a command list. Groups keep
@@ -77,7 +86,7 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
       if (chord === "") continue;
       const group = cmd.group || "General";
       if (!groups.has(group)) groups.set(group, []);
-      groups.get(group)!.push({ label: cmd.label, chord });
+      must(groups.get(group)).push({ label: cmd.label, chord });
     }
     if (groups.size === 0) {
       body.append(h("p", "console-cheatsheet-box__empty", "No keyboard shortcuts are bound."));
@@ -123,20 +132,37 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   // when it fires, the sheet appears. Any keyup of the chord's keys - "?", "/", or Shift - or a
   // window blur, cancels the timer and hides. Escape hides too.
   let timer: number | null = null;
-  const clearTimer = (): void => { if (timer !== null) { clearTimeout(timer); timer = null; } };
+  const clearTimer = (): void => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
 
   document.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape" && open) { hide(); return; }
+    if (e.key === "Escape" && open) {
+      hide();
+      return;
+    }
     if (e.key !== "?" || e.repeat) return;
     if (isTyping(e.target)) return;
     if (open || timer !== null) return;
     e.preventDefault();
-    timer = window.setTimeout(() => { timer = null; show(); }, HOLD_MS);
+    timer = window.setTimeout(() => {
+      timer = null;
+      show();
+    }, HOLD_MS);
   });
   document.addEventListener("keyup", (e: KeyboardEvent) => {
-    if (e.key === "?" || e.key === "/" || e.key === "Shift") { clearTimer(); hide(); }
+    if (e.key === "?" || e.key === "/" || e.key === "Shift") {
+      clearTimer();
+      hide();
+    }
   });
-  window.addEventListener("blur", () => { clearTimer(); hide(); });
+  window.addEventListener("blur", () => {
+    clearTimer();
+    hide();
+  });
 
   return { el: overlay, show, hide, toggle };
 }

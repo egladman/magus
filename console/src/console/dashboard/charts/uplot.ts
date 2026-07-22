@@ -16,10 +16,14 @@ export function cssVar(name: string, fallback = "#888"): string {
 // actual resolved CSS-variable colors so a no-op mutation doesn't churn. Returns an
 // unsubscribe. Each chart tile uses this to recolor itself; nothing global.
 export function onThemeChange(cb: () => void): () => void {
-  const sig = () => [
-    cssVar("--pf-t--global--text--color--regular"), cssVar("--console-chart-axis"),
-    cssVar("--console-status-running"), cssVar("--console-status-ok"), cssVar("--console-status-warn"),
-  ].join("|");
+  const sig = () =>
+    [
+      cssVar("--pf-t--global--text--color--regular"),
+      cssVar("--console-chart-axis"),
+      cssVar("--console-status-running"),
+      cssVar("--console-status-ok"),
+      cssVar("--console-status-warn"),
+    ].join("|");
   let last = sig();
   const check = (): void => {
     const s = sig();
@@ -31,7 +35,10 @@ export function onThemeChange(cb: () => void): () => void {
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   const mm = matchMedia("(prefers-color-scheme: dark)");
   mm.addEventListener("change", check);
-  return () => { mo.disconnect(); mm.removeEventListener("change", check); };
+  return () => {
+    mo.disconnect();
+    mm.removeEventListener("change", check);
+  };
 }
 
 const CHART_HEIGHT = 132;
@@ -45,7 +52,12 @@ function axisBase(): uPlot.Axis {
   };
 }
 
-export interface SeriesSpec { label: string; colorVar: string; fillVar?: string; width?: number; }
+export interface SeriesSpec {
+  label: string;
+  colorVar: string;
+  fillVar?: string;
+  width?: number;
+}
 
 export interface ChartSpec {
   series: SeriesSpec[];
@@ -89,7 +101,10 @@ export class TimeChart {
       height: CHART_HEIGHT,
       legend: { show: false },
       cursor: { points: { size: 5 }, focus: { prox: 16 } },
-      scales: { x: { time: true }, ...(this.spec.yRange ? { y: { range: this.spec.yRange } } : {}) },
+      scales: {
+        x: { time: true },
+        ...(this.spec.yRange ? { y: { range: this.spec.yRange } } : {}),
+      },
       axes: [axisBase(), yAxis],
       series: [
         {},
@@ -125,6 +140,9 @@ export class TimeChart {
   }
 
   destroy(): void {
-    if (this.chart) { this.chart.destroy(); this.chart = null; }
+    if (this.chart) {
+      this.chart.destroy();
+      this.chart = null;
+    }
   }
 }

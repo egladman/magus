@@ -6,17 +6,29 @@
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
-  Health, TargetRun_State, type Status, type Pool, type Run, type TargetRun,
+  Health,
+  TargetRun_State,
+  type Status,
+  type Pool,
+  type Run,
+  type TargetRun,
 } from "../../gen/magus/status/v1/status_pb";
 import type {
-  Snapshot, Latency, Remote, TargetStat, MCPToolStat, Buzz, Sandbox, Sample as ProtoSample,
+  Snapshot,
+  Latency,
+  Remote,
+  TargetStat,
+  MCPToolStat,
+  Buzz,
+  Sandbox,
+  Sample as ProtoSample,
 } from "../../gen/magus/metrics/v1/metrics_pb";
 import type { ConnState } from "../../lib/daemon";
 
 // ---- formatters ------------------------------------------------------------
 
 export function fmtArgs(args: string[] | undefined): string {
-  return (args && args.length) ? "magus " + args.join(" ") : "magus";
+  return args && args.length ? "magus " + args.join(" ") : "magus";
 }
 
 export function fmtBytes(n: number | bigint): string {
@@ -24,7 +36,10 @@ export function fmtBytes(n: number | bigint): string {
   if (v <= 0) return "-";
   const u = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
-  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024;
+    i++;
+  }
   return (v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)) + " " + u[i];
 }
 
@@ -84,13 +99,50 @@ const HEALTH: Record<number, { label: string; cls: string }> = {
   [Health.UNSPECIFIED]: { label: "unknown", cls: "" },
 };
 
-export interface HealthView { label: string; cls: string; }
-export interface PoolView { capacity: number; running: number; queued: number; mode: string; }
-export interface CacheView { hits: number; misses: number; errors: number; hitRate: number | null; sizeBytes: number | bigint; }
-export interface RunningTargetView { args: string[]; step: string; startTime?: Timestamp; invocation: string; }
-export interface WorkspaceView { root: string; hits?: number; misses?: number; errors?: number; lastAccessTime?: Timestamp; }
-export interface ServiceView { id: string; label: string; command: string; ports: string[]; state: string; dependents: number; startedAt?: Timestamp; }
-export interface ConfigView { defaultCharms: string[]; concurrency: number; sandbox: boolean; }
+export interface HealthView {
+  label: string;
+  cls: string;
+}
+export interface PoolView {
+  capacity: number;
+  running: number;
+  queued: number;
+  mode: string;
+}
+export interface CacheView {
+  hits: number;
+  misses: number;
+  errors: number;
+  hitRate: number | null;
+  sizeBytes: number | bigint;
+}
+export interface RunningTargetView {
+  args: string[];
+  step: string;
+  startTime?: Timestamp;
+  invocation: string;
+}
+export interface WorkspaceView {
+  root: string;
+  hits?: number;
+  misses?: number;
+  errors?: number;
+  lastAccessTime?: Timestamp;
+}
+export interface ServiceView {
+  id: string;
+  label: string;
+  command: string;
+  ports: string[];
+  state: string;
+  dependents: number;
+  startedAt?: Timestamp;
+}
+export interface ConfigView {
+  defaultCharms: string[];
+  concurrency: number;
+  sandbox: boolean;
+}
 
 // A target's lifecycle state, as plain view-model strings that double as the gantt
 // tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
@@ -104,9 +156,9 @@ export type TargetState = "unspecified" | "queued" | "running" | "passed" | "fai
 export interface TargetRunView {
   project: string;
   target: string;
-  label: string;             // "project:target" (or just the target when project is empty)
+  label: string; // "project:target" (or just the target when project is empty)
   state: TargetState;
-  terminal: boolean;         // passed | failed | cached
+  terminal: boolean; // passed | failed | cached
   startMs: number | null;
   endMs: number | null;
   outputRef: string;
@@ -131,7 +183,7 @@ export interface StatusView {
   // Shared services the daemon is hosting right now (deduped across the whole daemon, kept warm
   // between runs). Empty when none are held.
   services: ServiceView[];
-  magusVersion: string;      // the daemon binary's version (status BuildInfo.version)
+  magusVersion: string; // the daemon binary's version (status BuildInfo.version)
   daemonVersion: string;
 }
 
@@ -149,7 +201,7 @@ function mapTargetRun(t: TargetRun): TargetRunView {
   return {
     project: t.project || "",
     target: t.target || "",
-    label: t.project ? t.project + ":" + t.target : (t.target || ""),
+    label: t.project ? t.project + ":" + t.target : t.target || "",
     state,
     terminal: state === "passed" || state === "failed" || state === "cached",
     startMs: t.startedAt ? tsMillis(t.startedAt) : null,
@@ -172,7 +224,13 @@ function mapCache(cache: Pool["cache"] | undefined): CacheView {
   const misses = cache ? Number(cache.misses) : 0;
   const errors = cache ? Number(cache.errors) : 0;
   const total = hits + misses;
-  return { hits, misses, errors, hitRate: total > 0 ? hits / total : null, sizeBytes: cache ? cache.sizeBytes : 0 };
+  return {
+    hits,
+    misses,
+    errors,
+    hitRate: total > 0 ? hits / total : null,
+    sizeBytes: cache ? cache.sizeBytes : 0,
+  };
 }
 
 export function mapStatus(st: Status): StatusView {
@@ -187,7 +245,10 @@ export function mapStatus(st: Status): StatusView {
     },
     cache: mapCache(pool && pool.cache),
     runningTargets: ((pool && pool.runningTargets) || []).map((c) => ({
-      args: c.args || [], step: c.step || "", startTime: c.startTime, invocation: c.invocation || "",
+      args: c.args || [],
+      step: c.step || "",
+      startTime: c.startTime,
+      invocation: c.invocation || "",
     })),
     runs: (st.runs || []).map(mapRun),
     workspaces: ((pool && pool.workspaces) || []).map((w) => ({
@@ -198,8 +259,12 @@ export function mapStatus(st: Status): StatusView {
       lastAccessTime: w.lastAccessTime,
     })),
     services: (st.services || []).map((sv) => ({
-      id: sv.id || "", label: sv.label || "", command: sv.command || "",
-      ports: sv.port || [], state: sv.state || "", dependents: sv.dependents || 0,
+      id: sv.id || "",
+      label: sv.label || "",
+      command: sv.command || "",
+      ports: sv.port || [],
+      state: sv.state || "",
+      dependents: sv.dependents || 0,
       startedAt: sv.startedAt,
     })),
     magusVersion: st.build?.version || "",
@@ -209,10 +274,16 @@ export function mapStatus(st: Status): StatusView {
 
 // ---- metrics view-model (ConnectRPC Snapshot) ------------------------------
 
-export interface LatView { count: number; p50: number; p95: number; p99: number; max: number; }
+export interface LatView {
+  count: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+}
 
 export const LAT_KEYS = ["target", "cache", "poolWait", "graphQuery"] as const;
-export type LatKey = typeof LAT_KEYS[number];
+export type LatKey = (typeof LAT_KEYS)[number];
 export const LAT_META: Record<LatKey, { label: string; term: string }> = {
   // The wire field is "cache" (renamed from the old "cacheOp": "op" collides with the
   // Operation glossary term, and the family measures a Cache.Run, not a resolved op).
@@ -228,87 +299,167 @@ function mapLat(l: Latency | undefined): LatView | null {
 }
 
 export interface RemoteView {
-  hits: number; misses: number; errors: number; hitRate: number | null;
-  durationP50: number; durationP95: number; ioCount: number; bytesTotal: number | bigint;
+  hits: number;
+  misses: number;
+  errors: number;
+  hitRate: number | null;
+  durationP50: number;
+  durationP95: number;
+  ioCount: number;
+  bytesTotal: number | bigint;
 }
 
 function mapRemote(r: Remote | undefined): RemoteView | null {
   if (!r) return null;
-  const hits = Number(r.hits), misses = Number(r.misses);
+  const hits = Number(r.hits),
+    misses = Number(r.misses);
   const total = hits + misses;
   return {
-    hits, misses, errors: Number(r.errors), hitRate: total > 0 ? hits / total : null,
-    durationP50: r.durationP50, durationP95: r.durationP95, ioCount: Number(r.ioCount), bytesTotal: r.bytesTotal,
+    hits,
+    misses,
+    errors: Number(r.errors),
+    hitRate: total > 0 ? hits / total : null,
+    durationP50: r.durationP50,
+    durationP95: r.durationP95,
+    ioCount: Number(r.ioCount),
+    bytesTotal: r.bytesTotal,
   };
 }
 
 export interface TargetStatView {
-  project: string; target: string; spell: string; count: number;
-  p50: number; p95: number; p99: number; cacheHitRate: number; success: number; errors: number;
+  project: string;
+  target: string;
+  spell: string;
+  count: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  cacheHitRate: number;
+  success: number;
+  errors: number;
 }
 
 function mapTargetStat(t: TargetStat): TargetStatView {
   return {
-    project: t.project, target: t.target, spell: t.spell, count: Number(t.count),
-    p50: t.p50, p95: t.p95, p99: t.p99, cacheHitRate: t.cacheHitRate,
-    success: Number(t.success), errors: Number(t.errors),
+    project: t.project,
+    target: t.target,
+    spell: t.spell,
+    count: Number(t.count),
+    p50: t.p50,
+    p95: t.p95,
+    p99: t.p99,
+    cacheHitRate: t.cacheHitRate,
+    success: Number(t.success),
+    errors: Number(t.errors),
   };
 }
 
 export interface McpToolView {
-  tool: string; calls: number; errors: number;
-  inputP50: number; inputP95: number; inputTotal: number | bigint;
-  outputP50: number; outputP95: number; outputTotal: number | bigint;
-  durationP50: number; durationP95: number;
+  tool: string;
+  calls: number;
+  errors: number;
+  inputP50: number;
+  inputP95: number;
+  inputTotal: number | bigint;
+  outputP50: number;
+  outputP95: number;
+  outputTotal: number | bigint;
+  durationP50: number;
+  durationP95: number;
 }
 
 function mapMcpTool(m: MCPToolStat): McpToolView {
   return {
-    tool: m.tool, calls: Number(m.calls), errors: Number(m.errors),
-    inputP50: m.inputP50, inputP95: m.inputP95, inputTotal: m.inputTotal,
-    outputP50: m.outputP50, outputP95: m.outputP95, outputTotal: m.outputTotal,
-    durationP50: m.durationP50, durationP95: m.durationP95,
+    tool: m.tool,
+    calls: Number(m.calls),
+    errors: Number(m.errors),
+    inputP50: m.inputP50,
+    inputP95: m.inputP95,
+    inputTotal: m.inputTotal,
+    outputP50: m.outputP50,
+    outputP95: m.outputP95,
+    outputTotal: m.outputTotal,
+    durationP50: m.durationP50,
+    durationP95: m.durationP95,
   };
 }
 
 export interface BuzzView {
-  execCount: number; execP50: number; execP95: number;
-  compileCount: number; compileP50: number; compileP95: number;
-  hostCallCount: number; hostCallP50: number; hostCallP95: number;
-  sessionPoolReuse: number; sessionPoolIdle: number; sessionPoolEvictions: number;
-  sessionWarmP50: number; sessionWarmP95: number;
-  importCount: number; importP50: number; importP95: number;
-  spellResolveCount: number; spellResolveP50: number; spellResolveP95: number;
-  jitRuns: number; vmFaults: number;
+  execCount: number;
+  execP50: number;
+  execP95: number;
+  compileCount: number;
+  compileP50: number;
+  compileP95: number;
+  hostCallCount: number;
+  hostCallP50: number;
+  hostCallP95: number;
+  sessionPoolReuse: number;
+  sessionPoolIdle: number;
+  sessionPoolEvictions: number;
+  sessionWarmP50: number;
+  sessionWarmP95: number;
+  importCount: number;
+  importP50: number;
+  importP95: number;
+  spellResolveCount: number;
+  spellResolveP50: number;
+  spellResolveP95: number;
+  jitRuns: number;
+  vmFaults: number;
 }
 
 function mapBuzz(b: Buzz | undefined): BuzzView | null {
   if (!b) return null;
   return {
-    execCount: Number(b.execCount), execP50: b.execP50, execP95: b.execP95,
-    compileCount: Number(b.compileCount), compileP50: b.compileP50, compileP95: b.compileP95,
-    hostCallCount: Number(b.hostCallCount), hostCallP50: b.hostCallP50, hostCallP95: b.hostCallP95,
-    sessionPoolReuse: Number(b.sessionPoolReuse), sessionPoolIdle: Number(b.sessionPoolIdle),
+    execCount: Number(b.execCount),
+    execP50: b.execP50,
+    execP95: b.execP95,
+    compileCount: Number(b.compileCount),
+    compileP50: b.compileP50,
+    compileP95: b.compileP95,
+    hostCallCount: Number(b.hostCallCount),
+    hostCallP50: b.hostCallP50,
+    hostCallP95: b.hostCallP95,
+    sessionPoolReuse: Number(b.sessionPoolReuse),
+    sessionPoolIdle: Number(b.sessionPoolIdle),
     sessionPoolEvictions: Number(b.sessionPoolEvictions),
-    sessionWarmP50: b.sessionWarmP50, sessionWarmP95: b.sessionWarmP95,
-    importCount: Number(b.importCount), importP50: b.importP50, importP95: b.importP95,
-    spellResolveCount: Number(b.spellResolveCount), spellResolveP50: b.spellResolveP50, spellResolveP95: b.spellResolveP95,
-    jitRuns: Number(b.jitRuns), vmFaults: Number(b.vmFaults),
+    sessionWarmP50: b.sessionWarmP50,
+    sessionWarmP95: b.sessionWarmP95,
+    importCount: Number(b.importCount),
+    importP50: b.importP50,
+    importP95: b.importP95,
+    spellResolveCount: Number(b.spellResolveCount),
+    spellResolveP50: b.spellResolveP50,
+    spellResolveP95: b.spellResolveP95,
+    jitRuns: Number(b.jitRuns),
+    vmFaults: Number(b.vmFaults),
   };
 }
 
 export interface SandboxView {
-  applyP50: number; applyP95: number;
-  rulesRead: number; rulesWrite: number; rulesExec: number; envRules: number;
-  checksAllow: number; checksDeny: number; envDropped: number;
+  applyP50: number;
+  applyP95: number;
+  rulesRead: number;
+  rulesWrite: number;
+  rulesExec: number;
+  envRules: number;
+  checksAllow: number;
+  checksDeny: number;
+  envDropped: number;
 }
 
 function mapSandbox(s: Sandbox | undefined): SandboxView | null {
   if (!s) return null;
   return {
-    applyP50: s.applyP50, applyP95: s.applyP95,
-    rulesRead: Number(s.rulesRead), rulesWrite: Number(s.rulesWrite), rulesExec: Number(s.rulesExec),
-    envRules: Number(s.envRules), checksAllow: Number(s.checksAllow), checksDeny: Number(s.checksDeny),
+    applyP50: s.applyP50,
+    applyP95: s.applyP95,
+    rulesRead: Number(s.rulesRead),
+    rulesWrite: Number(s.rulesWrite),
+    rulesExec: Number(s.rulesExec),
+    envRules: Number(s.envRules),
+    checksAllow: Number(s.checksAllow),
+    checksDeny: Number(s.checksDeny),
     envDropped: Number(s.envDropped),
   };
 }
@@ -356,9 +507,9 @@ export function mapSnapshot(snap: Snapshot): MetricsView {
 export type CacheSrc = "metrics" | "status";
 
 export interface SampleView {
-  at: number;        // ms
+  at: number; // ms
   running: number;
-  capacity: number;  // 0 = unlimited
+  capacity: number; // 0 = unlimited
   queued: number;
   cacheHits: number;
   cacheMisses: number;
@@ -393,16 +544,66 @@ export function fmtDateStr(iso: string | undefined): string {
 
 // Raw wire shapes (snake_case json tags from types/*.go). Not exported: only the
 // mapped view-models below cross into tiles.
-interface HotspotNodeWire { path: string; churn?: number; authors?: number; blast_radius?: number; last_commit?: string; }
-interface HotspotWire { commits: number; since?: string; nodes: HotspotNodeWire[] | null; }
-interface CoChangeWire { a: string; b: string; count: number; hidden?: boolean; }
-interface AffinityWire { commits: number; pairs: CoChangeWire[] | null; }
-interface OwnershipWire { path: string; commits: number; authors: number; primary: string; primary_share: number; bus_factor_1?: boolean; stale?: boolean; }
-interface OwnershipOutWire { commits: number; projects: OwnershipWire[] | null; }
-interface TrendWire { path: string; recent: number; earlier: number; delta: number; }
-interface TrendOutWire { commits: number; projects: TrendWire[] | null; }
-interface VolatilityTargetWire { project: string; target: string; score: number; volatile?: boolean; pass: number; fail: number; volatile_count: number; samples: number; last_pass?: string; }
-interface VolatilityWire { threshold: number; targets: VolatilityTargetWire[] | null; }
+interface HotspotNodeWire {
+  path: string;
+  churn?: number;
+  authors?: number;
+  blast_radius?: number;
+  last_commit?: string;
+}
+interface HotspotWire {
+  commits: number;
+  since?: string;
+  nodes: HotspotNodeWire[] | null;
+}
+interface CoChangeWire {
+  a: string;
+  b: string;
+  count: number;
+  hidden?: boolean;
+}
+interface AffinityWire {
+  commits: number;
+  pairs: CoChangeWire[] | null;
+}
+interface OwnershipWire {
+  path: string;
+  commits: number;
+  authors: number;
+  primary: string;
+  primary_share: number;
+  bus_factor_1?: boolean;
+  stale?: boolean;
+}
+interface OwnershipOutWire {
+  commits: number;
+  projects: OwnershipWire[] | null;
+}
+interface TrendWire {
+  path: string;
+  recent: number;
+  earlier: number;
+  delta: number;
+}
+interface TrendOutWire {
+  commits: number;
+  projects: TrendWire[] | null;
+}
+interface VolatilityTargetWire {
+  project: string;
+  target: string;
+  score: number;
+  volatile?: boolean;
+  pass: number;
+  fail: number;
+  volatile_count: number;
+  samples: number;
+  last_pass?: string;
+}
+interface VolatilityWire {
+  threshold: number;
+  targets: VolatilityTargetWire[] | null;
+}
 export interface InsightWire {
   hotspots: HotspotWire;
   affinity: AffinityWire;
@@ -411,15 +612,47 @@ export interface InsightWire {
   volatility: VolatilityWire | null;
 }
 
-export interface HotspotNodeView { name: string; churn: number; authors: number; blastRadius: number; lastCommit: string; }
-export interface AffinityPairView { a: string; b: string; count: number; hidden: boolean; }
-export interface OwnershipRowView { path: string; primary: string; primaryShare: number; authors: number; busFactor1: boolean; stale: boolean; }
-export interface TrendRowView { path: string; delta: number; recent: number; earlier: number; }
-export interface VolatilityRowView {
-  label: string; score: number; volatile: boolean;
-  pass: number; fail: number; volatileCount: number; samples: number; lastPass: string;
+export interface HotspotNodeView {
+  name: string;
+  churn: number;
+  authors: number;
+  blastRadius: number;
+  lastCommit: string;
 }
-export interface VolatilityView { threshold: number; targets: VolatilityRowView[]; }
+export interface AffinityPairView {
+  a: string;
+  b: string;
+  count: number;
+  hidden: boolean;
+}
+export interface OwnershipRowView {
+  path: string;
+  primary: string;
+  primaryShare: number;
+  authors: number;
+  busFactor1: boolean;
+  stale: boolean;
+}
+export interface TrendRowView {
+  path: string;
+  delta: number;
+  recent: number;
+  earlier: number;
+}
+export interface VolatilityRowView {
+  label: string;
+  score: number;
+  volatile: boolean;
+  pass: number;
+  fail: number;
+  volatileCount: number;
+  samples: number;
+  lastPass: string;
+}
+export interface VolatilityView {
+  threshold: number;
+  targets: VolatilityRowView[];
+}
 
 export interface InsightView {
   commits: number; // the git-history window shared by the four VCS lenses
@@ -441,24 +674,40 @@ export function mapInsight(w: InsightWire): InsightView {
       lastCommit: fmtDateStr(n.last_commit),
     })),
     affinity: (w.affinity?.pairs ?? []).map((p) => ({
-      a: p.a, b: p.b, count: p.count, hidden: !!p.hidden,
+      a: p.a,
+      b: p.b,
+      count: p.count,
+      hidden: !!p.hidden,
     })),
     ownership: (w.ownership?.projects ?? []).map((o) => ({
-      path: o.path, primary: o.primary || "-", primaryShare: o.primary_share,
-      authors: o.authors, busFactor1: !!o.bus_factor_1, stale: !!o.stale,
+      path: o.path,
+      primary: o.primary || "-",
+      primaryShare: o.primary_share,
+      authors: o.authors,
+      busFactor1: !!o.bus_factor_1,
+      stale: !!o.stale,
     })),
     trend: (w.trend?.projects ?? []).map((t) => ({
-      path: t.path, delta: t.delta, recent: t.recent, earlier: t.earlier,
+      path: t.path,
+      delta: t.delta,
+      recent: t.recent,
+      earlier: t.earlier,
     })),
-    volatility: w.volatility ? {
-      threshold: w.volatility.threshold,
-      targets: (w.volatility.targets ?? []).map((v) => ({
-        label: v.project ? v.project + ":" + v.target : v.target,
-        score: v.score, volatile: !!v.volatile,
-        pass: v.pass, fail: v.fail, volatileCount: v.volatile_count,
-        samples: v.samples, lastPass: fmtDateStr(v.last_pass),
-      })),
-    } : null,
+    volatility: w.volatility
+      ? {
+          threshold: w.volatility.threshold,
+          targets: (w.volatility.targets ?? []).map((v) => ({
+            label: v.project ? v.project + ":" + v.target : v.target,
+            score: v.score,
+            volatile: !!v.volatile,
+            pass: v.pass,
+            fail: v.fail,
+            volatileCount: v.volatile_count,
+            samples: v.samples,
+            lastPass: fmtDateStr(v.last_pass),
+          })),
+        }
+      : null,
   };
 }
 
@@ -491,5 +740,15 @@ export interface DashboardState {
 }
 
 export function initialState(): DashboardState {
-  return { conn: { state: "none" }, liveHost: null, status: null, metrics: null, samples: [], insight: null, logLines: [], observingSince: null, config: null };
+  return {
+    conn: { state: "none" },
+    liveHost: null,
+    status: null,
+    metrics: null,
+    samples: [],
+    insight: null,
+    logLines: [],
+    observingSince: null,
+    config: null,
+  };
 }

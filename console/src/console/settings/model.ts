@@ -37,7 +37,13 @@ export interface SettingsEnvelope {
 export function buildSettingsEnvelope(p: Settings): SettingsEnvelope {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
-    settings: { poll: p.poll, host: p.host, theme: p.theme, focusRing: p.focusRing, keymap: p.keymap },
+    settings: {
+      poll: p.poll,
+      host: p.host,
+      theme: p.theme,
+      focusRing: p.focusRing,
+      keymap: p.keymap,
+    },
   };
 }
 
@@ -48,7 +54,14 @@ export function buildSettingsEnvelope(p: Settings): SettingsEnvelope {
 // (a wrong-typed value, or a malformed keymap). `newerSchema` carries the file's schemaVersion when it is
 // ahead of this console's, so the surface can say the file came from a newer build.
 export type ImportResult =
-  | { ok: true; next: Settings; applied: (keyof Settings)[]; unknown: string[]; skipped: string[]; newerSchema?: number }
+  | {
+      ok: true;
+      next: Settings;
+      applied: (keyof Settings)[];
+      unknown: string[];
+      skipped: string[];
+      newerSchema?: number;
+    }
   | { ok: false; error: string };
 
 // The canonical set of keys importSettings understands. Kept in sync with the Settings interface so a
@@ -115,11 +128,14 @@ export function importSettings(raw: string, current: Settings): ImportResult {
     return { ok: false, error: "No recognizable settings to import." };
   }
 
-  const unknown = Object.keys(settings).filter((k) => !(KNOWN_KEYS as readonly string[]).includes(k));
+  const unknown = Object.keys(settings).filter(
+    (k) => !(KNOWN_KEYS as readonly string[]).includes(k),
+  );
   // Imports stay permissive on version: a newer schemaVersion never hard-fails, it just tells the surface
   // the file came from a newer console so it can explain why some keys may not have applied.
   const version = parsed.schemaVersion;
-  const newerSchema = typeof version === "number" && version > SETTINGS_SCHEMA_VERSION ? version : undefined;
+  const newerSchema =
+    typeof version === "number" && version > SETTINGS_SCHEMA_VERSION ? version : undefined;
   return { ok: true, next, applied, unknown, skipped, newerSchema };
 }
 
@@ -150,28 +166,54 @@ export interface DiffContext {
 // computePendingChanges diffs a draft against the committed baseline into readable entries. Pure: no
 // storage, no DOM. Keymap changes are compared by EFFECTIVE chord (a dropped override that returns to
 // the default reads as a real change), one entry per affected command.
-export function computePendingChanges(committed: Settings, draft: Settings, ctx: DiffContext): PendingChange[] {
+export function computePendingChanges(
+  committed: Settings,
+  draft: Settings,
+  ctx: DiffContext,
+): PendingChange[] {
   const changes: PendingChange[] = [];
   if (committed.poll !== draft.poll) {
-    changes.push({ key: "poll", label: "Refresh rate", before: ctx.pollLabel(committed.poll), after: ctx.pollLabel(draft.poll) });
+    changes.push({
+      key: "poll",
+      label: "Refresh rate",
+      before: ctx.pollLabel(committed.poll),
+      after: ctx.pollLabel(draft.poll),
+    });
   }
   if (committed.host !== draft.host) {
-    changes.push({ key: "host", label: "Daemon host", before: ctx.hostLabel(committed.host), after: ctx.hostLabel(draft.host) });
+    changes.push({
+      key: "host",
+      label: "Daemon host",
+      before: ctx.hostLabel(committed.host),
+      after: ctx.hostLabel(draft.host),
+    });
   }
   if (committed.theme !== draft.theme) {
-    changes.push({ key: "theme", label: "Theme", before: ctx.themeLabel(committed.theme), after: ctx.themeLabel(draft.theme) });
+    changes.push({
+      key: "theme",
+      label: "Theme",
+      before: ctx.themeLabel(committed.theme),
+      after: ctx.themeLabel(draft.theme),
+    });
   }
   if (committed.focusRing !== draft.focusRing) {
     changes.push({
-      key: "focusRing", label: "Focus ring",
-      before: ctx.focusRingLabel(committed.focusRing), after: ctx.focusRingLabel(draft.focusRing),
+      key: "focusRing",
+      label: "Focus ring",
+      before: ctx.focusRingLabel(committed.focusRing),
+      after: ctx.focusRingLabel(draft.focusRing),
     });
   }
   for (const id of ctx.commandIds) {
     const before = ctx.effectiveChord(committed.keymap, id);
     const after = ctx.effectiveChord(draft.keymap, id);
     if (before !== after) {
-      changes.push({ key: "keymap:" + id, label: "Keybinding " + ctx.commandLabel(id), before, after });
+      changes.push({
+        key: "keymap:" + id,
+        label: "Keybinding " + ctx.commandLabel(id),
+        before,
+        after,
+      });
     }
   }
   return changes;
@@ -205,12 +247,26 @@ export function diffLines(before: string, after: string): DiffLine[] {
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
-    if (a[i] === b[j]) { out.push({ kind: "same", text: a[i] }); i++; j++; }
-    else if (lcs[i + 1][j] >= lcs[i][j + 1]) { out.push({ kind: "del", text: a[i] }); i++; }
-    else { out.push({ kind: "add", text: b[j] }); j++; }
+    if (a[i] === b[j]) {
+      out.push({ kind: "same", text: a[i] });
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      out.push({ kind: "del", text: a[i] });
+      i++;
+    } else {
+      out.push({ kind: "add", text: b[j] });
+      j++;
+    }
   }
-  while (i < n) { out.push({ kind: "del", text: a[i] }); i++; }
-  while (j < m) { out.push({ kind: "add", text: b[j] }); j++; }
+  while (i < n) {
+    out.push({ kind: "del", text: a[i] });
+    i++;
+  }
+  while (j < m) {
+    out.push({ kind: "add", text: b[j] });
+    j++;
+  }
   return out;
 }
 
@@ -231,7 +287,12 @@ export function createDraftCell<T>(initial: T, onChange: () => void): Persisted<
     get: () => value,
     set,
     update: (fn) => set(fn(value)),
-    persistOnly: (v) => { value = v; },
-    subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+    persistOnly: (v) => {
+      value = v;
+    },
+    subscribe(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
   };
 }

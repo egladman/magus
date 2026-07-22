@@ -4,8 +4,14 @@
 // createKeybindingsOverlay wraps it in a modal. Scope: only commands with a CONSOLE_KEYMAP default.
 
 import {
-  chordFromEvent, conflicts, formatChord, isMac, mergeKeymap, normalizeSequence,
-  type Command, type Keymap,
+  chordFromEvent,
+  conflicts,
+  formatChord,
+  isMac,
+  mergeKeymap,
+  normalizeSequence,
+  type Command,
+  type Keymap,
 } from "./commands";
 import type { Persisted } from "../lib/persist";
 import { h } from "./view";
@@ -23,16 +29,23 @@ function svgEl(tag: string, attrs: Record<string, string>): SVGElement {
 function rowIcon(kind: "record" | "clear" | "reset"): SVGElement {
   const filled = kind === "record";
   const svg = svgEl("svg", {
-    viewBox: "0 0 24 24", width: "14", height: "14",
-    fill: filled ? "currentColor" : "none", stroke: filled ? "none" : "currentColor",
-    "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true",
+    viewBox: "0 0 24 24",
+    width: "14",
+    height: "14",
+    fill: filled ? "currentColor" : "none",
+    stroke: filled ? "none" : "currentColor",
+    "stroke-width": "1.8",
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    "aria-hidden": "true",
   });
   if (kind === "record") svg.append(svgEl("circle", { cx: "12", cy: "12", r: "5" }));
   else if (kind === "clear") svg.append(svgEl("path", { d: "M6 6l12 12M18 6L6 18" }));
-  else svg.append(
-    svgEl("polyline", { points: "1 4 1 10 7 10" }),
-    svgEl("path", { d: "M3.51 15a9 9 0 1 0 2.13-9.36L1 10" }),
-  );
+  else
+    svg.append(
+      svgEl("polyline", { points: "1 4 1 10 7 10" }),
+      svgEl("path", { d: "M3.51 15a9 9 0 1 0 2.13-9.36L1 10" }),
+    );
   return svg;
 }
 
@@ -49,7 +62,10 @@ function actionButton(variant: string, label: string, glyph: SVGElement): HTMLBu
 // iconButton builds a glyph-only row control (no text). aria-label carries the name so it reads to
 // assistive tech; used for the reset-to-default control so it does not compete with the action bar's Reset.
 function iconButton(variant: string, ariaLabel: string, glyph: SVGElement): HTMLButtonElement {
-  const btn = h("button", ("pf-v6-c-button pf-m-small pf-m-plain " + variant).trim()) as HTMLButtonElement;
+  const btn = h(
+    "button",
+    ("pf-v6-c-button pf-m-small pf-m-plain " + variant).trim(),
+  ) as HTMLButtonElement;
   btn.type = "button";
   btn.setAttribute("aria-label", ariaLabel);
   btn.title = ariaLabel;
@@ -71,11 +87,19 @@ export interface KeybindingRow {
 
 // keybindingRows computes the editor rows: the effective chord is the user override when present
 // (including "" = deliberately disabled), else the default. Pure.
-export function keybindingRows(commands: Command[], defaults: Keymap, user: Keymap): KeybindingRow[] {
+export function keybindingRows(
+  commands: Command[],
+  defaults: Keymap,
+  user: Keymap,
+): KeybindingRow[] {
   return commands.map((c) => {
     const overridden = Object.prototype.hasOwnProperty.call(user, c.id);
     const chord = normalizeSequence((overridden ? user[c.id] : defaults[c.id]) ?? "");
-    const source: KeybindingRow["source"] = !overridden ? "default" : chord === "" ? "disabled" : "custom";
+    const source: KeybindingRow["source"] = !overridden
+      ? "default"
+      : chord === ""
+        ? "disabled"
+        : "custom";
     return { id: c.id, label: c.label, group: c.group ?? "", chord, source };
   });
 }
@@ -112,7 +136,7 @@ const CAPTURE_COMMIT_MS = 900;
 export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEditor {
   const mac = isMac();
   let capturing: string | null = null; // the command id currently being rebound
-  let captureSeq: string[] = [];        // chords collected so far in the in-progress recording
+  let captureSeq: string[] = []; // chords collected so far in the in-progress recording
   let unbind: (() => void) | null = null; // active capture listener teardown
   let commitTimer: number | null = null; // fires the pending recording after a pause
   let unsub: (() => void) | null = null; // keymap subscription, live for the editor's lifetime
@@ -121,7 +145,8 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
   root.dataset.kbeditor = "";
   const desc = h("p");
   desc.dataset.kbdesc = "";
-  desc.textContent = "Rebind a command: Record, then press the keys. It can be a single shortcut or a sequence like Ctrl+X then O. Pause to save, or press Esc to cancel. Clear disables a binding; the revert icon restores the default.";
+  desc.textContent =
+    "Rebind a command: Record, then press the keys. It can be a single shortcut or a sequence like Ctrl+X then O. Pause to save, or press Esc to cancel. Clear disables a binding; the revert icon restores the default.";
   const table = h("div");
   table.dataset.rows = "";
   root.append(desc, table);
@@ -138,8 +163,14 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
   }
 
   function stopCapture(): void {
-    if (unbind) { unbind(); unbind = null; }
-    if (commitTimer !== null) { clearTimeout(commitTimer); commitTimer = null; }
+    if (unbind) {
+      unbind();
+      unbind = null;
+    }
+    if (commitTimer !== null) {
+      clearTimeout(commitTimer);
+      commitTimer = null;
+    }
     capturing = null;
     captureSeq = [];
   }
@@ -149,11 +180,16 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
   // the first, then the run so far with a trailing ellipsis ("keep going, or pause to save").
   function paintCapture(): void {
     if (capturing === null) return;
-    const cell = table.querySelector<HTMLElement>('[data-command="' + capturing + '"] [data-chord]');
+    const cell = table.querySelector<HTMLElement>(
+      '[data-command="' + capturing + '"] [data-chord]',
+    );
     if (!cell) return;
     cell.replaceChildren();
     cell.dataset.capturing = "";
-    if (captureSeq.length === 0) { cell.textContent = "Press keys..."; return; }
+    if (captureSeq.length === 0) {
+      cell.textContent = "Press keys...";
+      return;
+    }
     const more = h("span", undefined, " ...");
     more.dataset.kbcapMore = "";
     cell.append(h("kbd", undefined, formatChord(captureSeq.join(" "), mac)), more);
@@ -170,14 +206,29 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
     const commit = (): void => {
       const seq = captureSeq.join(" ");
       stopCapture();
-      if (seq !== "") setChord(id, seq); // writing re-renders via the subscription; empty just cancels
+      if (seq !== "")
+        setChord(id, seq); // writing re-renders via the subscription; empty just cancels
       else render();
     };
     const onKey = (e: KeyboardEvent): void => {
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (e.key === "Escape") { stopCapture(); render(); return; }
-      const chord = chordFromEvent({ metaKey: e.metaKey, ctrlKey: e.ctrlKey, altKey: e.altKey, shiftKey: e.shiftKey, key: e.key, code: e.code }, mac);
+      if (e.key === "Escape") {
+        stopCapture();
+        render();
+        return;
+      }
+      const chord = chordFromEvent(
+        {
+          metaKey: e.metaKey,
+          ctrlKey: e.ctrlKey,
+          altKey: e.altKey,
+          shiftKey: e.shiftKey,
+          key: e.key,
+          code: e.code,
+        },
+        mac,
+      );
       if (chord === "") return; // a lone modifier - keep waiting
       captureSeq.push(chord);
       paintCapture();
@@ -209,9 +260,16 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
 
       const chordCell = h("span");
       chordCell.dataset.chord = "";
-      if (capturing === r.id) { chordCell.dataset.capturing = ""; chordCell.textContent = "Press keys..."; }
-      else if (r.source === "disabled") { chordCell.dataset.disabled = ""; chordCell.textContent = "Disabled"; }
-      else { const kbd = h("kbd", undefined, formatChord(r.chord, mac)); chordCell.append(kbd); }
+      if (capturing === r.id) {
+        chordCell.dataset.capturing = "";
+        chordCell.textContent = "Press keys...";
+      } else if (r.source === "disabled") {
+        chordCell.dataset.disabled = "";
+        chordCell.textContent = "Disabled";
+      } else {
+        const kbd = h("kbd", undefined, formatChord(r.chord, mac));
+        chordCell.append(kbd);
+      }
       row.append(chordCell);
 
       // Conflict: another command bound to the same chord (never for a disabled/empty chord).
@@ -229,14 +287,27 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
       actions.dataset.kactions = "";
       // Record starts/cancels capture; Clear disables the binding; reset (a glyph-only danger-tinted
       // control, aria-label "Reset to default") drops the custom binding back to the default.
-      const record = actionButton("pf-m-secondary", capturing === r.id ? "Cancel" : "Record", rowIcon("record"));
-      record.addEventListener("click", () => { if (capturing === r.id) { stopCapture(); render(); } else beginCapture(r.id); });
+      const record = actionButton(
+        "pf-m-secondary",
+        capturing === r.id ? "Cancel" : "Record",
+        rowIcon("record"),
+      );
+      record.addEventListener("click", () => {
+        if (capturing === r.id) {
+          stopCapture();
+          render();
+        } else beginCapture(r.id);
+      });
       const clear = actionButton("pf-m-secondary", "Clear", rowIcon("clear"));
-      clear.addEventListener("click", () => { setChord(r.id, ""); });
+      clear.addEventListener("click", () => {
+        setChord(r.id, "");
+      });
       const reset = iconButton("", "Reset to default", rowIcon("reset"));
       reset.dataset.role = "reset";
       reset.disabled = r.source === "default";
-      reset.addEventListener("click", () => { setChord(r.id, null); });
+      reset.addEventListener("click", () => {
+        setChord(r.id, null);
+      });
       actions.append(record, clear, reset);
       row.append(actions);
       table.append(row);
@@ -252,7 +323,10 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
     el: root,
     destroy(): void {
       stopCapture();
-      if (unsub) { unsub(); unsub = null; }
+      if (unsub) {
+        unsub();
+        unsub = null;
+      }
     },
   };
 }
@@ -303,11 +377,16 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   // Escape closes; stopPropagation keeps keys typed while the editor owns the screen from reaching the
   // global keybinding listener (a capturing row already swallowed its own keydown upstream).
   box.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") { ev.preventDefault(); close(); }
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      close();
+    }
     ev.stopPropagation();
   });
   // A click on the backdrop (outside the box) dismisses; a click inside stays.
-  overlay.addEventListener("pointerdown", (ev) => { if (!box.contains(ev.target as Node)) close(); });
+  overlay.addEventListener("pointerdown", (ev) => {
+    if (!box.contains(ev.target as Node)) close();
+  });
 
   return { el: overlay, open, close };
 }

@@ -18,13 +18,18 @@ test("morning window surfaces a morning line, not an evening one", () => {
   // pick=0 selects the first eligible entry; the ANY_HOURS pool leads, so scan the whole eligible set.
   const seen = new Set<string>();
   for (let i = 0; i < 12; i++) seen.add(launcherTagline(at(7), () => i / 12));
-  assert.ok([...seen].some((t) => t.includes("Morning") || t.includes("forge") || t.includes("coffee")));
+  assert.ok(
+    [...seen].some((t) => t.includes("Morning") || t.includes("forge") || t.includes("coffee")),
+  );
   assert.ok(![...seen].some((t) => t.includes("Evening") || t.includes("midnight")));
 });
 
 test("the night window wraps past midnight", () => {
   const seen = new Set<string>();
-  for (let i = 0; i < 12; i++) { seen.add(launcherTagline(at(23), () => i / 12)); seen.add(launcherTagline(at(2), () => i / 12)); }
+  for (let i = 0; i < 12; i++) {
+    seen.add(launcherTagline(at(23), () => i / 12));
+    seen.add(launcherTagline(at(2), () => i / 12));
+  }
   assert.ok([...seen].some((t) => t.includes("midnight") || t.includes("daemon never sleeps")));
 });
 

@@ -5,16 +5,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  leaves, splitLeaf, closePane, setRatio, setLeafPage, pickAxis, neighborInDirection,
-  swapLeaves, siblingLeafId,
-  MIN_RATIO, MAX_RATIO, type Pane, type Rect,
+  leaves,
+  splitLeaf,
+  closePane,
+  setRatio,
+  setLeafPage,
+  pickAxis,
+  neighborInDirection,
+  swapLeaves,
+  siblingLeafId,
+  MIN_RATIO,
+  MAX_RATIO,
+  type Pane,
+  type Rect,
 } from "./tiling";
 
 const leaf = (id: string, pageId = id): Pane => ({ kind: "leaf", id, pageId });
 
 test("leaves lists every leaf in order", () => {
   const t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
-  assert.deepEqual(leaves(t).map((l) => l.id), ["a", "b"]);
+  assert.deepEqual(
+    leaves(t).map((l) => l.id),
+    ["a", "b"],
+  );
 });
 
 test("splitLeaf replaces the target leaf with a split of [old, new]", () => {
@@ -23,19 +36,31 @@ test("splitLeaf replaces the target leaf with a split of [old, new]", () => {
   if (t.kind !== "split") return;
   assert.equal(t.dir, "row");
   assert.equal(t.ratio, 0.5);
-  assert.deepEqual([t.a, t.b].map((p) => p.kind === "leaf" && p.id), ["a", "b"]);
+  assert.deepEqual(
+    [t.a, t.b].map((p) => p.kind === "leaf" && p.id),
+    ["a", "b"],
+  );
 });
 
 test("splitLeaf with first=true puts the new leaf on the a-side", () => {
   const t = splitLeaf(leaf("a"), "a", "col", "s1", { id: "b", pageId: "b" }, true);
-  if (t.kind !== "split") { assert.fail("expected split"); return; }
-  assert.deepEqual([t.a, t.b].map((p) => p.kind === "leaf" && p.id), ["b", "a"]);
+  if (t.kind !== "split") {
+    assert.fail("expected split");
+    return;
+  }
+  assert.deepEqual(
+    [t.a, t.b].map((p) => p.kind === "leaf" && p.id),
+    ["b", "a"],
+  );
 });
 
 test("splitLeaf targets a nested leaf, leaving siblings intact", () => {
   let t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
   t = splitLeaf(t, "b", "col", "s2", { id: "c", pageId: "c" });
-  assert.deepEqual(leaves(t).map((l) => l.id), ["a", "b", "c"]);
+  assert.deepEqual(
+    leaves(t).map((l) => l.id),
+    ["a", "b", "c"],
+  );
 });
 
 test("splitLeaf on an unknown target returns the tree unchanged", () => {
@@ -64,7 +89,10 @@ test("closePane on a deep leaf collapses only its parent split", () => {
 
 test("closePane on an unknown id leaves the tree unchanged", () => {
   const t = splitLeaf(leaf("a"), "a", "row", "s1", { id: "b", pageId: "b" });
-  assert.deepEqual(leaves(closePane(t, "zzz") as Pane).map((l) => l.id), ["a", "b"]);
+  assert.deepEqual(
+    leaves(closePane(t, "zzz") as Pane).map((l) => l.id),
+    ["a", "b"],
+  );
 });
 
 test("setRatio sets the matching split and clamps to the drag limits", () => {
@@ -85,7 +113,13 @@ test("setRatio on an unknown split id changes nothing", () => {
 test("setLeafPage fills an empty pane's surface and leaves siblings alone", () => {
   let t = splitLeaf(leaf("a", "dashboard"), "a", "row", "s1", { id: "p2", pageId: "" });
   t = setLeafPage(t, "p2", "logs");
-  assert.deepEqual(leaves(t).map((l) => [l.id, l.pageId]), [["a", "dashboard"], ["p2", "logs"]]);
+  assert.deepEqual(
+    leaves(t).map((l) => [l.id, l.pageId]),
+    [
+      ["a", "dashboard"],
+      ["p2", "logs"],
+    ],
+  );
 });
 
 test("setLeafPage on an unknown id changes nothing", () => {
@@ -136,7 +170,14 @@ test("swapLeaves swaps two leaves and leaves the rest intact", () => {
   const swapped = swapLeaves(t, "a", "c");
   // a and c trade places: the position that held "a" now holds "c" (its id AND pageId travel with
   // it), the position that held "c" now holds "a", and "b" - untouched - stays exactly where it was.
-  assert.deepEqual(leaves(swapped).map((l) => [l.id, l.pageId]), [["c", "c"], ["b", "b"], ["a", "a"]]);
+  assert.deepEqual(
+    leaves(swapped).map((l) => [l.id, l.pageId]),
+    [
+      ["c", "c"],
+      ["b", "b"],
+      ["a", "a"],
+    ],
+  );
 });
 
 test("swapLeaves with an unknown id is a no-op", () => {
@@ -148,7 +189,13 @@ test("swapLeaves with an unknown id is a no-op", () => {
 test("swapLeaves preserves the ids and pageIds of the swapped leaves", () => {
   const t = splitLeaf(leaf("a", "dashboard"), "a", "row", "s1", { id: "b", pageId: "logs" });
   const swapped = swapLeaves(t, "a", "b");
-  assert.deepEqual(leaves(swapped).map((l) => [l.id, l.pageId]), [["b", "logs"], ["a", "dashboard"]]);
+  assert.deepEqual(
+    leaves(swapped).map((l) => [l.id, l.pageId]),
+    [
+      ["b", "logs"],
+      ["a", "dashboard"],
+    ],
+  );
 });
 
 test("swapLeaves with the same id twice is a no-op", () => {

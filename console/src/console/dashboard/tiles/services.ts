@@ -8,7 +8,10 @@ import type { DashboardState, ServiceView } from "../state";
 import { Card, h, type Tile } from "./card";
 
 export function servicesTile(): Tile {
-  const card = new Card("services", "Shared services", { term: "Service", label: "shared services" });
+  const card = new Card("services", "Shared services", {
+    term: "Service",
+    label: "shared services",
+  });
   const countLabel = h("span", "pf-v6-c-label pf-m-compact");
   const count = h("span", "pf-v6-c-label__content", "0");
   countLabel.append(count);
@@ -38,7 +41,9 @@ export function servicesTile(): Tile {
 
   return {
     el: card.el,
-    update(s: DashboardState) { if (s.status) render(s.status.services); },
+    update(s: DashboardState) {
+      if (s.status) render(s.status.services);
+    },
     destroy() {},
   };
 }

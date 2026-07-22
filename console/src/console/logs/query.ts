@@ -22,8 +22,14 @@ export function parseQuery(q: string): ParsedQuery {
     if (ci > 0) {
       const key = tok.slice(0, ci).toLowerCase();
       const val = tok.slice(ci + 1).toLowerCase();
-      if (val && (key === "target" || key === "status")) { groups.push({ key, value: val }); continue; }
-      if (val && key === "step") { texts.push(val); continue; }
+      if (val && (key === "target" || key === "status")) {
+        groups.push({ key, value: val });
+        continue;
+      }
+      if (val && key === "step") {
+        texts.push(val);
+        continue;
+      }
       // Unknown key (or empty value): fall through and treat the whole token as free text.
     }
     texts.push(tok.toLowerCase());
