@@ -280,7 +280,67 @@ func nodesWithDiscovery(ctx context.Context, src *interp.Source, projectPath str
 			slog.String("project", projectPath), slog.String("error", derr.Error()))
 		return nodes, nil
 	}
-	return append(nodes, dnodes...), policies
+	return mergeTargetNodes(nodes, dnodes), policies
+}
+
+// mergeTargetNodes unifies the static (describe.Extract) and discovered
+// (interp.DiscoverCtxNodes) node sets into ONE node per target, keyed by normalized
+// name. A ctx-form target appears in BOTH sets and they are COMPLEMENTARY: the static
+// read sees its spell ops (go["go-build"]) but not its ctx.needs/inputs (wrong
+// receiver), while discovery sees its deps/inputs/outputs/charms/policy but not the
+// spell ops. So the two are field-unioned rather than one shadowing the other (or the
+// renderer silently dropping a duplicate). An old-form target appears only in the
+// static set, a pure-ctx target only in the discovered set. Static (source) order is
+// preserved; a discovered-only node is appended.
+func mergeTargetNodes(static, discovered []types.TargetGraphNode) []types.TargetGraphNode {
+	out := make([]types.TargetGraphNode, len(static))
+	copy(out, static)
+	idx := make(map[string]int, len(out))
+	for i := range out {
+		idx[out[i].Name] = i
+	}
+	for _, d := range discovered {
+		if i, ok := idx[d.Name]; ok {
+			out[i] = unionTargetNode(out[i], d)
+			continue
+		}
+		idx[d.Name] = len(out)
+		out = append(out, d)
+	}
+	return out
+}
+
+// unionTargetNode merges b into a field by field: the slice fields are deduped-unioned,
+// Doc and Spells are taken from whichever node carries them (they never conflict - one
+// side is always empty for a given target), and DynamicIO is ORed.
+func unionTargetNode(a, b types.TargetGraphNode) types.TargetGraphNode {
+	if a.Doc == "" {
+		a.Doc = b.Doc
+	}
+	for _, dep := range b.Dependencies {
+		a.Dependencies = appendUniq(a.Dependencies, dep)
+	}
+	for _, cd := range b.CrossDependencies {
+		if !slices.Contains(a.CrossDependencies, cd) {
+			a.CrossDependencies = append(a.CrossDependencies, cd)
+		}
+	}
+	for _, ch := range b.Charms {
+		a.Charms = appendUniq(a.Charms, ch)
+	}
+	for _, in := range b.Inputs {
+		if !slices.Contains(a.Inputs, in) {
+			a.Inputs = append(a.Inputs, in)
+		}
+	}
+	for _, o := range b.Outputs {
+		a.Outputs = appendUniq(a.Outputs, o)
+	}
+	if len(a.Spells) == 0 {
+		a.Spells = b.Spells
+	}
+	a.DynamicIO = a.DynamicIO || b.DynamicIO
+	return a
 }
 
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
