@@ -123,6 +123,13 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	}))
 	sess.SetGlobal("magus", magus)
 
+	// The shared magus.Context value a ctx-form target receives as its first
+	// argument. Stashed under a session-global name the interp layer fetches when it
+	// dispatches (run) or discovers (graph) a ctx-form target. It closes over the
+	// same targets/exports/ext the magus.needs binding does, so a run-mode
+	// ctx.needs dispatches identically; discovery-mode methods record instead.
+	sess.SetGlobal(interp.TargetContextGlobal, buildTargetContext(obs, targets, exports, ext))
+
 	// The host utilities are reached under the same bare names as Buzz's own stdlib:
 	// `import "os"`, `import "fs"`, `import "http"`, `import "vcs"`, ... A magusfile
 	// selects methods off each module directly (os.exec, fs.glob, vcs.shortHash).

@@ -24,6 +24,41 @@ type normCtxKey struct{}
 
 type projectPathCtxKey struct{}
 
+// TargetContextGlobal is the session-global name under which the bindings layer
+// stashes the shared magus.Context value (see bindings.registerAllBuzz). A ctx-form
+// target function receives it as its first argument; execBuzzSrc's registration
+// wrapper and the discovery runner both fetch it with GetGlobal. The double
+// underscore keeps it out of the way of any magusfile identifier.
+const TargetContextGlobal = "__magus_target_context"
+
+// CtxFormTargetKeys returns the normalized keys of the exported targets in src
+// that use the ctx-form signature: an exported function whose FIRST parameter is
+// annotated `magus\Context` (types.ContextParamAnnot). That signature IS the target
+// contract for the new form; such a target declares its graph by RUNNING under
+// discovery mode (see DiscoverCtxNodes), not by the static AST read describe.Extract
+// does for the old global-magus form. Callers that only inspect target NAMES (e.g.
+// the ci guard, which the extractor no longer sees a ctx-form ci through) use this
+// alongside describe.Extract. Best-effort: a parse failure yields nil, matching the
+// extractor's never-error contract.
+func CtxFormTargetKeys(src string) map[string]bool {
+	prog, err := buzz.ParseEmbedded(src)
+	if err != nil || prog == nil {
+		return nil
+	}
+	norm := types.DefaultTargetNameNormalizer
+	out := map[string]bool{}
+	for _, stmt := range prog.Stmts {
+		fd, ok := stmt.(*ast.FunDecl)
+		if !ok || !fd.IsExported {
+			continue
+		}
+		if len(fd.ParamAnnots) > 0 && fd.ParamAnnots[0] == types.ContextParamAnnot {
+			out[norm.NormalizeTargetName(fd.Name)] = true
+		}
+	}
+	return out
+}
+
 // WithSource stores src in ctx so that bindings (e.g. magus.needs) can
 // retrieve the active magusfile source for pool lookup.
 func WithSource(ctx context.Context, src *Source) context.Context {
@@ -329,6 +364,10 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 
 	// Import names across all the project's magusfiles, to catch a target that shadows one.
 	importNames := map[string]string{}
+	// ctx-form target keys across all the project's magusfiles: these receive a
+	// magus.Context first argument at dispatch (injected below) instead of running
+	// on the bare `args` signature the old form uses.
+	ctxForm := map[string]bool{}
 	for _, path := range src.Files {
 		// rel names the offending file relative to its project dir, so a magusfiles/
 		// directory (several files) is unambiguous; the project itself is already in
@@ -346,6 +385,9 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		code := string(data)
 		for name, importPath := range importBoundNames(code) {
 			importNames[name] = importPath
+		}
+		for key := range CtxFormTargetKeys(code) {
+			ctxForm[key] = true
 		}
 		// Validate spell handles before Exec: an unknown `magus/spell/<handle>`
 		// resolves to nothing (gopherbuzz skips an unresolved import) and would
@@ -376,6 +418,10 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 	}
 	slices.Sort(names)
 	seen := make(map[string]string, len(names)) // canonical key -> source name
+	// The shared magus.Context value ctx-form targets receive as their first
+	// argument (stashed by the bindings layer). Null for a session without the
+	// bindings (e.g. a bare test), in which case no ctx-form target is dispatchable.
+	targetCtxVal := buzzSess.GetGlobal(TargetContextGlobal)
 	for _, name := range names {
 		val := exports[name]
 		if !val.IsFun() {
@@ -394,9 +440,16 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		seen[key] = name
 		captured := val
 		exportVals[key] = val
+		isCtxForm := ctxForm[key]
 		targetMap[key] = func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 			return TimeCall(ctx, ModeMagusfile, func() (vm.Value, error) {
-				return buzzSess.CallValue(ctx, captured, args)
+				callArgs := args
+				if isCtxForm {
+					// Prepend the magus.Context so the body's `ctx` parameter binds it;
+					// the user args (the `[str]` second parameter) ride along after.
+					callArgs = append([]vm.Value{targetCtxVal}, args...)
+				}
+				return buzzSess.CallValue(ctx, captured, callArgs)
 			})
 		}
 	}

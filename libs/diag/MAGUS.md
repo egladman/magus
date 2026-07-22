@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **299 nodes** and **306 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **307 nodes** and **301 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -43,31 +43,31 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `libs/diag` |
-| target | 8 | `magus query kind:target` | `format`, `generate`, `build` |
+| target | 8 | `magus query kind:target` | `format`, `generate`, `ci` |
 | spell | 11 | `magus query kind:spell` | `go`, `ts`, `py` |
-| op | 52 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
+| op | 52 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | tool | 13 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 29 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
+| diagnostic | 37 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
 | file | 1 | `magus query kind:file` | `magusfile.buzz` |
 | function | 8 | `magus query kind:function` | `build`, `ci`, `format` |
 | import | 5 | `magus query kind:import` | `fs`, `magus`, `magus/spell/go` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 8 | `magus query project:.` | `format`, `generate`, `build` |
+| . | 8 | `magus query project:.` | `format`, `generate`, `ci` |
 
 ## Project: libs/diag
 
 | Target | What it does |
 |---|---|
 | `generate` | Regenerates MAGUS.md and fails on drift. |
+| `build` |  |
+| `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `format` |  |
 | `lint` |  |
-| `build` |  |
 | `test` |  |
-| `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
-| `preflight` |  |
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `preflight` |  |

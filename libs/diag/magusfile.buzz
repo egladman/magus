@@ -30,9 +30,11 @@ magus.project({
 });
 
 // A pure library, so the pipeline is the Go lifecycle plus md-generate. Each target
-// delegates to the go spell's ops.
+// delegates to the go spell's ops. The Go-lifecycle targets take a magus\Context and
+// declare their dependencies through it (ctx.needs); generate/md_generate keep the
+// old global-magus form (per-target policy and fs/vcs side effects).
 
-export fun preflight(args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(args: [str]) > void {
@@ -52,12 +54,12 @@ export fun md_generate(args: [str]) > void {
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
-export fun format(args: [str]) > void { magus.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
-export fun lint(args: [str]) > void { magus.needs(format); go["go-vet"](); }
-export fun build(args: [str]) > void { magus.needs(format); go["go-build"](); }
-export fun test(args: [str]) > void { magus.needs(format); go["go-test"](); }
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](); }
+export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](); }
 
 // The anchor `magus affected ci` keys off; fans out lint/build/test after format.
-export fun ci(args: [str]) > void {
-    magus.needs(lint, build, test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test);
 }

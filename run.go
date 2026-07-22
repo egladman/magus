@@ -201,12 +201,19 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 			if src.Engine != "buzz" {
 				continue
 			}
-			for _, n := range describe.Extract(concatSource(src)) {
+			source := concatSource(src)
+			for _, n := range describe.Extract(source) {
 				// Node names are already normalized by the extractor, so this
 				// matches the run path's target-name resolution.
 				if n.Name == types.TargetCI {
 					return true, nil
 				}
+			}
+			// A ctx-form ci is invisible to the static extractor (it declares its deps
+			// through the injected ctx, not global magus.needs); recognize it by the
+			// signature contract, which is a name-only check here.
+			if interp.CtxFormTargetKeys(source)[types.TargetCI] {
+				return true, nil
 			}
 		}
 	}

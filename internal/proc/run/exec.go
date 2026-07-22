@@ -73,10 +73,17 @@ func (r ExecResult) ToMap() map[string]any {
 // callers format their own "exit N" / start-failure messages from ExecResult.
 func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
 	if types.Tracing(ctx) {
-		// Dry run: trace the command (at info, so it shows without -v) and skip
-		// execution, returning a benign success. A normal run logs it at debug below,
-		// after the sandbox check, then executes it.
-		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
+		// Discovery and dry run both skip execution and return a benign success; a
+		// normal run logs the command at debug below, after the sandbox check, then
+		// executes it. Discovery is the record-then-skip variant: it captures the
+		// intended action onto the discovery record (so a later dry-run/preview can
+		// show "would run: go build ...") and stays silent, whereas a bare dry run
+		// traces the command at info so it shows without -v.
+		if rec := types.DiscoveryFromContext(ctx); rec != nil {
+			rec.RecordAction(name, args, opts.Dir)
+		} else {
+			slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
+		}
 		return ExecResult{Started: true, Code: 0}, nil
 	}
 	// Emit a structured exec event (the command about to run) when inside a captured target

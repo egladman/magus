@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -362,6 +363,16 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
 			if src.Engine == "buzz" {
 				nodes := describe.Extract(concatSource(src))
+				// ctx-form targets are invisible to the static extractor (their edges
+				// are ctx.needs calls learned by running the target under discovery);
+				// merge their discovered nodes in. Best-effort: a discovery failure
+				// leaves the old-form nodes intact rather than dropping the project.
+				if dnodes, derr := interp.DiscoverCtxNodes(context.Background(), src); derr == nil {
+					nodes = append(nodes, dnodes...)
+				} else {
+					slog.Warn("magus: ctx-form target discovery failed; graph omits its ctx-form targets",
+						slog.String("project", p.Path), slog.String("error", derr.Error()))
+				}
 				resolveNodeRefs(nodes, p.Path)
 				entry.Nodes = nodes
 				entry.Cycle = describe.Cycle(nodes)
