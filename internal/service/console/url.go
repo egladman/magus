@@ -74,7 +74,7 @@ type FragmentParam struct {
 // document GET) and is emitted LAST, after any content directives, so callers hold a secret: a
 // link with a token must only be surfaced to an interactive user, never written to a log.
 //
-// This is the ONE home for the grammar: graphurl.GraphLink composes it rather than hand-building
+// This is the ONE home for the grammar: url.GraphLink composes it rather than hand-building
 // the "http://"+host+"/console/graph/"+frag string, so both producers share a single escaping
 // policy (encodeComponent, the encodeURIComponent equivalent the page's hash parser reverses).
 func Link(opts LinkOpts) string {
@@ -97,7 +97,7 @@ func Link(opts LinkOpts) string {
 // application/x-www-form-urlencoded, which encodes a space as "+"; decodeURIComponent would leave
 // that "+" literal, so the "+"->"%20" fixup is required. A literal "+" in s is already emitted as
 // "%2B" by QueryEscape, so the fixup never corrupts it. It is the single escaping policy shared by
-// every producer of the console URL grammar (Link here, and graphurl.GraphLink through it).
+// every producer of the console URL grammar (Link here, and url.GraphLink through it).
 func encodeComponent(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }

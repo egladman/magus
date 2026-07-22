@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/graph/graphurl"
+	"github.com/egladman/magus/internal/graph/url"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +18,7 @@ func TestBuildGraphLink(t *testing.T) {
 	)
 
 	t.Run("full link with directives", func(t *testing.T) {
-		got := buildGraphLink(host, token, graphurl.GraphLinkOpts{
+		got := buildGraphLink(host, token, url.GraphLinkOpts{
 			View: "blast",
 			Node: "project:pkg/foo",
 		})
@@ -28,11 +28,11 @@ func TestBuildGraphLink(t *testing.T) {
 	})
 
 	t.Run("no host omits the link", func(t *testing.T) {
-		require.Equal(t, "", buildGraphLink("", token, graphurl.GraphLinkOpts{View: "blast"}))
+		require.Equal(t, "", buildGraphLink("", token, url.GraphLinkOpts{View: "blast"}))
 	})
 
 	t.Run("no token drops the token directive but keeps the link", func(t *testing.T) {
-		got := buildGraphLink(host, "", graphurl.GraphLinkOpts{View: "blast"})
+		got := buildGraphLink(host, "", url.GraphLinkOpts{View: "blast"})
 		require.Equal(t,
 			"http://127.0.0.1:7391/console/graph/#view=blast",
 			got)

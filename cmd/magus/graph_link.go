@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/graph/graphurl"
+	"github.com/egladman/magus/internal/graph/url"
 )
 
 // graph_link.go holds the shared seam for the "view this in the Graph Explorer"
@@ -17,7 +17,7 @@ import (
 // daemon address and a best-effort token (a token-load failure just drops the
 // token, leaving the link usable). Distinct from graphExplorerLink in
 // graph_source.go, which builds a static #src= link for MAGUS.md.
-func liveExplorerLink(directives graphurl.GraphLinkOpts) string {
+func liveExplorerLink(directives url.GraphLinkOpts) string {
 	token, _ := auth.Load() // best-effort: an empty token still yields an openable link
 	return buildGraphLink(mcpAddrString(), token, directives)
 }
@@ -25,10 +25,10 @@ func liveExplorerLink(directives graphurl.GraphLinkOpts) string {
 // buildGraphLink fills Host/Token on the caller's directives and formats the URL,
 // returning "" only when GraphLink has no host to link to. It is split out with the
 // inputs injected so tests can assert the URL without a daemon.
-func buildGraphLink(host, token string, directives graphurl.GraphLinkOpts) string {
+func buildGraphLink(host, token string, directives url.GraphLinkOpts) string {
 	directives.Host = host
 	directives.Token = token
-	link, err := graphurl.GraphLink(directives)
+	link, err := url.GraphLink(directives)
 	if err != nil {
 		return ""
 	}

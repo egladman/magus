@@ -1,4 +1,4 @@
-package graphurl
+package url
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-// Package graphurl builds daemon-origin Graph Explorer links with a pre-applied
+// Package url builds daemon-origin Graph Explorer links with a pre-applied
 // query or named view, so a magus CLI command can print a clickable "view this in
 // the Graph Explorer" line as a COMPLEMENTARY aid alongside its normal output.
 //
@@ -25,7 +25,7 @@
 // the single home for the daemon-origin console URL grammar, so the escaping policy
 // (encodeURIComponent-equivalent) and the "/console/<surface>/#...token-last" shape
 // live in one place for every producer.
-package graphurl
+package url
 
 import (
 	"errors"
@@ -36,7 +36,7 @@ import (
 // ErrNoDaemon is returned when Host is empty: there is no loopback origin to build
 // the link from, so no link can be built. Callers treat it as "omit the link", not
 // a hard failure.
-var ErrNoDaemon = errors.New("graphurl: no daemon host; omit the link")
+var ErrNoDaemon = errors.New("graph link: no daemon host; omit the link")
 
 // GraphLinkOpts is the input to GraphLink. Host comes from the daemon address the
 // caller already resolves; Token is a best-effort bearer token; the four directive
