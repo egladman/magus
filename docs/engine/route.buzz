@@ -11,10 +11,10 @@ import "engine/types" as _;
 // hand-written), and manpage/, plus config.md. srcRel is the docs/-prefixed path. A path
 // convention because the generated .md carries no frontmatter marker.
 export fun isGenerated(srcRel: str, site: Site) > bool {
-    return srcRel.startsWith(site.docs + "/buzz/modules/")
-        or srcRel.startsWith(site.docs + "/spells/")
-        or srcRel.startsWith(site.docs + "/manpage/")
-        or srcRel == site.docs + "/config.md";
+    return srcRel.startsWith(site.docs + "/reference/buzz/")
+        or srcRel.startsWith(site.docs + "/concepts/spells/")
+        or srcRel.startsWith(site.docs + "/reference/manpage/")
+        or srcRel == site.docs + "/reference/config.md";
 }
 
 

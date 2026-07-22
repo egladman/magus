@@ -18,14 +18,14 @@ import (
 
 // Base URLs for diagnostic documentation, keyed by code-prefix subdir.
 const (
-	diagnosticSandboxBase   = "https://github.com/egladman/magus/blob/main/docs/codes/sandbox/"
-	diagnosticRaceBase      = "https://github.com/egladman/magus/blob/main/docs/codes/race/"
-	diagnosticMagusfileBase = "https://github.com/egladman/magus/blob/main/docs/codes/magusfile/"
-	diagnosticServicesBase  = "https://github.com/egladman/magus/blob/main/docs/codes/services/"
-	diagnosticCharmsBase    = "https://github.com/egladman/magus/blob/main/docs/codes/charms/"
-	diagnosticKnowledgeBase = "https://github.com/egladman/magus/blob/main/docs/codes/knowledge/"
-	diagnosticOutputRefBase = "https://github.com/egladman/magus/blob/main/docs/codes/outputref/"
-	diagnosticAuthBase      = "https://github.com/egladman/magus/blob/main/docs/codes/auth/"
+	diagnosticSandboxBase   = "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/"
+	diagnosticRaceBase      = "https://github.com/egladman/magus/blob/main/docs/reference/codes/race/"
+	diagnosticMagusfileBase = "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/"
+	diagnosticServicesBase  = "https://github.com/egladman/magus/blob/main/docs/reference/codes/services/"
+	diagnosticCharmsBase    = "https://github.com/egladman/magus/blob/main/docs/reference/codes/charms/"
+	diagnosticKnowledgeBase = "https://github.com/egladman/magus/blob/main/docs/reference/codes/knowledge/"
+	diagnosticOutputRefBase = "https://github.com/egladman/magus/blob/main/docs/reference/codes/outputref/"
+	diagnosticAuthBase      = "https://github.com/egladman/magus/blob/main/docs/reference/codes/auth/"
 )
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code). It aliases the framework's Code type, so

@@ -58,10 +58,10 @@ func TestDiagnosticCode_URL(t *testing.T) {
 		assert.Truef(t, strings.HasSuffix(CodeURL(code), ".md"), "URL() = %q, want .md suffix", CodeURL(code))
 	}
 	// MGS1xxx routes to the magusfile docs dir, not the sandbox/race bases.
-	assert.Contains(t, CodeURL(NoCITarget), "/docs/codes/magusfile/")
+	assert.Contains(t, CodeURL(NoCITarget), "/docs/reference/codes/magusfile/")
 	// MGS5xxx routes to the services docs dir.
 	assert.Contains(t, CodeURL(NearDuplicateServices), "MGS5001")
-	assert.Contains(t, CodeURL(NearDuplicateServices), "/docs/codes/services/")
+	assert.Contains(t, CodeURL(NearDuplicateServices), "/docs/reference/codes/services/")
 }
 
 func TestDiagnosticError_Is(t *testing.T) {

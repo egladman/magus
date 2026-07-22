@@ -71,9 +71,9 @@ export fun writeLLMsIndex(site: Site) > void {
 
 test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descriptions" {
     final pages = mut [<DocPage>];
-    pages.append(DocPage{url = "targets/", title = "Targets", desc = "What a target is"});
-    pages.append(DocPage{url = "cache/", title = "Cache", desc = "The cache model"});
-    pages.append(DocPage{url = "faq/", title = "FAQ", desc = ""});
+    pages.append(DocPage{url = "concepts/targets/", title = "Targets", desc = "What a target is"});
+    pages.append(DocPage{url = "concepts/cache/", title = "Cache", desc = "The cache model"});
+    pages.append(DocPage{url = "reference/faq/", title = "FAQ", desc = ""});
     final want = "# magus\n\n"
         + "> Workspace-aware build orchestrator and content-addressed cache. "
         + "Every link below is the page's raw Markdown (its index.md sibling), "

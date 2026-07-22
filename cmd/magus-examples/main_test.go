@@ -38,11 +38,11 @@ func TestInject(t *testing.T) {
 // TestDocsHaveExampleMarkers: every example the generator produces has a marker pair
 // in the docs, so `content-generate` can never render an example with nowhere to land.
 func TestDocsHaveExampleMarkers(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "knowledge.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "concepts", "knowledge.md"))
 	require.NoError(t, err)
 	doc := string(raw)
 	for _, ex := range examples {
-		assert.Contains(t, doc, "<!-- example:"+ex.slug+" -->", "docs/knowledge.md needs an open marker for %q", ex.slug)
+		assert.Contains(t, doc, "<!-- example:"+ex.slug+" -->", "docs/concepts/knowledge.md needs an open marker for %q", ex.slug)
 		assert.Contains(t, doc, ex.command(), "docs should mention the command %q near its example", ex.command())
 	}
 	assert.Contains(t, doc, "<!-- /example -->")

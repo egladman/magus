@@ -208,7 +208,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // except the install page; the home page (README) highlights nothing.
     var active = "documentation";
     if (srcRel == "README.md") { active = "home"; }
-    if (srcRel == site.docs + "/download.md" or srcRel.startsWith(site.docs + "/download/")) { active = "download"; }
+    if (srcRel == site.docs + "/guides/download.md" or srcRel.startsWith(site.docs + "/guides/download/")) { active = "download"; }
     // Blog posts and the blog index live under the "Blog" nav item.
     if (srcRel.startsWith(site.blog + "/") or srcRel == site.blog + "/index.md") { active = "blog"; }
     // /public/ autoindex pages are meta surfaces; no nav item is current.

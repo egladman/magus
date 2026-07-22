@@ -32,7 +32,7 @@
 // Run any subcommand with -h/--help for its own flag list.
 //
 //go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
-//go:generate go run ../magus-configdocs -out ../../docs/config.md
+//go:generate go run ../magus-configdocs -out ../../docs/reference/config.md
 package main
 
 import (

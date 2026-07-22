@@ -112,49 +112,49 @@ export fun renderTourPage(site: Site) > void {
     final steps: [TourStep] = mut [<TourStep>];
     steps.append(TourStep{ file = "01-hello.buzz", title = "Magusfiles: write your first target",
         desc = "A magusfile is a build definition; each exported function is a runnable target.",
-        docLabel = "Targets", docSlug = "targets" });
+        docLabel = "Targets", docSlug = "concepts/targets" });
     steps.append(TourStep{ file = "02-targets.buzz", title = "Targets: wire the dependencies",
         desc = "Wire a pipeline with magus.needs; ci is the conventional anchor it all keys off.",
-        docLabel = "Targets", docSlug = "targets" });
+        docLabel = "Targets", docSlug = "concepts/targets" });
     steps.append(TourStep{ file = "03-spells.buzz", title = "Spells: bind a real toolchain",
         desc = "Bind a real toolchain (Go, TypeScript, Docker) as cached, kebab-case ops.",
-        docLabel = "Spells", docSlug = "spells" });
+        docLabel = "Spells", docSlug = "concepts/spells" });
     steps.append(TourStep{ file = "04-buzz.buzz", title = "Buzz: branch, loop, recurse",
         desc = "Variables, functions, recursion, closures - evaluated live in your browser.",
-        docLabel = "Engines", docSlug = "engines" });
+        docLabel = "Engines", docSlug = "concepts/engines" });
     steps.append(TourStep{ file = "05-slots.buzz", title = "Slots: taming a greedy target",
         desc = "A target starts with one slot; reserve more so a parallel tool cannot starve the rest.",
-        docLabel = "Operations", docSlug = "operations" });
+        docLabel = "Operations", docSlug = "concepts/operations" });
     steps.append(TourStep{ file = "06-cache.buzz", title = "Cache: replay, and catch drift",
         desc = "Targets replay from cache and run once per plan; skip_cache opts a check out.",
-        docLabel = "Caching", docSlug = "remote-cache" });
+        docLabel = "Caching", docSlug = "concepts/remote-cache" });
     steps.append(TourStep{ file = "07-globs.buzz", title = "Globs: gather a target family",
         desc = "Name targets by a shared suffix and gather them with one glob; regex for the rest.",
-        docLabel = "Targets", docSlug = "targets" });
+        docLabel = "Targets", docSlug = "concepts/targets" });
     steps.append(TourStep{ file = "08-charms.buzz", title = "Charms: check, then apply",
         desc = "A charm rides down the plan; the built-in rw flips read-only checks to rewrites.",
-        docLabel = "Charms", docSlug = "charms" });
+        docLabel = "Charms", docSlug = "concepts/charms" });
     steps.append(TourStep{ file = "09-services.buzz", title = "Services: share one across runs",
         desc = "Author a spell whose op returns a Service; magus supervises one, shared across runs.",
-        docLabel = "Services", docSlug = "services" });
+        docLabel = "Services", docSlug = "concepts/services" });
     steps.append(TourStep{ file = "10-wards.buzz", title = "Wards: catch the contradiction",
         desc = "A detached service trips MGS5002 at resolution, before anything forks.",
-        docLabel = "Wards", docSlug = "wards" });
+        docLabel = "Wards", docSlug = "concepts/wards" });
     steps.append(TourStep{ file = "11-workspace.buzz", title = "Workspaces: run only what changed",
         desc = "Projects wire cross-project order with depends_on; affected runs only what changed.",
-        docLabel = "CI and affected", docSlug = "targets/ci" });
+        docLabel = "CI and affected", docSlug = "concepts/targets/ci" });
     steps.append(TourStep{ file = "12-magusfile.buzz", title = "Pipelines: assemble the whole build",
         desc = "The full multi-toolchain pipeline: generate, format, lint, build, test, release.",
-        docLabel = "CI", docSlug = "targets/ci" });
+        docLabel = "CI", docSlug = "concepts/targets/ci" });
     steps.append(TourStep{ file = "13-custom-targets.buzz", title = "Custom targets: name your own phases",
         desc = "The canonical names are conventions, not a closed set; export a release or deploy target and drive one from another.",
-        docLabel = "Targets", docSlug = "targets" });
+        docLabel = "Targets", docSlug = "concepts/targets" });
     steps.append(TourStep{ file = "14-stdlib.buzz", title = "Standard library: batteries included",
         desc = "Buzz ships host modules - string casing, semver math, JSON, hashing - you import and call straight from a target.",
-        docLabel = "Buzz modules", docSlug = "buzz/modules" });
+        docLabel = "Buzz modules", docSlug = "reference/buzz" });
     steps.append(TourStep{ file = "15-charms-custom.buzz", title = "Custom charms: patch the argv",
         desc = "Declare your own charm as a JSON Patch over a spell op's argv; run op:charm to watch the flag splice in.",
-        docLabel = "Charms", docSlug = "charms" });
+        docLabel = "Charms", docSlug = "concepts/charms" });
 
     var cards = "";
     var n = 1;

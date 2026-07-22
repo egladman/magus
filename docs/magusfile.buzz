@@ -130,11 +130,11 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
 // artifact owned by the root magusfile (man-generate). generate depends on this and
 // drift-gates the result.
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("buzz/modules/*.md", "spells/*.md", "spells.md", "manpage/*.md", "knowledge.md");
-    go["go-run"]({"args": ["../cmd/magus-docs", "-out", "./buzz/modules"]});
-    go["go-run"]({"args": ["../cmd/magus-spelldocs", "-out", "./spells", "-spells", "../spells"]});
-    go["go-run"]({"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./manpage"]});
-    go["go-run"]({"args": ["../cmd/magus-examples", "-docs", "./knowledge.md"]});
+    ctx.outputs("reference/buzz/*.md", "concepts/spells/*.md", "concepts/spells.md", "reference/manpage/*.md", "concepts/knowledge.md");
+    go["go-run"]({"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
+    go["go-run"]({"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
+    go["go-run"]({"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
+    go["go-run"]({"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
 }
 
 // generateJsBundles builds the committed browser bundles that import npm
@@ -174,7 +174,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // CONTENT are the derived-Markdown trees content-generate owns; they are rendered into
     // the site, so they must be fresh (and drift-gated) before the render below.
-    final CONTENT = ["buzz/modules", "spells", "spells.md", "manpage"];
+    final CONTENT = ["reference/buzz", "concepts/spells", "concepts/spells.md", "reference/manpage"];
     final clean_before = vcs.isDirty([OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT) == false;
     // Regenerate the docs Markdown derived from the Go tree BEFORE rendering the site.
     ctx.needs(content_generate);

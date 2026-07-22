@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **752 nodes** and **1909 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **754 nodes** and **1911 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -51,8 +51,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
 | method | 152 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 40 | `magus query kind:diagnostic` | `MGS4001`, `MGS5002`, `MGS5003` |
-| doc | 142 | `magus query kind:doc` | `documentation.md`, `spells.md`, `manpage/magus-affected.md` |
-| dir | 20 | `magus query kind:dir` | `buzz/modules`, `manpage`, `tour` |
+| doc | 142 | `magus query kind:doc` | `documentation.md`, `concepts/spells.md`, `reference/manpage/magus-affected.md` |
+| dir | 22 | `magus query kind:dir` | `reference/buzz`, `concepts`, `reference/manpage` |
 | file | 41 | `magus query kind:file` | `render.buzz`, `engine/page.buzz`, `lib/text.buzz` |
 | function | 214 | `magus query kind:function` | `renderContentHTML`, `walkGen`, `assetIntegrityCheck` |
 | import | 26 | `magus query kind:import` | `fs`, `assert`, `magus` |

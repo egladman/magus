@@ -13,7 +13,7 @@ import (
 )
 
 // TestEveryDiagnosticCodeHasDocPage enforces that every declared MGS#### code has a
-// documentation page under docs/codes/, at exactly the path its URL() resolves to.
+// documentation page under docs/reference/codes/, at exactly the path its URL() resolves to.
 // The docs are handwritten (the "Why/Resolution" prose is the value), so this is the
 // guard that keeps a new code from shipping without its page and that pins URL()
 // routing to a real file.
@@ -37,7 +37,7 @@ func TestEveryDiagnosticCodeHasDocPage(t *testing.T) {
 	for _, m := range codes {
 		code := DiagnosticCode(m[1])
 		url := CodeURL(code)
-		i := strings.Index(url, "docs/codes/")
+		i := strings.Index(url, "docs/reference/codes/")
 		require.GreaterOrEqual(t, i, 0, "%s: CodeURL %q has no docs/codes path", code, url)
 		path := filepath.Join(root, filepath.FromSlash(url[i:]))
 		_, statErr := os.Stat(path)

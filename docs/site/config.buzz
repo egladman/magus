@@ -13,7 +13,7 @@ export fun magusConfig() > Config {
     nav.append(NavLink{ suffix = "index.html", label = "Home", key = "home" });
     nav.append(NavLink{ suffix = "documentation/", label = "Documentation", key = "documentation" });
     nav.append(NavLink{ suffix = "blog/", label = "Blog", key = "blog" });
-    nav.append(NavLink{ suffix = "download/", label = "Download", key = "download" });
+    nav.append(NavLink{ suffix = "guides/download/", label = "Download", key = "download" });
     nav.append(NavLink{ suffix = "tour/", label = "Tour", key = "tour" });
     nav.append(NavLink{ suffix = "playground/", label = "Playground", key = "playground" });
     nav.append(NavLink{ suffix = "console/", label = "Console", key = "console", blank = true });

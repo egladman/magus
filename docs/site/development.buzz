@@ -132,10 +132,10 @@ magus run ci</code></pre>
 <p>The deeper references a contributor reaches for once the build is running:</p>
 <ul>
   <li><a href="../conventions/">Conventions</a> - the naming and layout rules magus expects of a workspace, and that this repository follows.</li>
-  <li><a href="../operations/">Operations</a> - the work hierarchy underneath a target: ops, plans, and the slots that bound concurrency.</li>
-  <li><a href="../config/">Configuration</a> - the <code>magus.yaml</code> keys and the <code>MAGUS_*</code> environment inventory.</li>
-  <li><a href="../wards/">Diagnostic codes</a> - the <code>MGSxxxx</code> wards, what each one catches, and how to author your own.</li>
-  <li><a href="../debugging/">Debugging</a> - dry runs, verbose output, and pry breakpoints for when a target misbehaves.</li>
+  <li><a href="../concepts/operations/">Operations</a> - the work hierarchy underneath a target: ops, plans, and the slots that bound concurrency.</li>
+  <li><a href="../reference/config/">Configuration</a> - the <code>magus.yaml</code> keys and the <code>MAGUS_*</code> environment inventory.</li>
+  <li><a href="../concepts/wards/">Diagnostic codes</a> - the <code>MGSxxxx</code> wards, what each one catches, and how to author your own.</li>
+  <li><a href="../guides/debugging/">Debugging</a> - dry runs, verbose output, and pry breakpoints for when a target misbehaves.</li>
 </ul>
 `, {"contributingSection": contributingSection, "projectCards": projectCards});
     renderDevelopmentPageRaw("Development", "Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.",

@@ -19,7 +19,7 @@ import (
 // This is the gate the docs lacked when they drifted (sh.md outlived the sh
 // module; crypto/platform were never generated).
 func TestModuleDocsUpToDate(t *testing.T) {
-	docsDir := filepath.Join("..", "..", "docs", "buzz", "modules")
+	docsDir := filepath.Join("..", "..", "docs", "reference", "buzz")
 
 	modules := std.All()
 	slices.SortFunc(modules, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
@@ -32,12 +32,12 @@ func TestModuleDocsUpToDate(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, renderModule(m), string(got),
-			"%s.md is out of date; re-run:\n  go run ./cmd/magus-docs -out ./docs/buzz/modules", m.Name)
+			"%s.md is out of date; re-run:\n  go run ./cmd/magus-docs -out ./docs/reference/buzz", m.Name)
 	}
 
 	if got, err := os.ReadFile(filepath.Join(docsDir, "index.md")); assert.NoError(t, err, "read index.md") {
 		assert.Equal(t, renderIndex(modules), string(got),
-			"index.md is out of date; re-run:\n  go run ./cmd/magus-docs -out ./docs/buzz/modules")
+			"index.md is out of date; re-run:\n  go run ./cmd/magus-docs -out ./docs/reference/buzz")
 	}
 
 	committed, err := filepath.Glob(filepath.Join(docsDir, "*.md"))

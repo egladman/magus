@@ -55,7 +55,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module | 23 | [`magus query kind:module`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `vcs` |
 | method | 152 | [`magus query kind:method`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 40 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic) | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 184 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/spells.md`, `docs/documentation.md`, `docs/manpage/magus.md` |
+| doc | 183 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/concepts/spells.md`, `docs/documentation.md`, `docs/reference/manpage/magus.md` |
 | dir | 94 | [`magus query kind:dir`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:dir) | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/buzz/modules` |
 | file | 223 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
 | function | 1042 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `sendObject`, `send` |

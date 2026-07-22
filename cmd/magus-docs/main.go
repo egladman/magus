@@ -423,9 +423,9 @@ func renderIndex(modules []std.Module) string {
 	emit("Other", leftover)
 
 	fmt.Fprintf(&b, "## See also\n\n")
-	fmt.Fprintf(&b, "- [Targets](../../targets.md): the runnable units whose magusfiles call these modules.\n")
-	fmt.Fprintf(&b, "- [Spells](../../spells.md): language and toolchain adapters that compose these modules into operations.\n")
-	fmt.Fprintf(&b, "- [Charms](../../charms.md): the execution modifiers the `charm` module constructs.\n")
+	fmt.Fprintf(&b, "- [Targets](../../concepts/targets.md): the runnable units whose magusfiles call these modules.\n")
+	fmt.Fprintf(&b, "- [Spells](../../concepts/spells.md): language and toolchain adapters that compose these modules into operations.\n")
+	fmt.Fprintf(&b, "- [Charms](../../concepts/charms.md): the execution modifiers the `charm` module constructs.\n")
 	fmt.Fprintf(&b, "- [Playground](../../playground.html): exercise these modules live in the browser.\n")
 	return b.String()
 }

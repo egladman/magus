@@ -83,9 +83,9 @@ removed lines (leading `-`) as a red one.
 
 ## Auto-generated pages
 
-Pages built from source - the [module reference](buzz/modules/index.md), the
-[spell reference](spells.md), the [man pages](manpage/magus.md), and the
-[configuration reference](config.md) - carry an **auto-generated** chip. Edit the
+Pages built from source - the [module reference](reference/buzz/index.md), the
+[spell reference](concepts/spells.md), the [man pages](reference/manpage/magus.md), and the
+[configuration reference](reference/config.md) - carry an **auto-generated** chip. Edit the
 generator, not the page; a hand edit is overwritten on the next build.
 
 ## Reading time
