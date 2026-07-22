@@ -20,12 +20,16 @@ import "lib/text" as _;
 import "lib/csp" as _;
 import "lib/html" as _;
 
-// loadMeta populates the commit-metadata fields once, shelling out to git. Pinned
-// to the default branch so deployed links stay stable across feature-branch renders.
+// loadMeta populates the commit-metadata fields once, shelling out to git. The
+// GitHub source-navigation links (edit/blame/history/blob) use the git symbolic ref
+// HEAD, which GitHub resolves to the repo's default branch: honest (it names the
+// canonical line, not a fabricated branch), rename-proof (survives a default-branch
+// rename), and identical on every branch so a feature-branch render never drifts -
+// the reason the old hardcoded "main" existed, now solved without the lie.
 export fun loadMeta(site: Site) > void {
     if (site.metaLoaded) { return; }
     site.metaPrefix = capture("git -C " + site.root + " rev-parse --show-prefix");
-    site.metaBranch = "main";
+    site.metaBranch = "HEAD";
     site.metaFull = capture("git -C " + site.root + " rev-parse HEAD");
     site.metaShort = capture("git -C " + site.root + " rev-parse --short HEAD");
     site.metaStamp = capture("TZ=UTC git -C " + site.root + " show -s --date=format-local:'%Y-%m-%dT%H:%M:%SZ' --format=%cd HEAD");
