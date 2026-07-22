@@ -132,6 +132,23 @@ func TestStampSkillAppendsExactlyOneFooter(t *testing.T) {
 	assert.True(t, strings.HasSuffix(out, "-->\n"), "footer is the last line")
 }
 
+func TestStampSkillInjectsProvenanceInsideFrontmatter(t *testing.T) {
+	out := string(stampSkill([]byte("---\nname: x\ndescription: y\n---\nbody\n")))
+	// Provenance lands inside the frontmatter (before the closing ---), leaving the
+	// source name/description ahead of it byte-for-byte.
+	assert.Contains(t, out, "---\nname: x\ndescription: y\nlicense: "+skillLicense+"\n")
+	assert.Contains(t, out, "compatibility: any-agent\n")
+	assert.Contains(t, out, "\n---\nbody\n", "closing --- and body follow the provenance")
+	fmStart := strings.Index(out, "---")
+	fmEnd := strings.Index(out[fmStart+3:], "\n---")
+	assert.Contains(t, out[:fmStart+3+fmEnd], "agent-skill-version:", "version metadata is within the frontmatter")
+}
+
+func TestInjectSkillProvenanceLeavesFrontmatterlessBodyAlone(t *testing.T) {
+	body := []byte("no frontmatter here\n")
+	assert.Equal(t, body, injectSkillProvenance(body))
+}
+
 func TestCheckSkillStatusesNothingInstalled(t *testing.T) {
 	assert.Empty(t, checkSkillStatuses(t.TempDir()))
 }
