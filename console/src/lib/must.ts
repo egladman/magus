@@ -1,10 +1,10 @@
 // must asserts a value is present, returning it non-null or throwing a clear error.
 // It replaces a `!` non-null assertion at a site where the value is known to exist:
 // same intent (proceed as non-null), but a violated assumption throws a named error
-// instead of a downstream `undefined` access. `label` names what was expected.
-export function must<T>(value: T | null | undefined, label = "value"): T {
+// instead of a downstream `undefined` access.
+export function must<T>(value: T | null | undefined): T {
   if (value === null || value === undefined) {
-    throw new Error(`must: expected ${label} to be present`);
+    throw new Error("must: a required value was null or undefined");
   }
   return value;
 }

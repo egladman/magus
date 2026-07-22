@@ -313,12 +313,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       setStatus("Decoding local graph...");
       return { data: await decodeFragment(params.data), source: "local" };
     } catch (e) {
-      setStatus(
-        "Could not decode the graph in the link (" +
-          (e instanceof Error ? errMessage(e) : String(e)) +
-          ").",
-        true,
-      );
+      setStatus("Could not decode the graph in the link (" + errMessage(e) + ").", true);
     }
   }
   // #src= fetches the JSON from an address: a loopback server (`magus graph open
@@ -344,13 +339,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       else if (localhostHost)
         hint =
           " The policy allows 127.0.0.1/[::1], not the `localhost` hostname - use `magus graph open --serve` or edit the URL to use 127.0.0.1.";
-      setStatus(
-        "Could not fetch the graph from that URL (" +
-          (e instanceof Error ? errMessage(e) : String(e)) +
-          ")." +
-          hint,
-        true,
-      );
+      setStatus("Could not fetch the graph from that URL (" + errMessage(e) + ")." + hint, true);
     }
   }
   // Fetch the committed demo graph for the demo button (#demo) AND for any content deep link
@@ -369,10 +358,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return { data: await r.json(), source: "demo" };
     } catch (e) {
-      setStatus(
-        "Could not load the demo graph (" + (e instanceof Error ? errMessage(e) : String(e)) + ").",
-        true,
-      );
+      setStatus("Could not load the demo graph (" + errMessage(e) + ").", true);
     }
   }
   // No usable fragment: DON'T auto-fetch the demo (that download is wasted on a cold visit).

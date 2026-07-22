@@ -687,7 +687,7 @@ export function startConsole(
   ): Promise<PageController<unknown, unknown> | null> {
     const m = registry.get(pageId);
     if (!m) return null;
-    return (await m.activate(host)) as PageController<unknown, unknown>;
+    return await m.activate(host);
   }
 
   // mount builds a tab's runtime once: a host pane in the outlet, a per-tab status bar, and a tile
