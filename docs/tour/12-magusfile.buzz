@@ -60,8 +60,9 @@ fun ldflags(version: str) > str {
 // later is fine, since bodies run after the whole file loads). Because it is a
 // plain identifier, a typo is an undefined variable caught at load, and magus can
 // recover the whole DAG statically, without running the bodies. For a family of
-// targets by name pattern there is magus.needsGlob (below). magus runs the
-// dependencies first, deduplicated, and in parallel wherever the graph allows.
+// targets by name pattern, magus.glob resolves the pattern to the matching
+// handles that magus.needs depends on (below). magus runs the dependencies
+// first, deduplicated, and in parallel wherever the graph allows.
 //
 // A spell's ops are its contributed targets, keyed by the kebab-case CLI name
 // (go-build, buf-lint). Call one by indexing the handle with that name, the same
@@ -79,14 +80,15 @@ export fun proto_generate(args: [str]) > void { buf["buf-generate"](); }
 export fun mock_generate(args: [str])  > void { go["go-generate"](); }
 
 // The umbrella `generate` target pulls in every `*-generate` target with ONE
-// pattern instead of listing each by hand: magus.needsGlob("*-generate") matches
-// every target ending in -generate, so adding a `sql-generate` later needs no edit
-// here. (needsGlob is the pattern verb; needs itself stays functions-only. A
-// pattern with no `*` is suffix shorthand, so "generate" would read the same here.)
-// That is the payoff of naming targets by a shared convention. Try `run generate`.
+// pattern instead of listing each by hand: magus.glob("*-generate") resolves to
+// every target ending in -generate, and magus.needs depends on those handles, so
+// adding a `sql-generate` later needs no edit here. (glob is the pattern resolver;
+// needs itself only ever takes handles. A pattern with no `*` is suffix shorthand,
+// so "generate" would read the same here.) That is the payoff of naming targets by
+// a shared convention. Try `run generate`.
 export fun generate(args: [str]) > void {
     magus.needs(preflight);
-    magus.needsGlob("*-generate");
+    magus.needs(magus.glob("*-generate"));
 }
 
 // Format every language. These ops CHECK by default; run `magus run format:rw`
@@ -122,7 +124,7 @@ export fun js_lint(args: [str]) > void {
 
 // The umbrella `lint` fans out across the whole family with one pattern.
 export fun lint(args: [str]) > void {
-    magus.needsGlob("*-lint");
+    magus.needs(magus.glob("*-lint"));
 }
 
 // Compile the version-stamped server binary and type-check the client.

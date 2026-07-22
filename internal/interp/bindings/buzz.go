@@ -52,13 +52,15 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	magus.MapSet("project", buildProject(ctx, obs))
 	magus.MapSet("cache", buildCacheNS(ctx, obs))
 	// magus.needs(...): the one dependency primitive. Each argument is a target
-	// function - a same-project exported target by reference, or a cross-project
-	// handle from a project import; the targets are awaited via the Buzz VM pool
-	// (cross-project handles dispatch through CrossDispatch).
+	// function - a same-project exported target by reference, a cross-project handle
+	// from a project import, or a magus.glob(...) list of target functions; the targets
+	// are awaited via the Buzz VM pool (cross-project handles dispatch through
+	// CrossDispatch).
 	magus.MapSet("needs", directVal(obs, "magus.needs", buildBuzzNeeds(targets, exports, ext)))
-	// magus.needsGlob(...): the pattern form - glob strings matched against the
-	// project's target names; every match is awaited like a needs dependency.
-	magus.MapSet("needsGlob", directVal(obs, "magus.needsGlob", buildBuzzNeedsGlob(targets)))
+	// magus.glob(...): resolve glob patterns (matched against target names) to the list
+	// of matching target function handles - the pattern resolver that feeds magus.needs
+	// (magus.needs(magus.glob("*-generate"))), so a string never enters needs itself.
+	magus.MapSet("glob", directVal(obs, "magus.glob", buildBuzzGlob(targets, exports)))
 	// magus.inputs(...) / magus.outputs(...): declare a target's cache footprint next
 	// to its body - inputs narrow the cache key, outputs the snapshot/replay set. They
 	// are read statically at load (a cache hit skips the body, so the run cannot be the

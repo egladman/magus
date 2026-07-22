@@ -174,7 +174,7 @@ func TestBuildBuzzNeeds(t *testing.T) {
 		_, err := needs(context.Background(), []vm.Value{vm.StrValue("go-build")})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be a target function")
-		assert.Contains(t, err.Error(), "needsGlob")
+		assert.Contains(t, err.Error(), "magus.glob(...)")
 	})
 
 	t.Run("an anonymous function is rejected", func(t *testing.T) {
@@ -206,41 +206,70 @@ func TestBuildBuzzNeeds(t *testing.T) {
 	})
 }
 
-func TestBuildBuzzNeedsGlob(t *testing.T) {
-	t.Run("each pattern resolves and dispatches its matches", func(t *testing.T) {
-		var runs atomic.Int32
-		record := func(context.Context, []vm.Value) (vm.Value, error) { runs.Add(1); return vm.Null, nil }
-		targets := map[string]vm.Callable{"go-build": record, "go-test": record, "lint": record}
-		needsGlob := buildBuzzNeedsGlob(targets)
+func TestBuildBuzzGlob(t *testing.T) {
+	// mkTargets builds a matching targets map plus the parallel exports map of handle
+	// values glob returns, both keyed by the same target names.
+	mkTargets := func(names ...string) (map[string]vm.Callable, map[string]vm.Value) {
+		targets := map[string]vm.Callable{}
+		exports := map[string]vm.Value{}
+		for _, n := range names {
+			targets[n] = noop
+			exports[n] = vm.DirectValue(n, noop)
+		}
+		return targets, exports
+	}
+	handleNames := func(v vm.Value) []string {
+		var out []string
+		for _, h := range v.ListItems() {
+			out = append(out, h.FunName())
+		}
+		return out
+	}
 
-		v, err := needsGlob(context.Background(), []vm.Value{vm.StrValue("go-*")})
+	t.Run("resolves patterns to the matching target handles", func(t *testing.T) {
+		targets, exports := mkTargets("go-build", "go-test", "lint")
+		v, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.StrValue("go-*")})
 		require.NoError(t, err)
-		require.Equal(t, vm.Null, v)
-		assert.Equal(t, int32(2), runs.Load(), "go-* matches go-build and go-test, not lint")
+		require.True(t, v.IsList())
+		// matchBuzzTargets sorts, so the handles come back in target-name order.
+		assert.Equal(t, []string{"go-build", "go-test"}, handleNames(v), "go-* matches go-build and go-test, not lint")
 	})
 
 	t.Run("a non-string argument is rejected", func(t *testing.T) {
-		needsGlob := buildBuzzNeedsGlob(noopTargets("go-build"))
-		_, err := needsGlob(context.Background(), []vm.Value{vm.IntValue(7)})
+		targets, exports := mkTargets("go-build")
+		_, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.IntValue(7)})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be a glob pattern string")
 	})
 
 	t.Run("zero arguments is an error", func(t *testing.T) {
-		needsGlob := buildBuzzNeedsGlob(noopTargets("go-build"))
-		_, err := needsGlob(context.Background(), nil)
+		targets, exports := mkTargets("go-build")
+		_, err := buildBuzzGlob(targets, exports)(context.Background(), nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "at least one glob pattern")
 	})
 
-	t.Run("a pattern matching nothing is a silent no-op", func(t *testing.T) {
+	t.Run("a pattern matching nothing yields an empty list", func(t *testing.T) {
+		targets, exports := mkTargets("go-build")
+		v, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.StrValue("python-*")})
+		require.NoError(t, err)
+		require.True(t, v.IsList())
+		assert.Empty(t, v.ListItems(), "no match yields no handles")
+	})
+
+	t.Run("needs flattens a glob list and dispatches each match", func(t *testing.T) {
 		var runs atomic.Int32
 		record := func(context.Context, []vm.Value) (vm.Value, error) { runs.Add(1); return vm.Null, nil }
-		needsGlob := buildBuzzNeedsGlob(map[string]vm.Callable{"go-build": record})
-		v, err := needsGlob(context.Background(), []vm.Value{vm.StrValue("python-*")})
+		targets := map[string]vm.Callable{"go-build": record, "go-test": record, "lint": record}
+		exports := map[string]vm.Value{"go-build": vm.DirectValue("go-build", record), "go-test": vm.DirectValue("go-test", record), "lint": vm.DirectValue("lint", record)}
+		globbed, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.StrValue("go-*")})
+		require.NoError(t, err)
+
+		needs := buildBuzzNeeds(targets, exports, &externalHandles{})
+		v, err := needs(context.Background(), []vm.Value{globbed})
 		require.NoError(t, err)
 		require.Equal(t, vm.Null, v)
-		assert.Equal(t, int32(0), runs.Load(), "no match runs nothing")
+		assert.Equal(t, int32(2), runs.Load(), "needs(glob(go-*)) dispatches go-build and go-test, not lint")
 	})
 }
 

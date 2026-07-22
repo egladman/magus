@@ -79,7 +79,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 // a magusfile referencing a member this host omits would fail to evaluate. The guard
 // test TestMagusSurfaceMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members
-// (magus.project, needs, needsGlob) are modeled into the graph.
+// (magus.project, needs, glob) are modeled into the graph.
 func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m := vm.NewMap()
 
@@ -91,37 +91,50 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return vm.Null, nil
 	}))
 
-	// magus.needs(fn, ...): trace a same-project edge per target function
-	// argument, keyed by the function's declared name (FunName) run through the
-	// same normalizer as the real binding's resolveTargetFun. Cross-project
-	// handles (import "project/...") aren't modeled in the single-file dry run -
-	// there's no sibling project to enumerate in the sandbox - so a non-function
-	// argument is skipped, best-effort.
+	// magus.needs(fn|glob(...), ...): trace a same-project edge per target function
+	// argument, keyed by the function's declared name (FunName) run through the same
+	// normalizer as the real binding's resolveTargetFun; a magus.glob(...) list arg is
+	// flattened to its handles. Cross-project handles (import "project/...") aren't
+	// modeled in the single-file dry run - there's no sibling project to enumerate in
+	// the sandbox - so a non-function argument is skipped, best-effort.
 	m.MapSet("needs", fn("magus.needs", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		var trace func(a vm.Value)
+		trace = func(a vm.Value) {
+			if a.IsList() {
+				// A magus.glob(...) result: trace each resolved target handle.
+				for _, el := range a.ListItems() {
+					trace(el)
+				}
+				return
+			}
+			if a.IsFun() {
+				if name := a.FunName(); name != "" {
+					tr.addEdge(normalizeTarget(name))
+				}
+			}
+		}
 		for _, a := range args {
-			if !a.IsFun() {
-				continue
-			}
-			if name := a.FunName(); name != "" {
-				tr.addEdge(normalizeTarget(name))
-			}
+			trace(a)
 		}
 		return vm.Null, nil
 	}))
 
-	// magus.needsGlob(pattern, ...): expand each pattern against the discovered
-	// target set (tr.targetKeys) and trace an edge per match, mirroring the real
-	// binding's matchBuzzTargets semantics.
-	m.MapSet("needsGlob", fn("magus.needsGlob", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	// magus.glob(pattern, ...): expand each pattern against the discovered target set
+	// (tr.targetKeys) and RETURN the matches as target handles (synthetic function
+	// values carrying each name), so magus.needs(magus.glob("...")) traces an edge per
+	// match. Mirrors the real binding's buildBuzzGlob: a pattern resolves to handles,
+	// keeping needs monomorphic.
+	m.MapSet("glob", fn("magus.glob", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		var handles []vm.Value
 		for _, a := range args {
 			if !a.IsStr() {
 				continue
 			}
 			for _, name := range tr.matchTargets(globToRegexp(a.AsString())) {
-				tr.addEdge(name)
+				handles = append(handles, fn(name, retNull))
 			}
 		}
-		return vm.Null, nil
+		return vm.ListValue(handles), nil
 	}))
 
 	// magus.cache.<...>: a namespace in the real module (cache.remote, ...); stub as

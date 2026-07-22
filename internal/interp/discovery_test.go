@@ -32,7 +32,7 @@ func nodesByName(nodes []types.TargetGraphNode) map[string]types.TargetGraphNode
 }
 
 // TestDiscoverCtxNodes runs a magusfile of ctx-form targets under discovery and
-// asserts the recorded declarations (needs, needsGlob, inputs, outputs, doc) become
+// asserts the recorded declarations (needs, glob, inputs, outputs, doc) become
 // graph nodes, that has_charm records the charm and takes its false branch, and that
 // an exported non-ctx function is ignored (not a target under the new contract).
 func TestDiscoverCtxNodes(t *testing.T) {
@@ -53,7 +53,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 // Lint by pattern.
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    ctx.needsGlob("forma*");
+    ctx.needs(ctx.glob("forma*"));
 }
 
 // Conditionally emit a release artifact.
@@ -82,8 +82,8 @@ export fun helper(args: [str]) > void {}
 		Outputs:      []string{"bin/app"},
 	}, by["build"])
 
-	// needsGlob records the matching target name as a dependency.
-	assert.Equal(t, []string{"format"}, by["lint"].Dependencies, "needsGlob(forma*) matches format")
+	// glob resolves the pattern to a handle that needs records as a dependency.
+	assert.Equal(t, []string{"format"}, by["lint"].Dependencies, "needs(glob(forma*)) matches format")
 
 	// has_charm returns false under discovery (the charm-absent branch), so the
 	// guarded output is not recorded, but the charm name IS recorded on the node.

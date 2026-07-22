@@ -2,7 +2,7 @@
 // without evaluating any target body. Every `export fun` is a node, its leading
 // doc comment is the node's description, and the target functions its body
 // passes to `magus.needs(...)` (plus the patterns it passes to
-// `magus.needsGlob(...)`) are its edges. Because it reads
+// `magus.needs(magus.glob(...))`) are its edges. Because it reads
 // the source rather than running it, it is deterministic and sees *both* arms of
 // a runtime branch (e.g. the `container` charm toggle on `build`) — a runtime
 // trace would only ever see the arm taken.
@@ -39,7 +39,7 @@ import (
 //
 // Each node's Dependencies are the resolved dependency target names — exact edges
 // first (target functions passed to magus.needs, in source order), then the names
-// matched by each magus.needsGlob pattern; self-edges and duplicates are dropped.
+// matched by each magus.glob pattern; self-edges and duplicates are dropped.
 // CrossDependencies hold cross-project edges (from project imports). Charms are the
 // has_charm names the body reads, sorted.
 func Extract(source string) []types.TargetGraphNode {
@@ -90,7 +90,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 
 	// Second pass: build each node by walking its body, resolving every edge straight
 	// into its Dependencies — exact edges (target functions passed to magus.needs)
-	// by name, pattern edges (magus.needsGlob) by matching the names collected above.
+	// by name, pattern edges (magus.needs(magus.glob(...))) by matching the names collected above.
 	var nodes []types.TargetGraphNode
 	for _, stmt := range prog.Stmts {
 		fn, ok := stmt.(*ast.FunDecl)
@@ -121,20 +121,25 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// static read, the same way any non-literal argument is.
 					if magusCall(e, "needs") {
 						for _, a := range e.Args {
-							if id, ok := a.(*ast.IdentExpr); ok {
-								if key := norm(id.Name); slices.Contains(names, key) {
+							switch arg := a.(type) {
+							case *ast.IdentExpr:
+								// Exact edge: a target function passed by reference.
+								if key := norm(arg.Name); slices.Contains(names, key) {
 									node.Dependencies = appendUniq(node.Dependencies, key)
 								}
-							}
-						}
-					}
-					// Pattern edges: magus.needsGlob("..."), each literal pattern
-					// resolved against the collected target names with the same
-					// semantics the runtime matcher uses.
-					if magusCall(e, "needsGlob") {
-						for _, a := range e.Args {
-							if lit, ok := a.(*ast.StringLit); ok {
-								node.Dependencies = appendMatching(node.Dependencies, names, node.Name, targetPatternRe(lit.Val))
+							case *ast.CallExpr:
+								// Pattern edges: magus.needs(magus.glob("...")). glob resolves
+								// the pattern to target handles; read each literal pattern the
+								// same way the runtime matcher does. A project-import member
+								// (<alias>.<target>) is a MemberExpr arg, collected as a cross
+								// edge by the MemberExpr walk case below.
+								if magusCall(arg, "glob") {
+									for _, ga := range arg.Args {
+										if lit, ok := ga.(*ast.StringLit); ok {
+											node.Dependencies = appendMatching(node.Dependencies, names, node.Name, targetPatternRe(lit.Val))
+										}
+									}
+								}
 							}
 						}
 					}
@@ -547,7 +552,7 @@ func firstSentence(s string) string {
 	return s
 }
 
-// targetPatternRe compiles a magus.needsGlob pattern to an anchored regexp with
+// targetPatternRe compiles a magus.glob pattern to an anchored regexp with
 // the runtime matcher's semantics (bindings' compileTargetPatterns): a pattern
 // with no "*" is suffix shorthand ("build" matches names ending in "-build"),
 // a pattern with "*" is a glob ("*" matches any run). Both forms are

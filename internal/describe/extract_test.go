@@ -32,7 +32,7 @@ export fun foo_bar(args: [str]) > void {
 export fun baz(args: [str]) > void { magus.doctor([]); }
 
 export fun gen_all(args: [str]) > void {
-    magus.needsGlob("*-gen");
+    magus.needs(magus.glob("*-gen"));
 }
 
 export fun a_gen(args: [str]) > void { go["x"](); }
@@ -262,11 +262,11 @@ export fun real(args: [str]) > void { go["x"](); }
 	assert.Equal(t, []string{"real"}, build.Dependencies, "trailing comment ignored")
 }
 
-// TestNeedsGlobMultiPattern guards multi-pattern needsGlob: every pattern in a
-// single magus.needsGlob call must be honored, not just the first.
+// TestNeedsGlobMultiPattern guards multi-pattern glob: every pattern in a
+// single magus.glob call must be honored, not just the first.
 func TestNeedsGlobMultiPattern(t *testing.T) {
 	g := Extract(`export fun all(args: [str]) > void {
-    magus.needsGlob("*-gen", "check-*");
+    magus.needs(magus.glob("*-gen", "check-*"));
 }
 export fun docs_gen(args: [str]) > void { go["x"](); }
 export fun check_lint(args: [str]) > void { go["x"](); }
@@ -276,9 +276,9 @@ export fun check_lint(args: [str]) > void { go["x"](); }
 	assert.Equal(t, want, all.Dependencies, "both glob patterns honored")
 }
 
-// TestNeedsHandles guards magus.needs / magus.needsGlob edges: an identifier naming
-// an exported target is an exact dep, needsGlob patterns resolve against sibling
-// target names (a starless pattern is suffix shorthand), a multi-pattern needsGlob
+// TestNeedsHandles guards magus.needs / magus.glob edges: an identifier naming
+// an exported target is an exact dep, glob patterns resolve against sibling
+// target names (a starless pattern is suffix shorthand), a multi-pattern glob
 // yields every match, and a handle in a trailing comment is prose, not an edge.
 func TestNeedsHandles(t *testing.T) {
 	g := Extract(`export fun build(args: [str]) > void { go["x"](); }
@@ -286,7 +286,7 @@ export fun a_gen(args: [str]) > void { go["x"](); }
 export fun b_gen(args: [str]) > void { go["x"](); }
 export fun test(args: [str]) > void {
     magus.needs(build);
-    magus.needsGlob("*-gen", "b-*");
+    magus.needs(magus.glob("*-gen", "b-*"));
     // magus.needs(ignored) in a comment must not count
 }
 `)

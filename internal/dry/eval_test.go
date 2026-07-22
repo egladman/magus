@@ -123,8 +123,8 @@ func TestLoadMagusfile_patternNeeds(t *testing.T) {
 	const src = `
 export fun proto_generate(args: [str]) > void {}
 export fun mock_generate(args: [str]) > void {}
-export fun generate(args: [str]) > void { magus.needsGlob("*-generate"); }
-export fun regen(args: [str]) > void { magus.needsGlob("proto-*", "mock-*"); }
+export fun generate(args: [str]) > void { magus.needs(magus.glob("*-generate")); }
+export fun regen(args: [str]) > void { magus.needs(magus.glob("proto-*", "mock-*")); }
 `
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)

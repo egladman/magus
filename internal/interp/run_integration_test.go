@@ -301,7 +301,7 @@ export fun dep(_a: [str]) > void { fs.writeFile("dep-ran", "dep"); }
 }
 
 // TestNeedsStringArgumentFails verifies magus.needs rejects a bare string - the
-// classic footgun - and points the author at magus.needsGlob for patterns.
+// classic footgun - and points the author at magus.glob for patterns.
 func TestNeedsStringArgumentFails(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
@@ -507,7 +507,7 @@ export fun build(args: [str]) > void {}
 	assert.True(t, keys["db-migrate"], "Parse missing 'db-migrate'")
 }
 
-// TestNeedsGlobHandle covers magus.needsGlob feeding a meta-target: the matched
+// TestNeedsGlobHandle covers magus.needs(magus.glob(...)) feeding a meta-target: the matched
 // targets run (sorted) before the body, and non-matching targets are skipped. With
 // no pool in ctx the deps run sequentially in the current VM, so the order is
 // deterministic.
@@ -523,7 +523,7 @@ export fun go_build(_a: [str]) > void { note("go-build"); }
 export fun image_build(_a: [str]) > void { note("image-build"); }
 export fun go_test(_a: [str]) > void { note("go-test"); }
 export fun build(_a: [str]) > void {
-   magus.needsGlob("*-build");
+   magus.needs(magus.glob("*-build"));
    note("build-body");
 }
 `)

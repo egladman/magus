@@ -66,7 +66,7 @@ func evalAndProbe(ctx context.Context, src string, charms []string, spells map[s
 	}
 
 	targets = discoverTargets(sess)
-	// Publish the full target set before probing so a magus.needsGlob in a body
+	// Publish the full target set before probing so a magus.glob in a body
 	// can expand its pattern against it.
 	for _, t := range targets {
 		tr.targetKeys = append(tr.targetKeys, t.key)
