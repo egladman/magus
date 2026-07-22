@@ -104,11 +104,11 @@ So `explain tool:go` lists every op that runs go:
 $ magus explain tool:go
 tool:go   tool
 tool: go
-11 nodes reach this
+12 nodes reach this
 
-used by (9)  op:go:go-build, op:go:go-clean, op:go:go-generate,
-             op:go:go-mod-tidy, op:go:go-test, op:go:go-vet, op:go:golangci-lint,
-             op:go:govulncheck, spell:go
+used by (10)  op:go:go-build, op:go:go-clean, op:go:go-generate,
+              op:go:go-mod-tidy, op:go:go-run, op:go:go-test, op:go:go-vet,
+              op:go:golangci-lint, op:go:govulncheck, spell:go
 
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago&token=q2lYk8MY_plBI1553QrP9_LU07Z8kem-6N-iYYUmQME
 (start the magus daemon if the graph does not load)

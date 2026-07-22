@@ -89,12 +89,12 @@
           <li><a href="../../spells/ts/" title="ts spell">ts spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#go-build" title="go-build">go-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#go-clean" title="go-clean">go-clean</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#go-fmt" title="go-fmt">go-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#go-generate" title="go-generate">go-generate</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#go-mod-tidy" title="go-mod-tidy">go-mod-tidy</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#go-test" title="go-test">go-test</a><ul><li><a href="#cd" title="cd">cd</a></li><li><a href="#debug" title="debug">debug</a></li><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#go-vet" title="go-vet">go-vet</a><ul><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#golangci-lint" title="golangci-lint">golangci-lint</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#govulncheck" title="govulncheck">govulncheck</a><ul><li><a href="#example-8" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#go-build" title="go-build">go-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#go-clean" title="go-clean">go-clean</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#go-fmt" title="go-fmt">go-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#go-generate" title="go-generate">go-generate</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#go-mod-tidy" title="go-mod-tidy">go-mod-tidy</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#go-run" title="go-run">go-run</a><ul><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#go-test" title="go-test">go-test</a><ul><li><a href="#cd" title="cd">cd</a></li><li><a href="#debug" title="debug">debug</a></li><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#go-vet" title="go-vet">go-vet</a><ul><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#golangci-lint" title="golangci-lint">golangci-lint</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-8" title="Example">Example</a></li></ul></li><li><a href="#govulncheck" title="govulncheck">govulncheck</a><ul><li><a href="#example-9" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">6 min read</small>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="go">go</h1>
 <p>The <code>go</code> spell wires the Go toolchain into a magusfile: each op forks a <code>go</code> (or <code>gofmt</code>) subcommand directly, with no shell. Lint and vulnerability scanning run as <code>go tool</code> invocations so they resolve from the module's tool block rather than PATH.</p>
@@ -238,6 +238,23 @@ export fun tidy(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-mod-tidy&quot;]();
 }
 </code></pre>
+<h2 id="go-run">go-run</h2>
+<p>go-run compiles and runs a package. Alone among these ops it has no useful bare form: the caller names the package and its flags through the {&quot;args&quot;: [...]} option (go[&quot;go-run&quot;]({&quot;args&quot;: [&quot;../cmd/tool&quot;, &quot;-out&quot;, &quot;x&quot;]}) -&gt; <code>go run ../cmd/tool -out x</code>), so a magusfile drives a repo-local Go tool through the spell - version-pinned, sandbox- and charm-aware - instead of a raw os.exec(&quot;go&quot;, [&quot;run&quot;, ...]).</p>
+<p><strong>Command:</strong> <code>go run</code></p>
+<h3 id="example-5">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// Run a repo-local Go tool through the spell instead of os.exec. go-run has no
+// useful bare form: name the package and its flags via the &quot;args&quot; option, which
+// append after `go run`. This forks `go run ./cmd/gen-docs -out ./docs`.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun generate(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-run&quot;]({&quot;args&quot;: [&quot;./cmd/gen-docs&quot;, &quot;-out&quot;, &quot;./docs&quot;]});
+}
+</code></pre>
 <h2 id="go-test">go-test</h2>
 <p>The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). <code>magus run go::go-test:cd</code> (or ci:cd) emits the profile.</p>
 <p><strong>Command:</strong> <code>go test ./...</code></p>
@@ -272,7 +289,7 @@ export fun tidy(ctx: magus\Context, args: [str]) &gt; void {
 ]
 </code></pre>
 </details>
-<h3 id="example-5">Example</h3>
+<h3 id="example-6">Example</h3>
 
 <pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// go-test runs the suite; here with the race detector, so `magus run test` forks
 // `go test ./... -race`. The cd charm (`magus run test:cd`) adds the atomic
@@ -288,7 +305,7 @@ export fun test(ctx: magus\Context, args: [str]) &gt; void {
 </code></pre>
 <h2 id="go-vet">go-vet</h2>
 <p><strong>Command:</strong> <code>go vet ./...</code></p>
-<h3 id="example-6">Example</h3>
+<h3 id="example-7">Example</h3>
 
 <pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// go-vet is static analysis, so it composes into the canonical `lint` target
 // (alongside golangci-lint) rather than a bespoke `vet` target. `magus run lint`
@@ -330,7 +347,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 ]
 </code></pre>
 </details>
-<h3 id="example-7">Example</h3>
+<h3 id="example-8">Example</h3>
 
 <pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// golangci-lint runs as a `go tool` (resolved from go.mod's tool block). The rw
 // charm inserts --fix, so `magus run lint:rw` applies the autofixable findings.
@@ -346,7 +363,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 <h2 id="govulncheck">govulncheck</h2>
 <p>Scans for known vulnerabilities in the module's call graph. Command as a <code>go tool</code> (like golangci-lint) so it resolves from go.mod's tool block, not PATH.</p>
 <p><strong>Command:</strong> <code>go tool govulncheck ./...</code></p>
-<h3 id="example-8">Example</h3>
+<h3 id="example-9">Example</h3>
 
 <pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// govulncheck scans the module's call graph for known vulnerabilities, run as a
 // `go tool` so it resolves from go.mod's tool block. Security scanning is static

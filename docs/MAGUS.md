@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **746 nodes** and **1898 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **747 nodes** and **1903 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,8 +45,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | project | 1 | `magus query kind:project` | `docs` |
 | target | 15 | `magus query kind:target` | `content-generate`, `generate`, `ci` |
 | spell | 11 | `magus query kind:spell` | `go`, `ts`, `docker` |
-| op | 52 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
-| tool | 13 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
+| op | 53 | `magus query kind:op` | `go-run`, `shellcheck`, `buf-breaking` |
+| tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `vcs` |
 | method | 149 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |

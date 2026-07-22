@@ -162,6 +162,29 @@ export fun tidy(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## go-run
+
+go-run compiles and runs a package. Alone among these ops it has no useful bare form: the caller names the package and its flags through the {"args": [...]} option (go["go-run"]({"args": ["../cmd/tool", "-out", "x"]}) -> `go run ../cmd/tool -out x`), so a magusfile drives a repo-local Go tool through the spell - version-pinned, sandbox- and charm-aware - instead of a raw os.exec("go", ["run", ...]).
+
+**Command:** `go run`
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// Run a repo-local Go tool through the spell instead of os.exec. go-run has no
+// useful bare form: name the package and its flags via the "args" option, which
+// append after `go run`. This forks `go run ./cmd/gen-docs -out ./docs`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    go["go-run"]({"args": ["./cmd/gen-docs", "-out", "./docs"]});
+}
+```
+
 ## go-test
 
 The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.

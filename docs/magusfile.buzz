@@ -26,6 +26,10 @@ import "render" as renderer;
 // the custom targets below; it just makes the project's TypeScript browsable as symbols.
 import "magus/spell/magusfile";
 import "magus/spell/ts";
+// go is imported for its go-run op only (content-generate/changelog-generate drive
+// repo-root Go tools through it), NOT added to the project spells list below: docs is
+// not a Go project, so it must not inherit go's **/*.go required-globs or language tag.
+import "magus/spell/go";
 
 magus.project({
     "spells": [magusfile, ts],
@@ -110,8 +114,8 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
 // must not be edited by hand. generate calls this; the drift gate catches any manual
 // edit to a released section on the next render.
 export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
-    os.exec("go", ["run", "../cmd/magus-utils", "generate-changelog",
-        "-releases", ROOT + "/releases", "-changelog", ROOT + "/CHANGELOG.md"], ".", {});
+    go["go-run"]({"args": ["../cmd/magus-utils", "generate-changelog",
+        "-releases", ROOT + "/releases", "-changelog", ROOT + "/CHANGELOG.md"]});
 }
 
 // content-generate regenerates the committed docs Markdown derived from the Go source
@@ -119,17 +123,18 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
 // the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the
 // Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked
 // examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The
-// generator tools live at the repo root, so they run from here (the docs cwd) as
-// `go run ../cmd/...` writing into this project's own tree. This owns only the Markdown
+// generator tools live at the repo root, so they run from here (the docs cwd) through
+// the go spell's go-run op (`go run ../cmd/...`) writing into this project's own tree,
+// version-pinned and sandbox-aware rather than a raw os.exec. This owns only the Markdown
 // manpages (docs-site content, docs/manpage/*.md); the roff manpages are a distribution
 // artifact owned by the root magusfile (man-generate). generate depends on this and
 // drift-gates the result.
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
     ctx.outputs("buzz/modules/*.md", "spells/*.md", "spells.md", "manpage/*.md", "knowledge.md");
-    os.exec("go", ["run", "../cmd/magus-docs", "-out", "./buzz/modules"], ".", {});
-    os.exec("go", ["run", "../cmd/magus-spelldocs", "-out", "./spells", "-spells", "../spells"], ".", {});
-    os.exec("go", ["run", "../cmd/magus-manpage", "-format", "md", "-out", "./manpage"], ".", {});
-    os.exec("go", ["run", "../cmd/magus-examples", "-docs", "./knowledge.md"], ".", {});
+    go["go-run"]({"args": ["../cmd/magus-docs", "-out", "./buzz/modules"]});
+    go["go-run"]({"args": ["../cmd/magus-spelldocs", "-out", "./spells", "-spells", "../spells"]});
+    go["go-run"]({"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./manpage"]});
+    go["go-run"]({"args": ["../cmd/magus-examples", "-docs", "./knowledge.md"]});
 }
 
 // generateJsBundles builds the committed browser bundles that import npm
