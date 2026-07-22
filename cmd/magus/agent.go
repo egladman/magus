@@ -103,11 +103,13 @@ func agentCmd(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "install":
 		return agentInstallCmd(ctx, args[1:])
+	case "sample":
+		return agentSampleCmd()
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return fmt.Errorf("agent: unknown subcommand %q (try: install)", args[0])
+		return fmt.Errorf("agent: unknown subcommand %q (try: install, sample)", args[0])
 	}
 }
 
@@ -129,6 +131,10 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "  agents     write .agents/skills/ (Agent Skills spec generic location)")
 	fmt.Fprintln(w, "  codex      write a managed magus section into AGENTS.md (Codex and")
 	fmt.Fprintln(w, "             any other AGENTS.md-reading agent)")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Other subcommands:")
+	fmt.Fprintln(w, "  sample     print a starter AGENTS.md to stdout to own and tweak; never")
+	fmt.Fprintln(w, "             writes a file, so it cannot clobber an existing one")
 }
 
 func agentUsageErr() error {
@@ -391,5 +397,40 @@ func printAgentInstallNextSteps(written []string) {
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
 	interactive.Emit(os.Stderr, "the skills point at MAGUS.md's routing table:  magus describe graph -o markdown")
 	interactive.Emit(os.Stderr, "safety: consider a line in your CLAUDE.md/AGENTS.md so parallel agents cannot wipe each other's work:")
-	interactive.Emit(os.Stderr, "  \"Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work.\"")
+	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
+	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  magus agent sample")
+}
+
+// vcsSafetyRule is the one always-on version-control rule worth carrying in a
+// CLAUDE.md/AGENTS.md: it stops one agent's whole-tree revert from destroying
+// another's uncommitted work. Shared by the install hint and the sample doc.
+const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
+
+// agentSampleDoc returns a complete, opinionated-but-tweakable AGENTS.md starter a
+// developer can paste and adapt. It is print-only (magus agent sample): unlike
+// `agent install codex`, which manages a marked magus section inside an existing
+// AGENTS.md, this hands over a whole file to own, so magus never risks clobbering
+// one. The magus block reproduces agents-section.md verbatim.
+func agentSampleDoc() string {
+	return "# AGENTS.md\n\n" +
+		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
+		"     fill in the project-specific sections below. The magus block reproduces\n" +
+		"     the guidance `magus agent install` would otherwise manage for you. -->\n\n" +
+		"## Project\n\n" +
+		"<!-- What this repo is, its primary language(s), and where the entry points\n" +
+		"     and top-level layout live. A few sentences. -->\n\n" +
+		"## Conventions\n\n" +
+		"<!-- The non-obvious house rules an agent cannot infer from the code:\n" +
+		"     naming, error handling, comment style, and what NOT to touch. -->\n\n" +
+		"## Version control\n\n" +
+		"- " + vcsSafetyRule + "\n\n" +
+		strings.TrimSpace(agentsSection) + "\n"
+}
+
+// agentSampleCmd prints agentSampleDoc to stdout. It never writes a file: an
+// AGENTS.md is the developer's to own, and clobbering an existing one would be the
+// opposite of helpful.
+func agentSampleCmd() error {
+	fmt.Fprint(os.Stdout, agentSampleDoc())
+	return nil
 }

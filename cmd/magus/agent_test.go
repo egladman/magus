@@ -198,3 +198,14 @@ func TestCheckSkillStatusesIgnoresForeignAgentsMD(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# their file\n"), 0o644))
 	assert.Empty(t, checkSkillStatuses(dir))
 }
+
+func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
+	doc := agentSampleDoc()
+	assert.Contains(t, doc, "# AGENTS.md")
+	assert.Contains(t, doc, "## Project")   // a project placeholder to fill in
+	assert.Contains(t, doc, "## magus")     // the reproduced magus block
+	assert.Contains(t, doc, vcsSafetyRule)  // the shared safety rule
+	for _, r := range doc {
+		require.Less(t, r, rune(128), "sample AGENTS.md must be plain ASCII")
+	}
+}
