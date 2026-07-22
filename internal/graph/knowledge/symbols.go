@@ -51,7 +51,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Label: path, Source: path, Attrs: attrs})
 		if owner, ok := owningProjectPath(path, projects); ok {
-			s.Edges = append(s.Edges, extractedEdge(projectID(owner), fileID(path), types.RelationContains, path))
+			dn, de := containsChain(owner, path, fileID(path))
+			s.Nodes = append(s.Nodes, dn...)
+			s.Edges = append(s.Edges, de...)
 		}
 	}
 	for _, sym := range syms {

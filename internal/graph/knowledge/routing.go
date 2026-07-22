@@ -14,7 +14,7 @@ import (
 var routingKindOrder = []string{
 	types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
 	types.KindTool, types.KindCharm, types.KindModule, types.KindMethod, types.KindDiagnostic,
-	types.KindDoc, types.KindFile, types.KindFunction, types.KindImport,
+	types.KindDoc, types.KindDir, types.KindFile, types.KindFunction, types.KindImport,
 	types.KindRationale, types.KindAuthor,
 }
 

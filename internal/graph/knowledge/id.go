@@ -43,6 +43,8 @@ func docID(relPath string) string { return types.KindDoc + ":" + relPath }
 
 func fileID(relPath string) string { return types.KindFile + ":" + relPath }
 
+func dirID(relPath string) string { return types.KindDir + ":" + relPath }
+
 func functionID(relPath, name string) string {
 	return types.KindFunction + ":" + relPath + ":" + name
 }
@@ -152,6 +154,22 @@ const (
 	// AttrLastRunOK is whether that most recent execution succeeded ("true"/"false"), so
 	// the ref's outcome is legible from the node without fetching the output.
 	AttrLastRunOK = "last_run_ok"
+)
+
+// Directory aggregate keys. These roll up from a directory's files (transitively) so a
+// dir node reads as a subsystem summary - the granularity agent memory anchors to and
+// dir-level coupling/churn queries read against. All are deterministic and OS-agnostic
+// (git commit counts, extension-derived languages, slash-relative paths), so the
+// @dirs shard is remote-shareable like @registry and @vcs.
+const (
+	// AttrDirFiles is how many path-bearing files/docs the directory holds transitively.
+	AttrDirFiles = "dir_files"
+	// AttrDirCommits is the summed git churn (commit counts) across those files - where a
+	// subsystem's change activity concentrates.
+	AttrDirCommits = "dir_commits"
+	// AttrLanguages is the sorted, comma-joined set of languages present under the
+	// directory, derived from file extensions.
+	AttrLanguages = "languages"
 )
 
 // Coverage attribute keys. Like the runtime keys these are OBSERVED - parsed from the

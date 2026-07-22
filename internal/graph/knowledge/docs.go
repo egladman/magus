@@ -81,7 +81,9 @@ func assembleDocs(root string, spells types.SpellsOutput, projects []types.Targe
 		// role attr telling you which is which. It never claims the doc "documents" the
 		// project (a spell page documents the spell, not the root project it sits under).
 		if owner, ok := owningProjectPath(rel, projects); ok {
-			s.Edges = append(s.Edges, extractedEdge(projectID(owner), dID, types.RelationContains, rel))
+			dn, de := containsChain(owner, rel, dID)
+			s.Nodes = append(s.Nodes, dn...)
+			s.Edges = append(s.Edges, de...)
 		}
 
 		if code, ok := diagnosticFromPath(rel); ok {

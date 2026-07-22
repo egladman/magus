@@ -51,6 +51,7 @@ const (
 	KindDiagnostic = "diagnostic"
 	KindDoc        = "doc"       // markdown doc page (phase 4)
 	KindFile       = "file"      // a .buzz source file (phase 4)
+	KindDir        = "dir"       // a directory between a project and its files; the containment tree layer
 	KindFunction   = "function"  // a callable defined in a .buzz source file (Buzz-authored)
 	KindImport     = "import"    // an unresolvable buzz import literal (phase 4)
 	KindRationale  = "rationale" // a NOTE/WHY/HACK/TODO comment (phase 4)

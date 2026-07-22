@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"maps"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -125,7 +126,9 @@ func AssembleShards(in Inputs) []Shard {
 				// never up to its project or the workspace. Edges added before the shard
 				// is appended, since a Shard is stored by value.
 				if owner, ok := owningProjectPath(n.Source, in.Graph.Projects); ok {
-					b.Edges = append(b.Edges, extractedEdge(projectID(owner), n.ID, types.RelationContains, n.Source))
+					dn, de := containsChain(owner, n.Source, n.ID)
+					b.Nodes = append(b.Nodes, dn...)
+					b.Edges = append(b.Edges, de...)
 				}
 			}
 			shards = append(shards, b)
@@ -169,7 +172,52 @@ func AssembleShards(in Inputs) []Shard {
 	if c := assembleCoverage(in.Coverage, in.Symbols); len(c.Nodes) > 0 {
 		shards = append(shards, c)
 	}
+	// Directory aggregates: roll up file count, summed churn, and languages onto each
+	// dir node from every path-bearing leaf (pathToNode). Runs last so it sees every
+	// file/doc/symbol path across the shards above; its dir attrs fold onto the
+	// structural dir nodes containsChain emitted in those shards.
+	if len(pathToNode) > 0 {
+		churnByPath := make(map[string]int, len(in.VCS))
+		for _, e := range in.VCS {
+			churnByPath[e.Path] = e.Commits
+		}
+		if d := assembleDirs(in.Graph.Projects, slices.Sorted(maps.Keys(pathToNode)), churnByPath); len(d.Nodes) > 0 {
+			shards = append(shards, d)
+		}
+	}
 	return shards
+}
+
+// containsChain builds the directory containment tree from a project down to a
+// path-bearing leaf node (a file or doc), returning a KindDir node for each directory
+// between the project root and the leaf plus the chain of `contains` edges:
+// project -> topdir -> ... -> parentdir -> leaf. It replaces a single flat
+// project -> leaf edge so a directory (a subsystem/package) is a first-class node -
+// the granularity agent memory anchors to and dir-level coupling/churn reads against.
+//
+// Dir nodes and edges dedup across shards on merge (a directory holds files from the
+// buzz, docs, and symbols shards, each of which emits the same chain for its own
+// files). A leaf sitting directly in the project root yields just project -> leaf, as
+// before. Paths are workspace-relative and slash-separated, so path (not filepath) is
+// the right splitter regardless of host OS.
+func containsChain(projectPath, leafPath, leafID string) ([]types.KnowledgeNode, []types.KnowledgeEdge) {
+	var dirs []string // deepest-first: the directories strictly between the project and the leaf
+	for d := path.Dir(leafPath); d != "." && d != "/" && d != "" && d != projectPath; d = path.Dir(d) {
+		dirs = append(dirs, d)
+	}
+	slices.Reverse(dirs) // chain shallow -> deep
+
+	parent := projectID(projectPath)
+	nodes := make([]types.KnowledgeNode, 0, len(dirs))
+	edges := make([]types.KnowledgeEdge, 0, len(dirs)+1)
+	for _, d := range dirs {
+		dID := dirID(d)
+		nodes = append(nodes, types.KnowledgeNode{ID: dID, Kind: types.KindDir, Label: d, Source: d})
+		edges = append(edges, extractedEdge(parent, dID, types.RelationContains, d))
+		parent = dID
+	}
+	edges = append(edges, extractedEdge(parent, leafID, types.RelationContains, leafPath))
+	return nodes, edges
 }
 
 // owningProjectPath returns the path of the project that contains file: the longest
