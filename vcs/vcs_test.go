@@ -367,3 +367,68 @@ func TestDescribeGit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "v1.2.3-dirty", d)
 }
+
+// TestIsSecondaryCheckout exercises each backend's on-disk signature for a second
+// checkout of a repo, plus the negatives (primary checkout, submodule, bare dir).
+// The signatures are constructed directly, so the test needs none of the tools
+// installed - it validates the detection, not the VCS.
+func TestIsSecondaryCheckout(t *testing.T) {
+	mkfile := func(t *testing.T, path, body string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+	}
+	mkdir := func(t *testing.T, path string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(path, 0o755))
+	}
+
+	t.Run("git linked worktree", func(t *testing.T) {
+		dir := t.TempDir()
+		mkfile(t, filepath.Join(dir, ".git"), "gitdir: /repo/.git/worktrees/feature\n")
+		assert.True(t, IsSecondaryCheckout(dir))
+		assert.True(t, gitVCS{}.IsSecondaryCheckout(dir))
+	})
+
+	t.Run("git submodule stays discoverable", func(t *testing.T) {
+		dir := t.TempDir()
+		mkfile(t, filepath.Join(dir, ".git"), "gitdir: /repo/.git/modules/libfoo\n")
+		assert.False(t, IsSecondaryCheckout(dir))
+	})
+
+	t.Run("git primary checkout (.git dir)", func(t *testing.T) {
+		dir := t.TempDir()
+		mkdir(t, filepath.Join(dir, ".git"))
+		assert.False(t, IsSecondaryCheckout(dir))
+	})
+
+	t.Run("hg share", func(t *testing.T) {
+		dir := t.TempDir()
+		mkfile(t, filepath.Join(dir, ".hg", "sharedpath"), "/repo/.hg\n")
+		assert.True(t, IsSecondaryCheckout(dir))
+		assert.True(t, hgVCS{}.IsSecondaryCheckout(dir))
+	})
+
+	t.Run("hg standalone repo", func(t *testing.T) {
+		dir := t.TempDir()
+		mkdir(t, filepath.Join(dir, ".hg"))
+		assert.False(t, IsSecondaryCheckout(dir))
+	})
+
+	t.Run("jj secondary workspace (.jj/repo file)", func(t *testing.T) {
+		dir := t.TempDir()
+		mkfile(t, filepath.Join(dir, ".jj", "repo"), "/repo/.jj/repo\n")
+		assert.True(t, IsSecondaryCheckout(dir))
+		assert.True(t, jjVCS{}.IsSecondaryCheckout(dir))
+	})
+
+	t.Run("jj primary workspace (.jj/repo dir)", func(t *testing.T) {
+		dir := t.TempDir()
+		mkdir(t, filepath.Join(dir, ".jj", "repo"))
+		assert.False(t, IsSecondaryCheckout(dir))
+	})
+
+	t.Run("plain directory", func(t *testing.T) {
+		assert.False(t, IsSecondaryCheckout(t.TempDir()))
+	})
+}

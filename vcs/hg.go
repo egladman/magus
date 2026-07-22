@@ -20,6 +20,14 @@ func (v hgVCS) Name() string     { return "hg" }
 func (v hgVCS) Claims() []string { return []string{".hg"} }
 func (v hgVCS) Base() string     { return "tip" }
 
+// IsSecondaryCheckout reports whether dir is an `hg share` checkout: the share
+// extension writes .hg/sharedpath naming the source repo's store, so the working
+// copy re-exposes the shared repo's files. A standalone repo has no sharedpath.
+func (v hgVCS) IsSecondaryCheckout(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, ".hg", "sharedpath"))
+	return err == nil
+}
+
 func (v hgVCS) Root(ctx context.Context, dir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "hg", "root")
 	cmd.Dir = dir

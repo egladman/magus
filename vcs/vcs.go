@@ -12,6 +12,21 @@ import (
 
 var builtin = []types.VCSDriver{gitVCS{}, hgVCS{}, jjVCS{}}
 
+// IsSecondaryCheckout reports whether dir is a second checkout of a repository
+// under any supported VCS (a git linked worktree, an `hg share`, a jj secondary
+// workspace). Discovery skips such dirs so a repo's projects and spells are not
+// re-indexed and made to shadow the originals (MGS1002). Each backend matches its
+// own on-disk signature, so detection favors no single VCS and needs no resolution
+// step (the active VCS is not yet known when discovery walks the tree).
+func IsSecondaryCheckout(dir string) bool {
+	for _, v := range builtin {
+		if v.IsSecondaryCheckout(dir) {
+			return true
+		}
+	}
+	return false
+}
+
 // Resolve picks the active VCS for root: disabled → explicit → auto (claim dir) → default (git).
 // Base ref: runtimeBase → opts.BaseRef → MAGUS_VCS_BASE_REF → per-VCS env → built-in default.
 func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions) (types.VCSResolution, error) {

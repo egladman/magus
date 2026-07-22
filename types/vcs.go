@@ -10,6 +10,12 @@ import (
 type VCSDriver interface {
 	Name() string
 	Claims() []string
+	// IsSecondaryCheckout reports whether dir is a second checkout of the same
+	// repository under this VCS (a git linked worktree, an `hg share`, a jj
+	// secondary workspace) rather than the primary. Discovery skips such dirs so a
+	// repo's projects and spells are not indexed twice. Matched structurally
+	// against the backend's on-disk signature; no process is spawned.
+	IsSecondaryCheckout(dir string) bool
 	Base() string
 	// Root, Diff, and Metadata operate on the repository containing dir. An empty
 	// dir uses the process working directory. Passing an explicit dir is required

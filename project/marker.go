@@ -1,8 +1,6 @@
 package project
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -28,23 +26,4 @@ func IsIgnoreDir(name string) bool {
 		return true
 	}
 	return slices.Contains(IgnoreDirs, name)
-}
-
-// IsNestedWorktree reports whether dir is a linked git worktree: its .git is a
-// FILE whose gitdir points under another repo's .git/worktrees/. Such a dir is a
-// second checkout of the same repo, so descending into it re-discovers every
-// project and spell, which then shadow the originals (MGS1002). Detection is
-// structural, so a worktree anywhere (not just under a skipped dot-dir) is caught
-// without naming any particular tool. A submodule's gitdir points under
-// .git/modules/ instead, so submodules stay discoverable.
-func IsNestedWorktree(dir string) bool {
-	data, err := os.ReadFile(filepath.Join(dir, ".git"))
-	if err != nil {
-		return false // absent, or a directory (the main checkout) - either way not a linked worktree
-	}
-	rest, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir:")
-	if !ok {
-		return false
-	}
-	return strings.Contains(filepath.ToSlash(strings.TrimSpace(rest)), "/.git/worktrees/")
 }

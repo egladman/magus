@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/egladman/magus/vcs"
 )
 
 // ShadowConflict is one spell import defined at two levels in ancestor-descendant
@@ -35,7 +37,7 @@ func SpellShadows(root string) ([]ShadowConflict, error) {
 			return nil //nolint:nilerr // unreadable entry: skip, do not fail the whole scan
 		}
 		if d.IsDir() {
-			if IsIgnoreDir(d.Name()) || IsNestedWorktree(path) {
+			if IsIgnoreDir(d.Name()) || vcs.IsSecondaryCheckout(path) {
 				return filepath.SkipDir
 			}
 			if d.Name() == "spells" {

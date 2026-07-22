@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // Discover walks root and returns a *types.Workspace. Only directories with a
@@ -41,7 +42,7 @@ func Discover(_ context.Context, root string) (*types.Workspace, error) {
 		}
 		base := d.Name()
 		if path != abs {
-			if IsIgnoreDir(base) || IsNestedWorktree(path) {
+			if IsIgnoreDir(base) || vcs.IsSecondaryCheckout(path) {
 				return fs.SkipDir
 			}
 		}

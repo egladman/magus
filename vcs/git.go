@@ -23,6 +23,22 @@ func (v gitVCS) Name() string     { return "git" }
 func (v gitVCS) Claims() []string { return []string{".git"} }
 func (v gitVCS) Base() string     { return "origin/main" }
 
+// IsSecondaryCheckout reports whether dir is a linked git worktree: its .git is a
+// FILE whose gitdir points under another repo's .git/worktrees/. The main checkout
+// has a .git DIRECTORY, and a submodule's gitdir points under .git/modules/, so
+// neither is treated as a linked worktree.
+func (v gitVCS) IsSecondaryCheckout(dir string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, ".git"))
+	if err != nil {
+		return false // absent, or a directory (the main checkout) - either way not linked
+	}
+	rest, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir:")
+	if !ok {
+		return false
+	}
+	return strings.Contains(filepath.ToSlash(strings.TrimSpace(rest)), "/.git/worktrees/")
+}
+
 func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
 	cmd.Dir = dir

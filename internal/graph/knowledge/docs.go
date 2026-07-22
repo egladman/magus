@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/docs"
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // DocsShardName is the singleton shard holding markdown doc nodes and the edges
@@ -209,8 +209,9 @@ func findDocFiles(root string) []string {
 		}
 		if d.IsDir() {
 			// Never skip the walk root itself: the workspace we are indexing is often a
-			// worktree, and skipDocWalkDir's nested-worktree guard would otherwise skip
-			// everything. The guard applies only to worktrees found BELOW the root.
+			// secondary checkout (a git worktree, hg share, or jj workspace), and
+			// skipDocWalkDir's secondary-checkout guard would otherwise skip everything.
+			// The guard applies only to checkouts found BELOW the root.
 			if p != root && skipDocWalkDir(p, d.Name()) {
 				return fs.SkipDir
 			}
@@ -232,14 +233,14 @@ func findDocFiles(root string) []string {
 // project.IsIgnoreDir (which skips ALL dot-dirs), the doc walk DOES descend into
 // meaningful hidden dirs - .claude/skills holds SKILL.md agent files, .github holds
 // templates - and skips only genuine noise: VCS internals, the magus cache, build and
-// dependency trees, and any nested git worktree (a second checkout of the same repo
-// whose files would otherwise be indexed twice).
+// dependency trees, and any secondary checkout of the same repo (a git worktree, hg
+// share, or jj workspace) whose files would otherwise be indexed twice.
 func skipDocWalkDir(path, name string) bool {
 	switch name {
 	case ".git", ".magus", "node_modules", "vendor", "gen", "target", "dist":
 		return true
 	}
-	return project.IsNestedWorktree(path)
+	return vcs.IsSecondaryCheckout(path)
 }
 
 // roleFromRel classifies a markdown file by what it IS, from cross-ecosystem filename

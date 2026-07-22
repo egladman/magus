@@ -3,7 +3,9 @@ package vcs
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -14,6 +16,15 @@ type jjVCS struct{}
 func (v jjVCS) Name() string     { return "jj" }
 func (v jjVCS) Claims() []string { return []string{".jj"} }
 func (v jjVCS) Base() string     { return "trunk()" }
+
+// IsSecondaryCheckout reports whether dir is a secondary `jj workspace add`
+// checkout: the primary workspace holds its store in a .jj/repo DIRECTORY, while a
+// secondary workspace's .jj/repo is a FILE pointing at that primary store, so
+// descending in re-exposes the same repository.
+func (v jjVCS) IsSecondaryCheckout(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, ".jj", "repo"))
+	return err == nil && !info.IsDir()
+}
 
 func (v jjVCS) Root(ctx context.Context, dir string) (string, error) {
 	cmd := exec.CommandContext(ctx, "jj", "workspace", "root")
