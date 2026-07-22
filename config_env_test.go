@@ -1,25 +1,28 @@
-package gen
+package magus
 
 import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/egladman/magus/internal/config"
+	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/stretchr/testify/assert"
 )
 
+// ApplyEnv is generated (internal/config/gen/env.go) from the Config struct. Its
+// env-to-Config behavior is tested here, in a consuming package, rather than inside the
+// generated tree.
 func TestApplyEnv_VolatilityEnabledTrue(t *testing.T) {
 	t.Setenv("MAGUS_VOLATILITY_ENABLED", "true")
 	cfg := config.Defaults()
-	ApplyEnv(&cfg, os.Getenv)
+	configgen.ApplyEnv(&cfg, os.Getenv)
 	assert.True(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=true: Volatility.Enabled should be true")
 }
 
 func TestApplyEnv_VolatilityEnabledFalse(t *testing.T) {
 	t.Setenv("MAGUS_VOLATILITY_ENABLED", "false")
 	cfg := config.Defaults()
-	ApplyEnv(&cfg, os.Getenv)
+	configgen.ApplyEnv(&cfg, os.Getenv)
 	assert.False(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=false: Volatility.Enabled should be false")
 }
 
@@ -29,7 +32,7 @@ func TestApplyEnvToConfig(t *testing.T) {
 	t.Setenv("MAGUS_DRY_RUN", "1")
 
 	cfg := config.Defaults()
-	ApplyEnv(&cfg, os.Getenv)
+	configgen.ApplyEnv(&cfg, os.Getenv)
 
 	assert.True(t, cfg.Cache.Immutable)
 	assert.Equal(t, 6, cfg.Concurrency)
@@ -39,6 +42,6 @@ func TestApplyEnvToConfig(t *testing.T) {
 func TestApplyEnv_SandboxEnabled(t *testing.T) {
 	t.Setenv("MAGUS_SANDBOX_ENABLED", "true")
 	cfg := config.Defaults()
-	ApplyEnv(&cfg, os.Getenv)
+	configgen.ApplyEnv(&cfg, os.Getenv)
 	assert.True(t, cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED=true: Sandbox.Enabled should be true")
 }
