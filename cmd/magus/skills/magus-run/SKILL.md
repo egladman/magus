@@ -10,6 +10,14 @@ sandbox, and magus caches results and computes what a change affects. Invoking a
 raw language tool directly bypasses all of that, so the cache goes stale, declared
 outputs drift, and `magus affected` can no longer vouch for your change.
 
+## Which project a command hits
+
+magus is CWD-relative: a bare `magus run`/`ls`/`describe` acts on the project holding
+your current directory, or the whole workspace from the root. Do not assume the root.
+Scope explicitly so a command means the same anywhere: name the project (`magus run
+test web`), or let `magus affected` compute the set from the diff. `magus where <name>`
+resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the CWD.
+
 ## Rules
 
 1. Prefer the MCP tools; they return structured content with nothing to silence.

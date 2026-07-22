@@ -62,7 +62,8 @@ var agentsSection string
 //	    search-index.json, the URL + section scheme, and the in-page nav axes)
 //	v10: magus-vcs teaches environmental-vs-real drift; install injects
 //	    open-standard provenance frontmatter (license, compatibility, metadata)
-const agentSkillVersion = 10
+//	v11: magus-run teaches CWD-relative project scope; tighten the prose
+const agentSkillVersion = 11
 
 // skillDirPlatforms maps each skill-directory platform to its repo-relative
 // destination. The bytes written are identical across platforms - the Agent

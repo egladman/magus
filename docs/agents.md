@@ -83,6 +83,9 @@ means adding a destination, not writing new instructions.
 - `magus-memory`: durable cross-session project memory over MCP - a status
   snapshot, a dated progress journal, and a decision log that survive model
   and session changes.
+- `magus-docs`: navigate magus's own documentation to answer a how-does-magus-do-X
+  question instead of guessing - the doc URL and section scheme, the in-page
+  navigation axes, and when to reach for it over the workspace graph.
 
 ### Where guidance belongs
 
