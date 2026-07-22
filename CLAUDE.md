@@ -22,13 +22,18 @@ hand-edit it.
 - Build: `magus run build`
 - Test: `magus run test` (or `go test ./...`)
 - Lint + vet + vuln: `magus run lint`
-- Final gate before handing work back: `magus affected ci` - runs the full
-  pipeline (lint, build, test, coverage) over affected projects.
+- Final gate before committing (and especially before pushing): `magus affected ci
+  --no-default-charms` - the full pipeline (lint, build, test, coverage) over
+  affected projects with the local `rw` charm stripped, so `generate` runs as a
+  drift gate exactly as CI does. Plain `magus affected ci` auto-writes generated
+  output locally (the charm note below) and can hide uncommitted-gen drift that
+  then fails CI.
 - Regenerate generated files: `magus run generate`, then commit.
-- Charm note: `magus.yaml` sets `default_charms: [rw]`, so local runs get
-  the `rw` charm automatically - `generate` writes locally. CI strips it
-  (`--no-default-charms` / the ci anchor), where `generate` acts as a pure
-  drift gate instead.
+- Charm note: `magus.yaml` sets `default_charms: [rw]`, so every local run carries
+  the `rw` charm implicitly - plain `magus affected ci` is exactly `magus affected
+  ci:rw`, and `generate` writes its output locally. CI strips the default
+  (`--no-default-charms` / the ci anchor), so there the same run carries no `rw`
+  and `generate` acts as a pure drift gate instead.
 
 ## Which magus binary
 
