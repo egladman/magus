@@ -42,25 +42,25 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 ## Examples
 
-_Show effective config_
+*Show effective config*
 
 ```sh
 magus config view
 ```
 
-_Show config as JSON_
+*Show config as JSON*
 
 ```sh
 magus config view -o json
 ```
 
-_Set cache to read-only_
+*Set cache to read-only*
 
 ```sh
 magus config set cache.immutable true
 ```
 
-_Initialise magus.yaml from defaults_
+*Initialise magus.yaml from defaults*
 
 ```sh
 magus config init
@@ -69,3 +69,4 @@ magus config init
 ## See Also
 
 [**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+

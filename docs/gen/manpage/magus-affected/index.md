@@ -38,31 +38,31 @@ introduced a regression.
 
 ## Options
 
-**--base** _string_
+**--base** *string*
 : Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)
 
-**--bisect** _string_
+**--bisect** *string*
 : Drive VCS bisect to find the commit that broke \<project\>
 
-**--depth** _int_
+**--depth** *int*
 : With --graph: cap displayed depth (0 = unlimited)
 
 **--dry-run**
 : Print what would run without executing
 
-**--explain** _string_
+**--explain** *string*
 : Show why \<project\> is in the affected set instead of executing
 
-**--good** _string_
+**--good** *string*
 : With --bisect: known-good commit SHA (auto-detected from history when empty)
 
 **--graph**
 : Render the dependency graph for the affected scope instead of executing
 
-**--max-parallel-budget** _int_
+**--max-parallel-budget** *int*
 : With --plan: cross-shard concurrency cap; 0 = unlimited
 
-**--max-shards** _int_ (default: 8)
+**--max-shards** *int* (default: 8)
 : With --plan: maximum CI shards (-1 = unlimited)
 
 **--null**
@@ -74,7 +74,7 @@ introduced a regression.
 **--stdin**
 : Read changed file paths from stdin instead of running a VCS diff
 
-**--target** _string_ (default: test)
+**--target** *string* (default: test)
 : With --bisect: magus target to bisect
 
 **--upstream**
@@ -108,55 +108,55 @@ introduced a regression.
 
 ## Examples
 
-_Build projects changed since the default base ref_
+*Build projects changed since the default base ref*
 
 ```sh
 magus affected build
 ```
 
-_Use a different base ref_
+*Use a different base ref*
 
 ```sh
 magus affected build --base main
 ```
 
-_Pipe from watch for continuous builds_
+*Pipe from watch for continuous builds*
 
 ```sh
 magus watch | magus affected --stdin build
 ```
 
-_List affected projects without building_
+*List affected projects without building*
 
 ```sh
 magus affected list
 ```
 
-_Show dependency graph for the affected scope_
+*Show dependency graph for the affected scope*
 
 ```sh
 magus affected build --graph
 ```
 
-_Graph as DOT for piping to Graphviz_
+*Graph as DOT for piping to Graphviz*
 
 ```sh
 magus affected build --graph -o dot | dot -Tsvg > graph.svg
 ```
 
-_Emit a CI shard plan for the affected set_
+*Emit a CI shard plan for the affected set*
 
 ```sh
 magus affected --plan
 ```
 
-_Shard plan limited to four shards_
+*Shard plan limited to four shards*
 
 ```sh
 magus affected --plan --max-shards 4
 ```
 
-_Bisect a regression in myapp_
+*Bisect a regression in myapp*
 
 ```sh
 magus affected --bisect ./apps/myapp
@@ -165,3 +165,4 @@ magus affected --bisect ./apps/myapp
 ## See Also
 
 [**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+

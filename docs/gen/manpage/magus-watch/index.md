@@ -27,10 +27,10 @@ trigger a full initial build in the downstream magus affected --stdin.
 
 ## Options
 
-**--backend** _string_ (default: fsnotify)
+**--backend** *string* (default: fsnotify)
 : Notification backend: fsnotify or poll
 
-**--debounce** _duration_ (default: 200ms)
+**--debounce** *duration* (default: 200ms)
 : Quiet window before emitting a batch
 
 **--initial** (default: true)
@@ -41,19 +41,19 @@ trigger a full initial build in the downstream magus affected --stdin.
 
 ## Examples
 
-_Continuous build pipeline_
+*Continuous build pipeline*
 
 ```sh
 magus watch | magus affected --stdin build
 ```
 
-_Increase debounce for slow editors_
+*Increase debounce for slow editors*
 
 ```sh
 magus watch --debounce 500ms | magus affected --stdin test
 ```
 
-_Polling backend (when inotify is unavailable)_
+*Polling backend (when inotify is unavailable)*
 
 ```sh
 magus watch --backend poll | magus affected --stdin build
@@ -62,3 +62,4 @@ magus watch --backend poll | magus affected --stdin build
 ## See Also
 
 [**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+

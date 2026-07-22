@@ -44,7 +44,7 @@ you had also written a `depends_on` entry - you never write both.
 reads the magusfile's AST; it resolves a same-project target passed by
 reference (`magus.needs(build)`), a cross-project handle passed as a member
 access (`magus.needs(alias.target)`), and each literal pattern given to
-`magus.needsGlob`. What it cannot evaluate is a _computed_ dependency - a
+`magus.glob` inside a `magus.needs`. What it cannot evaluate is a _computed_ dependency - a
 handle stored in a variable, returned from a function, or otherwise built at
 runtime. Such a `magus.needs` call is invisible to the static graph, to
 `magus describe`, and to the affected set. It still runs correctly at runtime
@@ -119,22 +119,26 @@ is a bug when they do.
   undeclared dependency" - a signal you may be missing a `depends_on`, not a
   guarantee.
 
-## `needs` and `needsGlob`: functions and patterns, same-project globs
+## `needs` and `glob`: functions and patterns, same-project globs
 
 `magus.needs` takes target **functions**: a same-project target passed by
 reference (`magus.needs(build, test)`) or a cross-project handle a project
-import binds (`magus.needs(alias.target)`). It never takes a string or a query
-object; a mistyped identifier is an undefined variable and fails at **load**,
-not at run time. For patterns, reach for the separate `magus.needsGlob`.
+import binds (`magus.needs(alias.target)`), or the list of handles `magus.glob`
+resolves a pattern to. It never takes a string or a query object; a mistyped
+identifier is an undefined variable and fails at **load**, not at run time. For
+patterns, resolve them to handles with `magus.glob` and pass the result to
+`magus.needs`.
 
-`magus.needsGlob(pattern)` is **same-project only** (a cross-project edge is
-always a handle `alias.target`) and matches registered target names. A pattern
-with no `*` is **suffix shorthand**, not a substring or exact match:
-`magus.needsGlob("build")` compiles to `^.*-build$` and matches
+`magus.glob(pattern)` is **same-project only** (a cross-project edge is always a
+handle `alias.target`) and resolves to the **handles** of the matching registered
+targets, which you feed to `magus.needs` (`magus.needs(magus.glob("*-generate"))`).
+A pattern with no `*` is **suffix shorthand**, not a substring or exact match:
+`magus.glob("build")` compiles to `^.*-build$` and resolves
 `go-build`/`docker-build`, but **not** a target literally named `build` - pass
 the `build` function to `magus.needs` for that. A pattern containing `*` matches
-as an ordinary anchored glob (`*-generate`). A pattern that matches nothing is a
-no-op.
+as an ordinary anchored glob (`*-generate`). A pattern that matches nothing
+yields no handles, so needs of it is a no-op. Only exported-function targets
+carry a handle; depend on a spell-provided op directly.
 
 ## A service reached via `needs` is supervised, not foregrounded
 
@@ -148,7 +152,7 @@ blocking on the service process itself. See
 
 ## See also
 
-- [targets.md](targets.md): the `magus.needs`/`magus.needsGlob` grammar and the
+- [targets.md](targets.md): the `magus.needs`/`magus.glob` grammar and the
   target-name model these edges resolve against.
 - [workspace.md](workspace.md): `depends_on` path resolution and the
   `magus.project` options map it lives in.

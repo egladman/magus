@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **997 nodes** and **1662 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **305 nodes** and **298 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -42,35 +42,30 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 1 | `magus query kind:project` | `libs/gopherbuzz` |
-| target | 9 | `magus query kind:target` | `format`, `generate`, `build` |
+| project | 1 | `magus query kind:project` | `libs/textsearch` |
+| target | 6 | `magus query kind:target` | `generate`, `preflight`, `ci` |
 | spell | 11 | `magus query kind:spell` | `go`, `ts`, `py` |
-| op | 52 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
+| op | 52 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | tool | 13 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
 | method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 37 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
-| doc | 15 | `magus query kind:doc` | `README.md`, `docs/ffi.md`, `examples/bubblegum/README.md` |
-| dir | 13 | `magus query kind:dir` | `examples/bubblegum`, `examples/bubblegum/core`, `examples/bubblegum/platform/macos/objc` |
-| file | 59 | `magus query kind:file` | `examples/bubblegum/config.buzz`, `examples/bubblegum/platform/macos/cocoa.buzz`, `examples/bubblegum/core/command.buzz` |
-| function | 557 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 59 | `magus query kind:import` | `std`, `state`, `os` |
+| file | 1 | `magus query kind:file` | `magusfile.buzz` |
+| function | 7 | `magus query kind:function` | `install`, `lint`, `test` |
+| import | 6 | `magus query kind:import` | `fs`, `magus`, `magus/spell/magusfile` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 9 | `magus query project:.` | `format`, `generate`, `build` |
+| . | 6 | `magus query project:.` | `generate`, `preflight`, `ci` |
 
-## Project: libs/gopherbuzz
+## Project: libs/textsearch
 
 | Target | What it does |
 |---|---|
 | `generate` | Regenerates MAGUS.md and fails on drift. |
-| `format` |  |
-| `lint` |  |
-| `build` |  |
-| `test` |  |
-| `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
-| `pgo-generate` | Regenerates default.pgo, the Buzz VM's PGO profile. |
+| `lint` | lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). |
+| `test` | test runs the node:test suite over the bundled *.test.ts (the search-grammar tests). |
+| `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests. |
 | `preflight` |  |
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |

@@ -26,7 +26,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 
 ## Options
 
-**--depth** _int_
+**--depth** *int*
 : With --graph: cap displayed depth (0 = unlimited)
 
 **--dry-run**
@@ -69,61 +69,61 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 
 ## Examples
 
-_Build everything_
+*Build everything*
 
 ```sh
 magus run build
 ```
 
-_Test one project_
+*Test one project*
 
 ```sh
 magus run test api/gateway
 ```
 
-_Build two specific projects_
+*Build two specific projects*
 
 ```sh
 magus run build api/gateway web/studio
 ```
 
-_Dry-run: show what would run_
+*Dry-run: show what would run*
 
 ```sh
 magus run build --dry-run
 ```
 
-_Force a fresh rebuild past a cache hit_
+*Force a fresh rebuild past a cache hit*
 
 ```sh
 magus run build --no-cache
 ```
 
-_Full CI pipeline_
+*Full CI pipeline*
 
 ```sh
 magus run ci
 ```
 
-_Show dependency graph for build target_
+*Show dependency graph for build target*
 
 ```sh
 magus run build --graph
 ```
 
-_Graph in Mermaid format_
+*Graph in Mermaid format*
 
 ```sh
 magus run build --graph -o mermaid
 ```
 
-_Graph dependents of api/gateway_
+*Graph dependents of api/gateway*
 
 ```sh
 magus run build api/gateway --graph --upstream
 ```
 
-_Stream JSONL target events to a file_
+*Stream JSONL target events to a file*
 
 ```sh
 magus run build -o jsonl --tee build.jsonl
@@ -132,3 +132,4 @@ magus run build -o jsonl --tee build.jsonl
 ## See Also
 
 [**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+

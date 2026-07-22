@@ -27,39 +27,39 @@ snapshot on its own line for log capture.
 **--compact**
 : Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)
 
-**--probe** _string_
+**--probe** *string*
 : Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)
 
-**--socket** _string_
+**--socket** *string*
 : Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir
 
-**--watch** _duration_
+**--watch** *duration*
 : Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot
 
-**--workspace** _string_
+**--workspace** *string*
 : Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)
 
 ## Examples
 
-_One-shot status snapshot_
+*One-shot status snapshot*
 
 ```sh
 magus status
 ```
 
-_Live updates every second_
+*Live updates every second*
 
 ```sh
 magus status --watch=1s
 ```
 
-_Single-line snapshot for a multiplexer sidebar_
+*Single-line snapshot for a multiplexer sidebar*
 
 ```sh
 magus status --compact --watch=1s
 ```
 
-_Inspect a specific running parent_
+*Inspect a specific running parent*
 
 ```sh
 magus status --socket=unix:///run/user/1000/magus/daemon.sock
@@ -68,3 +68,4 @@ magus status --socket=unix:///run/user/1000/magus/daemon.sock
 ## See Also
 
 [**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-tail**(1)](magus-tail.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+

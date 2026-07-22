@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **307 nodes** and **301 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **307 nodes** and **306 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -43,9 +43,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `libs/diag` |
-| target | 8 | `magus query kind:target` | `format`, `generate`, `ci` |
+| target | 8 | `magus query kind:target` | `format`, `generate`, `build` |
 | spell | 11 | `magus query kind:spell` | `go`, `ts`, `py` |
-| op | 52 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
+| op | 52 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 13 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
@@ -57,17 +57,17 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 8 | `magus query project:.` | `format`, `generate`, `ci` |
+| . | 8 | `magus query project:.` | `format`, `generate`, `build` |
 
 ## Project: libs/diag
 
 | Target | What it does |
 |---|---|
 | `generate` | Regenerates MAGUS.md and fails on drift. |
-| `build` |  |
-| `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `format` |  |
 | `lint` |  |
+| `build` |  |
 | `test` |  |
-| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `preflight` |  |
+| `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |

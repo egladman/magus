@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-notification-center-v2-plan-9e7c5d" title="Project: notification-center-v2-plan-9e7c5d">Project: notification-center-v2-plan-9e7c5d</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
+        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-libstextsearch" title="Project: libs/textsearch">Project: libs/textsearch</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -126,7 +126,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <p>Prefer a picture? Explore this graph in the <a href="https://eli.gladman.cc/magus/console/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>1836 nodes</strong> and <strong>4008 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2010 nodes</strong> and <strong>4253 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -145,13 +145,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>project</td>
-<td style="text-align:right">7</td>
+<td style="text-align:right">8</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:project</code></a></td>
-<td><code>docs</code>, <code>notification-center-v2-plan-9e7c5d</code>, <code>libs/gopherbuzz</code></td>
+<td><code>docs</code>, <code>magus</code>, <code>libs/gopherbuzz</code></td>
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">71</td>
+<td style="text-align:right">77</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:target</code></a></td>
 <td><code>content-generate</code>, <code>generate</code>, <code>generate</code></td>
 </tr>
@@ -193,31 +193,37 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>diagnostic</td>
-<td style="text-align:right">29</td>
+<td style="text-align:right">37</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:diagnostic</code></a></td>
-<td><code>MGS5002</code>, <code>MGS2001</code>, <code>MGS4001</code></td>
+<td><code>MGS2001</code>, <code>MGS4001</code>, <code>MGS5002</code></td>
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">161</td>
+<td style="text-align:right">178</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:doc</code></a></td>
 <td><code>docs/spells.md</code>, <code>docs/documentation.md</code>, <code>docs/manpage/magus.md</code></td>
 </tr>
 <tr>
+<td>dir</td>
+<td style="text-align:right">94</td>
+<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:dir" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:dir</code></a></td>
+<td><code>libs/gopherbuzz/examples/bubblegum</code>, <code>std/examples/fs</code>, <code>docs/buzz/modules</code></td>
+</tr>
+<tr>
 <td>file</td>
-<td style="text-align:right">202</td>
+<td style="text-align:right">221</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:file</code></a></td>
-<td><code>docs/render.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/config.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code></td>
+<td><code>libs/gopherbuzz/examples/bubblegum/config.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code>, <code>magusfile.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1019</td>
+<td style="text-align:right">1029</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:function</code></a></td>
-<td><code>sel</code>, <code>site_render</code>, <code>sendObject</code></td>
+<td><code>sel</code>, <code>sendObject</code>, <code>send</code></td>
 </tr>
 <tr>
 <td>import</td>
-<td style="text-align:right">91</td>
+<td style="text-align:right">110</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:import</code></a></td>
 <td><code>std</code>, <code>magus</code>, <code>fs</code></td>
 </tr>
@@ -255,7 +261,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>console</td>
 <td style="text-align:right">5</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:console" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:console</code></a></td>
-<td><code>build</code>, <code>ci</code>, <code>preflight</code></td>
+<td><code>build</code>, <code>ci</code>, <code>lint</code></td>
 </tr>
 <tr>
 <td>docs</td>
@@ -276,6 +282,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td><code>build</code>, <code>format</code>, <code>generate</code></td>
 </tr>
 <tr>
+<td>libs/textsearch</td>
+<td style="text-align:right">6</td>
+<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Ftextsearch" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:libs/textsearch</code></a></td>
+<td><code>lint</code>, <code>generate</code>, <code>preflight</code></td>
+</tr>
+<tr>
 <td>proto</td>
 <td style="text-align:right">3</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:proto" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:proto</code></a></td>
@@ -283,7 +295,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 </tbody>
 </table></figure>
-<h2 id="project-notification-center-v2-plan-9e7c5d">Project: notification-center-v2-plan-9e7c5d</h2>
+<h2 id="project-magus">Project: magus</h2>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -479,7 +491,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td><code>lint</code></td>
-<td></td>
+<td>lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no <code>any</code>, no non-null assertions - see biome.json).</td>
 </tr>
 <tr>
 <td><code>build</code></td>
@@ -610,6 +622,41 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tr>
 <td><code>pgo-generate</code></td>
 <td>Regenerates default.pgo, the Buzz VM's PGO profile.</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>md-generate</code></td>
+<td>Renders MAGUS.md (target catalog plus graph) from this magusfile.</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="project-libstextsearch">Project: libs/textsearch</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>generate</code></td>
+<td>Regenerates MAGUS.md and fails on drift.</td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td>lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no <code>any</code>, no non-null assertions - see biome.json).</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).</td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>'ci' is the anchor <code>magus affected ci</code> keys off: the lint gate and the unit tests.</td>
 </tr>
 <tr>
 <td><code>preflight</code></td>

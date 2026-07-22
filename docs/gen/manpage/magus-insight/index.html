@@ -95,16 +95,16 @@ run from inside a subtree and each reflects only that subtree's history; pass
 --workspace to analyze the whole workspace (the fan-in postflight uses this). The
 active VCS adapter must report per-commit files (git can).</p>
 <p>VCS-history lenses (the first argument):</p>
-<p>hotspots Edit frequency x complexity - the prime refactoring targets. The
+<p>hotspots   Edit frequency x complexity - the prime refactoring targets. The
 project view is the dependency graph heat-coloured by churn (with
 authors, recency, blast radius, and CI duration); --files ranks
 individual files by churn x complexity.
-affinity Projects that change together (temporal coupling). A hidden pair
+affinity   Projects that change together (temporal coupling). A hidden pair
 co-changes without either declaring a dependency on the other - a
 candidate architectural smell.
-ownership Author concentration: the primary author and their share, distinct
+ownership  Author concentration: the primary author and their share, distinct
 author count (bus factor), and abandonment (projects gone quiet).
-trend The recent half of the window versus the earlier half: a positive
+trend      The recent half of the window versus the earlier half: a positive
 delta is a rising hotspot, a negative one is cooling.</p>
 <p>Run-outcome lens:</p>
 <p>volatility Each (project, target) pair's recent pass/fail/volatile record scored
@@ -112,7 +112,7 @@ by its Wilson lower bound; a pair at or above the configured threshold
 is flagged volatile - a flakiness signal, the prime stabilization
 targets. It reads the shared runtime-history file, not git, so it takes
 no --commits/--since window and is always workspace-wide.</p>
-<p>report Every lens plus graph stats as one whole-workspace Markdown document
+<p>report     Every lens plus graph stats as one whole-workspace Markdown document
 (the magusfile's postflight target writes this to the GitHub Actions
 step summary).</p>
 <p>The VCS lenses read the commit log: --commits caps the scan; --since bounds it by
