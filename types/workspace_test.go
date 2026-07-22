@@ -1,12 +1,52 @@
 package types
 
 import (
+	"context"
 	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeWorkspaceRepo satisfies WorkspaceRepository via an embedded nil interface;
+// the context round-trip tests only need identity, never a method call.
+type fakeWorkspaceRepo struct{ WorkspaceRepository }
+
+// TestWorkspaceGraphObserver covers the mutable default observer: unset reads
+// nil, SetGraphObserver installs one, and nil clears it.
+func TestWorkspaceGraphObserver(t *testing.T) {
+	ws := &Workspace{}
+	assert.Nil(t, ws.GraphObserver(), "an unset observer reads nil")
+
+	obs := NoopObserver{}
+	ws.SetGraphObserver(obs)
+	assert.Equal(t, obs, ws.GraphObserver())
+
+	ws.SetGraphObserver(nil)
+	assert.Nil(t, ws.GraphObserver(), "passing nil clears the observer")
+}
+
+// TestWorkspaceContextHelpers covers the three context carriers: the workspace
+// repository, the active-dispatch set, and the request-scoped graph observer.
+// Each reads nil from a bare context and its stored value from a seeded one.
+func TestWorkspaceContextHelpers(t *testing.T) {
+	assert.Nil(t, WorkspaceFromContext(context.Background()))
+	assert.Nil(t, ActiveDispatchFromContext(context.Background()))
+	assert.Nil(t, GraphObserverFromContext(context.Background()))
+
+	repo := &fakeWorkspaceRepo{}
+	ctx := WithWorkspace(context.Background(), repo)
+	assert.Same(t, repo, WorkspaceFromContext(ctx))
+
+	dispatch := map[string]struct{}{"api": {}, "web": {}}
+	ctx = WithActiveDispatch(context.Background(), dispatch)
+	assert.Equal(t, dispatch, ActiveDispatchFromContext(ctx))
+
+	obs := NoopObserver{}
+	ctx = ContextWithGraphObserver(context.Background(), obs)
+	assert.Equal(t, obs, GraphObserverFromContext(ctx))
+}
 
 func newWorkspace(paths ...string) *Workspace {
 	projects := make(map[string]*Project, len(paths))

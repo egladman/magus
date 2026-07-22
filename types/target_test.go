@@ -7,6 +7,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTargetString(t *testing.T) {
+	assert.Equal(t, "api:build", Target{Path: "api", Name: "build"}.String())
+	// An empty path (all-projects target) still renders the leading colon.
+	assert.Equal(t, ":test", Target{Name: "test"}.String())
+}
+
+func TestExecResultToMap(t *testing.T) {
+	r := ExecResult{Stdout: "out", Stderr: "err", Code: 2, OK: false}
+	want := map[string]any{
+		"stdout": "out",
+		"stderr": "err",
+		"code":   2,
+		"ok":     false,
+	}
+	assert.Equal(t, want, r.ToMap())
+}
+
 func TestParseTarget(t *testing.T) {
 	got, err := ParseTarget("build") // bare target
 	require.NoError(t, err)

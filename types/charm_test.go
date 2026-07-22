@@ -50,6 +50,19 @@ func TestReservedCharms(t *testing.T) {
 	assert.Equal(t, "rw", ReservedCharms()[0], "ReservedCharms() must return an independent copy")
 }
 
+func TestReservedCharmDoc(t *testing.T) {
+	assert.Equal(t,
+		"mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci",
+		ReservedCharmDoc("RW"), "casing-insensitive lookup for rw")
+	assert.Equal(t,
+		"continuous-delivery: a target reads it to publish its artifact; survives into ci",
+		ReservedCharmDoc("cd"))
+	assert.Equal(t,
+		"GitHub Actions output: swap a tool's reporter to inline workflow annotations; survives into ci",
+		ReservedCharmDoc("gha"))
+	assert.Empty(t, ReservedCharmDoc("container"), "a non-reserved charm has no built-in doc")
+}
+
 // TestParseTargetNormalizesCharms locks in that the "target:charm" suffix is
 // canonicalized at the parse boundary, so everything downstream (cache key, ci
 // strip, typo guard) sees one spelling.

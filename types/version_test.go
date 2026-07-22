@@ -1,6 +1,20 @@
 package types
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// TestMagusVersionContext covers the round-trip: an unstamped context reads "",
+// and a stamped one reads back what WithMagusVersion stored.
+func TestMagusVersionContext(t *testing.T) {
+	assert.Empty(t, MagusVersionFromContext(context.Background()), "an unstamped context reads empty")
+
+	ctx := WithMagusVersion(context.Background(), "v1.2.3")
+	assert.Equal(t, "v1.2.3", MagusVersionFromContext(ctx))
+}
 
 func TestIsDevMagusVersion(t *testing.T) {
 	for _, tc := range []struct {
