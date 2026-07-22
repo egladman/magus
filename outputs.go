@@ -19,6 +19,18 @@ func (m *Magus) ResolveProjects(targets []types.Target) []*types.Project {
 // It returns the list of removed absolute file paths. When dryRun is true, no
 // files are deleted — only the matched paths are collected and returned.
 func (m *Magus) CleanOutputs(ctx context.Context, projects []*types.Project, dryRun bool) ([]string, error) {
+	// A real clean deletes declared outputs, so take each project's EXCLUSIVE
+	// workspace lock (sorted, deadlock-safe) up front so a concurrent magus process
+	// cannot be regenerating the same outputs mid-delete. A dry run removes nothing
+	// and takes no lock.
+	if !dryRun {
+		release, err := m.acquireProjectLocks(ctx, projects)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+	}
+
 	var removed []string
 	for _, p := range projects {
 		if ctx.Err() != nil {

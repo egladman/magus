@@ -45,6 +45,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+require github.com/gofrs/flock v0.13.0
+
 require (
 	aead.dev/minisign v0.2.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
