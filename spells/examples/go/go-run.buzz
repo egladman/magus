@@ -1,0 +1,11 @@
+// Run a repo-local Go tool through the spell instead of os.exec. go-run has no
+// useful bare form: name the package and its flags via the "args" option, which
+// append after `go run`. This forks `go run ./cmd/gen-docs -out ./docs`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    go["go-run"]({"args": ["./cmd/gen-docs", "-out", "./docs"]});
+}

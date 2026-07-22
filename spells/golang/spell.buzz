@@ -32,6 +32,12 @@ export fun mgs_getLanguage() > str { return "go"; }
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"]}; }
 fun goClean(target: Target) > Command { return Command{bin = "go", args = ["clean", "./..."]}; }
 fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["generate", "./..."]}; }
+// go-run compiles and runs a package. Alone among these ops it has no useful bare
+// form: the caller names the package and its flags through the {"args": [...]} option
+// (go["go-run"]({"args": ["../cmd/tool", "-out", "x"]}) -> `go run ../cmd/tool -out x`),
+// so a magusfile drives a repo-local Go tool through the spell - version-pinned,
+// sandbox- and charm-aware - instead of a raw os.exec("go", ["run", ...]).
+fun goRun(target: Target) > Command { return Command{bin = "go", args = ["run"]}; }
 
 fun goFmt(target: Target) > Command {
     final args = ["-l", "."];
@@ -81,6 +87,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-build": goBuild,
         "go-clean": goClean,
         "go-generate": goGenerate,
+        "go-run": goRun,
         "go-fmt": goFmt,
         "golangci-lint": golangCILint,
         "go-test": goTest,

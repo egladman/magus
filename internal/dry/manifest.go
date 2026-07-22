@@ -10,7 +10,7 @@ package dry
 // needed to build the tracing stubs. Add a row (and its ops) when a new built-in
 // spell ships.
 var builtinSpellOps = map[string][]string{
-	"go":     {"go-build", "go-test", "go-vet", "go-fmt", "go-mod-tidy", "go-generate", "go-clean", "golangci-lint", "govulncheck"},
+	"go":     {"go-build", "go-test", "go-vet", "go-fmt", "go-mod-tidy", "go-generate", "go-run", "go-clean", "golangci-lint", "govulncheck"},
 	"rs":     {"cargo-build", "cargo-test", "cargo-clippy", "cargo-fmt", "cargo-clean"},
 	"py":     {"pytest", "ruff-check", "ruff-format", "uv-build", "uv-clean"},
 	"ts":     {"tsc", "tsc-build", "tsc-clean", "eslint", "prettier", "vitest", "preflight", "dev-server", "biome-check", "biome-format"},

@@ -244,6 +244,7 @@ var goldenBuiltins = map[string]Descriptor{
 			"go-build":    {Command: types.Command{Bin: "go", Args: []string{"build"}}},
 			"go-clean":    {Command: types.Command{Bin: "go", Args: []string{"clean", "./..."}}},
 			"go-generate": {Command: types.Command{Bin: "go", Args: []string{"generate", "./..."}}},
+			"go-run":      {Command: types.Command{Bin: "go", Args: []string{"run"}}},
 			"go-fmt": {Command: types.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
