@@ -376,3 +376,21 @@ func TestIsRuntimeShard(t *testing.T) {
 	assert.False(t, IsRuntimeShard(RegistryShardName))
 	assert.False(t, IsRuntimeShard("pkg/foo"))
 }
+
+// TestDeclaredAsAttr checks a target whose raw name the normalizer rewrote carries
+// the declared_as attr on its knowledge node, while the node ID/label stay normalized.
+func TestDeclaredAsAttr(t *testing.T) {
+	in := Inputs{Graph: types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: ".", Engine: "buzz", Nodes: []types.TargetGraphNode{
+			{Name: "go-build", Declared: "goBuild"},
+			{Name: "build"},
+		}},
+	}}}
+	out := mergeAll(AssembleShards(in)).Output()
+	n, ok := nodeByID(out, "target:.:go-build")
+	require.True(t, ok)
+	assert.Equal(t, "go-build", n.Label, "node identity stays normalized")
+	assert.Equal(t, "goBuild", n.Attrs[AttrDeclaredAs], "raw spelling surfaced as declared_as")
+	plain, _ := nodeByID(out, "target:.:build")
+	assert.Empty(t, plain.Attrs[AttrDeclaredAs], "no declared_as when the name matches")
+}

@@ -182,7 +182,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 	if err != nil {
 		return err
 	}
-	out := ws.DescribeGraph()
+	out := ws.DescribeGraph(ctx)
 
 	if len(args) > 0 {
 		scope := args[0]

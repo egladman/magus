@@ -112,7 +112,13 @@ const TargetGraphDefinition = "The target dependency graph is the magus.needs " 
 // serializes it. Wire keys are snake_case field names (dependencies, not the
 // abbreviated deps), matching the project-level depends_on and the rest of this file.
 type TargetGraphNode struct {
-	Name         string   `json:"name"                   yaml:"name"`
+	Name string `json:"name" yaml:"name"`
+	// Declared is the target's raw, as-written name when it differs from the normalized
+	// Name (Name "go-build" declared as "goBuild" or "go_build"); empty when they match.
+	// Name is the identity every edge and lookup keys on - the normalizer maps any
+	// spelling to it - so Declared is provenance only: it conveys how the author wrote
+	// the target, surfaced as the knowledge graph's declared_as attr.
+	Declared     string   `json:"declared,omitempty"     yaml:"declared,omitempty"`
 	Doc          string   `json:"doc,omitempty"          yaml:"doc,omitempty"`
 	Dependencies []string `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
 	Charms       []string `json:"charms,omitempty"       yaml:"charms,omitempty"`

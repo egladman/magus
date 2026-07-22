@@ -55,7 +55,7 @@ type Describer interface {
 	DescribeSpells() SpellsOutput
 	DescribeCharms(defaults []string) CharmsOutput
 	DescribeTargets() TargetsOutput
-	DescribeGraph() TargetGraphOutput
+	DescribeGraph(ctx context.Context) TargetGraphOutput
 	DescribeProjects() ProjectsOutput
 	DescribeWorkspaces(cfg WorkspaceConfig) WorkspacesOutput
 	DescribeTarget(t Target) (EvaluatedTargetsOutput, error)

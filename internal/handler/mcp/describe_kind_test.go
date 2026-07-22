@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -61,7 +62,7 @@ type fakeDescriber struct{ gotTarget types.Target }
 func (f *fakeDescriber) DescribeSpells() types.SpellsOutput         { return types.SpellsOutput{} }
 func (f *fakeDescriber) DescribeCharms([]string) types.CharmsOutput { return types.CharmsOutput{} }
 func (f *fakeDescriber) DescribeTargets() types.TargetsOutput       { return types.TargetsOutput{} }
-func (f *fakeDescriber) DescribeGraph() types.TargetGraphOutput     { return types.TargetGraphOutput{} }
+func (f *fakeDescriber) DescribeGraph(context.Context) types.TargetGraphOutput { return types.TargetGraphOutput{} }
 func (f *fakeDescriber) DescribeProjects() types.ProjectsOutput     { return types.ProjectsOutput{} }
 func (f *fakeDescriber) DescribeWorkspaces(types.WorkspaceConfig) types.WorkspacesOutput {
 	return types.WorkspacesOutput{}

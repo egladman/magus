@@ -98,6 +98,9 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 			continue
 		}
 		node := types.TargetGraphNode{Name: norm(fn.Name), Doc: docSentence(fn.Doc)}
+		if norm(fn.Name) != fn.Name {
+			node.Declared = fn.Name // the raw spelling, when the normalizer rewrote it
+		}
 		var spellHits []spellHit
 		// A target attributes the ops/charms/edges of the same-file helper functions
 		// it calls, not only those in its own body. walk follows a bare call into a

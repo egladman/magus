@@ -412,6 +412,12 @@ func assembleProject(p types.TargetGraphProject) Shard {
 		if p.Engine != "" {
 			tAttrs = map[string]string{AttrEngine: p.Engine}
 		}
+		if n.Declared != "" {
+			if tAttrs == nil {
+				tAttrs = map[string]string{}
+			}
+			tAttrs[AttrDeclaredAs] = n.Declared
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     tID,
 			Kind:   types.KindTarget,

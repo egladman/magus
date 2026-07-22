@@ -159,7 +159,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// projects, but a single project that does not serve it (or a name no project serves
 	// at all) is an error. This is the run counterpart to affected's tolerance.
 	if len(targets) > 0 {
-		targets, err = filterServedTargets(m, targets, targetName)
+		targets, err = filterServedTargets(ctx, m, targets, targetName)
 		if err != nil {
 			return err
 		}
@@ -323,8 +323,8 @@ func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []
 // names that project (you asked for it explicitly), otherwise it reads as an unknown
 // target across the selection. When some projects serve it and others don't, the ones
 // that don't are dropped with a warning - the tolerant multi-project behavior.
-func filterServedTargets(m *magus.Magus, targets []types.Target, targetName string) ([]types.Target, error) {
-	return applyTargetFilter(targets, targetName, buildDefinesTarget(m), func(path string) string { return projectLabelFor(m, path) })
+func filterServedTargets(ctx context.Context, m *magus.Magus, targets []types.Target, targetName string) ([]types.Target, error) {
+	return applyTargetFilter(targets, targetName, buildDefinesTarget(ctx, m), func(path string) string { return projectLabelFor(m, path) })
 }
 
 // applyTargetFilter is the pure policy behind filterServedTargets: partition targets by
@@ -361,7 +361,7 @@ func applyTargetFilter(targets []types.Target, targetName string, defines func(p
 // covering BOTH sources of runnable targets: magusfile-declared targets (the target
 // graph's nodes) and spell ops (each bound spell's Targets). Neither set alone is
 // complete - the magusfile spell exposes no ops, and spell ops are not graph nodes.
-func buildDefinesTarget(m *magus.Magus) func(path, target string) bool {
+func buildDefinesTarget(ctx context.Context, m *magus.Magus) func(path, target string) bool {
 	byProject := map[string]map[string]bool{}
 	add := func(path, name string) {
 		set := byProject[path]
@@ -371,7 +371,7 @@ func buildDefinesTarget(m *magus.Magus) func(path, target string) bool {
 		}
 		set[name] = true
 	}
-	for _, p := range m.DescribeGraph().Projects {
+	for _, p := range m.DescribeGraph(ctx).Projects {
 		for _, n := range p.Nodes {
 			add(p.Path, n.Name)
 		}

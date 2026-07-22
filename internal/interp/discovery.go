@@ -48,7 +48,12 @@ func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode
 	// both live there.
 	ctxForm := map[string]bool{}
 	docs := map[string]string{}
-	norm := targetNameNormalizerFrom(ctx)
+	declared := map[string]string{}
+	// Normalize the node identity with the SAME default normalizer describe.Extract uses
+	// (types.DefaultTargetNameNormalizer), not a ctx-installed override: the discovered
+	// node and the static node for the same target must key on an identical Name so the
+	// caller's merge unifies them instead of emitting duplicates.
+	norm := types.DefaultTargetNameNormalizer
 	for _, f := range src.Files {
 		data, err := os.ReadFile(f)
 		if err != nil {
@@ -67,6 +72,9 @@ func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode
 				key := norm.NormalizeTargetName(fd.Name)
 				ctxForm[key] = true
 				docs[key] = fd.Doc
+				if key != fd.Name {
+					declared[key] = fd.Name // the raw spelling, when normalized
+				}
 			}
 		}
 	}
@@ -106,7 +114,7 @@ func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode
 			errs = append(errs, fmt.Errorf("discover target %q: %w", key, cerr))
 			continue
 		}
-		nodes = append(nodes, nodeFromRecord(key, docs[key], rec))
+		nodes = append(nodes, nodeFromRecord(key, declared[key], docs[key], rec))
 		if pol, ok := policyFromRecord(rec); ok {
 			policies[key] = pol
 		}
@@ -132,9 +140,10 @@ func policyFromRecord(rec *types.DiscoveryRecord) (types.Target, bool) {
 // nodeFromRecord assembles a target graph node from a discovery record. Dependency
 // and charm lists are already normalized and deduped by the recording methods; the
 // order is call order (needs) then sorted (charms), matching the extractor.
-func nodeFromRecord(name, doc string, rec *types.DiscoveryRecord) types.TargetGraphNode {
+func nodeFromRecord(name, declared, doc string, rec *types.DiscoveryRecord) types.TargetGraphNode {
 	node := types.TargetGraphNode{
 		Name:              name,
+		Declared:          declared,
 		Doc:               firstDocSentence(doc),
 		Dependencies:      rec.Needs,
 		CrossDependencies: rec.CrossDeps,

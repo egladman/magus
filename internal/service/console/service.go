@@ -285,11 +285,11 @@ func (s *Service) knowledgeGraph(ctx context.Context, withSymbols bool) (*knowle
 // TargetGraph returns the describe-graph view (targets flavor). It never errors today
 // (DescribeGraph is in-memory); the error return keeps the seam uniform with Graph and
 // leaves room for a future workspace-backed implementation.
-func (s *Service) TargetGraph(_ context.Context) (types.TargetGraphOutput, error) {
+func (s *Service) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error) {
 	if s.describeGraphFn != nil {
 		return s.describeGraphFn(), nil
 	}
-	return s.magus.DescribeGraph(), nil
+	return s.magus.DescribeGraph(ctx), nil
 }
 
 // projectSkeleton reduces a TargetGraphOutput to only project nodes and project->project

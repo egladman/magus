@@ -407,3 +407,15 @@ export fun bC(args: [str]) > void { magus.needs(aB); }
 `)
 	assert.NotNil(t, Cycle(g), "mixed-case cycle aB→bC→aB not detected")
 }
+
+// TestDeclaredName checks the raw as-written target name is captured when the
+// normalizer rewrites it, and left empty when the spelling already matches.
+func TestDeclaredName(t *testing.T) {
+	g := Extract(`export fun goBuild(args: [str]) > void {}
+export fun build(args: [str]) > void {}
+`)
+	rewritten, _ := nodeByName(g, "go-build")
+	assert.Equal(t, "goBuild", rewritten.Declared, "camelCase name captured as declared")
+	plain, _ := nodeByName(g, "build")
+	assert.Empty(t, plain.Declared, "a name the normalizer leaves alone has no declared_as")
+}

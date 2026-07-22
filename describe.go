@@ -297,6 +297,9 @@ func mergeTargetNode(a, b types.TargetGraphNode) types.TargetGraphNode {
 	if a.Doc == "" {
 		a.Doc = b.Doc
 	}
+	if a.Declared == "" {
+		a.Declared = b.Declared
+	}
 	for _, dep := range b.Dependencies {
 		a.Dependencies = appendUniq(a.Dependencies, dep)
 	}
@@ -448,11 +451,12 @@ func concatSource(src *interp.Source) string {
 	return sb.String()
 }
 
-// DescribeGraph returns the target dependency graph of each project, extracted
-// statically from its magusfile (no target body is evaluated). Buzz magusfiles
-// are supported; a project on any other engine yields an engine-tagged entry
-// with no nodes until that extractor lands.
-func (m *Magus) DescribeGraph() types.TargetGraphOutput {
+// DescribeGraph returns the target dependency graph of each project: the old-form
+// targets read statically from the magusfile, merged with the ctx-form targets learned
+// by running each under discovery (which is why it takes a ctx - the discovery run is
+// cancellable through it). Buzz magusfiles are supported; a project on any other engine
+// yields an engine-tagged entry with no nodes until that extractor lands.
+func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
 	out := types.TargetGraphOutput{Definition: types.TargetGraphDefinition}
 	repoRoot := gitRoot(m.ws.Root) // "" outside a repo; drives the repo-relative MAGUS.md heading
 	for _, p := range m.ws.All() {
@@ -472,7 +476,7 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 			// workspace directory name (e.g. "magus"). A non-root RelPath is kept as-is.
 			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
 			if src.Engine == "buzz" {
-				nodes, _ := collectTargetNodes(context.Background(), src, p.Path)
+				nodes, _ := collectTargetNodes(ctx, src, p.Path)
 				resolveNodeRefs(nodes, p.Path)
 				entry.Nodes = nodes
 				entry.Cycle = describe.Cycle(nodes)

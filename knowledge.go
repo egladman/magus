@@ -144,7 +144,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 	}
 	cacheDir := resolveCacheDir(root, cfg)
 	spells := ws.DescribeSpells()
-	graph := ws.DescribeGraph()
+	graph := ws.DescribeGraph(ctx)
 	projects := ws.DescribeProjects()
 
 	// The @vcs shard is produced by an expensive git-history scan. Fingerprint its inputs

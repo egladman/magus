@@ -129,7 +129,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	out := ws.DescribeGraph()
+	out := ws.DescribeGraph(ctx)
 
 	// A trailing list of project paths scopes the graph to those projects; the
 	// cross-project edge pass in the renderer drops edges to projects left out.

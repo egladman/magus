@@ -125,6 +125,12 @@ const (
 	// (value "true"), distinct from a compiled-in builtin that is merely available. The
 	// orphan lens flags only declared-but-unused spells as dead.
 	AttrDeclared = "declared"
+	// AttrDeclaredAs is a target's raw, as-written name when the normalizer rewrote it
+	// (node "go-build" declared_as "goBuild"). The node ID/label stay the normalized
+	// name - the identity edges and lookups key on - so this just conveys the author's
+	// spelling on the card, making the normalization visible rather than hidden. Absent
+	// when the declared name already equals the normalized one.
+	AttrDeclaredAs = "declared_as"
 	// AttrRole classifies a doc node by what the markdown file IS, from a universal
 	// filename convention (readme, agent, changelog, contributing, license), or "doc"
 	// for anything else. It is workspace-agnostic - no magus-specific filenames - so

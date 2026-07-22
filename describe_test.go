@@ -36,9 +36,9 @@ export fun build(args: [str]) > void {
 	ws, err := Inspect(context.Background(), root)
 	require.NoError(t, err, "Inspect")
 	var web *types.TargetGraphProject
-	for i, p := range ws.DescribeGraph().Projects {
+	for i, p := range ws.DescribeGraph(context.Background()).Projects {
 		if p.Path == "web" {
-			web = &ws.DescribeGraph().Projects[i]
+			web = &ws.DescribeGraph(context.Background()).Projects[i]
 			break
 		}
 	}
