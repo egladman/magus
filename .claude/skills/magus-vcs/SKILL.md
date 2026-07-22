@@ -68,13 +68,16 @@ CORRECT: note that `docs/gen/**` is a declared output of
    silently lost - stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
-4. Stage with `git add -A`, never a hand-typed path list. `git add` aborts on
-   the first pathspec that matches nothing, staging none of the listed files,
-   and a path you just `git mv`d or `git rm`d no longer exists at its old name,
-   so naming it stages nothing. Then confirm with `git diff --cached --stat`:
-   every intended edit, renames included (`renamed:`), must be present. `git
-   commit` records what `git diff --cached` shows and does not re-check that your
-   edits landed.
+4. Review `git status` first, then stage deliberately. `git add -A` stages every
+   untracked file too, so a stray build artifact or scratch file rides along
+   silently (this is how a compiled binary once slipped into a commit); use it
+   only when `git status` shows nothing you do not intend, else stage the specific
+   paths. Do not lean on a hand-typed path list as your only safeguard either:
+   `git add` aborts on the first pathspec that matches nothing (staging none of
+   the rest), and a path you just `git mv`d or `git rm`d is gone at its old name.
+   Whichever you use, confirm with `git diff --cached --stat`: every intended edit,
+   renames included (`renamed:`), must be present. `git commit` records what `git
+   diff --cached` shows and does not re-check that your edits landed.
 5. Run `magus affected ci` before calling the work done: it runs the full
    pipeline over every project the diff reaches, including ones you never edited,
    and after committing confirms HEAD builds - a partial commit that drops a

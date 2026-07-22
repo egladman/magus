@@ -2,10 +2,15 @@
 # rendered coverage.svg badge is committed; the profile is not.
 coverage.out
 
-# local build artifacts
+# Local build artifacts: `go build ./cmd/<name>` at the repo root drops the bare
+# basename here. /magus-* is a wildcard so a newly added cmd/magus-* tool is covered
+# without editing this list (an explicit list once missed magus-spelldocs and swept
+# the binary into a commit); the non-prefixed tools are named individually.
 /magus
-/magus-utils
-/magus-scribe
+/magus-*
+/coverage-badge
+/langservice-manifest
+/buzz-playground
 
 # release output from `magus run release` — cross-compiled tarballs + SHA256SUMS,
 # published to the GitHub release, never committed
@@ -20,9 +25,6 @@ coverage.out
 # SCIP code-symbol indexes are build artifacts (magus writes them under .magus, but a
 # manual `scip-*` run can drop one in the tree); never commit them.
 *.scip
-
-/magus-docs
-/buzz-playground
 
 # compiled Go test binaries (go test -c / bench runs)
 *.test
