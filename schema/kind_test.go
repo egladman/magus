@@ -1,4 +1,4 @@
-package gen
+package schema
 
 import (
 	"strings"
@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Kind and its String() are hand-written in schema/fieldtype. They are tested here,
+// through the schema package's re-exported aliases, rather than inside a generated tree.
 func TestKindString(t *testing.T) {
 	assert.Equal(t, "KindString", KindString.String())
 	assert.Equal(t, "KindInt", KindInt.String())

@@ -1,4 +1,9 @@
-package gen
+// Package fieldtype holds the hand-written config-field types (Kind, Field,
+// FlagNames) that the generated inventory in schema/gen populates. It is a
+// dependency-free leaf: schema/gen imports it for the types, keeping the generated
+// data pure (no import of internal/config), and the schema package re-exports these
+// as aliases so callers need not import this package directly.
+package fieldtype
 
 import (
 	"fmt"
@@ -106,7 +111,3 @@ func flagsLabel(f FlagNames) string {
 	}
 	return "--" + f.Long
 }
-
-// Fields is the generated inventory of every config-backed CLI flag and
-// MAGUS_* environment variable. Populated by fields.go (code-generated).
-var Fields []Field
