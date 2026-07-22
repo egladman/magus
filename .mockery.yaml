@@ -1,0 +1,17 @@
+# mockery generates testify mocks for interfaces we want to fake in tests.
+# Docs: https://vektra.github.io/mockery/. Run via `go tool mockery` (pinned in go.mod
+# tool block) - the mocks_generate magusfile target wires it into `magus run generate`.
+#
+# Mocks land in a gen/mocks/ subdir of the interface's own package (e.g. internal/dry ->
+# internal/dry/gen/mocks), alongside the repo's other generated trees (host/gen,
+# internal/spell/gen). The dir already scopes them as mocks, so the filename is just the
+# interface's snake_case name (spell_catalog.go), no redundant mock_ prefix. Keep this
+# list tight: add an interface only when a test genuinely needs to inject a fake.
+template: testify
+dir: "{{.InterfaceDir}}/gen/mocks"
+pkgname: mocks
+filename: "{{.InterfaceName | snakecase}}.go"
+packages:
+  github.com/egladman/magus/internal/dry:
+    interfaces:
+      SpellCatalog:

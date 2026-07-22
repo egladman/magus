@@ -1,13 +1,8 @@
 package spell
 
 import (
-	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/libs/gopherbuzz"
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
 
 	"github.com/stretchr/testify/assert"
@@ -46,57 +41,6 @@ func TestBuiltinsHash_Format(t *testing.T) {
 func TestBuiltinsHash_Stable(t *testing.T) {
 	h1, h2 := BuiltinsHash(), BuiltinsHash()
 	assert.Equal(t, h1, h2, "BuiltinsHash() not stable")
-}
-
-// TestBuiltinBytecodeParity proves the embedded-bytecode pipeline end to end for
-// every self-contained built-in: authored .buzz -> Compile -> Marshal ->
-// UnmarshalChunk -> ExecChunk -> Resolve yields a Descriptor identical to the one in
-// the in-process registry (Builtins(), keyed by runtime name). It walks the spells/
-// source tree, skipping function-op spells (e.g. github) that import host modules
-// and so are not bare-compilable built-ins.
-func TestBuiltinBytecodeParity(t *testing.T) {
-	want := Builtins()
-	ctx := context.Background()
-	// spellsDir is relative to this package (internal/spell).
-	const spellsDir = "../../spells"
-	dirs, err := os.ReadDir(spellsDir)
-	require.NoError(t, err)
-	for _, d := range dirs {
-		if !d.IsDir() {
-			continue
-		}
-		dir := d.Name()
-		src, err := os.ReadFile(filepath.Join(spellsDir, dir, "spell.buzz"))
-		if err != nil {
-			continue // not a spell dir
-		}
-		// Build-time half: inline the magus/target module exactly as the built-in
-		// generator does so the chunk is self-contained. A spell that imports host
-		// modules (e.g. github) is not a bare-compilable built-in — skip it.
-		combined, ok := SelfContainedBuiltinSource(string(src))
-		if !ok {
-			continue
-		}
-		t.Run(dir, func(t *testing.T) {
-			cs := buzz.NewSession(ctx, buzz.WithEmbedded())
-			defer cs.Close()
-			chunk, err := cs.Compile(combined)
-			require.NoError(t, err, "compile")
-			blob, err := chunk.Marshal()
-			require.NoError(t, err, "marshal")
-			// Runtime half: recover from bytecode and resolve the spec.
-			rechunk, err := vm.UnmarshalChunk(blob)
-			require.NoError(t, err, "unmarshal")
-			rs := buzz.NewSession(ctx, buzz.WithEmbedded())
-			defer rs.Close()
-			require.NoError(t, rs.ExecChunk(ctx, rechunk), "exec chunk")
-			got, err := Resolve(ctx, rs)
-			require.NoError(t, err, "resolve")
-			w, ok := want[got.Name]
-			require.Truef(t, ok, "built-in %q (name %q) not in registry", dir, got.Name)
-			assert.Equalf(t, w, got, "Descriptor mismatch for %q", dir)
-		})
-	}
 }
 
 func TestGoSpell_TidyTarget(t *testing.T) {

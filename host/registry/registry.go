@@ -1,10 +1,12 @@
 //go:build !wasm
 
-package gen
+package registry
+
+import gen "github.com/egladman/magus/host/gen"
 
 // This file is hand-maintained (not generated). TestModulesMatchStd guards it
 // against drift from std.All(). The RegisterFunc / ModuleReg types live in
-// module_reg.go (no build tag) so the wasm build can use them too; the
+// types.go (no build tag) so the wasm build can use them too; the
 // WASMCompatible:true entries here are mirrored in registry_wasm.go, which the
 // wasm build sees instead of this file.
 
@@ -19,30 +21,30 @@ package gen
 var Modules = map[string]ModuleReg{
 	// Context-dependent (process / filesystem / network): full surface only. The
 	// browser has no way to provide these, so they are never in the playground.
-	"os":      {RegisterOs, false},
-	"fs":      {RegisterFs, false},
-	"vcs":     {RegisterVcs, false},
-	"archive": {RegisterArchive, false},
-	"http":    {RegisterHttp, false},
+	"os":      {gen.RegisterOs, false},
+	"fs":      {gen.RegisterFs, false},
+	"vcs":     {gen.RegisterVcs, false},
+	"archive": {gen.RegisterArchive, false},
+	"http":    {gen.RegisterHttp, false},
 
 	// Pure compute: safe everywhere, including the WASM playground. Mirror this
 	// exact set in registry_wasm.go, which the wasm build uses in place of this file.
 	// uuid is here (its randomness uses the browser's getRandomValues) rather than
 	// treated as context-dependent - a deliberate choice to let it run in-browser.
-	"platform": {RegisterPlatform, true},
-	"crypto":   {RegisterCrypto, true},
-	"env":      {RegisterEnv, true},
-	"json":     {RegisterJson, true},
-	"time":     {RegisterTime, true},
-	"fmt":      {RegisterFmt, true},
-	"markdown": {RegisterMarkdown, true},
-	"charm":    {RegisterCharm, true},
-	"encoding": {RegisterEncoding, true},
-	"path":     {RegisterPath, true},
-	"strings":  {RegisterStrings, true},
-	"semver":   {RegisterSemver, true},
-	"yaml":     {RegisterYaml, true},
-	"template": {RegisterTemplate, true},
-	"toml":     {RegisterToml, true},
-	"uuid":     {RegisterUuid, true},
+	"platform": {gen.RegisterPlatform, true},
+	"crypto":   {gen.RegisterCrypto, true},
+	"env":      {gen.RegisterEnv, true},
+	"json":     {gen.RegisterJson, true},
+	"time":     {gen.RegisterTime, true},
+	"fmt":      {gen.RegisterFmt, true},
+	"markdown": {gen.RegisterMarkdown, true},
+	"charm":    {gen.RegisterCharm, true},
+	"encoding": {gen.RegisterEncoding, true},
+	"path":     {gen.RegisterPath, true},
+	"strings":  {gen.RegisterStrings, true},
+	"semver":   {gen.RegisterSemver, true},
+	"yaml":     {gen.RegisterYaml, true},
+	"template": {gen.RegisterTemplate, true},
+	"toml":     {gen.RegisterToml, true},
+	"uuid":     {gen.RegisterUuid, true},
 }

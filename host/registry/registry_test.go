@@ -1,4 +1,4 @@
-package gen
+package registry
 
 import (
 	"context"
@@ -9,15 +9,19 @@ import (
 	"strings"
 	"testing"
 
+	gen "github.com/egladman/magus/host/gen"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// camelCase mirrors the snake_case→camelCase transform the Buzz emitter applies
-// to method keys (magus-utils bindings). A single-word name is unchanged.
-func camelCase(s string) string {
+// These guard the hand-maintained Modules registry (registry.go and registry_wasm.go)
+// against drift from the canonical std.Module surface.
+
+// camelCaseKey mirrors the snake_case->camelCase transform the Buzz emitter applies to
+// method keys (magus-utils bindings). A single-word name is unchanged.
+func camelCaseKey(s string) string {
 	parts := strings.Split(s, "_")
 	if len(parts) == 1 {
 		return s
@@ -46,11 +50,11 @@ func TestModulesMatchStd(t *testing.T) {
 		assert.Containsf(t, want, name, "Modules registry has %q but std.All() does not", name)
 		delete(want, name)
 	}
-	assert.Emptyf(t, want, "std.All() modules missing from the Modules registry: %v", setKeys(want))
+	assert.Emptyf(t, want, "std.All() modules missing from the Modules registry: %v", modKeySet(want))
 }
 
-// setKeys returns the keys of a set, for a readable failure message.
-func setKeys(m map[string]bool) []string {
+// modKeySet returns the keys of a set, for a readable failure message.
+func modKeySet(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)
@@ -61,7 +65,7 @@ func setKeys(m map[string]bool) []string {
 // TestBuzzBindingsMatchHostModules guards against the host/gen trampolines
 // drifting from the canonical std.Module surface: every method a module
 // declares must be exposed as a key on the generated module map. Buzz camelCases
-// the host's snake_case names, so the lookup key is camelCase(meth.Name).
+// the host's snake_case names, so the lookup key is camelCaseKey(meth.Name).
 func TestBuzzBindingsMatchHostModules(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
@@ -71,7 +75,7 @@ func TestBuzzBindingsMatchHostModules(t *testing.T) {
 	for _, m := range std.All() {
 		var reg RegisterFunc
 		if m.Name == "magus" {
-			reg = RegisterMagus // the magus.* namespace has no Modules entry
+			reg = gen.RegisterMagus // the magus.* namespace has no Modules entry
 		} else if mr, ok := Modules[m.Name]; ok {
 			reg = mr.Register
 		} else {
@@ -82,7 +86,7 @@ func TestBuzzBindingsMatchHostModules(t *testing.T) {
 		for _, meth := range m.Methods {
 			// extra is self-complete: every declared method must be on the Buzz
 			// surface, even ones Buzz's stdlib also covers (see std.BuzzStdlibEquiv).
-			key := camelCase(meth.Name)
+			key := camelCaseKey(meth.Name)
 			if meth.BuzzName != "" {
 				key = meth.BuzzName
 			}
@@ -109,6 +113,8 @@ func TestWASMRegistryMatchesCompatibleSubset(t *testing.T) {
 			want[name] = true
 		}
 	}
+	// Test runs with the working directory set to this package's dir, so the wasm
+	// table is a plain relative path.
 	got := parseModulesMapKeys(t, "registry_wasm.go")
 	assert.Equal(t, want, got,
 		"registry_wasm.go must mirror exactly the WASMCompatible:true entries of registry.go")

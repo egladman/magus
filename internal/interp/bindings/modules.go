@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	buzzgen "github.com/egladman/magus/host/gen"
+	hostreg "github.com/egladman/magus/host/registry"
 	ispell "github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -29,8 +29,8 @@ const (
 // or installs it fresh when Buzz has no such module. Ordered by name so the bind
 // sequence is deterministic.
 func magusModules() []buzz.Module {
-	names := make([]string, 0, len(buzzgen.Modules))
-	for name := range buzzgen.Modules {
+	names := make([]string, 0, len(hostreg.Modules))
+	for name := range hostreg.Modules {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -38,7 +38,7 @@ func magusModules() []buzz.Module {
 	mods := make([]buzz.Module, 0, len(names))
 	for _, name := range names {
 		name := name
-		reg := buzzgen.Modules[name]
+		reg := hostreg.Modules[name]
 		labels := []string{labelMagus}
 		if reg.WASMCompatible {
 			labels = append(labels, labelWASM)
@@ -93,7 +93,7 @@ func mergeModuleMap(dst, src vm.Value) {
 // handler op path (callBuzzSpellFunc), so both surfaces stay in lock-step.
 // RegisterModuleSurface installs the shared Buzz module surface: Buzz's own
 // stdlib, the magus testing extensions (assert/suite), and every magus module
-// (buzzgen.Modules) layered on top of the same bare names. It is the full surface
+// (hostreg.Modules) layered on top of the same bare names. It is the full surface
 // a standalone script sees, shared by the magusfile engine (which then adds the
 // magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
 // runner, so the two never drift.

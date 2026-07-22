@@ -1,9 +1,10 @@
 // Subcommand `spells` compiles each built-in spell's Buzz source
-// (spells/<name>/spell.buzz) to bytecode and writes internal/spell/
-// gen/<name>.bo, which the spell package embeds at build time. The runtime
-// loader recovers each blob with UnmarshalChunk and runs it to extract the
-// spell's mgs_ functions — so the .buzz files are the source of truth and the
-// committed .bo blobs are a generated build artifact.
+// (spells/<dir>/spell.buzz) to bytecode and writes internal/spell/gen/<name>.bo,
+// named by the spell's runtime name (mgs_getName, e.g. "go" for spells/golang) so
+// the source directory never enters the runtime registry. The spell package embeds
+// the blobs at build time; the runtime loader recovers each with UnmarshalChunk and
+// runs it to extract the spell's mgs_ functions — so the .buzz files are the source
+// of truth and the committed .bo blobs are a generated build artifact.
 //
 // Only self-contained spells are compiled: a spell whose source imports a host
 // module (e.g. spells/github/actions, a function-op spell) needs bindings a bare
@@ -46,8 +47,8 @@ func runSpells(args []string) error {
 		if !e.IsDir() {
 			continue
 		}
-		name := e.Name()
-		srcPath := filepath.Join(*spellsDir, name, "spell.buzz")
+		dir := e.Name()
+		srcPath := filepath.Join(*spellsDir, dir, "spell.buzz")
 		src, err := os.ReadFile(srcPath)
 		if err != nil {
 			continue // not a spell dir
@@ -67,19 +68,48 @@ func runSpells(args []string) error {
 			_ = sess.Close()
 			return fmt.Errorf("compile %s: %w", srcPath, err)
 		}
+		// Resolve the spell so the blob is named by its runtime name (mgs_getName,
+		// e.g. "go"), not its source directory (e.g. "golang"): the loader keys the
+		// registry on the runtime name, so the dir never enters the runtime.
+		if err := sess.ExecChunk(ctx, chunk); err != nil {
+			_ = sess.Close()
+			return fmt.Errorf("exec %s: %w", srcPath, err)
+		}
+		spec, err := ispell.Resolve(ctx, sess)
+		if err != nil {
+			_ = sess.Close()
+			return fmt.Errorf("resolve %s: %w", srcPath, err)
+		}
 		blob, err := chunk.Marshal()
 		_ = sess.Close()
 		if err != nil {
 			return fmt.Errorf("marshal %s: %w", srcPath, err)
 		}
-		outPath := filepath.Join(*outDir, name+".bo")
+		outPath := filepath.Join(*outDir, spec.Name+".bo")
 		if err := os.WriteFile(outPath, blob, 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", outPath, err)
 		}
-		built = append(built, name)
+		built = append(built, spec.Name)
 	}
 	if len(built) == 0 {
 		return fmt.Errorf("no built-in spells found under %s", *spellsDir)
+	}
+	// Remove stale blobs (a renamed spell, a removed source dir) so the embedded set
+	// is exactly the current built-ins - the .bo names are runtime names, not dirs.
+	keep := make(map[string]bool, len(built))
+	for _, n := range built {
+		keep[n] = true
+	}
+	existing, err := filepath.Glob(filepath.Join(*outDir, "*.bo"))
+	if err != nil {
+		return fmt.Errorf("glob out: %w", err)
+	}
+	for _, p := range existing {
+		if !keep[strings.TrimSuffix(filepath.Base(p), ".bo")] {
+			if err := os.Remove(p); err != nil {
+				return fmt.Errorf("remove stale %s: %w", p, err)
+			}
+		}
 	}
 	sort.Strings(built)
 	fmt.Printf("spells: compiled %d built-ins -> %s: %s\n", len(built), *outDir, strings.Join(built, " "))

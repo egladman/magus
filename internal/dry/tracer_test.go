@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/dry/gen/mocks"
 )
 
 // TestEval_tracerSpellOp is the load-bearing proof for the spell docs' Run button:
@@ -70,6 +72,28 @@ export fun deploy(ctx: magus\Context, args: [str]) > void { acme["acme-ship"]();
 	r := Eval(context.Background(), src, WithSpells(map[string][]string{"acme": {"acme-ship"}}))
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
 	require.Len(t, r.Trace, 1, "the registered acme-ship op should trace one host op")
+	assert.Equal(t, "acme-ship", r.Trace[0].Name)
+}
+
+// TestEval_withCatalog proves the SpellCatalog seam: the built-in surface the tracer
+// stubs comes from the injected catalog, not a hard-coded manifest. A mock catalog with
+// one fake built-in makes that spell's op trace like a real built-in's. This is the
+// mock-driven replacement for the old hand-written manifest + drift-gate test.
+func TestEval_withCatalog(t *testing.T) {
+	const src = `
+import "magus";
+import "magus/spell/acme";
+
+magus.project({ "spells": [acme] });
+
+export fun deploy(ctx: magus\Context, args: [str]) > void { acme["acme-ship"](); }
+`
+	cat := mocks.NewMockSpellCatalog(t)
+	cat.EXPECT().BuiltinOps().Return(map[string][]string{"acme": {"acme-ship"}})
+
+	r := Eval(context.Background(), src, WithCatalog(cat))
+	require.True(t, r.OK, "eval failed: %+v", r.Diag)
+	require.Len(t, r.Trace, 1, "the acme-ship op from the injected catalog should trace")
 	assert.Equal(t, "acme-ship", r.Trace[0].Name)
 }
 

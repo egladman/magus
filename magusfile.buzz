@@ -177,6 +177,14 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void {
     os.exec("go", ["generate", "./internal/spell/..."]);
 }
 
+// Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked
+// interface's gen/ subdir. Mocks are committed and drift-gated like every other
+// generated tree; mockery is pinned in the go.mod tool block.
+export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("**/gen/mocks/*.go");
+    os.exec("go", ["tool", "mockery"]);
+}
+
 // Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.
 export fun config_generate(ctx: magus\Context, args: [str]) > void {
     os.exec("go", ["generate", "./cmd/magus/..."]);

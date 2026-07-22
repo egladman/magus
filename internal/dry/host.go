@@ -25,8 +25,8 @@ import (
 //
 // spells is the set of spells to register as tracing `magus/spell/<name>` modules,
 // keyed by import name with its op names. Callers pass the built-in registry
-// (builtinSpellOps) plus any extra spells registered via WithSpells, so a workspace
-// or third-party spell's example traces like a built-in's.
+// (the SpellCatalog's BuiltinOps) plus any extra spells registered via WithSpells, so
+// a workspace or third-party spell's example traces like a built-in's.
 func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map[string][]string) {
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)

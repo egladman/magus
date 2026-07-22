@@ -174,11 +174,12 @@ func applyWithEvanphx(argv []string, ops []types.PatchOp) ([]string, error) {
 }
 
 // goldenBuiltins is the original hand-maintained built-in table, frozen here as
-// a golden. The built-in registry is now produced by compiling each
-// spells/<name>/spell.buzz to bytecode and running it (see loadBuiltins);
-// TestBuiltinsMatchGolden asserts that pipeline reproduces these exact values,
-// so an accidental change in a built-in's .buzz — or in the Buzz toolchain — is
-// caught. Update this table in lockstep with an intentional built-in change.
+// a golden, keyed by runtime spell name (e.g. "go", not source dir "golang"). The
+// built-in registry is produced by compiling each spells/<dir>/spell.buzz to bytecode
+// and running it (see loadBuiltins); TestBuiltinsMatchGolden asserts that pipeline
+// reproduces these exact values, so an accidental change in a built-in's .buzz — or in
+// the Buzz toolchain — is caught. Update this table in lockstep with an intentional
+// built-in change.
 var goldenBuiltins = map[string]Descriptor{
 	"bash": {
 		Name:  "bash",
@@ -235,7 +236,7 @@ var goldenBuiltins = map[string]Descriptor{
 			"hadolint":           {Command: types.Command{Bin: "hadolint", Args: []string{"Dockerfile"}}},
 		},
 	},
-	"golang": {
+	"go": {
 		Name:       "go",
 		Needs:      []string{"**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		VersionCmd: []string{"go", "version"},
@@ -270,7 +271,7 @@ var goldenBuiltins = map[string]Descriptor{
 			"scip":        {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
-	"markdown": {
+	"md": {
 		Name:   "md",
 		Needs:  []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"},
 		Claims: []string{"**/*.md", "**/*.mdx"},
@@ -284,7 +285,7 @@ var goldenBuiltins = map[string]Descriptor{
 			}}},
 		},
 	},
-	"python": {
+	"py": {
 		Name:       "py",
 		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
 		VersionCmd: []string{"python3", "--version"},
@@ -307,7 +308,7 @@ var goldenBuiltins = map[string]Descriptor{
 			"scip": {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-python index . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
-	"rust": {
+	"rs": {
 		Name:       "rs",
 		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		VersionCmd: []string{"rustc", "--version"},
@@ -324,7 +325,7 @@ var goldenBuiltins = map[string]Descriptor{
 			"scip":       {Command: types.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
-	"typescript": {
+	"ts": {
 		Name:       "ts",
 		Needs:      []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
 		Claims:     []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
@@ -364,11 +365,11 @@ var goldenBuiltins = map[string]Descriptor{
 }
 
 func TestBuiltinsMatchGolden(t *testing.T) {
-	got := builtinsByDir()
+	got := Builtins()
 	require.Len(t, got, len(goldenBuiltins), "registry/golden size mismatch")
-	for dir, want := range goldenBuiltins {
-		g, ok := got[dir]
-		if !assert.Truef(t, ok, "registry missing built-in %q", dir) {
+	for name, want := range goldenBuiltins {
+		g, ok := got[name]
+		if !assert.Truef(t, ok, "registry missing built-in %q", name) {
 			continue
 		}
 		// DocOps and each op's Doc are resolution-path metadata (which targets are
@@ -377,10 +378,10 @@ func TestBuiltinsMatchGolden(t *testing.T) {
 		// bytecode serializes doc comments varies). Clear both before comparing the
 		// semantic fields (bin/args/charms).
 		g.DocOps = nil
-		for name, op := range g.Ops {
+		for opName, op := range g.Ops {
 			op.Doc = ""
-			g.Ops[name] = op
+			g.Ops[opName] = op
 		}
-		assert.Equalf(t, want, g, "built-in %q", dir)
+		assert.Equalf(t, want, g, "built-in %q", name)
 	}
 }

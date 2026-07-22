@@ -10,12 +10,30 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	hostgen "github.com/egladman/magus/host/gen"
+	hostreg "github.com/egladman/magus/host/registry"
+	ispell "github.com/egladman/magus/internal/spell"
 )
+
+// SpellCatalog yields the built-in spell op surface (import name -> op names) the
+// dry-run tracer needs to build spell stubs. It is the single seam between the tracer
+// and the built-in registry: production wires the real registry (builtinCatalog), and
+// a test injects a controlled set via WithCatalog. It replaces the old hand-written
+// manifest + drift-gate test, so the tracer's built-in surface cannot drift from the
+// registry.
+type SpellCatalog interface {
+	BuiltinOps() map[string][]string
+}
+
+// builtinCatalog is the production SpellCatalog, backed by the real internal/spell
+// registry. spell.BuiltinOps() derives its result from Builtins(), so there is one
+// source of truth.
+type builtinCatalog struct{}
+
+func (builtinCatalog) BuiltinOps() map[string][]string { return ispell.BuiltinOps() }
 
 // WASMCompatibleMagusModules is the allowlist of magus modules the browser
 // playground registers: the WASMCompatible entries of the one host-module registry
-// (hostgen.Modules), each pure computation with no filesystem, network, process,
+// (hostreg.Modules), each pure computation with no filesystem, network, process,
 // or randomness access under WASM. IO modules (fs / os / http / vcs / archive) and
 // uuid stay out; their examples render as reference-only code blocks in the docs.
 //
@@ -26,7 +44,7 @@ var WASMCompatibleMagusModules = wasmCompatibleMagusModules()
 
 func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session) vm.Value {
 	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
-	for name, reg := range hostgen.Modules {
+	for name, reg := range hostreg.Modules {
 		if reg.WASMCompatible {
 			out[name] = reg.Register
 		}
@@ -90,6 +108,17 @@ type evalConfig struct {
 	// built-ins, so a workspace or third-party spell's example traces too. Non-nil
 	// implies tracer mode.
 	spells map[string][]string
+	// catalog supplies the built-in spell surface; nil means the real registry
+	// (builtinCatalog). Set by WithCatalog for tests that drive a controlled set.
+	catalog SpellCatalog
+}
+
+// spellCatalog returns the configured catalog, defaulting to the real registry.
+func (c *evalConfig) spellCatalog() SpellCatalog {
+	if c.catalog != nil {
+		return c.catalog
+	}
+	return builtinCatalog{}
 }
 
 // EvalOption configures Eval. Options are additive: each turns on a capability
@@ -121,6 +150,16 @@ func WithSpells(spells map[string][]string) EvalOption {
 	}
 }
 
+// WithCatalog overrides the built-in spell catalog the tracer stubs, so a test can
+// drive the tracer with a controlled built-in set (e.g. a mock) instead of the real
+// registry. Implies tracer mode. Production callers omit it and get the registry.
+func WithCatalog(c SpellCatalog) EvalOption {
+	return func(cfg *evalConfig) {
+		cfg.tracer = true
+		cfg.catalog = c
+	}
+}
+
 // Eval evaluates Buzz source in a fresh sandboxed session. With no options it
 // is the language playground: Buzz stdlib plus the WASM-compatible host modules
 // (strings / json / crypto / ...), evaluated once, returning the trailing value's
@@ -144,7 +183,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	// target's dependency closure: an example is self-contained, so every op it wires
 	// is worth showing.
 	if cfg.tracer {
-		tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, mergeSpells(cfg.spells))
+		tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, mergeSpells(cfg.spellCatalog(), cfg.spells))
 		if diag != nil {
 			return EvalResult{Output: tr.out.String(), Diag: diag}
 		}
@@ -184,15 +223,16 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	return EvalResult{OK: true, Result: v.String(), Output: out.String()}
 }
 
-// mergeSpells returns the built-in spell registry with extra merged over it (extra
-// wins on a name clash), so a caller's WithSpells adds to rather than replaces the
-// built-ins. A nil extra returns the built-ins unchanged.
-func mergeSpells(extra map[string][]string) map[string][]string {
+// mergeSpells returns the catalog's built-in spell surface with extra merged over it
+// (extra wins on a name clash), so a caller's WithSpells adds to rather than replaces
+// the built-ins. A nil extra returns the built-ins unchanged.
+func mergeSpells(cat SpellCatalog, extra map[string][]string) map[string][]string {
+	base := cat.BuiltinOps()
 	if len(extra) == 0 {
-		return builtinSpellOps
+		return base
 	}
-	merged := make(map[string][]string, len(builtinSpellOps)+len(extra))
-	for name, ops := range builtinSpellOps {
+	merged := make(map[string][]string, len(base)+len(extra))
+	for name, ops := range base {
 		merged[name] = ops
 	}
 	for name, ops := range extra {
@@ -211,7 +251,7 @@ func mergeSpells(extra map[string][]string) map[string][]string {
 func EvalInContext(ctx context.Context, magusfileSrc, expr string) EvalResult {
 	tr := newTracer()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	installHost(ctx, sess, tr, builtinSpellOps)
+	installHost(ctx, sess, tr, builtinCatalog{}.BuiltinOps())
 
 	_ = sess.Exec(ctx, magusfileSrc) // best effort: bind whatever compiles
 

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/spell"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -177,23 +176,6 @@ func TestRun_unknownTarget(t *testing.T) {
 	r := Run(context.Background(), sampleMagusfile, "nope", nil)
 	require.False(t, r.OK, "expected an unknown-target diag")
 	assert.NotNil(t, r.Diag, "expected an unknown-target diag")
-}
-
-// TestManifestMatchesBuiltins gates the hand-written spell manifest against the
-// real built-in registry: every spell and op the playground claims must exist.
-// (Host-only: the spell package's embedded bytecode never enters the wasm build.)
-func TestManifestMatchesBuiltins(t *testing.T) {
-	builtins := spell.Builtins()
-	for name, ops := range builtinSpellOps {
-		spec, ok := builtins[name]
-		if !assert.True(t, ok, "manifest spell %q is not a built-in", name) {
-			continue
-		}
-		for _, op := range ops {
-			_, ok := spec.Ops[op]
-			assert.True(t, ok, "manifest op %q.%q is not a real target", name, op)
-		}
-	}
 }
 
 func hasEdge(edges []Edge, from, to string) bool {

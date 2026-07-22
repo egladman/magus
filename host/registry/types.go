@@ -1,4 +1,8 @@
-package gen
+// Package registry is the hand-maintained host-module registry: the Modules table
+// wiring each bare import name to its generated host/gen Register trampoline, plus the
+// WASMCompatible curation the browser playground needs. It is deliberately separate from
+// host/gen (which is generated-only) and imports it for the trampolines.
+package registry
 
 import (
 	"context"

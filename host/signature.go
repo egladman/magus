@@ -60,7 +60,7 @@ func returnSuffix(m std.Method) string {
 // single-word name is unchanged). This is the single source of truth for the
 // transform: magus-utils bindings uses it to emit the Buzz map keys, and
 // BuzzSignature uses it to render those same keys, so the two cannot drift.
-// (host/gen's drift test keeps an independent copy on purpose, to verify them.)
+// (the drift test in host/registry keeps an independent copy on purpose, to verify them.)
 func CamelCase(s string) string {
 	parts := strings.Split(s, "_")
 	if len(parts) == 1 {

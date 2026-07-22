@@ -117,7 +117,7 @@ func discoverTargets(sess *buzz.Session) []targetInfo {
 // A ward on a spell op (e.g. MGS5002) is NOT a load diagnostic: the op still lists
 // here, and the ward surfaces via Run.
 func LoadMagusfile(ctx context.Context, src string) Graph {
-	tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, builtinSpellOps)
+	tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, nil, builtinCatalog{}.BuiltinOps())
 	if diag != nil {
 		return Graph{Output: tr.out.String(), Diag: diag}
 	}
@@ -151,7 +151,7 @@ func LoadMagusfile(ctx context.Context, src string) Graph {
 // live-linting counterpart to LoadMagusfile's structural load.
 func Diagnostics(ctx context.Context, src string) []Diag {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
-	installHost(ctx, sess, newTracer(), builtinSpellOps)
+	installHost(ctx, sess, newTracer(), builtinCatalog{}.BuiltinOps())
 
 	ds := sess.Diagnostics(src)
 	out := make([]Diag, len(ds))
@@ -172,7 +172,7 @@ func Diagnostics(ctx context.Context, src string) []Diag {
 // trace of each target in that order. charms is the active charm set (from a
 // `run t:charm` invocation), so charm-gated branches (has_charm) resolve.
 func Run(ctx context.Context, src, targetKey string, charms []string) Result {
-	tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, charms, builtinSpellOps)
+	tr, targets, ops, isSpellBuf, diag := evalAndProbe(ctx, src, charms, builtinCatalog{}.BuiltinOps())
 	if diag != nil {
 		return Result{Output: tr.out.String(), Diag: diag}
 	}
