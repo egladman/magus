@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// ContextParamAnnot is the exact parameter type annotation that marks a target: an
+// ContextParamAnnotation is the exact parameter type annotation that marks a target: an
 // exported magusfile function is a target if and only if its FIRST parameter carries
 // this annotation. Buzz namespaces a qualified type with a backslash
 // (`serialize\Boxed`), not a dot, so the context type is spelled `magus\Context`;
@@ -14,7 +14,7 @@ import (
 // dot). Recognition keys on this raw annotation string, independent of
 // whether the checker can resolve the type (it treats an unknown qualified name
 // permissively). A ctx-less exported function is rejected at load (MGS1008).
-const ContextParamAnnot = `magus\Context`
+const ContextParamAnnotation = `magus\Context`
 
 // TargetNameNormalizer converts raw identifier strings (e.g. from exported
 // function names) to their canonical registered target name. Applied at both

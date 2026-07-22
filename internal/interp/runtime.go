@@ -32,7 +32,7 @@ type projectPathCtxKey struct{}
 const TargetContextGlobal = "__magus_target_context"
 
 // CtxFormTargetKeys returns the normalized keys of the exported functions in src whose
-// FIRST parameter is annotated `magus\Context` (types.ContextParamAnnot) - the target
+// FIRST parameter is annotated `magus\Context` (types.ContextParamAnnotation) - the target
 // contract. execBuzzSrc uses it to enforce that contract at load (an exported function
 // missing the context is rejected with MGS1008) and to prepend the context at dispatch.
 // It does NOT build the graph: the dependency graph is read statically by
@@ -50,7 +50,7 @@ func CtxFormTargetKeys(src string) map[string]bool {
 		if !ok || !fd.IsExported {
 			continue
 		}
-		if len(fd.ParamAnnots) > 0 && fd.ParamAnnots[0] == types.ContextParamAnnot {
+		if len(fd.ParamAnnots) > 0 && fd.ParamAnnots[0] == types.ContextParamAnnotation {
 			out[norm.NormalizeTargetName(fd.Name)] = true
 		}
 	}
@@ -329,7 +329,7 @@ func ctxlessTargetErr(name string) error {
 	return types.DiagnosticErrorf(types.TargetMissingContext,
 		"target %q must receive a %s as its first parameter: "+
 			"change its signature to export fun %s(ctx: %s, args: [str])",
-		name, types.ContextParamAnnot, name, types.ContextParamAnnot)
+		name, types.ContextParamAnnotation, name, types.ContextParamAnnotation)
 }
 
 // execBuzzSrc creates a Buzz Session, registers bindings, and executes source files.
