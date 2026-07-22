@@ -35,7 +35,9 @@ outputs drift, and `magus affected` can no longer vouch for your change.
    pipeline (typically generate, lint, build, test). When you consider your
    change done, run `magus affected ci` as the final gate - it runs the full
    pipeline over every project your change reaches, which is how you learn about
-   ramifications in projects you never touched.
+   ramifications in projects you never touched. Verify the build in place; never
+   `git stash`/`reset` first (data-loss-prone and pointless - the tree is
+   already what you want to verify).
 
 ## Command patterns
 

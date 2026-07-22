@@ -57,9 +57,25 @@ CORRECT: note that `docs/gen/**` is a declared output of
    silently lost - stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
-4. Run `magus affected ci` before declaring the work done: it runs the full
-   pipeline over every project the diff reaches, including projects you never
-   edited.
+4. Stage with `git add -A`, never a hand-typed path list. `git add` aborts on
+   the first pathspec that matches nothing, staging none of the listed files,
+   and a path you just `git mv`d or `git rm`d no longer exists at its old name,
+   so naming it stages nothing. Then confirm with `git diff --cached --stat`:
+   every intended edit, renames included (`renamed:`), must be present. `git
+   commit` records what `git diff --cached` shows and does not re-check that your
+   edits landed.
+5. Run `magus affected ci` before calling the work done: it runs the full
+   pipeline over every project the diff reaches, including ones you never edited,
+   and after committing confirms HEAD builds - a partial commit that drops a
+   rename or an importer update leaves HEAD non-building.
+
+Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
+build without committing." The working tree is ALREADY what you want to verify,
+so run `magus run build` / `magus affected ci` in place; building does not
+require committing first. A whole-tree stash or reset also unrecoverably
+destroys any untracked work a concurrent agent is writing. If you truly need a
+pristine tree (e.g. to diff regenerated output), use a throwaway
+`git worktree add`, never the live tree.
 
 `magus_affected_explain` {project} answers why a specific project is in the
 affected set (the changed files and dependency chains that pulled it in) when

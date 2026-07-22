@@ -12,11 +12,18 @@ outputs drift, and `magus affected` can no longer vouch for your change.
 
 ## Rules
 
-1. Prefer the MCP tools (`magus_run_target`, `magus_run_affected`) when a magus
-   daemon is connected; they return structured content with nothing to silence.
-   The CLI (`magus run <target>`) is the fallback - and when you shell out,
-   silence it (`-s`, next section) so a passing run costs a few lines, not a
-   scroll of progress.
+1. Prefer the MCP tools; they return structured content with nothing to silence.
+   Two distinct tools, pick by what you know:
+   - `magus_run_target` {target, projects} - run named projects (or the cwd
+     project). Use when you know which projects to run.
+   - `magus_run_affected` {target, base} - run ONLY the projects a VCS change
+     touched; magus computes the set. Use for a pre-commit/CI gate.
+
+   Fallback is an instruction, not a hint: if the MCP tool errors or no magus
+   daemon is connected, run the CLI equivalent (`magus run <target>` /
+   `magus affected <target>`) instead. Do not stop, and do not drop to a raw
+   language tool. When you shell out, silence it (`-s`, next section) so a
+   passing run costs a few lines, not a scroll of progress.
 2. Always reach for a top-level target first: `build`, `test`, `lint`, `format`,
    `generate`, or a custom target from the catalog. `MAGUS.md` (committed at the
    workspace root) lists every target per project; `magus_describe`
@@ -28,7 +35,9 @@ outputs drift, and `magus affected` can no longer vouch for your change.
    pipeline (typically generate, lint, build, test). When you consider your
    change done, run `magus affected ci` as the final gate - it runs the full
    pipeline over every project your change reaches, which is how you learn about
-   ramifications in projects you never touched.
+   ramifications in projects you never touched. Verify the build in place; never
+   `git stash`/`reset` first (data-loss-prone and pointless - the tree is
+   already what you want to verify).
 
 ## Command patterns
 
