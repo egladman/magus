@@ -167,9 +167,10 @@ const (
 	// AttrDirCommits is the summed git churn (commit counts) across those files - where a
 	// subsystem's change activity concentrates.
 	AttrDirCommits = "dir_commits"
-	// AttrLanguages is the sorted, comma-joined set of languages present under the
-	// directory, derived from file extensions.
-	AttrLanguages = "languages"
+	// AttrDirLanguages is the sorted, comma-joined set of languages present under the
+	// directory, derived from file extensions. Distinct from a file node's single-valued
+	// "language" attr - a directory spans languages, so this is a dir-scoped set.
+	AttrDirLanguages = "dir_languages"
 )
 
 // Coverage attribute keys. Like the runtime keys these are OBSERVED - parsed from the

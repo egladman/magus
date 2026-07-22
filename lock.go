@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -87,7 +87,7 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 
 // newProjectLocker returns a projectLocker whose lock files live under
 // <cacheDir>/locks, mirroring the workspace project tree. When noWait is true a
-// contended acquire fails fast with a *lockContended error instead of blocking.
+// contended acquire fails fast with a *lockContendedError instead of blocking.
 func newProjectLocker(cacheDir string, noWait bool, opts ...lockerOption) *projectLocker {
 	l := &projectLocker{dir: filepath.Join(cacheDir, "locks"), noWait: noWait}
 	for _, o := range opts {
@@ -96,11 +96,11 @@ func newProjectLocker(cacheDir string, noWait bool, opts ...lockerOption) *proje
 	return l
 }
 
-// lockContended is returned by a no-wait acquire when another magus process holds
+// lockContendedError is returned by a no-wait acquire when another magus process holds
 // the project's lock. It is the fail-fast signal for MAGUS_NO_WAIT.
-type lockContended struct{ Project string }
+type lockContendedError struct{ Project string }
 
-func (e *lockContended) Error() string {
+func (e *lockContendedError) Error() string {
 	p := e.Project
 	if p == "" {
 		p = "."
@@ -110,7 +110,7 @@ func (e *lockContended) Error() string {
 
 // acquire takes the project's EXCLUSIVE lock, blocking until it is free. If
 // another magus process holds it, one waiting message is emitted and then the
-// call blocks. With noWait the call returns a *lockContended error immediately.
+// call blocks. With noWait the call returns a *lockContendedError immediately.
 // The returned release func unlocks; call it (defer) once the invocation's
 // mutating work on the project is done.
 func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func(), error) {
@@ -126,7 +126,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 	}
 	if !got {
 		if l.noWait {
-			return nil, &lockContended{Project: projectPath}
+			return nil, &lockContendedError{Project: projectPath}
 		}
 		l.emitWaiting(projectPath)
 		got, err = fl.TryLockContext(ctx, lockRetryDelay)
@@ -150,9 +150,9 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 // reverse). On any failure it releases whatever it already holds and returns the
 // error.
 func (l *projectLocker) acquireAll(ctx context.Context, projectPaths []string) (func(), error) {
-	sorted := append([]string(nil), projectPaths...)
-	sort.Strings(sorted)
-	sorted = dedupSorted(sorted)
+	sorted := slices.Clone(projectPaths)
+	slices.Sort(sorted)
+	sorted = slices.Compact(sorted)
 
 	releases := make([]func(), 0, len(sorted))
 	releaseAll := func() {
@@ -191,17 +191,4 @@ func (l *projectLocker) emitWaiting(projectPath string) {
 		p = "."
 	}
 	fmt.Fprintf(os.Stderr, "magus: waiting for another magus process to finish on project %s...\n", p)
-}
-
-// dedupSorted returns s with adjacent duplicates removed; s must be sorted.
-func dedupSorted(s []string) []string {
-	out := s[:0]
-	var last string
-	for i, v := range s {
-		if i == 0 || v != last {
-			out = append(out, v)
-			last = v
-		}
-	}
-	return out
 }

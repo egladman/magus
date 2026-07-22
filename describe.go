@@ -230,29 +230,7 @@ func gitRoot(dir string) string {
 	}
 }
 
-// applyTargetDepsAndFootprint folds the two things magus recovers statically from a
-// target body into the workspace's projects: cross-project dependencies and the
-// per-target cache footprint (magus.inputs / magus.outputs).
-//
-// Cross-project deps (project imports) union into DependsOn, so the affected set and
-// scheduling treat them exactly like a project-level depends_on: a magusfile declares a
-// cross-project dependency once, at the target, rather than also in magus.project.
-// Per-target inputs populate TargetInputs in one representation (each InputRef resolved
-// to its owning project's workspace-relative path); outputs populate TargetOutputs
-// (project-root relative). Both add to that target's cache/snapshot footprint, unioned
-// onto the project-wide globs, never replacing them. A cross-project input's owning
-// project is also unioned into DependsOn, so an input change marks the consumer affected
-// exactly like a project-level depends_on; a same-project input's owning project is this
-// project itself, which is skipped (a project cannot depend on itself, and it already
-// seeds by directory containment).
-//
-// It mutates projects in place. ctx is honored between projects. A project whose source
-// can't be read or whose dep path won't resolve contributes nothing (best-effort,
-// matching the static extractor's never-error contract). One deliberate exception:
-// a magus.inputs/outputs call with a non-literal argument is a hard load error, because
-// a computed footprint is invisible to this static read and silently under-declaring it
-// risks a stale cache hit.
-// nodesWithDiscovery returns src's combined target graph nodes: the old-form nodes
+// collectTargetNodes returns src's combined target graph nodes: the old-form nodes
 // describe.Extract reads statically, plus the ctx-form nodes interp.DiscoverCtxNodes
 // learns by running each ctx-form target under discovery. Both the cache-footprint
 // path (applyTargetDepsAndFootprint) and the graph render (DescribeGraph) read
@@ -269,16 +247,18 @@ func gitRoot(dir string) string {
 // (ctx.skip_cache/exclusive/slots), for the footprint path to fold into
 // Project.TargetPolicies; the graph path ignores it. Nil when the interpreter is not
 // linked or discovery failed.
-func nodesWithDiscovery(ctx context.Context, src *interp.Source, projectPath string) ([]types.TargetGraphNode, map[string]types.Target) {
+func collectTargetNodes(ctx context.Context, src *interp.Source, projectPath string) ([]types.TargetGraphNode, map[string]types.Target) {
 	nodes := describe.Extract(concatSource(src))
 	if !interp.Available() {
 		return nodes, nil
 	}
 	dnodes, policies, derr := interp.DiscoverCtxNodes(ctx, src)
 	if derr != nil {
-		slog.Warn("magus: ctx-form target discovery failed; graph omits its ctx-form targets",
+		// Discovery is per-target best-effort: dnodes/policies still carry every ctx-form
+		// target that ran cleanly; only the failing ones are absent. Warn (rather than
+		// drop the whole project's ctx-form footprint) and merge what discovery recovered.
+		slog.Warn("magus: some ctx-form targets failed discovery; the graph and footprint omit them",
 			slog.String("project", projectPath), slog.String("error", derr.Error()))
-		return nodes, nil
 	}
 	return mergeTargetNodes(nodes, dnodes), policies
 }
@@ -301,7 +281,7 @@ func mergeTargetNodes(static, discovered []types.TargetGraphNode) []types.Target
 	}
 	for _, d := range discovered {
 		if i, ok := idx[d.Name]; ok {
-			out[i] = unionTargetNode(out[i], d)
+			out[i] = mergeTargetNode(out[i], d)
 			continue
 		}
 		idx[d.Name] = len(out)
@@ -310,10 +290,10 @@ func mergeTargetNodes(static, discovered []types.TargetGraphNode) []types.Target
 	return out
 }
 
-// unionTargetNode merges b into a field by field: the slice fields are deduped-unioned,
+// mergeTargetNode merges b into a field by field: the slice fields are deduped-unioned,
 // Doc and Spells are taken from whichever node carries them (they never conflict - one
 // side is always empty for a given target), and DynamicIO is ORed.
-func unionTargetNode(a, b types.TargetGraphNode) types.TargetGraphNode {
+func mergeTargetNode(a, b types.TargetGraphNode) types.TargetGraphNode {
 	if a.Doc == "" {
 		a.Doc = b.Doc
 	}
@@ -343,6 +323,29 @@ func unionTargetNode(a, b types.TargetGraphNode) types.TargetGraphNode {
 	return a
 }
 
+// applyTargetDepsAndFootprint folds the two things magus recovers statically from a
+// target body into the workspace's projects: cross-project dependencies and the
+// per-target cache footprint (magus.inputs / magus.outputs).
+//
+// Cross-project deps (project imports) union into DependsOn, so the affected set and
+// scheduling treat them exactly like a project-level depends_on: a magusfile declares a
+// cross-project dependency once, at the target, rather than also in magus.project.
+// Per-target inputs populate TargetInputs in one representation (each InputRef resolved
+// to its owning project's workspace-relative path); outputs populate TargetOutputs
+// (project-root relative). Both add to that target's cache/snapshot footprint, unioned
+// onto the project-wide globs, never replacing them. A cross-project input's owning
+// project is also unioned into DependsOn, so an input change marks the consumer affected
+// exactly like a project-level depends_on; a same-project input's owning project is this
+// project itself, which is skipped (a project cannot depend on itself, and it already
+// seeds by directory containment).
+//
+// It mutates projects in place. ctx is honored between projects. A project whose source
+// can't be read or whose dep path won't resolve contributes nothing (best-effort,
+// matching the static extractor's never-error contract). One deliberate exception:
+// an old-form magus.inputs/outputs call with a non-literal argument is a hard load error,
+// because a computed footprint is invisible to this static read and silently
+// under-declaring it risks a stale cache hit (a ctx-form ctx.inputs/outputs non-literal
+// is warned-and-excluded instead, since discovery runs the body rather than reading it).
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
@@ -357,7 +360,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			if src.Engine != "buzz" {
 				continue
 			}
-			nodes, policies := nodesWithDiscovery(ctx, src, p.Path)
+			nodes, policies := collectTargetNodes(ctx, src, p.Path)
 			for _, n := range nodes {
 				for _, ref := range n.CrossDependencies {
 					// Skip a self-resolving import (r == p.Path): a self-edge is both
@@ -469,7 +472,7 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 			// workspace directory name (e.g. "magus"). A non-root RelPath is kept as-is.
 			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
 			if src.Engine == "buzz" {
-				nodes, _ := nodesWithDiscovery(context.Background(), src, p.Path)
+				nodes, _ := collectTargetNodes(context.Background(), src, p.Path)
 				resolveNodeRefs(nodes, p.Path)
 				entry.Nodes = nodes
 				entry.Cycle = describe.Cycle(nodes)

@@ -65,7 +65,7 @@ func assembleDirs(projects []types.TargetGraphProject, leafPaths []string, churn
 			AttrDirCommits: strconv.Itoa(a.commits),
 		}
 		if len(a.langs) > 0 {
-			attrs[AttrLanguages] = strings.Join(slices.Sorted(maps.Keys(a.langs)), ",")
+			attrs[AttrDirLanguages] = strings.Join(slices.Sorted(maps.Keys(a.langs)), ",")
 		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: dirID(d), Kind: types.KindDir, Label: d, Source: d, Attrs: attrs})
 	}
@@ -74,7 +74,8 @@ func assembleDirs(projects []types.TargetGraphProject, leafPaths []string, churn
 
 // languageFromPath maps a file path to a language token by its extension. It is the
 // deterministic, OS-agnostic classifier the directory aggregate uses; the canonical
-// names match the "language" attr the buzz and symbol shards set on file nodes. An
+// names line up with the "language" attr the buzz and symbol shards set on file nodes
+// (though the dir attr is a SET under its own dir_languages key, not that single value). An
 // unrecognized extension falls back to the bare extension so nothing is silently lost;
 // an extensionless path yields "".
 func languageFromPath(p string) string {

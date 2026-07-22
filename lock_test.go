@@ -123,7 +123,7 @@ func TestReleasedOnProcessExit(t *testing.T) {
 	rel()
 }
 
-// TestNoWaitFailsFast proves the no-wait path returns *lockContended immediately
+// TestNoWaitFailsFast proves the no-wait path returns *lockContendedError immediately
 // instead of blocking when another handle holds the lock.
 func TestNoWaitFailsFast(t *testing.T) {
 	cacheDir := t.TempDir()
@@ -142,9 +142,9 @@ func TestNoWaitFailsFast(t *testing.T) {
 	if time.Since(start) > time.Second {
 		t.Fatalf("no-wait acquire blocked instead of failing fast")
 	}
-	var c *lockContended
+	var c *lockContendedError
 	if !errors.As(err, &c) {
-		t.Fatalf("want *lockContended error, got %v", err)
+		t.Fatalf("want *lockContendedError error, got %v", err)
 	}
 	if c.Project != "p" {
 		t.Fatalf("Contended.Project = %q, want %q", c.Project, "p")

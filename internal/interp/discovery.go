@@ -2,7 +2,9 @@ package interp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -82,7 +84,11 @@ func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode
 	exports := buzzSess.Exports()
 	var nodes []types.TargetGraphNode
 	policies := map[string]types.Target{}
-	for name, val := range exports {
+	var errs []error
+	// Iterate in a deterministic (sorted) order so the recorded footprint is stable
+	// run to run even if a body reads session state a sibling body set.
+	for _, name := range slices.Sorted(maps.Keys(exports)) {
+		val := exports[name]
 		key := norm.NormalizeTargetName(name)
 		if !ctxForm[key] || !val.IsFun() {
 			continue
@@ -93,7 +99,12 @@ func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode
 		// body reads its declarations, not its runtime args.
 		args := []vm.Value{targetCtxVal, vm.ListValue(nil)}
 		if _, cerr := buzzSess.CallValue(dctx, val, args); cerr != nil {
-			return nil, nil, fmt.Errorf("discover target %q: %w", key, cerr)
+			// Best-effort PER TARGET: a body that errors drops only its own node, not
+			// every sibling ctx-form target's declared footprint. The errors are joined
+			// and returned so a genuine authoring bug still surfaces (as a warning at the
+			// caller) rather than being swallowed.
+			errs = append(errs, fmt.Errorf("discover target %q: %w", key, cerr))
+			continue
 		}
 		nodes = append(nodes, nodeFromRecord(key, docs[key], rec))
 		if pol, ok := policyFromRecord(rec); ok {
@@ -103,7 +114,7 @@ func DiscoverCtxNodes(ctx context.Context, src *Source) ([]types.TargetGraphNode
 	slices.SortFunc(nodes, func(a, b types.TargetGraphNode) int {
 		return strings.Compare(a.Name, b.Name)
 	})
-	return nodes, policies, nil
+	return nodes, policies, errors.Join(errs...)
 }
 
 // policyFromRecord returns the per-target execution policy a discovery record

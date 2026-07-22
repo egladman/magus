@@ -78,7 +78,7 @@ func TestAssembleDirs(t *testing.T) {
 	assert.Equal(t, types.KindDir, leaf.Kind)
 	assert.Equal(t, "2", leaf.Attrs[AttrDirFiles])
 	assert.Equal(t, "5", leaf.Attrs[AttrDirCommits])
-	assert.Equal(t, "buzz,go", leaf.Attrs[AttrLanguages], "languages sorted")
+	assert.Equal(t, "buzz,go", leaf.Attrs[AttrDirLanguages], "languages sorted")
 
 	// internal aggregates its child transitively.
 	assert.Equal(t, "2", by["dir:internal"].Attrs[AttrDirFiles])
@@ -86,7 +86,7 @@ func TestAssembleDirs(t *testing.T) {
 
 	// docs holds the one markdown file.
 	assert.Equal(t, "1", by["dir:docs"].Attrs[AttrDirFiles])
-	assert.Equal(t, "markdown", by["dir:docs"].Attrs[AttrLanguages])
+	assert.Equal(t, "markdown", by["dir:docs"].Attrs[AttrDirLanguages])
 }
 
 // TestDirNodeStructuralAndAggregateMerge proves the structural dir node (from
@@ -107,6 +107,6 @@ func TestDirNodeStructuralAndAggregateMerge(t *testing.T) {
 	assert.Equal(t, types.KindDir, n.Kind)
 	assert.Equal(t, "internal/interp", n.Label, "structural label survives")
 	assert.Equal(t, "1", n.Attrs[AttrDirFiles], "aggregate attr folded in")
-	assert.Equal(t, "go", n.Attrs[AttrLanguages])
+	assert.Equal(t, "go", n.Attrs[AttrDirLanguages])
 	assert.True(t, hasEdge(out, "dir:internal", "dir:internal/interp", types.RelationContains))
 }
