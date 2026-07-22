@@ -63,7 +63,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolRunTarget),
-		Description: "Run a build target for one or more projects. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Without projects, the cwd project (or all) is selected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
+		Description: "Run a build target on an EXPLICIT set of projects (or the cwd project when omitted). Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Use this when you know which projects to run; to instead run only the projects a VCS change touched, use magus_run_affected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run, e.g. \"build\", \"test\", \"lint\", \"format\", \"ci\", or an op-direct spell-qualified form like \"go::go-test\"."},
 			{Name: "projects", Type: "string", Description: "Space-separated project paths. Use \"/\" for all. Omit for cwd-scoped selection."},
@@ -72,7 +72,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolRunAffected),
-		Description: "Run a build target on only the projects affected by VCS changes. Equivalent to `" + clihint.Affected.With("<target>") + "`. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
+		Description: "Run a build target on ONLY the projects a VCS change touched - magus computes the affected set from the diff and its dependency graph; you do not name projects. Equivalent to `" + clihint.Affected.With("<target>") + "`. This is the CI/pre-commit tool; to instead run named projects explicitly, use magus_run_target. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run on affected projects (e.g. \"test\", \"lint\", \"ci\")."},
 			{Name: "base", Type: "string", Description: "Override VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},

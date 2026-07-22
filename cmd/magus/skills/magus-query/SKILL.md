@@ -26,8 +26,10 @@ reported.
    the highest-degree anchor nodes. Consult it before running anything, so your
    first query is precise rather than a guess.
 
-2. Then reach for the verbs. Prefer the MCP tools; the CLI is the fallback when no
-   magus daemon is running.
+2. Then reach for the verbs. Prefer the MCP tools. The fallback is an instruction,
+   not a hint: if an MCP tool errors or no magus daemon is running, run the CLI
+   equivalent from the same row of the table below instead of stopping or
+   grepping.
 
    | question                                      | MCP tool        | CLI                                |
    | --------------------------------------------- | --------------- | ---------------------------------- |
