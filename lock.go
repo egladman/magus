@@ -140,6 +140,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 			}
 			return nil, fmt.Errorf("workspace lock: could not lock %s", projectPath)
 		}
+		l.emitResumed(projectPath)
 	}
 	return func() { _ = fl.Unlock() }, nil
 }
@@ -181,6 +182,11 @@ func (l *projectLocker) lockPath(projectPath string) string {
 	return filepath.Join(l.dir, filepath.FromSlash(p), "lock")
 }
 
+// emitWaiting tells the user, up front, that the run is not hung: another magus
+// process holds the project's lock, this run will start automatically once it frees,
+// and MAGUS_NO_WAIT is the fail-fast escape hatch. It goes to stderr unconditionally
+// (even under -s/--silent) - a run that stalls without explanation is the exact UX we
+// are avoiding. The notify hook diverts it for tests and the console.
 func (l *projectLocker) emitWaiting(projectPath string) {
 	if l.notify != nil {
 		l.notify(projectPath)
@@ -190,5 +196,20 @@ func (l *projectLocker) emitWaiting(projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	fmt.Fprintf(os.Stderr, "magus: waiting for another magus process to finish on project %s...\n", p)
+	fmt.Fprintf(os.Stderr, "magus: project %s is being changed by another magus process; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p)
+}
+
+// emitResumed closes the loop the waiting message opened: the other process finished
+// and this run now holds the lock and proceeds. Only reached after a wait, so it never
+// prints on the common uncontended path. Suppressed when a notify hook is installed so
+// the hook stays the single waiting signal tests count.
+func (l *projectLocker) emitResumed(projectPath string) {
+	if l.notify != nil {
+		return
+	}
+	p := projectPath
+	if p == "" {
+		p = "."
+	}
+	fmt.Fprintf(os.Stderr, "magus: lock on project %s released; starting.\n", p)
 }
