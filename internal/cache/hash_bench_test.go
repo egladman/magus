@@ -167,9 +167,37 @@ func BenchmarkExpandSourcesJSWorkspace(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		_, _ = expandSources(globs, root, nil)
+		_, _ = expandSources(globs, root, nil, nil)
 	}
 	b.Logf("target: <15 ms/op (measured: ~15 ms after single-walk+compiled-glob opt)")
+}
+
+// BenchmarkIsIgnoreDir measures the per-directory prune check the source walk runs
+// on every directory entry. It replaced a hardcoded switch with a project.IgnoreDirs +
+// spell-declared lookup; this pins that the check stays single-digit nanoseconds - far
+// below the per-directory syscall cost of WalkDir - so making the ignore set spell-driven
+// does not touch the walk's hot path. The miss case (a normal source dir, the overwhelming
+// majority of entries) is the one that must stay cheap.
+func BenchmarkIsIgnoreDir(b *testing.B) {
+	spellDirs := []string{"node_modules"} // a typical single-spell project's declared set
+	cases := []struct {
+		name string
+		dir  string
+	}{
+		{"miss", "internal"},      // common: a real source dir, scans both lists and returns false
+		{"dot", ".git"},           // narrow dot-set hit, first switch case
+		{"core", "vendor"},        // project.IgnoreDirs hit
+		{"spell", "node_modules"}, // spell-declared hit
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			var sink bool
+			for b.Loop() {
+				sink = isIgnoreDir(tc.dir, spellDirs)
+			}
+			_ = sink
+		})
+	}
 }
 
 // BenchmarkCompiledGlobMatchHot measures the hot-path cost of matching a

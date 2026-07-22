@@ -35,6 +35,7 @@ type Spell struct {
 	name                string
 	sources             []string
 	claims              []string
+	ignoreDirs          []string
 	outputs             []string
 	targets             []string
 	language            string          // canonical source language the spell adapts; "" when it adapts none
@@ -78,6 +79,13 @@ func (s *Spell) Sources() []string { return s.sources }
 func (s *Spell) Claims() []string  { return s.claims }
 func (s *Spell) Outputs() []string { return s.outputs }
 func (s *Spell) Targets() []string { return s.targets }
+
+// IgnoreDirs returns the non-source directory names this spell's ecosystem
+// generates (vendor, node_modules, target, ...), declared by mgs_listIgnoreDirs.
+// The input-hashing walk prunes them for a project this spell resolves, so the
+// engine holds no language-specific directory names. Dot-directories are skipped
+// structurally and never appear here.
+func (s *Spell) IgnoreDirs() []string { return s.ignoreDirs }
 
 // Language returns the canonical source language the spell adapts (e.g. "go",
 // "typescript"), or "" when it adapts no single language. It tags the spell node so a
@@ -182,6 +190,10 @@ func WithSources(sources ...string) SpellOption {
 
 func WithClaims(claims ...string) SpellOption {
 	return func(s *Spell) { s.claims = append(s.claims, claims...) }
+}
+
+func WithIgnoreDirs(dirs ...string) SpellOption {
+	return func(s *Spell) { s.ignoreDirs = append(s.ignoreDirs, dirs...) }
 }
 
 func WithSpellOutputs(outputs ...string) SpellOption {

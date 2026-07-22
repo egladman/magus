@@ -240,6 +240,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:      []string{"**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		VersionCmd: []string{"go", "version"},
 		Language:   "go",
+		IgnoreDirs: []string{"vendor"},
 		Ops: map[string]types.SpellOp{
 			"go-build":    {Command: types.Command{Bin: "go", Args: []string{"build"}}},
 			"go-clean":    {Command: types.Command{Bin: "go", Args: []string{"clean", "./..."}}},
@@ -288,6 +289,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
 		VersionCmd: []string{"python3", "--version"},
 		Language:   "python",
+		IgnoreDirs: []string{"__pycache__"},
 		Ops: map[string]types.SpellOp{
 			"uv-build": {Command: types.Command{Bin: "uv", Args: []string{"build"}}},
 			"uv-clean": {Command: types.Command{Bin: "uv", Args: []string{"clean"}}},
@@ -310,6 +312,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		VersionCmd: []string{"rustc", "--version"},
 		Language:   "rust",
+		IgnoreDirs: []string{"target"},
 		Ops: map[string]types.SpellOp{
 			"cargo-build":  {Command: types.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
 			"cargo-clean":  {Command: types.Command{Bin: "cargo", Args: []string{"clean"}}},
@@ -329,6 +332,7 @@ var goldenBuiltins = map[string]Descriptor{
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
 		Language:   "typescript",
+		IgnoreDirs: []string{"node_modules"},
 		Ops: map[string]types.SpellOp{
 			"biome-check": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Charms: map[string]types.Charm{
 				"rw":  {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},

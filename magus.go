@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -586,9 +587,24 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 	for _, o := range p.Outputs {
 		outputs = append(outputs, joinGlob(p.Path, o))
 	}
+	// Union the non-source dirs every resolved spell declares (vendor, node_modules,
+	// __pycache__, ...) so the source walk prunes them per-project instead of the cache
+	// hardcoding language-specific names. Unioning ALL the project's spells (not just
+	// one target's) keeps a polyglot project from descending into a sibling ecosystem's
+	// build tree. A name project.IgnoreDirs already covers adds nothing here; the union
+	// earns its keep for spells beyond the core defaults, including local ones.
+	var ignoreDirs []string
+	for _, sp := range p.ResolvedSpells {
+		for _, d := range sp.IgnoreDirs() {
+			if !slices.Contains(ignoreDirs, d) {
+				ignoreDirs = append(ignoreDirs, d)
+			}
+		}
+	}
 	return cache.Step{
 		ProjectPath:     p.Path,
 		Sources:         sources,
+		IgnoreDirs:      ignoreDirs,
 		Outputs:         outputs,
 		WorkspaceRoot:   m.ws.Root,
 		SpellDefVersion: ispell.BuiltinsHash(),

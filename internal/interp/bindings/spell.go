@@ -34,6 +34,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		opts := []types.SpellOption{
 			types.WithSources(spec.Needs...),
 			types.WithClaims(spec.Claims...),
+			types.WithIgnoreDirs(spec.IgnoreDirs...),
 			types.WithSpellOutputs(spec.Provides...),
 			types.WithTargets(spec.OpNames()...),
 			types.WithServiceTargets(spec.ServiceOpNames()...),
@@ -355,6 +356,7 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 	opts := []types.SpellOption{
 		types.WithSources(m.Needs...),
 		types.WithClaims(m.Claims...),
+		types.WithIgnoreDirs(m.IgnoreDirs...),
 		types.WithSpellOutputs(m.Provides...),
 		types.WithTargets(m.OpNames()...),
 		types.WithServiceTargets(m.ServiceOpNames()...),

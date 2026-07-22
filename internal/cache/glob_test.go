@@ -78,7 +78,7 @@ func TestExpandSourcesSemantics(t *testing.T) {
 	globs := []string{"pkg/**/*.js", "pkg/package.json"}
 	exclude := []string{"pkg/dist/**"}
 
-	got, err := expandSources(globs, root, exclude)
+	got, err := expandSources(globs, root, exclude, nil)
 	require.NoError(t, err)
 	var rels []string
 	for _, ra := range got {
@@ -102,7 +102,7 @@ func TestExpandSourcesSkipsSymlinkedFiles(t *testing.T) {
 	if err := os.Symlink(filepath.Join(root, "real.js"), filepath.Join(root, "link.js")); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
-	got, err := expandSources([]string{"*.js"}, root, nil)
+	got, err := expandSources([]string{"*.js"}, root, nil, nil)
 	require.NoError(t, err)
 	for _, ra := range got {
 		assert.NotEqualf(t, "link.js", ra.rel, "symlink link.js should be skipped, got %v", got)

@@ -44,6 +44,11 @@ export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 // lets `magus query language:typescript` reach this adapter alongside the code it builds.
 export fun mgs_getLanguage() > str { return "typescript"; }
 
+// mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned
+// from the input-hashing walk. dist is already excluded as a declared output, and
+// .turbo/.pnpm-store are dot-dirs skipped structurally, so only node_modules belongs here.
+export fun mgs_listIgnoreDirs() > [str] { return ["node_modules"]; }
+
 // biome-check is biome's lint/analyze pass (eslint's role, if your project
 // chose Biome over eslint+prettier - the magusfile decides which composes
 // into lint, not this spell). --write and --reporter=github verified against

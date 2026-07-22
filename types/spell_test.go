@@ -41,11 +41,13 @@ func TestNewSpellAccessors(t *testing.T) {
 		WithSources("**/*.go"),
 		WithClaims("**/*.go"),
 		WithSpellOutputs("bin/**"),
+		WithIgnoreDirs("vendor", "node_modules"),
 		WithTargets("build", "test"),
 		WithOpaque(),
 	)
 	assert.Equal(t, "go", s.Name())
 	assert.Equal(t, []string{"build", "test"}, s.Targets())
+	assert.Equal(t, []string{"vendor", "node_modules"}, s.IgnoreDirs())
 	assert.True(t, s.Opaque())
 }
 

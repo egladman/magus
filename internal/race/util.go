@@ -7,7 +7,10 @@ import (
 
 // shouldSkipDir reports whether a directory name should be excluded from
 // recursive watching. These are high-churn directories that produce noise
-// without containing project source files.
+// without containing project source files. This list is DELIBERATELY broader than
+// the cache/discovery ignore set (project.IgnoreDirs + spell-declared dirs): race
+// detection wants aggressive noise suppression across every ecosystem's build and
+// cache trees at once, since it has no resolved spell to narrow the set per project.
 func shouldSkipDir(name string) bool {
 	switch name {
 	case ".git", "node_modules", ".pnpm-store", ".turbo",

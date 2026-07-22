@@ -71,8 +71,13 @@ type Stats struct {
 
 // Step is the hashable description of a cached build step.
 type Step struct {
-	ProjectPath     string   // repo-relative project directory
-	Sources         []string // doublestar globs (relative to WorkspaceRoot) for the cache key
+	ProjectPath string   // repo-relative project directory
+	Sources     []string // doublestar globs (relative to WorkspaceRoot) for the cache key
+	// IgnoreDirs are the non-source dir names this project's resolved spells generate
+	// (vendor, node_modules, ...); pruned from the source walk so they are never hashed.
+	// The field itself is not written into the key - only the resulting file set is, so
+	// two ignore sets that yield the same files hash identically.
+	IgnoreDirs      []string
 	EnvAllow        []string // env var names whose values contribute to the key
 	Outputs         []string // globs snapshotted into cache and replayed on hit
 	Deps            []string // upstream project hashes folded into the key

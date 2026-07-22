@@ -228,3 +228,20 @@ func TestDecode_NeedsResolved(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"**/*.go", "go.mod"}, m.Needs)
 }
+
+// TestDecode_IgnoreDirs verifies the ignore_dirs field (mgs_listIgnoreDirs) is read
+// into Descriptor.IgnoreDirs, and that an absent field decodes to nil (not a panic or
+// empty-slice surprise) - the path a spell that declares no ignore dirs takes.
+func TestDecode_IgnoreDirs(t *testing.T) {
+	src := mapObj{
+		"name":        "myspell",
+		"ignore_dirs": []string{"vendor", "target"},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vendor", "target"}, m.IgnoreDirs)
+
+	m, err = Decode(mapObj{"name": "bare"})
+	require.NoError(t, err)
+	assert.Nil(t, m.IgnoreDirs, "a spell with no ignore_dirs must decode to nil")
+}

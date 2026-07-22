@@ -29,6 +29,11 @@ export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
 // `magus query language:go` reach this adapter alongside the code it builds.
 export fun mgs_getLanguage() > str { return "go"; }
 
+// mgs_listIgnoreDirs names non-source dirs the go ecosystem generates, pruned from
+// the input-hashing walk so vendored code is not hashed as a source. Dot-dirs are
+// skipped structurally, so only vendor belongs here.
+export fun mgs_listIgnoreDirs() > [str] { return ["vendor"]; }
+
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"]}; }
 fun goClean(target: Target) > Command { return Command{bin = "go", args = ["clean", "./..."]}; }
 fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["generate", "./..."]}; }

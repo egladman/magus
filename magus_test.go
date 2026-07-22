@@ -308,6 +308,38 @@ func TestStepFor_RootProject(t *testing.T) {
 	assert.Equal(t, m.Root(), spec.WorkspaceRoot, "WorkspaceRoot")
 }
 
+// TestStepFor_NoSpellsHasNoIgnoreDirs pins that a project with no resolved spells
+// carries no ignore dirs into its Step - the walk falls back to the core set only.
+func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
+	t.Parallel()
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
+	m, err := inspect(context.Background(), root)
+	require.NoError(t, err)
+	p := &types.Project{Path: ".", Sources: []string{"**/*.go"}}
+	assert.Empty(t, m.baseStep(p).IgnoreDirs, "no resolved spells: Step.IgnoreDirs must be empty")
+}
+
+// TestStepFor_UnionsSpellIgnoreDirs verifies baseStep unions the IgnoreDirs of ALL a
+// project's resolved spells (not just one) and dedups overlaps, preserving first-seen
+// order - the polyglot case where two spells both claim a dir. This exercises the whole
+// spell-declared path end to end: WithIgnoreDirs -> Spell.IgnoreDirs() -> Step.IgnoreDirs.
+func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
+	t.Parallel()
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
+	m, err := inspect(context.Background(), root)
+	require.NoError(t, err)
+	p := &types.Project{
+		Path:    ".",
+		Sources: []string{"**/*.go"},
+		ResolvedSpells: []*types.Spell{
+			types.NewSpell("go", types.WithIgnoreDirs("vendor")),
+			types.NewSpell("ts", types.WithIgnoreDirs("node_modules", "vendor")), // vendor overlaps -> deduped
+		},
+	}
+	assert.Equal(t, []string{"vendor", "node_modules"}, m.baseStep(p).IgnoreDirs,
+		"baseStep must union all resolved spells' ignore dirs and dedup overlaps in first-seen order")
+}
+
 func TestStepFor_NestedProject(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "api/magusfile.buzz")

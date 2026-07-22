@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/project"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -62,7 +63,7 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 		writeLine("charm:", c)
 	}
 
-	files, err := expandSources(s.Sources, s.WorkspaceRoot, s.Outputs)
+	files, err := expandSources(s.Sources, s.WorkspaceRoot, s.Outputs, s.IgnoreDirs)
 	if err != nil {
 		return "", err
 	}
@@ -271,7 +272,9 @@ type relAbs struct{ rel, abs string }
 // expandSources turns source globs into a sorted slice of (rel, abs) pairs.
 // Uses a single WalkDir pass with compiled matchers; prunes well-known ignore dirs early.
 // Output globs are excluded from the walk (output tree is never an input).
-func expandSources(globs []string, root string, outputGlobs []string) ([]relAbs, error) {
+// spellDirs are the non-source directory names the project's resolved spells declare
+// (vendor, node_modules, ...); they extend the core ignore set for this walk.
+func expandSources(globs []string, root string, outputGlobs, spellDirs []string) ([]relAbs, error) {
 	if len(globs) == 0 {
 		return nil, nil
 	}
@@ -313,7 +316,7 @@ func expandSources(globs []string, root string, outputGlobs []string) ([]relAbs,
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if path != root && isIgnoreDir(name) {
+			if path != root && isIgnoreDir(name, spellDirs) {
 				return fs.SkipDir
 			}
 			if len(prunePrefixes) > 0 && path != root {
@@ -368,14 +371,19 @@ func staticDirPrefix(glob string) string {
 	return ""
 }
 
-// isIgnoreDir reports whether name is a well-known directory to skip during source expansion.
-func isIgnoreDir(name string) bool {
+// isIgnoreDir reports whether name is a directory to skip during source expansion.
+// It prunes magus/VCS metadata dirs (a deliberately NARROW dot set - not the broad
+// "any dot-dir" rule project.IsIgnoreDir applies, because a Sources glob like **/*.md
+// legitimately hashes files under .github or .claude), the shared non-source dirs in
+// project.IgnoreDirs, and the per-project spellDirs each resolved spell declares. The
+// non-source names now live in project.IgnoreDirs (+ spellDirs) rather than a copy
+// here, so a new language spell prunes its build dir without editing this walk.
+func isIgnoreDir(name string, spellDirs []string) bool {
 	switch name {
-	case ".git", ".hg", ".jj", ".magus", ".build",
-		"vendor", "node_modules", "target", "gen":
+	case ".git", ".hg", ".jj", ".magus", ".build":
 		return true
 	}
-	return false
+	return slices.Contains(project.IgnoreDirs, name) || slices.Contains(spellDirs, name)
 }
 
 // shortHash returns the first 8 hex characters of h, for log lines.

@@ -61,10 +61,16 @@ func ValidatePatch(ops []types.PatchOp) error {
 // magus-utils spells), embedding the blob, and resolving its mgs_ functions at load
 // time.
 type Descriptor struct {
-	Name        string                   `json:"name"`
-	Needs       []string                 `json:"needs,omitempty"`
-	Claims      []string                 `json:"claims,omitempty"`
-	Provides    []string                 `json:"provides,omitempty"`
+	Name     string   `json:"name"`
+	Needs    []string `json:"needs,omitempty"`
+	Claims   []string `json:"claims,omitempty"`
+	Provides []string `json:"provides,omitempty"`
+	// IgnoreDirs names non-source directories this spell's ecosystem generates
+	// (vendor, node_modules, target, __pycache__) so the input-hashing walk prunes
+	// them per-project instead of the engine hardcoding language-specific names.
+	// Dot-directories are already skipped structurally, so only non-dot names belong
+	// here. Declared by mgs_listIgnoreDirs.
+	IgnoreDirs  []string                 `json:"ignore_dirs,omitempty"`
 	Opaque      bool                     `json:"opaque,omitempty"`
 	TargetNeeds map[string][]string      `json:"target_needs,omitempty"`
 	Ops         map[string]types.SpellOp `json:"targets,omitempty"`

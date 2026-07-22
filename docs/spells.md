@@ -192,7 +192,9 @@ The full-command convention is enforced even for streamlined toolchains like Go,
 
 ## Authoring a custom spell
 
-A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listClaimedGlobs`, `mgs_getVersionCommand`, `mgs_isOpaque`, and `mgs_listTargets`.
+A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listClaimedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionCommand`, `mgs_isOpaque`, and `mgs_listTargets`.
+
+`mgs_listIgnoreDirs` names the non-source directories your ecosystem generates (a Rust spell returns `["target"]`; a Node spell, `["node_modules"]`). magus prunes them from the input-hashing walk of any project this spell resolves, so a build tree never counts toward the cache key. Dot-directories are always skipped, so only non-dot names belong here.
 
 Buzz (`spells/ruby.buzz`):
 

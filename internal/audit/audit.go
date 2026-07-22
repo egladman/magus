@@ -197,8 +197,11 @@ func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, modTimeNs, siz
 // isMetaDir reports whether name is a tool or VCS metadata directory the audit
 // skips wholesale. magus and the VCSes write into these during normal operation
 // (e.g. a nested project's .magus cache/logs populated by a child magus run), so
-// their churn is bookkeeping, not a cross-project source write. Mirrors the
-// metadata subset of cache.isIgnoreDir. switch string(name) is allocation-free.
+// their churn is bookkeeping, not a cross-project source write. This is DELIBERATELY
+// only the metadata subset - it does NOT skip the language/dependency dirs in
+// project.IgnoreDirs (vendor, node_modules, ...), because a write into a vendored
+// tree IS a cross-project source write the audit must see. switch string(name) is
+// allocation-free.
 func isMetaDir(name []byte) bool {
 	switch string(name) {
 	case ".git", ".hg", ".jj", ".magus", ".build":

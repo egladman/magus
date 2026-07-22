@@ -24,6 +24,7 @@ var OptionalContract = []ContractEntry{
 	{Name: "mgs_listRequiredGlobs", Field: "needs", TakesDir: true},
 	{Name: "mgs_listProvidedGlobs", Field: "provides"},
 	{Name: "mgs_listClaimedGlobs", Field: "claims"},
+	{Name: "mgs_listIgnoreDirs", Field: "ignore_dirs"},
 	{Name: "mgs_getVersionCommand", Field: "version_cmd"},
 	{Name: "mgs_getLanguage", Field: "language"},
 	{Name: "mgs_isOpaque", Field: "opaque"},

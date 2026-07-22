@@ -109,7 +109,7 @@ func TestExpandSourcesSkipsSymlinks(t *testing.T) {
 	require.NoError(t, os.WriteFile(real, []byte("package main"), 0o644))
 	require.NoError(t, os.Symlink("real.go", filepath.Join(root, "alias.go")))
 
-	out, err := expandSources([]string{"*.go"}, root, nil)
+	out, err := expandSources([]string{"*.go"}, root, nil, nil)
 	require.NoError(t, err)
 
 	var rels []string
@@ -127,7 +127,7 @@ func TestExpandSourcesExcludesOutputs(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "keep.js"), []byte("k"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "dist", "bundle.js"), []byte("b"), 0o644))
 
-	out, err := expandSources([]string{"**/*.js"}, root, []string{"dist/**"})
+	out, err := expandSources([]string{"**/*.js"}, root, []string{"dist/**"}, nil)
 	require.NoError(t, err)
 
 	var rels []string
@@ -137,9 +137,54 @@ func TestExpandSourcesExcludesOutputs(t *testing.T) {
 	assert.Equal(t, []string{"keep.js"}, rels, "files under an output glob must be excluded")
 }
 
+// TestExpandSourcesPrunesSpellDirs verifies that a directory named by a spell's
+// declared IgnoreDirs is pruned from the walk even when it holds files matching a
+// source glob - the mechanism that lets a language spell (not the cache) decide its
+// ecosystem's non-source dirs. A dir NOT in the spell set (nor the core set) is walked.
+func TestExpandSourcesPrunesSpellDirs(t *testing.T) {
+	root := t.TempDir()
+	// zig-cache stands in for a spell-declared dir the core project.IgnoreDirs does
+	// not know about; src is a normal source dir that must survive.
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "zig-cache"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "src", "main.zig"), []byte("m"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "zig-cache", "stale.zig"), []byte("s"), 0o644))
+
+	// Without the spell dir declared, both .zig files are hashed.
+	out, err := expandSources([]string{"**/*.zig"}, root, nil, nil)
+	require.NoError(t, err)
+	var rels []string
+	for _, ra := range out {
+		rels = append(rels, ra.rel)
+	}
+	assert.Equal(t, []string{"src/main.zig", "zig-cache/stale.zig"}, rels, "no spell dirs: both hashed")
+
+	// With zig-cache declared, only the real source survives.
+	out, err = expandSources([]string{"**/*.zig"}, root, nil, []string{"zig-cache"})
+	require.NoError(t, err)
+	rels = nil
+	for _, ra := range out {
+		rels = append(rels, ra.rel)
+	}
+	assert.Equal(t, []string{"src/main.zig"}, rels, "spell-declared dir must be pruned from the walk")
+}
+
+// TestIsIgnoreDir pins the prune predicate: the narrow VCS/metadata dot set, the shared
+// project.IgnoreDirs defaults, and per-project spell-declared dirs all skip; a normal
+// source dir and an unrelated dot-dir (which the broad discovery rule would skip but the
+// hash walk deliberately does not, so **/*.md under .github still hashes) do not.
+func TestIsIgnoreDir(t *testing.T) {
+	spellDirs := []string{"node_modules"}
+	assert.True(t, isIgnoreDir(".git", spellDirs), "narrow metadata dot-dir")
+	assert.True(t, isIgnoreDir("vendor", spellDirs), "project.IgnoreDirs default")
+	assert.True(t, isIgnoreDir("node_modules", spellDirs), "spell-declared dir")
+	assert.False(t, isIgnoreDir("internal", spellDirs), "normal source dir is walked")
+	assert.False(t, isIgnoreDir(".github", spellDirs), "non-metadata dot-dir is deliberately walked by the hash set")
+}
+
 // TestExpandSourcesEmptyGlobs verifies the len(globs) == 0 early return.
 func TestExpandSourcesEmptyGlobs(t *testing.T) {
-	out, err := expandSources(nil, t.TempDir(), nil)
+	out, err := expandSources(nil, t.TempDir(), nil, nil)
 	require.NoError(t, err)
 	assert.Nil(t, out)
 }
@@ -151,6 +196,44 @@ func TestHashFilesEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, hashes)
 	assert.Nil(t, modes)
+}
+
+// TestHashStepIgnoreDirsKeyStability is the byte-stability contract for spell-declared
+// ignore dirs, asserted at the cache KEY (not just the file set): pruning a dir that
+// holds no matching source leaves the key untouched - the reason node_modules/__pycache__
+// never invalidate a Go project - while pruning a dir that DOES hold matching source moves
+// the key, proving the prune actually drops those files. A future change that folded
+// Step.IgnoreDirs into the key directly, or stopped pruning, would fail one of these.
+func TestHashStepIgnoreDirsKeyStability(t *testing.T) {
+	c := newBareCache(t)
+	ctx := context.Background()
+
+	root := t.TempDir()
+	write := func(rel, body string) {
+		p := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+	}
+	write("src/main.go", "package main")            // real source, always hashed
+	write("noise/data.txt", "x")                    // no **/*.go match - pruning is key-neutral
+	write("shadow/vendored.go", "package vendored") // matches **/*.go - pruning drops it from the key
+
+	key := func(ignore ...string) string {
+		h, err := c.hashStep(ctx, &Step{
+			ProjectPath:   ".",
+			WorkspaceRoot: root,
+			Sources:       []string{"**/*.go"},
+			IgnoreDirs:    ignore,
+		})
+		require.NoError(t, err)
+		return h
+	}
+
+	base := key()
+	assert.Equal(t, base, key("noise"),
+		"pruning a dir with no matching source must not change the cache key (byte-stability)")
+	assert.NotEqual(t, base, key("shadow"),
+		"pruning a dir that holds matching source must change the key (prune is effective)")
 }
 
 // TestStaticDirPrefix covers the metacharacter, no-slash, and no-metacharacter

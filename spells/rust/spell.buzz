@@ -15,6 +15,10 @@ export fun mgs_getVersionCommand() > [str] { return ["rustc", "--version"]; }
 // `magus query language:rust` reach this adapter alongside the code it builds.
 export fun mgs_getLanguage() > str { return "rust"; }
 
+// mgs_listIgnoreDirs names non-source dirs cargo generates, pruned from the
+// input-hashing walk. Dot-dirs are skipped structurally, so only target belongs here.
+export fun mgs_listIgnoreDirs() > [str] { return ["target"]; }
+
 fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }
 fun cargoClean(target: Target) > Command { return Command{bin = "cargo", args = ["clean"]}; }
 fun cargoClippy(target: Target) > Command { return Command{bin = "cargo", args = ["clippy", "--", "-D", "warnings"]}; }

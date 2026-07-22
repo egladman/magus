@@ -16,6 +16,11 @@ export fun mgs_getVersionCommand() > [str] { return ["python3", "--version"]; }
 // `magus query language:python` reach this adapter alongside the code it builds.
 export fun mgs_getLanguage() > str { return "python"; }
 
+// mgs_listIgnoreDirs names non-source dirs the python toolchain generates, pruned
+// from the input-hashing walk. The cache dirs (.pytest_cache, .mypy_cache) are
+// dot-dirs skipped structurally, so only __pycache__ belongs here.
+export fun mgs_listIgnoreDirs() > [str] { return ["__pycache__"]; }
+
 // build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
 // so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.
 fun uvBuild(target: Target) > Command { return Command{bin = "uv", args = ["build"]}; }
