@@ -1,4 +1,4 @@
-package wslock
+package magus
 
 import (
 	"context"
@@ -32,9 +32,9 @@ func TestSameProjectExclusiveSerializes(t *testing.T) {
 	// creating a ready file), so we know our acquire genuinely contends.
 	waitForFile(t, filepath.Join(lockDir, "app", "ready"), 3*time.Second)
 
-	locker := New(cacheDir, false)
+	locker := newProjectLocker(cacheDir, false)
 	start := time.Now()
-	release, err := locker.Acquire(context.Background(), "app")
+	release, err := locker.acquire(context.Background(), "app")
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
@@ -54,9 +54,9 @@ func TestSameProjectExclusiveSerializes(t *testing.T) {
 // TestDifferentProjectsNoContention proves two DIFFERENT projects' exclusive
 // locks are held concurrently, with no false contention.
 func TestDifferentProjectsNoContention(t *testing.T) {
-	locker := New(t.TempDir(), false)
+	locker := newProjectLocker(t.TempDir(), false)
 
-	relA, err := locker.Acquire(context.Background(), "libs/diag")
+	relA, err := locker.acquire(context.Background(), "libs/diag")
 	if err != nil {
 		t.Fatalf("acquire A: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestDifferentProjectsNoContention(t *testing.T) {
 	// contended, TryLock would fail and the deadline would elapse.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	relB, err := locker.Acquire(ctx, "libs/textsearch")
+	relB, err := locker.acquire(ctx, "libs/textsearch")
 	if err != nil {
 		t.Fatalf("acquire B (different project) should not contend: %v", err)
 	}
@@ -75,9 +75,9 @@ func TestDifferentProjectsNoContention(t *testing.T) {
 
 // TestReleaseFrees proves a released lock can be re-taken immediately.
 func TestReleaseFrees(t *testing.T) {
-	locker := New(t.TempDir(), false)
+	locker := newProjectLocker(t.TempDir(), false)
 
-	rel, err := locker.Acquire(context.Background(), "docs")
+	rel, err := locker.acquire(context.Background(), "docs")
 	if err != nil {
 		t.Fatalf("first acquire: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestReleaseFrees(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	rel2, err := locker.Acquire(ctx, "docs")
+	rel2, err := locker.acquire(ctx, "docs")
 	if err != nil {
 		t.Fatalf("re-acquire after release: %v", err)
 	}
@@ -113,17 +113,17 @@ func TestReleasedOnProcessExit(t *testing.T) {
 
 	// The kernel must have dropped the lock on process death, so we acquire it
 	// under a bounded context rather than blocking forever.
-	locker := New(cacheDir, false)
+	locker := newProjectLocker(cacheDir, false)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	rel, err := locker.Acquire(ctx, "svc")
+	rel, err := locker.acquire(ctx, "svc")
 	if err != nil {
 		t.Fatalf("acquire after holder death (lock should be released): %v", err)
 	}
 	rel()
 }
 
-// TestNoWaitFailsFast proves the no-wait path returns *Contended immediately
+// TestNoWaitFailsFast proves the no-wait path returns *lockContended immediately
 // instead of blocking when another handle holds the lock.
 func TestNoWaitFailsFast(t *testing.T) {
 	cacheDir := t.TempDir()
@@ -136,15 +136,15 @@ func TestNoWaitFailsFast(t *testing.T) {
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	waitForFile(t, filepath.Join(lockDir, "p", "ready"), 3*time.Second)
 
-	locker := New(cacheDir, true) // noWait
+	locker := newProjectLocker(cacheDir, true) // noWait
 	start := time.Now()
-	_, err := locker.Acquire(context.Background(), "p")
+	_, err := locker.acquire(context.Background(), "p")
 	if time.Since(start) > time.Second {
 		t.Fatalf("no-wait acquire blocked instead of failing fast")
 	}
-	var c *Contended
+	var c *lockContended
 	if !errors.As(err, &c) {
-		t.Fatalf("want *Contended error, got %v", err)
+		t.Fatalf("want *lockContended error, got %v", err)
 	}
 	if c.Project != "p" {
 		t.Fatalf("Contended.Project = %q, want %q", c.Project, "p")
@@ -165,8 +165,8 @@ func TestWaitingMessageEmittedOnce(t *testing.T) {
 	waitForFile(t, filepath.Join(lockDir, "w", "ready"), 3*time.Second)
 
 	var notes int32
-	locker := New(cacheDir, false, WithNotify(func(string) { atomic.AddInt32(&notes, 1) }))
-	rel, err := locker.Acquire(context.Background(), "w")
+	locker := newProjectLocker(cacheDir, false, withLockNotify(func(string) { atomic.AddInt32(&notes, 1) }))
+	rel, err := locker.acquire(context.Background(), "w")
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestWaitingMessageEmittedOnce(t *testing.T) {
 // orders and both complete. Sorted acquisition means neither can hold one lock
 // while waiting on another the peer holds.
 func TestAcquireAllSortedNoDeadlock(t *testing.T) {
-	locker := New(t.TempDir(), false)
+	locker := newProjectLocker(t.TempDir(), false)
 	set1 := []string{"a", "b", "c"}
 	set2 := []string{"c", "b", "a"}
 
@@ -190,7 +190,7 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 	run := func(paths []string) {
 		for i := 0; i < 50; i++ {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			rel, err := locker.AcquireAll(ctx, paths)
+			rel, err := locker.acquireAll(ctx, paths)
 			if err != nil {
 				cancel()
 				done <- err
@@ -222,7 +222,7 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 // TestLockPathMirrorsProjectTree proves lock files mirror the project tree and
 // the root project maps to <dir>/lock.
 func TestLockPathMirrorsProjectTree(t *testing.T) {
-	l := New("/cache", false)
+	l := newProjectLocker("/cache", false)
 	cases := map[string]string{
 		"":                filepath.Join("/cache", "locks", "lock"),
 		".":               filepath.Join("/cache", "locks", "lock"),
@@ -246,10 +246,10 @@ func helperHold(t *testing.T, lockDir, project string, holdMS int) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=TestHelperHold")
 	cmd.Env = append(os.Environ(),
-		"WSLOCK_HELPER=1",
-		"WSLOCK_DIR="+lockDir,
-		"WSLOCK_PROJECT="+project,
-		"WSLOCK_HOLD_MS="+strconv.Itoa(holdMS),
+		"LOCKTEST_HELPER=1",
+		"LOCKTEST_DIR="+lockDir,
+		"LOCKTEST_PROJECT="+project,
+		"LOCKTEST_HOLD_MS="+strconv.Itoa(holdMS),
 	)
 	cmd.Stderr = os.Stderr
 	return cmd
@@ -259,17 +259,17 @@ func helperHold(t *testing.T, lockDir, project string, holdMS int) *exec.Cmd {
 // helperHold. It acquires the lock directly via flock semantics (through the
 // Locker), writes a ready file, and sleeps.
 func TestHelperHold(t *testing.T) {
-	if os.Getenv("WSLOCK_HELPER") != "1" {
+	if os.Getenv("LOCKTEST_HELPER") != "1" {
 		t.Skip("subprocess helper; not run directly")
 	}
-	dir := os.Getenv("WSLOCK_DIR")
-	project := os.Getenv("WSLOCK_PROJECT")
-	holdMS, _ := strconv.Atoi(os.Getenv("WSLOCK_HOLD_MS"))
+	dir := os.Getenv("LOCKTEST_DIR")
+	project := os.Getenv("LOCKTEST_PROJECT")
+	holdMS, _ := strconv.Atoi(os.Getenv("LOCKTEST_HOLD_MS"))
 
-	// The Locker's dir is <cacheDir>/locks; WSLOCK_DIR is already that lock dir, so
+	// The Locker's dir is <cacheDir>/locks; LOCKTEST_DIR is already that lock dir, so
 	// point the cacheDir one level up.
-	locker := New(filepath.Dir(dir), false)
-	rel, err := locker.Acquire(context.Background(), project)
+	locker := newProjectLocker(filepath.Dir(dir), false)
+	rel, err := locker.acquire(context.Background(), project)
 	if err != nil {
 		t.Fatalf("helper acquire: %v", err)
 	}
