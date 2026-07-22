@@ -224,19 +224,19 @@ The six ops are exactly RFC 6902's (`add`/`remove`/`replace`/`move`/`copy`/`test
 When the argv needs to be computed, branch in code. A magusfile function target receives the forwarded CLI args:
 
 ```buzz
-export fun lint(args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
     os.exec("golangci-lint", if (fix) ["run", "--fix"] else ["run"]);
 }
 ```
 
-A function target reads the active charm set directly with **`magus.has_charm(name)`**, including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_, the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
+A function target reads the active charm set directly with **`ctx.has_charm(name)`**, including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_, the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
 
 ```buzz
-export fun build(args: [str]) > void {
-    if (magus.has_charm("container")) { magus.needs(image_build); }
-    else { magus.needs(go_build); }
+export fun build(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("container")) { ctx.needs(image_build); }
+    else { ctx.needs(go_build); }
 }
 ```
 
@@ -364,7 +364,7 @@ Conditional or per-invocation logic belongs in a **function target**, not a char
 ```buzz
 // magusfile.buzz
 import "os";
-export fun lint(args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
     os.exec("golangci-lint", if (fix) ["run", "--fix", "./..."] else ["run", "./..."]);

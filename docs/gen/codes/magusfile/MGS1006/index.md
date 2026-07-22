@@ -11,7 +11,7 @@ happens two ways:
 
 - **From the CLI** - `magus run <name>` (or `magus x <name>`) where `<name>`
   matches no target anywhere in the selected scope.
-- **From a magusfile** - a dependency handle such as `magus.needs(<name>)`
+- **From a magusfile** - a dependency handle such as `ctx.needs(<name>)`
   names a target that does not exist.
 
 ```text
@@ -42,12 +42,12 @@ scope.
   magusfile:
 
   ```buzz
-  export fun build(_a: [str]) > void { go["go-build"](); }
+  export fun build(ctx: magus\Context, _a: [str]) > void { go["go-build"](); }
   ```
 
-- **Dependency handle.** `magus.needs(x)` takes a target FUNCTION handle in the
+- **Dependency handle.** `ctx.needs(x)` takes a target FUNCTION handle in the
   same magusfile; a cross-project dependency uses the imported project's handle
-  (`import "project/api" as api; ... magus.needs(api.build);`). A bare
+  (`import "project/api" as api; ... ctx.needs(api.build);`). A bare
   unresolved name raises this diagnostic.
 
 ## What this is NOT

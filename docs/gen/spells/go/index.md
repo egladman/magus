@@ -29,9 +29,39 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 **Command:** `go build`
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// Wire go-build into a `build` target. `magus run build` forks `go build`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    go["go-build"]();
+}
+```
+
 ## go-clean
 
 **Command:** `go clean ./...`
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// Wire go-clean into a `clean` target: `magus run clean` forks `go clean ./...`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun clean(ctx: magus\Context, args: [str]) > void {
+    go["go-clean"]();
+}
+```
 
 ## go-fmt
 
@@ -56,11 +86,45 @@ Replaces `-l` with `-w`.
 
 </details>
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// go-fmt lists misformatted files; the rw charm rewrites them in place.
+// `magus run format` checks, `magus run format:rw` applies gofmt.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    go["go-fmt"]();
+}
+```
+
 ## go-generate
 
 **Command:** `go generate ./...`
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// Wire go-generate into a `generate` target: `magus run generate` forks
+// `go generate ./...`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    go["go-generate"]();
+}
+```
+
 ## go-mod-tidy
+
+tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes - safe for CI gating); the write charm applies the changes.
 
 **Command:** `go mod tidy --diff`
 
@@ -82,7 +146,25 @@ Drops `--diff`.
 
 </details>
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// go-mod-tidy checks go.mod/go.sum with --diff (CI-safe); the rw charm drops
+// --diff so `magus run tidy:rw` applies the changes.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun tidy(ctx: magus\Context, args: [str]) > void {
+    go["go-mod-tidy"]();
+}
+```
+
 ## go-test
+
+The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
 
 **Command:** `go test ./...`
 
@@ -129,9 +211,43 @@ Appends `-v`.
 
 </details>
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// go-test runs the suite; here with the race detector, so `magus run test` forks
+// `go test ./... -race`. The cd charm (`magus run test:cd`) adds the atomic
+// coverage profile a CD pipeline ships.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun test(ctx: magus\Context, args: [str]) > void {
+    go["go-test"]({ "args": ["-race"] });
+}
+```
+
 ## go-vet
 
 **Command:** `go vet ./...`
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// go-vet is static analysis, so it composes into the canonical `lint` target
+// (alongside golangci-lint) rather than a bespoke `vet` target. `magus run lint`
+// forks `go vet ./...`.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    go["go-vet"]();
+}
+```
 
 ## golangci-lint
 
@@ -175,11 +291,49 @@ Inserts `--fix`.
 
 </details>
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// golangci-lint runs as a `go tool` (resolved from go.mod's tool block). The rw
+// charm inserts --fix, so `magus run lint:rw` applies the autofixable findings.
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    go["golangci-lint"]();
+}
+```
+
 ## govulncheck
+
+Scans for known vulnerabilities in the module's call graph. Command as a `go tool` (like golangci-lint) so it resolves from go.mod's tool block, not PATH.
 
 **Command:** `go tool govulncheck ./...`
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// govulncheck scans the module's call graph for known vulnerabilities, run as a
+// `go tool` so it resolves from go.mod's tool block. Security scanning is static
+// analysis, so it composes into the canonical `lint` target - not a bespoke
+// `audit`/`security` target. (A slow scan can instead be gated in `ci`.)
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    go["govulncheck"]();
+}
+```
+
 ## scip
+
+scip is the reserved op that runs the language's SCIP indexer for the knowledge graph. Named for the format, not the binary, so the same verb produces symbols across every language spell (`magus run <project>::scip`). magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. Run through sh so the env var expands.
 
 **Command:** `sh -c scip-go --output "$MAGUS_SYMBOL_INDEX"`
 

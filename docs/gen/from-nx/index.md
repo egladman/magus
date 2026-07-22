@@ -24,7 +24,7 @@ plainly, and vice versa.
 | target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; seven canonical names plus custom - see [targets.md](targets.md#the-target-name))                                                       |
 | executor / plugin                             | spell op (a [spell](spells.md) is a library of tool-native ops)                                                                                                                     |
 | `nx:run-commands`                             | `os.exec(...)` in a target body                                                                                                                                                     |
-| `dependsOn: ["^build"]`                       | `magus.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering - see [dependencies.md](dependencies.md))                             |
+| `dependsOn: ["^build"]`                       | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering - see [dependencies.md](dependencies.md))                             |
 | `implicitDependencies`                        | `depends_on` in `magus.project`                                                                                                                                                     |
 | `inputs` / `namedInputs`                      | a spell's `needs` globs, plus a project's own [`sources`](workspace.md#magusproject-layering-policy)                                                                                |
 | `outputs`                                     | `outputs` / a spell's `provides` globs                                                                                                                                              |
@@ -138,21 +138,21 @@ import "magus/spell/ts";
 
 magus.project({ "spells": [ts] });
 
-export fun build(args: [str]) > void {
-    magus.needs(shared.build);   // folds into depends_on automatically
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(shared.build);   // folds into depends_on automatically
     ts["tsc-build"]();
 }
 
-export fun test(args: [str]) > void { ts["vitest"](); }
+export fun test(ctx: magus\Context, args: [str]) > void { ts["vitest"](); }
 
 // tsc composes into lint alongside eslint - not a bespoke `typecheck` target.
-export fun lint(args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void {
     ts["tsc"]();
     ts["eslint"]();
 }
 
-export fun ci(args: [str]) > void {
-    magus.needs(build, test, lint);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build, test, lint);
 }
 ```
 

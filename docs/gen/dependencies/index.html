@@ -91,7 +91,7 @@ the story of how they interact is scattered today across getting-started
 owns that story end to end.</p>
 <h2 id="the-two-mechanisms-and-the-decision-rule">The two mechanisms and the decision rule</h2>
 <ul>
-<li><strong><code>magus.needs(...)</code></strong> is target-level, imperative, and blocking at its call
+<li><strong><code>ctx.needs(...)</code></strong> is target-level, imperative, and blocking at its call
 site inside the target body. It says &quot;run X before the rest of my body
 executes&quot; - same-project or cross-project, deduped per invocation, run
 once. See <a href="../targets/">targets</a> for the full grammar.</li>
@@ -106,7 +106,7 @@ another project's changes affect you, independent of whether any target
 calls into it directly. A cross-project <code>needs</code> gives you both at
 once - see the fold, below.</p>
 <h2 id="the-fold-a-cross-project-needs-also-declares-depends-on">The fold: a cross-project <code>needs</code> also declares <code>depends_on</code></h2>
-<p>A cross-project <code>magus.needs(alias.target)</code> (where <code>alias</code> is a project
+<p>A cross-project <code>ctx.needs(alias.target)</code> (where <code>alias</code> is a project
 imported at the top of the magusfile, whose exported targets it binds as
 callable handles) is <strong>statically extracted</strong> and <strong>unioned into the
 consuming project's <code>DependsOn</code></strong> at workspace-open time
@@ -116,8 +116,8 @@ counts toward the affected closure and cache-key propagation exactly as if
 you had also written a <code>depends_on</code> entry - you never write both.</p>
 <p><strong>The fold is a static read, so a computed edge is invisible.</strong> The extractor
 reads the magusfile's AST; it resolves a same-project target passed by
-reference (<code>magus.needs(build)</code>), a cross-project handle passed as a member
-access (<code>magus.needs(alias.target)</code>), and each literal pattern given to
+reference (<code>ctx.needs(build)</code>), a cross-project handle passed as a member
+access (<code>ctx.needs(alias.target)</code>), and each literal pattern given to
 <code>magus.glob</code> inside a <code>magus.needs</code>. What it cannot evaluate is a <em>computed</em> dependency - a
 handle stored in a variable, returned from a function, or otherwise built at
 runtime. Such a <code>magus.needs</code> call is invisible to the static graph, to
@@ -161,7 +161,7 @@ are read from the AST the same way these <code>needs</code> edges are.</li>
 </ul>
 <h2 id="both-arms-rule-the-static-graph-and-a-dry-run-can-disagree">Both-arms rule: the static graph and a dry run can disagree</h2>
 <p>The static extractor (<code>internal/describe/extract.go</code>) that powers <code>magus describe</code>/<code>magus graph</code> sees <strong>both arms</strong> of a charm-conditional <code>magus.needs</code>
-call (an <code>if magus.has_charm(&quot;cd&quot;) { magus.needs(...) } else { magus.needs(...) }</code>
+call (an <code>if ctx.has_charm(&quot;cd&quot;) { ctx.needs(...) } else { ctx.needs(...) }</code>
 shows both edges in the graph). A dry run (<code>magus run --dry-run</code>) evaluates
 the magusfile for real and sees only the <strong>taken</strong> branch, under whichever
 charms are active. Both are correct for what they represent: the static graph
@@ -173,7 +173,7 @@ is a bug when they do.</p>
 <li><strong>Same-project runtime cycle.</strong> A target that (transitively) needs itself
 fails with <code>buzzpool: dispatch: stack contains &quot;&lt;name&gt;&quot; (cycle detected)</code> -
 the ancestor stack that catches this also catches a direct self-loop
-(<code>magus.needs(self)</code> inside <code>self</code>).</li>
+(<code>ctx.needs(self)</code> inside <code>self</code>).</li>
 <li><strong>Cross-project runtime cycle.</strong> Two projects whose <code>magus.needs</code> chains
 point back at each other fail with <code>cross-project cycle: &lt;dir&gt; target &quot;&lt;name&gt;&quot;</code>, detected by the same run's <code>CrossDispatch</code> coordinator.</li>
 <li><strong>Unregistered <code>depends_on</code> path.</strong> A <code>depends_on</code> entry naming a project
@@ -188,17 +188,17 @@ guarantee.</li>
 </ul>
 <h2 id="needs-and-glob-functions-and-patterns-same-project-globs"><code>needs</code> and <code>glob</code>: functions and patterns, same-project globs</h2>
 <p><code>magus.needs</code> takes target <strong>functions</strong>: a same-project target passed by
-reference (<code>magus.needs(build, test)</code>) or a cross-project handle a project
-import binds (<code>magus.needs(alias.target)</code>), or the list of handles <code>magus.glob</code>
+reference (<code>ctx.needs(build, test)</code>) or a cross-project handle a project
+import binds (<code>ctx.needs(alias.target)</code>), or the list of handles <code>magus.glob</code>
 resolves a pattern to. It never takes a string or a query object; a mistyped
 identifier is an undefined variable and fails at <strong>load</strong>, not at run time. For
 patterns, resolve them to handles with <code>magus.glob</code> and pass the result to
 <code>magus.needs</code>.</p>
-<p><code>magus.glob(pattern)</code> is <strong>same-project only</strong> (a cross-project edge is always a
+<p><code>ctx.glob(pattern)</code> is <strong>same-project only</strong> (a cross-project edge is always a
 handle <code>alias.target</code>) and resolves to the <strong>handles</strong> of the matching registered
-targets, which you feed to <code>magus.needs</code> (<code>magus.needs(magus.glob(&quot;*-generate&quot;))</code>).
+targets, which you feed to <code>magus.needs</code> (<code>ctx.needs(ctx.glob(&quot;*-generate&quot;))</code>).
 A pattern with no <code>*</code> is <strong>suffix shorthand</strong>, not a substring or exact match:
-<code>magus.glob(&quot;build&quot;)</code> compiles to <code>^.*-build$</code> and resolves
+<code>ctx.glob(&quot;build&quot;)</code> compiles to <code>^.*-build$</code> and resolves
 <code>go-build</code>/<code>docker-build</code>, but <strong>not</strong> a target literally named <code>build</code> - pass
 the <code>build</code> function to <code>magus.needs</code> for that. A pattern containing <code>*</code> matches
 as an ordinary anchored glob (<code>*-generate</code>). A pattern that matches nothing
@@ -227,7 +227,7 @@ this page's caching section builds on.</li>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../debugging/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Debugging magusfiles</span></a>
-      <a class="page-nav-next" href="../documentation/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus Documentation</span></a>
+      <a class="page-nav-next" href="../diagnostics/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Diagnostics</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -241,7 +241,7 @@ this page's caching section builds on.</li>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22dependencies%22">dependencies</a><a class="tag" href="../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../search/?q=tag%3A%22depends_on%22">depends_on</a><a class="tag" href="../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../search/?q=tag%3A%22cycles%22">cycles</a><a class="tag" href="../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T01:40:29Z">July 22, 2026, 1:40 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/0547a68fa9339fc8ffb06e9ab7d4e1e1a1273cfc" data-tooltip="0547a68fa9339fc8ffb06e9ab7d4e1e1a1273cfc" title="0547a68fa9339fc8ffb06e9ab7d4e1e1a1273cfc">0547a68f</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da"><code>c83ea185</code></a> <small><time datetime="2026-07-19T01:09:00Z">Jul 19, 2026</time></small> - align formatting with the pinned prettier and gofmt</li><li><a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433"><code>2f02f9d7</code></a> <small><time datetime="2026-07-16T04:52:34Z">Jul 16, 2026</time></small> - magus.needs takes target functions only: same-project exports by reference (forward refs work, bodies run post-load) and cross-project import members as real callables (alias.target() dispatches directly); add magus.needsGlob as the separate pattern verb; remove the magus.target namespace (literal/glob/regex/expand_globs), the Buzz TargetQuery mirror, and types.TargetQuery; resolve identifier and needsGlob edges in the static extractor and dry tracer so the graph is unchanged and dependency typos fail at load; export gopherbuzz vm.Value.Equal (Buzz == semantics) for host-side function identity; migrate all magusfiles (proto gains a conventional generate target wrapping buf-generate), docs, tour, starter, examples, and tests</li><li><a href="https://github.com/egladman/magus/commit/fe5ff5c08a7f744c30b06d6c654e989c2a391b66"><code>fe5ff5c0</code></a> <small><time datetime="2026-07-15T05:06:26Z">Jul 15, 2026</time></small> - add per-target magus.inputs/outputs cache footprint; add MGS1004/1005 footprint-hygiene checks; make per-target outputs first-class in clean and merge</li><li><a href="https://github.com/egladman/magus/commit/956d1d0658d84b87c71d2e36c46ef5c8c56c676c"><code>956d1d06</code></a> <small><time datetime="2026-07-15T03:39:56Z">Jul 15, 2026</time></small> - add docs/dependencies.md: the needs vs depends_on model, end to end</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/dependencies.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/dependencies.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/0547a68fa9339fc8ffb06e9ab7d4e1e1a1273cfc"><code>0547a68f</code></a> <small><time datetime="2026-07-22T01:40:29Z">Jul 22, 2026</time></small> - replace magus.needsGlob with magus.glob feeding target handles into magus.needs; keep needs handles-only; consolidate the target bindings into target.go</li><li><a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da"><code>c83ea185</code></a> <small><time datetime="2026-07-19T01:09:00Z">Jul 19, 2026</time></small> - align formatting with the pinned prettier and gofmt</li><li><a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433"><code>2f02f9d7</code></a> <small><time datetime="2026-07-16T04:52:34Z">Jul 16, 2026</time></small> - magus.needs takes target functions only: same-project exports by reference (forward refs work, bodies run post-load) and cross-project import members as real callables (alias.target() dispatches directly); add magus.needsGlob as the separate pattern verb; remove the magus.target namespace (literal/glob/regex/expand_globs), the Buzz TargetQuery mirror, and types.TargetQuery; resolve identifier and needsGlob edges in the static extractor and dry tracer so the graph is unchanged and dependency typos fail at load; export gopherbuzz vm.Value.Equal (Buzz == semantics) for host-side function identity; migrate all magusfiles (proto gains a conventional generate target wrapping buf-generate), docs, tour, starter, examples, and tests</li><li><a href="https://github.com/egladman/magus/commit/fe5ff5c08a7f744c30b06d6c654e989c2a391b66"><code>fe5ff5c0</code></a> <small><time datetime="2026-07-15T05:06:26Z">Jul 15, 2026</time></small> - add per-target magus.inputs/outputs cache footprint; add MGS1004/1005 footprint-hygiene checks; make per-target outputs first-class in clean and merge</li><li><a href="https://github.com/egladman/magus/commit/956d1d0658d84b87c71d2e36c46ef5c8c56c676c"><code>956d1d06</code></a> <small><time datetime="2026-07-15T03:39:56Z">Jul 15, 2026</time></small> - add docs/dependencies.md: the needs vs depends_on model, end to end</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/dependencies.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/dependencies.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -498,9 +498,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

@@ -84,6 +84,7 @@
           <li><a href="../../../codes/magusfile/MGS1005/" title="MGS1005: redundant footprint glob">MGS1005: redundant footprint glob</a></li>
           <li><a href="../../../codes/magusfile/MGS1006/" title="MGS1006: unknown target">MGS1006: unknown target</a></li>
           <li><a href="../../../codes/magusfile/MGS1007/" aria-current="page" title="MGS1007: target dependency cycle">MGS1007: target dependency cycle</a></li>
+          <li><a href="../../../codes/magusfile/MGS1008/" title="MGS1008: target missing its context parameter">MGS1008: target missing its context parameter</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -101,7 +102,7 @@ and errors instead of deadlocking.</p>
   see: .../MGS1007.md
 </code></pre>
 <h2 id="why">Why</h2>
-<p>Targets declare what they depend on (<code>magus.needs(...)</code>, cross-project handles).
+<p>Targets declare what they depend on (<code>ctx.needs(...)</code>, cross-project handles).
 Magus runs a target's dependencies before the target. If A depends on B and B
 depends on A - directly, or through a longer chain A -&gt; B -&gt; C -&gt; A - there is no
 valid order: each is waiting on the other. Left unchecked that is a deadlock, so
@@ -138,6 +139,7 @@ a cycle - the dependency graph itself has no valid order.</li>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../MGS1006/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS1006: unknown target</span></a>
+      <a class="page-nav-next" href="../MGS1008/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS1008: target missing its context parameter</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -151,7 +153,7 @@ a cycle - the dependency graph itself has no valid order.</li>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS1007%22">MGS1007</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../../search/?q=tag%3A%22depends%22">depends</a><a class="tag" href="../../../search/?q=tag%3A%22cycle%22">cycle</a><a class="tag" href="../../../search/?q=tag%3A%22cross-project%22">cross-project</a></div>
-    <small>Last updated <time datetime="2026-07-21T12:21:34Z">July 21, 2026, 12:21 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a0eab87e6dee9ffc69cf1ff825b05de7ef31a428" data-tooltip="a0eab87e6dee9ffc69cf1ff825b05de7ef31a428" title="a0eab87e6dee9ffc69cf1ff825b05de7ef31a428">a0eab87e</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a0eab87e6dee9ffc69cf1ff825b05de7ef31a428"><code>a0eab87e</code></a> <small><time datetime="2026-07-21T12:21:34Z">Jul 21, 2026</time></small> - add unknown target and dependency cycle diagnostic codes; give diag a wrapf that keeps the wrapped sentinel matching; wire the sites and add doc pages</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/codes/magusfile/MGS1007.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/codes/magusfile/MGS1007.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -408,9 +410,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

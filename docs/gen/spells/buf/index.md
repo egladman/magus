@@ -29,6 +29,8 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## buf-breaking
 
+breaking checks the current schema against a baseline for backward-incompatible changes (wire and JSON compatibility). It defaults to comparing against the main branch, buf's standard CI pattern; point it elsewhere with a function target when a repo uses a different default branch or an image baseline. This is the protobuf analogue of an API-contract gate: compose it into `lint` so a breaking .proto change fails the same read-only stage as go-vet and golangci-lint. The gha charm swaps buf's reporter to GitHub Actions annotations.
+
 **Command:** `buf breaking --against .git#branch=main`
 
 ### gha
@@ -50,11 +52,47 @@ Appends `--error-format=github-actions`.
 
 </details>
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// buf-breaking gates backward-incompatible schema changes, so it composes into the
+// read-only `lint` target alongside buf-lint. `magus run lint` forks `buf lint` then
+// `buf breaking --against .git#branch=main`, failing on a wire- or JSON-incompatible
+// .proto edit the same way go-vet fails a static-analysis violation.
+import "magus";
+import "magus/spell/buf";
+
+magus.project({ "spells": [buf] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    buf["buf-lint"]();
+    buf["buf-breaking"]();
+}
+```
+
 ## buf-build
 
 **Command:** `buf build`
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// Wire buf-build into a build target: magus run build forks buf build.
+import "magus";
+import "magus/spell/buf";
+
+magus.project({ "spells": [buf] });
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    buf["buf-build"]();
+}
+```
+
 ## buf-format
+
+format checks by default (--exit-code fails CI when files would change; the write charm applies the formatting in place.
 
 **Command:** `buf format --exit-code`
 
@@ -77,9 +115,39 @@ Replaces `--exit-code` with `-w`.
 
 </details>
 
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// buf-format checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/buf";
+
+magus.project({ "spells": [buf] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    buf["buf-format"]();
+}
+```
+
 ## buf-generate
 
 **Command:** `buf generate`
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// Wire buf-generate into a generate target: magus run generate forks buf generate.
+import "magus";
+import "magus/spell/buf";
+
+magus.project({ "spells": [buf] });
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    buf["buf-generate"]();
+}
+```
 
 ## buf-lint
 
@@ -103,4 +171,19 @@ Appends `--error-format=github-actions`.
 ```
 
 </details>
+
+### Example
+
+<!-- magus-run-recorder -->
+```buzz
+// buf-lint checks Protobuf style. The gha charm annotates findings in GitHub Actions.
+import "magus";
+import "magus/spell/buf";
+
+magus.project({ "spells": [buf] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    buf["buf-lint"]();
+}
+```
 

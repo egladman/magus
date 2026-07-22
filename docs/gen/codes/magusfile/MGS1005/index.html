@@ -84,6 +84,7 @@
           <li><a href="../../../codes/magusfile/MGS1005/" aria-current="page" title="MGS1005: redundant footprint glob">MGS1005: redundant footprint glob</a></li>
           <li><a href="../../../codes/magusfile/MGS1006/" title="MGS1006: unknown target">MGS1006: unknown target</a></li>
           <li><a href="../../../codes/magusfile/MGS1007/" title="MGS1007: target dependency cycle">MGS1007: target dependency cycle</a></li>
+          <li><a href="../../../codes/magusfile/MGS1008/" title="MGS1008: target missing its context parameter">MGS1008: target missing its context parameter</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -94,14 +95,14 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1005-redundant-footprint-glob">MGS1005: redundant footprint glob</h1>
-<p><code>magus doctor</code> found a per-target <code>magus.inputs(...)</code> or <code>magus.outputs(...)</code>
+<p><code>magus doctor</code> found a per-target <code>ctx.inputs(...)</code> or <code>ctx.outputs(...)</code>
 glob that is already declared project-wide - either in the project's <code>sources</code>
 /<code>outputs</code> options or contributed by a bound spell. Under the additive footprint
 model, the per-target copy adds nothing.</p>
 <pre><code class="language-text">[MGS1005] 1 per-target magus.inputs/outputs glob(s) duplicate a project-wide
 declaration (a no-op under the additive model); drop the duplicate (see
 .../MGS1005.md)
-  build: magus.inputs(&quot;src/**&quot;) already in project sources
+  build: ctx.inputs(&quot;src/**&quot;) already in project sources
 </code></pre>
 <h2 id="why">Why</h2>
 <p>A target's cache footprint is the <strong>union</strong> of three layers: the globs a bound
@@ -126,14 +127,14 @@ the <code>magus.inputs</code>/<code>magus.outputs</code> in that target's body.<
 </ul>
 <pre><code class="language-buzz">// Before: &quot;src/**&quot; declared twice - the per-target copy is a no-op.
 magus.project({sources = [&quot;src/**&quot;]});
-export fun build(args: [str]) &gt; void {
-    magus.inputs(&quot;src/**&quot;);
+export fun build(ctx: magus\Context, args: [str]) &gt; void {
+    ctx.inputs(&quot;src/**&quot;);
     go[&quot;go-build&quot;]();
 }
 
 // After: one home. Here it affects every target, so keep it project-wide.
 magus.project({sources = [&quot;src/**&quot;]});
-export fun build(args: [str]) &gt; void { go[&quot;go-build&quot;](); }
+export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](); }
 </code></pre>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
@@ -168,7 +169,7 @@ project-wide vs per-target declarations.</li>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS1005%22">MGS1005</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../search/?q=tag%3A%22inputs%22">inputs</a><a class="tag" href="../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
-    <small>Last updated <time datetime="2026-07-19T01:09:00Z">July 19, 2026, 1:09 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da" data-tooltip="c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da" title="c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da">c83ea185</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9"><code>dbe1d1fe</code></a> <small><time datetime="2026-07-15T23:58:51Z">Jul 15, 2026</time></small> - replace em-dashes with hyphens and the ellipsis character with ... across the hand-written documentation prose (charms, telemetry, remote-cache, and the diagnostic-code pages); plain-ASCII punctuation reads cleaner and matches the repo&#39;s user-facing-string convention</li><li><a href="https://github.com/egladman/magus/commit/fe5ff5c08a7f744c30b06d6c654e989c2a391b66"><code>fe5ff5c0</code></a> <small><time datetime="2026-07-15T05:06:26Z">Jul 15, 2026</time></small> - add per-target magus.inputs/outputs cache footprint; add MGS1004/1005 footprint-hygiene checks; make per-target outputs first-class in clean and merge</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/codes/magusfile/MGS1005.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/codes/magusfile/MGS1005.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da"><code>c83ea185</code></a> <small><time datetime="2026-07-19T01:09:00Z">Jul 19, 2026</time></small> - align formatting with the pinned prettier and gofmt</li><li><a href="https://github.com/egladman/magus/commit/dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9"><code>dbe1d1fe</code></a> <small><time datetime="2026-07-15T23:58:51Z">Jul 15, 2026</time></small> - replace em-dashes with hyphens and the ellipsis character with ... across the hand-written documentation prose (charms, telemetry, remote-cache, and the diagnostic-code pages); plain-ASCII punctuation reads cleaner and matches the repo&#39;s user-facing-string convention</li><li><a href="https://github.com/egladman/magus/commit/fe5ff5c08a7f744c30b06d6c654e989c2a391b66"><code>fe5ff5c0</code></a> <small><time datetime="2026-07-15T05:06:26Z">Jul 15, 2026</time></small> - add per-target magus.inputs/outputs cache footprint; add MGS1004/1005 footprint-hygiene checks; make per-target outputs first-class in clean and merge</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/codes/magusfile/MGS1005.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/codes/magusfile/MGS1005.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -425,9 +426,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

@@ -88,6 +88,8 @@
           <li><a href="../../spells/rs/" title="rs spell">rs spell</a></li>
           <li><a href="../../spells/ts/" title="ts spell">ts spell</a></li>
         </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#shellcheck" title="shellcheck">shellcheck</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -138,7 +140,20 @@
 </table></figure>
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="shellcheck">shellcheck</h2>
+<p>One shellcheck invocation over every shell source: find feeds xargs with NUL separators, and -r skips running shellcheck on an empty set.</p>
 <p><strong>Command:</strong> <code>sh -c find . \( -name '*.sh' -o -name '*.bash' \) -print0 | xargs -0 -r shellcheck</code></p>
+<h3 id="example">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// shellcheck lints every .sh/.bash script found under the project.
+import &quot;magus&quot;;
+import &quot;magus/spell/bash&quot;;
+
+magus.project({ &quot;spells&quot;: [bash] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    bash[&quot;shellcheck&quot;]();
+}
+</code></pre>
     </article>
     </div>
     </div>
@@ -157,7 +172,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22bash%22">bash</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22shell%22">shell</a><a class="tag" href="../../search/?q=tag%3A%22shellcheck%22">shellcheck</a><a class="tag" href="../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-17T02:18:57Z">July 17, 2026, 2:18 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637" data-tooltip="17fda88abe70724a67ab9c5422f3ada0a4007637" title="17fda88abe70724a67ab9c5422f3ada0a4007637">17fda88a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/bash.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/bash.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637"><code>17fda88a</code></a> <small><time datetime="2026-07-17T02:18:57Z">Jul 17, 2026</time></small> - drop the doctor preflight from the generate target so it runs in CI without a live daemon; regenerate the docs site for the console config rename and the graph reorg</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/bash.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/bash.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -414,9 +429,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

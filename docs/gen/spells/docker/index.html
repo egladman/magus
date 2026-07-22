@@ -89,12 +89,12 @@
           <li><a href="../../spells/ts/" title="ts spell">ts spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#docker-build" title="docker-build">docker-build</a></li><li><a href="#docker-build-check" title="docker-build-check">docker-build-check</a></li><li><a href="#docker-buildx" title="docker-buildx">docker-buildx</a></li><li><a href="#hadolint" title="hadolint">hadolint</a></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#docker-build" title="docker-build">docker-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#docker-build-check" title="docker-build-check">docker-build-check</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#docker-buildx" title="docker-buildx">docker-buildx</a><ul><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#hadolint" title="hadolint">hadolint</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="docker">docker</h1>
 <p>The <code>docker</code> spell forks the <code>docker</code> CLI (and <code>hadolint</code>) to build images and lint Dockerfiles. <code>docker-build-check</code> runs the builder's <code>--check</code> preflight without producing an image.</p>
@@ -141,12 +141,63 @@
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="docker-build">docker-build</h2>
 <p><strong>Command:</strong> <code>docker build</code></p>
+<h3 id="example">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// docker-build's base command is just `docker build`, so pass the image tag and
+// build context: `magus run image` forks `docker build -t app:latest .`.
+import &quot;magus&quot;;
+import &quot;magus/spell/docker&quot;;
+
+magus.project({ &quot;spells&quot;: [docker] });
+
+export fun image(ctx: magus\Context, args: [str]) &gt; void {
+    docker[&quot;docker-build&quot;]({ &quot;args&quot;: [&quot;-t&quot;, &quot;app:latest&quot;, &quot;.&quot;] });
+}
+</code></pre>
 <h2 id="docker-build-check">docker-build-check</h2>
 <p><strong>Command:</strong> <code>docker build --check</code></p>
+<h3 id="example-1">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// docker-build-check runs the builder `--check` preflight over a context without
+// producing an image; pass the build context (`.`).
+import &quot;magus&quot;;
+import &quot;magus/spell/docker&quot;;
+
+magus.project({ &quot;spells&quot;: [docker] });
+
+export fun image_check(ctx: magus\Context, args: [str]) &gt; void {
+    docker[&quot;docker-build-check&quot;]({ &quot;args&quot;: [&quot;.&quot;] });
+}
+</code></pre>
 <h2 id="docker-buildx">docker-buildx</h2>
 <p><strong>Command:</strong> <code>docker buildx build</code></p>
+<h3 id="example-2">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// docker-buildx builds with BuildKit; pass the tag and context. Add
+// &quot;--platform&quot;, &quot;linux/amd64,linux/arm64&quot; to the args for a multi-platform build.
+import &quot;magus&quot;;
+import &quot;magus/spell/docker&quot;;
+
+magus.project({ &quot;spells&quot;: [docker] });
+
+export fun image_buildx(ctx: magus\Context, args: [str]) &gt; void {
+    docker[&quot;docker-buildx&quot;]({ &quot;args&quot;: [&quot;-t&quot;, &quot;app:latest&quot;, &quot;.&quot;] });
+}
+</code></pre>
 <h2 id="hadolint">hadolint</h2>
 <p><strong>Command:</strong> <code>hadolint Dockerfile</code></p>
+<h3 id="example-3">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// hadolint lints the Dockerfile for common mistakes.
+import &quot;magus&quot;;
+import &quot;magus/spell/docker&quot;;
+
+magus.project({ &quot;spells&quot;: [docker] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    docker[&quot;hadolint&quot;]();
+}
+</code></pre>
     </article>
     </div>
     </div>
@@ -166,7 +217,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22docker%22">docker</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22container%22">container</a><a class="tag" href="../../search/?q=tag%3A%22image%22">image</a><a class="tag" href="../../search/?q=tag%3A%22hadolint%22">hadolint</a><a class="tag" href="../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-17T02:18:57Z">July 17, 2026, 2:18 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637" data-tooltip="17fda88abe70724a67ab9c5422f3ada0a4007637" title="17fda88abe70724a67ab9c5422f3ada0a4007637">17fda88a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/docker.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/docker.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637"><code>17fda88a</code></a> <small><time datetime="2026-07-17T02:18:57Z">Jul 17, 2026</time></small> - drop the doctor preflight from the generate target so it runs in CI without a live daemon; regenerate the docs site for the console config rename and the graph reorg</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/docker.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/docker.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -423,9 +474,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

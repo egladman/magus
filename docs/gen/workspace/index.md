@@ -64,12 +64,12 @@ import "spells/hello";          // ./spells/hello/spell.buzz
 magus.project({ "spells": [hello] });
 
 // Each exported function becomes a runnable target.
-export fun build(args: [str]) > void { hello.build(); }
-export fun test(args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void { hello.build(); }
+export fun test(ctx: magus\Context, args: [str]) > void {}
 
 // 'ci' is the conventional anchor `magus affected ci` keys off.
-export fun ci(args: [str]) > void {
-    magus.needs(build, test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build, test);
 }
 ```
 

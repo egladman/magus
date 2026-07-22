@@ -84,6 +84,7 @@
           <li><a href="../../../codes/magusfile/MGS1005/" title="MGS1005: redundant footprint glob">MGS1005: redundant footprint glob</a></li>
           <li><a href="../../../codes/magusfile/MGS1006/" title="MGS1006: unknown target">MGS1006: unknown target</a></li>
           <li><a href="../../../codes/magusfile/MGS1007/" title="MGS1007: target dependency cycle">MGS1007: target dependency cycle</a></li>
+          <li><a href="../../../codes/magusfile/MGS1008/" title="MGS1008: target missing its context parameter">MGS1008: target missing its context parameter</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -435,9 +436,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

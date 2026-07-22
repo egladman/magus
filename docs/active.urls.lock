@@ -49,6 +49,7 @@ codes/magusfile/MGS1004/
 codes/magusfile/MGS1005/
 codes/magusfile/MGS1006/
 codes/magusfile/MGS1007/
+codes/magusfile/MGS1008/
 codes/outputref/
 codes/outputref/MGS8001/
 codes/outputref/MGS8002/
@@ -76,6 +77,7 @@ codes/services/
 codes/services/MGS5001/
 codes/services/MGS5002/
 codes/services/MGS5003/
+concurrency/
 config/
 console/
 conventions/
@@ -92,6 +94,7 @@ development/projects/gopherbuzz/
 development/projects/magus/
 development/projects/website/
 development/website/
+diagnostics/
 documentation/
 download/
 download/docker/

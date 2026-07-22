@@ -89,7 +89,7 @@
           <li><a href="../../spells/ts/" title="ts spell">ts spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#markdownlint" title="markdownlint">markdownlint</a></li><li><a href="#prettier" title="prettier">prettier</a><ul><li><a href="#rw" title="rw">rw</a></li></ul></li><li><a href="#typos" title="typos">typos</a><ul><li><a href="#rw-1" title="rw">rw</a></li></ul></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#markdownlint" title="markdownlint">markdownlint</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#prettier" title="prettier">prettier</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#typos" title="typos">typos</a><ul><li><a href="#rw-1" title="rw">rw</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -141,6 +141,18 @@
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="markdownlint">markdownlint</h2>
 <p><strong>Command:</strong> <code>markdownlint **/*.md **/*.mdx</code></p>
+<h3 id="example">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// markdownlint enforces Markdown style across the docs.
+import &quot;magus&quot;;
+import &quot;magus/spell/md&quot;;
+
+magus.project({ &quot;spells&quot;: [md] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    md[&quot;markdownlint&quot;]();
+}
+</code></pre>
 <h2 id="prettier">prettier</h2>
 <p><strong>Command:</strong> <code>prettier --check --no-error-on-unmatched-pattern **/*.md **/*.mdx</code></p>
 <h3 id="rw">rw</h3>
@@ -156,6 +168,18 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-1">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// prettier checks Markdown formatting; the rw charm (magus run format:rw) rewrites in place.
+import &quot;magus&quot;;
+import &quot;magus/spell/md&quot;;
+
+magus.project({ &quot;spells&quot;: [md] });
+
+export fun format(ctx: magus\Context, args: [str]) &gt; void {
+    md[&quot;prettier&quot;]();
+}
+</code></pre>
 <h2 id="typos">typos</h2>
 <p><strong>Command:</strong> <code>typos --format brief</code></p>
 <h3 id="rw-1">rw</h3>
@@ -190,7 +214,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22md%22">md</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22markdown%22">markdown</a><a class="tag" href="../../search/?q=tag%3A%22docs%22">docs</a><a class="tag" href="../../search/?q=tag%3A%22prettier%22">prettier</a><a class="tag" href="../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-17T02:18:57Z">July 17, 2026, 2:18 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637" data-tooltip="17fda88abe70724a67ab9c5422f3ada0a4007637" title="17fda88abe70724a67ab9c5422f3ada0a4007637">17fda88a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/md.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/md.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637"><code>17fda88a</code></a> <small><time datetime="2026-07-17T02:18:57Z">Jul 17, 2026</time></small> - drop the doctor preflight from the generate target so it runs in CI without a live daemon; regenerate the docs site for the console config rename and the graph reorg</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/md.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/md.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -447,9 +471,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

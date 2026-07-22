@@ -89,12 +89,12 @@
           <li><a href="../../spells/ts/" aria-current="page" title="ts spell">ts spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#biome-check" title="biome-check">biome-check</a><ul><li><a href="#gha" title="gha">gha</a></li><li><a href="#rw" title="rw">rw</a></li></ul></li><li><a href="#biome-format" title="biome-format">biome-format</a><ul><li><a href="#rw-1" title="rw">rw</a></li></ul></li><li><a href="#dev-server" title="dev-server">dev-server</a></li><li><a href="#eslint" title="eslint">eslint</a><ul><li><a href="#gha-1" title="gha">gha</a></li><li><a href="#rw-2" title="rw">rw</a></li></ul></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#prettier" title="prettier">prettier</a><ul><li><a href="#rw-3" title="rw">rw</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li><li><a href="#tsc" title="tsc">tsc</a></li><li><a href="#tsc-build" title="tsc-build">tsc-build</a></li><li><a href="#tsc-clean" title="tsc-clean">tsc-clean</a></li><li><a href="#vitest" title="vitest">vitest</a><ul><li><a href="#gha-2" title="gha">gha</a></li></ul></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#biome-check" title="biome-check">biome-check</a><ul><li><a href="#gha" title="gha">gha</a></li><li><a href="#rw" title="rw">rw</a></li><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#biome-format" title="biome-format">biome-format</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#dev-server" title="dev-server">dev-server</a><ul><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#eslint" title="eslint">eslint</a><ul><li><a href="#gha-1" title="gha">gha</a></li><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#preflight" title="preflight">preflight</a><ul><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#prettier" title="prettier">prettier</a><ul><li><a href="#rw-3" title="rw">rw</a></li><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li><li><a href="#tsc" title="tsc">tsc</a><ul><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#tsc-build" title="tsc-build">tsc-build</a><ul><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#tsc-clean" title="tsc-clean">tsc-clean</a><ul><li><a href="#example-8" title="Example">Example</a></li></ul></li><li><a href="#vitest" title="vitest">vitest</a><ul><li><a href="#gha-2" title="gha">gha</a></li><li><a href="#example-9" title="Example">Example</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="ts">ts</h1>
 <p>The <code>ts</code> spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (<code>pnpm exec</code>). It is an opaque spell: <code>preflight</code> composes the individual checks into one target.</p>
@@ -142,6 +142,7 @@
 </table></figure>
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="biome-check">biome-check</h2>
+<p>biome-check is biome's lint/analyze pass (eslint's role, if your project chose Biome over eslint+prettier - the magusfile decides which composes into lint, not this spell). --write and --reporter=github verified against the current Biome CLI docs (biomejs.dev/reference/cli).</p>
 <p><strong>Command:</strong> <code>pnpm exec biome check .</code></p>
 <h3 id="gha">gha</h3>
 <p>Inserts <code>--reporter=github</code>.</p>
@@ -169,7 +170,21 @@
 ]
 </code></pre>
 </details>
+<h3 id="example">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// biome-check lints the project through Biome (pnpm exec biome check), the
+// spell's alternative to eslint - the magusfile picks one, not both.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;biome-check&quot;]();
+}
+</code></pre>
 <h2 id="biome-format">biome-format</h2>
+<p>biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat, <code>biome format</code> has no --check flag to drop: it is read-only by default (reports differences, writes nothing) and --write applies them, so rw ADDS a flag instead of removing one.</p>
 <p><strong>Command:</strong> <code>pnpm exec biome format .</code></p>
 <h3 id="rw-1">rw</h3>
 <p>Inserts <code>--write</code>.</p>
@@ -184,9 +199,39 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-1">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// biome-format checks formatting through Biome (pnpm exec biome format); the
+// rw charm (magus run format:rw) applies --write. The spell's alternative to
+// prettier - the magusfile picks one, not both.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun format(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;biome-format&quot;]();
+}
+</code></pre>
 <h2 id="dev-server">dev-server</h2>
+<p>dev-server runs the project's package.json &quot;dev&quot; script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.</p>
 <p><strong>Command:</strong> <code>pnpm run dev</code></p>
+<h3 id="example-2">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// dev-server runs the project's package.json dev script (pnpm run dev) as a
+// supervised background process when reached via magus.needs, or foreground
+// when run directly.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun serve(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;dev-server&quot;]();
+}
+</code></pre>
 <h2 id="eslint">eslint</h2>
+<p>eslint has no built-in &quot;github&quot; formatter (unlike ruff's --output-format=github); &quot;unix&quot; is the built-in, no-extra-devDependency formatter closest to a CI-friendly, one-line-per-problem shape for annotation/regex parsing.</p>
 <p><strong>Command:</strong> <code>pnpm exec eslint .</code></p>
 <h3 id="gha-1">gha</h3>
 <p>Inserts <code>--format=unix</code>.</p>
@@ -214,8 +259,33 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-3">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// eslint lints the project through the package manager (pnpm exec eslint).
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;eslint&quot;]();
+}
+</code></pre>
 <h2 id="preflight">preflight</h2>
+<p>preflight is a no-op marker op (no command).</p>
 <p><strong>Command:</strong> none; this op composes the spell's other ops (see the intro).</p>
+<h3 id="example-4">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// preflight composes the tsc/eslint/prettier/vitest checks into one opaque target.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun preflight(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;preflight&quot;]();
+}
+</code></pre>
 <h2 id="prettier">prettier</h2>
 <p><strong>Command:</strong> <code>pnpm exec prettier --check .</code></p>
 <h3 id="rw-3">rw</h3>
@@ -231,14 +301,69 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-5">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// prettier checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun format(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;prettier&quot;]();
+}
+</code></pre>
 <h2 id="scip">scip</h2>
+<p>scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. Run through sh so the env var expands.</p>
 <p><strong>Command:</strong> <code>sh -c scip-typescript index --output &quot;$MAGUS_SYMBOL_INDEX&quot;</code></p>
 <h2 id="tsc">tsc</h2>
 <p><strong>Command:</strong> <code>pnpm exec tsc</code></p>
+<h3 id="example-6">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// tsc is static analysis, so it composes into the canonical `lint` target
+// (alongside eslint) rather than a bespoke `typecheck` target. `magus run lint`
+// forks `pnpm exec tsc`.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;tsc&quot;]();
+}
+</code></pre>
 <h2 id="tsc-build">tsc-build</h2>
+<p>tsc-build uses TypeScript's project-references incremental build mode (works even without declared references, via its own .tsbuildinfo cache), emitting per tsconfig outDir - see mgs_listProvidedGlobs.</p>
 <p><strong>Command:</strong> <code>pnpm exec tsc --build</code></p>
+<h3 id="example-7">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// tsc-build compiles the project via TypeScript's project-references
+// incremental build mode (pnpm exec tsc --build).
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun build(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;tsc-build&quot;]();
+}
+</code></pre>
 <h2 id="tsc-clean">tsc-clean</h2>
+<p>tsc-clean mirrors tsc-build's project-references mode: --clean removes the declared outputs and the incremental .tsbuildinfo cache.</p>
 <p><strong>Command:</strong> <code>pnpm exec tsc --build --clean</code></p>
+<h3 id="example-8">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// tsc-clean removes tsc-build's declared outputs and its incremental
+// .tsbuildinfo cache (pnpm exec tsc --build --clean).
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun clean(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;tsc-clean&quot;]();
+}
+</code></pre>
 <h2 id="vitest">vitest</h2>
 <p><strong>Command:</strong> <code>pnpm exec vitest run</code></p>
 <h3 id="gha-2">gha</h3>
@@ -254,6 +379,18 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-9">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// vitest runs the test suite; the gha charm annotates failures in GitHub Actions.
+import &quot;magus&quot;;
+import &quot;magus/spell/ts&quot;;
+
+magus.project({ &quot;spells&quot;: [ts] });
+
+export fun test(ctx: magus\Context, args: [str]) &gt; void {
+    ts[&quot;vitest&quot;]();
+}
+</code></pre>
     </article>
     </div>
     </div>
@@ -272,7 +409,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22ts%22">ts</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22typescript%22">typescript</a><a class="tag" href="../../search/?q=tag%3A%22node%22">node</a><a class="tag" href="../../search/?q=tag%3A%22eslint%22">eslint</a><a class="tag" href="../../search/?q=tag%3A%22vitest%22">vitest</a><a class="tag" href="../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-17T02:18:57Z">July 17, 2026, 2:18 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637" data-tooltip="17fda88abe70724a67ab9c5422f3ada0a4007637" title="17fda88abe70724a67ab9c5422f3ada0a4007637">17fda88a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/cbc9afa3910ab08d960866ca4026d72b2c8410aa"><code>cbc9afa3</code></a> <small><time datetime="2026-07-15T03:26:59Z">Jul 15, 2026</time></small> - fix ts tsc example: compose into lint, not a bespoke typecheck target</li><li><a href="https://github.com/egladman/magus/commit/7cbbfe768d3a079c7eec9d92482b759f838833ca"><code>7cbbfe76</code></a> <small><time datetime="2026-07-15T03:25:37Z">Jul 15, 2026</time></small> - ts spell: add biome-check and biome-format ops</li><li><a href="https://github.com/egladman/magus/commit/16f95239c47da2e492fcfc467174e631675070e2"><code>16f95239</code></a> <small><time datetime="2026-07-15T03:21:06Z">Jul 15, 2026</time></small> - ts spell: add dev-server service op</li><li><a href="https://github.com/egladman/magus/commit/54e78560e18960e9a96c2c8d2b25086a79c6b66c"><code>54e78560</code></a> <small><time datetime="2026-07-15T03:16:44Z">Jul 15, 2026</time></small> - ts spell: add tsc-build and tsc-clean ops</li><li><a href="https://github.com/egladman/magus/commit/a94d95256e090a5e9982a29f39aedc3c3fd7e6ae"><code>a94d9525</code></a> <small><time datetime="2026-07-15T03:07:06Z">Jul 15, 2026</time></small> - ts spell: fix required-glob cache-miss gaps; add eslint rw/gha charms</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/ts.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/ts.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637"><code>17fda88a</code></a> <small><time datetime="2026-07-17T02:18:57Z">Jul 17, 2026</time></small> - drop the doctor preflight from the generate target so it runs in CI without a live daemon; regenerate the docs site for the console config rename and the graph reorg</li><li><a href="https://github.com/egladman/magus/commit/cbc9afa3910ab08d960866ca4026d72b2c8410aa"><code>cbc9afa3</code></a> <small><time datetime="2026-07-15T03:26:59Z">Jul 15, 2026</time></small> - fix ts tsc example: compose into lint, not a bespoke typecheck target</li><li><a href="https://github.com/egladman/magus/commit/7cbbfe768d3a079c7eec9d92482b759f838833ca"><code>7cbbfe76</code></a> <small><time datetime="2026-07-15T03:25:37Z">Jul 15, 2026</time></small> - ts spell: add biome-check and biome-format ops</li><li><a href="https://github.com/egladman/magus/commit/16f95239c47da2e492fcfc467174e631675070e2"><code>16f95239</code></a> <small><time datetime="2026-07-15T03:21:06Z">Jul 15, 2026</time></small> - ts spell: add dev-server service op</li><li><a href="https://github.com/egladman/magus/commit/54e78560e18960e9a96c2c8d2b25086a79c6b66c"><code>54e78560</code></a> <small><time datetime="2026-07-15T03:16:44Z">Jul 15, 2026</time></small> - ts spell: add tsc-build and tsc-clean ops</li><li><a href="https://github.com/egladman/magus/commit/a94d95256e090a5e9982a29f39aedc3c3fd7e6ae"><code>a94d9525</code></a> <small><time datetime="2026-07-15T03:07:06Z">Jul 15, 2026</time></small> - ts spell: fix required-glob cache-miss gaps; add eslint rw/gha charms</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/ts.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/ts.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -529,9 +666,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

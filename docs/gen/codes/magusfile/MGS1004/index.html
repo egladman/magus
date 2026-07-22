@@ -84,6 +84,7 @@
           <li><a href="../../../codes/magusfile/MGS1005/" title="MGS1005: redundant footprint glob">MGS1005: redundant footprint glob</a></li>
           <li><a href="../../../codes/magusfile/MGS1006/" title="MGS1006: unknown target">MGS1006: unknown target</a></li>
           <li><a href="../../../codes/magusfile/MGS1007/" title="MGS1007: target dependency cycle">MGS1007: target dependency cycle</a></li>
+          <li><a href="../../../codes/magusfile/MGS1008/" title="MGS1008: target missing its context parameter">MGS1008: target missing its context parameter</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -94,7 +95,7 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1004-unreached-footprint-declaration">MGS1004: unreached footprint declaration</h1>
-<p><code>magus doctor</code> found a <code>magus.inputs(...)</code> or <code>magus.outputs(...)</code> call that the
+<p><code>magus doctor</code> found a <code>ctx.inputs(...)</code> or <code>ctx.outputs(...)</code> call that the
 static extractor cannot reach from any target body. magus reads these
 declarations from the source without running it (a cache hit skips the body
 entirely), following a target's body and the helpers it calls by name. A call it
@@ -120,7 +121,7 @@ read cannot follow.</li>
 <p>The danger is silent under-declaration: the input you thought you declared is not
 in the key, so editing it produces no miss and you replay a stale build. This
 check makes that loud. It is the counterpart to the hard load error you get for a
-non-literal argument in a <em>reached</em> call (<code>magus.inputs(someVar)</code>) - that one
+non-literal argument in a <em>reached</em> call (<code>ctx.inputs(someVar)</code>) - that one
 magus can see and rejects immediately; an <em>unreached</em> call it can only warn about.</p>
 <p>This is a <strong>warning</strong>, not a load error: an unreached call may simply be dead
 code, which is harmless.</p>
@@ -128,12 +129,12 @@ code, which is harmless.</p>
 <p>Call <code>magus.inputs</code>/<code>magus.outputs</code> directly in the target body, or from a helper
 the target invokes by name:</p>
 <pre><code class="language-buzz">// Before: the glob lives in a helper nothing calls, so it never keys anything.
-fun srcGlobs() &gt; void { magus.inputs(&quot;src/**&quot;); }
-export fun build(args: [str]) &gt; void { go[&quot;go-build&quot;](); }
+fun srcGlobs() &gt; void { ctx.inputs(&quot;src/**&quot;); }
+export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](); }
 
 // After: declared in the body (or a bare-called helper), so it enters the key.
-export fun build(args: [str]) &gt; void {
-    magus.inputs(&quot;src/**&quot;);
+export fun build(ctx: magus\Context, args: [str]) &gt; void {
+    ctx.inputs(&quot;src/**&quot;);
     go[&quot;go-build&quot;]();
 }
 </code></pre>
@@ -142,7 +143,7 @@ export fun build(args: [str]) &gt; void {
 <ul>
 <li><strong>Not a hard error.</strong> Nothing blocks the build; it is a <code>magus doctor</code> finding.</li>
 <li><strong>Not the non-literal-argument error.</strong> A computed argument in a <em>reachable</em>
-call (<code>magus.inputs(x)</code>) is a magusfile load error, because magus sees the call
+call (<code>ctx.inputs(x)</code>) is a magusfile load error, because magus sees the call
 but cannot resolve the glob. MGS1004 is the opposite: magus resolves nothing
 because it never reaches the call.</li>
 </ul>
@@ -172,7 +173,7 @@ magus.inputs shares with <code>magus.needs</code>.</li>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22MGS1004%22">MGS1004</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../search/?q=tag%3A%22inputs%22">inputs</a><a class="tag" href="../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
-    <small>Last updated <time datetime="2026-07-19T01:09:00Z">July 19, 2026, 1:09 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da" data-tooltip="c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da" title="c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da">c83ea185</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9"><code>dbe1d1fe</code></a> <small><time datetime="2026-07-15T23:58:51Z">Jul 15, 2026</time></small> - replace em-dashes with hyphens and the ellipsis character with ... across the hand-written documentation prose (charms, telemetry, remote-cache, and the diagnostic-code pages); plain-ASCII punctuation reads cleaner and matches the repo&#39;s user-facing-string convention</li><li><a href="https://github.com/egladman/magus/commit/fe5ff5c08a7f744c30b06d6c654e989c2a391b66"><code>fe5ff5c0</code></a> <small><time datetime="2026-07-15T05:06:26Z">Jul 15, 2026</time></small> - add per-target magus.inputs/outputs cache footprint; add MGS1004/1005 footprint-hygiene checks; make per-target outputs first-class in clean and merge</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/codes/magusfile/MGS1004.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/codes/magusfile/MGS1004.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da"><code>c83ea185</code></a> <small><time datetime="2026-07-19T01:09:00Z">Jul 19, 2026</time></small> - align formatting with the pinned prettier and gofmt</li><li><a href="https://github.com/egladman/magus/commit/dbe1d1fe2f4500d2dbd021b4374f41c7fc1c08e9"><code>dbe1d1fe</code></a> <small><time datetime="2026-07-15T23:58:51Z">Jul 15, 2026</time></small> - replace em-dashes with hyphens and the ellipsis character with ... across the hand-written documentation prose (charms, telemetry, remote-cache, and the diagnostic-code pages); plain-ASCII punctuation reads cleaner and matches the repo&#39;s user-facing-string convention</li><li><a href="https://github.com/egladman/magus/commit/fe5ff5c08a7f744c30b06d6c654e989c2a391b66"><code>fe5ff5c0</code></a> <small><time datetime="2026-07-15T05:06:26Z">Jul 15, 2026</time></small> - add per-target magus.inputs/outputs cache footprint; add MGS1004/1005 footprint-hygiene checks; make per-target outputs first-class in clean and merge</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/codes/magusfile/MGS1004.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/codes/magusfile/MGS1004.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -429,9 +430,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

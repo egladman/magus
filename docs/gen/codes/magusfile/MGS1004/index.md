@@ -6,7 +6,7 @@ tags: [MGS1004, magusfile, cache, inputs, outputs, doctor]
 
 # MGS1004: unreached footprint declaration
 
-`magus doctor` found a `magus.inputs(...)` or `magus.outputs(...)` call that the
+`magus doctor` found a `ctx.inputs(...)` or `ctx.outputs(...)` call that the
 static extractor cannot reach from any target body. magus reads these
 declarations from the source without running it (a cache hit skips the body
 entirely), following a target's body and the helpers it calls by name. A call it
@@ -37,7 +37,7 @@ A declaration outside that reach is invisible to the cache:
 The danger is silent under-declaration: the input you thought you declared is not
 in the key, so editing it produces no miss and you replay a stale build. This
 check makes that loud. It is the counterpart to the hard load error you get for a
-non-literal argument in a _reached_ call (`magus.inputs(someVar)`) - that one
+non-literal argument in a _reached_ call (`ctx.inputs(someVar)`) - that one
 magus can see and rejects immediately; an _unreached_ call it can only warn about.
 
 This is a **warning**, not a load error: an unreached call may simply be dead
@@ -50,12 +50,12 @@ the target invokes by name:
 
 ```buzz
 // Before: the glob lives in a helper nothing calls, so it never keys anything.
-fun srcGlobs() > void { magus.inputs("src/**"); }
-export fun build(args: [str]) > void { go["go-build"](); }
+fun srcGlobs() > void { ctx.inputs("src/**"); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 
 // After: declared in the body (or a bare-called helper), so it enters the key.
-export fun build(args: [str]) > void {
-    magus.inputs("src/**");
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs("src/**");
     go["go-build"]();
 }
 ```
@@ -66,7 +66,7 @@ If the flagged call is genuinely dead code, delete it.
 
 - **Not a hard error.** Nothing blocks the build; it is a `magus doctor` finding.
 - **Not the non-literal-argument error.** A computed argument in a _reachable_
-  call (`magus.inputs(x)`) is a magusfile load error, because magus sees the call
+  call (`ctx.inputs(x)`) is a magusfile load error, because magus sees the call
   but cannot resolve the glob. MGS1004 is the opposite: magus resolves nothing
   because it never reaches the call.
 

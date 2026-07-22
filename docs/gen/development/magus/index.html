@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-libstextsearch" title="Project: libs/textsearch">Project: libs/textsearch</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
+        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-session-handoff-2026-07-21-76a49c" title="Project: session-handoff-2026-07-21-76a49c">Project: session-handoff-2026-07-21-76a49c</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-libstextsearch" title="Project: libs/textsearch">Project: libs/textsearch</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -126,7 +126,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <p>Prefer a picture? Explore this graph in the <a href="https://eli.gladman.cc/magus/console/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>2010 nodes</strong> and <strong>4253 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2019 nodes</strong> and <strong>4283 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -147,7 +147,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>project</td>
 <td style="text-align:right">8</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:project</code></a></td>
-<td><code>docs</code>, <code>magus</code>, <code>libs/gopherbuzz</code></td>
+<td><code>docs</code>, <code>session-handoff-2026-07-21-76a49c</code>, <code>libs/gopherbuzz</code></td>
 </tr>
 <tr>
 <td>target</td>
@@ -183,23 +183,23 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>module</td>
 <td style="text-align:right">22</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:module</code></a></td>
-<td><code>fs</code>, <code>charm</code>, <code>env</code></td>
+<td><code>fs</code>, <code>charm</code>, <code>vcs</code></td>
 </tr>
 <tr>
 <td>method</td>
-<td style="text-align:right">148</td>
+<td style="text-align:right">149</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:method</code></a></td>
 <td><code>archive.compress</code>, <code>archive.uncompress</code>, <code>charm.after</code></td>
 </tr>
 <tr>
 <td>diagnostic</td>
-<td style="text-align:right">37</td>
+<td style="text-align:right">40</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:diagnostic</code></a></td>
 <td><code>MGS2001</code>, <code>MGS4001</code>, <code>MGS5002</code></td>
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">178</td>
+<td style="text-align:right">183</td>
 <td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:doc</code></a></td>
 <td><code>docs/spells.md</code>, <code>docs/documentation.md</code>, <code>docs/manpage/magus.md</code></td>
 </tr>
@@ -295,7 +295,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 </tbody>
 </table></figure>
-<h2 id="project-magus">Project: magus</h2>
+<h2 id="project-session-handoff-2026-07-21-76a49c">Project: session-handoff-2026-07-21-76a49c</h2>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -950,9 +950,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

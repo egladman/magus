@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **1000 nodes** and **1663 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **1001 nodes** and **1663 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -50,7 +50,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 22 | `magus query kind:module` | `fs`, `charm`, `vcs` |
 | method | 149 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 39 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
+| diagnostic | 40 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
 | doc | 15 | `magus query kind:doc` | `README.md`, `docs/ffi.md`, `examples/bubblegum/README.md` |
 | dir | 13 | `magus query kind:dir` | `examples/bubblegum`, `examples/bubblegum/core`, `examples/bubblegum/platform/macos/objc` |
 | file | 59 | `magus query kind:file` | `examples/bubblegum/config.buzz`, `examples/bubblegum/platform/macos/cocoa.buzz`, `examples/bubblegum/core/command.buzz` |

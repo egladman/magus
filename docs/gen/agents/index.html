@@ -81,7 +81,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">6 min read</small>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="agents">Agents</h1>
 <p>magus knows more about a workspace than any agent can rediscover by reading
@@ -186,6 +186,9 @@ CODEOWNERS - and verify impact with <code>graph diff</code>.</li>
 <li><code>magus-memory</code>: durable cross-session project memory over MCP - a status
 snapshot, a dated progress journal, and a decision log that survive model
 and session changes.</li>
+<li><code>magus-docs</code>: navigate magus's own documentation to answer a how-does-magus-do-X
+question instead of guessing - the doc URL and section scheme, the in-page
+navigation axes, and when to reach for it over the workspace graph.</li>
 </ul>
 <h3 id="where-guidance-belongs">Where guidance belongs</h3>
 <p>The skills teach the magus tool surface and nothing else. Keep each kind of
@@ -285,7 +288,7 @@ model; the value is in the graph and the curation.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../search/?q=tag%3A%22agent+install%22">agent install</a><a class="tag" href="../search/?q=tag%3A%22MCP%22">MCP</a><a class="tag" href="../search/?q=tag%3A%22MAGUS.md%22">MAGUS.md</a><a class="tag" href="../search/?q=tag%3A%22AGENTS.md%22">AGENTS.md</a><a class="tag" href="../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../search/?q=tag%3A%22memory%22">memory</a><a class="tag" href="../search/?q=tag%3A%22claude%22">claude</a><a class="tag" href="../search/?q=tag%3A%22codex%22">codex</a><a class="tag" href="../search/?q=tag%3A%22opencode%22">opencode</a><a class="tag" href="../search/?q=tag%3A%22drift%22">drift</a></div>
-    <small>Last updated <time datetime="2026-07-19T01:09:00Z">July 19, 2026, 1:09 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da" data-tooltip="c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da" title="c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da">c83ea185</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b15a1edbffde6541d3d418d94428a91803e83362"><code>b15a1edb</code></a> <small><time datetime="2026-07-18T14:11:36Z">Jul 18, 2026</time></small> - agent skills v8: output-shaping doctrine; fix magus-vcs frontmatter; document the set</li><li><a href="https://github.com/egladman/magus/commit/b0821abe14977d64888d64ede179b35ffa832fed"><code>b0821abe</code></a> <small><time datetime="2026-07-14T17:47:12Z">Jul 14, 2026</time></small> - explain why the mcp daemon beats shelling out; add why a daemon not a wrapper section grounded in a real missed-context case</li><li><a href="https://github.com/egladman/magus/commit/e116cfcbb5c8796f1d07a01e1b6b8329c4c5a30f"><code>e116cfcb</code></a> <small><time datetime="2026-07-14T17:41:01Z">Jul 14, 2026</time></small> - document connecting the magus mcp to claude code; scope user and session restart to pick up tools and freshly installed skills</li><li><a href="https://github.com/egladman/magus/commit/3246c2fe81e5f0afa5e4b271fb93b8ff5030f55b"><code>3246c2fe</code></a> <small><time datetime="2026-07-14T17:28:06Z">Jul 14, 2026</time></small> - Merge remote-tracking branch &#39;origin/main&#39; into feat/native-console-desktop-f023ba</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/agents.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/agents.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T15:46:07Z">July 22, 2026, 3:46 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/6d1ab5a47bb112b8ad9867f393e068938475b8be" data-tooltip="6d1ab5a47bb112b8ad9867f393e068938475b8be" title="6d1ab5a47bb112b8ad9867f393e068938475b8be">6d1ab5a4</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da"><code>c83ea185</code></a> <small><time datetime="2026-07-19T01:09:00Z">Jul 19, 2026</time></small> - align formatting with the pinned prettier and gofmt</li><li><a href="https://github.com/egladman/magus/commit/b15a1edbffde6541d3d418d94428a91803e83362"><code>b15a1edb</code></a> <small><time datetime="2026-07-18T14:11:36Z">Jul 18, 2026</time></small> - agent skills v8: output-shaping doctrine; fix magus-vcs frontmatter; document the set</li><li><a href="https://github.com/egladman/magus/commit/b0821abe14977d64888d64ede179b35ffa832fed"><code>b0821abe</code></a> <small><time datetime="2026-07-14T17:47:12Z">Jul 14, 2026</time></small> - explain why the mcp daemon beats shelling out; add why a daemon not a wrapper section grounded in a real missed-context case</li><li><a href="https://github.com/egladman/magus/commit/e116cfcbb5c8796f1d07a01e1b6b8329c4c5a30f"><code>e116cfcb</code></a> <small><time datetime="2026-07-14T17:41:01Z">Jul 14, 2026</time></small> - document connecting the magus mcp to claude code; scope user and session restart to pick up tools and freshly installed skills</li><li><a href="https://github.com/egladman/magus/commit/3246c2fe81e5f0afa5e4b271fb93b8ff5030f55b"><code>3246c2fe</code></a> <small><time datetime="2026-07-14T17:28:06Z">Jul 14, 2026</time></small> - Merge remote-tracking branch &#39;origin/main&#39; into feat/native-console-desktop-f023ba</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/agents.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/agents.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -542,9 +545,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

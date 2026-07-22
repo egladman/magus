@@ -49,6 +49,7 @@
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1005/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1006/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1007/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/codes/magusfile/MGS1008/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/outputref/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/outputref/MGS8001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/outputref/MGS8002/</loc></url>
@@ -76,6 +77,7 @@
   <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5002/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/codes/services/MGS5003/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/concurrency/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/config/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/conventions/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/daemon/</loc></url>
@@ -85,6 +87,7 @@
   <url><loc>https://eli.gladman.cc/magus/development/contributing/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/docs/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/magus/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/diagnostics/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/documentation/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/download/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/download/docker/</loc></url>

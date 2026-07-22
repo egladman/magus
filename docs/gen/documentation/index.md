@@ -41,12 +41,12 @@ import "spells/hello";          // ./spells/hello/spell.buzz
 magus.project({ "spells": [hello] });
 
 // Each exported function becomes a runnable target.
-export fun build(args: [str]) > void { hello.build(); }
-export fun test(args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void { hello.build(); }
+export fun test(ctx: magus\Context, args: [str]) > void {}
 
 // 'ci' is the conventional anchor `magus affected ci` keys off.
-export fun ci(args: [str]) > void {
-    magus.needs(build, test);
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build, test);
 }
 ```
 
@@ -71,6 +71,7 @@ Start here to understand the model magus is built on.
 - [Services](services.md) - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
 - [Wards](wards.md) - coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).
 - [Knowledge graph](knowledge.md) - the deterministic, cache-backed graph of the magus domain that `magus query`/`explain`/`path` and agents read instead of grepping.
+- [Diagnostics](diagnostics.md) - every error is a pointable coded diagnostic (`MGSxxxx`) with a handwritten resolution page and a queryable graph node, written for a human to act on rather than parse.
 - [Engines](engines.md) - how magus loads and evaluates a magusfile.
 
 ## Going further
@@ -79,6 +80,7 @@ Once the basics click, these cover running magus at scale and in CI.
 
 - [CI](targets/ci.md) - compose a `ci` target with `magus.needs`, and the shared-cache trust model.
 - [Daemon and concurrency](daemon.md) - one persistent process, one shared pool across every client.
+- [Concurrency](concurrency.md) - the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations (with `MAGUS_NO_WAIT`).
 - [Remote caching](remote-cache.md) - share the build cache across machines and CI, with a signing-based trust model.
 - [Editor setup](editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
 - [Debugging](debugging.md) - the interactive REPL, `magus.pry()` breakpoints, and stepping through a target.

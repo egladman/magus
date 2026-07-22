@@ -75,9 +75,9 @@ A ` ```diff ` block shows a change: added lines (leading `+`) render as a green 
 removed lines (leading `-`) as a red one.
 
 ```diff
- export fun ci(args: [str]) > void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+ export fun ci(ctx: magus\Context, args: [str]) > void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 ```
 

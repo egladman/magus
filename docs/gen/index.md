@@ -95,8 +95,40 @@ to install. See the [Download guide](docs/download.md).
 
 ### A first look
 
-Point magus at a repo that has a `magusfile.buzz` at its root,[^playground] and each command
-returns an answer and stops:
+A `magusfile.buzz` at the repo root declares your targets as exported functions -
+each one composes operations from the spells you bind:[^playground]
+
+<!-- magus-run-recorder -->
+```buzz
+import "magus";
+import "magus/spell/go";
+
+magus.project({ "spells": [go] });
+
+// Every exported function is a runnable target. It receives a magus\Context,
+// the handle it uses to declare what it needs. magus caches each target's
+// result and runs it only when a change reaches this project.
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
+export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"](); }
+export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"](); }
+
+// format is read-only by default: go-fmt reports files that need formatting, and
+// go-mod-tidy runs with --diff so it fails if go.mod/go.sum have drifted. The `rw`
+// (read-write) charm flips both to apply: `magus run format:rw` formats the code
+// and tidies the modules in place.
+export fun format(ctx: magus\Context, args: [str]) > void {
+    go["go-fmt"]();
+    go["go-mod-tidy"]();
+}
+
+// 'ci' is the anchor `magus affected ci` keys off: it composes the pipeline
+// by declaring the targets it needs.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build, test, lint, format);
+}
+```
+
+Point magus at that repo and each command returns an answer and stops:
 
 ```sh
 magus ls                                  # which projects exist

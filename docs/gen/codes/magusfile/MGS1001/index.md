@@ -43,8 +43,8 @@ Define a `ci` target in your magusfile and compose the stages with
 `magus.needs`:
 
 ```buzz
-export fun ci(_a: [str]) > void {
-    magus.needs(build, test, lint);
+export fun ci(ctx: magus\Context, _a: [str]) > void {
+    ctx.needs(build, test, lint);
 }
 ```
 

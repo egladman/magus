@@ -138,7 +138,7 @@
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 
-<pre data-runnable="true"><code class="language-buzz">import &quot;std&quot;;
+<pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
 std.print(strings.camelCase(&quot;hello world&quot;));
@@ -168,7 +168,7 @@ std.print(strings.camelCase(&quot;hello world&quot;));
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 
-<pre data-runnable="true"><code class="language-buzz">import &quot;std&quot;;
+<pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
 std.print(strings.snakeCase(&quot;HelloWorld&quot;));
@@ -198,7 +198,7 @@ std.print(strings.snakeCase(&quot;HelloWorld&quot;));
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 
-<pre data-runnable="true"><code class="language-buzz">import &quot;std&quot;;
+<pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
 std.print(strings.kebabCase(&quot;MyComponentName&quot;));
@@ -228,7 +228,7 @@ std.print(strings.kebabCase(&quot;MyComponentName&quot;));
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 
-<pre data-runnable="true"><code class="language-buzz">import &quot;std&quot;;
+<pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
 std.print(strings.pascalCase(&quot;user_profile&quot;));
@@ -258,7 +258,7 @@ std.print(strings.pascalCase(&quot;user_profile&quot;));
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 
-<pre data-runnable="true"><code class="language-buzz">import &quot;std&quot;;
+<pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
 std.print(strings.capitalize(&quot;hELLO&quot;));
@@ -288,7 +288,7 @@ std.print(strings.capitalize(&quot;hELLO&quot;));
 <p><strong>Returns:</strong> []string</p>
 <p><strong>Example:</strong></p>
 
-<pre data-runnable="true"><code class="language-buzz">import &quot;std&quot;;
+<pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
 final parts = strings.words(&quot;parseHTTPResponse2&quot;);
@@ -328,7 +328,7 @@ foreach (w in parts) { std.print(w); }
 <p><strong>Returns:</strong> string</p>
 <p><strong>Example:</strong></p>
 
-<pre data-runnable="true"><code class="language-buzz">import &quot;std&quot;;
+<pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
 std.print(strings.ellipsis(&quot;the quick brown fox&quot;, 12));
@@ -353,7 +353,7 @@ std.print(strings.ellipsis(&quot;the quick brown fox&quot;, 12));
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22strings%22">strings</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-05T02:24:18Z">July 5, 2026, 2:24 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8" data-tooltip="7bbecbc5a122147d3f1db4a29e2b3fd9734781c8" title="7bbecbc5a122147d3f1db4a29e2b3fd9734781c8">7bbecbc5</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/buzz/modules/strings.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/buzz/modules/strings.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -610,9 +610,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

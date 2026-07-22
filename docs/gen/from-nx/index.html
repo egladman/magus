@@ -123,7 +123,7 @@ plainly, and vice versa.</p>
 </tr>
 <tr>
 <td><code>dependsOn: [&quot;^build&quot;]</code></td>
-<td><code>magus.needs(...)</code> (target-level; the <code>^</code>-upstream semantics come from <code>depends_on</code> plus same-target ordering - see <a href="../dependencies/">dependencies</a>)</td>
+<td><code>ctx.needs(...)</code> (target-level; the <code>^</code>-upstream semantics come from <code>depends_on</code> plus same-target ordering - see <a href="../dependencies/">dependencies</a>)</td>
 </tr>
 <tr>
 <td><code>implicitDependencies</code></td>
@@ -252,21 +252,21 @@ import &quot;magus/spell/ts&quot;;
 
 magus.project({ &quot;spells&quot;: [ts] });
 
-export fun build(args: [str]) &gt; void {
-    magus.needs(shared.build);   // folds into depends_on automatically
+export fun build(ctx: magus\Context, args: [str]) &gt; void {
+    ctx.needs(shared.build);   // folds into depends_on automatically
     ts[&quot;tsc-build&quot;]();
 }
 
-export fun test(args: [str]) &gt; void { ts[&quot;vitest&quot;](); }
+export fun test(ctx: magus\Context, args: [str]) &gt; void { ts[&quot;vitest&quot;](); }
 
 // tsc composes into lint alongside eslint - not a bespoke `typecheck` target.
-export fun lint(args: [str]) &gt; void {
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;tsc&quot;]();
     ts[&quot;eslint&quot;]();
 }
 
-export fun ci(args: [str]) &gt; void {
-    magus.needs(build, test, lint);
+export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+    ctx.needs(build, test, lint);
 }
 </code></pre>
 <p><code>ts[&quot;tsc-build&quot;]</code>'s <code>needs</code>/<code>provides</code> globs and <code>ts[&quot;eslint&quot;]</code>'s claimed
@@ -299,7 +299,7 @@ from-scratch walkthrough.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22nx%22">nx</a><a class="tag" href="../search/?q=tag%3A%22migration%22">migration</a><a class="tag" href="../search/?q=tag%3A%22monorepo%22">monorepo</a><a class="tag" href="../search/?q=tag%3A%22terminology%22">terminology</a><a class="tag" href="../search/?q=tag%3A%22comparison%22">comparison</a><a class="tag" href="../search/?q=tag%3A%22porting%22">porting</a></div>
-    <small>Last updated <time datetime="2026-07-19T01:09:00Z">July 19, 2026, 1:09 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da" data-tooltip="c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da" title="c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da">c83ea185</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433"><code>2f02f9d7</code></a> <small><time datetime="2026-07-16T04:52:34Z">Jul 16, 2026</time></small> - magus.needs takes target functions only: same-project exports by reference (forward refs work, bodies run post-load) and cross-project import members as real callables (alias.target() dispatches directly); add magus.needsGlob as the separate pattern verb; remove the magus.target namespace (literal/glob/regex/expand_globs), the Buzz TargetQuery mirror, and types.TargetQuery; resolve identifier and needsGlob edges in the static extractor and dry tracer so the graph is unchanged and dependency typos fail at load; export gopherbuzz vm.Value.Equal (Buzz == semantics) for host-side function identity; migrate all magusfiles (proto gains a conventional generate target wrapping buf-generate), docs, tour, starter, examples, and tests</li><li><a href="https://github.com/egladman/magus/commit/be1a024d7be7d1abfdb8c892f4745e639b72e8b5"><code>be1a024d</code></a> <small><time datetime="2026-07-15T03:44:47Z">Jul 15, 2026</time></small> - add docs/from-nx.md: an Nx adoption page</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/from-nx.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/from-nx.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/c83ea185dbdbeb633d7085a4cd4902c1aeb0b3da"><code>c83ea185</code></a> <small><time datetime="2026-07-19T01:09:00Z">Jul 19, 2026</time></small> - align formatting with the pinned prettier and gofmt</li><li><a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433"><code>2f02f9d7</code></a> <small><time datetime="2026-07-16T04:52:34Z">Jul 16, 2026</time></small> - magus.needs takes target functions only: same-project exports by reference (forward refs work, bodies run post-load) and cross-project import members as real callables (alias.target() dispatches directly); add magus.needsGlob as the separate pattern verb; remove the magus.target namespace (literal/glob/regex/expand_globs), the Buzz TargetQuery mirror, and types.TargetQuery; resolve identifier and needsGlob edges in the static extractor and dry tracer so the graph is unchanged and dependency typos fail at load; export gopherbuzz vm.Value.Equal (Buzz == semantics) for host-side function identity; migrate all magusfiles (proto gains a conventional generate target wrapping buf-generate), docs, tour, starter, examples, and tests</li><li><a href="https://github.com/egladman/magus/commit/be1a024d7be7d1abfdb8c892f4745e639b72e8b5"><code>be1a024d</code></a> <small><time datetime="2026-07-15T03:44:47Z">Jul 15, 2026</time></small> - add docs/from-nx.md: an Nx adoption page</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/from-nx.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/from-nx.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -556,9 +556,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

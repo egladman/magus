@@ -80,7 +80,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">14 min read</small>
+    <small class="reading-time" title="Estimated reading time">15 min read</small>
     <article>
 <h1 id="magus">magus</h1>
 <p align="center">
@@ -154,8 +154,37 @@ the same way.</p>
 <p>magus ships as a single self-contained binary, so there is no second toolchain
 to install. See the <a href="download/">Download guide</a>.</p>
 <h3 id="a-first-look">A first look</h3>
-<p>Point magus at a repo that has a <code>magusfile.buzz</code> at its root,<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> and each command
-returns an answer and stops:</p>
+<p>A <code>magusfile.buzz</code> at the repo root declares your targets as exported functions -
+each one composes operations from the spells you bind:<sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup></p>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+// Every exported function is a runnable target. It receives a magus\Context,
+// the handle it uses to declare what it needs. magus caches each target's
+// result and runs it only when a change reaches this project.
+export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](); }
+export fun test(ctx: magus\Context, args: [str])  &gt; void { go[&quot;go-test&quot;](); }
+export fun lint(ctx: magus\Context, args: [str])  &gt; void { go[&quot;golangci-lint&quot;](); }
+
+// format is read-only by default: go-fmt reports files that need formatting, and
+// go-mod-tidy runs with --diff so it fails if go.mod/go.sum have drifted. The `rw`
+// (read-write) charm flips both to apply: `magus run format:rw` formats the code
+// and tidies the modules in place.
+export fun format(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-fmt&quot;]();
+    go[&quot;go-mod-tidy&quot;]();
+}
+
+// 'ci' is the anchor `magus affected ci` keys off: it composes the pipeline
+// by declaring the targets it needs.
+export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+    ctx.needs(build, test, lint, format);
+}
+</code></pre>
+<p>Point magus at that repo and each command returns an answer and stops:</p>
 <pre><code class="language-sh">magus ls                                  # which projects exist
 magus run test                            # run a target, cache the result
 magus affected ci                         # the pipeline, over only what your diff reaches
@@ -410,7 +439,7 @@ go build -o magus ./cmd/magus
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="search/?q=tag%3A%22readme%22">readme</a></div>
-    <small>Last updated <time datetime="2026-07-18T14:43:06Z">July 18, 2026, 2:43 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/6e73e742bf32c82190f50c30ac9617d14fe061ad" data-tooltip="6e73e742bf32c82190f50c30ac9617d14fe061ad" title="6e73e742bf32c82190f50c30ac9617d14fe061ad">6e73e742</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/de0bf8d1ba7f7ae018b3859d7f422c1993ddd877"><code>de0bf8d1</code></a> <small><time datetime="2026-07-17T19:53:41Z">Jul 17, 2026</time></small> - document the console job control surface; drop the read only framing</li><li><a href="https://github.com/egladman/magus/commit/f0a6a4e9a3d6afccd0b94c930163915ad9ea0c27"><code>f0a6a4e9</code></a> <small><time datetime="2026-07-17T17:38:15Z">Jul 17, 2026</time></small> - fix a false claim: the local cache is unsigned; signing is for shared artifacts only</li><li><a href="https://github.com/egladman/magus/commit/d324e48748e0e4e57abf024a1974f62e269be4e3"><code>d324e487</code></a> <small><time datetime="2026-07-17T13:42:49Z">Jul 17, 2026</time></small> - stop pitching the remote cache as a way to share results onto laptops; lead with signing instead</li><li><a href="https://github.com/egladman/magus/commit/568010faf445bbc3f51f823d580aa817d452d9fe"><code>568010fa</code></a> <small><time datetime="2026-07-17T13:23:05Z">Jul 17, 2026</time></small> - cross-link the readme with footnotes; scip, playground, mcp, and one per console app</li><li><a href="https://github.com/egladman/magus/commit/18105f814ac764d09f7e49f936b4487f59631f34"><code>18105f81</code></a> <small><time datetime="2026-07-17T13:20:55Z">Jul 17, 2026</time></small> - drop the clone from the build-from-source snippet; start at mise install</li><li><a href="https://github.com/egladman/magus/commit/b2edf4889310237ad000c6e0bfa85cc3a7f640d1"><code>b2edf488</code></a> <small><time datetime="2026-07-17T13:20:34Z">Jul 17, 2026</time></small> - drop the stale -tags mcp build tag from the readme; console.enabled is the only off switch</li><li><a href="https://github.com/egladman/magus/commit/2e8014218df8d2e6f4fb82d641bbdf7e9bb5e5a1"><code>2e801421</code></a> <small><time datetime="2026-07-17T03:46:10Z">Jul 17, 2026</time></small> - punch up the readme intro and why-magus; fold the two pwa app lists into one; drop the em-dashes and heavy bold</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T16:13:20Z">July 22, 2026, 4:13 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/8530564bc26a7810f055617863e8a1e7322436b5" data-tooltip="8530564bc26a7810f055617863e8a1e7322436b5" title="8530564bc26a7810f055617863e8a1e7322436b5">8530564b</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/9b216885f90752bee364d621c6bd402345a0718d"><code>9b216885</code></a> <small><time datetime="2026-07-22T11:43:14Z">Jul 22, 2026</time></small> - tighten the migration comments and README example prose; humanizer pass</li><li><a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e"><code>a9aa3a2e</code></a> <small><time datetime="2026-07-22T06:04:47Z">Jul 22, 2026</time></small> - make magus.Context the sole target contract enforced with MGS1008; remove discovery-run and build the target graph statically; rename vcs.classifyDrift to diagnoseDrift; unify the docs markers under a magus prefix and reword the recorder dry-run output; add a runnable magusfile to the README</li><li><a href="https://github.com/egladman/magus/commit/6e73e742bf32c82190f50c30ac9617d14fe061ad"><code>6e73e742</code></a> <small><time datetime="2026-07-18T14:43:06Z">Jul 18, 2026</time></small> - share to phone: a time-boxed read-only LAN listener with a single-use token and QR</li><li><a href="https://github.com/egladman/magus/commit/de0bf8d1ba7f7ae018b3859d7f422c1993ddd877"><code>de0bf8d1</code></a> <small><time datetime="2026-07-17T19:53:41Z">Jul 17, 2026</time></small> - document the console job control surface; drop the read only framing</li><li><a href="https://github.com/egladman/magus/commit/f0a6a4e9a3d6afccd0b94c930163915ad9ea0c27"><code>f0a6a4e9</code></a> <small><time datetime="2026-07-17T17:38:15Z">Jul 17, 2026</time></small> - fix a false claim: the local cache is unsigned; signing is for shared artifacts only</li><li><a href="https://github.com/egladman/magus/commit/d324e48748e0e4e57abf024a1974f62e269be4e3"><code>d324e487</code></a> <small><time datetime="2026-07-17T13:42:49Z">Jul 17, 2026</time></small> - stop pitching the remote cache as a way to share results onto laptops; lead with signing instead</li><li><a href="https://github.com/egladman/magus/commit/568010faf445bbc3f51f823d580aa817d452d9fe"><code>568010fa</code></a> <small><time datetime="2026-07-17T13:23:05Z">Jul 17, 2026</time></small> - cross-link the readme with footnotes; scip, playground, mcp, and one per console app</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/README.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/README.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -667,9 +696,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>

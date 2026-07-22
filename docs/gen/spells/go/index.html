@@ -89,12 +89,12 @@
           <li><a href="../../spells/ts/" title="ts spell">ts spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#go-build" title="go-build">go-build</a></li><li><a href="#go-clean" title="go-clean">go-clean</a></li><li><a href="#go-fmt" title="go-fmt">go-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li></ul></li><li><a href="#go-generate" title="go-generate">go-generate</a></li><li><a href="#go-mod-tidy" title="go-mod-tidy">go-mod-tidy</a><ul><li><a href="#rw-1" title="rw">rw</a></li></ul></li><li><a href="#go-test" title="go-test">go-test</a><ul><li><a href="#cd" title="cd">cd</a></li><li><a href="#debug" title="debug">debug</a></li></ul></li><li><a href="#go-vet" title="go-vet">go-vet</a></li><li><a href="#golangci-lint" title="golangci-lint">golangci-lint</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#rw-2" title="rw">rw</a></li></ul></li><li><a href="#govulncheck" title="govulncheck">govulncheck</a></li><li><a href="#scip" title="scip">scip</a></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#go-build" title="go-build">go-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#go-clean" title="go-clean">go-clean</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#go-fmt" title="go-fmt">go-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#go-generate" title="go-generate">go-generate</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#go-mod-tidy" title="go-mod-tidy">go-mod-tidy</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#go-test" title="go-test">go-test</a><ul><li><a href="#cd" title="cd">cd</a></li><li><a href="#debug" title="debug">debug</a></li><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#go-vet" title="go-vet">go-vet</a><ul><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#golangci-lint" title="golangci-lint">golangci-lint</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#govulncheck" title="govulncheck">govulncheck</a><ul><li><a href="#example-8" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="go">go</h1>
 <p>The <code>go</code> spell wires the Go toolchain into a magusfile: each op forks a <code>go</code> (or <code>gofmt</code>) subcommand directly, with no shell. Lint and vulnerability scanning run as <code>go tool</code> invocations so they resolve from the module's tool block rather than PATH.</p>
@@ -141,8 +141,32 @@
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="go-build">go-build</h2>
 <p><strong>Command:</strong> <code>go build</code></p>
+<h3 id="example">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// Wire go-build into a `build` target. `magus run build` forks `go build`.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun build(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-build&quot;]();
+}
+</code></pre>
 <h2 id="go-clean">go-clean</h2>
 <p><strong>Command:</strong> <code>go clean ./...</code></p>
+<h3 id="example-1">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// Wire go-clean into a `clean` target: `magus run clean` forks `go clean ./...`.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun clean(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-clean&quot;]();
+}
+</code></pre>
 <h2 id="go-fmt">go-fmt</h2>
 <p><strong>Command:</strong> <code>gofmt -l .</code></p>
 <h3 id="rw">rw</h3>
@@ -158,9 +182,36 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-2">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// go-fmt lists misformatted files; the rw charm rewrites them in place.
+// `magus run format` checks, `magus run format:rw` applies gofmt.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun format(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-fmt&quot;]();
+}
+</code></pre>
 <h2 id="go-generate">go-generate</h2>
 <p><strong>Command:</strong> <code>go generate ./...</code></p>
+<h3 id="example-3">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// Wire go-generate into a `generate` target: `magus run generate` forks
+// `go generate ./...`.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun generate(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-generate&quot;]();
+}
+</code></pre>
 <h2 id="go-mod-tidy">go-mod-tidy</h2>
+<p>tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes - safe for CI gating); the write charm applies the changes.</p>
 <p><strong>Command:</strong> <code>go mod tidy --diff</code></p>
 <h3 id="rw-1">rw</h3>
 <p>Drops <code>--diff</code>.</p>
@@ -174,7 +225,21 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-4">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// go-mod-tidy checks go.mod/go.sum with --diff (CI-safe); the rw charm drops
+// --diff so `magus run tidy:rw` applies the changes.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun tidy(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-mod-tidy&quot;]();
+}
+</code></pre>
 <h2 id="go-test">go-test</h2>
+<p>The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). <code>magus run go::go-test:cd</code> (or ci:cd) emits the profile.</p>
 <p><strong>Command:</strong> <code>go test ./...</code></p>
 <h3 id="cd">cd</h3>
 <p>Appends <code>-covermode=atomic</code>, appends <code>-coverprofile=coverage.out</code>.</p>
@@ -207,8 +272,36 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-5">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// go-test runs the suite; here with the race detector, so `magus run test` forks
+// `go test ./... -race`. The cd charm (`magus run test:cd`) adds the atomic
+// coverage profile a CD pipeline ships.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun test(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-test&quot;]({ &quot;args&quot;: [&quot;-race&quot;] });
+}
+</code></pre>
 <h2 id="go-vet">go-vet</h2>
 <p><strong>Command:</strong> <code>go vet ./...</code></p>
+<h3 id="example-6">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// go-vet is static analysis, so it composes into the canonical `lint` target
+// (alongside golangci-lint) rather than a bespoke `vet` target. `magus run lint`
+// forks `go vet ./...`.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;go-vet&quot;]();
+}
+</code></pre>
 <h2 id="golangci-lint">golangci-lint</h2>
 <p><strong>Command:</strong> <code>go tool golangci-lint run ./...</code></p>
 <h3 id="debug-1">debug</h3>
@@ -237,9 +330,39 @@
 ]
 </code></pre>
 </details>
+<h3 id="example-7">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// golangci-lint runs as a `go tool` (resolved from go.mod's tool block). The rw
+// charm inserts --fix, so `magus run lint:rw` applies the autofixable findings.
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;golangci-lint&quot;]();
+}
+</code></pre>
 <h2 id="govulncheck">govulncheck</h2>
+<p>Scans for known vulnerabilities in the module's call graph. Command as a <code>go tool</code> (like golangci-lint) so it resolves from go.mod's tool block, not PATH.</p>
 <p><strong>Command:</strong> <code>go tool govulncheck ./...</code></p>
+<h3 id="example-8">Example</h3>
+
+<pre data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">// govulncheck scans the module's call graph for known vulnerabilities, run as a
+// `go tool` so it resolves from go.mod's tool block. Security scanning is static
+// analysis, so it composes into the canonical `lint` target - not a bespoke
+// `audit`/`security` target. (A slow scan can instead be gated in `ci`.)
+import &quot;magus&quot;;
+import &quot;magus/spell/go&quot;;
+
+magus.project({ &quot;spells&quot;: [go] });
+
+export fun lint(ctx: magus\Context, args: [str]) &gt; void {
+    go[&quot;govulncheck&quot;]();
+}
+</code></pre>
 <h2 id="scip">scip</h2>
+<p>scip is the reserved op that runs the language's SCIP indexer for the knowledge graph. Named for the format, not the binary, so the same verb produces symbols across every language spell (<code>magus run &lt;project&gt;::scip</code>). magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. Run through sh so the env var expands.</p>
 <p><strong>Command:</strong> <code>sh -c scip-go --output &quot;$MAGUS_SYMBOL_INDEX&quot;</code></p>
     </article>
     </div>
@@ -260,7 +383,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22go%22">go</a><a class="tag" href="../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../search/?q=tag%3A%22golang%22">golang</a><a class="tag" href="../../search/?q=tag%3A%22build%22">build</a><a class="tag" href="../../search/?q=tag%3A%22test%22">test</a><a class="tag" href="../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-17T02:18:57Z">July 17, 2026, 2:18 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637" data-tooltip="17fda88abe70724a67ab9c5422f3ada0a4007637" title="17fda88abe70724a67ab9c5422f3ada0a4007637">17fda88a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/f848542ed2a95505c2a9fc46a5e5ad297f21e5c5"><code>f848542e</code></a> <small><time datetime="2026-07-16T00:05:54Z">Jul 16, 2026</time></small> - replace em-dashes with hyphens in the user-facing doc-strings the doc generators render (std module Doc fields, the go/buzz spell op docs, internal/manpage Long descriptions, and the magus-docs/manpage intro strings) and regenerate docs/{buzz/modules,spells,manpage}; the rendered reference pages are now plain ASCII, matching the convention for user-facing strings</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/go.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/go.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T06:04:47Z">July 22, 2026, 6:04 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a9aa3a2e74d1defc65c217b4e672ad0735252e9e" data-tooltip="a9aa3a2e74d1defc65c217b4e672ad0735252e9e" title="a9aa3a2e74d1defc65c217b4e672ad0735252e9e">a9aa3a2e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/17fda88abe70724a67ab9c5422f3ada0a4007637"><code>17fda88a</code></a> <small><time datetime="2026-07-17T02:18:57Z">Jul 17, 2026</time></small> - drop the doctor preflight from the generate target so it runs in CI without a live daemon; regenerate the docs site for the console config rename and the graph reorg</li><li><a href="https://github.com/egladman/magus/commit/f848542ed2a95505c2a9fc46a5e5ad297f21e5c5"><code>f848542e</code></a> <small><time datetime="2026-07-16T00:05:54Z">Jul 16, 2026</time></small> - replace em-dashes with hyphens in the user-facing doc-strings the doc generators render (std module Doc fields, the go/buzz spell op docs, internal/manpage Long descriptions, and the magus-docs/manpage intro strings) and regenerate docs/{buzz/modules,spells,manpage}; the rendered reference pages are now plain ASCII, matching the convention for user-facing strings</li><li><a href="https://github.com/egladman/magus/commit/5e827efbc37c66ec5dc18cd27076fc5208b052de"><code>5e827efb</code></a> <small><time datetime="2026-07-14T13:35:53Z">Jul 14, 2026</time></small> - scip symbol ingestion; auto per language spell; cached index; symbol/file nodes; language attr; mgs_getLanguage</li><li><a href="https://github.com/egladman/magus/commit/66e4aa40fa8388abc0f2f7024ef843424e893733"><code>66e4aa40</code></a> <small><time datetime="2026-07-05T02:24:52Z">Jul 5, 2026</time></small> - overhaul and regenerate the documentation site</li><li><a href="https://github.com/egladman/magus/commit/3aebfbb216c4726a88921d2db2180609da7b3ca2"><code>3aebfbb2</code></a> <small><time datetime="2026-07-03T13:14:39Z">Jul 3, 2026</time></small> - generate per-spell reference docs with runnable dry-run examples</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/spells/go.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/spells/go.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -517,9 +640,9 @@ know which file a snippet belongs in (for example a <code>magusfile.buzz</code>)
 <h2 id="diffs">Diffs</h2>
 <p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
 removed lines (leading <code>-</code>) as a red one.</p>
-<pre><code class="language-diff"> export fun ci(args: [str]) &gt; void {
--    magus.needs(lint);
-+    magus.needs(lint, test);
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
  }
 </code></pre>
 <h2 id="auto-generated-pages">Auto-generated pages</h2>
