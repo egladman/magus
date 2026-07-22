@@ -71,7 +71,7 @@
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/main/docs/buzz/modules/vcs.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/buzz/modules/vcs.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
@@ -101,12 +101,12 @@
           <li><a href="../../../buzz/modules/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#fields" title="Fields">Fields</a></li><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#root" title="root">root</a></li><li><a href="#diff" title="diff">diff</a></li><li><a href="#short-hash" title="short_hash">short_hash</a></li><li><a href="#hash" title="hash">hash</a></li><li><a href="#branch" title="branch">branch</a></li><li><a href="#commit-date" title="commit_date">commit_date</a></li><li><a href="#is-dirty" title="is_dirty">is_dirty</a></li><li><a href="#metadata" title="metadata">metadata</a></li><li><a href="#commit" title="commit">commit</a></li><li><a href="#history" title="history">history</a></li><li><a href="#exe" title="exe">exe</a></li><li><a href="#describe" title="describe">describe</a></li></ul></li></ul>
+        <ul><li><a href="#fields" title="Fields">Fields</a></li><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#root" title="root">root</a></li><li><a href="#diff" title="diff">diff</a></li><li><a href="#short-hash" title="short_hash">short_hash</a></li><li><a href="#hash" title="hash">hash</a></li><li><a href="#branch" title="branch">branch</a></li><li><a href="#commit-date" title="commit_date">commit_date</a></li><li><a href="#is-dirty" title="is_dirty">is_dirty</a></li><li><a href="#classify-drift" title="classify_drift">classify_drift</a></li><li><a href="#metadata" title="metadata">metadata</a></li><li><a href="#commit" title="commit">commit</a></li><li><a href="#history" title="history">history</a></li><li><a href="#exe" title="exe">exe</a></li><li><a href="#describe" title="describe">describe</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="vcs">vcs</h1>
 <p>Version-control queries for the current working tree.</p>
@@ -138,11 +138,11 @@
 <h2 id="methods">Methods</h2>
 <h3 id="root">root</h3>
 <p>Absolute path of the repository root.</p>
-<p><strong>Signature:</strong> <code>vcs.root() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L167" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.root() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L177" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="diff">diff</h3>
 <p>List files changed against the given base (defaults to vcs.base).</p>
-<p><strong>Signature:</strong> <code>vcs.diff([base]) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L180" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.diff([base]) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L190" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -164,23 +164,23 @@
 <p><strong>Returns:</strong> []string</p>
 <h3 id="short-hash">short_hash</h3>
 <p>Short commit hash, or empty on error.</p>
-<p><strong>Signature:</strong> <code>vcs.shortHash() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L196" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.shortHash() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L206" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="hash">hash</h3>
 <p>Full commit hash, or empty on error.</p>
-<p><strong>Signature:</strong> <code>vcs.hash() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L209" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.hash() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L219" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="branch">branch</h3>
 <p>Current branch, or empty on error.</p>
-<p><strong>Signature:</strong> <code>vcs.branch() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L222" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.branch() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L232" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="commit-date">commit_date</h3>
 <p>Commit date string, or empty on error.</p>
-<p><strong>Signature:</strong> <code>vcs.commitDate() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L235" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.commitDate() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L245" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="is-dirty">is_dirty</h3>
 <p>True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([&quot;MAGUS.md&quot;]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.</p>
-<p><strong>Signature:</strong> <code>vcs.isDirty([paths]) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L248" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.isDirty([paths]) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L325" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -200,13 +200,41 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> bool</p>
+<h3 id="classify-drift">classify_drift</h3>
+<p>Classify a generate gate's drift and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.</p>
+<p><strong>Signature:</strong> <code>vcs.classifyDrift(outputs, [inputs]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L281" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Optional</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>outputs</code></td>
+<td><code>[]string</code></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>inputs</code></td>
+<td><code>[]string</code></td>
+<td>yes</td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
+<p><strong>Returns:</strong> map[string]any</p>
 <h3 id="metadata">metadata</h3>
 <p>Full metadata table: short_hash, hash, branch, commit_date, is_dirty.</p>
-<p><strong>Signature:</strong> <code>vcs.metadata() → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L268" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.metadata() → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L345" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="commit">commit</h3>
 <p>Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == &quot;&quot;) rather than for null.</p>
-<p><strong>Signature:</strong> <code>vcs.commit([rev]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L296" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.commit([rev]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L373" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -228,7 +256,7 @@
 <p><strong>Returns:</strong> any</p>
 <h3 id="history">history</h3>
 <p>Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.</p>
-<p><strong>Signature:</strong> <code>vcs.history([limit]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L310" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.history([limit]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L387" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -250,11 +278,11 @@
 <p><strong>Returns:</strong> any</p>
 <h3 id="exe">exe</h3>
 <p>Absolute path to the active VCS executable (git/hg/jj), or &quot;&quot; if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).</p>
-<p><strong>Signature:</strong> <code>vcs.exe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L340" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.exe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L417" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="describe">describe</h3>
 <p>Human-readable version string from the nearest tag (git's <code>describe --tags --always --dirty</code>: tag, else short hash, with a -dirty suffix for a modified tree). &quot;&quot; when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.</p>
-<p><strong>Signature:</strong> <code>vcs.describe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L326" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>vcs.describe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L403" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
     </article>
     </div>
@@ -275,7 +303,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-16T00:05:54Z">July 16, 2026, 12:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/f848542ed2a95505c2a9fc46a5e5ad297f21e5c5" data-tooltip="f848542ed2a95505c2a9fc46a5e5ad297f21e5c5" title="f848542ed2a95505c2a9fc46a5e5ad297f21e5c5">f848542e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/main/docs/buzz/modules/vcs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/main/docs/buzz/modules/vcs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-22T03:30:15Z">July 22, 2026, 3:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/cec46165283315ae296db14e0145b658b79880b0" data-tooltip="cec46165283315ae296db14e0145b658b79880b0" title="cec46165283315ae296db14e0145b658b79880b0">cec46165</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/f848542ed2a95505c2a9fc46a5e5ad297f21e5c5"><code>f848542e</code></a> <small><time datetime="2026-07-16T00:05:54Z">Jul 16, 2026</time></small> - replace em-dashes with hyphens in the user-facing doc-strings the doc generators render (std module Doc fields, the go/buzz spell op docs, internal/manpage Long descriptions, and the magus-docs/manpage intro strings) and regenerate docs/{buzz/modules,spells,manpage}; the rendered reference pages are now plain ASCII, matching the convention for user-facing strings</li><li><a href="https://github.com/egladman/magus/commit/7bbecbc5a122147d3f1db4a29e2b3fd9734781c8"><code>7bbecbc5</code></a> <small><time datetime="2026-07-05T02:24:18Z">Jul 5, 2026</time></small> - add config-docs generator; add config, conventions, wards, buzz and download reference docs</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/buzz/modules/vcs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/buzz/modules/vcs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -569,7 +597,7 @@ line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role
   <footer class="site-footer container">
     <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
     <small class="footer-group"><a href="../../../console/">Console</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>
-    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/main/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
   </footer>
   <script type="module" src="../../../main.js"></script>
 </body>

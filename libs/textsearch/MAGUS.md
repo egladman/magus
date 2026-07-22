@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **305 nodes** and **298 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **308 nodes** and **299 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -48,9 +48,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | op | 52 | `magus query kind:op` | `shellcheck`, `buf-breaking`, `buf-build` |
 | tool | 13 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
 | charm | 1 | `magus query kind:charm` | `rw` |
-| module | 22 | `magus query kind:module` | `fs`, `charm`, `env` |
-| method | 148 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 37 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
+| module | 22 | `magus query kind:module` | `fs`, `charm`, `vcs` |
+| method | 149 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| diagnostic | 39 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
 | file | 1 | `magus query kind:file` | `magusfile.buzz` |
 | function | 7 | `magus query kind:function` | `install`, `lint`, `test` |
 | import | 6 | `magus query kind:import` | `fs`, `magus`, `magus/spell/magusfile` |
