@@ -54,3 +54,13 @@ func TestFanOutSingleObserverPassThrough(t *testing.T) {
 	o.OnBuild(BuildStats{})
 	assert.Equal(t, 1, a.builds)
 }
+
+// NoopObserver's callbacks are empty; invoking each must be a safe no-op.
+func TestNoopObserver(t *testing.T) {
+	assert.NotPanics(t, func() {
+		var o NoopObserver
+		o.OnBuild(BuildStats{})
+		o.OnQuery(QueryEvent{})
+		o.OnError(errors.New("x"))
+	})
+}
