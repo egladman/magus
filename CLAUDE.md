@@ -110,6 +110,10 @@ deliberately instead:
   `magus buzz -t <file>`.
 - Commits: subject line only, no area prefix, no Co-Authored-By trailer;
   join multiple ideas with semicolons. Never push unless explicitly asked.
+- Git is the orchestrator's job: do VCS ops yourself, never delegate git to a
+  subagent, and run mutating subagents isolated or serialized. Never a whole-tree
+  git op (`stash`/`reset`/`checkout .`/`clean`) to verify a build - it wipes a
+  concurrent agent's untracked work. See the magus-vcs skill.
 
 ## Working style
 
