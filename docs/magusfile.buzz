@@ -127,7 +127,7 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
     ctx.outputs("buzz/modules/*.md", "spells/*.md", "spells.md", "manpage/*.md", "knowledge.md");
     os.exec("go", ["run", "../cmd/magus-docs", "-out", "./buzz/modules"], ".", {});
-    os.exec("go", ["run", "../cmd/magus-spelldocs", "-out", "./spells"], ".", {});
+    os.exec("go", ["run", "../cmd/magus-spelldocs", "-out", "./spells", "-spells", "../spells"], ".", {});
     os.exec("go", ["run", "../cmd/magus-manpage", "-format", "md", "-out", "./manpage"], ".", {});
     os.exec("go", ["run", "../cmd/magus-examples", "-docs", "./knowledge.md"], ".", {});
 }

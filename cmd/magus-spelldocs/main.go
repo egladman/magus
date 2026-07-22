@@ -116,9 +116,17 @@ var repoRoot = docs.RepoRoot()
 
 const spellOptsSource = "internal/interp/bindings/spell_object.go"
 
+// spellsDir is the path to the repo's spells/ directory, relative to the caller's
+// cwd. It is explicit (the -spells flag) rather than discovered by walking up to a
+// module root: the caller knows where spells live in its own context and says so,
+// which keeps resolution contextual instead of imposing a global root.
+var spellsDir = "spells"
+
 func main() {
 	outDir := flag.String("out", "docs/spells", "output directory for spell docs")
+	spellsFlag := flag.String("spells", "spells", "path to the repo's spells/ directory, relative to cwd")
 	flag.Parse()
+	spellsDir = *spellsFlag
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "magus-spelldocs: mkdir %s: %v\n", *outDir, err)
@@ -337,7 +345,7 @@ func injectSpellList(path string, builtins map[string]ispell.Descriptor, names [
 // then reads that handler's FunDecl.Doc. Any read/parse miss yields an empty map,
 // so a spell with no source-side docs renders no op descriptions.
 func parseOpDocs(dir string) map[string]string {
-	src, err := os.ReadFile(filepath.Join("spells", dir, "spell.buzz"))
+	src, err := os.ReadFile(filepath.Join(spellsDir, dir, "spell.buzz"))
 	if err != nil {
 		return nil
 	}
@@ -494,7 +502,7 @@ func sortedCharmNames(charms map[string]types.Charm) []string {
 // missing example simply skips the Example section (same contract as
 // cmd/magus-docs.readExample).
 func readExample(spell, op string) string {
-	data, err := os.ReadFile(filepath.Join("spells", "examples", spell, op+".buzz"))
+	data, err := os.ReadFile(filepath.Join(spellsDir, "examples", spell, op+".buzz"))
 	if err != nil {
 		return ""
 	}
