@@ -252,6 +252,33 @@ func gitRoot(dir string) string {
 // a magus.inputs/outputs call with a non-literal argument is a hard load error, because
 // a computed footprint is invisible to this static read and silently under-declaring it
 // risks a stale cache hit.
+// nodesWithDiscovery returns src's combined target graph nodes: the old-form nodes
+// describe.Extract reads statically, plus the ctx-form nodes interp.DiscoverCtxNodes
+// learns by running each ctx-form target under discovery. Both the cache-footprint
+// path (applyTargetDepsAndFootprint) and the graph render (DescribeGraph) read
+// through here so a ctx-form target's inputs/outputs/cross-deps reach the cache key
+// and affected-tracking, not only MAGUS.md.
+//
+// Discovery RUNS the target bodies, so it needs the Buzz interpreter linked. A bare
+// library caller that does not link it (interp.Available() == false; see doc.go) gets
+// only the static old-form nodes here - the same graceful degradation validateTargetPolicies
+// and magus.project() evaluation take when the interpreter is absent. Best-effort even
+// when linked: a discovery failure logs and yields just the old-form nodes, so a
+// discovery bug degrades that project's footprint/graph rather than failing the load.
+func nodesWithDiscovery(ctx context.Context, src *interp.Source, projectPath string) []types.TargetGraphNode {
+	nodes := describe.Extract(concatSource(src))
+	if !interp.Available() {
+		return nodes
+	}
+	if dnodes, derr := interp.DiscoverCtxNodes(ctx, src); derr == nil {
+		nodes = append(nodes, dnodes...)
+	} else {
+		slog.Warn("magus: ctx-form target discovery failed; graph omits its ctx-form targets",
+			slog.String("project", projectPath), slog.String("error", derr.Error()))
+	}
+	return nodes
+}
+
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
@@ -266,7 +293,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			if src.Engine != "buzz" {
 				continue
 			}
-			for _, n := range describe.Extract(concatSource(src)) {
+			for _, n := range nodesWithDiscovery(ctx, src, p.Path) {
 				for _, ref := range n.CrossDependencies {
 					// Skip a self-resolving import (r == p.Path): a self-edge is both
 					// unnecessary and rejected by the depgraph as a self-loop - same guard
@@ -362,17 +389,7 @@ func (m *Magus) DescribeGraph() types.TargetGraphOutput {
 			// workspace directory name (e.g. "magus"). A non-root RelPath is kept as-is.
 			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
 			if src.Engine == "buzz" {
-				nodes := describe.Extract(concatSource(src))
-				// ctx-form targets are invisible to the static extractor (their edges
-				// are ctx.needs calls learned by running the target under discovery);
-				// merge their discovered nodes in. Best-effort: a discovery failure
-				// leaves the old-form nodes intact rather than dropping the project.
-				if dnodes, derr := interp.DiscoverCtxNodes(context.Background(), src); derr == nil {
-					nodes = append(nodes, dnodes...)
-				} else {
-					slog.Warn("magus: ctx-form target discovery failed; graph omits its ctx-form targets",
-						slog.String("project", p.Path), slog.String("error", derr.Error()))
-				}
+				nodes := nodesWithDiscovery(context.Background(), src, p.Path)
 				resolveNodeRefs(nodes, p.Path)
 				entry.Nodes = nodes
 				entry.Cycle = describe.Cycle(nodes)
