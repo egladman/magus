@@ -372,7 +372,7 @@ export fun coverage(ctx: magus\Context, args: [str]) > void {
     go["go-test"]({"args": ["-covermode=atomic", "-coverprofile=coverage.out"]});
     final pct = total_coverage(os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
     final svg = os.exec("go", ["run", "./cmd/coverage-badge",
-        "-label", "coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
+        "-label", "go coverage", "-message", pct + "%", "-color", badge_color(pct)]).stdout;
     fs.writeFile(fs.join("assets", "coverage.svg"), svg);
     if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs.isDirty([fs.join("assets", "coverage.svg")])) {
