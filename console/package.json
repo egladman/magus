@@ -9,7 +9,7 @@
     "build-css": "esbuild src/styles/patternfly.css --bundle --minify --external:'*.woff2' --external:'*.woff' --external:'*.ttf' --external:'*.svg' --external:'*.png' --external:'*.jpg' --external:'*.gif' --outfile=gen/patternfly.css && esbuild src/styles/tokens.css --minify --outfile=gen/tokens.css && esbuild src/styles/overrides.css --minify --outfile=gen/overrides.css && esbuild src/styles/console.css --minify --outfile=gen/console.css && esbuild src/console/logs/logs.css --minify --outfile=gen/logs/logs.css && esbuild src/console/graph/graph.css --minify --outfile=gen/graph/graph.css && esbuild src/console/dashboard/dashboard.css --minify --outfile=gen/dashboard/dashboard.css && esbuild src/console/settings/settings.css --minify --outfile=gen/settings/settings.css",
     "copy-static": "mkdir -p gen/assets gen/logs gen/graph gen/dashboard gen/activity && cp index.html manifest.webmanifest sw.js gen/ && cp src/assets/* gen/assets/ && cp src/console/logs/scaffold.html gen/logs/ && cp src/console/graph/scaffold.html gen/graph/ && cp src/console/dashboard/scaffold.html gen/dashboard/ && cp ../docs/graph.json gen/graph/graph.json && node scripts/surface-stubs.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "rm -rf .testcache && esbuild $(find src -name '*.test.ts') --bundle --platform=node --format=esm --outdir=.testcache && node --test $(find .testcache -name '*.test.js')"
+    "test": "rm -rf .testcache && esbuild $(find src -name '*.test.ts') --bundle --platform=node --format=esm --outdir=.testcache && node --test $(find .testcache -name '*.test.js' -not -name '*-dom.test.js') && node --import ./test-setup.mjs --test $(find .testcache -name '*-dom.test.js')"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.9.0",
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",
+    "@happy-dom/global-registrator": "^20.10.6",
     "@patternfly/patternfly": "6.5.2",
     "@types/d3-drag": "3.0.7",
     "@types/d3-force": "3.0.10",
