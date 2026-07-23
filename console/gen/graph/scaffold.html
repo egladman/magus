@@ -103,6 +103,18 @@
             </div>
           </div>
         </div>
+        <!-- Graph source: which graph you are viewing (build vs knowledge) - more fundamental
+             than how it is arranged, so it sits above Display mode. Only switchable against a
+             live daemon (which serves both flavors); in a static snapshot both buttons are
+             disabled with a hint. main.ts drives selection via pf-m-selected and each button's
+             disabled/title (see syncGraphKindToggle/switchGraphKind). -->
+        <div class="console-graph-sidebar__source">
+          <p class="console-graph-sidebar__sourcelabel">Graph</p>
+          <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-label="Graph">
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The build graph: targets and what they depend on. Switch requires a live workspace (magus graph open --live)."><span class="pf-v6-c-toggle-group__text">Build</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph open --live)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
+          </div>
+        </div>
         <!-- Display mode: ALWAYS VISIBLE (Decision 3, discoverability phase) - the manual
              override for the arrangement axis, distinct from the "Ask a question" views
              below (the emphasis/filter axis). Same PF toggle group main.ts previously kept
