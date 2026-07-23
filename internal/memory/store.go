@@ -129,7 +129,7 @@ func Validate(r Record) error {
 		return fmt.Errorf("memory: type must be one of pointer, decision, plan (got %q)", r.Type)
 	}
 	if len(r.Refs) == 0 {
-		return errors.New("memory: a record needs at least one ref - if you cannot name a ref kind, it is not a memory, it is a query you should just run")
+		return errors.New("memory: a record needs at least one ref; if you cannot name a ref kind, it is not a memory, it is a query you should just run")
 	}
 	for _, ref := range r.Refs {
 		switch ref.Kind {
@@ -142,7 +142,7 @@ func Validate(r Record) error {
 		}
 	}
 	if r.Type == TypePointer && strings.TrimSpace(r.Body) != "" {
-		return errors.New("memory: a pointer carries no prose - its refs are the payload (only decision/plan take a caption)")
+		return errors.New("memory: a pointer carries no prose; its refs are the payload (only decision/plan take a caption)")
 	}
 	return nil
 }
