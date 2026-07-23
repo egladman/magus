@@ -112,7 +112,7 @@ Memory and scratch:
 
 | Tool               | Purpose                                                                            |
 | ------------------ | ---------------------------------------------------------------------------------- |
-| `magus_memory`     | Durable per-repo `status` / `progress` / `decisions` files, shared across sessions |
+| `magus_memory`     | Durable per-repo memory records (typed pointers into the codebase), shared across sessions |
 | `magus_scratchpad` | Private per-workspace scratch file for the agent's intermediate notes              |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.

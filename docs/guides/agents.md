@@ -83,9 +83,10 @@ means naming a destination, not writing new instructions.
 - `magus-architecture`: ground refactoring proposals in graph evidence -
   hotspots, affinity (undeclared coupling), blast radius, symbol fan-in,
   CODEOWNERS - and verify impact with `graph diff`.
-- `magus-memory`: durable cross-session project memory over MCP - a status
-  snapshot, a dated progress journal, and a decision log that survive model
-  and session changes.
+- `magus-memory`: durable cross-session project memory over MCP. Each memory is
+  a typed pointer into the codebase (a saved query, a graph node, an output ref,
+  a doc), not free prose; only a decision carries the why. The graph holds the
+  truth, memory holds the curation. Records survive model and session changes.
 - `magus-docs`: navigate magus's own documentation to answer a how-does-magus-do-X
   question instead of guessing - the doc URL and section scheme, the in-page
   navigation axes, and when to reach for it over the workspace graph.
@@ -288,9 +289,9 @@ connected and daemon-less sessions.
 
 Two tools deserve a callout because they carry state across sessions:
 `magus_scratchpad` (a disposable per-workspace working file) and `magus_memory`
-(durable per-repository status/progress/decisions markdown, kept in the user
-state directory outside the repo, shared across branches, worktrees, sessions,
-and models). Both are pull-based: nothing is injected into an agent's context;
+(durable per-repository records, each a typed pointer into the codebase, kept in
+the user state directory outside the repo, shared across branches, worktrees,
+sessions, and models). Both are pull-based: nothing is injected into an agent's context;
 an agent reads them when it chooses to. Captured build output is addressed by
 [output references](../concepts/output-refs.md).
 

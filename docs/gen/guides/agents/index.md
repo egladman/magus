@@ -83,9 +83,10 @@ means naming a destination, not writing new instructions.
 - `magus-architecture`: ground refactoring proposals in graph evidence -
   hotspots, affinity (undeclared coupling), blast radius, symbol fan-in,
   CODEOWNERS - and verify impact with `graph diff`.
-- `magus-memory`: durable cross-session project memory over MCP - a status
-  snapshot, a dated progress journal, and a decision log that survive model
-  and session changes.
+- `magus-memory`: durable cross-session project memory over MCP. Each memory is
+  a typed pointer into the codebase (a saved query, a graph node, an output ref,
+  a doc), not free prose; only a decision carries the why. The graph holds the
+  truth, memory holds the curation. Records survive model and session changes.
 - `magus-docs`: navigate magus's own documentation to answer a how-does-magus-do-X
   question instead of guessing - the doc URL and section scheme, the in-page
   navigation axes, and when to reach for it over the workspace graph.
@@ -129,9 +130,10 @@ through re-running install.
 
 ## Guard hooks
 
-Most agent hosts can run a hook before executing a shell command. magus ships
-the evaluation, never the harness: `magus agent hook` reads one command,
-applies the guard rules, and emits a neutral verdict.
+Most agent hosts can run a hook before executing a shell command. magus
+supplies the rule evaluation; the host supplies the hook that calls it.
+`magus agent hook` reads one command, applies the guard rules, and returns a
+neutral verdict.
 
 - `deny`, with a `reason` written for the model: destructive whole-tree VCS
   operations (`git stash`, `git reset --hard`, `git checkout .`,
@@ -147,10 +149,18 @@ produce it: as arguments, as raw stdin, or extracted from a JSON event on
 stdin with `--from-json <dot.path>`. The verdict leaves through the standard
 output arm: `-o json` (a schema-versioned envelope), `-o yaml`, `-o name` (the
 bare decision word), or `-o template=<go-template>` to render your host's
-response dialect directly - bare `-o template` lists the fields. A host
-integration is therefore a few lines of configuration you own; magus carries
-no host-specific code. An unreadable event fails open as a `pass`: a guard
-that errors on every tool call is worse than no guard.
+response dialect directly. Bare `-o template` lists the fields. A host
+integration is therefore a few lines of configuration you own, with no
+host-specific code in magus. An unreadable event fails open as a `pass`, since
+a guard that errors on every tool call is worse than no guard.
+
+This split is deliberate. magus owns the guard rules and the verdict, not
+integration code for each host. Maintaining a codec per host as the tools keep
+changing would be a lot to manage for little gain. So the host-specific part
+stays in a template or a few lines of config you control: adding a host, or
+fixing one that changed, is your edit, not a new magus release. What follows
+are examples, not a fixed list of supported hosts. Any host that can run a
+command and read its output fits.
 
 ```sh
 magus agent hook -- git stash                 # deny: whole-tree git stash destroys ...
@@ -185,19 +195,86 @@ Claude Code's response dialect, emitting nothing on a `pass`:
 
 ### Other hosts
 
-Every hook-capable host follows the same three-step recipe: extract the
-command string from the host's event, hand it to `magus agent hook`, and map
-the verdict onto the host's response. As of mid-2026 that covers, at least:
-Cursor (`.cursor/hooks.json`, a `beforeShellExecution` hook mapping deny and
-advise onto `permission` and `agent_message`), Gemini CLI
-(`.gemini/settings.json`, a `BeforeTool` hook with a `run_shell_command`
-matcher mapping deny onto `decision` and `reason`), OpenCode (a
-`.opencode/plugins/` TypeScript plugin whose `tool.execute.before` throws the
-`reason` on deny), and Codex (feature-gated hooks accepting the same response
-shape as Claude Code, plus declarative command rules). Their event shapes and
-response fields are those products' surfaces and change on their schedule -
-consult each host's hook documentation for current field names. The magus side
-of the recipe never changes.
+A full setup is two steps: install the guidance where the host reads it, then
+wire the guard hook. The hook step is always the same shape - pull the command
+out of the host's event with `--from-json <dot.path>`, let `magus agent hook`
+judge it, and render the verdict into the host's response with `-o template`;
+only the dot-path and the response field names change. The examples below were
+verified against each product's official docs in mid-2026, with the confidence
+caveats called out inline. Those docs are the products' own and move on their
+schedule, so treat each one as a tested starting point rather than a standing
+guarantee, and confirm against the host's current hook and instruction-file
+docs.
+
+Not every host reads the Agent Skills format. Claude Code and OpenCode discover
+`SKILL.md` directories; Cursor and most other hosts read an `AGENTS.md` instead,
+which is why their install step is `--agents-md`, not a skills directory.
+
+#### OpenCode
+
+OpenCode discovers Agent Skills from `.opencode/skills/` (and also reads
+`.claude/skills/`, so if you already installed there for Claude Code, OpenCode
+picks those up and this step is optional):
+
+```sh
+magus agent install .opencode/skills
+```
+
+The guard is a `.opencode/plugins/` TypeScript plugin. OpenCode has no
+shell-command hook config, but a plugin gets Bun's `$` shell handle to call the
+binary. Throwing from `tool.execute.before` reliably blocks the command. Note
+that OpenCode's docs confirm the throw blocks but do not promise the `reason`
+reaches the model, so treat this as a hard stop whose explanation is
+best-effort. Bun's `$` escapes the interpolated command, so passing it as one
+argument is injection-safe:
+
+```ts
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MagusGuard: Plugin = async ({ $ }) => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool !== "bash") return
+    const command = output.args.command ?? ""
+    const out = await $`magus agent hook -o json -- ${command}`.nothrow().text()
+    const verdict = JSON.parse(out || "{}")
+    if (verdict.decision === "deny") throw new Error(verdict.reason)
+  },
+})
+```
+
+#### Cursor
+
+Cursor does not read Agent Skills directories; it reads an `AGENTS.md` at the
+repo root. Install the managed section there:
+
+```sh
+magus agent install --agents-md
+```
+
+The guard is a `beforeShellExecution` hook in `.cursor/hooks.json`. Cursor runs
+the hook as a program (not an inline shell string), so point it at a small
+wrapper script. The command is at the event's top-level `command`
+(`--from-json command`). One documented limit: Cursor delivers `agent_message`
+to the model only on a denial, not on an allow, so `advise` collapses to a
+plain allow here. The block is what reaches the model, and the advisory nudges
+live in the installed guidance instead. Cursor fails open on a hook crash or bad
+JSON unless the hook sets `failClosed`.
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [{ "command": "./.cursor/hooks/magus-guard.sh" }]
+  }
+}
+```
+
+```sh
+#!/bin/sh
+# .cursor/hooks/magus-guard.sh  (chmod +x)
+command -v magus >/dev/null 2>&1 || { echo '{"permission":"allow"}'; exit 0; }
+exec magus agent hook --from-json command -o 'template={{if eq .decision "deny"}}{"permission":"deny","agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
+```
 
 ## The MCP daemon
 
@@ -212,9 +289,9 @@ connected and daemon-less sessions.
 
 Two tools deserve a callout because they carry state across sessions:
 `magus_scratchpad` (a disposable per-workspace working file) and `magus_memory`
-(durable per-repository status/progress/decisions markdown, kept in the user
-state directory outside the repo, shared across branches, worktrees, sessions,
-and models). Both are pull-based: nothing is injected into an agent's context;
+(durable per-repository records, each a typed pointer into the codebase, kept in
+the user state directory outside the repo, shared across branches, worktrees,
+sessions, and models). Both are pull-based: nothing is injected into an agent's context;
 an agent reads them when it chooses to. Captured build output is addressed by
 [output references](../concepts/output-refs.md).
 

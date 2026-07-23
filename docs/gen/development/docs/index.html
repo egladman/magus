@@ -124,7 +124,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>754 nodes</strong> and <strong>1911 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>779 nodes</strong> and <strong>2047 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -199,7 +199,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>doc</td>
 <td style="text-align:right">142</td>
 <td><code>magus query kind:doc</code></td>
-<td><code>documentation.md</code>, <code>concepts/spells.md</code>, <code>reference/manpage/magus-affected.md</code></td>
+<td><code>reference/manpage/magus-doctor.md</code>, <code>concepts/spells.md</code>, <code>documentation.md</code></td>
 </tr>
 <tr>
 <td>dir</td>
@@ -209,21 +209,21 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>file</td>
-<td style="text-align:right">41</td>
+<td style="text-align:right">42</td>
 <td><code>magus query kind:file</code></td>
 <td><code>render.buzz</code>, <code>engine/page.buzz</code>, <code>lib/text.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">214</td>
+<td style="text-align:right">238</td>
 <td><code>magus query kind:function</code></td>
-<td><code>renderContentHTML</code>, <code>walkGen</code>, <code>assetIntegrityCheck</code></td>
+<td><code>renderContentHTML</code>, <code>maskLinkable</code>, <code>walkGen</code></td>
 </tr>
 <tr>
 <td>import</td>
 <td style="text-align:right">26</td>
 <td><code>magus query kind:import</code></td>
-<td><code>fs</code>, <code>assert</code>, <code>magus</code></td>
+<td><code>assert</code>, <code>fs</code>, <code>magus</code></td>
 </tr>
 </tbody>
 </table></figure>
