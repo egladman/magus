@@ -23,8 +23,10 @@ import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 
 // TYPE_LABELS / REFKIND_LABELS render an enum value as its lowercase wire word; the *_OPTIONS
-// lists drive the edit-form selects and the type filter (UNSPECIFIED never offered).
-const TYPE_LABELS: Record<number, string> = {
+// lists drive the edit-form selects and the type filter (UNSPECIFIED never offered). Typed as
+// Record<Memory*, string> so a new enum member without a label is a compile error, not a silent
+// "undefined" at render.
+const TYPE_LABELS: Record<MemoryType, string> = {
   [MemoryType.UNSPECIFIED]: "unspecified",
   [MemoryType.POINTER]: "pointer",
   [MemoryType.DECISION]: "decision",
@@ -32,7 +34,7 @@ const TYPE_LABELS: Record<number, string> = {
 };
 const TYPE_OPTIONS = [MemoryType.POINTER, MemoryType.DECISION, MemoryType.PLAN];
 
-const REFKIND_LABELS: Record<number, string> = {
+const REFKIND_LABELS: Record<MemoryRefKind, string> = {
   [MemoryRefKind.UNSPECIFIED]: "?",
   [MemoryRefKind.QUERY]: "query",
   [MemoryRefKind.NODE]: "node",
@@ -53,11 +55,19 @@ function hasCaption(t: MemoryType): boolean {
   return t === MemoryType.DECISION || t === MemoryType.PLAN;
 }
 
-// draftRef is one editable ref row in the form (strings before they become a wire MemoryRef).
-interface draftRef {
+// DraftRef is one editable ref row in the form: a typed kind plus a target still in its pre-wire
+// form (a raw string, trimmed and packed into a MemoryRef only on save).
+interface DraftRef {
   kind: MemoryRefKind;
   target: string;
 }
+
+// EditState is what the inline editor is open on: nothing, a new record, or an existing record
+// being edited (by name). It replaces the old "" = new / null = none tri-state string.
+type EditState = { kind: "none" } | { kind: "new" } | { kind: "edit"; name: string };
+
+// fieldSeq gives each labeled control a unique id so its <label for> can point at it.
+let fieldSeq = 0;
 
 // buildMemorySection builds the section body and drives it live against the daemon at host. A
 // null host short-circuits to a "connect first" empty state. Returns the body and a destroy()
@@ -86,22 +96,41 @@ export function buildMemorySection(
     createDaemonTransport(host, getLiveToken()),
   );
 
-  // Client-side view state: the selection (record names checked for bulk delete), a text
-  // filter, a type filter, and the name of the record currently open in the inline editor
-  // ("" for a new record, null for none). The dataset is small, so filtering is in JS over
-  // the full ListMemories result rather than a server filter.
+  // One controller for the section's whole lifetime: every RPC rides its signal, and destroy()
+  // aborts it so an in-flight fetch is cancelled instead of resolving into a detached node.
+  const controller = new AbortController();
+
+  // Client-side view state: the selection (record names checked for bulk delete), a text filter,
+  // a type filter, and what the inline editor is open on. The dataset is small, so filtering is in
+  // JS over the full ListMemories result rather than a server filter. lastCursor/lastRecords hold
+  // the most recent load so the editor, the filter, and the bulk button repaint from memory
+  // without another round trip.
   const selected = new Set<string>();
   let filterText = "";
   let filterType: MemoryType | null = null;
-  let editing: string | null = null;
+  let editState: EditState = { kind: "none" };
+  let lastCursor = "";
+  let lastRecords: Memory[] = [];
 
-  // load fetches the cursor and the records, then rebuilds the section. Called on mount and
-  // after every save/delete so the view stays current.
+  // Retained handles into the current render so filtering and selection repaint in place: the list
+  // container (rebuilt on filter) and the bulk-delete button (inserted/removed as the selection
+  // crosses empty), instead of tearing down the whole body or re-finding a PatternFly class.
+  let listEl = h("div", "console-settings-memory__list");
+  let toolbarEl: HTMLElement | null = null;
+  let bulkBtn: HTMLButtonElement | null = null;
+
+  // load fetches the cursor and the records, stores them, then rebuilds the section. Called on
+  // mount and after every save/delete so the view stays current.
   async function load(): Promise<void> {
     try {
-      const [cursor, list] = await Promise.all([client.getCursor({}), client.listMemories({})]);
+      const [cursor, list] = await Promise.all([
+        client.getCursor({}, { signal: controller.signal }),
+        client.listMemories({}, { signal: controller.signal }),
+      ]);
       if (stale) return;
-      render(cursor.content, list.memories);
+      lastCursor = cursor.content;
+      lastRecords = list.memories;
+      render();
     } catch (e) {
       if (stale) return;
       if (isCapabilityDenied(e)) {
@@ -118,45 +147,60 @@ export function buildMemorySection(
     }
   }
 
-  function render(cursor: string, records: Memory[]): void {
+  // render rebuilds the whole section body from lastCursor/lastRecords. Structural changes
+  // (mount, open/close editor) go through here; per-keystroke filtering and selection toggles use
+  // the in-place repaint helpers below so the search box never loses focus.
+  function render(): void {
     body.replaceChildren();
-    body.append(buildCursorCard(cursor));
+    body.append(buildCursorCard(lastCursor));
 
     const toolbar = h("div", "console-settings-memory__toolbar");
-    const addBtn = button("Add memory", "pf-m-secondary pf-m-small");
-    addBtn.addEventListener("click", () => { editing = ""; render(cursor, records); });
+    toolbarEl = toolbar;
+    bulkBtn = null;
 
-    const typeSel = h("select", "pf-v6-c-form-control console-settings-memory__filter") as HTMLSelectElement;
-    typeSel.append(option("", "All types"));
-    for (const t of TYPE_OPTIONS) typeSel.append(option(String(t), TYPE_LABELS[t]));
+    const addBtn = button("Add memory", "pf-m-secondary pf-m-small");
+    addBtn.addEventListener("click", () => { editState = { kind: "new" }; render(); });
+
+    const typeSel = h("select", "pf-v6-c-form-control console-settings-memory__filter");
+    typeSel.setAttribute("aria-label", "Filter by type");
+    typeSel.append(option("All types", ""));
+    for (const t of TYPE_OPTIONS) typeSel.append(option(TYPE_LABELS[t] ?? "unspecified", String(t)));
     typeSel.value = filterType == null ? "" : String(filterType);
     typeSel.addEventListener("change", () => {
       filterType = typeSel.value === "" ? null : (Number(typeSel.value) as MemoryType);
-      render(cursor, records);
+      repaintList();
     });
 
-    const search = h("input", "pf-v6-c-form-control console-settings-memory__search") as HTMLInputElement;
+    const search = h("input", "pf-v6-c-form-control console-settings-memory__search");
     search.type = "search";
     search.placeholder = "Filter by name, ref, or caption";
+    search.setAttribute("aria-label", "Filter memories");
     search.value = filterText;
-    search.addEventListener("input", () => { filterText = search.value; render(cursor, records); });
+    // Filter WITHOUT rebuilding the input: repaint only the list container, so focus and the
+    // caret survive every keystroke.
+    search.addEventListener("input", () => { filterText = search.value; repaintList(); });
 
     toolbar.append(addBtn, typeSel, search);
-
-    if (selected.size > 0) {
-      const bulk = button("Delete selected (" + selected.size + ")", "pf-m-link pf-m-danger pf-m-small");
-      bulk.addEventListener("click", () => void bulkDelete());
-      toolbar.append(bulk);
-    }
     body.append(toolbar);
+    repaintBulk();
 
-    if (editing !== null) {
-      body.append(buildEditForm(records.find((r) => r.name === editing)));
+    if (editState.kind !== "none") {
+      const es = editState; // const narrowing survives the find() closure below; a let would not
+      const target = es.kind === "edit" ? lastRecords.find((rec) => rec.name === es.name) : undefined;
+      body.append(buildEditForm(target));
     }
 
-    const shown = records.filter(matchesFilter);
-    if (records.length === 0) {
-      body.append(
+    listEl = h("div", "console-settings-memory__list");
+    body.append(listEl);
+    repaintList();
+  }
+
+  // repaintList refills only the list container from the current filter, leaving the toolbar (and
+  // its focused search box) untouched.
+  function repaintList(): void {
+    listEl.replaceChildren();
+    if (lastRecords.length === 0) {
+      listEl.append(
         buildEmpty(
           "No memories yet",
           "Agents record memories as they work. Each is a typed pointer into the codebase - a saved query, a node, an output ref - so there is nothing to write by hand here; use Add memory only to seed one.",
@@ -164,21 +208,39 @@ export function buildMemorySection(
       );
       return;
     }
-    const list = h("div", "console-settings-memory__list");
+    const shown = lastRecords.filter(matchesFilter);
     if (shown.length === 0) {
-      list.append(h("p", "console-settings-memory__empty", "No records match the current filter."));
+      listEl.append(h("p", "console-settings-memory__empty", "No records match the current filter."));
+      return;
     }
-    for (const rec of shown) list.append(buildRow(rec));
-    body.append(list);
+    for (const rec of shown) listEl.append(buildRow(rec));
   }
 
-  function matchesFilter(r: Memory): boolean {
-    if (filterType != null && r.type !== filterType) return false;
+  // repaintBulk inserts, updates, or removes the "Delete selected" button in place against a
+  // retained reference, so a selection toggle never triggers a network reload.
+  function repaintBulk(): void {
+    if (!toolbarEl) return;
+    if (selected.size === 0) {
+      bulkBtn?.remove();
+      bulkBtn = null;
+      return;
+    }
+    if (!bulkBtn) {
+      bulkBtn = button("", "pf-m-link pf-m-danger pf-m-small");
+      bulkBtn.dataset.role = "bulk-delete";
+      bulkBtn.addEventListener("click", () => void bulkDelete([...selected]));
+      toolbarEl.append(bulkBtn);
+    }
+    bulkBtn.textContent = "Delete selected (" + selected.size + ")";
+  }
+
+  function matchesFilter(rec: Memory): boolean {
+    if (filterType != null && rec.type !== filterType) return false;
     if (filterText.trim() === "") return true;
     const needle = filterText.toLowerCase();
-    if (r.name.toLowerCase().includes(needle)) return true;
-    if (r.body.toLowerCase().includes(needle)) return true;
-    return r.refs.some((ref) => ref.target.toLowerCase().includes(needle));
+    if (rec.name.toLowerCase().includes(needle)) return true;
+    if (rec.body.toLowerCase().includes(needle)) return true;
+    return rec.refs.some((ref) => ref.target.toLowerCase().includes(needle));
   }
 
   // buildCursorCard renders the singleton snapshot: one textarea, one Save (UpdateCursor).
@@ -186,7 +248,7 @@ export function buildMemorySection(
   function buildCursorCard(content: string): HTMLElement {
     const card = h("div", "console-settings-memory__cursor");
     card.append(h("h3", "console-settings-memory__title", "Resume - where you left off"));
-    const area = h("textarea") as HTMLTextAreaElement;
+    const area = h("textarea");
     area.className = "pf-v6-c-form-control";
     area.rows = 3;
     area.spellcheck = false;
@@ -195,9 +257,9 @@ export function buildMemorySection(
     const save = button("Save", "pf-m-primary pf-m-small");
     save.addEventListener("click", () => {
       save.disabled = true;
-      void client.updateCursor({ content: area.value }).then(
+      void client.updateCursor({ content: area.value }, { signal: controller.signal }).then(
         () => { if (!stale) showToast("Agent memory", "Saved the cursor."); },
-        (e: unknown) => { save.disabled = false; toastError("save the cursor", e); },
+        (e: unknown) => { save.disabled = false; showErrorToast("save the cursor", e); },
       );
     });
     const control = h("div", "console-settings-memory__cursorbody");
@@ -210,31 +272,27 @@ export function buildMemorySection(
   // caption (decision/plan only), status, and per-row Edit and Delete actions.
   function buildRow(rec: Memory): HTMLElement {
     const row = h("div", "console-settings-memory__row");
-    row.setAttribute("data-type", TYPE_LABELS[rec.type]);
+    row.setAttribute("data-type", TYPE_LABELS[rec.type] ?? "unspecified");
 
-    const check = h("input", "console-settings-memory__check") as HTMLInputElement;
+    const check = h("input", "console-settings-memory__check");
     check.type = "checkbox";
     check.checked = selected.has(rec.name);
     check.setAttribute("aria-label", "Select " + rec.name);
     check.addEventListener("change", () => {
       if (check.checked) selected.add(rec.name);
       else selected.delete(rec.name);
-      // Re-render only the toolbar's bulk button by reloading is overkill; toggle in place.
-      const bulk = body.querySelector<HTMLElement>(".console-settings-memory__toolbar .pf-m-danger");
-      if (selected.size === 0) bulk?.remove();
-      else if (!bulk) void load();
-      else bulk.textContent = "Delete selected (" + selected.size + ")";
+      repaintBulk();
     });
 
     const head = h("div", "console-settings-memory__rowhead");
-    head.append(h("span", "console-settings-memory__badge", TYPE_LABELS[rec.type]));
+    head.append(h("span", "console-settings-memory__badge", TYPE_LABELS[rec.type] ?? "unspecified"));
     head.append(h("span", "console-settings-memory__name", rec.name));
     if (rec.status) head.append(h("span", "console-settings-memory__status", rec.status));
 
     const chips = h("div", "console-settings-memory__chips");
     for (const ref of rec.refs) {
       const chip = h("span", "console-settings-memory__chip");
-      chip.append(h("span", "console-settings-memory__chipkind", REFKIND_LABELS[ref.kind]));
+      chip.append(h("span", "console-settings-memory__chipkind", REFKIND_LABELS[ref.kind] ?? "?"));
       chip.append(document.createTextNode(" " + ref.target));
       chips.append(chip);
     }
@@ -245,7 +303,7 @@ export function buildMemorySection(
 
     const actions = h("div", "console-settings-memory__rowactions");
     const edit = button("Edit", "pf-m-secondary pf-m-small");
-    edit.addEventListener("click", () => { editing = rec.name; void load(); });
+    edit.addEventListener("click", () => { editState = { kind: "edit", name: rec.name }; render(); });
     const del = button("Delete", "pf-m-link pf-m-danger pf-m-small");
     del.addEventListener("click", () => void deleteOne(rec.name));
     actions.append(edit, del);
@@ -261,17 +319,19 @@ export function buildMemorySection(
     const nameInput = labeledInput("Name (kebab-slug)", rec?.name ?? "");
     nameInput.input.disabled = rec !== undefined; // name is identity; edit never renames
 
-    const typeSel = h("select", "pf-v6-c-form-control") as HTMLSelectElement;
-    for (const t of TYPE_OPTIONS) typeSel.append(option(String(t), TYPE_LABELS[t]));
+    const typeId = "console-memory-field-" + ++fieldSeq;
+    const typeSel = h("select", "pf-v6-c-form-control");
+    typeSel.id = typeId;
+    for (const t of TYPE_OPTIONS) typeSel.append(option(TYPE_LABELS[t] ?? "unspecified", String(t)));
     typeSel.value = String(rec?.type ?? MemoryType.POINTER);
 
     const statusInput = labeledInput("Status (optional)", rec?.status ?? "");
     const refsBox = h("div", "console-settings-memory__refs");
-    const drafts: draftRef[] = rec ? rec.refs.map((r) => ({ kind: r.kind, target: r.target })) : [];
+    const drafts: DraftRef[] = rec ? rec.refs.map((r) => ({ kind: r.kind, target: r.target })) : [];
     const renderRefs = (): void => {
       refsBox.replaceChildren();
       refsBox.append(h("label", "console-settings-memory__label", "Refs (the payload - at least one)"));
-      drafts.forEach((d, i) => refsBox.append(refRow(d, () => { drafts.splice(i, 1); renderRefs(); })));
+      drafts.forEach((d, i) => refsBox.append(buildRefRow(d, () => { drafts.splice(i, 1); renderRefs(); })));
       const add = button("Add ref", "pf-m-link pf-m-small");
       add.addEventListener("click", () => { drafts.push({ kind: MemoryRefKind.QUERY, target: "" }); renderRefs(); });
       refsBox.append(add);
@@ -279,13 +339,17 @@ export function buildMemorySection(
     if (drafts.length === 0) drafts.push({ kind: MemoryRefKind.QUERY, target: "" });
     renderRefs();
 
+    const bodyId = "console-memory-field-" + ++fieldSeq;
     const bodyWrap = h("div", "console-settings-memory__bodywrap");
-    const bodyArea = h("textarea") as HTMLTextAreaElement;
+    const bodyArea = h("textarea");
+    bodyArea.id = bodyId;
     bodyArea.className = "pf-v6-c-form-control";
     bodyArea.rows = 2;
     bodyArea.placeholder = "Caption - the why (decision/plan only)";
     bodyArea.value = rec?.body ?? "";
-    bodyWrap.append(h("label", "console-settings-memory__label", "Caption"), bodyArea);
+    const bodyLabel = h("label", "console-settings-memory__label", "Caption");
+    bodyLabel.htmlFor = bodyId;
+    bodyWrap.append(bodyLabel, bodyArea);
     const syncBodyVisibility = (): void => {
       bodyWrap.hidden = !hasCaption(Number(typeSel.value) as MemoryType);
     };
@@ -296,7 +360,7 @@ export function buildMemorySection(
 
     const save = button("Save", "pf-m-primary pf-m-small");
     const cancel = button("Cancel", "pf-m-link pf-m-small");
-    cancel.addEventListener("click", () => { editing = null; void load(); });
+    cancel.addEventListener("click", () => { editState = { kind: "none" }; render(); });
     save.addEventListener("click", () => {
       const t = Number(typeSel.value) as MemoryType;
       const record = {
@@ -314,27 +378,31 @@ export function buildMemorySection(
       };
       save.disabled = true;
       cancel.disabled = true;
-      void client.updateMemory({ memory: record, allowMissing: true }).then(
-        () => { if (!stale) { showToast("Agent memory", "Saved " + record.name + "."); editing = null; void load(); } },
-        (e: unknown) => { save.disabled = false; cancel.disabled = false; toastError("save " + record.name, e); },
+      void client.updateMemory({ memory: record, allowMissing: true }, { signal: controller.signal }).then(
+        () => { if (!stale) { showToast("Agent memory", "Saved " + record.name + "."); editState = { kind: "none" }; void load(); } },
+        (e: unknown) => { save.disabled = false; cancel.disabled = false; showErrorToast("save " + record.name, e); },
       );
     });
 
     const typeWrap = h("div", "console-settings-memory__bodywrap");
-    typeWrap.append(h("label", "console-settings-memory__label", "Type"), typeSel);
+    const typeLabel = h("label", "console-settings-memory__label", "Type");
+    typeLabel.htmlFor = typeId;
+    typeWrap.append(typeLabel, typeSel);
     const actions = h("div", "console-settings-memory__editactions");
     actions.append(save, cancel);
     form.append(nameInput.wrap, typeWrap, statusInput.wrap, refsBox, bodyWrap, refsInput.wrap, actions);
     return form;
   }
 
-  function refRow(d: draftRef, onRemove: () => void): HTMLElement {
+  function buildRefRow(d: DraftRef, onRemove: () => void): HTMLElement {
     const rowEl = h("div", "console-settings-memory__refrow");
-    const kindSel = h("select", "pf-v6-c-form-control") as HTMLSelectElement;
-    for (const k of REFKIND_OPTIONS) kindSel.append(option(String(k), REFKIND_LABELS[k]));
+    const kindSel = h("select", "pf-v6-c-form-control");
+    kindSel.setAttribute("aria-label", "Ref kind");
+    for (const k of REFKIND_OPTIONS) kindSel.append(option(REFKIND_LABELS[k] ?? "?", String(k)));
     kindSel.value = String(d.kind);
     kindSel.addEventListener("change", () => { d.kind = Number(kindSel.value) as MemoryRefKind; });
-    const target = h("input", "pf-v6-c-form-control") as HTMLInputElement;
+    const target = h("input", "pf-v6-c-form-control");
+    target.setAttribute("aria-label", "Ref target");
     target.value = d.target;
     target.placeholder = "target (node id, query, output ref, command, or doc)";
     target.addEventListener("input", () => { d.target = target.value; });
@@ -347,60 +415,82 @@ export function buildMemorySection(
   async function deleteOne(name: string): Promise<void> {
     if (!confirm("Delete the memory " + name + "? This cannot be undone.")) return;
     try {
-      await client.deleteMemory({ name, allowMissing: true });
+      await client.deleteMemory({ name, allowMissing: true }, { signal: controller.signal });
       if (stale) return;
       selected.delete(name);
       showToast("Agent memory", "Deleted " + name + ".");
       void load();
     } catch (e) {
-      toastError("delete " + name, e);
+      showErrorToast("delete " + name, e);
     }
   }
 
-  async function bulkDelete(): Promise<void> {
-    const names = [...selected];
+  // bulkDelete deletes each named record independently (Promise.allSettled, not all): a partial
+  // failure clears only the names that succeeded, reports the count that failed, and reloads
+  // regardless - always with ONE aggregate toast, never one per record.
+  async function bulkDelete(names: string[]): Promise<void> {
     if (names.length === 0) return;
     if (!confirm("Delete " + names.length + " memories? This cannot be undone.")) return;
     try {
-      await Promise.all(names.map((name) => client.deleteMemory({ name, allowMissing: true })));
+      const results = await Promise.allSettled(
+        names.map((name) => client.deleteMemory({ name, allowMissing: true }, { signal: controller.signal })),
+      );
       if (stale) return;
-      selected.clear();
-      showToast("Agent memory", "Deleted " + names.length + " memories.");
-      void load();
-    } catch (e) {
-      toastError("delete the selected memories", e);
+      let failed = 0;
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled") selected.delete(names[i]);
+        else failed++;
+      });
+      const deleted = names.length - failed;
+      if (failed === 0) {
+        showToast("Agent memory", "Deleted " + deleted + " memories.");
+      } else {
+        showToast(
+          "Agent memory",
+          "Deleted " + deleted + " of " + names.length + " memories; " + failed + " could not be deleted.",
+          failed === names.length ? "error" : "warn",
+        );
+      }
+    } finally {
+      if (!stale) void load();
     }
   }
 
-  function toastError(action: string, e: unknown): void {
+  function showErrorToast(action: string, e: unknown): void {
     if (stale) return;
     const msg = e instanceof Error ? e.message : String(e);
     showToast("Agent memory", "Could not " + action + ": " + msg, "error");
   }
 
   void load();
-  return { el: body, destroy() { stale = true; } };
+  return { el: body, destroy() { stale = true; controller.abort(); } };
 }
 
 // button builds a PatternFly button of the given modifier classes.
 function button(label: string, modifiers: string): HTMLButtonElement {
-  const b = h("button", "pf-v6-c-button " + modifiers, label) as HTMLButtonElement;
+  const b = h("button", "pf-v6-c-button " + modifiers, label);
   b.type = "button";
   return b;
 }
 
-// option builds a <select> option.
-function option(value: string, label: string): HTMLOptionElement {
-  const o = h("option", "", label) as HTMLOptionElement;
+// option builds a <select> option (visible label first, then its value - the same order as
+// button's label, so the two helpers cannot be transposed by accident).
+function option(label: string, value: string): HTMLOptionElement {
+  const o = h("option", "", label);
   o.value = value;
   return o;
 }
 
-// labeledInput builds a labeled text input, returning the wrapper and the input.
+// labeledInput builds a labeled text input, associating the <label for> with the input by id,
+// and returns the wrapper and the input.
 function labeledInput(label: string, value: string): { wrap: HTMLElement; input: HTMLInputElement } {
+  const id = "console-memory-field-" + ++fieldSeq;
   const wrap = h("div", "console-settings-memory__bodywrap");
-  wrap.append(h("label", "console-settings-memory__label", label));
-  const input = h("input", "pf-v6-c-form-control") as HTMLInputElement;
+  const lab = h("label", "console-settings-memory__label", label);
+  lab.htmlFor = id;
+  wrap.append(lab);
+  const input = h("input", "pf-v6-c-form-control");
+  input.id = id;
   input.value = value;
   wrap.append(input);
   return { wrap, input };
