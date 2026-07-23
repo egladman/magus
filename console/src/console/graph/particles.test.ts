@@ -73,8 +73,19 @@ test("particleAlpha: 0 at the ends, ~0.8 in the middle, ramps over the first/las
 test("tick: determinism - two calls at the same nowMs return identical flowPoints", () => {
   resetMotion();
   const edges: FlowEdge[] = [
-    { pts: [{ x: 0, y: 0 }, { x: 100, y: 0 }] },
-    { pts: [{ x: 0, y: 50 }, { x: 50, y: 50 }, { x: 100, y: 50 }] },
+    {
+      pts: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+    },
+    {
+      pts: [
+        { x: 0, y: 50 },
+        { x: 50, y: 50 },
+        { x: 100, y: 50 },
+      ],
+    },
   ];
   setFlowEdges(edges);
   const a = tick(12345);
@@ -90,7 +101,14 @@ test("tick: returns null when there are no flow edges and no live pulses", () =>
 
 test("tick: produces 2 particles per flow edge", () => {
   resetMotion();
-  setFlowEdges([{ pts: [{ x: 0, y: 0 }, { x: 100, y: 0 }] }]);
+  setFlowEdges([
+    {
+      pts: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+    },
+  ]);
   const result = tick(0);
   assert.ok(result);
   assert.equal(result.flowPoints.length, 2);
@@ -150,7 +168,14 @@ test("setFlowEdges: null or empty returns false", () => {
 
 test("resetMotion: clears both flow edges and pulses", () => {
   resetMotion();
-  setFlowEdges([{ pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }] }]);
+  setFlowEdges([
+    {
+      pts: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+      ],
+    },
+  ]);
   setPulses(["a"], 0);
   assert.ok(tick(0) !== null);
   resetMotion();

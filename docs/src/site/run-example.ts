@@ -131,9 +131,7 @@ export function initRunExample(): void {
       lines.push(tag + op.name + detail + "  " + op.kind + " · would run");
     }
     const n = trace.length;
-    lines.push(
-      "[dry] " + n + " step" + (n === 1 ? "" : "s") + " planned, nothing executed",
-    );
+    lines.push("[dry] " + n + " step" + (n === 1 ? "" : "s") + " planned, nothing executed");
     return lines.join("\n");
   }
 

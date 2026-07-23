@@ -88,7 +88,12 @@ export function buildMemorySection(
         "Connect the console to a running daemon to view and edit agent memory. Open the console from a magus link, or set the daemon host on the General tab.",
       ),
     );
-    return { el: body, destroy() { stale = true; } };
+    return {
+      el: body,
+      destroy() {
+        stale = true;
+      },
+    };
   }
 
   const client: Client<typeof MemoryService> = createClient(
@@ -141,7 +146,11 @@ export function buildMemorySection(
       body.replaceChildren(
         buildEmpty(
           "Could not load memory",
-          "The daemon at " + host + " did not answer the memory service (" + msg + "). Start it with: magus server start.",
+          "The daemon at " +
+            host +
+            " did not answer the memory service (" +
+            msg +
+            "). Start it with: magus server start.",
         ),
       );
     }
@@ -159,12 +168,16 @@ export function buildMemorySection(
     bulkBtn = null;
 
     const addBtn = button("Add memory", "pf-m-secondary pf-m-small");
-    addBtn.addEventListener("click", () => { editState = { kind: "new" }; render(); });
+    addBtn.addEventListener("click", () => {
+      editState = { kind: "new" };
+      render();
+    });
 
     const typeSel = h("select", "pf-v6-c-form-control console-settings-memory__filter");
     typeSel.setAttribute("aria-label", "Filter by type");
     typeSel.append(option("All types", ""));
-    for (const t of TYPE_OPTIONS) typeSel.append(option(TYPE_LABELS[t] ?? "unspecified", String(t)));
+    for (const t of TYPE_OPTIONS)
+      typeSel.append(option(TYPE_LABELS[t] ?? "unspecified", String(t)));
     typeSel.value = filterType == null ? "" : String(filterType);
     typeSel.addEventListener("change", () => {
       filterType = typeSel.value === "" ? null : (Number(typeSel.value) as MemoryType);
@@ -178,7 +191,10 @@ export function buildMemorySection(
     search.value = filterText;
     // Filter WITHOUT rebuilding the input: repaint only the list container, so focus and the
     // caret survive every keystroke.
-    search.addEventListener("input", () => { filterText = search.value; repaintList(); });
+    search.addEventListener("input", () => {
+      filterText = search.value;
+      repaintList();
+    });
 
     toolbar.append(addBtn, typeSel, search);
     body.append(toolbar);
@@ -186,7 +202,8 @@ export function buildMemorySection(
 
     if (editState.kind !== "none") {
       const es = editState; // const narrowing survives the find() closure below; a let would not
-      const target = es.kind === "edit" ? lastRecords.find((rec) => rec.name === es.name) : undefined;
+      const target =
+        es.kind === "edit" ? lastRecords.find((rec) => rec.name === es.name) : undefined;
       body.append(buildEditForm(target));
     }
 
@@ -210,7 +227,9 @@ export function buildMemorySection(
     }
     const shown = lastRecords.filter(matchesFilter);
     if (shown.length === 0) {
-      listEl.append(h("p", "console-settings-memory__empty", "No records match the current filter."));
+      listEl.append(
+        h("p", "console-settings-memory__empty", "No records match the current filter."),
+      );
       return;
     }
     for (const rec of shown) listEl.append(buildRow(rec));
@@ -258,8 +277,13 @@ export function buildMemorySection(
     save.addEventListener("click", () => {
       save.disabled = true;
       void client.updateCursor({ content: area.value }, { signal: controller.signal }).then(
-        () => { if (!stale) showToast("Agent memory", "Saved the cursor."); },
-        (e: unknown) => { save.disabled = false; showErrorToast("save the cursor", e); },
+        () => {
+          if (!stale) showToast("Agent memory", "Saved the cursor.");
+        },
+        (e: unknown) => {
+          save.disabled = false;
+          showErrorToast("save the cursor", e);
+        },
       );
     });
     const control = h("div", "console-settings-memory__cursorbody");
@@ -285,7 +309,9 @@ export function buildMemorySection(
     });
 
     const head = h("div", "console-settings-memory__rowhead");
-    head.append(h("span", "console-settings-memory__badge", TYPE_LABELS[rec.type] ?? "unspecified"));
+    head.append(
+      h("span", "console-settings-memory__badge", TYPE_LABELS[rec.type] ?? "unspecified"),
+    );
     head.append(h("span", "console-settings-memory__name", rec.name));
     if (rec.status) head.append(h("span", "console-settings-memory__status", rec.status));
 
@@ -303,7 +329,10 @@ export function buildMemorySection(
 
     const actions = h("div", "console-settings-memory__rowactions");
     const edit = button("Edit", "pf-m-secondary pf-m-small");
-    edit.addEventListener("click", () => { editState = { kind: "edit", name: rec.name }; render(); });
+    edit.addEventListener("click", () => {
+      editState = { kind: "edit", name: rec.name };
+      render();
+    });
     const del = button("Delete", "pf-m-link pf-m-danger pf-m-small");
     del.addEventListener("click", () => void deleteOne(rec.name));
     actions.append(edit, del);
@@ -322,7 +351,8 @@ export function buildMemorySection(
     const typeId = "console-memory-field-" + ++fieldSeq;
     const typeSel = h("select", "pf-v6-c-form-control");
     typeSel.id = typeId;
-    for (const t of TYPE_OPTIONS) typeSel.append(option(TYPE_LABELS[t] ?? "unspecified", String(t)));
+    for (const t of TYPE_OPTIONS)
+      typeSel.append(option(TYPE_LABELS[t] ?? "unspecified", String(t)));
     typeSel.value = String(rec?.type ?? MemoryType.POINTER);
 
     const statusInput = labeledInput("Status (optional)", rec?.status ?? "");
@@ -330,10 +360,22 @@ export function buildMemorySection(
     const drafts: DraftRef[] = rec ? rec.refs.map((r) => ({ kind: r.kind, target: r.target })) : [];
     const renderRefs = (): void => {
       refsBox.replaceChildren();
-      refsBox.append(h("label", "console-settings-memory__label", "Refs (the payload - at least one)"));
-      drafts.forEach((d, i) => refsBox.append(buildRefRow(d, () => { drafts.splice(i, 1); renderRefs(); })));
+      refsBox.append(
+        h("label", "console-settings-memory__label", "Refs (the payload - at least one)"),
+      );
+      drafts.forEach((d, i) =>
+        refsBox.append(
+          buildRefRow(d, () => {
+            drafts.splice(i, 1);
+            renderRefs();
+          }),
+        ),
+      );
       const add = button("Add ref", "pf-m-link pf-m-small");
-      add.addEventListener("click", () => { drafts.push({ kind: MemoryRefKind.QUERY, target: "" }); renderRefs(); });
+      add.addEventListener("click", () => {
+        drafts.push({ kind: MemoryRefKind.QUERY, target: "" });
+        renderRefs();
+      });
       refsBox.append(add);
     };
     if (drafts.length === 0) drafts.push({ kind: MemoryRefKind.QUERY, target: "" });
@@ -356,11 +398,17 @@ export function buildMemorySection(
     typeSel.addEventListener("change", syncBodyVisibility);
     syncBodyVisibility();
 
-    const refsInput = labeledInput("References (comma-separated names, optional)", (rec?.references ?? []).join(", "));
+    const refsInput = labeledInput(
+      "References (comma-separated names, optional)",
+      (rec?.references ?? []).join(", "),
+    );
 
     const save = button("Save", "pf-m-primary pf-m-small");
     const cancel = button("Cancel", "pf-m-link pf-m-small");
-    cancel.addEventListener("click", () => { editState = { kind: "none" }; render(); });
+    cancel.addEventListener("click", () => {
+      editState = { kind: "none" };
+      render();
+    });
     save.addEventListener("click", () => {
       const t = Number(typeSel.value) as MemoryType;
       const record = {
@@ -378,10 +426,22 @@ export function buildMemorySection(
       };
       save.disabled = true;
       cancel.disabled = true;
-      void client.updateMemory({ memory: record, allowMissing: true }, { signal: controller.signal }).then(
-        () => { if (!stale) { showToast("Agent memory", "Saved " + record.name + "."); editState = { kind: "none" }; void load(); } },
-        (e: unknown) => { save.disabled = false; cancel.disabled = false; showErrorToast("save " + record.name, e); },
-      );
+      void client
+        .updateMemory({ memory: record, allowMissing: true }, { signal: controller.signal })
+        .then(
+          () => {
+            if (!stale) {
+              showToast("Agent memory", "Saved " + record.name + ".");
+              editState = { kind: "none" };
+              void load();
+            }
+          },
+          (e: unknown) => {
+            save.disabled = false;
+            cancel.disabled = false;
+            showErrorToast("save " + record.name, e);
+          },
+        );
     });
 
     const typeWrap = h("div", "console-settings-memory__bodywrap");
@@ -390,7 +450,15 @@ export function buildMemorySection(
     typeWrap.append(typeLabel, typeSel);
     const actions = h("div", "console-settings-memory__editactions");
     actions.append(save, cancel);
-    form.append(nameInput.wrap, typeWrap, statusInput.wrap, refsBox, bodyWrap, refsInput.wrap, actions);
+    form.append(
+      nameInput.wrap,
+      typeWrap,
+      statusInput.wrap,
+      refsBox,
+      bodyWrap,
+      refsInput.wrap,
+      actions,
+    );
     return form;
   }
 
@@ -400,12 +468,16 @@ export function buildMemorySection(
     kindSel.setAttribute("aria-label", "Ref kind");
     for (const k of REFKIND_OPTIONS) kindSel.append(option(REFKIND_LABELS[k] ?? "?", String(k)));
     kindSel.value = String(d.kind);
-    kindSel.addEventListener("change", () => { d.kind = Number(kindSel.value) as MemoryRefKind; });
+    kindSel.addEventListener("change", () => {
+      d.kind = Number(kindSel.value) as MemoryRefKind;
+    });
     const target = h("input", "pf-v6-c-form-control");
     target.setAttribute("aria-label", "Ref target");
     target.value = d.target;
     target.placeholder = "target (node id, query, output ref, command, or doc)";
-    target.addEventListener("input", () => { d.target = target.value; });
+    target.addEventListener("input", () => {
+      d.target = target.value;
+    });
     const rm = button("Remove", "pf-m-link pf-m-small");
     rm.addEventListener("click", onRemove);
     rowEl.append(kindSel, target, rm);
@@ -433,7 +505,9 @@ export function buildMemorySection(
     if (!confirm("Delete " + names.length + " memories? This cannot be undone.")) return;
     try {
       const results = await Promise.allSettled(
-        names.map((name) => client.deleteMemory({ name, allowMissing: true }, { signal: controller.signal })),
+        names.map((name) =>
+          client.deleteMemory({ name, allowMissing: true }, { signal: controller.signal }),
+        ),
       );
       if (stale) return;
       let failed = 0;
@@ -447,7 +521,13 @@ export function buildMemorySection(
       } else {
         showToast(
           "Agent memory",
-          "Deleted " + deleted + " of " + names.length + " memories; " + failed + " could not be deleted.",
+          "Deleted " +
+            deleted +
+            " of " +
+            names.length +
+            " memories; " +
+            failed +
+            " could not be deleted.",
           failed === names.length ? "error" : "warn",
         );
       }
@@ -463,7 +543,13 @@ export function buildMemorySection(
   }
 
   void load();
-  return { el: body, destroy() { stale = true; controller.abort(); } };
+  return {
+    el: body,
+    destroy() {
+      stale = true;
+      controller.abort();
+    },
+  };
 }
 
 // button builds a PatternFly button of the given modifier classes.
@@ -483,7 +569,10 @@ function option(label: string, value: string): HTMLOptionElement {
 
 // labeledInput builds a labeled text input, associating the <label for> with the input by id,
 // and returns the wrapper and the input.
-function labeledInput(label: string, value: string): { wrap: HTMLElement; input: HTMLInputElement } {
+function labeledInput(
+  label: string,
+  value: string,
+): { wrap: HTMLElement; input: HTMLInputElement } {
   const id = "console-memory-field-" + ++fieldSeq;
   const wrap = h("div", "console-settings-memory__bodywrap");
   const lab = h("label", "console-settings-memory__label", label);

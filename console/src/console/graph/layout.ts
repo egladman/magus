@@ -175,7 +175,10 @@ function computeLayers(
 // always strictly greater than layer(e.t) once computeLayers has run (e.s is
 // the dependent, e.t the dependency), so `ids`/`layers` come out already
 // ascending by layer - i.e. ascending x, dependency end to dependent end.
-function buildDummyChains(depEdges: DepEdge[], layerOf: Map<string, number>): Map<GLink, DummyChain> {
+function buildDummyChains(
+  depEdges: DepEdge[],
+  layerOf: Map<string, number>,
+): Map<GLink, DummyChain> {
   const chains = new Map<GLink, DummyChain>();
   for (const e of depEdges) {
     const ls = layerOf.get(e.s) ?? 0;
@@ -209,7 +212,11 @@ function chainSegments(e: { s: string; t: string }, chain: DummyChain): { s: str
 // routeEdges resolves each long edge's dummy chain to world-space points via
 // the just-computed coordinate map and writes them back onto the link;
 // short edges (span <= 1, no chain) have any stale route cleared.
-function routeEdges(depEdges: DepEdge[], chains: Map<GLink, DummyChain>, dummyCoord: Map<string, { x: number; y: number }>): void {
+function routeEdges(
+  depEdges: DepEdge[],
+  chains: Map<GLink, DummyChain>,
+  dummyCoord: Map<string, { x: number; y: number }>,
+): void {
   for (const e of depEdges) {
     const chain = chains.get(e.linkRef);
     if (chain) {

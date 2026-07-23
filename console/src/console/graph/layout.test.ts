@@ -113,7 +113,12 @@ test("layoutWaves: a diamond (a depends on b,c; b,c depend on d) yields wave0=[d
 });
 
 test("layoutWaves: within a wave, nodes sort by (project, id)", () => {
-  const nodes = [mkNode("b1", "z-project"), mkNode("a1", "a-project"), mkNode("c1", "a-project"), mkNode("root")];
+  const nodes = [
+    mkNode("b1", "z-project"),
+    mkNode("a1", "a-project"),
+    mkNode("c1", "a-project"),
+    mkNode("root"),
+  ];
   const links = [mkLink("b1", "root"), mkLink("a1", "root"), mkLink("c1", "root")];
   const { waves } = layoutWaves(nodes, links);
 

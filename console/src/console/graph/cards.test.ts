@@ -18,7 +18,17 @@ function fakeCtx(): CanvasRenderingContext2D {
 }
 
 function fakeNode(id: string, label: string): GNode {
-  return { id, kind: "target", label, degree: 0, r: 0, x: 0, y: 0, fx: null, fy: null } as unknown as GNode;
+  return {
+    id,
+    kind: "target",
+    label,
+    degree: 0,
+    r: 0,
+    x: 0,
+    y: 0,
+    fx: null,
+    fy: null,
+  } as unknown as GNode;
 }
 
 test("measureCards: a very long label clamps to CARD_MAX_W", () => {

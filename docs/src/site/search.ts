@@ -456,9 +456,7 @@ export function initSearch(): void {
             );
           if (tk.phrase)
             return (
-              '<span class="qchip qchip-phrase">&quot;' +
-              escapeHtml(tk.display) +
-              "&quot;</span>"
+              '<span class="qchip qchip-phrase">&quot;' + escapeHtml(tk.display) + "&quot;</span>"
             );
           return '<span class="qchip">' + escapeHtml(tk.display) + "</span>";
         })

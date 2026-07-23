@@ -82,7 +82,9 @@ test("layoutRadial: ring 2 keeps a parent's children in a contiguous angular spa
   assert.equal(rings[2].length, 4);
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const ring2Sorted = [...rings[2]].sort((a, b) => angleOf(byId.get(a) as GNode) - angleOf(byId.get(b) as GNode));
+  const ring2Sorted = [...rings[2]].sort(
+    (a, b) => angleOf(byId.get(a) as GNode) - angleOf(byId.get(b) as GNode),
+  );
   // c1/c2 (children of p1) and c3/c4 (children of p2) each form a contiguous
   // run once all ring-2 ids are sorted by angle.
   const p1Children = new Set(["c1", "c2"]);

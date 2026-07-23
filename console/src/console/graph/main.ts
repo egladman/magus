@@ -617,10 +617,7 @@ function applyLayeredMode() {
 function applyWavesMode() {
   const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   if (visNodes.length > LAYERED_MAX) {
-    setStatus(
-      "waves layout is capped at 500 nodes: narrow with a query or the local graph",
-      true,
-    );
+    setStatus("waves layout is capped at 500 nodes: narrow with a query or the local graph", true);
     wavesMeta = null;
     return false;
   }
@@ -988,11 +985,7 @@ function draw() {
     // geometrically-left endpoint (layoutReversed edges can flip that).
     const routePts: { x: number; y: number }[] | null =
       isDagMode() && e.points && e.points.length
-        ? [
-            { x: sx, y: sy },
-            { x: tx, y: ty },
-            ...e.points,
-          ].sort((a, b) => a.x - b.x)
+        ? [{ x: sx, y: sy }, { x: tx, y: ty }, ...e.points].sort((a, b) => a.x - b.x)
         : null;
     ctx.beginPath();
     if (routePts) {
@@ -1045,8 +1038,7 @@ function draw() {
       let fromX = fromNode === s ? sx : tx,
         fromY = fromNode === s ? sy : ty;
       if (routePts && routePts.length > 2) {
-        const nearest =
-          routePts[0].x === tipAttachX ? routePts[1] : routePts[routePts.length - 2];
+        const nearest = routePts[0].x === tipAttachX ? routePts[1] : routePts[routePts.length - 2];
         fromX = nearest.x;
         fromY = nearest.y;
       }
@@ -1568,7 +1560,7 @@ function fitView(ids: Set<string> | null) {
   const cards = cardsActive();
   for (const n of pts) {
     const hw = cards && n.w ? n.w / 2 : n.r;
-    const hh = cards && n.w ? n.h! / 2 : n.r;
+    const hh = cards && n.h ? n.h / 2 : n.r;
     minX = Math.min(minX, n.x - hw);
     maxX = Math.max(maxX, n.x + hw);
     minY = Math.min(minY, n.y - hh);
@@ -2734,10 +2726,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           " with no edges.",
       );
       setResultLine(
-        matchSet.size +
-          " target" +
-          (matchSet.size === 1 ? "" : "s") +
-          " nothing depends on.",
+        matchSet.size + " target" + (matchSet.size === 1 ? "" : "s") + " nothing depends on.",
       );
       break;
     }
@@ -2756,7 +2745,9 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             ids.size +
             " target(s) caught in a loop: a configuration error to fix.",
         );
-        setResultLine(ids.size + " target" + (ids.size === 1 ? "" : "s") + " in circular dependencies.");
+        setResultLine(
+          ids.size + " target" + (ids.size === 1 ? "" : "s") + " in circular dependencies.",
+        );
       } else {
         matchSet = null;
         setStatus("No circular dependencies: the dependency graph is acyclic.");
@@ -3575,7 +3566,9 @@ function liveApplyGraphUpdate(data: GraphPayload) {
       // The radial center vanished in the refresh; radial without a center is
       // meaningless, so fall back to the flavor default.
       switchLayout(graphFlavor === "targets" ? "layered" : "force");
-      setStatus("radial center no longer exists in the refreshed graph; showing the default layout.");
+      setStatus(
+        "radial center no longer exists in the refreshed graph; showing the default layout.",
+      );
     }
   } else {
     sim?.alpha(0.3).restart();

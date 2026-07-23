@@ -256,7 +256,11 @@ export function mountSharePanel(): SharePanel {
       });
     } catch {
       trigger.disabled = false;
-      showToast("Share", "Could not reach the daemon to start a share. Is it still running?", "error");
+      showToast(
+        "Share",
+        "Could not reach the daemon to start a share. Is it still running?",
+        "error",
+      );
       return;
     }
     if (!res.ok) {

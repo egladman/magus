@@ -45,7 +45,11 @@ export function initGlossaryTerms(): void {
     const kind = term.dataset.kind || "";
     const label = KIND_LABELS[kind];
     const jump =
-      kind === "convention" ? "About this convention" : label ? "Open reference" : "Full entry &amp; references";
+      kind === "convention"
+        ? "About this convention"
+        : label
+          ? "Open reference"
+          : "Full entry &amp; references";
     return (
       (label ? `<p class="gloss-kind">${label}</p>` : "") +
       (def ? `<p class="gloss-def">${esc(def)}</p>` : "") +
@@ -89,7 +93,8 @@ export function initGlossaryTerms(): void {
     if (left > maxLeft) left = Math.max(window.scrollX + 8, maxLeft);
     let top = r.bottom + window.scrollY + 6;
     const ph = pop.offsetHeight;
-    if (r.bottom + ph + 12 > window.innerHeight && r.top - ph - 6 > 0) top = r.top + window.scrollY - ph - 6;
+    if (r.bottom + ph + 12 > window.innerHeight && r.top - ph - 6 > 0)
+      top = r.top + window.scrollY - ph - 6;
     pop.style.left = `${Math.round(left)}px`;
     pop.style.top = `${Math.round(top)}px`;
     pop.style.visibility = "";
