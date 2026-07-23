@@ -290,7 +290,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         and srcRel != site.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md";
     var edit = "<small class=\"page-tools-edit\">";
     if (hasSource) {
-        edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View source</a> &middot; ";
+        edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View markdown source</a> &middot; ";
     }
     edit = edit + "<a href=\"" + site.config.repoURL + "/edit/" + site.metaBranch + "/" + site.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
     // Second row under the search box: "Suggest an edit" hugging the right edge. The search
