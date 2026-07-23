@@ -12,12 +12,20 @@ import (
 )
 
 // shareResponse is the JSON the share endpoint returns to the console: the link
-// (with the token in its fragment) a phone loads, when it dies, and whether
+// (with the token in its fragment) a device loads, when it dies, and whether
 // starting it revoked a previous active share.
 type shareResponse struct {
 	URL        string `json:"url"`
 	ExpiresAt  string `json:"expires_at"` // RFC 3339 UTC
 	Superseded bool   `json:"superseded"`
+}
+
+// shareRequest is the optional JSON body: the lifetime the operator picked in the
+// console before minting. Zero or absent means the default; the share manager
+// clamps any value to [share.MinTTL, share.MaxTTL], so the handler passes it through
+// without validating.
+type shareRequest struct {
+	TTLSeconds int `json:"ttl_seconds"`
 }
 
 // shareError is the JSON error body the console toasts on a failed share.
@@ -41,10 +49,15 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		}
 		if consoleDir == "" {
 			writeShareError(w, http.StatusServiceUnavailable,
-				"the built console was not found, so there is nothing to serve to your phone; build it with `magus run build console` and try again", log)
+				"the built console was not found, so there is nothing to share; build it with `magus run build console` and try again", log)
 			return
 		}
-		sess, err := mgr.Start(consoleDir, guarded)
+		// The body is optional: an absent or malformed body means "use the default
+		// lifetime", so a decode error is not fatal - it leaves req zero and Start
+		// falls back to the default. The manager clamps whatever ttl arrives.
+		var req shareRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		sess, err := mgr.Start(consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
 		if err != nil {
 			// A missing LAN interface (the common case) is a client-actionable
 			// condition, not a server fault: report it as 503 with the guidance

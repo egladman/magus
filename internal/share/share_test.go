@@ -85,6 +85,30 @@ func TestPickLANIPv4(t *testing.T) {
 	}
 }
 
+// TestResolveTTL covers the caller-requested-lifetime clamp: a non-positive request
+// falls back to the manager default, and any other value is bounded to [MinTTL, MaxTTL].
+func TestResolveTTL(t *testing.T) {
+	m := NewManager(context.Background(), 15*time.Minute, nil)
+	cases := []struct {
+		name string
+		in   time.Duration
+		want time.Duration
+	}{
+		{"zero uses default", 0, 15 * time.Minute},
+		{"negative uses default", -time.Hour, 15 * time.Minute},
+		{"in range passes through", time.Hour, time.Hour},
+		{"below min clamps up", 10 * time.Second, MinTTL},
+		{"above max clamps down", 48 * time.Hour, MaxTTL},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := m.resolveTTL(tc.in); got != tc.want {
+				t.Fatalf("resolveTTL(%s) = %s, want %s", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 // newTestManager returns a Manager that binds its share listener on loopback,
 // so the token/listener lifecycle can be exercised without a real LAN. Extra
 // options (e.g. WithTrailDir) pass straight through to NewManager.
@@ -150,7 +174,7 @@ func TestManagerServesGuardedRoutesWithToken(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler})
+	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -195,13 +219,13 @@ func TestManagerSupersedeRevokesOldToken(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	first, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler})
+	first, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
 	if err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	oldToken := tokenFromURL(t, first.URL)
 
-	second, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler})
+	second, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -234,7 +258,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	if _, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}); err != nil {
+	if _, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0); err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	first, ok := m.Active()
@@ -243,7 +267,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	}
 
 	// Supersede: the second Start replaces the first under the lock.
-	second, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler})
+	second, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -278,7 +302,7 @@ func TestManagerCloseKillsListener(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler})
+	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -294,7 +318,7 @@ func TestManagerTTLClosesListener(t *testing.T) {
 	m := newTestManager(t, ctx, 150*time.Millisecond)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler})
+	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -336,7 +360,7 @@ func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute, WithTrailDir(trailDir))
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler})
+	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}

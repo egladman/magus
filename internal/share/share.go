@@ -31,10 +31,21 @@ import (
 )
 
 // DefaultTTL is how long a share stays live before the listener closes and the
-// token expires. Short by design: a share is a "glance at my phone" affordance,
-// not a standing remote endpoint. Fifteen minutes is long enough to scan and
-// look, short enough that a leaked QR is worth little.
+// token expires when the caller does not request a specific lifetime. Short by
+// default: the common case is a "glance at my phone" affordance, not a standing
+// remote endpoint. Fifteen minutes is long enough to scan and look, short enough
+// that a leaked QR is worth little.
 const DefaultTTL = 15 * time.Minute
+
+// MinTTL and MaxTTL bound a caller-requested share lifetime. The console lets the
+// operator pick a duration before minting (a quick phone glance versus an all-day
+// display on a TV), and the daemon clamps the request to this range so a leaked QR
+// can never be made to live indefinitely. The token stays read-only regardless, so
+// a longer window only widens who may look, never what they may change.
+const (
+	MinTTL = 1 * time.Minute
+	MaxTTL = 24 * time.Hour
+)
 
 // Iface is the minimal, testable projection of a network interface that
 // pickLANIPv4 needs: whether it is up and a loopback, and its addresses. The
@@ -186,20 +197,40 @@ func NewManager(parent context.Context, ttl time.Duration, log *slog.Logger, opt
 	return m
 }
 
+// resolveTTL turns a caller-requested lifetime into the one this share will use: a
+// non-positive request falls back to the manager's configured default; any other
+// value is clamped to [MinTTL, MaxTTL] so a request can neither be too brief to scan
+// nor long enough to make a leaked QR a standing endpoint.
+func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return m.ttl
+	}
+	if ttl < MinTTL {
+		return MinTTL
+	}
+	if ttl > MaxTTL {
+		return MaxTTL
+	}
+	return ttl
+}
+
 // Start mints a fresh read-only token and opens a new LAN listener serving the
 // console from consoleDir at /console/ (unauthenticated static assets) and every
 // handler in guarded behind the new token (path -> handler). Any previously
 // active share is revoked first, so there is exactly one live token bound 1:1 to
 // exactly one live listener: a token from a prior session validates nowhere.
-// The listener closes and the token expires together after the manager's ttl (or
-// on parent cancellation / Close). consoleDir must contain the built console.
-func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler) (Session, error) {
+// The listener closes and the token expires together after ttl (or on parent
+// cancellation / Close). ttl is the caller-requested lifetime: a non-positive value
+// uses the manager's configured default, and any other value is clamped to
+// [MinTTL, MaxTTL]. consoleDir must contain the built console.
+func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl time.Duration) (Session, error) {
 	addr, err := m.selectAddr()
 	if err != nil {
 		return Session{}, err
 	}
 
-	secret, tok, err := auth.MintShareToken(m.ttl)
+	ttl = m.resolveTTL(ttl)
+	secret, tok, err := auth.MintShareToken(ttl)
 	if err != nil {
 		return Session{}, err
 	}
@@ -250,7 +281,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler) (Ses
 	// (timeout, daemon shutdown, or a Close/supersede cancel) tears the listener
 	// down. Closing the listener and expiring the token are therefore the same
 	// event - there is never a live listener with a dead token or vice versa.
-	ctx, cancel := context.WithTimeout(m.parent, m.ttl)
+	ctx, cancel := context.WithTimeout(m.parent, ttl)
 
 	// Supersede any current share and publish this one under the lock BEFORE starting
 	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if
