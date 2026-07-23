@@ -1,7 +1,7 @@
 <main class="console-graph-main">
 
     <!-- The blocks below marked [data-ref-section] are this surface's reference copy (Ask, Views, Search
-         syntax, Colors and forces, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
+         syntax, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
          panel (#console-refpanel, opened from the title-bar Reference button) each time it opens, and
          again on a tab change while docked - cloning, not moving, so the surface can unmount and remount
          freely. The sources are hidden in place by [data-ref-section]{display:none} (overrides.css);
@@ -75,34 +75,6 @@
       </div>
     </details>
 
-    <details class="console-graph-help" data-ref-section>
-      <summary>Colors and forces</summary>
-      <div class="console-graph-help__body">
-        <p class="console-graph-display__sublabel">Layout forces</p>
-        <div class="console-graph-display__forces" role="group" aria-label="Layout forces">
-          <label>Repel <input type="range" id="force-charge" min="20" max="200" value="60" step="5"></label>
-          <label>Link length <input type="range" id="force-link" min="10" max="140" value="40" step="5"></label>
-          <label>Gravity <input type="range" id="force-gravity" min="0" max="10" value="2" step="1"></label>
-        </div>
-        <p class="console-graph-display__sublabel">Color presets</p>
-        <p class="console-graph-display__controlhint">One-click color coding over the kind palette. Active preset serializes to the URL.</p>
-        <div class="console-graph-colorgroup__presetrow">
-          <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="spell" title="Color each spell a distinct hue - shows toolchain as architectural layer"><span class="pf-v6-c-button__text">Color by spell</span></button>
-          <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="project" title="Color each project a distinct hue - shows project boundaries"><span class="pf-v6-c-button__text">Color by project</span></button>
-          <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout) - shows architectural layers"><span class="pf-v6-c-button__text">Color by DAG depth</span></button>
-          <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="duration" data-conditional hidden title="Color by run duration - hot is slow. Shown when the graph carries timing (run a build first: magus graph deps -o json)."><span class="pf-v6-c-button__text">Color by duration</span></button>
-        </div>
-        <p class="console-graph-display__sublabel">Color groups</p>
-        <p>Paint every node matching a query one color, on top of the kind palette - keep several at once to compare slices of the graph.</p>
-        <div class="console-graph-colorgroup__addrow">
-          <input id="group-query" type="text" placeholder="kind:spell" aria-label="Color-group query" spellcheck="false" autocomplete="off">
-          <input id="group-color" type="color" value="#e8590c" aria-label="Color-group color">
-          <button id="group-add" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small"><span class="pf-v6-c-button__text">Add</span></button>
-        </div>
-        <div id="group-list" aria-label="Color groups"></div>
-      </div>
-    </details>
-
     <section class="console-graph-app">
       <aside class="console-graph-sidebar">
         <!-- Query bar: a labelled PF input-group. The "magus query" prompt is a LABEL above the field,
@@ -165,6 +137,29 @@
             <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">See what my last change affects</button>
           </div>
         </div>
+        <!-- Colors and forces: the interactive display controls, collapsed by default so
+             the sidebar's default state stays search + modes + explore. Lives here (not
+             in the Reference drawer) because these are LIVE controls, not documentation -
+             the reference copy at the top of <main> was removed when this moved. -->
+        <details class="console-graph-sidebar__panel">
+          <summary>Colors and forces</summary>
+          <div class="console-graph-sidebar__panelbody">
+            <p class="console-graph-display__sublabel">Layout forces</p>
+            <div class="console-graph-display__forces" role="group" aria-label="Layout forces">
+              <label>Repel <input type="range" id="force-charge" min="20" max="200" value="60" step="5"></label>
+              <label>Link length <input type="range" id="force-link" min="10" max="140" value="40" step="5"></label>
+              <label>Gravity <input type="range" id="force-gravity" min="0" max="10" value="2" step="1"></label>
+            </div>
+            <p class="console-graph-display__sublabel">Color presets</p>
+            <p class="console-graph-display__controlhint">One-click color coding over the kind palette. Active preset serializes to the URL.</p>
+            <div class="console-graph-colorgroup__presetrow">
+              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="spell" title="Color each spell a distinct hue - shows toolchain as architectural layer"><span class="pf-v6-c-button__text">Color by spell</span></button>
+              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="project" title="Color each project a distinct hue - shows project boundaries"><span class="pf-v6-c-button__text">Color by project</span></button>
+              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout) - shows architectural layers"><span class="pf-v6-c-button__text">Color by DAG depth</span></button>
+              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="duration" data-conditional hidden title="Color by run duration - hot is slow. Shown when the graph carries timing (run a build first: magus graph deps -o json)."><span class="pf-v6-c-button__text">Color by duration</span></button>
+            </div>
+          </div>
+        </details>
         <!-- Phase 5: projection unfold button - shown when default projection is active. -->
         <button id="projection-unfold-btn" type="button" class="pf-v6-c-button pf-m-link console-graph-sidebar__unfold" hidden><span class="pf-v6-c-button__text">Show full graph</span></button>
         <!-- Phase 5: empty-state suggestion chips - populated after graph loads. -->
@@ -222,11 +217,6 @@
              already is (over the canvas) instead of below the whole app. -->
         <p id="graph-result-line" class="console-graph-stage__result" hidden aria-live="polite"></p>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
-        <!-- Bottom-left mode indicator (Decision 3): a persistent readout of the active
-             display mode, kept in sync by syncLayoutToggle - so a mode switched by a
-             question chip's auto-switch (askQuestion) stays visible even after the sidebar
-             control scrolls out of view. -->
-        <p id="graph-mode-indicator" class="console-graph-stage__mode" aria-live="polite">mode: Force</p>
         <!-- Load spinner: shown while boot fetches the demo graph.json (~1.4MB). main.ts toggles it
              around `await loadGraph()`; hidden by default (a cold visit shows the empty state instead). -->
         <div id="graph-loading" class="console-graph-loading" hidden>
@@ -284,10 +274,17 @@
       <!-- populated by renderViewCommand() -->
     </div>
 
-    <!-- Status/hint line: lives OUT of the canvas overlay so it never obscures the
-         graph. A quiet in-flow line beneath the app; empty (display:none) unless
-         there's something to report (loading, a view result, or an error). -->
-    <p id="graph-status" role="status">Loading graph...</p>
+    <!-- Bottom status row: the mode indicator (Decision 3 - a persistent readout of the
+         active display mode, kept in sync by syncLayoutToggle so a mode switched by a
+         question chip's auto-switch (askQuestion) stays visible) on the left, and the
+         status/hint line filling the rest. Both live OUT of the canvas overlay so they
+         never obscure the graph; #graph-status is empty (display:none) unless there's
+         something to report (loading, a view result, or an error) - the mode label stays
+         visible either way. -->
+    <div class="console-graph-bottombar">
+      <p id="graph-mode-indicator" class="console-graph-bottombar__mode" aria-live="polite">mode: Force</p>
+      <p id="graph-status" role="status">Loading graph...</p>
+    </div>
 
     <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
 
