@@ -7,11 +7,13 @@
 /* Pico v2 scales the root font-size UP at each breakpoint - 100% (16px) at the
    base, climbing to 125% (20px) >=1280px and 131.25% >=1536px - which makes the
    whole UI read noticeably larger than a typical 16px site (e.g. github.com).
-   Pin it to 100% so 1rem == 16px at every width; spacing is rem-based, so the
-   entire layout tightens proportionally to match. */
+   Pin it flat so 1rem is the same at every width; spacing is rem-based, so the
+   whole layout scales proportionally off this one value. 106.25% (17px) reads a
+   touch larger than a bare 16px for comfort on phones without inflating to Pico's
+   native 20px+ - dense, but not cramped. */
 
 :root {
-  --pico-font-size: 100%;
+  --pico-font-size: 106.25%;
   /* Shared width for the app-like tool pages (search, playground editor) so they
      occupy the same screen real estate instead of one being 78rem and the other
      full-bleed. Wider than the prose container, but still capped. */
@@ -471,11 +473,13 @@ body {
   background-position: 0.6rem center;
   background-size: 1rem 1rem;
 }
-/* Header: extra right padding reserves space for the keybinding hint. */
+/* Header: extra right padding reserves space for the keybinding hint. A touch more
+   vertical padding gives the field a comfortable ~40px hit area on touch without
+   inflating the header row. */
 .page-tools .search-input {
   width: 100%;
   min-width: 0;
-  padding: 0.32rem 5rem 0.32rem 1.9rem;
+  padding: 0.45rem 5rem 0.45rem 1.9rem;
 }
 /* Page: same field, a touch taller for a prominent bar; no kbd hint, so no right gap. */
 .search-page-inputwrap .search-input {
@@ -1331,6 +1335,15 @@ article :is(h2, h3, h4, h5, h6):hover .heading-anchor,
   }
 }
 
+/* Inline code: trim the vertical padding Pico applies symmetrically. With the full
+   padding, a wrapped run of inline-code spans (go-build, go-test, golangci-lint ...)
+   makes tinted boxes tall enough that adjacent lines touch and read as one block; a
+   slimmer padding-block keeps a clear gap between rows. Horizontal padding is left as
+   Pico sets it, and code inside a pre block is untouched. */
+:not(pre) > code {
+  padding-block: 0.1rem;
+}
+
 /* Inline code that is itself a link - e.g. a type name linking to its source
    definition, or a module name in a reference table - should read unmistakably
    as a link. Pico colors links with the primary color but inline <code> sets its
@@ -1677,7 +1690,12 @@ a code {
   justify-content: center;
   background: none;
   border: 0;
-  padding: 0 0.3rem;
+  /* A larger hit area than the bare glyph: min-size plus padding takes the tap target
+     from ~19px to ~34px without a big glyph, so it stays quiet chrome but is easy to
+     hit on a phone. */
+  padding: 0.25rem 0.5rem;
+  min-width: 2rem;
+  min-height: 2rem;
   color: inherit;
   font-size: 1.2rem;
   line-height: 1;

@@ -182,7 +182,11 @@ html.ref-instant body, html.ref-instant .ref-drawer, html.ref-instant .ref-backd
 .ref-pin[aria-pressed="true"]:active { color: var(--accent-warm); }
 .ref-pin svg { display: block; }
 .ref-drawer-close {
-  width: auto; margin: 0; padding: 0.1rem 0.5rem; font-size: 1.2rem; line-height: 1;
+  /* min-size + centered flex gives the close "x" a ~34px tap target (was ~22px) without a
+     bigger glyph, matching the fix on the announcement close. */
+  width: auto; margin: 0; padding: 0.25rem 0.5rem; min-width: 2rem; min-height: 2rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; line-height: 1;
   background: none; border: 0; box-shadow: none; cursor: pointer;
   /* Same fix as .ref-pin: reset Pico's bare-<button> white --pico-color so the glyph never fades. */
   --pico-color: var(--pico-contrast); color: var(--pico-muted-color);

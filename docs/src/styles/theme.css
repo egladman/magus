@@ -91,11 +91,13 @@
   --accent-warm-hover: #c2410c;
   --accent-warm-inverse: #ffffff;
 
-  /* Glossary term highlight: a muted highlighter yellow (marker swipe) that marks an
+  /* Glossary term highlight: a soft parchment-gold (marker swipe) that marks an
      auto-linked glossary term as a distinct kind of thing, not another blue link. Its
-     own vars, not --pico-mark-*, so glossary terms never read as transient search hits. */
-  --glossary-highlight: #f7ecab;
-  --glossary-highlight-strong: #efdd85;
+     own vars, not --pico-mark-*, so glossary terms never read as transient search hits.
+     Kept gentle so the fill complements the palette rather than grabbing the eye; the
+     thin gold underline (--glossary-highlight-rule) carries the "this is a term" cue. */
+  --glossary-highlight: #f4eecb;
+  --glossary-highlight-strong: #ecdfa8;
   --glossary-highlight-rule: #c9ad4a;
 
   /* Demo callout accent: a muted teal, its own identity for "there is a runnable demo of
