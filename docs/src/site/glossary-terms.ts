@@ -3,9 +3,11 @@
 //   hover / focus -> a quick popover, gated on matchMedia("(hover: hover)") so a touch
 //                    tap's synthetic pre-click mouseenter/focus can't flash it open (desktop
 //                    peek only)
-//   click / tap   -> a split reveal: the content parts open below the term's paragraph to
-//                    show a recessed panel (the only interaction that works on touch, since
-//                    hover has no tap)
+//   click / tap   -> on a hover-capable device the popover above already shows everything
+//                    a click would (both render the same cardBody()), so the click just
+//                    follows the link; on touch (no hover) it instead opens a split reveal -
+//                    the content parts open below the term's paragraph to show a recessed
+//                    panel - since that's the only way to see the definition at all
 //
 // Everything is static. The render pass (lib/glossary.buzz) links each term and bakes its
 // definition into the link (data-def), so both surfaces read the text straight off the DOM
@@ -177,6 +179,12 @@ export function initGlossaryTerms(): void {
     term.addEventListener("focus", () => showPop(term));
     term.addEventListener("blur", scheduleHide);
     term.addEventListener("click", (e: MouseEvent) => {
+      // The reveal and the hover popover render the exact same cardBody() content, so on
+      // a hover-capable device the popover already covers a click's worth of extra
+      // information - let the click follow the link normally instead of also parting the
+      // page open. Touch devices have no hover, so their click is the only way to see the
+      // definition at all; that's where the reveal earns its keep.
+      if (canHover) return;
       e.preventDefault();
       hidePop();
       openReveal(term);
