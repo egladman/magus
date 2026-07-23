@@ -95,8 +95,10 @@ to install. See the [Download guide](docs/guides/download.md).
 
 ### A first look
 
-A `magusfile.buzz` at the repo root declares your targets as exported functions -
-each one composes operations from the spells you bind:[^playground]
+magus targets are written in [Buzz](https://buzz-lang.dev/), a small typed
+scripting language it embeds. A `magusfile.buzz` at the repo root declares your
+targets as exported functions - each one composes operations from the spells you
+bind:[^playground]
 
 <!-- magus-run-recorder -->
 
