@@ -14,7 +14,7 @@ with a teammate, an agent, or another tool.
 Output references fix this. Every target that runs is given a short **reference id**
 for its captured output, printed on its own line:
 
-```
+```text
 [pass] docs test (1.2s)
 ref1a2b3c
 ```
@@ -36,7 +36,7 @@ triple-click selects exactly the ref.
 
 A failing target adds two hints, the exact commands ready to copy:
 
-```
+```text
 [fail] docs test (1.2s): tsc exit 2
 refcc49db1f
   full output: magus query output refcc49db1f

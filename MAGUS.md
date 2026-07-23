@@ -34,7 +34,7 @@ Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman
 
 ## Query first
 
-This workspace has a knowledge graph of **2078 nodes** and **4473 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2078 nodes** and **4472 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -89,7 +89,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
 | `test` | Formats first, then runs the Go test suite. |
 | `lint` | Formats first, then golangci-lint, go vet, govulncheck, markdownlint. |
-| `format` | Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs. |
+| `format` | Regenerates, then formats Go and tidies `go.mod`. |
 | `ci` | Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |

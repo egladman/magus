@@ -84,7 +84,7 @@ the console logs a warning and does not register its routes.
 **Bearer token.** Every request must carry `Authorization: Bearer <token>`.
 The token is the same one the MCP server uses. Retrieve it with:
 
-```
+```sh
 magus config mcp token print
 ```
 
@@ -151,7 +151,7 @@ log in the address bar).
 
 `magus doctor` reports console reachability when the daemon is running:
 
-```
+```text
 [pass] console: reachable at http://127.0.0.1:7391/api/v1/graph
     bearer token: magus config mcp token print
 ```
@@ -318,7 +318,7 @@ and the built assets are committed and CI-checked. `site-manifest.sha256`
 lists every served file with its SHA-256, in `sha256sum(1)` format. To verify
 any asset:
 
-```
+```sh
 curl -s <asset-url> | sha256sum
 ```
 

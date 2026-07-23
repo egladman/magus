@@ -117,7 +117,7 @@
 <h2 id="methods">Methods</h2>
 <h3 id="render">render</h3>
 <p>Serialize an XML node to a string. A node is a string (text) or an element map {&quot;tag&quot;: name, &quot;attrs&quot;: [name, value, ...], &quot;children&quot;: [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.</p>
-<p><strong>Signature:</strong> <code>xml.render(node) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L74" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>xml.render(node) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L75" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -139,7 +139,7 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="element">element</h3>
 <p>Build an element node from a tag, a flat [name, value, ...] attribute list, and a list of child nodes (elements or strings). Sugar for the {&quot;tag&quot;, &quot;attrs&quot;, &quot;children&quot;} map that render consumes.</p>
-<p><strong>Signature:</strong> <code>xml.element(tag, attrs, children) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L61" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>xml.element(tag, attrs, children) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L62" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -173,7 +173,7 @@
 <p><strong>Returns:</strong> any</p>
 <h3 id="parse">parse</h3>
 <p>Parse an XML string into a node tree: each element becomes {&quot;tag&quot;: name, &quot;attrs&quot;: [name, value, ...], &quot;children&quot;: [node, ...]}, character data becomes a string. The inverse shape of render.</p>
-<p><strong>Signature:</strong> <code>xml.parse(s) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L132" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>xml.parse(s) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/xml.go#L133" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -212,7 +212,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22xml%22">xml</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-23T21:23:00Z">July 23, 2026, 9:23 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/2403e72a2aec3d0a983804fa9490506a332ed154" data-tooltip="2403e72a2aec3d0a983804fa9490506a332ed154" title="2403e72a2aec3d0a983804fa9490506a332ed154">2403e72a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/xml.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/xml.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

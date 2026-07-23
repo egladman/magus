@@ -90,7 +90,7 @@ output, and pulling out ONE target's full output - especially a failure - to sha
 with a teammate, an agent, or another tool.</p>
 <p>Output references fix this. Every target that runs is given a short <strong>reference id</strong>
 for its captured output, printed on its own line:</p>
-<pre><code>[pass] docs test (1.2s)
+<pre><code class="language-text">[pass] docs test (1.2s)
 ref1a2b3c
 </code></pre>
 <p>Retrieve that exact output at any time with <code>magus query output</code>:</p>
@@ -103,7 +103,7 @@ every output format (<code>pretty</code>, <code>text</code>, <code>json</code>) 
 mode it sits on its own bare, unlabeled line beneath the pass/fail line, so a
 triple-click selects exactly the ref.</p>
 <p>A failing target adds two hints, the exact commands ready to copy:</p>
-<pre><code>[fail] docs test (1.2s): tsc exit 2
+<pre><code class="language-text">[fail] docs test (1.2s): tsc exit 2
 refcc49db1f
   full output: magus query output refcc49db1f
   open in browser: magus query output refcc49db1f --open
@@ -213,7 +213,7 @@ that is not a well-formed <code>ref&lt;hex&gt;</code> id, so it cannot name a st
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22output%22">output</a><a class="tag" href="../../search/?q=tag%3A%22ref%22">ref</a><a class="tag" href="../../search/?q=tag%3A%22logs%22">logs</a><a class="tag" href="../../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../../search/?q=tag%3A%22failure%22">failure</a><a class="tag" href="../../search/?q=tag%3A%22debugging%22">debugging</a><a class="tag" href="../../search/?q=tag%3A%22clipboard%22">clipboard</a><a class="tag" href="../../search/?q=tag%3A%22mcp%22">mcp</a><a class="tag" href="../../search/?q=tag%3A%22agent%22">agent</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-23T19:43:54Z">July 23, 2026, 7:43 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/fd9e97cdc2e52eba81205c56f1b36a76a5bd69a7" data-tooltip="fd9e97cdc2e52eba81205c56f1b36a76a5bd69a7" title="fd9e97cdc2e52eba81205c56f1b36a76a5bd69a7">fd9e97cd</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/output-refs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/output-refs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
