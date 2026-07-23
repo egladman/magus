@@ -5,15 +5,16 @@ mgs = "go run ./cmd/magus"
 
 [tools]
 go = "1.26.4"
-# node + prettier + markdownlint-cli back the markdown spell (md.prettier /
-# md.markdownlint), so the format/lint gates resolve them from mise, not a stray global.
+# node + markdownlint-cli back the markdown spell (md.markdownlint), so the lint gate
+# resolves them from mise, not a stray global. Markdown has no formatter: TypeScript/CSS
+# use biome (a pnpm devDep per project), and prettier was dropped rather than kept only to
+# format markdown, which biome does not support.
 node = "24"
 # pnpm (not npm) is the website's package manager: it enforces a minimum release
 # age on installs (see website/.npmrc minimum-release-age, 10 days) so a freshly
 # published - possibly compromised - version is never pulled into a build.
 pnpm = "10.33.0"
 "npm:markdownlint-cli" = "0.49.0"
-"npm:prettier" = "3.9.4"
 # esbuild bundles + minifies the website's client JS (js/theme.js -> gen/theme.js,
 # js/main.js -> gen/main.js) and minifies its CSS, in the website generate target.
 # Pinned EXACTLY: a version bump silently rewrites every gen/*.js|css byte and trips

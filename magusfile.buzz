@@ -417,8 +417,11 @@ export fun test(ctx: magus\Context, args: [str])   > void { ctx.needs(format); g
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
 export fun lint(ctx: magus\Context, args: [str])   > void { ctx.needs(format); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]); md.markdownlint(); }
-// Regenerates, then formats Go, tidies `go.mod`, and prettifies the docs.
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); md.prettier(); }
+// Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):
+// markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all
+// TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely
+// to format markdown.
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
 
 // Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate;
 // the affected/pipeline anchor - one command that also catches unregenerated output.

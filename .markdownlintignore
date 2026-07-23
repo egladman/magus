@@ -5,3 +5,19 @@ node_modules/
 # Claude Code session worktrees: full repo checkouts owned by other sessions.
 # A root-scoped markdownlint walk must never check them.
 .claude/
+
+# Generated Markdown. Derived from the Go source tree by content-generate (module
+# reference, spell docs, manpages, knowledge) or emitted into a gen/ tree by the docs
+# render. It is drift-gated by its own generators, not hand-authored, so a prose linter
+# must not gate it - a rule fix belongs in the generator, not the output.
+**/gen/
+docs/reference/buzz/
+docs/reference/manpage/
+docs/concepts/spells/
+docs/concepts/spells.md
+docs/concepts/knowledge.md
+CHANGELOG.md
+
+# The AGENTS.md section template is embedded into a larger AGENTS.md, so it intentionally
+# starts at "## magus" - the first-line-h1 rule does not apply to a fragment.
+cmd/magus/agents-section.md
