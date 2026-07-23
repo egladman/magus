@@ -9,7 +9,7 @@ import { errName } from "./guards";
 // What this module owns:
 //   - HOST RESOLUTION: resolveDaemonHost() is the single source of truth for "which
 //     daemon origin do I talk to". It considers, in order, an explicit #port= attach,
-//     own-origin adoption (shared phone view / the operator's daemon-origin console),
+//     own-origin adoption (a LAN-share viewer / the operator's daemon-origin console),
 //     and the operator's configured default. daemonAttach() is the explicit-only
 //     subset (no configured fallback) surfaces use to decide whether to enter live
 //     mode at all.
@@ -37,7 +37,7 @@ import { Code, ConnectError, type Interceptor, type Transport } from "@connectrp
 import { getDefaultHost } from "./settings";
 
 // isCapabilityDenied reports whether a Connect RPC error is the daemon DECLINING the capability to
-// this client (not a transient outage). A read-only phone-share session cannot reach TokenService
+// this client (not a transient outage). A read-only LAN-share session cannot reach TokenService
 // or MemoryService: the LAN share listener never mounts them (Unimplemented/NotFound) and a share
 // token cannot pass their guard (Unauthenticated/PermissionDenied). A capability-gated section
 // keys its visibility on this so the SERVER decides what a client may see - never a client-side
@@ -102,7 +102,7 @@ export function wantsDemo(params: HashParams): boolean {
 // (e.g. "127.0.0.1:7391@evil.com" splits to host "127.0.0.1", but a browser fetching
 // "http://127.0.0.1:7391@evil.com" actually connects to evil.com and would send it the
 // bearer token). Returns the normalized "host:port" (brackets kept for IPv6) on
-// success, or null on any rejection. Shared mode's same-origin LAN host is NOT accepted
+// success, or null on any rejection. The LAN share's same-origin host is NOT accepted
 // here - that path resolves through resolveDaemonHost/location.host directly, so this
 // pure loopback check makes the docs claim "data cannot leave your machine" verifiable.
 export function validateLoopbackHost(hostPort: string): string | null {
@@ -147,7 +147,7 @@ export function normalizeDaemonHost(input: string): string | null {
 }
 
 // loopbackPort extracts the port from a loopback host:port ("127.0.0.1:7391" -> "7391",
-// "[::1]:7391" -> "7391"), or null when the host is not loopback (a shared-mode LAN
+// "[::1]:7391" -> "7391"), or null when the host is not loopback (a LAN-share
 // origin). logsLink uses it to decide whether a log-viewer deep-link needs a #port=.
 function loopbackPort(host: string): string | null {
   const norm = validateLoopbackHost(host);
@@ -164,7 +164,7 @@ function loopbackPort(host: string): string | null {
 
 // logsLink builds a log-viewer deep-link ("../logs/#...") for the daemon the console is
 // talking to. A LOOPBACK daemon needs its port so the viewer can re-attach (#port=<port>);
-// a shared-mode (same-origin LAN) daemon needs none - the viewer resolves its own origin -
+// a LAN-share (same-origin LAN) daemon needs none - the viewer resolves its own origin -
 // so only the content params (e.g. { ref } or { inv }) ride the fragment. Pass the resolved
 // daemon host (or null) plus the extra content params.
 export function logsLink(host: string | null, extra: Record<string, string>): string {
@@ -175,39 +175,39 @@ export function logsLink(host: string | null, extra: Record<string, string>): st
   return "../logs/" + (parts.length ? "#" + parts.join("&") : "");
 }
 
-// ---- host resolution + shared mode (share to phone) ------------------------
+// ---- host resolution + read-only LAN share ---------------------------------
 
 // ownOrigin: the console adopted the page's OWN origin as the daemon (it was served BY
-// the daemon and carries a token). Covers BOTH a phone on a LAN share and the operator's
-// own daemon-origin console. sharedMode is the read-only SUBSET (a phone on a non-loopback
-// LAN origin); the operator's loopback console adopts its origin but keeps full control.
+// the daemon and carries a token). Covers BOTH a device on a LAN share and the operator's
+// own daemon-origin console. readOnly narrows that to the look-only case (a non-loopback LAN
+// origin: a phone, a TV, any device on the share); the operator's loopback console keeps full control.
 let ownOrigin = false;
-let sharedMode = false;
+let readOnly = false;
 
-// isSharedMode reports whether the console is running as a read-only phone viewer
-// loaded from the daemon's LAN share origin (see adoptDaemonOrigin). The
-// shell uses it to hide loopback-tier actions (Share to phone itself, and any
-// mutating control) - a shared session is a look, not a touch.
-export function isSharedMode(): boolean {
-  return sharedMode;
+// isReadOnly reports whether the console is a read-only viewer: a phone, a TV, or any
+// device loaded from the daemon's LAN share origin (see adoptDaemonOrigin). The shell uses
+// it to hide loopback-tier actions (Share itself, and any mutating control): a shared
+// session is a look, not a touch.
+export function isReadOnly(): boolean {
+  return readOnly;
 }
 
 // adoptDaemonOrigin detects a page that must adopt its OWN origin as the daemon: a
 // page carrying a #token= fragment (or a token already stashed from one) that was served
 // BY the daemon. Two audiences reach it:
-//   - a phone that opened a LAN share link (NON-loopback page origin): a read-only "look,
-//     not touch" view, so it ALSO enters shared mode and the shell hides every mutating
+//   - a device that opened a LAN share link (NON-loopback page origin): a read-only "look,
+//     not touch" view, so it ALSO becomes read-only and the shell hides every mutating
 //     control.
 //   - the operator's own console, opened by a minted daemon-origin link served from
 //     127.0.0.1:<port>/console/ (LOOPBACK page origin): it adopts its origin as the daemon
-//     too, but keeps FULL control - it is the operator's own console, not a shared phone
-//     view, so it does NOT enter read-only shared mode.
+//     too, but keeps FULL control - it is the operator's own console, not a shared viewer,
+//     so it does NOT become read-only.
 // It records the adoption (ownOrigin) so resolveDaemonHost returns location.host directly -
 // no fragment synthesis - and consumes the token. A page carrying an explicit #port= is a
 // cross-origin attach to a LOCAL daemon (the operator reaching past their origin), not
 // own-origin adoption: it just consumes any token and keeps full control. On a page with no
 // token and no #port it does nothing. Call it once, before anything reads the hash. Returns
-// whether READ-ONLY shared mode was entered.
+// whether the console became READ-ONLY.
 export function adoptDaemonOrigin(): boolean {
   if (typeof location === "undefined") return false;
   const params = parseHash();
@@ -220,15 +220,15 @@ export function adoptDaemonOrigin(): boolean {
   if (params.token === undefined && getLiveToken() === null) return false; // not our flow
 
   ownOrigin = true;
-  // Only a phone on a NON-loopback LAN share origin drops to read-only shared mode; the
+  // Only a device on a NON-loopback LAN share origin becomes read-only; the
   // operator's own loopback console adopts its origin but keeps full control. localhost
   // counts as loopback here too - a page served from localhost is the operator's own machine.
   const hn = location.hostname;
   const loopback = hn === "127.0.0.1" || hn === "::1" || hn === "[::1]" || hn === "localhost";
-  if (!loopback) sharedMode = true;
+  if (!loopback) readOnly = true;
 
   consumeLiveToken(params); // stash + strip the token
-  return sharedMode;
+  return readOnly;
 }
 
 // daemonAttach resolves the daemon host for an EXPLICIT attach only, or null. This is the
@@ -237,9 +237,9 @@ export function adoptDaemonOrigin(): boolean {
 // use it, so a mere configured default never forces them into live mode.
 //   1. #port=<port>  -> 127.0.0.1:<port> (loopback-implied; wins over origin adoption, since
 //      a hosted page carrying #port is deliberately reaching a local daemon).
-//   2. own-origin adoption (shared phone view, or the operator's daemon-origin console) ->
+//   2. own-origin adoption (a LAN-share viewer, or the operator's daemon-origin console) ->
 //      location.host, the exact origin the console was served from. NEVER a loopback
-//      expansion for a phone: it must keep talking to the LAN IP:port it loaded from.
+//      expansion for a LAN-share viewer: it must keep talking to the LAN IP:port it loaded from.
 export function daemonAttach(params: HashParams = parseHash()): string | null {
   if (params.port !== undefined) return expandPort(params.port);
   if (ownOrigin && typeof location !== "undefined") return location.host;
@@ -342,7 +342,7 @@ export async function fetchReadiness(
   // Defense in depth: the caller passes an already-resolved host (resolveDaemonHost), but re-verify
   // it is literal loopback OR the page's OWN origin before attaching the bearer token, so a future
   // caller that ever passes a raw string can never send the token to a third-party host. The
-  // shared-mode LAN host is same-origin, so it passes here where validateLoopbackHost alone would not.
+  // LAN-share host is same-origin, so it passes here where validateLoopbackHost alone would not.
   const safe =
     validateLoopbackHost(host) ??
     (typeof location !== "undefined" && host === location.host ? host : null);

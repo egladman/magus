@@ -17,7 +17,7 @@ import { buildModelMulti } from "./model";
 import { render, updateTimelineControl } from "./render";
 
 // The host of the current live stream, stashed so a FAIL notification can deep-link back to the failing
-// ref. A resolved daemon host (loopback, or the shared-mode same-origin LAN host), or null before any
+// ref. A resolved daemon host (loopback, or the LAN-share same-origin host), or null before any
 // live connect.
 let liveNotifyHost: string | null = null;
 

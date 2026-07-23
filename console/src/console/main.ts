@@ -42,7 +42,7 @@ import {
   resolveDaemonHost,
   createDaemonTransport,
   fetchReadiness,
-  isSharedMode,
+  isReadOnly,
   adoptDaemonOrigin,
   type ReadinessReport,
   type ReadinessComponent,
@@ -413,7 +413,7 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   left.append(conn);
   // Shared ("view only") reminder: a phone viewing over the LAN share is read-only, so a quiet muted tag
   // sits next to the connection dot as an ambient cue - not a banner. Loopback consoles never see it.
-  if (isSharedMode()) {
+  if (isReadOnly()) {
     const viewOnly = document.createElement("span");
     viewOnly.className = "console-shell-statusbar__viewonly";
     viewOnly.dataset.viewonly = "";
@@ -459,7 +459,7 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   // Share to phone: a quiet phone-glyph button, loopback-console only (a shared read-only viewer can't
   // trigger sharing, and the daemon rejects the loopback-guarded endpoint anyway). data-share-toggle is
   // the hook; startConsole's one delegated click opens the share dialog for whichever tab's copy fired.
-  if (!isSharedMode()) {
+  if (!isReadOnly()) {
     const share = document.createElement("button");
     share.type = "button";
     share.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__share";
@@ -637,13 +637,13 @@ export function startConsole(
   // Snapshot the boot fragment BEFORE adoptDaemonOrigin consumes/strips the #token= (below), so the
   // attach-visibility notification further down can still tell it booted attached and name the port.
   const bootParams = parseHash();
-  // Enter shared ("share to phone") mode BEFORE anything reads the fragment: on a
-  // phone that opened a LAN share link this records own-origin adoption and stashes
-  // the token, so resolveDaemonHost returns the page's own origin and every surface
-  // connects read-only over same-origin fetches to the exact LAN host it loaded from.
+  // Adopt the daemon origin BEFORE anything reads the fragment: on any device that opened a
+  // LAN share link (a phone, a TV, a laptop) this records own-origin adoption and stashes the
+  // token, so resolveDaemonHost returns the page's own origin and every surface connects
+  // read-only over same-origin fetches to the exact LAN host it loaded from.
   adoptDaemonOrigin();
-  const shared = isSharedMode();
-  document.documentElement.toggleAttribute("data-shared-mode", shared);
+  const readOnly = isReadOnly();
+  document.documentElement.toggleAttribute("data-read-only", readOnly);
 
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders
@@ -917,9 +917,9 @@ export function startConsole(
   }
 
   // Shell-side watchers (share-connect + storage thresholds). Skipped in the daemon-free demo (they would
-  // poll a daemon that is not there and perturb the deterministic scenario) and in shared/phone mode (a
-  // read-only viewer does not manage the host's share token, and TokenService is denied there anyway).
-  if (!wantsDemo(parseHash()) && !isSharedMode()) {
+  // poll a daemon that is not there and perturb the deterministic scenario) and for a read-only viewer (it
+  // does not manage the host's share token, and TokenService is denied there anyway).
+  if (!wantsDemo(parseHash()) && !isReadOnly()) {
     checkLocalStorageAlert(notifications.store);
     startShellWatch(notifications.store);
   }
@@ -1084,9 +1084,9 @@ export function startConsole(
   });
 
   // Share to phone: a loopback-console affordance only (the status-bar phone button is likewise gated
-  // out in shared mode). Register the palette mirror only when NOT shared - a phone viewing over the
-  // LAN is a read-only viewer and the daemon rejects the loopback-guarded trigger anyway.
-  if (!shared) {
+  // out for a read-only viewer). Register the palette mirror only when NOT read-only - a device viewing
+  // over the LAN is a read-only viewer and the daemon rejects the loopback-guarded trigger anyway.
+  if (!readOnly) {
     registerCommand({
       id: "console.share",
       label: "Share to phone",
@@ -1726,7 +1726,7 @@ export function startConsole(
     const activeId = saved.activeId ?? saved.tabs[0]?.id ?? null;
     const tab = saved.tabs.find((t) => t.id === activeId) ?? saved.tabs[0];
     if (tab) mount(tab);
-  } else if (shared) {
+  } else if (readOnly) {
     // A phone that just scanned the QR lands on something live immediately rather
     // than an empty launcher: open the Dashboard as the read-only view.
     open("dashboard");

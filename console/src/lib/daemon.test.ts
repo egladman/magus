@@ -5,13 +5,13 @@ import {
   normalizeDaemonHost,
   daemonAttach,
   adoptDaemonOrigin,
-  isSharedMode,
+  isReadOnly,
 } from "./daemon";
 
-// The loopback lock and the #port/shared-mode grammar. validateLoopbackHost is the pure
+// The loopback lock and the #port/LAN-share grammar. validateLoopbackHost is the pure
 // loopback check for a configured/entered host; normalizeDaemonHost adds bare-port expansion;
-// daemonAttach resolves an explicit attach (#port -> loopback, or the page's own origin in
-// shared mode). #live is gone entirely.
+// daemonAttach resolves an explicit attach (#port -> loopback, or the page's own origin when
+// a LAN-share link adopted it). #live is gone entirely.
 
 // withLocation stubs a page origin (host, hostname, hash) for the duration of fn, then restores it.
 function withLocation<T>(loc: { host: string; hostname: string; hash?: string }, fn: () => T): T {
@@ -33,7 +33,7 @@ test("validateLoopbackHost accepts literal loopback with a port", () => {
 
 test("validateLoopbackHost rejects non-loopback hosts, including the page origin", () => {
   // Even when the page itself is on the LAN, a raw host string is only accepted when it is
-  // literal loopback - the shared-mode origin is resolved through location.host, not here.
+  // literal loopback - the LAN-share origin is resolved through location.host, not here.
   withLocation({ host: "192.168.1.20:54321", hostname: "192.168.1.20" }, () => {
     assert.equal(validateLoopbackHost("192.168.1.20:54321"), null);
     assert.equal(validateLoopbackHost("192.168.1.99:54321"), null);
@@ -103,15 +103,15 @@ function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
   }
 }
 
-// Kept LAST: adoptDaemonOrigin only ever sets the module shared/own-origin flags to
-// true, so once shared mode is entered it stays entered for the rest of this module's tests.
-test("shared mode resolves the daemon to the page's own LAN origin (not loopback)", () => {
+// Kept LAST: adoptDaemonOrigin only ever sets the module read-only/own-origin flags to
+// true, so once read-only is entered it stays entered for the rest of this module's tests.
+test("a LAN-share origin resolves the daemon to the page's own LAN origin (not loopback)", () => {
   withBrowserGlobals(
     { host: "192.168.1.42:8787", hostname: "192.168.1.42", hash: "#token=abc123" },
     () => {
-      assert.equal(adoptDaemonOrigin(), true); // non-loopback origin + token -> read-only shared view
-      assert.equal(isSharedMode(), true);
-      // The phone must keep talking to the EXACT LAN IP:port it loaded from - never 127.0.0.1.
+      assert.equal(adoptDaemonOrigin(), true); // non-loopback origin + token -> read-only view
+      assert.equal(isReadOnly(), true);
+      // The device must keep talking to the EXACT LAN IP:port it loaded from - never 127.0.0.1.
       assert.equal(daemonAttach({}), "192.168.1.42:8787");
     },
   );
