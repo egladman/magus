@@ -37,6 +37,11 @@ export interface GNode extends GNodeInput {
   y: number;
   fx: number | null;
   fy: number | null;
+  // Card metrics (world units), set by cards.measureCards only while the card
+  // renderer is active (targets flavor in the layered/waves DAG modes). Absent
+  // in force/radial mode and for the knowledge flavor, where nodes are circles.
+  w?: number;
+  h?: number;
 }
 
 // GEndpoint is a GLink endpoint: it starts as an id string from the loader and
@@ -58,6 +63,12 @@ export interface GLink {
   dashed?: boolean;
   cycle?: boolean;
   layoutReversed?: boolean;
+  // points is the multi-layer edge route computed by the DAG layouts
+  // (layoutLayered/layoutWaves): world-space bend points strictly BETWEEN the
+  // endpoints, ordered ascending-x (dependency end -> dependent end). Absent or
+  // empty means a direct edge. Cleared alongside layoutReversed at every
+  // re-layout / reset site.
+  points?: { x: number; y: number }[];
 }
 
 // GraphFlavor is the two graph shapes the CLI emits and the explorer renders.

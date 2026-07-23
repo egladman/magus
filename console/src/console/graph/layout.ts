@@ -18,9 +18,22 @@
 //   4. Coordinates: fixed column width; row height scales to the max layer
 //      occupancy. n.fx = col * COL_W; n.fy = order * ROW_H.
 //
-// The force simulation is NOT ticked in layered mode. d3-zoom, drag, hover,
-// and selection operate on the same draw() function unchanged. Drag updates
-// n.fx/n.fy directly.
+// layoutWaves shares steps 1-2 (via computeLayers) but replaces steps 3-4: no
+// barycenter (waves emphasize membership and parallelism, not crossing
+// reduction), strict column grid, and within-wave ordering by (project, id) so
+// a project's targets cluster. It returns the per-wave membership so main.ts
+// can label columns and report parallelism.
+//
+// Both layouts route depends_on edges whose layer span is more than one hop
+// through synthetic "dummy" nodes at each intermediate layer (never pushed
+// into the real `nodes` array): in layoutLayered the dummies join the
+// barycenter ordering to pull crossings down; in both layouts the dummies'
+// final coordinates become the edge's `points` route so draw() can curve
+// through the intermediate columns instead of slicing through them.
+//
+// The force simulation is NOT ticked in layered/waves mode. d3-zoom, drag,
+// hover, and selection operate on the same draw() function unchanged. Drag
+// updates n.fx/n.fy directly.
 
 import { type GLink, type GNode, endpointId } from "./types.js";
 
@@ -28,14 +41,33 @@ export const LAYERED_COL_W = 180; // horizontal spacing between layers (columns)
 export const LAYERED_ROW_H = 48; // vertical spacing between nodes within a layer
 export const LAYERED_MAX = 500; // scale guard: refuse layered above this count
 
-export function layoutLayered(nodes: GNode[], links: GLink[]): void {
+// A DummyChain is the bend-point route for one long depends_on edge: dummy ids
+// standing in for the edge at each intermediate layer, ordered ascending by
+// layer - which is also ascending x, since e.s (the dependent) always sits at
+// a strictly higher layer than e.t (the dependency) once cycle-break has run.
+interface DummyChain {
+  ids: string[];
+  layers: number[];
+}
+
+type DepEdge = { s: string; t: string; linkRef: GLink };
+
+// computeLayers runs the shared cycle-break + longest-path layering pass.
+// Both layoutLayered and layoutWaves consume its output; neither may change
+// its behavior (layoutLayered's fx/fy and layoutReversed flags must stay
+// byte-identical to the pre-extraction implementation for graphs where every
+// edge spans exactly one layer - the case every existing caller relies on).
+function computeLayers(
+  nodes: GNode[],
+  links: GLink[],
+): { layerOf: Map<string, number>; depEdges: DepEdge[] } {
   // Work on the visible subset by id.
   const ids = new Set(nodes.map((n) => n.id));
 
   // Collect depends_on edges (only those within the visible subset).
   // We work on index arrays to avoid mutating the real link objects (except
   // the layoutReversed flag, which IS written back for the draw pass).
-  const depEdges: { s: string; t: string; linkRef: GLink }[] = [];
+  const depEdges: DepEdge[] = [];
   for (const e of links) {
     if (e.relation !== "depends_on") continue;
     const s = endpointId(e.source);
@@ -59,7 +91,7 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   // pairs. We snapshot the original target id separately from the edge object so
   // that later reversals of e.s/e.t don't corrupt the DFS traversal.
   // Sorting by original targetId gives deterministic traversal order.
-  const outSnap = new Map<string, { origTarget: string; edgeRef: (typeof depEdges)[number] }[]>();
+  const outSnap = new Map<string, { origTarget: string; edgeRef: DepEdge }[]>();
   for (const id of ids) outSnap.set(id, []);
   for (const e of depEdges) outSnap.get(e.s)?.push({ origTarget: e.t, edgeRef: e });
   for (const arr of outSnap.values())
@@ -132,11 +164,90 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   }
   for (const id of sortedIds) getLayer(id);
 
+  return { layerOf, depEdges };
+}
+
+// buildDummyChains finds every depends_on edge whose layer span is more than
+// one hop and synthesizes one dummy id per intermediate layer. Dummy ids are
+// never real nodes - they exist only to (a) optionally join the barycenter
+// ordering so long edges pull crossings down, and (b) carry the x/y that
+// becomes the edge's route once coordinates are assigned. layer(e.s) is
+// always strictly greater than layer(e.t) once computeLayers has run (e.s is
+// the dependent, e.t the dependency), so `ids`/`layers` come out already
+// ascending by layer - i.e. ascending x, dependency end to dependent end.
+function buildDummyChains(depEdges: DepEdge[], layerOf: Map<string, number>): Map<GLink, DummyChain> {
+  const chains = new Map<GLink, DummyChain>();
+  for (const e of depEdges) {
+    const ls = layerOf.get(e.s) ?? 0;
+    const lt = layerOf.get(e.t) ?? 0;
+    if (ls - lt <= 1) continue;
+    const ids: string[] = [];
+    const layers: number[] = [];
+    for (let layer = lt + 1; layer < ls; layer++) {
+      // The leading space guarantees no collision with any real node id and
+      // sorts dummies before real ids within a layer for stable ordering.
+      ids.push(` dummy:${e.s}->${e.t}:${layer}`);
+      layers.push(layer);
+    }
+    chains.set(e.linkRef, { ids, layers });
+  }
+  return chains;
+}
+
+// chainSegments expands one long edge into its unit-length replacement path
+// (dependent -> ... -> dependency, matching depEdges' s/t convention, each
+// hop exactly one layer) so the barycenter sweep sees a chain of adjacent
+// hops instead of a long-range edge that would otherwise skip past the
+// intermediate layers uncounted.
+function chainSegments(e: { s: string; t: string }, chain: DummyChain): { s: string; t: string }[] {
+  const seq = [e.s, ...[...chain.ids].reverse(), e.t]; // high layer -> low layer
+  const segs: { s: string; t: string }[] = [];
+  for (let i = 0; i < seq.length - 1; i++) segs.push({ s: seq[i], t: seq[i + 1] });
+  return segs;
+}
+
+// routeEdges resolves each long edge's dummy chain to world-space points via
+// the just-computed coordinate map and writes them back onto the link;
+// short edges (span <= 1, no chain) have any stale route cleared.
+function routeEdges(depEdges: DepEdge[], chains: Map<GLink, DummyChain>, dummyCoord: Map<string, { x: number; y: number }>): void {
+  for (const e of depEdges) {
+    const chain = chains.get(e.linkRef);
+    if (chain) {
+      e.linkRef.points = chain.ids.map((id) => dummyCoord.get(id) as { x: number; y: number });
+    } else {
+      delete e.linkRef.points;
+    }
+  }
+}
+
+export function layoutLayered(
+  nodes: GNode[],
+  links: GLink[],
+  opts?: { colW?: number; rowH?: number },
+): void {
+  const colW = opts?.colW ?? LAYERED_COL_W;
+  const rowH = opts?.rowH ?? LAYERED_ROW_H;
+  const ids = new Set(nodes.map((n) => n.id));
+  const { layerOf, depEdges } = computeLayers(nodes, links);
+
   // Group nodes by layer and sort within each layer by id for initial order.
   const layerGroups = new Map<number, string[]>(); // layer -> [nodeId, ...]
   for (const [id, l] of layerOf) {
     if (!layerGroups.has(l)) layerGroups.set(l, []);
     layerGroups.get(l)?.push(id);
+  }
+
+  // ---- dummy-node insertion (Phase 1 edge routing) ---------------------------
+  // Long edges (span > 1) get one dummy per intermediate layer; dummies join
+  // layerGroups exactly like real nodes so the barycenter passes below see
+  // them, but they are NEVER pushed into the real `nodes` array.
+  const chains = buildDummyChains(depEdges, layerOf);
+  for (const chain of chains.values()) {
+    for (let i = 0; i < chain.ids.length; i++) {
+      const layer = chain.layers[i];
+      if (!layerGroups.has(layer)) layerGroups.set(layer, []);
+      layerGroups.get(layer)?.push(chain.ids[i]);
+    }
   }
   for (const arr of layerGroups.values()) arr.sort();
 
@@ -152,15 +263,24 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   }
 
   // Build directed edge sets for sweep (predecessor in layer l-1, successor in l+1).
+  // Built from the SEGMENTED edge list (long edges expanded through their dummy
+  // chain), not the original depEdges, so the sweep sees unit-length hops only.
+  const idsAll = new Set<string>(ids);
+  for (const chain of chains.values()) for (const id of chain.ids) idsAll.add(id);
+
   const succMap = new Map<string, string[]>(); // nodeId -> [nodeId]  (target of depends_on)
   const prevMap = new Map<string, string[]>(); // nodeId -> [nodeId]  (source of depends_on)
-  for (const id of ids) {
+  for (const id of idsAll) {
     succMap.set(id, []);
     prevMap.set(id, []);
   }
   for (const e of depEdges) {
-    succMap.get(e.s)?.push(e.t);
-    prevMap.get(e.t)?.push(e.s);
+    const chain = chains.get(e.linkRef);
+    const segs = chain ? chainSegments(e, chain) : [{ s: e.s, t: e.t }];
+    for (const seg of segs) {
+      succMap.get(seg.s)?.push(seg.t);
+      prevMap.get(seg.t)?.push(seg.s);
+    }
   }
 
   function barycentricSort(arr: string[], neighborFn: (id: string) => string[]): string[] {
@@ -193,25 +313,119 @@ export function layoutLayered(nodes: GNode[], links: GLink[]): void {
   }
 
   // ---- Step 4: assign coordinates -------------------------------------------
-  // x = layer index * COL_W (left = layer 0 = roots/sources)
-  // y = order index * ROW_H, centered vertically within the layer.
+  // x = layer index * colW (left = layer 0 = roots/sources)
+  // y = order index * rowH, centered vertically within the layer.
   const maxOccupancy = Math.max(...[...layerGroups.values()].map((a) => a.length), 1);
-  const totalH = maxOccupancy * LAYERED_ROW_H;
+  const totalH = maxOccupancy * rowH;
   const byId = new Map(nodes.map((n) => [n.id, n]));
+  const dummyCoord = new Map<string, { x: number; y: number }>();
 
   for (const l of sortedLayers) {
     const arr = layerGroups.get(l);
     if (!arr) continue;
-    const layerH = arr.length * LAYERED_ROW_H;
-    const yOffset = (totalH - layerH) / 2 + LAYERED_ROW_H / 2;
+    const layerH = arr.length * rowH;
+    const yOffset = (totalH - layerH) / 2 + rowH / 2;
     for (let i = 0; i < arr.length; i++) {
-      const n = byId.get(arr[i]);
-      if (!n) continue;
-      n.fx = l * LAYERED_COL_W + LAYERED_COL_W / 2;
-      n.fy = yOffset + i * LAYERED_ROW_H;
-      // Also set x/y so the initial draw is immediate (before any tick).
-      n.x = n.fx;
-      n.y = n.fy;
+      const id = arr[i];
+      const x = l * colW + colW / 2;
+      const y = yOffset + i * rowH;
+      const n = byId.get(id);
+      if (n) {
+        n.fx = x;
+        n.fy = y;
+        // Also set x/y so the initial draw is immediate (before any tick).
+        n.x = x;
+        n.y = y;
+      } else {
+        dummyCoord.set(id, { x, y });
+      }
     }
   }
+
+  routeEdges(depEdges, chains, dummyCoord);
+}
+
+// layoutWaves lays out the visible subset into strict topological-order
+// columns ("waves"): wave N is every node whose longest dependency chain is
+// exactly N hops deep - "everything magus can run in parallel once wave N-1
+// finished". Unlike layoutLayered there is no barycenter pass (waves
+// emphasize membership and parallelism, not crossing reduction); within a
+// wave, nodes sort by (project, id) so a project's targets cluster.
+export function layoutWaves(
+  nodes: GNode[],
+  links: GLink[],
+  opts?: { colW?: number; rowH?: number },
+): { waves: string[][] } {
+  const colW = opts?.colW ?? LAYERED_COL_W;
+  const rowH = opts?.rowH ?? LAYERED_ROW_H;
+  const { layerOf, depEdges } = computeLayers(nodes, links);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  // Group real nodes by wave and sort within each wave by (project, id).
+  const waveGroups = new Map<number, string[]>();
+  for (const [id, l] of layerOf) {
+    if (!waveGroups.has(l)) waveGroups.set(l, []);
+    waveGroups.get(l)?.push(id);
+  }
+  const projectOf = (id: string): string => byId.get(id)?.attrs?.project ?? "";
+  for (const arr of waveGroups.values()) {
+    arr.sort((a, b) => {
+      const pa = projectOf(a);
+      const pb = projectOf(b);
+      if (pa !== pb) return pa < pb ? -1 : 1;
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+  }
+
+  // Snapshot the per-wave real-node membership (for main.ts) before dummies
+  // are appended below - dummies are routing scaffolding, not wave members.
+  // waves[i] = the ids in wave i; the array index equals the wave number
+  // because longest-path layering guarantees no empty middle layer (reaching
+  // layer k requires a real predecessor chain 0..k-1), so the sorted layer
+  // keys are already the contiguous run 0..max.
+  const waves: string[][] = [...waveGroups.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, waveIds]) => [...waveIds]);
+
+  // ---- dummy-node insertion: same routing as layoutLayered, but dummies are
+  // simply appended (no barycenter to join - waves use a strict grid).
+  const chains = buildDummyChains(depEdges, layerOf);
+  for (const chain of chains.values()) {
+    for (let i = 0; i < chain.ids.length; i++) {
+      const layer = chain.layers[i];
+      if (!waveGroups.has(layer)) waveGroups.set(layer, []);
+      waveGroups.get(layer)?.push(chain.ids[i]);
+    }
+  }
+
+  // ---- assign coordinates: strict column grid --------------------------------
+  const sortedWaves = [...waveGroups.keys()].sort((a, b) => a - b);
+  const maxOccupancy = Math.max(...[...waveGroups.values()].map((a) => a.length), 1);
+  const totalH = maxOccupancy * rowH;
+  const dummyCoord = new Map<string, { x: number; y: number }>();
+
+  for (const l of sortedWaves) {
+    const arr = waveGroups.get(l);
+    if (!arr) continue;
+    const layerH = arr.length * rowH;
+    const yOffset = (totalH - layerH) / 2 + rowH / 2;
+    for (let i = 0; i < arr.length; i++) {
+      const id = arr[i];
+      const x = l * colW + colW / 2;
+      const y = yOffset + i * rowH;
+      const n = byId.get(id);
+      if (n) {
+        n.fx = x;
+        n.fy = y;
+        n.x = x;
+        n.y = y;
+      } else {
+        dummyCoord.set(id, { x, y });
+      }
+    }
+  }
+
+  routeEdges(depEdges, chains, dummyCoord);
+
+  return { waves };
 }
