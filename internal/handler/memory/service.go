@@ -120,10 +120,32 @@ func (s *Service) UpdateCursor(_ context.Context, req *connect.Request[memoryv1.
 func recordToProto(r store.Record) *memoryv1.Memory {
 	refs := make([]*memoryv1.MemoryRef, len(r.Refs))
 	for i, ref := range r.Refs {
-		refs[i] = &memoryv1.MemoryRef{Kind: refKindToProto(ref.Kind), Target: ref.Target}
+		var kind memoryv1.MemoryRefKind
+		switch ref.Kind {
+		case store.RefKindQuery:
+			kind = memoryv1.MemoryRefKind_MEMORY_REF_KIND_QUERY
+		case store.RefKindNode:
+			kind = memoryv1.MemoryRefKind_MEMORY_REF_KIND_NODE
+		case store.RefKindOutput:
+			kind = memoryv1.MemoryRefKind_MEMORY_REF_KIND_OUTPUT
+		case store.RefKindCommand:
+			kind = memoryv1.MemoryRefKind_MEMORY_REF_KIND_COMMAND
+		case store.RefKindDoc:
+			kind = memoryv1.MemoryRefKind_MEMORY_REF_KIND_DOC
+		}
+		refs[i] = &memoryv1.MemoryRef{Kind: kind, Target: ref.Target}
+	}
+	var typ memoryv1.MemoryType
+	switch r.Type {
+	case store.TypePointer:
+		typ = memoryv1.MemoryType_MEMORY_TYPE_POINTER
+	case store.TypeDecision:
+		typ = memoryv1.MemoryType_MEMORY_TYPE_DECISION
+	case store.TypePlan:
+		typ = memoryv1.MemoryType_MEMORY_TYPE_PLAN
 	}
 	m := &memoryv1.Memory{
-		Name: r.Name, Type: typeToProto(r.Type), Refs: refs,
+		Name: r.Name, Type: typ, Refs: refs,
 		Status: r.Status, Body: r.Body, References: r.References,
 	}
 	if r.Created > 0 {
@@ -141,70 +163,32 @@ func recordToProto(r store.Record) *memoryv1.Memory {
 func recordFromProto(m *memoryv1.Memory) store.Record {
 	refs := make([]store.Ref, len(m.GetRefs()))
 	for i, ref := range m.GetRefs() {
-		refs[i] = store.Ref{Kind: refKindFromProto(ref.GetKind()), Target: ref.GetTarget()}
+		var kind store.RefKind
+		switch ref.GetKind() {
+		case memoryv1.MemoryRefKind_MEMORY_REF_KIND_QUERY:
+			kind = store.RefKindQuery
+		case memoryv1.MemoryRefKind_MEMORY_REF_KIND_NODE:
+			kind = store.RefKindNode
+		case memoryv1.MemoryRefKind_MEMORY_REF_KIND_OUTPUT:
+			kind = store.RefKindOutput
+		case memoryv1.MemoryRefKind_MEMORY_REF_KIND_COMMAND:
+			kind = store.RefKindCommand
+		case memoryv1.MemoryRefKind_MEMORY_REF_KIND_DOC:
+			kind = store.RefKindDoc
+		}
+		refs[i] = store.Ref{Kind: kind, Target: ref.GetTarget()}
+	}
+	var typ store.RecordType
+	switch m.GetType() {
+	case memoryv1.MemoryType_MEMORY_TYPE_POINTER:
+		typ = store.TypePointer
+	case memoryv1.MemoryType_MEMORY_TYPE_DECISION:
+		typ = store.TypeDecision
+	case memoryv1.MemoryType_MEMORY_TYPE_PLAN:
+		typ = store.TypePlan
 	}
 	return store.Record{
-		Name: m.GetName(), Type: typeFromProto(m.GetType()), Status: m.GetStatus(),
+		Name: m.GetName(), Type: typ, Status: m.GetStatus(),
 		Body: m.GetBody(), Refs: refs, References: m.GetReferences(),
-	}
-}
-
-func typeToProto(s string) memoryv1.MemoryType {
-	switch s {
-	case store.TypePointer:
-		return memoryv1.MemoryType_MEMORY_TYPE_POINTER
-	case store.TypeDecision:
-		return memoryv1.MemoryType_MEMORY_TYPE_DECISION
-	case store.TypePlan:
-		return memoryv1.MemoryType_MEMORY_TYPE_PLAN
-	default:
-		return memoryv1.MemoryType_MEMORY_TYPE_UNSPECIFIED
-	}
-}
-
-func typeFromProto(t memoryv1.MemoryType) string {
-	switch t {
-	case memoryv1.MemoryType_MEMORY_TYPE_POINTER:
-		return store.TypePointer
-	case memoryv1.MemoryType_MEMORY_TYPE_DECISION:
-		return store.TypeDecision
-	case memoryv1.MemoryType_MEMORY_TYPE_PLAN:
-		return store.TypePlan
-	default:
-		return ""
-	}
-}
-
-func refKindToProto(s string) memoryv1.MemoryRefKind {
-	switch s {
-	case store.RefKindQuery:
-		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_QUERY
-	case store.RefKindNode:
-		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_NODE
-	case store.RefKindOutput:
-		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_OUTPUT
-	case store.RefKindCommand:
-		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_COMMAND
-	case store.RefKindDoc:
-		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_DOC
-	default:
-		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_UNSPECIFIED
-	}
-}
-
-func refKindFromProto(k memoryv1.MemoryRefKind) string {
-	switch k {
-	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_QUERY:
-		return store.RefKindQuery
-	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_NODE:
-		return store.RefKindNode
-	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_OUTPUT:
-		return store.RefKindOutput
-	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_COMMAND:
-		return store.RefKindCommand
-	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_DOC:
-		return store.RefKindDoc
-	default:
-		return ""
 	}
 }

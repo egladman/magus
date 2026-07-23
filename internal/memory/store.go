@@ -26,45 +26,50 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Record types - the closed subject axis a record's Type may take. pointer carries no
-// prose; decision/plan carry a ref-anchored prose caption.
+// RecordType is the closed subject axis a record's Type may take. A named string type so
+// the compiler carries the closed set the values below promise, not just Validate at
+// runtime. pointer carries no prose; decision/plan carry a ref-anchored prose caption.
+type RecordType string
+
 const (
-	TypePointer  = "pointer"
-	TypeDecision = "decision"
-	TypePlan     = "plan"
+	TypePointer  RecordType = "pointer"
+	TypeDecision RecordType = "decision"
+	TypePlan     RecordType = "plan"
 )
 
-// Ref kinds - the closed set a Ref.Kind may take. node/doc/output name a magus-domain
-// node; query/command are re-runnable strings. All five are resolvable, so staleness is
+// RefKind is the closed set a Ref.Kind may take. node/doc/output name a magus-domain node;
+// query/command are re-runnable strings. All five are resolvable, so staleness is
 // detectable (the isolation and graph-anchoring live in the deferred Phase 2 shard).
+type RefKind string
+
 const (
-	RefKindQuery   = "query"
-	RefKindNode    = "node"
-	RefKindOutput  = "output"
-	RefKindCommand = "command"
-	RefKindDoc     = "doc"
+	RefKindQuery   RefKind = "query"
+	RefKindNode    RefKind = "node"
+	RefKindOutput  RefKind = "output"
+	RefKindCommand RefKind = "command"
+	RefKindDoc     RefKind = "doc"
 )
 
 // Ref is one typed pointer a record carries: Kind is the closed ref-kind
-// (query/node/output/command/doc from types.MemoryRef*); Target is the payload (a
-// node ID or path, an output ref token, or a raw query/command string).
+// (query/node/output/command/doc); Target is the payload (a node ID or path, an output ref
+// token, or a raw query/command string).
 type Ref struct {
-	Kind   string `yaml:"kind"`
-	Target string `yaml:"target"`
+	Kind   RefKind `yaml:"kind"`
+	Target string  `yaml:"target"`
 }
 
 // Record is one persisted memory. The payload is one or more typed Refs; Body is a
 // prose caption present only for decision/plan records (empty for pointer). Created
 // and Updated are unix seconds, stamped by the store (output-only to callers).
 type Record struct {
-	Name       string   `yaml:"name"`
-	Type       string   `yaml:"type"`
-	Status     string   `yaml:"status,omitempty"`
-	Refs       []Ref    `yaml:"refs"`
-	References []string `yaml:"references,omitempty"`
-	Created    int64    `yaml:"created,omitempty"`
-	Updated    int64    `yaml:"updated,omitempty"`
-	Body       string   `yaml:"-"`
+	Name       string     `yaml:"name"`
+	Type       RecordType `yaml:"type"`
+	Status     string     `yaml:"status,omitempty"`
+	Refs       []Ref      `yaml:"refs"`
+	References []string   `yaml:"references,omitempty"`
+	Created    int64      `yaml:"created,omitempty"`
+	Updated    int64      `yaml:"updated,omitempty"`
+	Body       string     `yaml:"-"`
 }
 
 // nameRE is the record name shape: a kebab slug. It doubles as the on-disk basename,

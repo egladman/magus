@@ -43,10 +43,10 @@ type memoryRecordView struct {
 func toRecordView(r memory.Record) memoryRecordView {
 	refs := make([]memoryRefView, len(r.Refs))
 	for i, ref := range r.Refs {
-		refs[i] = memoryRefView{Kind: ref.Kind, Target: ref.Target}
+		refs[i] = memoryRefView{Kind: string(ref.Kind), Target: ref.Target}
 	}
 	return memoryRecordView{
-		Name: r.Name, Type: r.Type, Status: r.Status, Refs: refs,
+		Name: r.Name, Type: string(r.Type), Status: r.Status, Refs: refs,
 		References: r.References, Body: r.Body, Created: r.Created, Updated: r.Updated,
 	}
 }
@@ -81,7 +81,7 @@ func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 		}
 		rec := memory.Record{
 			Name:       strings.TrimSpace(paramString(req.Params, "name", "")),
-			Type:       strings.TrimSpace(paramString(req.Params, "type", "")),
+			Type:       memory.RecordType(strings.TrimSpace(paramString(req.Params, "type", ""))),
 			Status:     strings.TrimSpace(paramString(req.Params, "status", "")),
 			Body:       paramString(req.Params, "body", ""),
 			Refs:       refs,
@@ -137,7 +137,7 @@ func parseMemoryRefs(s string) ([]memory.Ref, error) {
 			return nil, fmt.Errorf("mcp: ref %q must be written as 'kind: target' (kinds: query, node, output, command, doc)", line)
 		}
 		refs = append(refs, memory.Ref{
-			Kind:   strings.TrimSpace(line[:i]),
+			Kind:   memory.RefKind(strings.TrimSpace(line[:i])),
 			Target: strings.TrimSpace(line[i+1:]),
 		})
 	}
