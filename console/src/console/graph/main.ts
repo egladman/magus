@@ -462,6 +462,22 @@ function setStatus(msg: string, isError?: boolean) {
   statusEl.toggleAttribute("data-error", !!isError);
 }
 
+// setResultLine narrates "what am I looking at" in the slim bar at the top of the
+// canvas stage - a concise mirror of the fuller text activateView already writes to
+// the bottom #graph-status line, placed where the eye already is. null hides it (the
+// default state: nothing active).
+function setResultLine(text: string | null) {
+  const line = el("graph-result-line");
+  if (!line) return;
+  if (text) {
+    line.textContent = text;
+    line.hidden = false;
+  } else {
+    line.textContent = "";
+    line.hidden = true;
+  }
+}
+
 // ---- graph prep ------------------------------------------------------------
 // Normalize the loaded JSON into d3-force's mutable shape and precompute degree
 // (drives node radius) and adjacency (drives the explain card + neighbor
@@ -1621,6 +1637,7 @@ function clearFocusOrQuery() {
   pendingRadialPick = false;
   if (searchEl) searchEl.value = "";
   setStatus("");
+  setResultLine(null);
   // Clear any active view.
   if (activeView) {
     activeView = null;
@@ -2562,6 +2579,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "Click a node to see what depends on it (blast view). CLI: magus explain <node-id>",
         );
+        setResultLine(null);
         renderList();
         draw();
         updateHash();
@@ -2579,6 +2597,15 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           (deps.size - 1 === 1 ? "" : "s") +
           ".",
       );
+      setResultLine(
+        "Showing the " +
+          (deps.size - 1) +
+          " target" +
+          (deps.size - 1 === 1 ? "" : "s") +
+          " that rebuild if you change " +
+          (n ? n.label : nodeId) +
+          ".",
+      );
       break;
     }
     case "trace": {
@@ -2586,21 +2613,25 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "Click two nodes to find the path between them (trace view). CLI: magus path <a> <b>",
         );
+        setResultLine(null);
         renderList();
         draw();
         updateHash();
         return;
       }
+      const na = graph.byId ? graph.byId.get(nodeId) : null;
+      const nb = graph.byId ? graph.byId.get(nodeTo) : null;
       const path = shortestDependsOnPath(nodeId, nodeTo);
       if (!path) {
-        const na = graph.byId ? graph.byId.get(nodeId) : null;
-        const nb = graph.byId ? graph.byId.get(nodeTo) : null;
         setStatus(
           "No depends_on path from " +
             (na ? na.label : nodeId) +
             " to " +
             (nb ? nb.label : nodeTo) +
             ".",
+        );
+        setResultLine(
+          "No path from " + (na ? na.label : nodeId) + " to " + (nb ? nb.label : nodeTo) + ".",
         );
         matchSet = new Set([nodeId, nodeTo]);
       } else {
@@ -2614,6 +2645,17 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
               })
               .join(" -> "),
         );
+        setResultLine(
+          "Path from " +
+            (na ? na.label : nodeId) +
+            " to " +
+            (nb ? nb.label : nodeTo) +
+            ", " +
+            (path.length - 1) +
+            " step" +
+            (path.length - 1 === 1 ? "" : "s") +
+            ".",
+        );
       }
       break;
     }
@@ -2623,6 +2665,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "No duration data in this graph. Run `magus graph deps -o json` after a build to include timing.",
         );
+        setResultLine(null);
         matchSet = null;
       } else {
         matchSet = new Set(path);
@@ -2639,6 +2682,15 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             formatDuration(total) +
             " total (longest duration-weighted chain).",
         );
+        setResultLine(
+          "Slowest chain: " +
+            path.length +
+            " target" +
+            (path.length === 1 ? "" : "s") +
+            ", " +
+            formatDuration(total) +
+            " total.",
+        );
       }
       break;
     }
@@ -2649,6 +2701,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         .slice(0, 12);
       matchSet = new Set(top.map((n) => n.id));
       setStatus("What's a hub? The " + matchSet.size + " highest-degree nodes.");
+      setResultLine("The " + matchSet.size + " most depended-on targets.");
       break;
     }
     case "orphans": {
@@ -2659,6 +2712,12 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           " orphan node" +
           (matchSet.size === 1 ? "" : "s") +
           " with no edges.",
+      );
+      setResultLine(
+        matchSet.size +
+          " target" +
+          (matchSet.size === 1 ? "" : "s") +
+          " nothing depends on.",
       );
       break;
     }
@@ -2677,9 +2736,11 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             ids.size +
             " target(s) caught in a loop - a configuration error to fix.",
         );
+        setResultLine(ids.size + " target" + (ids.size === 1 ? "" : "s") + " in circular dependencies.");
       } else {
         matchSet = null;
         setStatus("No circular dependencies - the dependency graph is acyclic.");
+        setResultLine("No circular dependencies.");
       }
       break;
     }
@@ -2688,6 +2749,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
       const aff = typeof nodeId === "object" && nodeId ? nodeId : window._liveAffectedIds;
       if (!aff || !aff.size) {
         setStatus("no affected nodes in current diff", true);
+        setResultLine(null);
         matchSet = null;
       } else {
         matchSet = aff;
@@ -2697,6 +2759,9 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             " affected node" +
             (aff.size === 1 ? "" : "s") +
             " (live workspace).",
+        );
+        setResultLine(
+          aff.size + " target" + (aff.size === 1 ? "" : "s") + " affected by your last change.",
         );
       }
       break;
@@ -2725,6 +2790,7 @@ function clearView() {
   query = "";
   setFlowEdges(null);
   flowOn = false;
+  setResultLine(null);
   renderList();
   updateHash();
   draw();
@@ -3093,11 +3159,11 @@ function renderSuggestions() {
   wrap.innerHTML = chips
     .map(
       (c, i) =>
-        '<button type="button" class="pf-v6-c-button pf-m-link pf-m-inline console-graph-sidebar__suggestion" data-i="' +
+        '<button type="button" class="console-graph-views__chip console-graph-sidebar__suggestion" data-i="' +
         i +
-        '"><span class="pf-v6-c-button__text">' +
+        '">' +
         escapeHtml(c.text) +
-        "</span></button>",
+        "</button>",
     )
     .join("");
   wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
