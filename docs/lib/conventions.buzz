@@ -58,12 +58,20 @@ fun cleanConventionDef(s: str) > str {
 // conventionHint builds the "?" link for one convention anchor, or "" if that section is
 // absent from the corpus (so a missing section silently skips rather than links nowhere).
 // The def is baked into data-def; data-kind lets the shared popover label it a Convention.
+// helpCircleSvg is the hint glyph: a crisp inline help-circle (a "?" in a circle) that
+// strokes with currentColor, so it stays theme-aware and sharp at any size without a font
+// or icon library - the same inline-SVG approach the site nav uses.
+final helpCircleSvg = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" "
+    + "stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">"
+    + "<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3\"/>"
+    + "<line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>";
+
 fun conventionHint(conventions: [Convention], anchor: str, relToConventions: str) > str {
     foreach (c in conventions) {
         if (c.anchor == anchor) {
             return "<a class=\"convention-hint\" href=\"" + relToConventions + "#" + anchor
                 + "\" data-kind=\"convention\" data-def=\"" + escapeAttr(c.def)
-                + "\" aria-label=\"What is this? " + escapeAttr(c.title) + "\">?</a>";
+                + "\" aria-label=\"What is this? " + escapeAttr(c.title) + "\">" + helpCircleSvg + "</a>";
         }
     }
     return "";
@@ -80,7 +88,35 @@ export fun injectConventionHints(html: str, conventions: [Convention], relToConv
         conventionHint(conventions, "admonitions", relToConventions));
     h = insertBeforeClose(h, "<figcaption>", "</figcaption>",
         conventionHint(conventions, "code-block-titles", relToConventions));
+    h = injectFirstPlaceholderHint(h, conventionHint(conventions, "placeholders", relToConventions));
     return h;
+}
+
+// injectFirstPlaceholderHint appends a "?" hint after the FIRST inline <code> on the page
+// that holds an angle-bracket placeholder (&lt;...&gt;), linking to the placeholders
+// convention. First occurrence only - like the glossary linker - so a page that uses the
+// syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced
+// block by having no newline, so a multi-line code block is never hinted.
+fun injectFirstPlaceholderHint(html: str, hint: str) > str {
+    if (hint == "") { return html; }
+    var scanned = "";
+    var rest = html;
+    var idx = rest.indexOf("<code>");
+    while (idx != null) {
+        final afterOpen = rest.sub(idx + 6);            // 6 = len("<code>")
+        final closeAt = afterOpen.indexOf("</code>");
+        if (closeAt == null) { return scanned + rest; }
+        final inner = afterOpen.sub(0, len: closeAt);
+        final consumedLen = idx + 6 + closeAt + 7;      // through </code> (7 = len("</code>"))
+        if (inner.indexOf("\n") == null
+            and inner.indexOf("&lt;") != null and inner.indexOf("&gt;") != null) {
+            return scanned + rest.sub(0, len: consumedLen) + hint + rest.sub(consumedLen);
+        }
+        scanned = scanned + rest.sub(0, len: consumedLen);
+        rest = rest.sub(consumedLen);
+        idx = rest.indexOf("<code>");
+    }
+    return scanned + rest;
 }
 
 // insertBeforeClose inserts `ins` just before the first `close` following each `open` marker.
@@ -128,4 +164,15 @@ test "injectConventionHints leaves markers untouched when the section is absent"
     final cs = mut [<Convention>];
     final html = "<p class=\"admonition-title\">Note</p>";
     assert\equal(injectConventionHints(html, cs, "../conventions/"), html, "no corpus, no change");
+}
+
+test "the placeholder hint lands on the first inline placeholder only, never a fenced block" {
+    final cs = mut [<Convention>];
+    cs.append(Convention{ title = "Placeholders", anchor = "placeholders", def = "angle-bracket stand-ins" });
+    final html = "<pre><code>magus run &lt;x&gt;\nmore</code></pre> then <code>&lt;target&gt;</code> and <code>&lt;path&gt;</code>";
+    final res = injectConventionHints(html, cs, "../conventions/");
+    assert\equal(res.indexOf("<code>&lt;target&gt;</code><a class=\"convention-hint\"") != null, true,
+        "first inline placeholder hinted");
+    assert\equal(res.indexOf("<code>&lt;path&gt;</code><a") != null, false, "second placeholder not hinted");
+    assert\equal(res.indexOf("more</code></pre><a") != null, false, "fenced block not hinted");
 }
