@@ -16,7 +16,7 @@ type describeKindTool struct {
 
 func (t *describeKindTool) Name() string { return "magus_describe" }
 
-func (t *describeKindTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *describeKindTool) Invoke(_ context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
 	kind := paramString(req.Params, "kind", "")
 	// name narrows a list into one entity's detail, mirroring the CLI's trailing
 	// name positional (`magus describe <noun> <name>`). Only spells, targets, and
@@ -120,7 +120,7 @@ type describeFileTool struct {
 
 func (t *describeFileTool) Name() string { return ToolDescribeFile.String() }
 
-func (t *describeFileTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *describeFileTool) Invoke(_ context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
 	raw := paramString(req.Params, "paths", "")
 	paths := strings.Fields(raw)
 	if len(paths) == 0 {

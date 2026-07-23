@@ -93,7 +93,6 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
-
 }
 
 func TestWrapCapturesExchange(t *testing.T) {

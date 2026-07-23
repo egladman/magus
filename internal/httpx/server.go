@@ -70,8 +70,12 @@ func (s *Server) Serve(ctx context.Context) error {
 // Addr is the loopback address actually bound - the real port even when the
 // caller requested port 0.
 func (s *Server) Addr() netip.AddrPort {
+	tcp, ok := s.ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return netip.AddrPort{}
+	}
 	return netip.AddrPortFrom(
 		netip.AddrFrom4([4]byte{127, 0, 0, 1}),
-		uint16(s.ln.Addr().(*net.TCPAddr).Port),
+		uint16(tcp.Port),
 	)
 }

@@ -20,11 +20,12 @@ type statusTool struct {
 
 func (t *statusTool) Name() string { return "magus_status" }
 
-func (t *statusTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *statusTool) Invoke(ctx context.Context, _ types.InvokeRequest) (types.InvokeResponse, error) {
 	addr, err := resolveStatusAddr(ctx, t.opts)
 	out := statusResult{}
 	if err != nil {
 		out.PoolError = err.Error()
+		//nolint:nilerr // the pool error is reported in the response payload, not as a tool-call error
 		return types.InvokeResponse{Data: out}, nil
 	}
 	reply, err := proc.QueryStatus(ctx, addr)

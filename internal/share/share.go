@@ -239,7 +239,11 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	if err != nil {
 		return Session{}, fmt.Errorf("share: bind LAN listener on %s: %w", addr, err)
 	}
-	port := ln.Addr().(*net.TCPAddr).Port
+	tcp, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		return Session{}, fmt.Errorf("share: LAN listener address is not TCP")
+	}
+	port := tcp.Port
 	// The token rides the fragment (#token=), never the path or query, so it is
 	// not sent to the server on the initial document GET and does not land in an
 	// access log; the console reads it client-side and replays it as a bearer.
@@ -281,7 +285,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	// (timeout, daemon shutdown, or a Close/supersede cancel) tears the listener
 	// down. Closing the listener and expiring the token are therefore the same
 	// event - there is never a live listener with a dead token or vice versa.
-	ctx, cancel := context.WithTimeout(m.parent, ttl)
+	ctx, cancel := context.WithTimeout(m.parent, ttl) //nolint:gosec // cancel is stored in active.cancel below and called on supersede/Close/teardown, not leaked
 
 	// Supersede any current share and publish this one under the lock BEFORE starting
 	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if

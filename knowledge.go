@@ -519,8 +519,8 @@ func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) st
 	h := sha256.New()
 	fmt.Fprintf(h, "v%d\x00a%d\x00%s\x00%d\x00%t\x00", types.KnowledgeSchemaVersion, vcsAssemblyVersion, head.ID, vcsMaxCommits(cfg), authorship)
 	for _, f := range dirty {
-		h.Write([]byte(f))
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte(f))
+		_, _ = h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

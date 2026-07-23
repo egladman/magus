@@ -27,7 +27,7 @@ type whereTool struct {
 
 func (t *whereTool) Name() string { return "magus_where" }
 
-func (t *whereTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *whereTool) Invoke(_ context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
 	filter := paramString(req.Params, "filter", "")
 	var filters []string
 	if filter != "" {

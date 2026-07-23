@@ -188,9 +188,7 @@ func assembleCoverage(cov []FileCoverage, symbols map[string][]types.KnowledgeSy
 				Attrs: attrs,
 			})
 		}
-		for _, sn := range symbolCoverage(fc, symsByFile[fc.Path]) {
-			s.Nodes = append(s.Nodes, sn)
-		}
+		s.Nodes = append(s.Nodes, symbolCoverage(fc, symsByFile[fc.Path])...)
 	}
 	return s
 }

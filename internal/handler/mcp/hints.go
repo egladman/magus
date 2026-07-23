@@ -95,7 +95,7 @@ func firstRef(result *mcplib.CallToolResult) string {
 		return ""
 	}
 	notRefRune := func(r rune) bool {
-		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
 	}
 	for _, c := range result.Content {
 		tc, ok := c.(mcplib.TextContent)

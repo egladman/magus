@@ -41,7 +41,7 @@ func (g *gzipResponseWriter) WriteHeader(code int) {
 	g.wroteHeader = true
 	if code == http.StatusOK {
 		g.useGzip = true
-		h := g.ResponseWriter.Header()
+		h := g.Header()
 		h.Set("Content-Encoding", "gzip")
 		h.Add("Vary", "Accept-Encoding")
 		h.Del("Content-Length")

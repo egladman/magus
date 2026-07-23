@@ -17,7 +17,7 @@ Build, serialize, and parse XML/SVG.
 
 Serialize an XML node to a string. A node is a string (text) or an element map {"tag": name, "attrs": [name, value, ...], "children": [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.
 
-**Signature:** `xml.render(node) → string` · [source](https://github.com/egladman/magus/blob/main/std/xml.go#L74)
+**Signature:** `xml.render(node) → string` · [source](https://github.com/egladman/magus/blob/main/std/xml.go#L75)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Serialize an XML node to a string. A node is a string (text) or an element map {
 
 Build an element node from a tag, a flat [name, value, ...] attribute list, and a list of child nodes (elements or strings). Sugar for the {"tag", "attrs", "children"} map that render consumes.
 
-**Signature:** `xml.element(tag, attrs, children) → any` · [source](https://github.com/egladman/magus/blob/main/std/xml.go#L61)
+**Signature:** `xml.element(tag, attrs, children) → any` · [source](https://github.com/egladman/magus/blob/main/std/xml.go#L62)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -43,7 +43,7 @@ Build an element node from a tag, a flat [name, value, ...] attribute list, and 
 
 Parse an XML string into a node tree: each element becomes {"tag": name, "attrs": [name, value, ...], "children": [node, ...]}, character data becomes a string. The inverse shape of render.
 
-**Signature:** `xml.parse(s) → any` · [source](https://github.com/egladman/magus/blob/main/std/xml.go#L132)
+**Signature:** `xml.parse(s) → any` · [source](https://github.com/egladman/magus/blob/main/std/xml.go#L133)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

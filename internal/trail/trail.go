@@ -154,15 +154,15 @@ func WriteBlob(base, prefix string, data []byte) (ref string, size int64) {
 	}
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return "", size
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return "", size
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return "", size
 	}
 	return ref, size
@@ -318,16 +318,16 @@ func rotate(base string, max int) {
 		}
 		if _, err := tmp.WriteString(l + "\n"); err != nil {
 			tmp.Close()
-			os.Remove(tmp.Name())
+			_ = os.Remove(tmp.Name())
 			return
 		}
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return
 	}
 	gcBlobs(base, kept)
@@ -359,7 +359,7 @@ func gcBlobs(base string, keptLines []string) {
 			continue
 		}
 		if _, ok := referenced[name]; !ok {
-			os.Remove(filepath.Join(blobsPath(base), name))
+			_ = os.Remove(filepath.Join(blobsPath(base), name))
 		}
 	}
 }

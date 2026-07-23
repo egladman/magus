@@ -514,7 +514,7 @@ func readGuardCommand(in io.Reader, args []string, fromJSON string) (string, boo
 		}
 		return s, true
 	}
-	if len(args) > 0 && !(len(args) == 1 && args[0] == "-") {
+	if len(args) > 0 && (len(args) != 1 || args[0] != "-") {
 		return strings.Join(args, " "), true
 	}
 	b, err := io.ReadAll(in)

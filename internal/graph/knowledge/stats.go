@@ -48,10 +48,9 @@ func (g *Graph) connectivity() (components, largest int) {
 	for id := range g.nodes {
 		parent[id] = id
 	}
-	var find func(string) string
-	find = func(x string) string {
+	var find = func(x string) string {
 		for parent[x] != x {
-			parent[x] = parent[parent[x]] // path halving
+			parent[x] = parent[parent[x]]
 			x = parent[x]
 		}
 		return x

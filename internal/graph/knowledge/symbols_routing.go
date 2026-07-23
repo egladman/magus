@@ -62,10 +62,10 @@ func symbolShardsKey(man *manifest) string {
 	slices.Sort(names)
 	h := sha256.New()
 	for _, name := range names {
-		h.Write([]byte(name))
-		h.Write([]byte{0})
-		h.Write([]byte(man.Shards[name].Fingerprint))
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte(name))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(man.Shards[name].Fingerprint))
+		_, _ = h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil)[:8])
 }

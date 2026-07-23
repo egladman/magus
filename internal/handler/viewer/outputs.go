@@ -124,5 +124,5 @@ func (h *OutputHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(raw)
+	_, _ = w.Write(raw) //nolint:gosec // G705: served as text/plain (not html), so the captured build output cannot execute as script
 }

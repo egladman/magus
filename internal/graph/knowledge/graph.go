@@ -195,17 +195,17 @@ func (g *Graph) Output() types.KnowledgeGraphOutput {
 func (g *Graph) Fingerprint() string {
 	h := sha256.New()
 	for _, n := range g.Nodes() {
-		h.Write([]byte(n.ID))
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte(n.ID))
+		_, _ = h.Write([]byte{0})
 	}
-	h.Write([]byte{'\n'})
+	_, _ = h.Write([]byte{'\n'})
 	for _, e := range g.Edges() {
-		h.Write([]byte(e.Source))
-		h.Write([]byte{0})
-		h.Write([]byte(e.Target))
-		h.Write([]byte{0})
-		h.Write([]byte(e.Relation))
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte(e.Source))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(e.Target))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(e.Relation))
+		_, _ = h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil)[:8]) // 64-bit prefix: ample to spot a change
 }

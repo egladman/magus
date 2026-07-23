@@ -140,18 +140,6 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 	return srv
 }
 
-// newServer constructs and registers tools on a new MCPServer. originFn is called
-// with the current request ctx to resolve the caller identity at tool-call
-// time so each handler's wrap closure captures the right per-session value.
-func newServer(opts Options, log *slog.Logger, originFn func(context.Context) origin.Origin) *mcpserver.MCPServer {
-	hooks := &mcpserver.Hooks{}
-	hooks.AddBeforeInitialize(func(_ context.Context, _ any, req *mcp.InitializeRequest) {
-		agent := agentFromRequest(req)
-		log.Info("[AGENT] client connected", slog.String("agent", agent))
-	})
-	return buildServer(opts, log, hooks, originFn)
-}
-
 // HTTPHandler builds the MCP Streamable-HTTP handler for daemon mode: it
 // validates opts, wires per-session origin tracking, and returns the bare MCP
 // handler. It mounts no routes and opens no listener - the daemon package owns

@@ -43,8 +43,9 @@ func (r *reg) i64h(name, desc, unit string) metric.Int64Histogram {
 	return h
 }
 
-func (r *reg) f64h(name, desc, unit string) metric.Float64Histogram {
-	h, err := r.m.Float64Histogram(name, metric.WithDescription(desc), metric.WithUnit(unit))
+func (r *reg) f64h(name, desc string) metric.Float64Histogram {
+	// Every duration histogram is in seconds; the unit is not a per-call parameter.
+	h, err := r.m.Float64Histogram(name, metric.WithDescription(desc), metric.WithUnit("s"))
 	r.join(name, err)
 	return h
 }
@@ -63,7 +64,7 @@ func newMCPInstruments(m metric.Meter) (mcpInstruments, error) {
 		calls:      r.i64c("magus.mcp.tool.calls", "Number of MCP tool calls.", "{call}"),
 		inputSize:  r.i64h("magus.mcp.tool.input.size", "Request payload bytes of an MCP tool call.", "By"),
 		outputSize: r.i64h("magus.mcp.tool.output.size", "Response payload bytes of an MCP tool call.", "By"),
-		duration:   r.f64h("magus.mcp.tool.duration", "Wall-clock duration of an MCP tool call, in seconds.", "s"),
+		duration:   r.f64h("magus.mcp.tool.duration", "Wall-clock duration of an MCP tool call, in seconds."),
 	}
 	return mi, r.err
 }
@@ -93,7 +94,7 @@ type sandboxInstruments struct {
 func newSandboxInstruments(m metric.Meter) (sandboxInstruments, error) {
 	r := reg{m: m}
 	si := sandboxInstruments{
-		applyDuration: r.f64h("magus.sandbox.apply.duration", "Wall-clock duration of applying a filesystem sandbox, in seconds.", "s"),
+		applyDuration: r.f64h("magus.sandbox.apply.duration", "Wall-clock duration of applying a filesystem sandbox, in seconds."),
 		rules:         r.i64c("magus.sandbox.rules", "Filesystem access rules a sandbox was built from.", "{rule}"),
 		envRules:      r.i64c("magus.sandbox.env.rules", "Environment allow-rules a sandbox was built from.", "{rule}"),
 		checks:        r.i64c("magus.sandbox.checks", "Filesystem access checks resolved against a sandbox.", "{check}"),
@@ -168,17 +169,17 @@ type buzzInstruments struct {
 func newBuzzInstruments(m metric.Meter) (buzzInstruments, error) {
 	r := reg{m: m}
 	bi := buzzInstruments{
-		execDuration:        r.f64h("magus.buzz.exec.duration", "Wall-clock duration of a Buzz script execution, in seconds.", "s"),
-		compileDuration:     r.f64h("magus.buzz.compile.duration", "Wall-clock duration of a Buzz compile phase, in seconds.", "s"),
-		hostCallDuration:    r.f64h("magus.buzz.host.call.duration", "Wall-clock duration of a Buzz call into a host callable, in seconds.", "s"),
+		execDuration:        r.f64h("magus.buzz.exec.duration", "Wall-clock duration of a Buzz script execution, in seconds."),
+		compileDuration:     r.f64h("magus.buzz.compile.duration", "Wall-clock duration of a Buzz compile phase, in seconds."),
+		hostCallDuration:    r.f64h("magus.buzz.host.call.duration", "Wall-clock duration of a Buzz call into a host callable, in seconds."),
 		hostCallCount:       r.i64c("magus.buzz.host.call.count", "Number of Buzz calls across the native boundary.", "{call}"),
 		sessionPoolReuse:    r.i64c("magus.buzz.session.pool.reuse", "Buzz session-pool acquires, by whether an idle session was reused.", "{acquire}"),
 		sessionPoolIdle:     r.i64ud("magus.buzz.session.pool.idle", "Number of idle Buzz sessions currently pooled.", "{session}"),
 		sessionPoolEviction: r.i64c("magus.buzz.session.pool.evictions", "Buzz sessions evicted from the pool.", "{session}"),
-		sessionWarmDuration: r.f64h("magus.buzz.session.warm.duration", "Wall-clock duration of warming a Buzz session, in seconds.", "s"),
-		importDuration:      r.f64h("magus.buzz.import.duration", "Wall-clock duration of resolving a Buzz import, in seconds.", "s"),
-		spellResolve:        r.f64h("magus.buzz.spell.resolve.duration", "Wall-clock duration of resolving a spell, in seconds.", "s"),
-		spellBuiltinsWarm:   r.f64h("magus.buzz.spell.builtins.warm", "Wall-clock duration of warming a spell's builtins, in seconds.", "s"),
+		sessionWarmDuration: r.f64h("magus.buzz.session.warm.duration", "Wall-clock duration of warming a Buzz session, in seconds."),
+		importDuration:      r.f64h("magus.buzz.import.duration", "Wall-clock duration of resolving a Buzz import, in seconds."),
+		spellResolve:        r.f64h("magus.buzz.spell.resolve.duration", "Wall-clock duration of resolving a spell, in seconds."),
+		spellBuiltinsWarm:   r.f64h("magus.buzz.spell.builtins.warm", "Wall-clock duration of warming a spell's builtins, in seconds."),
 		spellBuiltinsCount:  r.i64c("magus.buzz.spell.builtins.count", "Number of spell builtin warms.", "{spell}"),
 		jitRuns:             r.i64c("magus.buzz.jit.runs", "Number of JIT-compiled entry executions.", "{entry}"),
 		vmFaults:            r.i64c("magus.buzz.vm.faults", "Number of Buzz VM faults.", "{fault}"),

@@ -289,7 +289,7 @@ func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string
 	}
 	outDirty, err := v.Dirty(ctx, dir, outputs)
 	if err != nil || !outDirty {
-		return clean, nil // VCS unavailable or no output drift: nothing to classify
+		return clean, nil //nolint:nilerr // VCS unavailable or no output drift: nothing to classify
 	}
 	inDirty := false
 	if len(inputs) > 0 {

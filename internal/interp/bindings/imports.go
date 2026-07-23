@@ -94,13 +94,13 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 		}
 		callerRel, err := filepath.Rel(ws.Root(), src.Dir)
 		if err != nil {
-			return vm.StrValue(path.Clean(joined)), nil
+			return vm.StrValue(path.Clean(joined)), nil //nolint:nilerr // best-effort: degrade to the cleaned path rather than aborting the target
 		}
 		resolved, err := file.Resolve(joined, filepath.ToSlash(callerRel))
 		if err != nil {
 			// Match the static extractor's best-effort drop and the branches above:
 			// degrade to the cleaned path rather than aborting the target at runtime.
-			return vm.StrValue(path.Clean(joined)), nil
+			return vm.StrValue(path.Clean(joined)), nil //nolint:nilerr // deliberate best-effort degradation, see comment above
 		}
 		return vm.StrValue(resolved), nil
 	}))

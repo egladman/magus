@@ -127,13 +127,12 @@ func parseSemver(v string) [3]int {
 		}
 		n := 0
 		for _, c := range p {
-			if c >= '0' && c <= '9' {
-				n = n*10 + int(c-'0')
-			} else {
+			if c < '0' || c > '9' {
 				break
 			}
+			n = n*10 + int(c-'0')
 		}
-		out[i] = n
+		out[i] = n //nolint:gosec // G602: parts is SplitN(v, ".", 3) and i is guarded < 3, so out[i] on [3]int is in range
 	}
 	return out
 }

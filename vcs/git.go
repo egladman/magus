@@ -442,7 +442,7 @@ func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
 func (v gitVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
 	hooksDir, err := vcsOutput(ctx, root, "git", "rev-parse", "--git-path", "hooks")
 	if err != nil {
-		return nil, nil // not a git repo (or git unavailable): nothing to install
+		return nil, nil //nolint:nilerr // not a git repo (or git unavailable): nothing to install
 	}
 	if !filepath.IsAbs(hooksDir) {
 		hooksDir = filepath.Join(root, hooksDir)

@@ -86,6 +86,7 @@ const defaultExploreURL = "https://eli.gladman.cc/magus/console/graph/"
 func (o Options) SiteOrigin() (string, error) {
 	u, err := url.Parse(defaultExploreURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
+		//nolint:nilerr // a malformed or schemeless default URL means no origin to allow, not a hard error
 		return "", nil
 	}
 	return u.Scheme + "://" + u.Host, nil

@@ -3,6 +3,7 @@ package std
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -139,11 +140,12 @@ func XMLParse(_ context.Context, s string) (any, error) {
 			return
 		}
 		parent := stack[len(stack)-1]
-		parent["children"] = append(parent["children"].([]any), node)
+		children, _ := parent["children"].([]any)
+		parent["children"] = append(children, node)
 	}
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

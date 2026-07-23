@@ -13,7 +13,7 @@ type configGetTool struct {
 
 func (t *configGetTool) Name() string { return "magus_config_get" }
 
-func (t *configGetTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *configGetTool) Invoke(_ context.Context, _ types.InvokeRequest) (types.InvokeResponse, error) {
 	return types.InvokeResponse{Data: t.cfg}, nil
 }
 

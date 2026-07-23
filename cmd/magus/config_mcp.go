@@ -255,7 +255,7 @@ func configMCPConnectorCreate(args []string) error {
 
 	exp, err := parseExpiry(time.Now(), *expires)
 	if err != nil {
-		return fmt.Errorf("magus config mcp connector create: %v", err)
+		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
 
 	store, err := auth.LoadConnectorStore()

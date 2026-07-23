@@ -2,6 +2,7 @@ package interp_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,7 +79,7 @@ func (d *scriptDriver) EvalLine(snippet string) ([]engine.Value, error) {
 
 func (d *scriptDriver) IsIncomplete(err error) bool {
 	for _, r := range d.responses {
-		if r.incomplete && r.err == err {
+		if r.incomplete && errors.Is(r.err, err) {
 			return true
 		}
 	}

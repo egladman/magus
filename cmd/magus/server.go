@@ -196,7 +196,7 @@ func spawnDetachedDaemon() (pid int, logPath string, err error) {
 	}
 	defer func() { _ = logf.Close() }()
 
-	cmd := exec.Command(exe, os.Args[1:]...)
+	cmd := exec.Command(exe, os.Args[1:]...) //nolint:gosec // G702: re-execs this same magus binary with the caller's own args to detach the daemon
 	cmd.Env = append(os.Environ(), daemonDetachEnv+"=1")
 	cmd.Stdin = nil
 	cmd.Stdout = logf
@@ -376,7 +376,7 @@ func serverJob(ctx context.Context, args []string) error {
 	}
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil || addr == "" {
-		return nil // no daemon: quietly do nothing so a checkout hook is never delayed
+		return nil //nolint:nilerr // no daemon: quietly do nothing so a checkout hook is never delayed
 	}
 	// Only a PERSISTENT daemon (`server start`) runs a job that outlives this process; a
 	// per-process proc server (which magus may spin up for any command) would die when this
@@ -384,7 +384,7 @@ func serverJob(ctx context.Context, args []string) error {
 	// otherwise no-op, so a hook stays a safe no-op off the daemon.
 	st, serr := proc.QueryStatus(ctx, addr)
 	if serr != nil || st == nil || st.Mode != "daemon" {
-		return nil
+		return nil //nolint:nilerr // not a persistent daemon: no-op so a hook stays a safe no-op off the daemon
 	}
 	inv, err := proc.SubmitJob(ctx, addr, job.Argv, version)
 	if err != nil {
