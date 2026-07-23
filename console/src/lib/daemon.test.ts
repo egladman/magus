@@ -4,7 +4,7 @@ import {
   validateLoopbackHost,
   normalizeDaemonHost,
   daemonAttach,
-  enterSharedModeIfNeeded,
+  adoptDaemonOrigin,
   isSharedMode,
 } from "./daemon";
 
@@ -68,7 +68,7 @@ test("daemonAttach expands #port to the literal loopback IP, rejecting a bad por
   assert.equal(daemonAttach({}), null); // no attach directive, no origin adoption
 });
 
-// withBrowserGlobals stubs the minimal DOM surface enterSharedModeIfNeeded/consumeLiveToken touch
+// withBrowserGlobals stubs the minimal DOM surface adoptDaemonOrigin/consumeLiveToken touch
 // (storage + history), plus the fuller location they read, for the duration of fn.
 function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
   const g = globalThis as unknown as Record<string, unknown>;
@@ -103,13 +103,13 @@ function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
   }
 }
 
-// Kept LAST: enterSharedModeIfNeeded only ever sets the module shared/own-origin flags to
+// Kept LAST: adoptDaemonOrigin only ever sets the module shared/own-origin flags to
 // true, so once shared mode is entered it stays entered for the rest of this module's tests.
 test("shared mode resolves the daemon to the page's own LAN origin (not loopback)", () => {
   withBrowserGlobals(
     { host: "192.168.1.42:8787", hostname: "192.168.1.42", hash: "#token=abc123" },
     () => {
-      assert.equal(enterSharedModeIfNeeded(), true); // non-loopback origin + token -> read-only shared view
+      assert.equal(adoptDaemonOrigin(), true); // non-loopback origin + token -> read-only shared view
       assert.equal(isSharedMode(), true);
       // The phone must keep talking to the EXACT LAN IP:port it loaded from - never 127.0.0.1.
       assert.equal(daemonAttach({}), "192.168.1.42:8787");

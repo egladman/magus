@@ -185,14 +185,14 @@ let ownOrigin = false;
 let sharedMode = false;
 
 // isSharedMode reports whether the console is running as a read-only phone viewer
-// loaded from the daemon's LAN share origin (see enterSharedModeIfNeeded). The
+// loaded from the daemon's LAN share origin (see adoptDaemonOrigin). The
 // shell uses it to hide loopback-tier actions (Share to phone itself, and any
 // mutating control) - a shared session is a look, not a touch.
 export function isSharedMode(): boolean {
   return sharedMode;
 }
 
-// enterSharedModeIfNeeded detects a page that must adopt its OWN origin as the daemon: a
+// adoptDaemonOrigin detects a page that must adopt its OWN origin as the daemon: a
 // page carrying a #token= fragment (or a token already stashed from one) that was served
 // BY the daemon. Two audiences reach it:
 //   - a phone that opened a LAN share link (NON-loopback page origin): a read-only "look,
@@ -208,7 +208,7 @@ export function isSharedMode(): boolean {
 // own-origin adoption: it just consumes any token and keeps full control. On a page with no
 // token and no #port it does nothing. Call it once, before anything reads the hash. Returns
 // whether READ-ONLY shared mode was entered.
-export function enterSharedModeIfNeeded(): boolean {
+export function adoptDaemonOrigin(): boolean {
   if (typeof location === "undefined") return false;
   const params = parseHash();
   // An explicit #port attach reaches a loopback daemon from wherever the console is hosted:

@@ -43,7 +43,7 @@ import {
   createDaemonTransport,
   fetchReadiness,
   isSharedMode,
-  enterSharedModeIfNeeded,
+  adoptDaemonOrigin,
   type ReadinessReport,
   type ReadinessComponent,
 } from "../lib/daemon";
@@ -634,14 +634,14 @@ export function startConsole(
   outlet: HTMLElement,
   statusHost: HTMLElement,
 ): void {
-  // Snapshot the boot fragment BEFORE enterSharedModeIfNeeded consumes/strips the #token= (below), so the
+  // Snapshot the boot fragment BEFORE adoptDaemonOrigin consumes/strips the #token= (below), so the
   // attach-visibility notification further down can still tell it booted attached and name the port.
   const bootParams = parseHash();
   // Enter shared ("share to phone") mode BEFORE anything reads the fragment: on a
   // phone that opened a LAN share link this records own-origin adoption and stashes
   // the token, so resolveDaemonHost returns the page's own origin and every surface
   // connects read-only over same-origin fetches to the exact LAN host it loaded from.
-  enterSharedModeIfNeeded();
+  adoptDaemonOrigin();
   const shared = isSharedMode();
   document.documentElement.toggleAttribute("data-shared-mode", shared);
 

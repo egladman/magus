@@ -43,7 +43,7 @@ import {
   daemonAttach,
   consumeLiveToken,
   getLiveToken,
-  enterSharedModeIfNeeded,
+  adoptDaemonOrigin,
   fetchSSE,
   authHeaders,
   isRemembered,
@@ -4433,13 +4433,13 @@ async function bootLive() {
   // offline links keep working even when a default daemon is configured.
   if (params.data || params.src) return false;
 
-  // The graph is a SEPARATE bundle from the shell, so the shell's enterSharedModeIfNeeded() does not
+  // The graph is a SEPARATE bundle from the shell, so the shell's adoptDaemonOrigin() does not
   // set THIS bundle's own-origin flag. Run it here too so a daemon-origin link from `magus graph open
   // --live` (which carries a #token but no #port) is recognized as own-origin and daemonAttach adopts
   // location.host. It is a no-op for a #port attach (which needs no origin adoption) and for a cold,
   // token-less visit. The shell may have already stripped the #token from the URL; getLiveToken() reads
   // the stashed copy, so adoption still fires.
-  enterSharedModeIfNeeded();
+  adoptDaemonOrigin();
 
   // Explicit-attach only: a #port link, or the daemon-origin/shared console. A mere configured default
   // must not force the explorer into live mode - a cold visit shows the static empty state instead.
