@@ -1,11 +1,15 @@
 // run-example.js - "Run ▶" button on opt-in Buzz code blocks.
 //
 // The markdown render tags a fence with data-magus-run="true" (via a <!-- magus-run -->
-// author marker); this module finds those blocks, adds a Run button + an output
-// panel, and on click LAZY-LOADS the playground WASM (never on page load - the
-// ~1.9 MB artifact would regress the perf work). Subsequent runs on the page
-// reuse the cached module. Also adds an "Open in Playground ↗" link (opens in a
-// new tab) that deep-links the snippet into /playground/#source=<base64url>.
+// author marker); this module finds those blocks and adds two action bars plus an
+// output panel. Top bar: "Open in Playground ↗" (left, opens in a new tab, deep-linking
+// the snippet into /playground/#source=<base64url>) and a copy-to-clipboard button
+// (right) - runnable blocks skip code-copy.js's floating corner button (see there) and
+// get this inline one instead. Bottom bar: the Run button (right-aligned), directly
+// above where its output panel will land on click, which LAZY-LOADS the playground WASM
+// (never on page load - the ~1.9 MB artifact would regress the perf work). Subsequent
+// runs on the page reuse the cached module.
+import { copyFeedback } from "../lib/clipboard.js";
 
 // The playground WASM exposes window.buzz.* inside its Go main(), and wasm_exec.js
 // defines window.Go; declare just the surface this module touches.
@@ -103,6 +107,13 @@ export function initRunExample(): void {
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
 
+  // Matches code-copy.js's icon exactly, so the runnable block's inline copy button
+  // and every other code block's floating one read as the same control.
+  const CLIPBOARD =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="9" y="9" width="13" height="13" rx="2"></rect>' +
+    '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+
   function base64url(text: string): string {
     // UTF-8 -> latin1 (unescape(encodeURIComponent)) -> btoa -> URL-safe alphabet.
     return btoa(unescape(encodeURIComponent(text)))
@@ -140,10 +151,9 @@ export function initRunExample(): void {
     if (!code) return;
 
     // Couple the controls to the code block itself: reuse the .code-block wrapper
-    // code-copy.js already added (or create one), then hang an action bar off the
-    // BOTTOM of that wrapper so Run + Open-in-Playground read as part of the block
-    // rather than a row floating above it. The output panel attaches directly below
-    // the same block, so the whole thing is one visually-connected unit.
+    // (code-copy.js skips this pre, so normally none exists yet) and hang the top and
+    // bottom bars off it so they read as part of the block. The output panel attaches
+    // below the whole block on first run, so input and output stay a single unit.
     const parent = pre.parentElement;
     let block: HTMLElement;
     if (parent && parent.classList.contains("code-block")) {
@@ -157,17 +167,9 @@ export function initRunExample(): void {
     }
     block.classList.add("runnable");
 
-    const bar = document.createElement("div");
-    bar.className = "runnable-bar";
-
-    const runBtn = document.createElement("button");
-    runBtn.type = "button";
-    runBtn.className = "run-example";
-    runBtn.innerHTML = PLAY + "<span>Run</span>";
-    runBtn.setAttribute("aria-label", "Run this Buzz snippet");
-    runBtn.setAttribute("title", "Run this Buzz snippet");
-    runBtn.setAttribute("data-tooltip", "Run this snippet");
-    bar.appendChild(runBtn);
+    // Top bar: Open in Playground (left) + copy (right).
+    const topBar = document.createElement("div");
+    topBar.className = "runnable-bar runnable-bar-top";
 
     const openLink = document.createElement("a");
     openLink.className = "open-in-playground";
@@ -182,9 +184,46 @@ export function initRunExample(): void {
     openArrow.setAttribute("aria-hidden", "true");
     openArrow.textContent = "↗";
     openLink.append(openArrow);
-    bar.appendChild(openLink);
+    topBar.appendChild(openLink);
 
-    block.appendChild(bar);
+    // Matches code-copy.js: no button at all where the Clipboard API is unavailable,
+    // rather than an inert one.
+    if (navigator.clipboard) {
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "runnable-copy";
+      copyBtn.setAttribute("aria-label", "Copy code to clipboard");
+      copyBtn.setAttribute("title", "Copy code to clipboard");
+      copyBtn.setAttribute("data-tooltip", "Copy code");
+      copyBtn.innerHTML = CLIPBOARD;
+      topBar.appendChild(copyBtn);
+      copyFeedback({
+        el: copyBtn,
+        getText: () => code.textContent,
+        restIcon: CLIPBOARD,
+        restLabel: "Copy code to clipboard",
+        doneLabel: "Copied",
+        failLabel: "Copy failed",
+      });
+    }
+
+    block.insertBefore(topBar, pre);
+
+    // Bottom bar: Run alone, right-aligned, sitting directly above where its
+    // output panel lands.
+    const bottomBar = document.createElement("div");
+    bottomBar.className = "runnable-bar runnable-bar-bottom";
+
+    const runBtn = document.createElement("button");
+    runBtn.type = "button";
+    runBtn.className = "run-example";
+    runBtn.innerHTML = PLAY + "<span>Run</span>";
+    runBtn.setAttribute("aria-label", "Run this Buzz snippet");
+    runBtn.setAttribute("title", "Run this Buzz snippet");
+    runBtn.setAttribute("data-tooltip", "Run this snippet");
+    bottomBar.appendChild(runBtn);
+
+    pre.insertAdjacentElement("afterend", bottomBar);
 
     // Output panel inserted after the whole block on first run.
     let out: HTMLPreElement | null = null;

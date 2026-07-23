@@ -115,8 +115,6 @@ export function initGlossaryTerms(): void {
       el.classList.remove("is-open");
       el.style.height = "0";
     });
-    const above = el.previousElementSibling;
-    if (above) above.classList.remove("glossary-parted");
     if (term) term.classList.remove("is-open");
     const done = (e: TransitionEvent): void => {
       if (e.propertyName !== "height") return;
@@ -139,12 +137,11 @@ export function initGlossaryTerms(): void {
     const el = document.createElement("div");
     el.className = "glossary-reveal";
     el.innerHTML =
-      `<div class="glossary-reveal-inner"><span class="glossary-seam" aria-hidden="true"></span>` +
+      `<div class="glossary-reveal-inner">` +
       `<button class="glossary-reveal-close" type="button" aria-label="Close">&times;</button>` +
       cardBody(term) +
       `</div>`;
     block.insertAdjacentElement("afterend", el);
-    block.classList.add("glossary-parted");
     term.classList.add("is-open");
     // Inner panel height plus its 0.5rem top+bottom margin, so the trench opens to the exact
     // content height before JS settles it to auto.

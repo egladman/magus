@@ -20,6 +20,10 @@ export function initCodeCopy(): void {
     if (code.classList.contains("language-mermaid")) return;
     const pre = code.parentElement;
     if (!pre) return;
+    // Runnable blocks (run-example.js) get their own top action bar with Run +
+    // Open in Playground; a second floating copy button in the same corner would
+    // overlap it.
+    if (pre.hasAttribute("data-magus-run")) return;
     const parent = pre.parentElement;
     if (!parent || parent.classList.contains("code-block")) return;
 
