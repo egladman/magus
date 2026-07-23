@@ -174,6 +174,18 @@
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
 .console-shell-notify[hidden] { display: none; }
+/* Bottom fade: both pop-out panels (notifications + reference) are the PRIMARY (white) surface, but the
+   status bar they dock above is the SECONDARY (grey) rail - a hard edge between the two reads as a clash.
+   A short gradient at the panel's bottom eases the panel's own colour into the status-bar grey so the two
+   meet seamlessly, and the scrolling content dissolves into it instead of being cut by a line. The overlay
+   is non-interactive and sits above the content; both panels are position:fixed, so bottom:0 is their own
+   lower edge (which already clears the status bar via bottom:var(--console-statusbar-h)). */
+.console-shell-notify::after,
+#console-refpanel::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.75rem;
+  background: linear-gradient(to bottom, transparent, var(--pf-t--global--background--color--secondary--default));
+  pointer-events: none; z-index: 1;
+}
 .console-shell-notify__head {
   flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
   gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
