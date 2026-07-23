@@ -359,7 +359,7 @@
 @keyframes console-toast-in { from { opacity: 0; transform: translateY(0.4rem); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .console-shell-toast--transient { animation: none; } }
 
-/* --- Share to phone dialog ------------------------------------------------------------------------
+/* --- Share dialog --------------------------------------------------------------------------------
  * The QR share modal (share.ts) is a small centered overlay PatternFly has no exact component for, so
  * it stays data/class-scoped here like the keybindings editor and the toast. Class names follow the
  * console-<area>-<block>__<element> convention; state is carried by classes, not IDs. The QR frame is
@@ -393,10 +393,20 @@
 }
 .console-share-dialog__qr canvas { display: block; image-rendering: pixelated; }
 .console-share-dialog__qr--failed { display: none; }
+/* The URL is a click-to-copy button, so reset the native button chrome to a bordered
+ * mono line and signal it is interactive with a plain -> link hover (no all-caps, square). */
 .console-share-dialog__url {
-  margin: 0; width: 100%; word-break: break-all; text-align: center;
+  margin: 0; width: 100%; box-sizing: border-box; word-break: break-all; text-align: center;
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem;
-  color: var(--pf-t--global--text--color--subtle); user-select: all;
+  color: var(--pf-t--global--text--color--subtle); cursor: pointer;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: transparent;
+}
+.console-share-dialog__url:hover {
+  color: var(--pf-t--global--text--color--link--default);
+  border-color: var(--pf-t--global--text--color--link--default);
 }
 .console-share-dialog__note {
   margin: 0; text-align: center; font-size: 0.74rem;

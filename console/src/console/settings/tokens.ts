@@ -25,7 +25,7 @@ function scopeLabel(scope: TokenScope): string {
     case TokenScope.CONNECTOR:
       return "Connector";
     case TokenScope.SHARE_READ:
-      return "Share to phone";
+      return "Read-only share";
     default:
       return "Token";
   }
@@ -189,7 +189,7 @@ export function buildTokensSection(
     const detail = isShare
       ? 'Revoke the share token "' +
         who +
-        '"? This also closes the phone share listener immediately.'
+        '"? This also closes the read-only share listener immediately.'
       : 'Revoke connector token "' +
         who +
         '"? Any client using it will stop working. This cannot be undone - mint a new one from the CLI if needed.';

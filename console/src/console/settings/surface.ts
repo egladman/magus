@@ -943,7 +943,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
         buildSection(
           "Access tokens",
           tokensSection.el,
-          "List and revoke the daemon's connector tokens and the active phone-share token. Minting stays a CLI-only operation - the console can never create a token.",
+          "List and revoke the daemon's connector tokens and the active read-only share token. Minting stays a CLI-only operation - the console can never create a token.",
         ),
       ),
     },

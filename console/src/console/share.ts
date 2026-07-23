@@ -1,16 +1,18 @@
-// share.ts - the "Share to phone" flow in the console shell.
+// share.ts - the "Share a read-only view" flow in the console shell.
 //
 // It POSTs the daemon's loopback /api/v1/share (with the same bearer the console
-// already uses), then renders a small modal: a QR of the returned LAN URL, the
-// URL as selectable text, and a plain disclosure that the phone must be on the
-// same network and the link is short-lived and read-only. The daemon does the
-// real work (mint token, open the LAN listener); this module is presentation
-// plus one authenticated fetch. Every failure is surfaced as a toast, never a
-// silent no-op, so a missing LAN interface or an old daemon reads honestly.
+// already uses), then renders a small modal: a QR of the returned LAN URL and the
+// URL as a click-to-copy line, so the viewer can either scan it on a phone or paste
+// it into any device on the network (a tablet, a laptop, a TV browser). A plain
+// disclosure states the same-network requirement, the lifetime, and that the link
+// is read-only. The daemon does the real work (mint token, open the LAN listener);
+// this module is presentation plus one authenticated fetch. Every failure is
+// surfaced as a toast, never a silent no-op, so a missing LAN interface or an old
+// daemon reads honestly.
 //
-// It is a loopback-console affordance only: in shared mode (a phone viewing over
-// the LAN) the command is never registered, and the daemon would reject the
-// share trigger anyway (it is loopback + bearer guarded).
+// It is a loopback-console affordance only: a read-only viewer over the LAN never
+// registers the command, and the daemon would reject the share trigger anyway (it
+// is loopback + bearer guarded).
 
 import { resolveDaemonHost, authHeaders, getLiveToken } from "../lib/daemon";
 import { showToast } from "../lib/refresh-toast";
@@ -90,11 +92,11 @@ function renderShareDialog(url: string, expiresAt: string, superseded: boolean):
   dialog.className = "console-share-dialog";
   dialog.setAttribute("role", "dialog");
   dialog.setAttribute("aria-modal", "true");
-  dialog.setAttribute("aria-label", "Share to phone");
+  dialog.setAttribute("aria-label", "Share a read-only view");
 
   const heading = document.createElement("h2");
   heading.className = "console-share-dialog__title";
-  heading.textContent = "Share to phone";
+  heading.textContent = "Share a read-only view";
   dialog.append(heading);
 
   if (superseded) {
@@ -120,16 +122,30 @@ function renderShareDialog(url: string, expiresAt: string, superseded: boolean):
   qrFrame.append(canvas);
   dialog.append(qrFrame);
 
-  const link = document.createElement("p");
+  // Copy the link to the clipboard, shared by the URL line (click-to-copy) and the
+  // Copy button so "scan it or paste it anywhere" is one gesture either way.
+  const copyUrl = (): void => {
+    navigator.clipboard?.writeText(url).then(
+      () => showToast("Share", "Share link copied.", "ok"),
+      () => showToast("Share", "Could not copy the link. Select and copy it manually.", "warn"),
+    );
+  };
+
+  // The URL is a click-to-copy line (not just selectable text): scan the QR on a
+  // phone, or copy the link and open it on any other device on the network.
+  const link = document.createElement("button");
+  link.type = "button";
   link.className = "console-share-dialog__url";
   link.textContent = url;
+  link.title = "Click to copy";
+  link.addEventListener("click", copyUrl);
   dialog.append(link);
 
   // The one disclosure line Eli asked for: network requirement + lifetime + read-only.
   const note = document.createElement("p");
   note.className = "console-share-dialog__note";
   note.textContent =
-    "Your phone must be on the same network as this machine. The link works for 15 minutes and is read-only.";
+    "Any device on the same network can open this. The link works for 15 minutes and is read-only.";
   dialog.append(note);
 
   const expiry = formatExpiry(expiresAt);
@@ -146,12 +162,7 @@ function renderShareDialog(url: string, expiresAt: string, superseded: boolean):
   copyBtn.type = "button";
   copyBtn.className = "pf-v6-c-button pf-m-secondary";
   copyBtn.textContent = "Copy link";
-  copyBtn.addEventListener("click", () => {
-    navigator.clipboard?.writeText(url).then(
-      () => showToast("Share", "Share link copied.", "ok"),
-      () => showToast("Share", "Could not copy the link. Select and copy it manually.", "warn"),
-    );
-  });
+  copyBtn.addEventListener("click", copyUrl);
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
   closeBtn.className = "pf-v6-c-button pf-m-primary";

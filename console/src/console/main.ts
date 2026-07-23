@@ -411,14 +411,14 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   conn.setAttribute("aria-label", hint);
   conn.title = hint;
   left.append(conn);
-  // Shared ("view only") reminder: a phone viewing over the LAN share is read-only, so a quiet muted tag
+  // Shared ("view only") reminder: a device viewing over the LAN share is read-only, so a quiet muted tag
   // sits next to the connection dot as an ambient cue - not a banner. Loopback consoles never see it.
   if (isReadOnly()) {
     const viewOnly = document.createElement("span");
     viewOnly.className = "console-shell-statusbar__viewonly";
     viewOnly.dataset.viewonly = "";
     viewOnly.textContent = "view only";
-    viewOnly.title = "This is a read-only view shared to your phone.";
+    viewOnly.title = "This is a read-only view shared over the network.";
     left.append(viewOnly);
   }
   const right = document.createElement("div");
@@ -456,7 +456,7 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     panes.append(panesIconSpan);
     right.append(panes);
   }
-  // Share to phone: a quiet phone-glyph button, loopback-console only (a shared read-only viewer can't
+  // Share a read-only view: a quiet share-glyph button, loopback-console only (a read-only viewer can't
   // trigger sharing, and the daemon rejects the loopback-guarded endpoint anyway). data-share-toggle is
   // the hook; startConsole's one delegated click opens the share dialog for whichever tab's copy fired.
   if (!isReadOnly()) {
@@ -464,8 +464,8 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     share.type = "button";
     share.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__share";
     share.dataset.shareToggle = "";
-    share.setAttribute("aria-label", "Share to phone");
-    share.title = "Share to phone (a time-boxed, read-only view for a phone on this network)";
+    share.setAttribute("aria-label", "Share a read-only view");
+    share.title = "Share a read-only view (a time-boxed link any device on this network can open)";
     const shareIcon = document.createElement("span");
     shareIcon.className = "pf-v6-c-button__icon";
     shareIcon.append(phoneIcon());
@@ -1083,13 +1083,13 @@ export function startConsole(
     run: () => notifications.toggle(),
   });
 
-  // Share to phone: a loopback-console affordance only (the status-bar phone button is likewise gated
-  // out for a read-only viewer). Register the palette mirror only when NOT read-only - a device viewing
-  // over the LAN is a read-only viewer and the daemon rejects the loopback-guarded trigger anyway.
+  // Share a read-only view: a loopback-console affordance only (the status-bar share button is likewise
+  // gated out for a read-only viewer). Register the palette mirror only when NOT read-only - a device
+  // viewing over the LAN is a read-only viewer and the daemon rejects the loopback-guarded trigger anyway.
   if (!readOnly) {
     registerCommand({
       id: "console.share",
-      label: "Share to phone",
+      label: "Share a read-only view",
       group: "General",
       run: () => {
         void openShareDialog();

@@ -62,7 +62,7 @@ async function revokeActiveShareToken(host: string): Promise<void> {
       return;
     }
     await tokens.revokeToken({ identifier: share.identifier });
-    showToast("Share", "Revoked the share token; the phone listener is closed.");
+    showToast("Share", "Revoked the share token; the share listener is closed.");
   } catch (e) {
     showToast(
       "Share",
