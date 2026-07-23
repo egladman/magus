@@ -1,6 +1,8 @@
 // glossary-terms.ts - two interactions on auto-linked glossary terms, split by input:
 //
-//   hover / focus -> a quick popover (desktop peek)
+//   hover / focus -> a quick popover, gated on matchMedia("(hover: hover)") so a touch
+//                    tap's synthetic pre-click mouseenter/focus can't flash it open (desktop
+//                    peek only)
 //   click / tap   -> a split reveal: the content parts open below the term's paragraph to
 //                    show a recessed panel (the only interaction that works on touch, since
 //                    hover has no tap)
@@ -58,6 +60,13 @@ export function initGlossaryTerms(): void {
   }
 
   // --- Hover popover -------------------------------------------------------------------
+  // Touch devices report hover:none, but a tap still fires a synthetic mouseenter (and
+  // sometimes focus) just before the click as part of the browser's tap-compatibility
+  // sequence - without this guard, tapping a term would flash the popover open right
+  // alongside the split-reveal it's actually meant to trigger. Real hover-capable
+  // devices (including keyboard nav on a desktop/laptop, which reports hover:hover even
+  // without an active mouse) are unaffected.
+  const canHover = !!(window.matchMedia && window.matchMedia("(hover: hover)").matches);
   const pop = document.createElement("div");
   pop.className = "glossary-popover";
   pop.hidden = true;
@@ -82,6 +91,7 @@ export function initGlossaryTerms(): void {
   }
 
   function showPop(term: HTMLAnchorElement): void {
+    if (!canHover) return;
     if (revealTerm === term) return; // its reveal is already open; skip the peek
     cancelHide();
     pop.innerHTML = cardBody(term);
