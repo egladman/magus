@@ -193,18 +193,25 @@ Claude Code's response dialect, emitting nothing on a `pass`:
 }
 ```
 
-### Other hosts
+### Other agents
+
+> [!NOTE]
+> Only the Claude Code setup above is tested end-to-end; it is the guard this
+> repository dogfoods. The OpenCode and Cursor examples below were written against
+> each product's published hook spec but have not been run end-to-end here, so
+> double-check them against the upstream docs:
+> [OpenCode plugins](https://opencode.ai/docs/plugins) and
+> [Cursor hooks](https://docs.cursor.com/agent/hooks).
 
 A full setup is two steps: install the guidance where the host reads it, then
 wire the guard hook. The hook step is always the same shape - pull the command
 out of the host's event with `--from-json <dot.path>`, let `magus agent hook`
 judge it, and render the verdict into the host's response with `-o template`;
 only the dot-path and the response field names change. The examples below were
-verified against each product's official docs in mid-2026, with the confidence
-caveats called out inline. Those docs are the products' own and move on their
-schedule, so treat each one as a tested starting point rather than a standing
-guarantee, and confirm against the host's current hook and instruction-file
-docs.
+written against each product's published hook and instruction-file docs in
+mid-2026, with the confidence caveats called out inline. Those docs are the
+products' own and move on their schedule, so confirm each against the host's
+current docs and expect to adjust.
 
 Not every host reads the Agent Skills format. Claude Code and OpenCode discover
 `SKILL.md` directories; Cursor and most other hosts read an `AGENTS.md` instead,
