@@ -436,6 +436,17 @@ export fun renderRoot(site: Site) > void {
     // The home page sits at gen root, so its in-content links are rewritten root-to-root.
     html = renderContentHTML(html, "", "");
 
+    // Same cross-linking every other docs page gets (glossary.md is exempt there since it
+    // defines the terms; the README doesn't, so it always gets linked): auto-link the first
+    // occurrence of each glossary term, link inline-code domain references, and hint rendered
+    // convention markers back to their conventions section. Root-relative, so "" is both the
+    // page's own clean directory and the base relativePath resolves from.
+    final linkRes = linkGlossaryTerms(html, site.glossaryTerms, relativePath("", "glossary/"));
+    html = linkRes.html;
+    site.addTermRefs(linkRes.linked, "index.html");
+    html = linkCodeEntities(html, site.codeEntities, "");
+    html = injectConventionHints(html, site.conventions, relativePath("", "conventions/"));
+
     final fm = serialize\jsonDecode(markdown\frontmatter(md));
     var title = fm.q("title").stringValue();
     if (title == "") { title = deriveTitle(md, "README.md"); }
