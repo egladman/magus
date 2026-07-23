@@ -49,7 +49,7 @@ import {
 } from "../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../gen/magus/status/v1/status_pb";
-import { openShareDialog } from "./share";
+import { mountSharePanel } from "./share";
 import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
 import type { PageController, PageModule } from "./page";
 
@@ -893,6 +893,11 @@ export function startConsole(
   const notifications = mountNotificationCenter();
   if (wantsDemo(parseHash())) notifications.seedDemo();
 
+  // The share pop-out: a right-docked panel (the notification-center idiom) that the
+  // status-bar share button toggles through the one delegated footer click below. It
+  // is a hidden singleton; a read-only viewer simply never gets a button to open it.
+  const sharePanel = mountSharePanel();
+
   // Attach visibility: when the console booted attached (an explicit #port=, or a #token= own-origin
   // adoption), drop a HISTORY-tier note naming where it connected. History tier (kind "ok") so it
   // records silently and never lights the bell; keyed so a reload does not re-announce it. A bare #port
@@ -1091,9 +1096,7 @@ export function startConsole(
       id: "console.share",
       label: "Share a read-only view",
       group: "General",
-      run: () => {
-        void openShareDialog();
-      },
+      run: () => sharePanel.open(),
     });
   }
 
@@ -1518,7 +1521,7 @@ export function startConsole(
   statusHost.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
     if (t.closest("[data-cheatsheet-toggle]")) cheatsheet.toggle();
-    if (t.closest("[data-share-toggle]")) void openShareDialog();
+    if (t.closest("[data-share-toggle]")) sharePanel.toggle();
     // Same delegation idiom for the Panes tray button: makeStatusBar rebuilds one per tab, this one
     // listener drives the single shared popup regardless of which tab's copy was clicked.
     const panesBtn = t.closest<HTMLElement>("[data-panes-toggle]");

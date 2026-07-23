@@ -181,6 +181,7 @@
    is non-interactive and sits above the content; both panels are position:fixed, so bottom:0 is their own
    lower edge (which already clears the status bar via bottom:var(--console-statusbar-h)). */
 .console-shell-notify::after,
+.console-shell-share::after,
 #console-refpanel::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.75rem;
   background: linear-gradient(to bottom, transparent, var(--pf-t--global--background--color--secondary--default));
@@ -359,43 +360,55 @@
 @keyframes console-toast-in { from { opacity: 0; transform: translateY(0.4rem); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .console-shell-toast--transient { animation: none; } }
 
-/* --- Share dialog --------------------------------------------------------------------------------
- * The QR share modal (share.ts) is a small centered overlay PatternFly has no exact component for, so
- * it stays data/class-scoped here like the keybindings editor and the toast. Class names follow the
+/* --- Share panel ---------------------------------------------------------------------------------
+ * The "Share a read-only view" pop-out (share.ts): a right-docked side panel in the SAME family as
+ * the notification center and reference drawer, not a centered modal - it has the room to pick a
+ * lifetime and then show the QR + link without squishing. Docks between the top chrome and the status
+ * bar on the right edge, dismissed by Escape / outside-click. Class names follow the
  * console-<area>-<block>__<element> convention; state is carried by classes, not IDs. The QR frame is
- * pinned light (white ground, dark modules) in BOTH themes so the code scans reliably - a theme-tinted,
- * low-contrast QR would not decode. */
-.console-share-backdrop {
-  position: fixed; inset: 0; z-index: var(--pf-t--global--z-index--500);
-  display: flex; align-items: center; justify-content: center;
-  padding: 1rem; background: rgba(0, 0, 0, 0.55);
-}
-.console-share-dialog {
-  max-width: min(22rem, calc(100vw - 2rem)); width: 100%;
-  display: flex; flex-direction: column; gap: 0.6rem; align-items: center;
-  padding: 1.1rem 1.2rem;
+ * pinned light (white ground, dark modules) in BOTH themes so the code scans reliably. */
+.console-shell-share {
+  position: fixed; top: var(--console-topchrome-h); bottom: var(--console-statusbar-h); right: 0; left: auto;
+  width: 24rem; max-width: calc(100vw - 1rem);
+  display: flex; flex-direction: column;
   background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  box-shadow: var(--pf-t--global--box-shadow--lg, 0 8px 24px rgba(0, 0, 0, 0.4));
+  border-left: 1px solid var(--pf-t--global--border--color--default);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.28);
+  z-index: var(--pf-t--global--z-index--300); /* same tier as the notification panel */
 }
-.console-share-dialog__title {
-  margin: 0; font-size: 1rem; font-weight: 600;
-  color: var(--pf-t--global--text--color--regular);
+.console-shell-share[hidden] { display: none; }
+.console-shell-share__head {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-share-dialog__revoked {
-  margin: 0; font-size: 0.78rem;
+.console-shell-share__title { font-size: 0.85rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+/* The body scrolls if a short viewport cannot hold the QR + link + actions; its bottom padding clears
+   the status-bar fade (::after below) so the last control is never cut. */
+.console-shell-share__body {
+  flex: 1 1 auto; overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 0.7rem; align-items: center;
+  padding: 1rem 1.1rem 2.75rem;
+}
+.console-shell-share__picklabel {
+  margin: 0; align-self: flex-start; font-size: 0.78rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-share__durations { align-self: stretch; }
+.console-shell-share__generate { align-self: stretch; }
+.console-shell-share__revoked {
+  margin: 0; align-self: flex-start; font-size: 0.78rem;
   color: var(--console-status-warn, var(--pf-t--global--text--color--regular));
 }
 /* Light frame around the QR so quiet-zone contrast holds in dark mode too. */
-.console-share-dialog__qr {
+.console-shell-share__qr {
   padding: 0.5rem; background: #ffffff; border-radius: 2px; line-height: 0;
 }
-.console-share-dialog__qr canvas { display: block; image-rendering: pixelated; }
-.console-share-dialog__qr--failed { display: none; }
-/* The URL is a click-to-copy button, so reset the native button chrome to a bordered
- * mono line and signal it is interactive with a plain -> link hover (no all-caps, square). */
-.console-share-dialog__url {
+.console-shell-share__qr canvas { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
+.console-shell-share__qr--failed { display: none; }
+/* The URL is a click-to-copy button: reset native button chrome to a bordered mono line and signal it
+   is interactive with a plain -> link hover (no all-caps, square). */
+.console-shell-share__url {
   margin: 0; width: 100%; box-sizing: border-box; word-break: break-all; text-align: center;
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem;
   color: var(--pf-t--global--text--color--subtle); cursor: pointer;
@@ -404,18 +417,18 @@
   border-radius: var(--pf-t--global--border--radius--small);
   background: transparent;
 }
-.console-share-dialog__url:hover {
+.console-shell-share__url:hover {
   color: var(--pf-t--global--text--color--link--default);
   border-color: var(--pf-t--global--text--color--link--default);
 }
-.console-share-dialog__note {
+.console-shell-share__note {
   margin: 0; text-align: center; font-size: 0.74rem;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-share-dialog__expiry {
+.console-shell-share__expiry {
   margin: 0; text-align: center; font-size: 0.7rem; opacity: 0.8;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-share-dialog__actions {
+.console-shell-share__actions {
   display: flex; gap: 0.5rem; margin-top: 0.2rem;
 }
