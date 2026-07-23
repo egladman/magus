@@ -174,7 +174,7 @@ magus explain &quot;op:go:go-test&quot;              # an op's base argv (the `a
 magus path &quot;target:.:test&quot; &quot;tool:go&quot;       # a target reaches its tool via target-&gt;op-&gt;tool
 </code></pre>
 <p>Each spell op carries the base argv it runs on an <code>argv</code> attr (rendered with empty
-charms) and <code>use</code>s the <code>tool:&lt;program&gt;</code> node for its argv[0] - the program, its own kind
+charms) and <code>use</code>s the <code>tool:&lt;program&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> node for its argv[0] - the program, its own kind
 because it is an entity, not an operation. The op's spell <code>use</code>s the tool too, so
 <code>explain tool:go</code> lists every op and spell that runs go; a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> reaches the tool
 through its existing <code>target --uses--&gt; op</code> edge. (There is no per-target command node:

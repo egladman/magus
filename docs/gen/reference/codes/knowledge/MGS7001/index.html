@@ -90,7 +90,7 @@
 <p>The knowledge-graph builder walks every <code>.buzz</code> source and records an
 <code>imports</code> edge per import statement. When an import path resolves to a scanned
 <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> file, the edge is EXTRACTED (confidence 1.0). When it does not, the
-builder keeps the import as an INFERRED edge to a literal <code>import:&lt;path&gt;</code> node
+builder keeps the import as an INFERRED edge to a literal <code>import:&lt;path&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> node
 and tags that node with this code, so the ambiguity stays visible instead of
 being silently dropped.</p>
 <p>Built-in <code>magus</code> and <code>magus/*</code> imports are stdlib modules, not files; they are

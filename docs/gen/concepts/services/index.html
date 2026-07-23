@@ -147,7 +147,7 @@ drop stale state or free held ports) without shutting the daemon down;</li>
 </ul>
 <p>If the daemon is killed uncleanly, a new daemon replays each hosted service's <code>stop</code>
 command on startup to <strong>reap orphans</strong> the dead one left behind. Give a container
-service a <code>stop</code> command (e.g. <code>docker stop &lt;name&gt;</code>) so it can be reaped this way.</p>
+service a <code>stop</code> command (e.g. <code>docker stop &lt;name&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>) so it can be reaped this way.</p>
 <h2 id="guarding-against-foot-guns">Guarding against foot-guns</h2>
 <p>magus is proactive about the two ways services go wrong. Both <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> as
 <a href="../../reference/codes/services/">diagnostics</a>.</p>

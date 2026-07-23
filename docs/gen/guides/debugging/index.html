@@ -103,7 +103,7 @@ go
 <p>The REPL treats lines starting with <code>//</code> as comments and skips them. Type <code>.help</code> for the meta-command list, <code>.exit</code> (or Ctrl-D) to quit.</p>
 <h3 id="--no-autoload"><code>--no-autoload</code></h3>
 <p>Skip executing the magusfile on start. Useful when you want a blank environment to experiment without side-effects from your <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s startup code.</p>
-<h3 id="-c-dir"><code>-C &lt;dir&gt;</code></h3>
+<h3 id="-c-dir"><code>-C &lt;dir&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></h3>
 <p>Set the working directory for <code>import</code> resolution (default: cwd).</p>
 <pre><code class="language-sh">magus repl -C internal/auth
 </code></pre>

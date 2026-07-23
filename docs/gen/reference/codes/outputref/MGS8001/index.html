@@ -88,7 +88,7 @@
     <article>
 <h1 id="mgs8001-output-ref-not-found">MGS8001: output ref not found</h1>
 <p>Every <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> that runs is given a short reference id (<code>ref1a2b3c</code>) for its
-captured output, retrievable later with <code>magus query output &lt;ref&gt;</code>. This code fires
+captured output, retrievable later with <code>magus query output &lt;ref&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>. This code fires
 when the ref is well-formed but the store holds no output for it.</p>
 <p>There are two ordinary causes: the entry aged out of the <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> (the store keeps
 only the last few executions per target and prunes by age and size), or the ref

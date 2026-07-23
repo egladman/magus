@@ -107,7 +107,7 @@ appeared on npm and the VS Code marketplace, where a compromised package
 or extension reads credentials from disk and exfiltrates them.</p>
 <h2 id="what-sandbox-blocks">What sandbox blocks</h2>
 <ul>
-<li>Reads of files outside <code>&lt;workspace&gt;</code> + <code>/tmp</code> + system libs.
+<li>Reads of files outside <code>&lt;workspace&gt;</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> + <code>/tmp</code> + system libs.
 This denies <code>~/.aws/credentials</code>, <code>~/.vault-token</code>, <code>~/.ssh/id_rsa</code>,
 <code>~/.npmrc</code>, <code>~/.config/op</code>, <code>~/.docker/config.json</code>, <code>~/.kube/config</code>,
 <code>/etc/shadow</code>, and the rest of the usual supply-chain targets.</li>

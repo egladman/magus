@@ -88,7 +88,7 @@
     <article>
 <h1 id="output-reference-diagnostics">Output-reference diagnostics</h1>
 <p>Codes in the <code>MGS8xxx</code> range flag problems resolving a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>-<a class="glossary-term" href="../../../glossary/#output-reference" data-def="A short, shareable id (ref1a2b3c, &quot;ref" for short) for one target execution's captured output; it appears on each target's line, and magus query output ref1a2b3c prints those exact bytes. In OpenTelemetry terms it corresponds to a **span** (one target execution) within its **trace** (the whole magus invocation).">output reference</a>
-id (<code>ref1a2b3c</code>) with <code>magus query output &lt;ref&gt;</code>. Every target that runs is given
+id (<code>ref1a2b3c</code>) with <code>magus query output &lt;ref&gt;</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>. Every target that runs is given
 a short reference id for its captured output; these codes fire when that id cannot
 be resolved to stored output.</p>
 <h2 id="codes">Codes</h2>

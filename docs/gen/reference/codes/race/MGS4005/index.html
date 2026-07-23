@@ -109,7 +109,7 @@ can render the same inputs to different bytes - the classic markdown-emphasis ca
 (<code>*x*</code> vs <code>_x_</code>). That difference is real, but it is not your change, and committing it
 would just re-introduce the same skew against the next machine.</p>
 <h2 id="resolution">Resolution</h2>
-<p>Do not commit the drift. Discard it (<code>git checkout -- &lt;paths&gt;</code>) and move on. If the
+<p>Do not commit the drift. Discard it (<code>git checkout -- &lt;paths&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>) and move on. If the
 files genuinely need regenerating for a real reason, regenerate with the pinned release
 (the version CI uses) so the bytes match the contract, not with a local dev build.</p>
 <p>If you believe the inputs really did change, see <a href="../MGS4006/">MGS4006</a> (stale generated

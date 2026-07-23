@@ -171,7 +171,7 @@ is a bug when they do.</p>
 <h2 id="cycle-and-error-behavior">Cycle and error behavior</h2>
 <ul>
 <li><strong>Same-project runtime cycle.</strong> A target that (transitively) needs itself
-fails with <code>buzzpool: dispatch: stack contains &quot;&lt;name&gt;&quot; (cycle detected)</code> -
+fails with <code>buzzpool: dispatch: stack contains &quot;&lt;name&gt;&quot; (cycle detected)</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> -
 the ancestor stack that catches this also catches a direct self-loop
 (<code>ctx.needs(self)</code> inside <code>self</code>).</li>
 <li><strong>Cross-project runtime cycle.</strong> Two projects whose <code>magus.needs</code> chains

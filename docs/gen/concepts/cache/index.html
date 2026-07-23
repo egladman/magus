@@ -258,7 +258,7 @@ its still-present entry. Disk is reclaimed separately by eviction and pruning (s
 <td>Always runs; never replays <strong>or</strong> snapshots (a long-running <code>fs.watch</code> loop, a <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> op).</td>
 </tr>
 <tr>
-<td><code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;target&gt; --no-cache</code></td>
+<td><code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;target&gt; --no-cache</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></td>
 <td>one target, one invocation</td>
 <td>Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike <code>skip_cache</code>.</td>
 </tr>

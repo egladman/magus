@@ -131,7 +131,7 @@ of the daemon's job socket:</p>
 </tr>
 </tbody>
 </table></figure>
-<p>For scripts and container probes, <code>magus status --probe=&lt;kind&gt;</code> exits <code>0</code> healthy / <code>1</code>
+<p>For scripts and container probes, <code>magus status --probe=&lt;kind&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> exits <code>0</code> healthy / <code>1</code>
 unhealthy. The kinds are <code>liveness</code> (the daemon answers), <code>readiness</code> (a workspace is
 loaded), and <code>mcp</code> (this endpoint is reachable) - and they are comma-combinable, failing
 if any listed check does:</p>
