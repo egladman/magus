@@ -16,6 +16,7 @@ import "lib/text" as _;
 import "lib/url" as _;
 import "lib/html" as _;
 import "lib/glossary" as _;
+import "lib/conventions" as _;
 import "lib/csp" as _;
 import "engine/meta" as _;
 import "engine/path" as _;
@@ -173,6 +174,11 @@ export object Site {
     // the term popover ("referenced on ...").
     glossaryTerms: [GlossaryTerm] = mut [<GlossaryTerm>],
     glossaryRefs: {str: [str]} = mut {},
+
+    // Documentation conventions, parsed pre-walk from conventions.md. Each rendered page gets
+    // a subtle "?" hint next to a convention marker (an admonition title, a code caption)
+    // linking back to its section, with the section's blurb baked in for the shared popover.
+    conventions: [Convention] = mut [<Convention>],
 
     // Per-page glossary vocabulary: each docs page's clean URL mapped to the "||"-joined,
     // sorted set of glossary anchors it auto-links (the same set glossaryRefs holds inverted).
@@ -581,6 +587,16 @@ export object Site {
         final md = f.readAll();
         f.close();
         this.glossaryTerms = parseGlossary(md);
+    }
+
+    // collectConventions parses conventions.md into the convention corpus, pre-walk (like
+    // collectGlossaryTerms), so every page's render can hint its convention markers.
+    fun collectConventions() > void {
+        final path = this.root + "/" + this.docs + "/conventions.md";
+        final f = io\File.open(path, io\FileMode.read);
+        final md = f.readAll();
+        f.close();
+        this.conventions = parseConventions(md);
     }
 
     // collectPageTerms records, per docs page, the glossary anchors that page auto-links,

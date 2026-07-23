@@ -18,6 +18,7 @@ import "lib/text" as _;
 import "lib/url" as _;
 import "lib/html" as _;
 import "lib/glossary" as _;
+import "lib/conventions" as _;
 import "engine/meta" as _;
 import "engine/path" as _;
 import "engine/types" as _;
@@ -523,6 +524,13 @@ export fun renderFile(rel: str, site: Site) > void {
     // Link inline-code domain references (diagnostic codes, ...) to their reference pages on
     // every page, glossary included.
     html = linkCodeEntities(html, site.codeEntities, newCleanDirectory(rel, site));
+
+    // Hint each rendered convention marker (an admonition title, a code caption) back to its
+    // section on the conventions page, with the section's blurb baked in for the popover. The
+    // conventions page itself is skipped - it defines them.
+    if (rel != "conventions.md") {
+        html = injectConventionHints(html, site.conventions, relativePath(newCleanDirectory(rel, site), "conventions/"));
+    }
 
     // If a tour step demonstrates this concept, inject a "see the demo" callout after the
     // intro, deep-linking its tour card.

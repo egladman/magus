@@ -1,0 +1,131 @@
+// lib/conventions.buzz - render-time "convention hint" injector. Adds a subtle "?" link
+// to the documentation-conventions page next to each rendered convention marker (an
+// admonition title, a code-block caption), baking the convention's one-line description
+// into data-def so the shared popover (glossary-terms.ts) can explain it in place. A reader
+// who wonders "what is this?" gets the answer without leaving the page. Pure string
+// transforms, golden-gated like lib/glossary.buzz and lib/html.buzz.
+namespace conventions;
+
+import "assert";
+import "lib/text" as _;       // escapeAttr
+import "lib/glossary" as _;   // glossarySlug, for the goldmark anchors
+
+// Convention is one section of conventions.md: the heading, its goldmark anchor, and the
+// lead paragraph as a one-line description for the popover. The conventions page is prose
+// H2 sections (unlike the glossary's ### entries).
+export object Convention {
+    title: str = "",
+    anchor: str = "",
+    def: str = "",
+}
+
+// parseConventions reads conventions.md into its sections: each "## Heading" becomes a
+// Convention with its anchor and the paragraph under it (markup stripped, trailing colon
+// dropped since a lead line often ends in ":" before an example).
+export fun parseConventions(md: str) > [Convention] {
+    final lines = md.split("\n");
+    final items: [Convention] = mut [<Convention>];
+    var i = 0;
+    while (i < lines.len()) {
+        if (lines[i].startsWith("## ")) {
+            final title = lines[i].sub(3).trim();
+            var j = i + 1;
+            while (j < lines.len() and lines[j].trim() == "") { j = j + 1; }
+            var def = "";
+            while (j < lines.len() and lines[j].trim() != ""
+                and lines[j].startsWith("#") == false and lines[j].startsWith("```") == false) {
+                if (def == "") { def = lines[j].trim(); } else { def = def + " " + lines[j].trim(); }
+                j = j + 1;
+            }
+            items.append(Convention{ title = title, anchor = glossarySlug(title), def = cleanConventionDef(def) });
+        }
+        i = i + 1;
+    }
+    return items;
+}
+
+// cleanConventionDef reduces a section's lead paragraph to a short plain-text blurb: drop
+// backticks and bold markers, and a trailing colon.
+fun cleanConventionDef(s: str) > str {
+    var d = s;
+    while (d.indexOf("`") != null) { d = d.replace("`", with: ""); }
+    while (d.indexOf("**") != null) { d = d.replace("**", with: ""); }
+    d = d.trim();
+    if (d.endsWith(":")) { d = d.sub(0, len: d.len() - 1).trim(); }
+    return d;
+}
+
+// conventionHint builds the "?" link for one convention anchor, or "" if that section is
+// absent from the corpus (so a missing section silently skips rather than links nowhere).
+// The def is baked into data-def; data-kind lets the shared popover label it a Convention.
+fun conventionHint(conventions: [Convention], anchor: str, relToConventions: str) > str {
+    foreach (c in conventions) {
+        if (c.anchor == anchor) {
+            return "<a class=\"convention-hint\" href=\"" + relToConventions + "#" + anchor
+                + "\" data-kind=\"convention\" data-def=\"" + escapeAttr(c.def)
+                + "\" aria-label=\"What is this? " + escapeAttr(c.title) + "\">?</a>";
+        }
+    }
+    return "";
+}
+
+// injectConventionHints adds a "?" hint into each rendered convention marker: an admonition
+// title and a code-block caption. It runs after the content transforms, so it sees the final
+// <p class="admonition-title"> / <figcaption> markup. The conventions page itself is skipped
+// by the caller (it defines these). A marker whose section is missing from the corpus is
+// left untouched.
+export fun injectConventionHints(html: str, conventions: [Convention], relToConventions: str) > str {
+    var h = html;
+    h = insertBeforeClose(h, "<p class=\"admonition-title\">", "</p>",
+        conventionHint(conventions, "admonitions", relToConventions));
+    h = insertBeforeClose(h, "<figcaption>", "</figcaption>",
+        conventionHint(conventions, "code-block-titles", relToConventions));
+    return h;
+}
+
+// insertBeforeClose inserts `ins` just before the first `close` following each `open` marker.
+// Returns html unchanged when ins is "" (the section was not in the corpus).
+fun insertBeforeClose(html: str, open: str, close: str, ins: str) > str {
+    if (ins == "") { return html; }
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(open);
+    while (idx != null) {
+        buf = buf + rest.sub(0, len: idx + open.len());
+        rest = rest.sub(idx + open.len());
+        final end = rest.indexOf(close);
+        if (end == null) { return buf + rest; }
+        buf = buf + rest.sub(0, len: end) + ins;
+        rest = rest.sub(end);
+        idx = rest.indexOf(open);
+    }
+    return buf + rest;
+}
+
+test "parseConventions reads H2 sections, anchors, and a cleaned lead line" {
+    final md = "# Documentation conventions\n\n## Admonitions\n\nCall-outs carry a colored accent per type:\n\n> [!NOTE]\n> body\n\n## Diffs\n\nA `diff` block shows a change.\n";
+    final cs = parseConventions(md);
+    assert\equal(cs.len(), 2, "two sections parsed");
+    assert\equal(cs[0].title, "Admonitions", "title");
+    assert\equal(cs[0].anchor, "admonitions", "goldmark anchor");
+    assert\equal(cs[0].def, "Call-outs carry a colored accent per type", "lead line, trailing colon dropped");
+    assert\equal(cs[1].def, "A diff block shows a change.", "backticks stripped");
+}
+
+test "injectConventionHints links an admonition title and a code caption" {
+    final cs = mut [<Convention>];
+    cs.append(Convention{ title = "Admonitions", anchor = "admonitions", def = "colored call-outs" });
+    cs.append(Convention{ title = "Code-block titles", anchor = "code-block-titles", def = "a filename caption" });
+    final res = injectConventionHints(
+        "<div class=\"admonition admonition-note\"><p class=\"admonition-title\">Note</p>\n<p>body</p>\n</div>",
+        cs, "../conventions/");
+    assert\equal(res.indexOf("<p class=\"admonition-title\">Note<a class=\"convention-hint\"") != null, true,
+        "hint injected before the title close");
+    assert\equal(res.indexOf("href=\"../conventions/#admonitions\"") != null, true, "hint targets the section anchor");
+}
+
+test "injectConventionHints leaves markers untouched when the section is absent" {
+    final cs = mut [<Convention>];
+    final html = "<p class=\"admonition-title\">Note</p>";
+    assert\equal(injectConventionHints(html, cs, "../conventions/"), html, "no corpus, no change");
+}

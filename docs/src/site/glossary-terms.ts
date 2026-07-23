@@ -14,16 +14,20 @@
 // The popover registers with the popups coordinator so opening it closes any other menu.
 import { registerPopup, notifyPopupOpen } from "./popups.js";
 
-// Human labels for the code-entity kinds (data-kind). Glossary terms carry no kind.
+// Human labels for the data-kind on a linked term. Glossary terms carry no kind; code
+// entities and convention hints do.
 const KIND_LABELS: Record<string, string> = {
   code: "Diagnostic code",
   command: "Command",
   method: "Method",
   config: "Config key",
+  convention: "Convention",
 };
 
 export function initGlossaryTerms(): void {
-  const terms = document.querySelectorAll<HTMLAnchorElement>("a.glossary-term, a.code-xref");
+  const terms = document.querySelectorAll<HTMLAnchorElement>(
+    "a.glossary-term, a.code-xref, a.convention-hint",
+  );
   if (!terms.length) return;
 
   function esc(s: string): string {
@@ -38,8 +42,10 @@ export function initGlossaryTerms(): void {
   function cardBody(term: HTMLAnchorElement): string {
     const def = term.dataset.def || "";
     const href = term.getAttribute("href") || "";
-    const label = KIND_LABELS[term.dataset.kind || ""];
-    const jump = label ? "Open reference" : "Full entry &amp; references";
+    const kind = term.dataset.kind || "";
+    const label = KIND_LABELS[kind];
+    const jump =
+      kind === "convention" ? "About this convention" : label ? "Open reference" : "Full entry &amp; references";
     return (
       (label ? `<p class="gloss-kind">${label}</p>` : "") +
       (def ? `<p class="gloss-def">${esc(def)}</p>` : "") +

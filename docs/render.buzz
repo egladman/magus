@@ -33,6 +33,7 @@ import "lib/date" as _;
 // rewriteHref/resolvePath/cleanTarget.
 import "lib/html" as _;
 import "lib/glossary" as _;
+import "lib/conventions" as _;
 // Content-Security-Policy construction + the content hashing under it:
 // computeCSP/scriptHash/fileSha256/cspForRedirectStub and the CSP_* constants.
 import "lib/csp" as _;
@@ -206,6 +207,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     site.collectDocPages("");
     // Parse the glossary vocabulary before the walk so every page can auto-link its terms.
     site.collectGlossaryTerms();
+    site.collectConventions();
     // Record which glossary terms each page mentions (native, fast) so renderRelated can rank
     // neighbors by shared vocabulary. Needs docPages + glossaryTerms.
     site.collectPageTerms();
