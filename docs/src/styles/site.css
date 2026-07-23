@@ -2024,8 +2024,10 @@ a code {
 /* Split reveal: an in-place trench that parts open below the clicked term's block,
    bled to the full width of the article card (not just the prose column) so the split
    reads as the page itself opening, not a boxed callout floating in the margin. The
-   inner panel is recessed (sectioning background + inset top/bottom shadows) so it
-   reads as a layer pried open beneath the page - both shadows live on this one element
+   panel is the SAME background as the article card around it - the depth comes only
+   from the inset top/bottom shadows, as if the page above and below is casting a shadow
+   onto this layer, not from a distinct panel fill (a visibly different fill read as its
+   own gray box rather than a recess in the page). Both shadows live on this one element
    only; an earlier version also cast a shadow from the block above (.glossary-parted),
    which doubled the top edge into a visible double line once the two elements'
    widths could differ. The height 0 -> content transition (settled to auto in JS) is
@@ -2053,7 +2055,7 @@ a code {
   /* Square: a trench pried open in the page, not a rounded card - the sharp edges sell
      the "parting" over a floating panel. */
   border-radius: 0;
-  background: var(--pico-card-sectioning-background-color);
+  background: var(--pico-card-background-color);
   border: 1px solid var(--pico-muted-border-color);
   box-shadow:
     inset 0 14px 14px -16px rgba(0, 0, 0, 0.25),
