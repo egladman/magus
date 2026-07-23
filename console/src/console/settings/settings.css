@@ -285,54 +285,75 @@
  * One card per file (status, progress, decisions): a header with the file's role, metadata, and the
  * Edit/Delete actions, over a body that renders the markdown (safe, text-only) or the edit textarea. */
 .console-settings-memory { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
-.console-settings-memory__dir { margin: 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); overflow-wrap: anywhere; }
-.console-settings-memory__dir code { font-family: var(--pf-t--global--font--family--mono); }
-.console-settings-memory__card {
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--secondary--default);
-}
-.console-settings-memory__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--pf-t--global--spacer--sm);
-  padding: var(--pf-t--global--spacer--md);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
-}
-.console-settings-memory__headtext { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
-.console-settings-memory__title {
-  margin: 0;
-  font-size: var(--pf-t--global--font--size--heading--h4);
-  font-weight: var(--pf-t--global--font--weight--heading--bold);
-  color: var(--pf-t--global--text--color--regular);
-}
-.console-settings-memory__blurb,
-.console-settings-memory__meta { margin: 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
-.console-settings-memory__actions { margin-left: auto; display: flex; gap: var(--pf-t--global--spacer--sm); }
-.console-settings-memory__cardbody { padding: var(--pf-t--global--spacer--md); }
-/* The rendered markdown: bounded height and scrollable so a long journal never runs the page. */
-.console-settings-memory__doc {
-  max-height: 22rem;
-  overflow: auto;
+/* The cursor snapshot: the one genuine free-text blob, pinned on top. */
+.console-settings-memory__cursor {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  font-size: var(--pf-t--global--font--size--body--sm);
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-settings-memory__cursorbody { display: flex; align-items: flex-end; gap: var(--pf-t--global--spacer--sm); }
+.console-settings-memory__cursorbody textarea { flex: 1; resize: vertical; }
+.console-settings-memory__title {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
   color: var(--pf-t--global--text--color--regular);
 }
-.console-settings-memory__heading { margin: 0.3rem 0 0; font-size: var(--pf-t--global--font--size--body--default); font-weight: var(--pf-t--global--font--weight--body--bold); }
-.console-settings-memory__para { margin: 0; overflow-wrap: anywhere; }
-.console-settings-memory__list { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.15rem; }
-.console-settings-memory__empty { margin: 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
-.console-settings-memory__edit { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--sm); }
-.console-settings-memory__edit textarea {
-  width: 100%;
-  resize: vertical;
-  font-family: var(--pf-t--global--font--family--mono);
-  font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.5;
+/* Toolbar: add, filters, and the bulk-delete action when a selection exists. */
+.console-settings-memory__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pf-t--global--spacer--sm); }
+.console-settings-memory__filter { flex: 0 0 auto; width: auto; }
+.console-settings-memory__search { flex: 1 1 12rem; min-width: 8rem; }
+/* The record list: dense rows, one per memory. */
+.console-settings-memory__list { display: flex; flex-direction: column; }
+.console-settings-memory__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--sm) 0;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+.console-settings-memory__check { margin-top: 0.25rem; }
+.console-settings-memory__rowmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.console-settings-memory__rowhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--pf-t--global--spacer--sm); }
+.console-settings-memory__badge {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+  padding: 0 0.35rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-settings-memory__name { font-weight: var(--pf-t--global--font--weight--body--bold); overflow-wrap: anywhere; }
+.console-settings-memory__status { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+.console-settings-memory__chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.console-settings-memory__chip {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+  padding: 0 0.35rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  overflow-wrap: anywhere;
+}
+.console-settings-memory__chipkind { color: var(--pf-t--global--text--color--subtle); }
+.console-settings-memory__caption { margin: 0; font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; }
+.console-settings-memory__rowactions { display: flex; gap: var(--pf-t--global--spacer--sm); flex: 0 0 auto; }
+.console-settings-memory__empty { margin: 0; padding: var(--pf-t--global--spacer--sm) 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+/* Inline create/edit form. */
+.console-settings-memory__edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--md);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-settings-memory__bodywrap { display: flex; flex-direction: column; gap: 0.2rem; }
+.console-settings-memory__label { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+.console-settings-memory__refs { display: flex; flex-direction: column; gap: 0.3rem; }
+.console-settings-memory__refrow { display: flex; gap: var(--pf-t--global--spacer--sm); align-items: center; }
+.console-settings-memory__refrow input { flex: 1; }
 .console-settings-memory__editactions { display: flex; gap: var(--pf-t--global--spacer--sm); }
 
 /* --- About: source/license/feedback, the quiet section at the foot of the page ----------------------

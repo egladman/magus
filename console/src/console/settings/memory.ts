@@ -1,98 +1,69 @@
-// memory.ts - the Settings "Agent memory" section: an observable, EDITABLE view over the
-// durable magus_memory files (status, progress, decisions) that agents write across sessions,
-// spoken to over magus.memory.v1.MemoryService.
+// memory.ts - the Settings "Agent memory" section: a dense, console-admin view over the
+// durable agent-memory RECORDS the magus_memory MCP tool writes, spoken to over
+// magus.memory.v1.MemoryService.
 //
-// Why editable: the memory files are append-heavy and never rotated by default, so they grow
-// unbounded and an agent can silently bloat the store. A human read/edit/delete surface is the
-// safety valve - the operator can audit what agents recorded and prune bad or oversized entries.
+// Memory is a set of discrete records, each a typed POINTER into the magus domain (the refs
+// ARE the payload); only a decision/plan carries a prose caption. The view is a list built
+// for scanning and pruning many rows at once - per-row edit/delete plus checkbox
+// multi-select with a single bulk delete - not roomy cards. A cursor snapshot ("where you
+// left off") is pinned on top as the one genuine free-text blob.
 //
-// The content is AGENT-WRITTEN and UNTRUSTED. It is rendered through text nodes ONLY (never
-// innerHTML): the read view is a minimal, injection-proof markdown pass that builds real DOM
-// elements from text, and the edit view is a plain <textarea>. No memory string can carry markup
-// into the page.
+// The content is AGENT-WRITTEN and UNTRUSTED. It is rendered through h() (textContent) and
+// plain form controls ONLY, never innerHTML: no record string can carry markup into the page.
 
 import { createClient, type Client } from "@connectrpc/connect";
-import { MemoryService, MemoryFile, type MemoryDoc } from "../../gen/magus/memory/v1/memory_pb";
+import {
+  MemoryService,
+  MemoryType,
+  MemoryRefKind,
+  type Memory,
+} from "../../gen/magus/memory/v1/memory_pb";
 import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 
-// FILE_ORDER fixes the display order and the explicit per-file labels the section shows. Each
-// label names the file's role so the control's purpose is obvious on its own.
-const FILE_ORDER: { file: MemoryFile; title: string; blurb: string }[] = [
-  {
-    file: MemoryFile.STATUS,
-    title: "Status snapshot",
-    blurb: "The current state agents overwrite each session.",
-  },
-  {
-    file: MemoryFile.PROGRESS,
-    title: "Progress journal",
-    blurb: "A dated log of work done, appended over time.",
-  },
-  {
-    file: MemoryFile.DECISIONS,
-    title: "Decision log",
-    blurb: "Dated decisions with the reasoning behind them.",
-  },
+// TYPE_LABELS / REFKIND_LABELS render an enum value as its lowercase wire word; the *_OPTIONS
+// lists drive the edit-form selects and the type filter (UNSPECIFIED never offered).
+const TYPE_LABELS: Record<number, string> = {
+  [MemoryType.UNSPECIFIED]: "unspecified",
+  [MemoryType.POINTER]: "pointer",
+  [MemoryType.DECISION]: "decision",
+  [MemoryType.PLAN]: "plan",
+};
+const TYPE_OPTIONS = [MemoryType.POINTER, MemoryType.DECISION, MemoryType.PLAN];
+
+const REFKIND_LABELS: Record<number, string> = {
+  [MemoryRefKind.UNSPECIFIED]: "?",
+  [MemoryRefKind.QUERY]: "query",
+  [MemoryRefKind.NODE]: "node",
+  [MemoryRefKind.OUTPUT]: "output",
+  [MemoryRefKind.COMMAND]: "command",
+  [MemoryRefKind.DOC]: "doc",
+};
+const REFKIND_OPTIONS = [
+  MemoryRefKind.QUERY,
+  MemoryRefKind.NODE,
+  MemoryRefKind.OUTPUT,
+  MemoryRefKind.COMMAND,
+  MemoryRefKind.DOC,
 ];
 
-// sizeLabel renders a byte count compactly (B / KB).
-function sizeLabel(bytes: bigint): string {
-  const n = Number(bytes);
-  if (n < 1024) return n + " B";
-  return (n / 1024).toFixed(1) + " KB";
+// hasCaption reports whether a type carries a prose body (decision/plan). A pointer never does.
+function hasCaption(t: MemoryType): boolean {
+  return t === MemoryType.DECISION || t === MemoryType.PLAN;
 }
 
-// modifiedLabel renders a doc's last-modified time, or a "not written yet" note when absent.
-function modifiedLabel(doc: MemoryDoc): string {
-  const ts = doc.modified;
-  if (!ts) return "Not written yet";
-  const ms = Number(ts.seconds) * 1000 + Math.floor((ts.nanos || 0) / 1e6);
-  return "Edited " + new Date(ms).toLocaleString() + " - " + sizeLabel(doc.sizeBytes);
+// draftRef is one editable ref row in the form (strings before they become a wire MemoryRef).
+interface draftRef {
+  kind: MemoryRefKind;
+  target: string;
 }
 
-// renderMarkdown is a MINIMAL, SAFE markdown pass: it builds real DOM elements from the raw text
-// using textContent only, so agent-written content can never inject markup. It recognizes ATX
-// headings (## / ###) and dash/star bullet lists; every other line is a paragraph. Inline syntax
-// (bold, code) is left as literal text - correctness and safety over completeness.
-function renderMarkdown(text: string): HTMLElement {
-  const doc = h("div", "console-settings-memory__doc");
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  let list: HTMLElement | null = null;
-  const closeList = (): void => {
-    if (list) {
-      doc.append(list);
-      list = null;
-    }
-  };
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
-    if (bullet) {
-      if (!list) list = h("ul", "console-settings-memory__list");
-      list.append(h("li", "", bullet[1]));
-      continue;
-    }
-    closeList();
-    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
-    if (heading) {
-      const level = Math.min(6, Math.max(3, heading[1].length + 2)); // # -> h3, ## -> h4, ...
-      doc.append(h(("h" + level) as "h3", "console-settings-memory__heading", heading[2]));
-      continue;
-    }
-    if (line.trim() === "") continue;
-    doc.append(h("p", "console-settings-memory__para", line));
-  }
-  closeList();
-  return doc;
-}
-
-// buildMemorySection builds the section body and drives it live against the daemon at host. A null
-// host short-circuits to a clear "connect first" empty state. Returns the body and a destroy() the
-// surface calls on teardown so a late RPC never renders into a detached node. opts.onDenied fires
-// when the daemon declines the memory service to this client (a phone-share session): the caller
-// hides the whole section, so the SERVER decides whether the memory view is offered.
+// buildMemorySection builds the section body and drives it live against the daemon at host. A
+// null host short-circuits to a "connect first" empty state. Returns the body and a destroy()
+// the surface calls on teardown so a late RPC never renders into a detached node. opts.onDenied
+// fires when the daemon declines the service (a phone-share session): the caller hides the
+// whole section, so the SERVER decides whether the memory view is offered.
 export function buildMemorySection(
   host: string | null,
   opts: { onDenied?: () => void } = {},
@@ -107,12 +78,7 @@ export function buildMemorySection(
         "Connect the console to a running daemon to view and edit agent memory. Open the console from a magus link, or set the daemon host on the General tab.",
       ),
     );
-    return {
-      el: body,
-      destroy() {
-        stale = true;
-      },
-    };
+    return { el: body, destroy() { stale = true; } };
   }
 
   const client: Client<typeof MemoryService> = createClient(
@@ -120,29 +86,24 @@ export function buildMemorySection(
     createDaemonTransport(host, getLiveToken()),
   );
 
-  // load lists the files (for the on-disk dir + metadata), then fetches each file's content, and
-  // rebuilds the section. Called on mount and after every save/delete so the view stays current.
+  // Client-side view state: the selection (record names checked for bulk delete), a text
+  // filter, a type filter, and the name of the record currently open in the inline editor
+  // ("" for a new record, null for none). The dataset is small, so filtering is in JS over
+  // the full ListMemories result rather than a server filter.
+  const selected = new Set<string>();
+  let filterText = "";
+  let filterType: MemoryType | null = null;
+  let editing: string | null = null;
+
+  // load fetches the cursor and the records, then rebuilds the section. Called on mount and
+  // after every save/delete so the view stays current.
   async function load(): Promise<void> {
     try {
-      const list = await client.listMemory({});
-      const docs = await Promise.all(
-        FILE_ORDER.map((f) => client.getMemory({ file: f.file }).then((r) => r.doc)),
-      );
+      const [cursor, list] = await Promise.all([client.getCursor({}), client.listMemories({})]);
       if (stale) return;
-      body.replaceChildren();
-      const dir = h("p", "console-settings-memory__dir");
-      dir.append(document.createTextNode("Files on disk: "));
-      dir.append(h("code", "", list.dir || "(unknown)"));
-      body.append(dir);
-      for (let i = 0; i < FILE_ORDER.length; i++) {
-        const meta = FILE_ORDER[i];
-        const doc = docs[i];
-        body.append(buildFileCard(meta, doc ?? undefined));
-      }
+      render(cursor.content, list.memories);
     } catch (e) {
       if (stale) return;
-      // The daemon declined the service to this client (a read-only phone share): hide the section
-      // entirely rather than show a failure - the server has decided the memory view is not offered.
       if (isCapabilityDenied(e)) {
         opts.onDenied?.();
         return;
@@ -151,167 +112,301 @@ export function buildMemorySection(
       body.replaceChildren(
         buildEmpty(
           "Could not load memory",
-          "The daemon at " +
-            host +
-            " did not answer the memory service (" +
-            msg +
-            "). Start it with: magus server start.",
+          "The daemon at " + host + " did not answer the memory service (" + msg + "). Start it with: magus server start.",
         ),
       );
     }
   }
 
-  // buildFileCard renders one memory file: a header (label, blurb, metadata) with Edit and Delete
-  // actions over a body that is either the rendered markdown, an empty note, or the edit form.
-  function buildFileCard(
-    meta: { file: MemoryFile; title: string; blurb: string },
-    doc: MemoryDoc | undefined,
-  ): HTMLElement {
-    const card = h("div", "console-settings-memory__card");
+  function render(cursor: string, records: Memory[]): void {
+    body.replaceChildren();
+    body.append(buildCursorCard(cursor));
 
-    const head = h("div", "console-settings-memory__head");
-    const heading = h("div", "console-settings-memory__headtext");
-    heading.append(
-      h("h3", "console-settings-memory__title", meta.title),
-      h("p", "console-settings-memory__blurb", meta.blurb),
-      h("p", "console-settings-memory__meta", doc ? modifiedLabel(doc) : "Not written yet"),
-    );
-    const actions = h("div", "console-settings-memory__actions");
-    const editBtn = h(
-      "button",
-      "pf-v6-c-button pf-m-secondary pf-m-small",
-      "Edit",
-    ) as HTMLButtonElement;
-    editBtn.type = "button";
-    editBtn.title = "Edit the " + meta.title.toLowerCase();
-    editBtn.setAttribute("aria-label", "Edit the " + meta.title.toLowerCase());
-    const deleteBtn = h(
-      "button",
-      "pf-v6-c-button pf-m-link pf-m-danger pf-m-small",
-      "Delete",
-    ) as HTMLButtonElement;
-    deleteBtn.type = "button";
-    deleteBtn.title = "Delete the " + meta.title.toLowerCase() + " file";
-    deleteBtn.setAttribute("aria-label", "Delete the " + meta.title.toLowerCase() + " file");
-    deleteBtn.disabled = !doc || !doc.exists;
-    actions.append(editBtn, deleteBtn);
-    head.append(heading, actions);
-    card.append(head);
+    const toolbar = h("div", "console-settings-memory__toolbar");
+    const addBtn = button("Add memory", "pf-m-secondary pf-m-small");
+    addBtn.addEventListener("click", () => { editing = ""; render(cursor, records); });
 
-    const bodyBox = h("div", "console-settings-memory__cardbody");
-    const content = doc?.content ?? "";
-    if (doc && doc.exists && content.trim() !== "") {
-      bodyBox.append(renderMarkdown(content));
-    } else {
-      bodyBox.append(
-        h(
-          "p",
-          "console-settings-memory__empty",
-          "This file is empty. Agents write to it as they work, or you can add content with Edit.",
-        ),
-      );
-    }
-    card.append(bodyBox);
-
-    // enterEdit swaps the card body for a textarea seeded with the raw markdown, plus Save/Cancel.
-    // Saving replaces the whole file (PutMemory is an overwrite, not an append).
-    const enterEdit = (): void => {
-      editBtn.disabled = true;
-      bodyBox.replaceChildren();
-      const form = h("div", "console-settings-memory__edit");
-      const control = h("span", "pf-v6-c-form-control");
-      const area = h("textarea") as HTMLTextAreaElement;
-      area.value = content;
-      area.rows = 12;
-      area.spellcheck = false;
-      area.setAttribute("aria-label", "Edit the " + meta.title.toLowerCase());
-      control.append(area);
-      const editActions = h("div", "console-settings-memory__editactions");
-      const saveBtn = h(
-        "button",
-        "pf-v6-c-button pf-m-primary pf-m-small",
-        "Save",
-      ) as HTMLButtonElement;
-      saveBtn.type = "button";
-      const cancelBtn = h(
-        "button",
-        "pf-v6-c-button pf-m-link pf-m-small",
-        "Cancel",
-      ) as HTMLButtonElement;
-      cancelBtn.type = "button";
-      editActions.append(saveBtn, cancelBtn);
-      form.append(control, editActions);
-      bodyBox.append(form);
-      area.focus();
-
-      cancelBtn.addEventListener("click", () => void load()); // discard: rebuild from the saved state
-      saveBtn.addEventListener("click", () => {
-        saveBtn.disabled = true;
-        cancelBtn.disabled = true;
-        void client.putMemory({ file: meta.file, content: area.value }).then(
-          () => {
-            if (stale) return;
-            showToast("Agent memory", "Saved " + meta.title.toLowerCase() + ".");
-            void load();
-          },
-          (e) => {
-            if (stale) return;
-            saveBtn.disabled = false;
-            cancelBtn.disabled = false;
-            const msg = e instanceof Error ? e.message : String(e);
-            showToast(
-              "Agent memory",
-              "Could not save " + meta.title.toLowerCase() + ": " + msg,
-              "error",
-            );
-          },
-        );
-      });
-    };
-    editBtn.addEventListener("click", enterEdit);
-
-    deleteBtn.addEventListener("click", () => {
-      if (
-        !confirm(
-          "Delete the " +
-            meta.title.toLowerCase() +
-            "? This removes the file from disk and cannot be undone.",
-        )
-      )
-        return;
-      deleteBtn.disabled = true;
-      void client.deleteMemory({ file: meta.file }).then(
-        () => {
-          if (stale) return;
-          showToast("Agent memory", "Deleted " + meta.title.toLowerCase() + ".");
-          void load();
-        },
-        (e) => {
-          if (stale) return;
-          deleteBtn.disabled = false;
-          const msg = e instanceof Error ? e.message : String(e);
-          showToast(
-            "Agent memory",
-            "Could not delete " + meta.title.toLowerCase() + ": " + msg,
-            "error",
-          );
-        },
-      );
+    const typeSel = h("select", "pf-v6-c-form-control console-settings-memory__filter") as HTMLSelectElement;
+    typeSel.append(option("", "All types"));
+    for (const t of TYPE_OPTIONS) typeSel.append(option(String(t), TYPE_LABELS[t]));
+    typeSel.value = filterType == null ? "" : String(filterType);
+    typeSel.addEventListener("change", () => {
+      filterType = typeSel.value === "" ? null : (Number(typeSel.value) as MemoryType);
+      render(cursor, records);
     });
 
+    const search = h("input", "pf-v6-c-form-control console-settings-memory__search") as HTMLInputElement;
+    search.type = "search";
+    search.placeholder = "Filter by name, ref, or caption";
+    search.value = filterText;
+    search.addEventListener("input", () => { filterText = search.value; render(cursor, records); });
+
+    toolbar.append(addBtn, typeSel, search);
+
+    if (selected.size > 0) {
+      const bulk = button("Delete selected (" + selected.size + ")", "pf-m-link pf-m-danger pf-m-small");
+      bulk.addEventListener("click", () => void bulkDelete());
+      toolbar.append(bulk);
+    }
+    body.append(toolbar);
+
+    if (editing !== null) {
+      body.append(buildEditForm(records.find((r) => r.name === editing)));
+    }
+
+    const shown = records.filter(matchesFilter);
+    if (records.length === 0) {
+      body.append(
+        buildEmpty(
+          "No memories yet",
+          "Agents record memories as they work. Each is a typed pointer into the codebase - a saved query, a node, an output ref - so there is nothing to write by hand here; use Add memory only to seed one.",
+        ),
+      );
+      return;
+    }
+    const list = h("div", "console-settings-memory__list");
+    if (shown.length === 0) {
+      list.append(h("p", "console-settings-memory__empty", "No records match the current filter."));
+    }
+    for (const rec of shown) list.append(buildRow(rec));
+    body.append(list);
+  }
+
+  function matchesFilter(r: Memory): boolean {
+    if (filterType != null && r.type !== filterType) return false;
+    if (filterText.trim() === "") return true;
+    const needle = filterText.toLowerCase();
+    if (r.name.toLowerCase().includes(needle)) return true;
+    if (r.body.toLowerCase().includes(needle)) return true;
+    return r.refs.some((ref) => ref.target.toLowerCase().includes(needle));
+  }
+
+  // buildCursorCard renders the singleton snapshot: one textarea, one Save (UpdateCursor).
+  // This is the ONE place a free-text blob is correct - it is a snapshot, not a record.
+  function buildCursorCard(content: string): HTMLElement {
+    const card = h("div", "console-settings-memory__cursor");
+    card.append(h("h3", "console-settings-memory__title", "Resume - where you left off"));
+    const area = h("textarea") as HTMLTextAreaElement;
+    area.className = "pf-v6-c-form-control";
+    area.rows = 3;
+    area.spellcheck = false;
+    area.value = content;
+    area.setAttribute("aria-label", "Cursor snapshot");
+    const save = button("Save", "pf-m-primary pf-m-small");
+    save.addEventListener("click", () => {
+      save.disabled = true;
+      void client.updateCursor({ content: area.value }).then(
+        () => { if (!stale) showToast("Agent memory", "Saved the cursor."); },
+        (e: unknown) => { save.disabled = false; toastError("save the cursor", e); },
+      );
+    });
+    const control = h("div", "console-settings-memory__cursorbody");
+    control.append(area, save);
+    card.append(control);
     return card;
   }
 
+  // buildRow renders one record: a select checkbox, a type badge, its refs as chips, the
+  // caption (decision/plan only), status, and per-row Edit and Delete actions.
+  function buildRow(rec: Memory): HTMLElement {
+    const row = h("div", "console-settings-memory__row");
+    row.setAttribute("data-type", TYPE_LABELS[rec.type]);
+
+    const check = h("input", "console-settings-memory__check") as HTMLInputElement;
+    check.type = "checkbox";
+    check.checked = selected.has(rec.name);
+    check.setAttribute("aria-label", "Select " + rec.name);
+    check.addEventListener("change", () => {
+      if (check.checked) selected.add(rec.name);
+      else selected.delete(rec.name);
+      // Re-render only the toolbar's bulk button by reloading is overkill; toggle in place.
+      const bulk = body.querySelector<HTMLElement>(".console-settings-memory__toolbar .pf-m-danger");
+      if (selected.size === 0) bulk?.remove();
+      else if (!bulk) void load();
+      else bulk.textContent = "Delete selected (" + selected.size + ")";
+    });
+
+    const head = h("div", "console-settings-memory__rowhead");
+    head.append(h("span", "console-settings-memory__badge", TYPE_LABELS[rec.type]));
+    head.append(h("span", "console-settings-memory__name", rec.name));
+    if (rec.status) head.append(h("span", "console-settings-memory__status", rec.status));
+
+    const chips = h("div", "console-settings-memory__chips");
+    for (const ref of rec.refs) {
+      const chip = h("span", "console-settings-memory__chip");
+      chip.append(h("span", "console-settings-memory__chipkind", REFKIND_LABELS[ref.kind]));
+      chip.append(document.createTextNode(" " + ref.target));
+      chips.append(chip);
+    }
+
+    const main = h("div", "console-settings-memory__rowmain");
+    main.append(head, chips);
+    if (rec.body) main.append(h("p", "console-settings-memory__caption", rec.body));
+
+    const actions = h("div", "console-settings-memory__rowactions");
+    const edit = button("Edit", "pf-m-secondary pf-m-small");
+    edit.addEventListener("click", () => { editing = rec.name; void load(); });
+    const del = button("Delete", "pf-m-link pf-m-danger pf-m-small");
+    del.addEventListener("click", () => void deleteOne(rec.name));
+    actions.append(edit, del);
+
+    row.append(check, main, actions);
+    return row;
+  }
+
+  // buildEditForm renders the inline create/update form. rec is undefined for a new record.
+  // Save is an upsert (UpdateMemory with allow_missing), so create and edit share one path.
+  function buildEditForm(rec: Memory | undefined): HTMLElement {
+    const form = h("div", "console-settings-memory__edit");
+    const nameInput = labeledInput("Name (kebab-slug)", rec?.name ?? "");
+    nameInput.input.disabled = rec !== undefined; // name is identity; edit never renames
+
+    const typeSel = h("select", "pf-v6-c-form-control") as HTMLSelectElement;
+    for (const t of TYPE_OPTIONS) typeSel.append(option(String(t), TYPE_LABELS[t]));
+    typeSel.value = String(rec?.type ?? MemoryType.POINTER);
+
+    const statusInput = labeledInput("Status (optional)", rec?.status ?? "");
+    const refsBox = h("div", "console-settings-memory__refs");
+    const drafts: draftRef[] = rec ? rec.refs.map((r) => ({ kind: r.kind, target: r.target })) : [];
+    const renderRefs = (): void => {
+      refsBox.replaceChildren();
+      refsBox.append(h("label", "console-settings-memory__label", "Refs (the payload - at least one)"));
+      drafts.forEach((d, i) => refsBox.append(refRow(d, () => { drafts.splice(i, 1); renderRefs(); })));
+      const add = button("Add ref", "pf-m-link pf-m-small");
+      add.addEventListener("click", () => { drafts.push({ kind: MemoryRefKind.QUERY, target: "" }); renderRefs(); });
+      refsBox.append(add);
+    };
+    if (drafts.length === 0) drafts.push({ kind: MemoryRefKind.QUERY, target: "" });
+    renderRefs();
+
+    const bodyWrap = h("div", "console-settings-memory__bodywrap");
+    const bodyArea = h("textarea") as HTMLTextAreaElement;
+    bodyArea.className = "pf-v6-c-form-control";
+    bodyArea.rows = 2;
+    bodyArea.placeholder = "Caption - the why (decision/plan only)";
+    bodyArea.value = rec?.body ?? "";
+    bodyWrap.append(h("label", "console-settings-memory__label", "Caption"), bodyArea);
+    const syncBodyVisibility = (): void => {
+      bodyWrap.hidden = !hasCaption(Number(typeSel.value) as MemoryType);
+    };
+    typeSel.addEventListener("change", syncBodyVisibility);
+    syncBodyVisibility();
+
+    const refsInput = labeledInput("References (comma-separated names, optional)", (rec?.references ?? []).join(", "));
+
+    const save = button("Save", "pf-m-primary pf-m-small");
+    const cancel = button("Cancel", "pf-m-link pf-m-small");
+    cancel.addEventListener("click", () => { editing = null; void load(); });
+    save.addEventListener("click", () => {
+      const t = Number(typeSel.value) as MemoryType;
+      const record = {
+        name: nameInput.input.value.trim(),
+        type: t,
+        status: statusInput.input.value.trim(),
+        body: hasCaption(t) ? bodyArea.value : "",
+        refs: drafts
+          .filter((d) => d.target.trim() !== "")
+          .map((d) => ({ kind: d.kind, target: d.target.trim() })),
+        references: refsInput.input.value
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s !== ""),
+      };
+      save.disabled = true;
+      cancel.disabled = true;
+      void client.updateMemory({ memory: record, allowMissing: true }).then(
+        () => { if (!stale) { showToast("Agent memory", "Saved " + record.name + "."); editing = null; void load(); } },
+        (e: unknown) => { save.disabled = false; cancel.disabled = false; toastError("save " + record.name, e); },
+      );
+    });
+
+    const typeWrap = h("div", "console-settings-memory__bodywrap");
+    typeWrap.append(h("label", "console-settings-memory__label", "Type"), typeSel);
+    const actions = h("div", "console-settings-memory__editactions");
+    actions.append(save, cancel);
+    form.append(nameInput.wrap, typeWrap, statusInput.wrap, refsBox, bodyWrap, refsInput.wrap, actions);
+    return form;
+  }
+
+  function refRow(d: draftRef, onRemove: () => void): HTMLElement {
+    const rowEl = h("div", "console-settings-memory__refrow");
+    const kindSel = h("select", "pf-v6-c-form-control") as HTMLSelectElement;
+    for (const k of REFKIND_OPTIONS) kindSel.append(option(String(k), REFKIND_LABELS[k]));
+    kindSel.value = String(d.kind);
+    kindSel.addEventListener("change", () => { d.kind = Number(kindSel.value) as MemoryRefKind; });
+    const target = h("input", "pf-v6-c-form-control") as HTMLInputElement;
+    target.value = d.target;
+    target.placeholder = "target (node id, query, output ref, command, or doc)";
+    target.addEventListener("input", () => { d.target = target.value; });
+    const rm = button("Remove", "pf-m-link pf-m-small");
+    rm.addEventListener("click", onRemove);
+    rowEl.append(kindSel, target, rm);
+    return rowEl;
+  }
+
+  async function deleteOne(name: string): Promise<void> {
+    if (!confirm("Delete the memory " + name + "? This cannot be undone.")) return;
+    try {
+      await client.deleteMemory({ name, allowMissing: true });
+      if (stale) return;
+      selected.delete(name);
+      showToast("Agent memory", "Deleted " + name + ".");
+      void load();
+    } catch (e) {
+      toastError("delete " + name, e);
+    }
+  }
+
+  async function bulkDelete(): Promise<void> {
+    const names = [...selected];
+    if (names.length === 0) return;
+    if (!confirm("Delete " + names.length + " memories? This cannot be undone.")) return;
+    try {
+      await Promise.all(names.map((name) => client.deleteMemory({ name, allowMissing: true })));
+      if (stale) return;
+      selected.clear();
+      showToast("Agent memory", "Deleted " + names.length + " memories.");
+      void load();
+    } catch (e) {
+      toastError("delete the selected memories", e);
+    }
+  }
+
+  function toastError(action: string, e: unknown): void {
+    if (stale) return;
+    const msg = e instanceof Error ? e.message : String(e);
+    showToast("Agent memory", "Could not " + action + ": " + msg, "error");
+  }
+
   void load();
-  return {
-    el: body,
-    destroy() {
-      stale = true;
-    },
-  };
+  return { el: body, destroy() { stale = true; } };
 }
 
-// buildEmpty renders the shared console empty state: a PF EmptyState with a title and body line.
+// button builds a PatternFly button of the given modifier classes.
+function button(label: string, modifiers: string): HTMLButtonElement {
+  const b = h("button", "pf-v6-c-button " + modifiers, label) as HTMLButtonElement;
+  b.type = "button";
+  return b;
+}
+
+// option builds a <select> option.
+function option(value: string, label: string): HTMLOptionElement {
+  const o = h("option", "", label) as HTMLOptionElement;
+  o.value = value;
+  return o;
+}
+
+// labeledInput builds a labeled text input, returning the wrapper and the input.
+function labeledInput(label: string, value: string): { wrap: HTMLElement; input: HTMLInputElement } {
+  const wrap = h("div", "console-settings-memory__bodywrap");
+  wrap.append(h("label", "console-settings-memory__label", label));
+  const input = h("input", "pf-v6-c-form-control") as HTMLInputElement;
+  input.value = value;
+  wrap.append(input);
+  return { wrap, input };
+}
+
+// buildEmpty renders the shared console empty state: a PF EmptyState with a title and body.
 function buildEmpty(title: string, sub: string): HTMLElement {
   const wrap = h("div", "pf-v6-c-empty-state");
   const content = h("div", "pf-v6-c-empty-state__content");

@@ -2,217 +2,246 @@
 // @generated from file magus/memory/v1/memory.proto (package magus.memory.v1, syntax proto3)
 /* eslint-disable */
 
-// Package magus.memory.v1 is the console-facing MemoryService: an observable and
-// EDITABLE view over the durable magus_memory files (status, progress, decisions) the
-// MCP magus_memory tool writes. It is a SECOND door onto the exact on-disk files that
-// tool maintains - the per-repository markdown under the user's XDG state directory -
-// never a second store of its own. Its reason to exist: agent memory is append-heavy
-// and never rotated by default, so it grows unbounded and an agent can silently bloat
-// it; a human editing/deleting surface is the safety valve. So the service is
-// deliberately read AND write: list the files, read one, replace one's content, or
-// delete one.
+// Package magus.memory.v1 is the console-facing MemoryService: an observable, editable
+// view over the durable agent-memory RECORDS the magus_memory MCP tool writes. It is a
+// SECOND door onto the exact on-disk store that tool maintains - the per-repository
+// records under the user's XDG state directory - never a second store of its own.
 //
-// The content it returns is AGENT-WRITTEN and therefore UNTRUSTED: a client must render
-// it as text/markdown, never as trusted HTML.
+// Memory is a set of discrete records, each a typed POINTER into the magus domain (a
+// saved query, a graph node, an output ref, a command, a doc); only a decision/plan
+// carries a prose caption. Its reason to exist as an editable surface: an agent can
+// accumulate stale or bloated records, and a human read/edit/delete surface is the
+// safety valve. Every record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: a
+// client must render them as text, never as trusted HTML.
 //
-// Access policy: every RPC requires the daemon bearer token. The service is mounted on
-// the loopback listener behind the same guard as the other cli-token console services
-// (magus.job.v1, magus.token.v1) and is NEVER served on the LAN share listener - memory
-// is the operator's own working notes, not a read surface for a shared phone view.
-// buf-breaking gates this file: fields and RPCs may be ADDED (old clients ignore unknown
-// fields), never renumbered or removed.
+// Surface is deliberately minimal (AIP-aligned): List the records, Update one (an upsert
+// keyed by name - allow_missing folds create into update), Delete one. A "delete
+// selected" bulk action is a client-side loop of Delete, not a batch RPC. The cursor
+// snapshot ("where did I leave off") is a singleton, read and overwritten on its own.
+//
+// Access policy: every RPC requires the daemon bearer token, mounted on loopback behind
+// the same guard as the other cli-token console services, and NEVER on the LAN share
+// listener - memory is the operator's own working notes.
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_field_mask, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file magus/memory/v1/memory.proto.
  */
 export const file_magus_memory_v1_memory: GenFile = /*@__PURE__*/
-  fileDesc("ChxtYWd1cy9tZW1vcnkvdjEvbWVtb3J5LnByb3RvEg9tYWd1cy5tZW1vcnkudjEipwEKCU1lbW9yeURvYxIpCgRmaWxlGAEgASgOMhsubWFndXMubWVtb3J5LnYxLk1lbW9yeUZpbGUSDAoEbmFtZRgCIAEoCRIPCgdjb250ZW50GAMgASgJEhIKCnNpemVfYnl0ZXMYBCABKAMSLAoIbW9kaWZpZWQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBmV4aXN0cxgGIAEoCCITChFMaXN0TWVtb3J5UmVxdWVzdCJLChJMaXN0TWVtb3J5UmVzcG9uc2USKAoEZG9jcxgBIAMoCzIaLm1hZ3VzLm1lbW9yeS52MS5NZW1vcnlEb2MSCwoDZGlyGAIgASgJIkkKEEdldE1lbW9yeVJlcXVlc3QSNQoEZmlsZRgBIAEoDjIbLm1hZ3VzLm1lbW9yeS52MS5NZW1vcnlGaWxlQgq6SAeCAQQQASAAIjwKEUdldE1lbW9yeVJlc3BvbnNlEicKA2RvYxgBIAEoCzIaLm1hZ3VzLm1lbW9yeS52MS5NZW1vcnlEb2MiWgoQUHV0TWVtb3J5UmVxdWVzdBI1CgRmaWxlGAEgASgOMhsubWFndXMubWVtb3J5LnYxLk1lbW9yeUZpbGVCCrpIB4IBBBABIAASDwoHY29udGVudBgCIAEoCSI8ChFQdXRNZW1vcnlSZXNwb25zZRInCgNkb2MYASABKAsyGi5tYWd1cy5tZW1vcnkudjEuTWVtb3J5RG9jIkwKE0RlbGV0ZU1lbW9yeVJlcXVlc3QSNQoEZmlsZRgBIAEoDjIbLm1hZ3VzLm1lbW9yeS52MS5NZW1vcnlGaWxlQgq6SAeCAQQQASAAIj8KFERlbGV0ZU1lbW9yeVJlc3BvbnNlEicKA2RvYxgBIAEoCzIaLm1hZ3VzLm1lbW9yeS52MS5NZW1vcnlEb2MqdgoKTWVtb3J5RmlsZRIbChdNRU1PUllfRklMRV9VTlNQRUNJRklFRBAAEhYKEk1FTU9SWV9GSUxFX1NUQVRVUxABEhgKFE1FTU9SWV9GSUxFX1BST0dSRVNTEAISGQoVTUVNT1JZX0ZJTEVfREVDSVNJT05TEAMy6wIKDU1lbW9yeVNlcnZpY2USVQoKTGlzdE1lbW9yeRIiLm1hZ3VzLm1lbW9yeS52MS5MaXN0TWVtb3J5UmVxdWVzdBojLm1hZ3VzLm1lbW9yeS52MS5MaXN0TWVtb3J5UmVzcG9uc2USUgoJR2V0TWVtb3J5EiEubWFndXMubWVtb3J5LnYxLkdldE1lbW9yeVJlcXVlc3QaIi5tYWd1cy5tZW1vcnkudjEuR2V0TWVtb3J5UmVzcG9uc2USUgoJUHV0TWVtb3J5EiEubWFndXMubWVtb3J5LnYxLlB1dE1lbW9yeVJlcXVlc3QaIi5tYWd1cy5tZW1vcnkudjEuUHV0TWVtb3J5UmVzcG9uc2USWwoMRGVsZXRlTWVtb3J5EiQubWFndXMubWVtb3J5LnYxLkRlbGV0ZU1lbW9yeVJlcXVlc3QaJS5tYWd1cy5tZW1vcnkudjEuRGVsZXRlTWVtb3J5UmVzcG9uc2ViBnByb3RvMw", [file_google_protobuf_timestamp, file_buf_validate_validate]);
+  fileDesc("ChxtYWd1cy9tZW1vcnkvdjEvbWVtb3J5LnByb3RvEg9tYWd1cy5tZW1vcnkudjEiSQoJTWVtb3J5UmVmEiwKBGtpbmQYASABKA4yHi5tYWd1cy5tZW1vcnkudjEuTWVtb3J5UmVmS2luZBIOCgZ0YXJnZXQYAiABKAki/wEKBk1lbW9yeRIMCgRuYW1lGAEgASgJEikKBHR5cGUYAiABKA4yGy5tYWd1cy5tZW1vcnkudjEuTWVtb3J5VHlwZRIoCgRyZWZzGAMgAygLMhoubWFndXMubWVtb3J5LnYxLk1lbW9yeVJlZhIOCgZzdGF0dXMYBCABKAkSDAoEYm9keRgFIAEoCRISCgpyZWZlcmVuY2VzGAYgAygJEi8KC2NyZWF0ZV90aW1lGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiPAoTTGlzdE1lbW9yaWVzUmVxdWVzdBIRCglwYWdlX3NpemUYASABKAUSEgoKcGFnZV90b2tlbhgCIAEoCSJaChRMaXN0TWVtb3JpZXNSZXNwb25zZRIpCghtZW1vcmllcxgBIAMoCzIXLm1hZ3VzLm1lbW9yeS52MS5NZW1vcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIoYBChNVcGRhdGVNZW1vcnlSZXF1ZXN0EicKBm1lbW9yeRgBIAEoCzIXLm1hZ3VzLm1lbW9yeS52MS5NZW1vcnkSLwoLdXBkYXRlX21hc2sYAiABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrEhUKDWFsbG93X21pc3NpbmcYAyABKAgiPwoUVXBkYXRlTWVtb3J5UmVzcG9uc2USJwoGbWVtb3J5GAEgASgLMhcubWFndXMubWVtb3J5LnYxLk1lbW9yeSI6ChNEZWxldGVNZW1vcnlSZXF1ZXN0EgwKBG5hbWUYASABKAkSFQoNYWxsb3dfbWlzc2luZxgCIAEoCCIWChREZWxldGVNZW1vcnlSZXNwb25zZSISChBHZXRDdXJzb3JSZXF1ZXN0IiQKEUdldEN1cnNvclJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAkiJgoTVXBkYXRlQ3Vyc29yUmVxdWVzdBIPCgdjb250ZW50GAEgASgJIicKFFVwZGF0ZUN1cnNvclJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAkqcgoKTWVtb3J5VHlwZRIbChdNRU1PUllfVFlQRV9VTlNQRUNJRklFRBAAEhcKE01FTU9SWV9UWVBFX1BPSU5URVIQARIYChRNRU1PUllfVFlQRV9ERUNJU0lPThACEhQKEE1FTU9SWV9UWVBFX1BMQU4QAyq3AQoNTWVtb3J5UmVmS2luZBIfChtNRU1PUllfUkVGX0tJTkRfVU5TUEVDSUZJRUQQABIZChVNRU1PUllfUkVGX0tJTkRfUVVFUlkQARIYChRNRU1PUllfUkVGX0tJTkRfTk9ERRACEhoKFk1FTU9SWV9SRUZfS0lORF9PVVRQVVQQAxIbChdNRU1PUllfUkVGX0tJTkRfQ09NTUFORBAEEhcKE01FTU9SWV9SRUZfS0lORF9ET0MQBTLXAwoNTWVtb3J5U2VydmljZRJbCgxMaXN0TWVtb3JpZXMSJC5tYWd1cy5tZW1vcnkudjEuTGlzdE1lbW9yaWVzUmVxdWVzdBolLm1hZ3VzLm1lbW9yeS52MS5MaXN0TWVtb3JpZXNSZXNwb25zZRJbCgxVcGRhdGVNZW1vcnkSJC5tYWd1cy5tZW1vcnkudjEuVXBkYXRlTWVtb3J5UmVxdWVzdBolLm1hZ3VzLm1lbW9yeS52MS5VcGRhdGVNZW1vcnlSZXNwb25zZRJbCgxEZWxldGVNZW1vcnkSJC5tYWd1cy5tZW1vcnkudjEuRGVsZXRlTWVtb3J5UmVxdWVzdBolLm1hZ3VzLm1lbW9yeS52MS5EZWxldGVNZW1vcnlSZXNwb25zZRJSCglHZXRDdXJzb3ISIS5tYWd1cy5tZW1vcnkudjEuR2V0Q3Vyc29yUmVxdWVzdBoiLm1hZ3VzLm1lbW9yeS52MS5HZXRDdXJzb3JSZXNwb25zZRJbCgxVcGRhdGVDdXJzb3ISJC5tYWd1cy5tZW1vcnkudjEuVXBkYXRlQ3Vyc29yUmVxdWVzdBolLm1hZ3VzLm1lbW9yeS52MS5VcGRhdGVDdXJzb3JSZXNwb25zZWIGcHJvdG8z", [file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
 
 /**
- * MemoryDoc describes one memory file. In a List response the content is omitted (only
- * metadata is carried); Get, Put, and Delete return it with content populated (empty for
- * a deleted or never-written file).
+ * MemoryRef is one typed pointer: the payload of a record.
  *
- * @generated from message magus.memory.v1.MemoryDoc
+ * @generated from message magus.memory.v1.MemoryRef
  */
-export type MemoryDoc = Message<"magus.memory.v1.MemoryDoc"> & {
+export type MemoryRef = Message<"magus.memory.v1.MemoryRef"> & {
   /**
-   * @generated from field: magus.memory.v1.MemoryFile file = 1;
+   * @generated from field: magus.memory.v1.MemoryRefKind kind = 1;
    */
-  file: MemoryFile;
+  kind: MemoryRefKind;
 
   /**
-   * on-disk basename, e.g. "status.md"
+   * node id / path, output ref token, or a raw query/command string
    *
-   * @generated from field: string name = 2;
+   * @generated from field: string target = 2;
+   */
+  target: string;
+};
+
+/**
+ * Describes the message magus.memory.v1.MemoryRef.
+ * Use `create(MemoryRefSchema)` to create a new message.
+ */
+export const MemoryRefSchema: GenMessage<MemoryRef> = /*@__PURE__*/
+  messageDesc(file_magus_memory_v1_memory, 0);
+
+/**
+ * Memory is one record. name is the kebab-slug identity; refs are the required payload;
+ * body is the caption (decision/plan only); status is the optional lifecycle field;
+ * references links to other records by name. create_time/update_time are output-only.
+ *
+ * @generated from message magus.memory.v1.Memory
+ */
+export type Memory = Message<"magus.memory.v1.Memory"> & {
+  /**
+   * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * raw markdown; UNTRUSTED (agent-written)
-   *
-   * @generated from field: string content = 3;
+   * @generated from field: magus.memory.v1.MemoryType type = 2;
    */
-  content: string;
+  type: MemoryType;
 
   /**
-   * current on-disk size
-   *
-   * @generated from field: int64 size_bytes = 4;
+   * @generated from field: repeated magus.memory.v1.MemoryRef refs = 3;
    */
-  sizeBytes: bigint;
+  refs: MemoryRef[];
 
   /**
-   * last-modified time; unset when the file does not exist
+   * free lifecycle string (accepted, superseded, done, stale, ...)
    *
-   * @generated from field: google.protobuf.Timestamp modified = 5;
+   * @generated from field: string status = 4;
    */
-  modified?: Timestamp;
+  status: string;
 
   /**
-   * whether the file is present on disk
+   * UNTRUSTED prose caption; empty for a pointer
    *
-   * @generated from field: bool exists = 6;
+   * @generated from field: string body = 5;
    */
-  exists: boolean;
+  body: string;
+
+  /**
+   * other record names (memory -> memory)
+   *
+   * @generated from field: repeated string references = 6;
+   */
+  references: string[];
+
+  /**
+   * output only
+   *
+   * @generated from field: google.protobuf.Timestamp create_time = 7;
+   */
+  createTime?: Timestamp;
+
+  /**
+   * output only
+   *
+   * @generated from field: google.protobuf.Timestamp update_time = 8;
+   */
+  updateTime?: Timestamp;
 };
 
 /**
- * Describes the message magus.memory.v1.MemoryDoc.
- * Use `create(MemoryDocSchema)` to create a new message.
+ * Describes the message magus.memory.v1.Memory.
+ * Use `create(MemorySchema)` to create a new message.
  */
-export const MemoryDocSchema: GenMessage<MemoryDoc> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1_memory, 0);
-
-/**
- * @generated from message magus.memory.v1.ListMemoryRequest
- */
-export type ListMemoryRequest = Message<"magus.memory.v1.ListMemoryRequest"> & {
-};
-
-/**
- * Describes the message magus.memory.v1.ListMemoryRequest.
- * Use `create(ListMemoryRequestSchema)` to create a new message.
- */
-export const ListMemoryRequestSchema: GenMessage<ListMemoryRequest> = /*@__PURE__*/
+export const MemorySchema: GenMessage<Memory> = /*@__PURE__*/
   messageDesc(file_magus_memory_v1_memory, 1);
 
 /**
- * @generated from message magus.memory.v1.ListMemoryResponse
+ * @generated from message magus.memory.v1.ListMemoriesRequest
  */
-export type ListMemoryResponse = Message<"magus.memory.v1.ListMemoryResponse"> & {
+export type ListMemoriesRequest = Message<"magus.memory.v1.ListMemoriesRequest"> & {
   /**
-   * one per known file, in a stable order; content omitted
+   * wired for forward-compat; the store returns all records today
    *
-   * @generated from field: repeated magus.memory.v1.MemoryDoc docs = 1;
+   * @generated from field: int32 page_size = 1;
    */
-  docs: MemoryDoc[];
+  pageSize: number;
 
   /**
-   * absolute path of the directory holding the files
-   *
-   * @generated from field: string dir = 2;
+   * @generated from field: string page_token = 2;
    */
-  dir: string;
+  pageToken: string;
 };
 
 /**
- * Describes the message magus.memory.v1.ListMemoryResponse.
- * Use `create(ListMemoryResponseSchema)` to create a new message.
+ * Describes the message magus.memory.v1.ListMemoriesRequest.
+ * Use `create(ListMemoriesRequestSchema)` to create a new message.
  */
-export const ListMemoryResponseSchema: GenMessage<ListMemoryResponse> = /*@__PURE__*/
+export const ListMemoriesRequestSchema: GenMessage<ListMemoriesRequest> = /*@__PURE__*/
   messageDesc(file_magus_memory_v1_memory, 2);
 
 /**
- * @generated from message magus.memory.v1.GetMemoryRequest
+ * @generated from message magus.memory.v1.ListMemoriesResponse
  */
-export type GetMemoryRequest = Message<"magus.memory.v1.GetMemoryRequest"> & {
+export type ListMemoriesResponse = Message<"magus.memory.v1.ListMemoriesResponse"> & {
   /**
-   * @generated from field: magus.memory.v1.MemoryFile file = 1;
+   * @generated from field: repeated magus.memory.v1.Memory memories = 1;
    */
-  file: MemoryFile;
+  memories: Memory[];
+
+  /**
+   * always empty until the store paginates
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
 };
 
 /**
- * Describes the message magus.memory.v1.GetMemoryRequest.
- * Use `create(GetMemoryRequestSchema)` to create a new message.
+ * Describes the message magus.memory.v1.ListMemoriesResponse.
+ * Use `create(ListMemoriesResponseSchema)` to create a new message.
  */
-export const GetMemoryRequestSchema: GenMessage<GetMemoryRequest> = /*@__PURE__*/
+export const ListMemoriesResponseSchema: GenMessage<ListMemoriesResponse> = /*@__PURE__*/
   messageDesc(file_magus_memory_v1_memory, 3);
 
 /**
- * @generated from message magus.memory.v1.GetMemoryResponse
+ * @generated from message magus.memory.v1.UpdateMemoryRequest
  */
-export type GetMemoryResponse = Message<"magus.memory.v1.GetMemoryResponse"> & {
+export type UpdateMemoryRequest = Message<"magus.memory.v1.UpdateMemoryRequest"> & {
   /**
-   * @generated from field: magus.memory.v1.MemoryDoc doc = 1;
+   * memory.name is the identity to upsert
+   *
+   * @generated from field: magus.memory.v1.Memory memory = 1;
    */
-  doc?: MemoryDoc;
+  memory?: Memory;
+
+  /**
+   * empty = full replace (the only mode today)
+   *
+   * @generated from field: google.protobuf.FieldMask update_mask = 2;
+   */
+  updateMask?: FieldMask;
+
+  /**
+   * true => create when absent (AIP-134 upsert)
+   *
+   * @generated from field: bool allow_missing = 3;
+   */
+  allowMissing: boolean;
 };
 
 /**
- * Describes the message magus.memory.v1.GetMemoryResponse.
- * Use `create(GetMemoryResponseSchema)` to create a new message.
+ * Describes the message magus.memory.v1.UpdateMemoryRequest.
+ * Use `create(UpdateMemoryRequestSchema)` to create a new message.
  */
-export const GetMemoryResponseSchema: GenMessage<GetMemoryResponse> = /*@__PURE__*/
+export const UpdateMemoryRequestSchema: GenMessage<UpdateMemoryRequest> = /*@__PURE__*/
   messageDesc(file_magus_memory_v1_memory, 4);
 
 /**
- * @generated from message magus.memory.v1.PutMemoryRequest
+ * @generated from message magus.memory.v1.UpdateMemoryResponse
  */
-export type PutMemoryRequest = Message<"magus.memory.v1.PutMemoryRequest"> & {
+export type UpdateMemoryResponse = Message<"magus.memory.v1.UpdateMemoryResponse"> & {
   /**
-   * @generated from field: magus.memory.v1.MemoryFile file = 1;
-   */
-  file: MemoryFile;
-
-  /**
-   * the file's full new markdown content (overwrite, not append)
+   * the stored record, with server-set timestamps
    *
-   * @generated from field: string content = 2;
+   * @generated from field: magus.memory.v1.Memory memory = 1;
    */
-  content: string;
+  memory?: Memory;
 };
 
 /**
- * Describes the message magus.memory.v1.PutMemoryRequest.
- * Use `create(PutMemoryRequestSchema)` to create a new message.
+ * Describes the message magus.memory.v1.UpdateMemoryResponse.
+ * Use `create(UpdateMemoryResponseSchema)` to create a new message.
  */
-export const PutMemoryRequestSchema: GenMessage<PutMemoryRequest> = /*@__PURE__*/
+export const UpdateMemoryResponseSchema: GenMessage<UpdateMemoryResponse> = /*@__PURE__*/
   messageDesc(file_magus_memory_v1_memory, 5);
-
-/**
- * @generated from message magus.memory.v1.PutMemoryResponse
- */
-export type PutMemoryResponse = Message<"magus.memory.v1.PutMemoryResponse"> & {
-  /**
-   * @generated from field: magus.memory.v1.MemoryDoc doc = 1;
-   */
-  doc?: MemoryDoc;
-};
-
-/**
- * Describes the message magus.memory.v1.PutMemoryResponse.
- * Use `create(PutMemoryResponseSchema)` to create a new message.
- */
-export const PutMemoryResponseSchema: GenMessage<PutMemoryResponse> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1_memory, 6);
 
 /**
  * @generated from message magus.memory.v1.DeleteMemoryRequest
  */
 export type DeleteMemoryRequest = Message<"magus.memory.v1.DeleteMemoryRequest"> & {
   /**
-   * @generated from field: magus.memory.v1.MemoryFile file = 1;
+   * @generated from field: string name = 1;
    */
-  file: MemoryFile;
+  name: string;
+
+  /**
+   * true => deleting an absent record is a no-op
+   *
+   * @generated from field: bool allow_missing = 2;
+   */
+  allowMissing: boolean;
 };
 
 /**
@@ -220,16 +249,12 @@ export type DeleteMemoryRequest = Message<"magus.memory.v1.DeleteMemoryRequest">
  * Use `create(DeleteMemoryRequestSchema)` to create a new message.
  */
 export const DeleteMemoryRequestSchema: GenMessage<DeleteMemoryRequest> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1_memory, 7);
+  messageDesc(file_magus_memory_v1_memory, 6);
 
 /**
  * @generated from message magus.memory.v1.DeleteMemoryResponse
  */
 export type DeleteMemoryResponse = Message<"magus.memory.v1.DeleteMemoryResponse"> & {
-  /**
-   * @generated from field: magus.memory.v1.MemoryDoc doc = 1;
-   */
-  doc?: MemoryDoc;
 };
 
 /**
@@ -237,88 +262,184 @@ export type DeleteMemoryResponse = Message<"magus.memory.v1.DeleteMemoryResponse
  * Use `create(DeleteMemoryResponseSchema)` to create a new message.
  */
 export const DeleteMemoryResponseSchema: GenMessage<DeleteMemoryResponse> = /*@__PURE__*/
+  messageDesc(file_magus_memory_v1_memory, 7);
+
+/**
+ * @generated from message magus.memory.v1.GetCursorRequest
+ */
+export type GetCursorRequest = Message<"magus.memory.v1.GetCursorRequest"> & {
+};
+
+/**
+ * Describes the message magus.memory.v1.GetCursorRequest.
+ * Use `create(GetCursorRequestSchema)` to create a new message.
+ */
+export const GetCursorRequestSchema: GenMessage<GetCursorRequest> = /*@__PURE__*/
   messageDesc(file_magus_memory_v1_memory, 8);
 
 /**
- * MemoryFile names one file in the closed durable-memory set. status is the current
- * snapshot (overwritten), progress is a dated work journal (appended by agents),
- * decisions is a dated decision log with the why (appended by agents). The set is
- * closed on purpose: adding a value is an API decision every agent host sees.
- *
- * @generated from enum magus.memory.v1.MemoryFile
+ * @generated from message magus.memory.v1.GetCursorResponse
  */
-export enum MemoryFile {
+export type GetCursorResponse = Message<"magus.memory.v1.GetCursorResponse"> & {
   /**
-   * @generated from enum value: MEMORY_FILE_UNSPECIFIED = 0;
+   * UNTRUSTED; empty when the cursor was never written
+   *
+   * @generated from field: string content = 1;
+   */
+  content: string;
+};
+
+/**
+ * Describes the message magus.memory.v1.GetCursorResponse.
+ * Use `create(GetCursorResponseSchema)` to create a new message.
+ */
+export const GetCursorResponseSchema: GenMessage<GetCursorResponse> = /*@__PURE__*/
+  messageDesc(file_magus_memory_v1_memory, 9);
+
+/**
+ * @generated from message magus.memory.v1.UpdateCursorRequest
+ */
+export type UpdateCursorRequest = Message<"magus.memory.v1.UpdateCursorRequest"> & {
+  /**
+   * @generated from field: string content = 1;
+   */
+  content: string;
+};
+
+/**
+ * Describes the message magus.memory.v1.UpdateCursorRequest.
+ * Use `create(UpdateCursorRequestSchema)` to create a new message.
+ */
+export const UpdateCursorRequestSchema: GenMessage<UpdateCursorRequest> = /*@__PURE__*/
+  messageDesc(file_magus_memory_v1_memory, 10);
+
+/**
+ * @generated from message magus.memory.v1.UpdateCursorResponse
+ */
+export type UpdateCursorResponse = Message<"magus.memory.v1.UpdateCursorResponse"> & {
+  /**
+   * @generated from field: string content = 1;
+   */
+  content: string;
+};
+
+/**
+ * Describes the message magus.memory.v1.UpdateCursorResponse.
+ * Use `create(UpdateCursorResponseSchema)` to create a new message.
+ */
+export const UpdateCursorResponseSchema: GenMessage<UpdateCursorResponse> = /*@__PURE__*/
+  messageDesc(file_magus_memory_v1_memory, 11);
+
+/**
+ * MemoryType is the subject axis of a record (stable, closed). pointer carries refs only;
+ * decision and plan additionally carry a prose caption (the why the graph cannot derive).
+ *
+ * @generated from enum magus.memory.v1.MemoryType
+ */
+export enum MemoryType {
+  /**
+   * @generated from enum value: MEMORY_TYPE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
-   * @generated from enum value: MEMORY_FILE_STATUS = 1;
+   * @generated from enum value: MEMORY_TYPE_POINTER = 1;
    */
-  STATUS = 1,
+  POINTER = 1,
 
   /**
-   * @generated from enum value: MEMORY_FILE_PROGRESS = 2;
+   * @generated from enum value: MEMORY_TYPE_DECISION = 2;
    */
-  PROGRESS = 2,
+  DECISION = 2,
 
   /**
-   * @generated from enum value: MEMORY_FILE_DECISIONS = 3;
+   * @generated from enum value: MEMORY_TYPE_PLAN = 3;
    */
-  DECISIONS = 3,
+  PLAN = 3,
 }
 
 /**
- * Describes the enum magus.memory.v1.MemoryFile.
+ * Describes the enum magus.memory.v1.MemoryType.
  */
-export const MemoryFileSchema: GenEnum<MemoryFile> = /*@__PURE__*/
+export const MemoryTypeSchema: GenEnum<MemoryType> = /*@__PURE__*/
   enumDesc(file_magus_memory_v1_memory, 0);
 
 /**
- * MemoryService lists, reads, replaces, and deletes the durable memory files. List
- * enumerates the closed set with per-file metadata; Get returns one file's raw markdown;
- * Put replaces one file's whole content; Delete removes one file from disk.
+ * MemoryRefKind is the closed set a ref points at. node/doc/output name a magus-domain
+ * node; query/command are re-runnable strings. Every kind resolves or dangles.
+ *
+ * @generated from enum magus.memory.v1.MemoryRefKind
+ */
+export enum MemoryRefKind {
+  /**
+   * @generated from enum value: MEMORY_REF_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: MEMORY_REF_KIND_QUERY = 1;
+   */
+  QUERY = 1,
+
+  /**
+   * @generated from enum value: MEMORY_REF_KIND_NODE = 2;
+   */
+  NODE = 2,
+
+  /**
+   * @generated from enum value: MEMORY_REF_KIND_OUTPUT = 3;
+   */
+  OUTPUT = 3,
+
+  /**
+   * @generated from enum value: MEMORY_REF_KIND_COMMAND = 4;
+   */
+  COMMAND = 4,
+
+  /**
+   * @generated from enum value: MEMORY_REF_KIND_DOC = 5;
+   */
+  DOC = 5,
+}
+
+/**
+ * Describes the enum magus.memory.v1.MemoryRefKind.
+ */
+export const MemoryRefKindSchema: GenEnum<MemoryRefKind> = /*@__PURE__*/
+  enumDesc(file_magus_memory_v1_memory, 1);
+
+/**
+ * MemoryService lists, upserts, and deletes memory records, plus reads/overwrites the
+ * singleton cursor snapshot.
  *
  * @generated from service magus.memory.v1.MemoryService
  */
 export const MemoryService: GenService<{
   /**
-   * ListMemory returns metadata (never content) for every known memory file, plus the
-   * on-disk directory holding them so the operator can find them outside the console.
+   * ListMemories returns every record in full (records are small). Paginated by contract
+   * so growth never forces a breaking change, though the store returns all records today.
    *
-   * @generated from rpc magus.memory.v1.MemoryService.ListMemory
+   * @generated from rpc magus.memory.v1.MemoryService.ListMemories
    */
-  listMemory: {
+  listMemories: {
     methodKind: "unary";
-    input: typeof ListMemoryRequestSchema;
-    output: typeof ListMemoryResponseSchema;
+    input: typeof ListMemoriesRequestSchema;
+    output: typeof ListMemoriesResponseSchema;
   },
   /**
-   * GetMemory returns one file's raw markdown content and metadata. A file that does
-   * not exist yet returns an empty doc with exists=false, not an error.
+   * UpdateMemory upserts a record by name: with allow_missing=true it creates the record
+   * when absent, otherwise it updates in place. An empty update_mask is a full replace.
    *
-   * @generated from rpc magus.memory.v1.MemoryService.GetMemory
+   * @generated from rpc magus.memory.v1.MemoryService.UpdateMemory
    */
-  getMemory: {
+  updateMemory: {
     methodKind: "unary";
-    input: typeof GetMemoryRequestSchema;
-    output: typeof GetMemoryResponseSchema;
+    input: typeof UpdateMemoryRequestSchema;
+    output: typeof UpdateMemoryResponseSchema;
   },
   /**
-   * PutMemory replaces one file's whole content with the supplied markdown, creating it
-   * if absent. It is a full overwrite, not an append.
-   *
-   * @generated from rpc magus.memory.v1.MemoryService.PutMemory
-   */
-  putMemory: {
-    methodKind: "unary";
-    input: typeof PutMemoryRequestSchema;
-    output: typeof PutMemoryResponseSchema;
-  },
-  /**
-   * DeleteMemory removes one file from disk. Deleting an already-absent file is a no-op
-   * that succeeds and reports exists=false.
+   * DeleteMemory removes a record by name. With allow_missing=true, deleting an absent
+   * record succeeds as a no-op (idempotent).
    *
    * @generated from rpc magus.memory.v1.MemoryService.DeleteMemory
    */
@@ -326,6 +447,26 @@ export const MemoryService: GenService<{
     methodKind: "unary";
     input: typeof DeleteMemoryRequestSchema;
     output: typeof DeleteMemoryResponseSchema;
+  },
+  /**
+   * GetCursor returns the cursor snapshot, empty when never written.
+   *
+   * @generated from rpc magus.memory.v1.MemoryService.GetCursor
+   */
+  getCursor: {
+    methodKind: "unary";
+    input: typeof GetCursorRequestSchema;
+    output: typeof GetCursorResponseSchema;
+  },
+  /**
+   * UpdateCursor overwrites the cursor snapshot.
+   *
+   * @generated from rpc magus.memory.v1.MemoryService.UpdateCursor
+   */
+  updateCursor: {
+    methodKind: "unary";
+    input: typeof UpdateCursorRequestSchema;
+    output: typeof UpdateCursorResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_memory_v1_memory, 0);

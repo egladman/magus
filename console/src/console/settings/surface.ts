@@ -962,7 +962,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
         buildSection(
           "Agent memory",
           memorySection.el,
-          "View and edit the durable memory files agents write across sessions. Editing is the safety valve against the store growing unbounded.",
+          "View, edit, and prune the durable memory records agents write across sessions - typed pointers into the codebase, not free notes. Editing is the safety valve against the store growing unbounded.",
         ),
       ),
     },
