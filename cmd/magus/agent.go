@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -63,7 +64,11 @@ var agentsSection string
 //	v10: magus-vcs teaches environmental-vs-real drift; install injects
 //	    open-standard provenance frontmatter (license, compatibility, metadata)
 //	v11: magus-run teaches CWD-relative project scope; tighten the prose
-const agentSkillVersion = 11
+//	v12: trigger-first frontmatter descriptions (literal command cues) for
+//	     magus-vcs/magus-run/magus-query; agents-section moment-to-skill routing
+//	     table; claude install merges a PreToolUse guard hook into
+//	     .claude/settings.json (magus agent hook)
+const agentSkillVersion = 12
 
 // skillDirPlatforms maps each skill-directory platform to its repo-relative
 // destination. The bytes written are identical across platforms - the Agent
@@ -105,11 +110,13 @@ func agentCmd(ctx context.Context, args []string) error {
 		return agentInstallCmd(ctx, args[1:])
 	case "sample":
 		return agentSampleCmd()
+	case "hook":
+		return agentHookCmd(os.Stdin, os.Stdout)
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return fmt.Errorf("agent: unknown subcommand %q (try: install, sample)", args[0])
+		return fmt.Errorf("agent: unknown subcommand %q (try: install, sample, hook)", args[0])
 	}
 }
 
@@ -126,7 +133,8 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "where they discover them.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Platforms:")
-	fmt.Fprintln(w, "  claude     write .claude/skills/ (Claude Code)")
+	fmt.Fprintln(w, "  claude     write .claude/skills/ and merge a PreToolUse guard hook into")
+	fmt.Fprintln(w, "             .claude/settings.json (Claude Code); --hooks=false skips the hook")
 	fmt.Fprintln(w, "  opencode   write .opencode/skills/ (OpenCode)")
 	fmt.Fprintln(w, "  agents     write .agents/skills/ (Agent Skills spec generic location)")
 	fmt.Fprintln(w, "  codex      write a managed magus section into AGENTS.md (Codex and")
@@ -135,6 +143,8 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "Other subcommands:")
 	fmt.Fprintln(w, "  sample     print a starter AGENTS.md to stdout to own and tweak; never")
 	fmt.Fprintln(w, "             writes a file, so it cannot clobber an existing one")
+	fmt.Fprintln(w, "  hook       plumbing invoked by the installed Claude Code guard hook; reads")
+	fmt.Fprintln(w, "             one hook event as JSON on stdin, emits a decision on stdout")
 }
 
 func agentUsageErr() error {
@@ -149,6 +159,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
 	dir := fset.String("dir", ".", "Repo directory to install into")
 	force := fset.Bool("force", false, "Overwrite existing installed skill files")
+	hooks := fset.Bool("hooks", true, "For claude: merge the PreToolUse guard hook into .claude/settings.json")
 	fset.Usage = func() { agentUsage(os.Stderr) }
 	if err := fset.Parse(args); err != nil {
 		return err
@@ -176,6 +187,11 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		written, err = installAgentsSection(*dir)
 	case skillDirPlatforms[platform] != "":
 		written, err = installSkillTree(*dir, skillDirPlatforms[platform], *force)
+		if err == nil && platform == "claude" && *hooks {
+			var hookWritten []string
+			hookWritten, err = installClaudeHooks(*dir)
+			written = append(written, hookWritten...)
+		}
 	default:
 		return fmt.Errorf("agent install: platform %q is not supported yet (supported: %s); file an issue to request it",
 			platform, strings.Join(platformNames(), ", "))
@@ -433,4 +449,178 @@ func agentSampleDoc() string {
 func agentSampleCmd() error {
 	fmt.Fprint(os.Stdout, agentSampleDoc())
 	return nil
+}
+
+// agentHookCommand is the shell line installed into .claude/settings.json as a
+// PreToolUse hook on the Bash tool. It fails open: when magus is not on PATH the
+// hook exits 0 and the tool call proceeds unguarded, rather than erroring on
+// every Bash call in a repo that has the config but not the binary.
+const agentHookCommand = "command -v magus >/dev/null 2>&1 || exit 0; exec magus agent hook"
+
+// installClaudeHooks merges the magus PreToolUse guard hook into
+// <dir>/.claude/settings.json, preserving every other key. Idempotent: an entry
+// whose command invokes `magus agent hook` is replaced in place, never
+// duplicated. A settings file that fails to parse is left untouched (refusing
+// beats clobbering a hand-edited config).
+func installClaudeHooks(dir string) ([]string, error) {
+	path := filepath.Join(dir, ".claude", "settings.json")
+	settings := map[string]any{}
+	if body, err := os.ReadFile(path); err == nil {
+		if jerr := json.Unmarshal(body, &settings); jerr != nil {
+			return nil, fmt.Errorf("agent install: %s is not valid JSON, refusing to touch it: %w", path, jerr)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("agent install: read %s: %w", path, err)
+	}
+
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		hooks = map[string]any{}
+		settings["hooks"] = hooks
+	}
+	pre, _ := hooks["PreToolUse"].([]any)
+
+	entry := map[string]any{
+		"matcher": "Bash",
+		"hooks": []any{map[string]any{
+			"type":    "command",
+			"command": agentHookCommand,
+			"timeout": 10,
+		}},
+	}
+	replaced := false
+	for i, e := range pre {
+		if preToolUseEntryIsMagus(e) {
+			pre[i] = entry
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		pre = append(pre, entry)
+	}
+	hooks["PreToolUse"] = pre
+
+	// A plain Marshal would HTML-escape the > and & in the hook command into
+	// > escapes a human then has to read in their settings file.
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(settings); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(path, []byte(buf.String()), 0o644); err != nil {
+		return nil, fmt.Errorf("agent install: write %s: %w", path, err)
+	}
+	return []string{filepath.Join(".claude", "settings.json")}, nil
+}
+
+// preToolUseEntryIsMagus reports whether a PreToolUse entry is the one magus
+// manages: any of its command hooks invokes `magus agent hook`.
+func preToolUseEntryIsMagus(e any) bool {
+	m, ok := e.(map[string]any)
+	if !ok {
+		return false
+	}
+	inner, _ := m["hooks"].([]any)
+	for _, h := range inner {
+		hm, ok := h.(map[string]any)
+		if !ok {
+			continue
+		}
+		if cmd, _ := hm["command"].(string); strings.Contains(cmd, "magus agent hook") {
+			return true
+		}
+	}
+	return false
+}
+
+// agentHookCmd implements `magus agent hook`: plumbing invoked by the installed
+// Claude Code PreToolUse hook. It reads one hook event as JSON on stdin and
+// emits a decision on stdout. Anything unrecognized - a malformed event, a
+// different event or tool, a command no rule matches - produces no output and
+// exit 0, which the hook contract reads as "proceed": a guard must fail open or
+// it turns every Bash call into a hard failure.
+func agentHookCmd(in io.Reader, out io.Writer) error {
+	var ev struct {
+		HookEventName string `json:"hook_event_name"`
+		ToolName      string `json:"tool_name"`
+		ToolInput     struct {
+			Command string `json:"command"`
+		} `json:"tool_input"`
+	}
+	if err := json.NewDecoder(in).Decode(&ev); err != nil {
+		return nil
+	}
+	if ev.HookEventName != "PreToolUse" || ev.ToolName != "Bash" {
+		return nil
+	}
+	v := evaluateBashGuard(ev.ToolInput.Command)
+	hso := map[string]any{"hookEventName": "PreToolUse"}
+	switch {
+	case v.Deny != "":
+		hso["permissionDecision"] = "deny"
+		hso["permissionDecisionReason"] = v.Deny
+	case v.Context != "":
+		hso["additionalContext"] = v.Context
+	default:
+		return nil
+	}
+	return json.NewEncoder(out).Encode(map[string]any{"hookSpecificOutput": hso})
+}
+
+// bashGuardVerdict classifies one Bash command line. Deny blocks the call with a
+// reason the model sees; Context lets it proceed and injects a reminder.
+type bashGuardVerdict struct {
+	Deny    string
+	Context string
+}
+
+// The guard patterns. [^&|;]* keeps a flag search inside one segment of a
+// compound command, so `git reset && tool --hard-mode` does not false-positive.
+var (
+	guardStashRe     = regexp.MustCompile(`\bgit\s+stash\b`)
+	guardStashSafeRe = regexp.MustCompile(`\bgit\s+stash\s+(list|show|pop|apply|drop|branch)\b`)
+	guardResetRe     = regexp.MustCompile(`\bgit\s+reset\b[^&|;]*--hard`)
+	guardCheckoutRe  = regexp.MustCompile(`\bgit\s+checkout\s+(--\s+)?\.(\s|$)`)
+	guardRestoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
+	guardCleanRe     = regexp.MustCompile(`\bgit\s+clean\b[^&|;]*\s-\w*[fdxX]`)
+	guardStageRe     = regexp.MustCompile(`\bgit\s+(commit|add)\b`)
+	guardRawToolRe   = regexp.MustCompile(`\bgo\s+(test|build|vet)\b|\bnpm\s+(test|run|exec)\b|\bnpx\s|\bpnpm\b|\byarn\b|\beslint\b|\bprettier\b|\bpytest\b|\btsc\b|\bcargo\s+(test|build|check|clippy)\b`)
+)
+
+const (
+	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Load the magus-vcs skill for the commit checklist if not already loaded."
+	runGuardContext = "magus workspace: a magus target likely covers this (magus run build / test / lint / format / generate; MAGUS.md lists every target). Raw language tools bypass the cache, the sandbox, and affected tracking. Load the magus-run skill if not already loaded; if no target covers this work, proceed."
+)
+
+func denyWholeTree(op string) string {
+	return "whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. Verify builds in place (magus run build / magus affected ci); building never requires a clean tree. If you truly need a pristine tree, use a throwaway git worktree. See the magus-vcs skill."
+}
+
+// evaluateBashGuard applies the guard rules in severity order: destructive
+// whole-tree git operations deny; staging/committing and raw language tools
+// proceed with an injected reminder.
+func evaluateBashGuard(command string) bashGuardVerdict {
+	switch {
+	case guardStashRe.MatchString(command) && !guardStashSafeRe.MatchString(command):
+		return bashGuardVerdict{Deny: denyWholeTree("git stash")}
+	case guardResetRe.MatchString(command):
+		return bashGuardVerdict{Deny: denyWholeTree("git reset --hard")}
+	case guardCheckoutRe.MatchString(command):
+		return bashGuardVerdict{Deny: denyWholeTree("git checkout .")}
+	case guardRestoreRe.MatchString(command):
+		return bashGuardVerdict{Deny: denyWholeTree("git restore .")}
+	case guardCleanRe.MatchString(command):
+		return bashGuardVerdict{Deny: denyWholeTree("git clean")}
+	case guardStageRe.MatchString(command):
+		return bashGuardVerdict{Context: vcsGuardContext}
+	case guardRawToolRe.MatchString(command):
+		return bashGuardVerdict{Context: runGuardContext}
+	}
+	return bashGuardVerdict{}
 }

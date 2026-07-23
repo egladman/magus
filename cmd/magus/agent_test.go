@@ -199,6 +199,134 @@ func TestCheckSkillStatusesIgnoresForeignAgentsMD(t *testing.T) {
 	assert.Empty(t, checkSkillStatuses(dir))
 }
 
+// TestEvaluateBashGuard pins the guard's decision table: destructive whole-tree
+// git operations deny, staging and raw language tools get a context reminder,
+// and everything else passes silently.
+func TestEvaluateBashGuard(t *testing.T) {
+	tests := []struct {
+		command string
+		deny    bool
+		context string // "" for none, else a substring the context must carry
+	}{
+		{command: "git stash", deny: true},
+		{command: "git stash push -u", deny: true},
+		{command: "cd /repo && git stash", deny: true},
+		{command: "git stash pop"},
+		{command: "git stash list"},
+		{command: "git reset --hard origin/main", deny: true},
+		{command: "git reset HEAD~1"},
+		{command: "git reset && tool --hard-mode"},
+		{command: "git checkout .", deny: true},
+		{command: "git checkout -- .", deny: true},
+		{command: "git checkout main"},
+		{command: "git checkout -b feat/x"},
+		{command: "git restore .", deny: true},
+		{command: "git restore cmd/magus/agent.go"},
+		{command: "git clean -fd", deny: true},
+		{command: "git clean -n"},
+		{command: "git commit -m 'x'", context: "magus-vcs"},
+		{command: "git add -A", context: "magus-vcs"},
+		{command: "go test ./...", context: "magus-run"},
+		{command: "npm test", context: "magus-run"},
+		{command: "npx prettier --check .", context: "magus-run"},
+		{command: "pytest tests/", context: "magus-run"},
+		{command: "cargo build --release", context: "magus-run"},
+		{command: "go version"},
+		{command: "magus run test"},
+		{command: "ls -la"},
+		{command: "git status --porcelain"},
+		{command: "git diff --cached --stat"},
+	}
+	for _, tt := range tests {
+		v := evaluateBashGuard(tt.command)
+		if tt.deny {
+			assert.NotEmpty(t, v.Deny, "%q must deny", tt.command)
+			assert.Empty(t, v.Context, "%q denies, no context", tt.command)
+			continue
+		}
+		assert.Empty(t, v.Deny, "%q must not deny", tt.command)
+		if tt.context == "" {
+			assert.Empty(t, v.Context, "%q must pass silently", tt.command)
+		} else {
+			assert.Contains(t, v.Context, tt.context, "%q context names the skill", tt.command)
+		}
+	}
+}
+
+// TestAgentHookCmd covers the stdin-to-stdout plumbing around the guard: a deny
+// decision serializes to the hook contract, an unmatched command and a malformed
+// event both produce no output (fail open), never an error.
+func TestAgentHookCmd(t *testing.T) {
+	run := func(input string) string {
+		var out strings.Builder
+		require.NoError(t, agentHookCmd(strings.NewReader(input), &out))
+		return out.String()
+	}
+
+	denied := run(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}`)
+	assert.Contains(t, denied, `"permissionDecision":"deny"`)
+	assert.Contains(t, denied, "magus-vcs")
+
+	reminded := run(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git commit -m x"}}`)
+	assert.Contains(t, reminded, `"additionalContext"`)
+	assert.NotContains(t, reminded, `"permissionDecision"`)
+
+	assert.Empty(t, run(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`))
+	assert.Empty(t, run(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}`))
+	assert.Empty(t, run(`{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{}}`))
+	assert.Empty(t, run(`not json`), "malformed input fails open")
+}
+
+// TestInstallClaudeHooksCreatesMergesIdempotent proves the settings merge: a
+// missing file is created, foreign keys survive, and re-install replaces the
+// managed entry instead of duplicating it.
+func TestInstallClaudeHooksCreatesMergesIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	written, err := installClaudeHooks(dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join(".claude", "settings.json")}, written)
+
+	path := filepath.Join(dir, ".claude", "settings.json")
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "magus agent hook")
+	assert.Contains(t, string(body), `"matcher": "Bash"`)
+
+	// Foreign keys and hooks survive the merge; ours is added alongside.
+	foreign := `{"permissions":{"allow":["Bash(ls *)"]},"hooks":{"PreToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"their-hook"}]}]}}`
+	require.NoError(t, os.WriteFile(path, []byte(foreign), 0o644))
+	_, err = installClaudeHooks(dir)
+	require.NoError(t, err)
+	body, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "Bash(ls *)")
+	assert.Contains(t, string(body), "their-hook")
+	assert.Contains(t, string(body), "magus agent hook")
+
+	// Re-install: the managed entry is replaced in place, not appended again.
+	_, err = installClaudeHooks(dir)
+	require.NoError(t, err)
+	body, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(body), "magus agent hook"))
+	assert.Equal(t, 1, strings.Count(string(body), "their-hook"))
+}
+
+// TestInstallClaudeHooksRefusesInvalidJSON: a hand-edited settings file that no
+// longer parses is an error, never a clobber.
+func TestInstallClaudeHooksRefusesInvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".claude", "settings.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("{broken"), 0o644))
+	_, err := installClaudeHooks(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "refusing")
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "{broken", string(body), "the broken file is left untouched")
+}
+
 func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
 	doc := agentSampleDoc()
 	assert.Contains(t, doc, "# AGENTS.md")

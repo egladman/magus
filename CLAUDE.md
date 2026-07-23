@@ -16,6 +16,11 @@ hand-edit it.
   is hand-authored - read it before touching the agent surface.
 - Record decisions worth keeping (with the why) via the `magus_memory` MCP
   tool; read its status/decisions files at session start.
+- Invoke the Skill tool at these moments, before acting - not after something
+  breaks: `git commit`/`git add`/`git stash`/`git reset` or reading a diff ->
+  Skill(magus-vcs); about to build/test/lint/generate -> Skill(magus-run);
+  "what exists / depends on / uses X" -> Skill(magus-query); "how does magus
+  X work" -> Skill(magus-docs).
 
 ## Commands
 

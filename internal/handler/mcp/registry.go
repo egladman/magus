@@ -63,7 +63,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolRunTarget),
-		Description: "Run a build target on an EXPLICIT set of projects (or the cwd project when omitted). Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Use this when you know which projects to run; to instead run only the projects a VCS change touched, use magus_run_affected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
+		Description: "Run a build target on an EXPLICIT set of projects (or the cwd project when omitted). Use this INSTEAD of raw language tools (go test, eslint, pytest, tsc): the raw tool bypasses the cache, the sandbox, and affected tracking. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Use this when you know which projects to run; to instead run only the projects a VCS change touched, use magus_run_affected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
 		Params: []ParamDescriptor{
 			{Name: "target", Type: "string", Required: true, Description: "Target to run, e.g. \"build\", \"test\", \"lint\", \"format\", \"ci\", or an op-direct spell-qualified form like \"go::go-test\"."},
 			{Name: "projects", Type: "string", Description: "Space-separated project paths. Use \"/\" for all. Omit for cwd-scoped selection."},

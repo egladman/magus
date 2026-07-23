@@ -1,6 +1,6 @@
 ---
 name: magus-vcs
-description: Triage changed files in a magus workspace before reading, editing, or committing them. Use when inspecting a diff or dirty working tree, deciding whether a changed file is worth investigating, resolving conflicts in generated files, or preparing a commit in a repo that has a magusfile.buzz. Keys on the fact that magus declares which files are generated outputs.
+description: Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, or git clean, and when reading git status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.
 ---
 
 # VCS hygiene in a magus workspace

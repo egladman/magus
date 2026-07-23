@@ -5,6 +5,17 @@ holds a verified model of it: the project dependency graph, every target's
 declared inputs and outputs, and what a diff affects. Use that model instead
 of rediscovering it by reading files.
 
+If the magus-* skills are installed (.claude/skills/, .opencode/skills/, or
+.agents/skills/), load the matching skill BEFORE acting - at the moment, not
+after something breaks:
+
+| before you                                        | load        |
+| ------------------------------------------------- | ----------- |
+| git commit, git add, git stash/reset, read a diff | magus-vcs   |
+| build, test, lint, format, or generate anything   | magus-run   |
+| grep for what exists, depends on, or uses X       | magus-query |
+| answer "how does magus X" from memory             | magus-docs  |
+
 Query before grepping. The committed MAGUS.md lists every project, target,
 and the graph's routing table.
 

@@ -1,6 +1,6 @@
 ---
 name: magus-query
-description: Use the magus knowledge graph to find and relate magus-domain entities (projects, targets, spells, ops, charms, modules, diagnostics, docs) instead of grepping. Trigger when working in a repo that uses magus and you need to know what exists, what depends on what, or how two entities relate.
+description: Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.
 ---
 
 # magus knowledge graph

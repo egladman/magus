@@ -1,6 +1,6 @@
 ---
 name: magus-run
-description: Run builds, tests, lints, and codegen through magus targets instead of raw language tools. Use when working in a repo that has a magusfile.buzz and you are about to build, test, lint, format, or regenerate anything - especially before reaching for go test, npm, eslint, pytest, or another tool directly. Also use when a magus target fails and you need its captured output.
+description: Run builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with magusfile.buzz at the root - a target covers the work, and the raw tool bypasses the cache, the sandbox, and affected tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (magus affected ci).
 ---
 
 # Running work through magus
