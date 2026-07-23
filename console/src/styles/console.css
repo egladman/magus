@@ -970,14 +970,16 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 /* Unpinned = OVERLAY. Pinning adds pf-m-inline (ref-drawer.ts), which lets PF inset the __content so
    the surfaces reflow narrower (snap-to-fit). Unpinned drops pf-m-inline; PF's CSS-only non-inline
-   drawer then parks the expanded panel off the right edge (the __content yields no width), so pull it
-   back as a right-docked overlay that floats over the full-width content - a quick peek. Desktop only:
-   below 48rem the panel is a full-screen overlay (the block below). The overlay width tracks the same
-   panel flex-basis the splitter drives, so a dragged width still applies. */
+   drawer then parks the expanded panel off the right edge (the __content yields no width), so dock it
+   like the notification panel instead (#console-shell-notify in overrides.css): position: fixed,
+   clearing the top chrome and the status bar explicitly, right-docked - a quick peek that floats over
+   the full-width content rather than a PF-inset absolute box. Desktop only: below 48rem the panel is a
+   full-screen overlay (the block below), which already docks this way. The overlay width tracks the
+   same panel flex-basis the splitter drives, so a dragged width still applies. */
 @media (min-width: 48rem) {
-  #console-refdrawer:not(.pf-m-inline).pf-m-expanded > .pf-v6-c-drawer__main { position: relative; }
   #console-refdrawer:not(.pf-m-inline).pf-m-expanded > .pf-v6-c-drawer__main > #console-refpanel {
-    position: absolute; inset-block: 0; inset-inline-end: 0; inset-inline-start: auto;
+    position: fixed; top: var(--console-topchrome-h); bottom: var(--console-statusbar-h);
+    inset-inline-end: 0; inset-inline-start: auto;
     width: var(--pf-v6-c-drawer__panel--md--FlexBasis, var(--console-refdrawer-w)); max-width: 100%;
     margin: 0; transform: none;
     box-shadow: var(--pf-t--global--box-shadow--lg);
