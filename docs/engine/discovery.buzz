@@ -79,8 +79,8 @@ test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descript
         + "Every link below is the page's raw Markdown (its index.md sibling), "
         + "so an agent fetches clean content directly.\n\n"
         + "## Documentation\n\n"
-        + "- [Cache](/cache/index.md): The cache model\n"
-        + "- [FAQ](/faq/index.md)\n"
-        + "- [Targets](/targets/index.md): What a target is\n";
+        + "- [Cache](/concepts/cache/index.md): The cache model\n"
+        + "- [Targets](/concepts/targets/index.md): What a target is\n"
+        + "- [FAQ](/reference/faq/index.md)\n";
     assert\equal(llmsIndexBody(pages, "/", "magus"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
 }
