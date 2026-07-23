@@ -9,19 +9,19 @@
     <!-- Views panel - question-first navigation. The one [data-ref-section] the drawer SKIPS (by its
          #ask-panel id): its chips are the live sidebar control, not reference copy. -->
     <details class="console-graph-views" data-ref-section id="ask-panel">
-      <summary>Ask a question</summary>
+      <summary>Explore</summary>
       <div class="console-graph-help__body">
-        <p class="console-graph-views__hint">Questions you might ask about a workspace. Click one to explore, or write your own query below.</p>
+        <p class="console-graph-views__hint">Things you can do with a workspace's graph. Click one to explore, or write your own query below.</p>
         <div class="console-graph-views__body">
-        <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a node to see everything that depends on it (reverse BFS over depends_on). CLI: magus explain &lt;node-id&gt;">What breaks if I change this?</button>
-        <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two nodes to find the shortest depends_on path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Why does A depend on B?</button>
-        <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run in parallel. CLI: magus describe graph -o json">What runs in parallel?</button>
-        <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="Longest duration-weighted chain. Hidden when no DurationMs data is present. CLI: magus graph deps -o json">What's slow?</button>
-        <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency - A needs B needs A. magus cannot pick a build order for these, so it is a configuration error to fix. CLI: magus graph verify">Any circular dependencies?</button>
-        <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a node, then see its neighborhood as rings by distance. Same data as double-click focus, different shape.">What's around this?</button>
-        <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree nodes - the ones everything touches. CLI: magus query kind:target">What's a hub?</button>
-        <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Nodes with no edges - potentially dead code or unconfigured targets. CLI: magus query -kind:project">What's dead?</button>
-        <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">What does my diff touch?</button>
+        <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a target, then see everything that would rebuild if you change it. CLI: magus explain &lt;target&gt;">See what rebuilds when I change a target</button>
+        <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two targets to see the dependency path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Trace the path between two targets</button>
+        <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run at the same time. CLI: magus describe graph -o json">Show the build order</button>
+        <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
+        <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
+        <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
+        <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
+        <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
+        <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">See what my last change affects</button>
         <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
         </div>
       </div>
@@ -113,7 +113,7 @@
           <div class="pf-v6-c-input-group console-graph-querybar">
             <div class="pf-v6-c-input-group__item pf-m-fill">
               <span class="pf-v6-c-form-control">
-                <input id="node-search" type="text" placeholder="kind:spell project:web" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" disabled>
+                <input id="node-search" type="text" placeholder="Type to filter - e.g. kind:spell" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" disabled>
               </span>
             </div>
             <div class="pf-v6-c-input-group__item">
@@ -151,18 +151,18 @@
              so these are the live control. Reuses the sanctioned console-graph-views__chip
              escape hatch; main.ts wires them by class + data-view/data-lens. Order matches the
              #ask-panel reference copy (keep both in sync). -->
-        <div class="console-graph-views console-graph-sidebar__views" aria-label="Ask a question">
-          <p class="console-graph-sidebar__viewslabel">Ask a question</p>
-          <div class="console-graph-views__body" role="group" aria-label="Question views">
-            <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a node to see everything that depends on it (reverse BFS over depends_on). CLI: magus explain &lt;node-id&gt;">What breaks if I change this?</button>
-            <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two nodes to find the shortest depends_on path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Why does A depend on B?</button>
-            <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run in parallel. CLI: magus describe graph -o json">What runs in parallel?</button>
-            <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="Longest duration-weighted chain. Hidden when no timing data is present. CLI: magus graph deps -o json">What's slow?</button>
-            <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency - A needs B needs A. magus cannot pick a build order for these, so it is a configuration error to fix. CLI: magus graph verify">Any circular dependencies?</button>
-            <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a node, then see its neighborhood as rings by distance. Same data as double-click focus, different shape.">What's around this?</button>
-            <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree nodes - the ones everything touches. CLI: magus query kind:target">What's a hub?</button>
-            <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Nodes with no edges - potentially dead code or unconfigured targets. CLI: magus query -kind:project">What's dead?</button>
-            <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">What does my diff touch?</button>
+        <div class="console-graph-views console-graph-sidebar__views" aria-label="Explore">
+          <p class="console-graph-sidebar__viewslabel">Explore</p>
+          <div class="console-graph-views__body" role="group" aria-label="Explore views">
+            <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a target, then see everything that would rebuild if you change it. CLI: magus explain &lt;target&gt;">See what rebuilds when I change a target</button>
+            <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two targets to see the dependency path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Trace the path between two targets</button>
+            <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run at the same time. CLI: magus describe graph -o json">Show the build order</button>
+            <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
+            <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
+            <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
+            <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
+            <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
+            <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">See what my last change affects</button>
           </div>
         </div>
         <!-- Phase 5: projection unfold button - shown when default projection is active. -->
@@ -216,6 +216,11 @@
              by default so it doesn't cover the graph. Desktop keeps the legend open. -->
         <button id="legend-toggle" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-expanded="false" aria-controls="graph-legend-panel">
           <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><line x1="11" y1="6" x2="20" y2="6"/><line x1="11" y1="18" x2="20" y2="18"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Legend</span></button>
+        <!-- Result line: a slim narration of "what am I looking at" for the active view/query,
+             at the top of the stage. Hidden (and empty) when nothing is active - the bottom
+             #graph-status line carries the same text too, but this one sits where the eye
+             already is (over the canvas) instead of below the whole app. -->
+        <p id="graph-result-line" class="console-graph-stage__result" hidden aria-live="polite"></p>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
         <!-- Bottom-left mode indicator (Decision 3): a persistent readout of the active
              display mode, kept in sync by syncLayoutToggle - so a mode switched by a
