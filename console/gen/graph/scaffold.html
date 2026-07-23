@@ -1,7 +1,7 @@
 <main class="console-graph-main">
 
     <!-- The blocks below marked [data-ref-section] are this surface's reference copy (Ask, Views, Search
-         syntax, Layout and colors, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
+         syntax, Colors and forces, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
          panel (#console-refpanel, opened from the title-bar Reference button) each time it opens, and
          again on a tab change while docked - cloning, not moving, so the surface can unmount and remount
          freely. The sources are hidden in place by [data-ref-section]{display:none} (overrides.css);
@@ -15,10 +15,13 @@
         <div class="console-graph-views__body">
         <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a node to see everything that depends on it (reverse BFS over depends_on). CLI: magus explain &lt;node-id&gt;">What breaks if I change this?</button>
         <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two nodes to find the shortest depends_on path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Why does A depend on B?</button>
+        <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run in parallel. CLI: magus describe graph -o json">What runs in parallel?</button>
         <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="Longest duration-weighted chain. Hidden when no DurationMs data is present. CLI: magus graph deps -o json">What's slow?</button>
+        <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency - A needs B needs A. magus cannot pick a build order for these, so it is a configuration error to fix. CLI: magus graph verify">Any circular dependencies?</button>
+        <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a node, then see its neighborhood as rings by distance. Same data as double-click focus, different shape.">What's around this?</button>
         <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree nodes - the ones everything touches. CLI: magus query kind:target">What's a hub?</button>
         <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Nodes with no edges - potentially dead code or unconfigured targets. CLI: magus query -kind:project">What's dead?</button>
-        <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode (Phase 9). CLI: magus affected">What does my diff touch?</button>
+        <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">What does my diff touch?</button>
         <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
         </div>
       </div>
@@ -73,15 +76,8 @@
     </details>
 
     <details class="console-graph-help" data-ref-section>
-      <summary>Layout and colors</summary>
+      <summary>Colors and forces</summary>
       <div class="console-graph-help__body">
-        <p class="console-graph-display__sublabel">Layout</p>
-        <div class="console-graph-display__layoutrow">
-          <!-- Text-only PF button with canonical anatomy; main.ts drives the label by setting the
-               __text span's textContent (Layered/Force), so the Button structure stays intact. -->
-          <button id="layout-toggle-btn" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small" title="Switch to layered DAG layout"><span class="pf-v6-c-button__text">Layered</span></button>
-          <span class="console-graph-display__hint">Force: physics simulation. Layered: deterministic DAG (Sugiyama-style, left-to-right). Target graphs default to layered; knowledge graphs default to force. Capped at 500 visible nodes.</span>
-        </div>
         <p class="console-graph-display__sublabel">Layout forces</p>
         <div class="console-graph-display__forces" role="group" aria-label="Layout forces">
           <label>Repel <input type="range" id="force-charge" min="20" max="200" value="60" step="5"></label>
@@ -94,6 +90,7 @@
           <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="spell" title="Color each spell a distinct hue - shows toolchain as architectural layer"><span class="pf-v6-c-button__text">Color by spell</span></button>
           <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="project" title="Color each project a distinct hue - shows project boundaries"><span class="pf-v6-c-button__text">Color by project</span></button>
           <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout) - shows architectural layers"><span class="pf-v6-c-button__text">Color by DAG depth</span></button>
+          <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="duration" data-conditional hidden title="Color by run duration - hot is slow. Shown when the graph carries timing (run a build first: magus graph deps -o json)."><span class="pf-v6-c-button__text">Color by duration</span></button>
         </div>
         <p class="console-graph-display__sublabel">Color groups</p>
         <p>Paint every node matching a query one color, on top of the kind palette - keep several at once to compare slices of the graph.</p>
@@ -134,18 +131,38 @@
             </div>
           </div>
         </div>
+        <!-- Display mode: ALWAYS VISIBLE (Decision 3, discoverability phase) - the manual
+             override for the arrangement axis, distinct from the "Ask a question" views
+             below (the emphasis/filter axis). Same PF toggle group main.ts previously kept
+             collapsed inside "Colors and forces"; it now lives here so a user can see and
+             change the mode without opening a details panel. main.ts drives selection via
+             pf-m-selected and each button's disabled/title (see syncLayoutToggle/layoutAvailable). -->
+        <div class="console-graph-sidebar__modes">
+          <p class="console-graph-sidebar__modeslabel">Display mode</p>
+          <div class="pf-v6-c-toggle-group console-graph-display__layoutgroup" role="group" aria-label="Layout">
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="force" title="Free-floating physics layout - clusters and highly-connected hubs pop out. Best for exploring the whole graph."><span class="pf-v6-c-toggle-group__text">Force</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="layered" title="Left-to-right dependency flow - what depends on what, arranged in tiers. Best for reading direction."><span class="pf-v6-c-toggle-group__text">Layered</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="waves" title="Build order - each column is a set of targets magus can run in parallel. Best for seeing what runs when."><span class="pf-v6-c-toggle-group__text">Waves</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="radial" title="Rings around one node by distance - its neighborhood at a glance. Pick a node first."><span class="pf-v6-c-toggle-group__text">Radial</span></button></div>
+          </div>
+        </div>
         <!-- Ask a question: the question-first views, surfaced in the sidebar. The original
              #ask-panel reference block is display:none in the decoupled console (no ref drawer),
              so these are the live control. Reuses the sanctioned console-graph-views__chip
-             escape hatch; main.ts wires them by class + data-view/data-lens. -->
+             escape hatch; main.ts wires them by class + data-view/data-lens. Order matches the
+             #ask-panel reference copy (keep both in sync). -->
         <div class="console-graph-views console-graph-sidebar__views" aria-label="Ask a question">
           <p class="console-graph-sidebar__viewslabel">Ask a question</p>
           <div class="console-graph-views__body" role="group" aria-label="Question views">
             <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a node to see everything that depends on it (reverse BFS over depends_on). CLI: magus explain &lt;node-id&gt;">What breaks if I change this?</button>
             <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two nodes to find the shortest depends_on path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Why does A depend on B?</button>
+            <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run in parallel. CLI: magus describe graph -o json">What runs in parallel?</button>
             <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="Longest duration-weighted chain. Hidden when no timing data is present. CLI: magus graph deps -o json">What's slow?</button>
+            <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency - A needs B needs A. magus cannot pick a build order for these, so it is a configuration error to fix. CLI: magus graph verify">Any circular dependencies?</button>
+            <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a node, then see its neighborhood as rings by distance. Same data as double-click focus, different shape.">What's around this?</button>
             <button type="button" class="console-graph-views__chip" data-view="hubs" data-lens="hubs" title="The highest-degree nodes - the ones everything touches. CLI: magus query kind:target">What's a hub?</button>
             <button type="button" class="console-graph-views__chip" data-view="orphans" data-lens="orphans" title="Nodes with no edges - potentially dead code or unconfigured targets. CLI: magus query -kind:project">What's dead?</button>
+            <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">What does my diff touch?</button>
           </div>
         </div>
         <!-- Phase 5: projection unfold button - shown when default projection is active. -->
@@ -200,6 +217,11 @@
         <button id="legend-toggle" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-expanded="false" aria-controls="graph-legend-panel">
           <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><line x1="11" y1="6" x2="20" y2="6"/><line x1="11" y1="18" x2="20" y2="18"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Legend</span></button>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
+        <!-- Bottom-left mode indicator (Decision 3): a persistent readout of the active
+             display mode, kept in sync by syncLayoutToggle - so a mode switched by a
+             question chip's auto-switch (askQuestion) stays visible even after the sidebar
+             control scrolls out of view. -->
+        <p id="graph-mode-indicator" class="console-graph-stage__mode" aria-live="polite">mode: Force</p>
         <!-- Load spinner: shown while boot fetches the demo graph.json (~1.4MB). main.ts toggles it
              around `await loadGraph()`; hidden by default (a cold visit shows the empty state instead). -->
         <div id="graph-loading" class="console-graph-loading" hidden>
