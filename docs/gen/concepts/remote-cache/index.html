@@ -84,11 +84,13 @@
     <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="remote-caching">Remote caching</h1>
-<p>magus's <a href="../../#build-model">build cache</a> is content-addressed: a target's
+<p>magus's <a href="../../#build-model">build cache</a> is content-addressed: a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s
 output is keyed by the SHA-256 of its inputs, so an unchanged target replays its
-previous output instead of rebuilding. That cache lives on disk (<code>.magus/</code> in the
-workspace root) and is <strong>local</strong> to one machine.</p>
-<p>A <strong>remote cache</strong> shares those artifacts across <strong>CI runners</strong>, machine to
+previous output instead of rebuilding. That <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> lives on disk (<code>.magus/</code> in the
+<a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root) and is <strong>local</strong> to one machine.</p>
+<aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-6">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
+
+<p>A <strong><a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a></strong> shares those artifacts across <strong><a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runners</strong>, machine to
 machine. When the local cache misses, magus asks the remote backend for the
 artifact; if found, it downloads and replays it instead of building. After a genuine
 build, magus uploads the result so the next machine gets a hit. A cold CI runner can
@@ -133,11 +135,11 @@ contract: three functions the remote-cache subsystem detects by name and invokes
 </table></figure>
 <p>(A fourth, <code>prune</code>, evicts artifacts by retention policy.) These are not
 operations a target composes; they are the contract the remote-cache subsystem
-calls. Everything backend-specific (auth, transport) stays in the spell, in pure
-Buzz. See <a href="../spells/">spells</a> and <a href="../engines/">engines</a>.</p>
+calls. Everything backend-specific (auth, transport) stays in the <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>, in pure
+<a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>. See <a href="../spells/">spells</a> and <a href="../engines/">engines</a>.</p>
 <h2 id="wiring-a-backend">Wiring a backend</h2>
-<p>Wiring has two parts: the magusfile binds the backend (a spell, i.e. code), and
-<code>magus.yaml</code> declares the trust set that secures it (<code>cache.remote.trusted_keys</code>, i.e.
+<p>Wiring has two parts: the <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> binds the backend (a spell, i.e. code), and
+<code>magus.yaml</code> declares the trust set that secures it (<code><a class="code-xref" href="../../reference/config/#cache" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_CACHE_REMOTE_TRUSTED_KEYS">cache.remote.trusted_keys</a></code>, i.e.
 data). The split is deliberate. A trust anchor is declarative config, not build
 logic, so it lives in YAML where it can't branch or compute itself. The spell
 <strong>self-gates</strong> via <code>enabled()</code>, so the backend is a no-op anywhere it isn't
@@ -155,7 +157,7 @@ cache:
 <p><code>magus.cache.remote(handle)</code> records the backend; magus resolves and drives it
 during a run. Bind <strong>one</strong> backend. A non-empty <code>cache.remote.trusted_keys</code> is
 <strong>required</strong> alongside it: a remote backend with no trust set fails at load (see
-the next section). Generate a key with <code>magus config cache key generate</code>.</p>
+the next section). Generate a key with <code><a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> cache key generate</code>.</p>
 <h3 id="github-actions-cache">GitHub Actions Cache</h3>
 <p>The <code>actions</code> spell (<a href="../../spells/github/actions/spell.buzz"><code>spells/github/actions</code></a>)
 stores artifacts in the GitHub Actions Cache, over its v2 (Twirp) API.</p>
@@ -181,7 +183,7 @@ automatically inside a GitHub Actions job:</p>
 <tr>
 <td><code>ACTIONS_RESULTS_URL</code></td>
 <td>the runner</td>
-<td>cache service (v2) base URL</td>
+<td>cache <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> (v2) base URL</td>
 </tr>
 <tr>
 <td><code>ACTIONS_RUNTIME_TOKEN</code></td>
@@ -271,7 +273,7 @@ so a shared cache can never come up unverified. <em>Upgrading an existing remote
 cache:</em> add <code>cache.remote.trusted_keys</code> to <code>magus.yaml</code> and set <code>MAGUS_CACHE_SIGNING_KEY</code>
 on trusted pushes, or the run fails at load with a message saying so.</p>
 <h3 id="insecure-mode-no-signing">Insecure mode (no signing)</h3>
-<p><code>cache.remote.insecure: true</code> (env <code>MAGUS_CACHE_REMOTE_INSECURE</code>) is the explicit
+<p><code><a class="code-xref" href="../../reference/config/#cache" data-kind="config" data-def="bool, flag --cache-remote-insecure, env MAGUS_CACHE_REMOTE_INSECURE">cache.remote.insecure</a>: true</code> (env <code>MAGUS_CACHE_REMOTE_INSECURE</code>) is the explicit
 opt-out: the backend runs with <strong>no trust set and no signing key</strong>, importing and
 producing <strong>unsigned</strong> artifacts. This removes the supply-chain protection above
 (any writer the store trusts can inject files into a consumer's build), so it is
@@ -309,7 +311,7 @@ remote <code>put_artifact</code> upload:</p>
 <pre><code class="language-yaml"># in your CI workflow env
 MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
 </code></pre>
-<p><code>MAGUS_CACHE_IMMUTABLE=true</code> (config key <code>cache.immutable</code>) opens the cache
+<p><code>MAGUS_CACHE_IMMUTABLE=true</code> (config key <code><a class="code-xref" href="../../reference/config/#cache" data-kind="config" data-def="bool, flag --cache-immutable, env MAGUS_CACHE_IMMUTABLE">cache.immutable</a></code>) opens the cache
 read-only; the default is mutable. See the
 <a href="../../#shared-cache-trust-signing-and-read-only-refs">supply-chain note in the README</a>.</p>
 <h2 id="observability">Observability</h2>
@@ -317,8 +319,8 @@ read-only; the default is mutable. See the
 <code>get</code>/<code>put</code> automatically, with no backend changes, since the wrapping
 happens around the <code>RemoteBackend</code> interface, not inside the spell. You get the
 <code>magus.cache.remote.{hits,misses,errors,duration,io.size}</code> metrics (hit-rate,
-latency, bytes moved) plus a <code>magus.cache.remote.get</code>/<code>.put</code> span per operation,
-so a slow fetch or upload shows up inline in the build trace. Remote metrics live
+<a class="glossary-term" href="../../glossary/#latency" data-def="How long an operation takes. magus records latency as OpenTelemetry histograms per family - target execution, cache op, pool wait, and graph query - and reports each as a count, sum, and percentiles.">latency</a>, bytes moved) plus a <code>magus.cache.remote.get</code>/<code>.put</code> <a class="glossary-term" href="../../glossary/#span" data-def="OpenTelemetry's name for one unit of work under a trace - a target execution, whose sub-operations are child spans. An output reference points at a span's captured output.">span</a> per <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a>,
+so a slow fetch or upload shows up inline in the build <a class="glossary-term" href="../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a>. Remote metrics live
 under their own <code>.remote</code> prefix and are never folded into the local
 <code>magus.cache.*</code> counters. See the
 <a href="../telemetry/#remote-cache">telemetry reference</a> for the full instrument list.</p>
@@ -346,14 +348,14 @@ signing for free. It only moves the opaque bytes.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../concepts/spells/cosign/"><span class="related-card-title">cosign spell</span><span class="related-card-desc">Cosign spell: keyless sign, attest, and verify for container artifacts.</span></a>
-        <a class="related-card" href="../../concepts/targets/ci/"><span class="related-card-title">CI</span><span class="related-card-desc">Compose a ci target from your magusfile, wire the flow with magus.needs, and lock down shared-cache writes with Ed25519 trusted keys.</span></a>
         <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
+        <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22remote-cache%22">remote-cache</a><a class="tag" href="../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../search/?q=tag%3A%22s3%22">s3</a><a class="tag" href="../../search/?q=tag%3A%22github-actions%22">github-actions</a><a class="tag" href="../../search/?q=tag%3A%22artifacts%22">artifacts</a><a class="tag" href="../../search/?q=tag%3A%22signing%22">signing</a><a class="tag" href="../../search/?q=tag%3A%22supply-chain%22">supply-chain</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -494,6 +496,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -604,6 +611,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

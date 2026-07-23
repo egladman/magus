@@ -84,16 +84,16 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="magus-status">magus-status</h1>
-<p>Inspect concurrency pool and configuration</p>
+<p>Inspect <a class="glossary-term" href="../../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> <a class="glossary-term" href="../../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> and configuration</p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> status [flags]</p>
 <h2 id="description">Description</h2>
-<p>Show the magus configuration that affects this process - telemetry, cache
+<p>Show the magus configuration that affects this process - telemetry, <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>
 settings - and, when a parent magus process is running, the live state of its
-concurrency pool (current slot usage, queued waiters).</p>
+concurrency pool (current <a class="glossary-term" href="../../../glossary/#slot" data-def="One unit of the pool's capacity. A target acquires the slots it needs to run (most take one) and releases them when it finishes; the pool tracks capacity (total slots), running (acquired), and queued (blocked).">slot</a> usage, <a class="glossary-term" href="../../../glossary/#queued" data-def="A target that wants a slot while the pool is full; it blocks first-in-first-out until a slot frees. The dashboard colors a sample with queued > 0 accordingly.">queued</a> waiters).</p>
 <p>When --watch is non-zero, status polls and reprints at that interval. On a
 TTY the screen is cleared between reprints; piped output appends each
-snapshot on its own line for log capture.</p>
+<a class="glossary-term" href="../../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a> on its own line for log capture.</p>
 <h2 id="options">Options</h2>
 <dl>
 <dt><strong>--compact</strong></dt>
@@ -101,10 +101,10 @@ snapshot on its own line for log capture.</p>
 <dt><strong>--probe</strong> <em>string</em></dt>
 <dd>Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)</dd>
 <dt><strong>--socket</strong> <em>string</em></dt>
-<dd>Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir</dd>
+<dd>Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_<a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">DAEMON</a>_SOCKET or scan sock dir</dd>
 <dt><strong>--watch</strong> <em>duration</em></dt>
 <dd>Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot</dd>
-<dt><strong>--workspace</strong> <em>string</em></dt>
+<dt><strong>--<a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a></strong> <em>string</em></dt>
 <dd>Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)</dd>
 </dl>
 <h2 id="examples">Examples</h2>
@@ -134,14 +134,14 @@ snapshot on its own line for log capture.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
-        <a class="related-card" href="../../../reference/codes/race/"><span class="related-card-title">race diagnostics</span><span class="related-card-desc">Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-server/"><span class="related-card-title">magus server</span><span class="related-card-desc">Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.</span></a>
-        <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../../../concepts/concurrency/"><span class="related-card-title">Concurrency</span><span class="related-card-desc">How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, and the cross-process workspace lock that keeps two separate magus invocations from clobbering each other&#39;s outputs and cache.</span></a>
+        <a class="related-card" href="../../../guides/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+status%22">magus status</a><a class="tag" href="../../../search/?q=tag%3A%22status%22">status</a><a class="tag" href="../../../search/?q=tag%3A%22concurrency%22">concurrency</a><a class="tag" href="../../../search/?q=tag%3A%22pool%22">pool</a><a class="tag" href="../../../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../../../search/?q=tag%3A%22monitoring%22">monitoring</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -282,6 +282,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -392,6 +397,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

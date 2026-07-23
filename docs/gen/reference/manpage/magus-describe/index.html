@@ -89,9 +89,9 @@
 <p><strong>magus</strong> describe &lt;noun&gt; [&lt;name&gt;] [flags]</p>
 <h2 id="description">Description</h2>
 <p>Define a magus concept and list every entity of that kind. The noun is
-one of spell, charm, target, project, workspace, module, or mcp-tool; singular
+one of <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>, <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>, <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a>, or mcp-tool; singular
 and plural are interchangeable. Pass a name after the noun to detail a single
-entity instead of listing them all. (The knowledge graph lives under magus
+entity instead of listing them all. (The <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a> lives under magus
 graph: export for the merged graph, stats for its shape.)</p>
 <p>The charm noun is the inverse of a target ref: &quot;describe charm rw&quot; lists every
 target that declares the rw charm and the argv edit each one makes, the transpose
@@ -106,7 +106,7 @@ step at a time.</p>
 <dt><strong>--evaluated</strong></dt>
 <dd>For projects: print workspace-rooted globs, effective claims, and per-target policies</dd>
 <dt><strong>--explain</strong></dt>
-<dd>For a target ref with charms: show the per-charm argv trace (base then each charm)</dd>
+<dd>For a target ref with charms: show the per-charm argv <a class="glossary-term" href="../../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a> (base then each charm)</dd>
 </dl>
 <h2 id="examples">Examples</h2>
 <p><em>List every target</em></p>
@@ -137,15 +137,15 @@ step at a time.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../reference/manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-init/"><span class="related-card-title">magus init</span><span class="related-card-desc">Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-ls/"><span class="related-card-title">magus ls</span><span class="related-card-desc">List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-run/"><span class="related-card-title">magus run</span><span class="related-card-desc">Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-graph/"><span class="related-card-title">magus graph</span><span class="related-card-desc">Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph&#39;s shape (god nodes, orphans, doc coverage).</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+describe%22">magus describe</a><a class="tag" href="../../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../../search/?q=tag%3A%22charm%22">charm</a><a class="tag" href="../../../search/?q=tag%3A%22target%22">target</a><a class="tag" href="../../../search/?q=tag%3A%22project%22">project</a><a class="tag" href="../../../search/?q=tag%3A%22workspace%22">workspace</a><a class="tag" href="../../../search/?q=tag%3A%22introspection%22">introspection</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -286,6 +286,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -396,6 +401,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

@@ -101,8 +101,8 @@ back, or move the newer store aside and re-mint connector tokens with the older
 version.</p>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><code>magus version</code>: the running magus's version.</li>
-<li><code>magus config mcp connector</code>: manage connector tokens.</li>
+<li><code><a class="code-xref" href="../../../manpage/magus-version/" data-kind="command" data-def="Print the magus version string, git commit hash, and build date for the currently installed binary.">magus version</a></code>: the running magus's version.</li>
+<li><code><a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> mcp connector</code>: manage connector tokens.</li>
 </ul>
     </article>
     </div>
@@ -123,7 +123,7 @@ version.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS9003%22">MGS9003</a><a class="tag" href="../../../../search/?q=tag%3A%22auth%22">auth</a><a class="tag" href="../../../../search/?q=tag%3A%22connector%22">connector</a><a class="tag" href="../../../../search/?q=tag%3A%22store%22">store</a><a class="tag" href="../../../../search/?q=tag%3A%22version%22">version</a><a class="tag" href="../../../../search/?q=tag%3A%22upgrade%22">upgrade</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -264,6 +264,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -374,6 +379,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

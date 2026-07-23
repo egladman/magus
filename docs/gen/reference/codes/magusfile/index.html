@@ -92,15 +92,15 @@
     <div>
     <article>
 <h1 id="magusfile-authoring-diagnostics">Magusfile authoring diagnostics</h1>
-<p>Codes in the <code>MGS1xxx</code> range flag problems with how a workspace's magusfile(s)
+<p>Codes in the <code>MGS1xxx</code> range flag problems with how a <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>'s <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>(s)
 are authored: targets that must exist but don't, declarations that won't
 resolve, and similar. Magus raises them at run time (as a typed
-<code>DiagnosticError</code>) and, where applicable, as a <code>magus doctor</code> health check so the
-gap is visible before CI runs.</p>
+<code>DiagnosticError</code>) and, where applicable, as a <code><a class="code-xref" href="../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> <a class="glossary-term" href="../../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> check so the
+gap is visible before <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runs.</p>
 <h2 id="codes">Codes</h2>
 <ul>
-<li><a href="MGS1001/">MGS1001</a>: no <code>ci</code> target defined in the selected project(s).</li>
-<li><a href="MGS1002/">MGS1002</a>: a spell import is shadowed by a same-named spell higher in the tree.</li>
+<li><a href="MGS1001/">MGS1001</a>: no <code>ci</code> <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> defined in the selected <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>(s).</li>
+<li><a href="MGS1002/">MGS1002</a>: a <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> import is shadowed by a same-named spell higher in the tree.</li>
 </ul>
     </article>
     </div>
@@ -108,7 +108,7 @@ gap is visible before CI runs.</p>
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../search/?q=tag%3A%22diagnostics%22">diagnostics</a><a class="tag" href="../../../search/?q=tag%3A%22error+codes%22">error codes</a><a class="tag" href="../../../search/?q=tag%3A%22MGS1xxx%22">MGS1xxx</a><a class="tag" href="../../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../../search/?q=tag%3A%22doctor%22">doctor</a><a class="tag" href="../../../search/?q=tag%3A%22authoring%22">authoring</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -249,6 +249,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -359,6 +364,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

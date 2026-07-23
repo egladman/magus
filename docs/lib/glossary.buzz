@@ -1,0 +1,589 @@
+// lib/glossary.buzz - render-time glossary auto-linker + slug. Links the first
+// linkable occurrence of each glossary term on a page to its glossary anchor, so the
+// domain vocabulary self-cross-links without hand-maintained links. Pure string
+// transforms, golden-gated like the content transforms in lib/html.buzz. The linked
+// anchor carries data-glossary=<anchor> so the client popover (glossary-popover.ts) can
+// show the term's definition and where else it is referenced.
+namespace glossary;
+
+import "assert";
+import "lib/text" as _;
+
+// GlossaryTerm is one glossary entry: the display term, its goldmark anchor slug, and
+// the one-line definition (used by the popover index). Terms are matched longest-first
+// so a multi-word term wins over a substring term (e.g. "pool mode" over "pool").
+export object GlossaryTerm {
+    term: str = "",
+    anchor: str = "",
+    def: str = "",
+}
+
+// GlossaryLinkResult carries the linked HTML plus the anchors that were linked on this
+// page, so the caller can record "term X is referenced on page Y" for the popover index.
+export object GlossaryLinkResult {
+    html: str = "",
+    linked: [str] = mut [<str>],
+}
+
+// glossarySlug mirrors goldmark's heading-id slug: lowercase, spaces AND underscores to
+// hyphens, drop any char that is not a-z, 0-9, or hyphen. "Output reference" ->
+// "output-reference"; "MAGUS.md" -> "magusmd"; "write_file" -> "write-file".
+export fun glossarySlug(term: str) > str {
+    final low = term.lower();
+    var buf = "";
+    var i = 0;
+    while (i < low.len()) {
+        final b = low.byte(i);
+        if (b == 32 or b == 95) {   // space or underscore -> hyphen
+            buf = buf + "-";
+        } else if ((b >= 97 and b <= 122) or (b >= 48 and b <= 57) or b == 45) {
+            buf = buf + low.sub(i, len: 1);
+        }
+        i = i + 1;
+    }
+    return buf;
+}
+
+fun isWordByte(b: int) > bool {
+    return (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122);
+}
+
+// lowerByte lowercases an ASCII byte (A-Z -> a-z), leaving others untouched. Used to compare
+// bytes case-insensitively WITHOUT allocating a lowercased substring per position - the hot
+// path here runs over every character of every page for every term, so allocation-free
+// byte comparison is what keeps a full-site render fast.
+fun lowerByte(b: int) > int {
+    if (b >= 65 and b <= 90) { return b + 32; }
+    return b;
+}
+
+// scanPastByte returns the index just past the next `target` byte at/after `from`, or the
+// end of html. An allocation-free replacement for html.sub(from).indexOf(<char>) + 1.
+fun scanPastByte(html: str, start: int, target: int) > int {
+    final total = html.len();
+    var j = start;
+    while (j < total) {
+        if (html.byte(j) == target) { return j + 1; }
+        j = j + 1;
+    }
+    return total;
+}
+
+// scanPast returns the index just past the next occurrence of s at/after `from`, or the end
+// of html. Allocation-free replacement for html.sub(from).indexOf(s) + s.len().
+fun scanPast(html: str, start: int, s: str) > int {
+    final total = html.len();
+    final m = s.len();
+    var j = start;
+    while (j + m <= total) {
+        var k = 0;
+        var eq = true;
+        while (k < m) {
+            if (html.byte(j + k) != s.byte(k)) { eq = false; break; }
+            k = k + 1;
+        }
+        if (eq) { return j + m; }
+        j = j + 1;
+    }
+    return total;
+}
+
+// tagNameLower reads the tag name at a '<' (skipping a leading '/'), lowercased.
+fun tagNameLower(html: str, at: int) > str {
+    var j = at + 1;
+    if (j < html.len() and html.byte(j) == 47) { j = j + 1; }   // '/'
+    var name = "";
+    while (j < html.len()) {
+        final b = html.byte(j);
+        if ((b >= 65 and b <= 90) or (b >= 97 and b <= 122) or (b >= 48 and b <= 57)) {
+            name = name + html.sub(j, len: 1);
+            j = j + 1;
+        } else {
+            break;
+        }
+    }
+    return name.lower();
+}
+
+// isSkipContainer is true for tags whose text content must never be auto-linked: pre
+// (fenced code always), a (no nested links), and headings. Inline <code> is skipped only
+// in prose mode (glossary terms) - code entities (MGSxxxx codes, commands, mod\method)
+// DELIBERATELY link inside inline code, which is where those references appear.
+fun isSkipContainer(name: str, skipInlineCode: bool) > bool {
+    if (name == "code") { return skipInlineCode; }
+    return name == "pre" or name == "a"
+        or name == "h1" or name == "h2" or name == "h3"
+        or name == "h4" or name == "h5" or name == "h6";
+}
+
+// linkIns is one pending link insertion: wrap html[pos : pos+len) in `open` ... </a>.
+object linkIns {
+    pos: int = 0,
+    len: int = 0,
+    open: str = "",
+}
+
+// spaces returns n space bytes, built by doubling (O(log n) concats) so masking a large
+// protected region stays cheap.
+fun spaces(n: int) > str {
+    if (n <= 0) { return ""; }
+    var s = " ";
+    while (s.len() < n) { s = s + s; }
+    return s.sub(0, len: n);
+}
+
+// maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced
+// by a space and the linkable text lowercased. Non-linkable = inside a tag (< .. >), an HTML
+// comment, or a skip container (pre/a/headings, plus inline code when skipInlineCode). A
+// native indexOf then lands only in linkable text, so the ONE interpreted pass over the page
+// is this build - not one scan per term, which is the difference between a fast render and a
+// ten-minute one. Emits per-run pieces (not per char) so allocation stays O(tags), not O(N).
+fun maskLinkable(html: str, skipInlineCode: bool) > str {
+    final total = html.len();
+    final pieces: [str] = mut [<str>];
+    var i = 0;
+    while (i < total) {
+        if (html.byte(i) == 60) {   // '<': mask this tag / comment / skip container
+            var end = 0;
+            if (i + 3 < total and html.byte(i + 1) == 33 and html.byte(i + 2) == 45 and html.byte(i + 3) == 45) {
+                end = scanPast(html, i + 4, "-->");
+            } else {
+                final isClose = (i + 1 < total and html.byte(i + 1) == 47);
+                final name = tagNameLower(html, i);
+                if (isClose == false and isSkipContainer(name, skipInlineCode)) {
+                    end = scanPast(html, i + 1, "</" + name + ">");
+                } else {
+                    end = scanPastByte(html, i + 1, 62);
+                }
+            }
+            pieces.append(spaces(end - i));
+            i = end;
+        } else {   // a run of linkable text up to the next '<'
+            final start = i;
+            i = i + 1;
+            while (i < total and html.byte(i) != 60) { i = i + 1; }
+            pieces.append(html.sub(start, len: i - start).lower());
+        }
+    }
+    return pieces.join("");
+}
+
+// acceptable reports whether needle matched at pos (length n) in searchable is a whole word
+// (non-word boundaries) that does not overlap an already-placed insertion.
+fun acceptable(searchable: str, pos: int, n: int, ins: [linkIns]) > bool {
+    if (pos > 0 and isWordByte(searchable.byte(pos - 1))) { return false; }
+    final after = pos + n;
+    if (after < searchable.len() and isWordByte(searchable.byte(after))) { return false; }
+    foreach (x in ins) {
+        if (pos < x.pos + x.len and after > x.pos) { return false; }
+    }
+    return true;
+}
+
+// applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are
+// parallel and longest-first) in open ... </a>, matching natively on the masked `searchable`
+// and inserting into html right-to-left so earlier positions never shift. Returns the linked
+// html and the keys linked (longest-first). If masking changed the length (a non-ASCII case
+// fold, not expected in these docs), it returns html unlinked rather than misplace a link.
+fun applyLinks(html: str, searchable: str, tokens: [str], opens: [str], keys: [str]) > GlossaryLinkResult {
+    if (searchable.len() != html.len()) {
+        return GlossaryLinkResult{ html = html, linked = mut [<str>] };
+    }
+    final ins: [linkIns] = mut [<linkIns>];
+    final linked: [str] = mut [<str>];
+    var t = 0;
+    while (t < tokens.len()) {
+        final needle = tokens[t];
+        final n = needle.len();
+        var pos = searchable.indexOf(needle);
+        while (pos != null and acceptable(searchable, pos!, n, ins) == false) {
+            final rel = searchable.sub(pos! + 1).indexOf(needle);
+            if (rel == null) { pos = null; } else { pos = pos! + 1 + rel!; }
+        }
+        if (pos != null) {
+            ins.append(linkIns{ pos = pos!, len = n, open = opens[t] });
+            linked.append(keys[t]);
+        }
+        t = t + 1;
+    }
+    final ordered = ins.sort(fun (a: linkIns, b: linkIns) > bool { return a.pos > b.pos; });
+    var result = html;
+    foreach (x in ordered) {
+        result = result.sub(0, len: x.pos) + x.open + result.sub(x.pos, len: x.len) + "</a>" + result.sub(x.pos + x.len);
+    }
+    return GlossaryLinkResult{ html = result, linked = linked };
+}
+
+// linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be
+// ordered longest-first so multi-word terms win over their substrings) to
+// relToGlossary + "#" + anchor, and records which anchors were linked. A page carrying
+// the "<!-- magus-noglossary -->" opt-out marker is returned verbatim (marker stripped)
+// with nothing linked.
+export fun linkGlossaryTerms(html: str, terms: [GlossaryTerm], relToGlossary: str) > GlossaryLinkResult {
+    final marker = "<!-- magus-noglossary -->";
+    if (html.indexOf(marker) != null) {
+        var stripped = html;
+        while (stripped.indexOf(marker) != null) { stripped = stripped.replace(marker, with: ""); }
+        return GlossaryLinkResult{ html = stripped, linked = mut [<str>] };
+    }
+    // The definition is baked into each link (data-def) so the client popover/reveal needs no
+    // fetch; the href is the static glossary entry, which carries the "referenced on" backlinks.
+    final tokens: [str] = mut [<str>];
+    final opens: [str] = mut [<str>];
+    final keys: [str] = mut [<str>];
+    foreach (t in terms) {
+        tokens.append(t.term.lower());
+        opens.append("<a class=\"glossary-term\" href=\"" + relToGlossary + "#" + t.anchor
+            + "\" data-def=\"" + escapeAttr(t.def) + "\">");
+        keys.append(t.anchor);
+    }
+    return applyLinks(html, maskLinkable(html, true), tokens, opens, keys);   // prose: mask inline code
+}
+
+// Entity is one linkable domain reference recognized in INLINE code (and prose), never in
+// fenced blocks: a diagnostic code (MGSxxxx), a CLI command ("magus run"), a module method
+// ("fs\glob"), or a config key. url is gen-root-relative; anchor is an optional in-page
+// target; summary feeds the shared popover; kind labels it. Matched longest-first so a
+// specific reference wins over a shorter prefix.
+export object Entity {
+    token: str = "",
+    kind: str = "",
+    url: str = "",
+    anchor: str = "",
+    summary: str = "",
+}
+
+// sortEntitiesLongestFirst orders entities by descending match length, so linkCodeEntities
+// tries "magus affected ci" before "magus affected". Selection sort; the catalogs are small.
+export fun sortEntitiesLongestFirst(entities: [Entity]) > [Entity] {
+    var work: [Entity] = mut [<Entity>];
+    foreach (e in entities) { work.append(e); }
+    final res: [Entity] = mut [<Entity>];
+    while (work.len() > 0) {
+        var best = 0;
+        var b = 1;
+        while (b < work.len()) {
+            if (work[b].token.len() > work[best].token.len()) { best = b; }
+            b = b + 1;
+        }
+        res.append(work[best]);
+        final nw: [Entity] = mut [<Entity>];
+        var c = 0;
+        while (c < work.len()) {
+            if (c != best) { nw.append(work[c]); }
+            c = c + 1;
+        }
+        work = nw;
+    }
+    return res;
+}
+
+// linkCodeEntities links the first occurrence of each entity's match string (inside inline
+// code or prose, never a fenced <pre> block) to its reference page, baking the summary into
+// data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities
+// MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).
+export fun linkCodeEntities(html: str, entities: [Entity], pageDir: str) > str {
+    final tokens: [str] = mut [<str>];
+    final opens: [str] = mut [<str>];
+    final keys: [str] = mut [<str>];
+    foreach (e in entities) {
+        var href = relativePath(pageDir, e.url);
+        if (e.anchor != "") { href = href + "#" + e.anchor; }
+        tokens.append(e.token.lower());
+        opens.append("<a class=\"code-xref\" href=\"" + href + "\" data-kind=\"" + e.kind
+            + "\" data-def=\"" + escapeAttr(e.summary) + "\">");
+        keys.append(e.token);
+    }
+    // code mode: inline <code> stays linkable (that is where these references appear); only
+    // fenced <pre> blocks, tags, and links are masked out.
+    return applyLinks(html, maskLinkable(html, false), tokens, opens, keys).html;
+}
+
+// ConfigKey is a parsed config.md table row: the dotted key and a popover summary built
+// from its type + flag + env-var columns. ok is false for header/separator/non-dotted rows.
+export object ConfigKey {
+    key: str = "",
+    summary: str = "",
+    ok: bool = false,
+}
+
+// cleanConfigCell trims a markdown table cell and drops its backticks (env-var underscores
+// are kept - they are part of the name, not markdown).
+fun cleanConfigCell(c: str) > str {
+    var s = c.trim();
+    while (s.indexOf("`") != null) { s = s.replace("`", with: ""); }
+    return s.trim();
+}
+
+// parseConfigRow parses a config.md table row "| `key` | `ENV` | `--flag` | type |" into a
+// dotted config key and a one-line popover summary (its type, how to set it via flag/env).
+// Returns ok=false for the header, the separator, and any non-dotted key.
+export fun parseConfigRow(line: str) > ConfigKey {
+    if (line.startsWith("| ") == false) { return ConfigKey{}; }
+    final cells: [str] = mut [<str>];
+    foreach (c in line.split("|")) { cells.append(cleanConfigCell(c)); }
+    if (cells.len() < 5) { return ConfigKey{}; }
+    final key = cells[1];
+    if (key.indexOf(".") == null) { return ConfigKey{}; }
+    var summary = cells[4];   // type
+    final flag = cells[3];
+    if (flag != "" and flag.indexOf("env only") == null and flag.indexOf("---") == null) {
+        summary = summary + ", flag " + flag;
+    }
+    final env = cells[2];
+    if (env != "" and env.indexOf("---") == null) {
+        summary = summary + ", env " + env;
+    }
+    return ConfigKey{ key = key, summary = summary, ok = true };
+}
+
+test "parseConfigRow extracts the key and a type/flag/env summary" {
+    final r = parseConfigRow("| `cache.dir` | `MAGUS_CACHE_DIR` | `--cache-dir` | string |");
+    assert\equal(r.ok, true, "dotted key row parsed");
+    assert\equal(r.key, "cache.dir", "key");
+    assert\equal(r.summary, "string, flag --cache-dir, env MAGUS_CACHE_DIR", "type + flag + env");
+}
+
+test "parseConfigRow skips header, separator, and bare section keys" {
+    assert\equal(parseConfigRow("| Config key | Environment variable | Flag | Type |").ok, false, "header skipped");
+    assert\equal(parseConfigRow("|------------|----------------------|------|------|").ok, false, "separator skipped");
+    assert\equal(parseConfigRow("| `cache` | x | y | z |").ok, false, "non-dotted key skipped");
+}
+
+// injectBacklinks appends each term's "referenced on" fragment (byAnchor[anchor], a
+// caller-built HTML string) at the END of that term's section on the glossary page - just
+// before the next <h3>/<h2> heading, so it sits below the definition. The glossary is
+// rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure
+// string surgery; anchors with no fragment are left untouched.
+export fun injectBacklinks(html: str, byAnchor: {str: str}) > str {
+    final marker = "<h3 id=\"";
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(marker);
+    while (idx != null) {
+        buf = buf + rest.sub(0, len: idx! + marker.len());
+        rest = rest.sub(idx! + marker.len());
+        final q = rest.indexOf("\"");
+        if (q == null) { return buf + rest; }
+        final anchor = rest.sub(0, len: q!);
+        var cut = rest.len();
+        final nextH3 = rest.indexOf("<h3 id=\"");
+        if (nextH3 != null and nextH3! < cut) { cut = nextH3!; }
+        final nextH2 = rest.indexOf("<h2");
+        if (nextH2 != null and nextH2! < cut) { cut = nextH2!; }
+        final frag = byAnchor[anchor];
+        if (frag != null) {
+            buf = buf + rest.sub(0, len: cut) + frag!;
+        } else {
+            buf = buf + rest.sub(0, len: cut);
+        }
+        rest = rest.sub(cut);
+        idx = rest.indexOf(marker);
+    }
+    return buf + rest;
+}
+
+// unwrapLinks turns each markdown "[text](url)" into just "text".
+fun unwrapLinks(s: str) > str {
+    var buf = "";
+    var rest = s;
+    var open = rest.indexOf("[");
+    while (open != null) {
+        buf = buf + rest.sub(0, len: open!);
+        rest = rest.sub(open! + 1);
+        final bracket = rest.indexOf("](");
+        if (bracket == null) { buf = buf + "["; break; }
+        final label = rest.sub(0, len: bracket!);
+        rest = rest.sub(bracket! + 2);
+        final paren = rest.indexOf(")");
+        if (paren == null) { buf = buf + label; break; }
+        buf = buf + label;
+        rest = rest.sub(paren! + 1);
+        open = rest.indexOf("[");
+    }
+    return buf + rest;
+}
+
+// cleanDef reduces a glossary definition paragraph to a short plain-text blurb for the
+// popover: cut the trailing "See ..." cross-link, unwrap [text](url) to text, drop
+// backticks.
+fun cleanDef(s: str) > str {
+    var d = s;
+    final seeIdx = d.indexOf(" See [");
+    if (seeIdx != null) { d = d.sub(0, len: seeIdx!); }
+    d = unwrapLinks(d);
+    while (d.indexOf("`") != null) { d = d.replace("`", with: ""); }
+    return d.trim();
+}
+
+// sortLongestFirst returns terms ordered by descending term length, so linkGlossaryTerms
+// matches a multi-word term before any of its substring terms. Selection sort; the term
+// set is small (a few dozen).
+fun sortLongestFirst(terms: [GlossaryTerm]) > [GlossaryTerm] {
+    var work: [GlossaryTerm] = mut [<GlossaryTerm>];
+    foreach (t in terms) { work.append(t); }
+    final res: [GlossaryTerm] = mut [<GlossaryTerm>];
+    while (work.len() > 0) {
+        var best = 0;
+        var b = 1;
+        while (b < work.len()) {
+            if (work[b].term.len() > work[best].term.len()) { best = b; }
+            b = b + 1;
+        }
+        res.append(work[best]);
+        final nw: [GlossaryTerm] = mut [<GlossaryTerm>];
+        var c = 0;
+        while (c < work.len()) {
+            if (c != best) { nw.append(work[c]); }
+            c = c + 1;
+        }
+        work = nw;
+    }
+    return res;
+}
+
+// parseGlossary reads the glossary Markdown into terms: each "### Term" H3 becomes a
+// GlossaryTerm with its goldmark anchor and a one-line definition (the paragraph under
+// the heading, cross-link and markup stripped). Returned longest-first for matching.
+export fun parseGlossary(md: str) > [GlossaryTerm] {
+    final lines = md.split("\n");
+    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    var i = 0;
+    while (i < lines.len()) {
+        if (lines[i].startsWith("### ")) {
+            final term = lines[i].sub(4).trim();
+            var j = i + 1;
+            while (j < lines.len() and lines[j].trim() == "") { j = j + 1; }
+            var def = "";
+            while (j < lines.len() and lines[j].trim() != "" and lines[j].startsWith("#") == false) {
+                if (def == "") { def = lines[j].trim(); } else { def = def + " " + lines[j].trim(); }
+                j = j + 1;
+            }
+            terms.append(GlossaryTerm{ term = term, anchor = glossarySlug(term), def = cleanDef(def) });
+        }
+        i = i + 1;
+    }
+    return sortLongestFirst(terms);
+}
+
+test "parseGlossary reads H3 terms, anchors, and a cleaned definition" {
+    final md = "# Glossary\n\n## Core\n\n### Workspace\n\nThe root dir; the unit magus operates over. See [workspace.md](concepts/workspace.md).\n\n### Pool mode\n\nA `pool` scheduling policy.\n";
+    final terms = parseGlossary(md);
+    assert\equal(terms.len(), 2, "two terms parsed");
+    // longest-first: "Pool mode" (9) before "Workspace" (9)? equal len -> stable-ish; assert set membership instead
+    var sawWorkspace = false;
+    var sawPool = false;
+    foreach (t in terms) {
+        if (t.anchor == "workspace") {
+            sawWorkspace = true;
+            assert\equal(t.def, "The root dir; the unit magus operates over.", "See-link trimmed");
+        }
+        if (t.anchor == "pool-mode") {
+            sawPool = true;
+            assert\equal(t.def, "A pool scheduling policy.", "backticks dropped");
+        }
+    }
+    assert\equal(sawWorkspace and sawPool, true, "both terms present with anchors");
+}
+
+test "sortLongestFirst orders by descending term length" {
+    final ts: [GlossaryTerm] = mut [<GlossaryTerm>];
+    ts.append(GlossaryTerm{ term = "pool", anchor = "pool" });
+    ts.append(GlossaryTerm{ term = "remote cache", anchor = "remote-cache" });
+    ts.append(GlossaryTerm{ term = "cache", anchor = "cache" });
+    final sorted = sortLongestFirst(ts);
+    assert\equal(sorted[0].term, "remote cache", "longest first");
+    assert\equal(sorted[2].term, "pool", "shortest last");
+}
+
+test "linkCodeEntities links inside inline code but never in a fenced block" {
+    final ents: [Entity] = mut [<Entity>];
+    ents.append(Entity{ token = "MGS1002", kind = "code", url = "reference/codes/graph/MGS1002/", summary = "duplicate spell" });
+    final html = "<p>see <code>MGS1002</code> here</p><pre><code>MGS1002 again</code></pre>";
+    assert\equal(linkCodeEntities(html, ents, "concepts/cache"),
+        "<p>see <code><a class=\"code-xref\" href=\"../../reference/codes/graph/MGS1002/\" data-kind=\"code\" data-def=\"duplicate spell\">MGS1002</a></code> here</p><pre><code>MGS1002 again</code></pre>",
+        "inline code linked, fenced block untouched, first occurrence only");
+}
+
+test "linkCodeEntities builds an anchored href for a method ref" {
+    final ents: [Entity] = mut [<Entity>];
+    ents.append(Entity{ token = "fs\\glob", kind = "method", url = "reference/buzz/fs/", anchor = "glob", summary = "list files" });
+    assert\equal(linkCodeEntities("<p><code>fs\\glob</code></p>", ents, "concepts/cache"),
+        "<p><code><a class=\"code-xref\" href=\"../../reference/buzz/fs/#glob\" data-kind=\"method\" data-def=\"list files\">fs\\glob</a></code></p>",
+        "method ref links to its anchor");
+}
+
+test "sortEntitiesLongestFirst orders by descending match length" {
+    final es: [Entity] = mut [<Entity>];
+    es.append(Entity{ token = "magus affected" });
+    es.append(Entity{ token = "magus affected ci" });
+    final sorted = sortEntitiesLongestFirst(es);
+    assert\equal(sorted[0].token, "magus affected ci", "longest match first");
+}
+
+test "injectBacklinks appends a fragment at the end of each term section" {
+    final byAnchor = mut {<str: str>};
+    byAnchor["cache"] = "<div>refs-cache</div>";
+    byAnchor["target"] = "<div>refs-target</div>";
+    final html = "<h2>A</h2>\n<h3 id=\"cache\">Cache</h3>\n<p>def a</p>\n<h3 id=\"target\">Target</h3>\n<p>def b</p>\n";
+    assert\equal(injectBacklinks(html, byAnchor),
+        "<h2>A</h2>\n<h3 id=\"cache\">Cache</h3>\n<p>def a</p>\n<div>refs-cache</div><h3 id=\"target\">Target</h3>\n<p>def b</p>\n<div>refs-target</div>",
+        "each fragment inserted before the next heading / at the end");
+}
+
+test "injectBacklinks leaves a term with no fragment untouched" {
+    final byAnchor = mut {<str: str>};
+    final html = "<h3 id=\"cache\">Cache</h3>\n<p>def</p>\n";
+    assert\equal(injectBacklinks(html, byAnchor), html, "no fragment, unchanged");
+}
+
+test "glossarySlug mirrors goldmark heading ids" {
+    assert\equal(glossarySlug("Output reference"), "output-reference", "space to hyphen");
+    assert\equal(glossarySlug("MAGUS.md"), "magusmd", "punctuation dropped");
+    assert\equal(glossarySlug("One-off"), "one-off", "existing hyphen kept");
+    assert\equal(glossarySlug("CI"), "ci", "lowercased");
+}
+
+test "linkGlossaryTerms links the first linkable occurrence and records it" {
+    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    terms.append(GlossaryTerm{ term = "cache", anchor = "cache", def = "Content store." });
+    final r = linkGlossaryTerms("<p>The cache is warm; the cache stays.</p>", terms, "../glossary/");
+    assert\equal(r.html,
+        "<p>The <a class=\"glossary-term\" href=\"../glossary/#cache\" data-def=\"Content store.\">cache</a> is warm; the cache stays.</p>",
+        "first occurrence only, definition baked in");
+    assert\equal(r.linked.len(), 1, "one anchor recorded");
+    assert\equal(r.linked[0], "cache", "recorded the cache anchor");
+}
+
+test "linkGlossaryTerms skips code, headings, and existing links" {
+    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    terms.append(GlossaryTerm{ term = "cache", anchor = "cache" });
+    final html = "<h2>cache</h2><pre>cache</pre><code>cache</code><a href=\"x\">cache</a>";
+    final r = linkGlossaryTerms(html, terms, "g/");
+    assert\equal(r.html, html, "every protected region untouched");
+    assert\equal(r.linked.len(), 0, "nothing recorded");
+}
+
+test "linkGlossaryTerms does not match a substring (plural) as a whole word" {
+    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    terms.append(GlossaryTerm{ term = "target", anchor = "target" });
+    assert\equal(linkGlossaryTerms("<p>targets everywhere</p>", terms, "g/").html,
+        "<p>targets everywhere</p>", "plural not linked");
+}
+
+test "linkGlossaryTerms prefers the longer term" {
+    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    terms.append(GlossaryTerm{ term = "pool mode", anchor = "pool-mode" });
+    terms.append(GlossaryTerm{ term = "pool", anchor = "pool" });
+    assert\equal(linkGlossaryTerms("<p>pool mode here</p>", terms, "g/").html,
+        "<p><a class=\"glossary-term\" href=\"g/#pool-mode\" data-def=\"\">pool mode</a> here</p>",
+        "longer term wins");
+}
+
+test "linkGlossaryTerms honors the noglossary opt-out" {
+    final terms: [GlossaryTerm] = mut [<GlossaryTerm>];
+    terms.append(GlossaryTerm{ term = "cache", anchor = "cache" });
+    final r = linkGlossaryTerms("<!-- magus-noglossary --><p>cache</p>", terms, "g/");
+    assert\equal(r.html, "<p>cache</p>", "marker stripped, nothing linked");
+    assert\equal(r.linked.len(), 0, "nothing recorded");
+}

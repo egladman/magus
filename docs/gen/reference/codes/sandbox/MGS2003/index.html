@@ -96,15 +96,15 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="mgs2003-env-vars-stripped-from-child-process">MGS2003: env vars stripped from child process</h1>
-<p>The sandbox replaced a child process's inherited environment with a
+<p>The <a class="glossary-term" href="../../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> replaced a child process's inherited environment with a
 curated allowlist and one or more variables were dropped.</p>
 <pre><code class="language-text">[MGS2003] env vars stripped from child process by sandbox
   cmd=go stripped_count=14
 </code></pre>
 <h2 id="why">Why</h2>
 <p>The default allowlist is intentionally small: <code>HOME</code>, <code>PATH</code>, <code>USER</code>,
-locale and terminal vars, plus the <code>MAGUS_*</code> daemon coordination vars.
-Everything else is stripped so that a compromised spell cannot
+locale and terminal vars, plus the <code>MAGUS_*</code> <a class="glossary-term" href="../../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> coordination vars.
+Everything else is stripped so that a compromised <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> cannot
 exfiltrate <code>AWS_ACCESS_KEY_ID</code>, <code>GITHUB_TOKEN</code>, <code>VAULT_TOKEN</code>,
 <code>OP_SESSION_*</code>, <code>NPM_TOKEN</code>, <code>ANTHROPIC_API_KEY</code>, and similar.</p>
 <p>The warning is informational, not an error. The build may have
@@ -140,14 +140,14 @@ re-broadcasting it through the environment.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
-        <a class="related-card" href="../../../../reference/codes/sandbox/MGS2001/"><span class="related-card-title">MGS2001: path read denied</span><span class="related-card-desc">Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.</span></a>
-        <a class="related-card" href="../../../../reference/codes/sandbox/MGS2002/"><span class="related-card-title">MGS2002: path write denied</span><span class="related-card-desc">Fires when a spell tries to write to a file outside the workspace and outside the sandbox allowlist, blocking persistence and tampering attacks.</span></a>
-        <a class="related-card" href="../../../../reference/codes/sandbox/MGS2006/"><span class="related-card-title">MGS2006: PATH-shim manager stripped</span><span class="related-card-desc">Fires when a subprocess likely failed because the sandbox stripped env vars that a PATH-shim runtime manager such as mise, asdf, or direnv needs.</span></a>
+        <a class="related-card" href="../../../../concepts/sandbox/"><span class="related-card-title">Sandbox model</span><span class="related-card-desc">The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.</span></a>
+        <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../../reference/config/"><span class="related-card-title">magus.yaml configuration</span><span class="related-card-desc">Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS2003%22">MGS2003</a><a class="tag" href="../../../../search/?q=tag%3A%22sandbox%22">sandbox</a><a class="tag" href="../../../../search/?q=tag%3A%22security%22">security</a><a class="tag" href="../../../../search/?q=tag%3A%22environment%22">environment</a><a class="tag" href="../../../../search/?q=tag%3A%22passthrough%22">passthrough</a><a class="tag" href="../../../../search/?q=tag%3A%22secrets%22">secrets</a><a class="tag" href="../../../../search/?q=tag%3A%22subprocess%22">subprocess</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -288,6 +288,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -398,6 +403,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

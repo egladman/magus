@@ -1102,6 +1102,8 @@ article li {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
 }
 .tour-head h3 {
   margin: 0;
@@ -1146,8 +1148,8 @@ article li {
 .tour-foot .open-in-playground {
   align-self: flex-start; /* shrink to its content in the flex-column footer */
 }
-/* Inline concept cross-link tucked at the end of the description, so the warm
-   "Open in Playground" call to action below stands on its own. Quiet by default
+/* Inline concept cross-link tucked at the end of the description, so the
+   "Open in Playground" link below stands on its own. Quiet by default
    (muted, underlined so it still reads as a link), firming up on hover; nowrap so
    the trailing arrow never wraps to a line by itself. */
 .tour-learn {
@@ -1783,8 +1785,16 @@ a code {
    Open-in-Playground link, plus an output panel that attaches below the block on
    first run. The bar lives inside .code-block so it reads as part of the block,
    not a floating row; squaring the code's bottom corners fuses the two. */
+.code-block.runnable {
+  /* Violet spine down the input block, rhyming with the output panel's violet left
+     border below, so a runnable example and its result read as one input/output pair. */
+  border-left: 3px solid var(--accent-violet);
+}
 .code-block.runnable > pre {
   margin-bottom: 0;
+  /* Square the left corners so the pre sits flush against the violet spine; keep the
+     top-right rounded. */
+  border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -1795,7 +1805,7 @@ a code {
   padding: 0.4rem 0.6rem;
   background: var(--pico-card-sectioning-background-color);
   border-top: 1px solid var(--pico-muted-border-color);
-  border-bottom-left-radius: var(--pico-border-radius);
+  border-bottom-left-radius: 0; /* square to meet the violet spine on the left */
   border-bottom-right-radius: var(--pico-border-radius);
 }
 .run-example {
@@ -1806,47 +1816,43 @@ a code {
   align-items: center;
   gap: 0.4rem;
   margin: 0;
-  /* The primary action in the whole panel: a warm filled button so "run this"
-     pops against the blue links and the muted chrome. One accent, one job. */
-  background-color: var(--accent-warm);
-  border-color: var(--accent-warm);
-  color: var(--accent-warm-inverse);
+  /* The one primary action in the panel: a filled button in the site primary blue,
+     prominent by weight against the quiet chrome. Open-in-Playground beside it is a
+     plain link, so the block reads with a single clear "do it" control. */
+  background-color: var(--pico-primary);
+  border-color: var(--pico-primary);
+  color: var(--pico-primary-inverse);
 }
 .run-example:hover,
 .run-example:focus-visible {
-  background-color: var(--accent-warm-hover);
-  border-color: var(--accent-warm-hover);
+  background-color: var(--pico-primary-hover);
+  border-color: var(--pico-primary-hover);
 }
 .run-example[disabled] { opacity: 0.6; }
-/* Open in Playground - the shared orange call to action, used both on the tour
-   cards (standalone) and beside the Run button on runnable code blocks. Outline
-   orange by default so where it sits next to the filled Run button it reads as the
-   secondary action; it fills in on hover/focus. One component, one look, either place.
-   Pins :visited to the same warm color: it's a styled control, not prose, so it must
-   not pick up the article's blue/purple visited-link convention (theme.css) once clicked. */
+/* Open in Playground - the shared "leave to the full editor" affordance, used both on
+   the tour cards (standalone) and beside the Run button on runnable code blocks. A
+   plain quiet link, not a button: the site primary blue with the north-east arrow, so
+   it reads as "opens elsewhere" and never competes with the one filled Run button.
+   Pins :visited to the same blue so this styled control does not drift to the article's
+   purple visited-link convention (theme.css) once clicked. */
 .open-in-playground,
 .open-in-playground:visited {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.65rem;
+  gap: 0.3rem;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.5;
-  border: 1px solid var(--accent-warm);
-  border-radius: var(--pico-border-radius);
-  background-color: transparent;
-  color: var(--accent-warm);
+  color: var(--pico-primary);
   text-decoration: none;
 }
 .open-in-playground:hover,
 .open-in-playground:focus-visible,
 .open-in-playground:visited:hover,
 .open-in-playground:visited:focus-visible {
-  background-color: var(--accent-warm);
-  border-color: var(--accent-warm);
-  color: var(--accent-warm-inverse);
-  text-decoration: none;
+  color: var(--pico-primary-hover);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 /* The label arrow is a separate glyph (rarr for same-site concept links, the
    north-east arrow for this opens-elsewhere control - see .xref-arrow below);
@@ -1869,6 +1875,237 @@ a code {
 }
 .runnable-output.failed {
   border-left-color: var(--pico-del-color, #b3261e);
+}
+
+/* Glossary term: the render pass auto-links the first occurrence of each glossary term
+   (lib/glossary.buzz). Styled as a Medium-style highlight - a muted highlighter-yellow
+   marker swipe (--glossary-highlight) with a subtle marker underline - so an indexed term
+   reads as a distinct kind of thing, NOT another underlined navigation link, and without
+   spending more of the violet accent (which already carries the reveal seam and the
+   runnable I/O spine). The tint deepens on hover/focus and while its reveal is open. The
+   underline is an inset box-shadow (no layout shift); box-decoration-break keeps the
+   highlight intact across line wraps. glossary-terms.js enhances it into a hover popover
+   and a click reveal; with no JS it is still a plain link to the glossary entry. */
+.glossary-term,
+.glossary-term:visited {
+  color: inherit;
+  text-decoration: none;
+  background-color: var(--glossary-highlight);
+  box-shadow: inset 0 -0.07em 0 var(--glossary-highlight-rule);
+  border-radius: 2px;
+  padding: 0 0.12em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.glossary-term:hover,
+.glossary-term:focus-visible,
+.glossary-term.is-open {
+  background-color: var(--glossary-highlight-strong);
+}
+
+/* Code cross-reference: an inline-code identifier (a diagnostic code, command, mod\method,
+   or config key) linked to its reference page. It lives INSIDE a <code>, so it keeps the
+   mono/code look; a quiet dotted underline marks it as a link without a loud color, firming
+   to solid in the primary color on hover/focus and while its reveal is open. Same
+   hover-popover / click-reveal as glossary terms (glossary-terms.js). */
+.code-xref,
+.code-xref:visited {
+  color: inherit;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--pico-muted-color);
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+.code-xref:hover,
+.code-xref:focus-visible,
+.code-xref.is-open {
+  color: var(--pico-primary);
+  text-decoration-style: solid;
+  text-decoration-color: var(--pico-primary);
+}
+/* Term surfaces (glossary-terms.js): the hover popover and the click split-reveal share
+   one content style (.gloss-*). The popover is a floating card positioned in JS; the
+   reveal is an in-flow panel that parts the page open below the term's block. */
+.glossary-popover {
+  position: absolute;
+  z-index: 60;
+  width: max-content;
+  max-width: 22rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.glossary-popover[hidden] { display: none; }
+
+/* Split reveal: an in-place trench that parts open below the clicked term's block. The
+   inner panel is recessed (sectioning background + inset top/bottom shadows) so it reads
+   as a layer pried open beneath the page; the block above casts a soft parted edge. The
+   height 0 -> content transition (settled to auto in JS) is the "part" animation. */
+.glossary-reveal {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.42s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.glossary-reveal-inner {
+  position: relative;
+  margin: 0.5rem 0;
+  padding: 1rem 1.1rem;
+  /* Square: a trench pried open in the page, not a rounded card - the sharp edges sell
+     the "parting" over a floating panel. */
+  border-radius: 0;
+  background: var(--pico-card-sectioning-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  box-shadow:
+    inset 0 14px 14px -14px rgba(0, 0, 0, 0.45),
+    inset 0 -14px 14px -14px rgba(0, 0, 0, 0.45);
+  font-size: 0.9rem;
+}
+.glossary-reveal-inner > * {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.3s ease 0.12s, transform 0.3s ease 0.12s;
+}
+.glossary-reveal.is-open .glossary-reveal-inner > * {
+  opacity: 1;
+  transform: none;
+}
+/* The block just above the seam casts a soft edge so the page reads as split there. */
+.glossary-parted {
+  box-shadow: 0 10px 12px -12px rgba(0, 0, 0, 0.5);
+}
+.glossary-seam {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  width: 44px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: var(--accent-violet);
+  opacity: 0.7;
+}
+.glossary-reveal-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  /* A comfortable touch target (>=44px) so the split is easy to close on mobile, where
+     tapping the term again also toggles it shut. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--pico-muted-color);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.glossary-reveal-close:hover,
+.glossary-reveal-close:focus-visible {
+  color: var(--pico-color);
+}
+
+/* Shared content, both surfaces: an optional kind label (code entities), the baked-in
+   definition, and a jump to the reference page. */
+.gloss-kind {
+  margin: 0 0 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pico-primary);
+}
+.gloss-def {
+  margin: 0 0 0.5rem;
+  color: var(--pico-muted-color);
+}
+.glossary-reveal-inner .gloss-def {
+  color: var(--pico-color);
+}
+.gloss-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  font-size: 0.8rem;
+}
+
+/* Demo callout: injected after a concept page's intro when a tour step demonstrates it
+   (page.buzz injectDemoCallout). A distinct component in its own teal accent - not a link,
+   not a button - signalling "there is a runnable demonstration of this concept." Structured
+   like an admonition (icon + left accent) but with the demo identity. */
+.demo-callout {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin: 1.25rem 0;
+  padding: 0.8rem 0.9rem;
+  background: var(--demo-accent-bg);
+  border: 1px solid color-mix(in srgb, var(--demo-accent) 28%, var(--pico-muted-border-color));
+  border-left: 3px solid var(--demo-accent);
+  border-radius: var(--pico-border-radius);
+}
+.demo-callout-icon {
+  flex: none;
+  margin-top: 0.1rem;
+  color: var(--demo-accent);
+}
+.demo-callout-body {
+  flex: 1;
+}
+.demo-callout-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--demo-accent-strong);
+}
+.demo-callout-desc {
+  margin: 0.15rem 0 0.5rem;
+  font-size: 0.86rem;
+  color: var(--pico-color);
+}
+.demo-callout-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--demo-accent);
+  text-decoration: none;
+}
+.demo-callout-link:hover,
+.demo-callout-link:focus-visible {
+  color: var(--demo-accent-strong);
+  text-decoration: underline;
+}
+
+/* Glossary page: each term's "referenced on" backlinks, injected under its definition by
+   the render pass (injectBacklinks) from the whole-corpus cross-reference set. A quiet,
+   compact line so it annotates the entry without competing with the definition. */
+.glossary-backlinks {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--pico-muted-color);
+  line-height: 1.6;
+}
+.glossary-backlinks-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.35rem;
 }
 
 /* Charm JSON-Patch disclosure (spell docs). The default Pico <details> reads as

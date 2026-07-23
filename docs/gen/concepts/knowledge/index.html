@@ -84,15 +84,15 @@
     <small class="reading-time" title="Estimated reading time">19 min read</small>
     <article>
 <h1 id="knowledge-graph">Knowledge graph</h1>
-<p>The knowledge graph is a deterministic, cache-backed graph of the magus domain.
-Every node and edge is EXTRACTED or rubric-INFERRED from workspace sources - no
+<p>The <a class="glossary-term" href="../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a> is a deterministic, <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>-backed graph of the magus domain.
+Every node and edge is EXTRACTED or rubric-INFERRED from <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> sources - no
 LLM pass, ever - so it is safe to rebuild implicitly and byte-for-byte
 reproducible from the same inputs. It is assembled from machinery magus already
-owns: the verified project dependency DAG, static magusfile extraction, the
-spell/module/diagnostic registries, markdown docs, and buzz source parsing.</p>
+owns: the verified <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> dependency DAG, static <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> extraction, the
+<a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>/<a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a>/diagnostic registries, markdown docs, and <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> source parsing.</p>
 <p>It exists so agents and humans can ask &quot;what is this, what touches it, how do
 these relate&quot; and get a precise answer instead of grepping. Agents reach it over
-MCP; humans reach it through three verbs and the <code>magus graph</code> home.</p>
+MCP; humans reach it through three verbs and the <code><a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a></code> home.</p>
 <h2 id="the-two-concept-model">The two-concept model</h2>
 <ul>
 <li><strong>query / explain / path READ the graph</strong> - daily retrieval.</li>
@@ -118,7 +118,7 @@ kind with its count, the query that lists it, and the highest-degree anchor
 nodes, so an agent knows what exists before running anything.</p>
 <h2 id="query-grammar">Query grammar</h2>
 <p><code>magus query</code> takes free-text terms (AND) plus field filters and negation. Terms
-are scored with the same leaf-anchored fuzzy match that powers <code>magus where</code>.</p>
+are scored with the same leaf-anchored fuzzy match that powers <code><a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">magus where</a></code>.</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -157,7 +157,7 @@ are scored with the same leaf-anchored fuzzy match that powers <code>magus where
 </tr>
 <tr>
 <td><code>&quot;exact phrase&quot;</code></td>
-<td>a quoted span stays one term</td>
+<td>a quoted <a class="glossary-term" href="../../glossary/#span" data-def="OpenTelemetry's name for one unit of work under a trace - a target execution, whose sub-operations are child spans. An output reference points at a span's captured output.">span</a> stays one term</td>
 </tr>
 </tbody>
 </table></figure>
@@ -167,7 +167,7 @@ cannot pull in the whole graph.</p>
 <h2 id="questions-you-can-ask">Questions you can ask</h2>
 <p>Recipes for the graph as a lens on the workspace. Rebuild first with <code>magus graph build</code> if you want it fresh; combine field filters freely.</p>
 <p><strong>What programs does the workspace actually run?</strong> magus owns the task layer, so it
-knows the concrete tool behind every operation - not just the source.</p>
+knows the concrete tool behind every <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a> - not just the source.</p>
 <pre><code class="language-sh">magus query &quot;kind:tool&quot;                    # the workspace's toolchain (go, buf, docker, ...)
 magus explain &quot;tool:go&quot;                    # every op and spell that runs go
 magus explain &quot;op:go:go-test&quot;              # an op's base argv (the `argv` attr) and its tool
@@ -176,7 +176,7 @@ magus path &quot;target:.:test&quot; &quot;tool:go&quot;       # a target reache
 <p>Each spell op carries the base argv it runs on an <code>argv</code> attr (rendered with empty
 charms) and <code>use</code>s the <code>tool:&lt;program&gt;</code> node for its argv[0] - the program, its own kind
 because it is an entity, not an operation. The op's spell <code>use</code>s the tool too, so
-<code>explain tool:go</code> lists every op and spell that runs go; a target reaches the tool
+<code>explain tool:go</code> lists every op and spell that runs go; a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> reaches the tool
 through its existing <code>target --uses--&gt; op</code> edge. (There is no per-target command node:
 its argv was always identical to the op's, so the op carries the model.)</p>
 <p>So <code>explain tool:go</code> lists every op that runs go:</p>
@@ -243,7 +243,7 @@ profile - a pure code-graph tool cannot answer this.</p>
 <pre><code class="language-sh">magus explain &quot;symbol:&lt;id&gt;&quot;      # a function's coverage ratio + test_refs (test files that reference it)
 magus query &quot;kind:file&quot; -o json  # each file node's attrs.coverage (covered/total statements)
 </code></pre>
-<p>After <code>magus run coverage</code> (or <code>ci</code>), a <code>coverage</code> attr (with <code>covered_stmts</code> /
+<p>After <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> coverage</code> (or <code>ci</code>), a <code>coverage</code> attr (with <code>covered_stmts</code> /
 <code>total_stmts</code>) folds onto file and symbol nodes, and <code>test_refs</code> counts the test files
 that reference a symbol. Sort symbols by <code>coverage</code> ascending for &quot;what is untested&quot;,
 or cross it with <code>insight hotspots</code> to rank high-churn, low-coverage code first.</p>
@@ -313,18 +313,18 @@ version.</p>
 from a parseable source) or <code>inferred</code> (a rubric score, from a fuzzy match).</p>
 <p>Relations: <code>depends_on</code>, <code>contains</code>, <code>uses</code>, <code>calls</code>, <code>imports</code>, <code>references</code>,
 <code>documents</code>, <code>rationale_for</code>, <code>owns</code>.</p>
-<p>Ownership is extracted from a committed <code>CODEOWNERS</code> file (checked at the repo
+<p><a class="glossary-term" href="../../glossary/#ownership" data-def="An insight lens: author concentration - the primary author and their share, the distinct-author count (the bus factor), and abandonment.">Ownership</a> is extracted from a committed <code>CODEOWNERS</code> file (checked at the repo
 root, <code>.github/</code>, or <code>docs/</code>): each owner becomes an <code>owner</code> node with an <code>owns</code>
 edge to every project and buzz file it covers, under GitHub's last-match-wins rule,
 with <code>CODEOWNERS:&lt;line&gt;</code> provenance. Only declared ownership is taken - blame-derived
-ownership is insight's job, not a graph edge - so &quot;who owns the blast radius of this
+ownership is <a class="glossary-term" href="../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a>'s job, not a graph edge - so &quot;who owns the blast radius of this
 change&quot; is one path query.</p>
 <p>Both node-link JSON and GraphML carry a <code>schema_version</code>; external consumers and
 agent skills should check it, since a bump is a changelog event.</p>
 <h2 id="file-layout">File layout</h2>
 <p>The graph lives under the cache dir at <code>.magus/knowledge/</code>, cache-owned and NOT
 committed by default - the build is cheap and deterministic, so committing
-derived data buys nothing (<code>export</code> exists for teams that want a snapshot).</p>
+derived data buys nothing (<code>export</code> exists for teams that want a <a class="glossary-term" href="../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a>).</p>
 <pre><code class="language-text">.magus/knowledge/
   manifest.json        per-shard fingerprints and counts (the routing index)
   shards/&lt;name&gt;.json   one file per shard; SHARDS ARE AUTHORITATIVE
@@ -337,12 +337,12 @@ run history (<code>@runtime</code>, below). A query loads the store, fingerprint
 shard, and rebuilds only the stale ones - the &quot;cache that gets hit first&quot;. First
 run pays a full build; steady state is a fingerprint check. <code>--refresh</code> forces a
 full rebuild.</p>
-<p>Two optional knobs bound and share the store. <code>knowledge.max_size_mb</code> soft-caps
+<p>Two optional knobs bound and share the store. <code><a class="code-xref" href="../../reference/config/#knowledge" data-kind="config" data-def="int, flag --knowledge-max-size-mb, env MAGUS_KNOWLEDGE_MAX_SIZE_MB">knowledge.max_size_mb</a></code> soft-caps
 the shard directory: over the cap, least-recently-used shard files are evicted
 (their manifest entries stay, so an evicted shard is restored from the remote
 cache or rebuilt on the next query; 0, the default, is unlimited). When a remote
 build cache is configured, deterministic shards ride it - pushed on build,
-restored by fingerprint - so teammates and CI can reuse them. The <code>@runtime</code> shard
+restored by fingerprint - so teammates and <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> can reuse them. The <code>@runtime</code> shard
 is never pushed: it is local run history, not shareable derived data.</p>
 <h2 id="runtime-enrichment">Runtime enrichment</h2>
 <p>Beyond the static graph, magus records which diagnostics (<code>MGSxxxx</code> codes) each
@@ -376,12 +376,12 @@ index the same way you run any target:</p>
 source tree: magus hands the indexer the destination through a <code>MAGUS_SYMBOL_INDEX</code>
 environment variable it injects for the <code>scip</code> op, and reads that same path back at
 query time. The next graph query folds the symbols in.</p>
-<p><strong>The daemon keeps it fresh for you.</strong> While the daemon runs, background auto-indexing
+<p><strong>The <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> keeps it fresh for you.</strong> While the daemon runs, background auto-indexing
 re-runs each symbol-capable project's <code>scip</code> op when its sources change, so symbols stay
 current with no manual step. It is deliberately unobtrusive: a burst of edits coalesces
 into one run (a quiet window), a project re-indexes at most once per interval, a run
 starts only when nothing else is running, and it cancels itself the moment your own work
-needs a slot. Each run goes through the normal path, so it shows up as an ordinary
+needs a <a class="glossary-term" href="../../glossary/#slot" data-def="One unit of the pool's capacity. A target acquires the slots it needs to run (most take one) and releases them when it finishes; the pool tracks capacity (total slots), running (acquired), and queued (blocked).">slot</a>. Each run goes through the normal path, so it shows up as an ordinary
 journaled job, not hidden work. It is on by default in the daemon; a one-shot CLI never
 auto-indexes. Tune or disable it under <code>knowledge.symbol_indexing</code> (<code>disabled</code>,
 <code>quiet_seconds</code>, <code>min_interval_seconds</code>). If an indexer is not installed the background
@@ -431,7 +431,7 @@ file node: <code>vcs_last_commit</code> (short SHA of the most recent commit tou
 <code>vcs_last_modified</code> (its date), <code>vcs_last_author</code> (who last touched it), and
 <code>vcs_commits</code> (commits touching the file within the window). It also mints an <code>author</code>
 node per contributor with an <code>authored</code> edge to each file they touched in the window -
-who edits what, so an agent can ask <code>explain author:Ada</code> or trace ownership. These edges
+who edits what, so an agent can ask <code>explain author:Ada</code> or <a class="glossary-term" href="../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a> ownership. These edges
 are uncapped: <code>max_commits</code> already bounds the scan, so a dominant maintainer legitimately
 having many is a fact to teach, not a smell. Set <code>authorship: false</code> to keep only the
 per-file <code>vcs_*</code> attrs and drop the author layer.</p>
@@ -450,7 +450,7 @@ file in a graph tool - files are the interface.</p>
 magus graph export -o graphml &gt; graph.graphml  # GraphML (Gephi, yEd, ...)
 </code></pre>
 <p>For a specific neighborhood rather than the whole graph, <code>--select</code> reuses the
-query engine, and the layout formats become available (they are unreadable on the
+query <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>, and the layout formats become available (they are unreadable on the
 full graph, so they require a scope):</p>
 <pre><code class="language-sh">magus graph export --select &quot;kind:spell go&quot; -o mermaid
 magus graph export --select &quot;project:pkg/foo&quot; --budget 80 -o dot
@@ -515,7 +515,7 @@ between pages is rejected rather than returning an incoherent slice.</p>
 an agent HOW to use magus (the repo's <code>MAGUS.md</code> says WHAT is in the workspace):
 the knowledge-graph verbs, target-first execution, generated-file triage, and
 graph-grounded refactoring. The skills ship with the binary and teach only the
-tool surface, so they stay current with the magus version rather than the
+tool <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>, so they stay current with the <a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="Print the magus version string, git commit hash, and build date for the currently installed binary.">magus version</a> rather than the
 workspace. Platform is an explicit argument; only <code>claude</code> is supported today.
 Each installed file carries a version footer, and <code>magus graph verify</code> (with
 <code>--strict</code> for CI) reports when an installed skill has fallen behind the binary
@@ -559,15 +559,15 @@ humans working alongside them, and stops there.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/output-refs/"><span class="related-card-title">Target output references</span><span class="related-card-desc">Every target that runs gets a short reference id (ref1a2b3c) for its captured output. Retrieve any target&#39;s exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.</span></a>
-        <a class="related-card" href="../../reference/manpage/magus-graph/"><span class="related-card-title">magus graph</span><span class="related-card-desc">Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph&#39;s shape (god nodes, orphans, doc coverage).</span></a>
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../reference/codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../guides/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../search/?q=tag%3A%22schema%22">schema</a><a class="tag" href="../../search/?q=tag%3A%22node-link%22">node-link</a><a class="tag" href="../../search/?q=tag%3A%22graphml%22">graphml</a><a class="tag" href="../../search/?q=tag%3A%22mcp%22">mcp</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -708,6 +708,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -818,6 +823,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

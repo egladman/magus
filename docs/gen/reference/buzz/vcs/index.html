@@ -112,7 +112,7 @@
 <h1 id="vcs">vcs</h1>
 <p>Version-control queries for the current working tree.</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;vcs&quot;</code>) and call methods in <code>camelCase</code> (<code>vcs.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;vcs&quot;</code>) and call methods in <code>camelCase</code> (<code>vcs.someMethod</code>).</p>
 </blockquote>
 <h2 id="fields">Fields</h2>
 <figure class="table-scroll"><table>
@@ -180,7 +180,7 @@
 <p><strong>Signature:</strong> <code>vcs.commitDate() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L245" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="is-dirty">is_dirty</h3>
-<p>True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([&quot;MAGUS.md&quot;]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.</p>
+<p>True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>), e.g. is_dirty([&quot;<a class="glossary-term" href="../../../glossary/#magusmd" data-def="The committed routing index at a workspace root, regenerated from the knowledge graph: it lists every node and points at the exact query for a given question, so it is the entry point an agent reads first.">MAGUS.md</a>&quot;]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.</p>
 <p><strong>Signature:</strong> <code>vcs.isDirty([paths]) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L325" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -202,7 +202,7 @@
 </table></figure>
 <p><strong>Returns:</strong> bool</p>
 <h3 id="diagnose-drift">diagnose_drift</h3>
-<p>Diagnose why a generate gate's outputs drifted and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.</p>
+<p>Diagnose why a generate gate's outputs drifted and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s output globs and (optional) input globs, project-relative. code is <a class="code-xref" href="../../codes/race/MGS4006/" data-kind="code" data-def="A generated output drifted on regeneration because a declared input actually changed, so the committed output is stale and must be regenerated and committed.">MGS4006</a> when a declared input changed (real drift, commit it), <a class="code-xref" href="../../codes/race/MGS4005/" data-kind="code" data-def="A generated output differs on regeneration but its declared inputs are unchanged and a dev build produced it, so the difference is toolchain or version skew, not a source change.">MGS4005</a> when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or <a class="code-xref" href="../../codes/race/MGS4003/" data-kind="code" data-def="Fires under race replay when a project's declared outputs differ across two consecutive runs, indicating a reproducibility violation.">MGS4003</a> when a release build's identical inputs still differ (a reproducibility bug); drifted is false with empty fields when the outputs are clean. Composes is_dirty; does not replace it.</p>
 <p><strong>Signature:</strong> <code>vcs.diagnoseDrift(outputs, [inputs]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L280" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -278,7 +278,7 @@
 </table></figure>
 <p><strong>Returns:</strong> any</p>
 <h3 id="exe">exe</h3>
-<p>Absolute path to the active VCS executable (git/hg/jj), or &quot;&quot; if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).</p>
+<p>Absolute path to the active VCS executable (git/hg/jj), or &quot;&quot; if unresolved. Lets a <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).</p>
 <p><strong>Signature:</strong> <code>vcs.exe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L417" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="describe">describe</h3>
@@ -297,14 +297,14 @@
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../reference/buzz/archive/"><span class="related-card-title">archive module</span><span class="related-card-desc">Archive creation and extraction with automatic format detection.</span></a>
-        <a class="related-card" href="../../../reference/buzz/charm/"><span class="related-card-title">charm module</span><span class="related-card-desc">Constructors for charm values: RFC 6902 JSON Patches over a target&#39;s argv (see docs/charms.md).</span></a>
-        <a class="related-card" href="../../../reference/buzz/crypto/"><span class="related-card-title">crypto module</span><span class="related-card-desc">Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -445,6 +445,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -555,6 +560,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

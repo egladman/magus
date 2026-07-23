@@ -84,24 +84,24 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="magus-graph">magus-graph</h1>
-<p>The workspace's graphs as objects: deps, export, stats</p>
+<p>The <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>'s graphs as objects: deps, export, stats</p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> graph &lt;deps|export|stats|open&gt; [flags]</p>
 <h2 id="description">Description</h2>
 <p>The workspace's graphs as objects: emit, export, and measure them. The
-query, explain, and path verbs read the knowledge graph; magus graph is the
+query, explain, and path verbs read the <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a>; <a class="code-xref" href="./" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> is the
 home of the graph itself.</p>
 <p>Subcommands (the first argument):</p>
-<p>deps     The project dependency DAG. A trailing list of project paths roots
+<p>deps     The <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> dependency DAG. A trailing list of project paths roots
 the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
-same view scoped to a run is available as magus run &lt;target&gt; --graph
-and magus affected &lt;target&gt; --graph.
-export   The merged knowledge graph: the deterministic, cache-backed graph of
+same view scoped to a run is available as <a class="code-xref" href="../magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;<a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>&gt; --graph
+and magus <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> &lt;target&gt; --graph.
+export   The merged knowledge graph: the deterministic, <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>-backed graph of
 the magus domain (projects, targets, spells, ops, charms, modules,
-methods, diagnostics, docs, buzz sources). -o json emits the
+methods, diagnostics, docs, <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> sources). -o json emits the
 node-link form; -o graphml emits GraphML. External graph viewers
 (Gephi, yEd) read both directly. --select &quot;&lt;terms&gt;&quot; narrows the
-export to a query's neighborhood (same engine as magus query); -o dot
+export to a query's neighborhood (same <a class="glossary-term" href="../../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> as magus query); -o dot
 and -o mermaid render only with --select, since the full graph has too
 many nodes to lay out. The graph is cache-backed under
 &lt;cache&gt;/knowledge; only shards whose sources changed are rebuilt.
@@ -109,7 +109,7 @@ stats    The graph's shape: god nodes (the most connected spells, modules,
 targets - where structural risk concentrates), orphans (docs that
 document nothing, spells no target uses), and doc coverage (the
 share of diagnostics, spells, and modules with a doc). --kind scopes
-every section to one node kind. insight report embeds this section.
+every section to one node kind. <a class="glossary-term" href="../../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a> report embeds this section.
 open     Open the workspace's knowledge graph (or target dependency graph with
 --targets) in the hosted, interactive Graph Explorer. The graph is
 delivered privately: by default it rides in the URL fragment
@@ -119,7 +119,7 @@ hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
 <dl>
 <dt><strong>--depth</strong> <em>int</em></dt>
 <dd>Cap displayed depth (0 = unlimited)</dd>
-<dt><strong>--spell</strong> <em>string</em></dt>
+<dt><strong>--<a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a></strong> <em>string</em></dt>
 <dd>Only projects driven by this spell</dd>
 <dt><strong>--target</strong> <em>string</em></dt>
 <dd>Target whose duration history annotates nodes (default: build)</dd>
@@ -131,7 +131,7 @@ hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
 <dt><strong>--budget</strong> <em>int</em> (default: 50)</dt>
 <dd>Node budget for --select (how many nodes the neighborhood may collect)</dd>
 <dt><strong>--global</strong></dt>
-<dd>Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace</dd>
+<dd>Union the workspaces registered in config (<a class="code-xref" href="../../config/#knowledge" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_KNOWLEDGE_WORKSPACES">knowledge.workspaces</a>); node IDs are namespaced by workspace</dd>
 <dt><strong>--refresh</strong></dt>
 <dd>Force a full graph rebuild before exporting</dd>
 <dt><strong>--select</strong> <em>string</em></dt>
@@ -217,15 +217,15 @@ hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../reference/codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
         <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
-        <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../reference/codes/auth/MGS9004/"><span class="related-card-title">MGS9004: no auth token configured</span><span class="related-card-desc">A command asked for the operator (cli) token but none exists yet. The daemon mints one on its next start, or you can generate it explicitly.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+graph%22">magus graph</a><a class="tag" href="../../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../../search/?q=tag%3A%22dependency+graph%22">dependency graph</a><a class="tag" href="../../../search/?q=tag%3A%22export%22">export</a><a class="tag" href="../../../search/?q=tag%3A%22graphml%22">graphml</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -366,6 +366,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -476,6 +481,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="target-output-references">Target output references</h1>
-<p>A pretty <code>magus run</code> interleaves magus's own status lines with each target's real
+<p>A pretty <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code> interleaves magus's own status lines with each <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s real
 stdout and stderr. Two things are then hard: telling magus chrome from a target's
 output, and pulling out ONE target's full output - especially a failure - to share
 with a teammate, an agent, or another tool.</p>
@@ -115,7 +115,7 @@ searching the <a href="../knowledge/">knowledge graph</a>. It is a subcommand, n
 positional, so a free-text search term can never collide with a ref id - <code>magus query refactor</code> always searches the graph.</p>
 <ul>
 <li><code>magus query output ref1a2b3c</code> - print the exact output to stdout.</li>
-<li><code>magus query output ref1a2b3c -o json</code> - the descriptor (ref, project, target,
+<li><code>magus query output ref1a2b3c -o json</code> - the descriptor (ref, <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, target,
 status, duration) plus the output as one record; <code>-o yaml</code> too.</li>
 <li><code>magus query output ref1a2b3c --open</code> - open the output in the browser <a href="#the-log-viewer">log viewer</a>.</li>
 </ul>
@@ -172,7 +172,7 @@ dedicated tool, not a mode of <code>magus_query</code>, so a free-text graph que
 collides with a ref id.</p>
 <h2 id="how-refs-are-stored">How refs are stored</h2>
 <ul>
-<li>The ref is derived from the step's cache key plus a per-execution nonce, so it is
+<li>The ref is derived from the step's <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> key plus a per-execution nonce, so it is
 cache-key-flavored but unique to each run.</li>
 <li>Output is persisted verbatim as a per-ref blob under the cache directory
 (<code>outputs/</code>), alongside a small descriptor sidecar (project, target, status,
@@ -206,14 +206,14 @@ that is not a well-formed <code>ref&lt;hex&gt;</code> id, so it cannot name a st
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
-        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../concepts/telemetry/"><span class="related-card-title">Telemetry</span><span class="related-card-desc">Export magus metrics and traces to any OTLP collector you run, with head-based sampling, resource attributes, and full instrument reference.</span></a>
-        <a class="related-card" href="../../concepts/volatility/"><span class="related-card-title">Volatility</span><span class="related-card-desc">How magus tells a volatile failure from a real regression using per-target history and a Wilson-score volatility rate, when it auto-retries, and the tools for chasing down a genuine intermittent break.</span></a>
+        <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
+        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
+        <a class="related-card" href="../../reference/console/"><span class="related-card-title">Console API</span><span class="related-card-desc">Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22output%22">output</a><a class="tag" href="../../search/?q=tag%3A%22ref%22">ref</a><a class="tag" href="../../search/?q=tag%3A%22logs%22">logs</a><a class="tag" href="../../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../../search/?q=tag%3A%22failure%22">failure</a><a class="tag" href="../../search/?q=tag%3A%22debugging%22">debugging</a><a class="tag" href="../../search/?q=tag%3A%22clipboard%22">clipboard</a><a class="tag" href="../../search/?q=tag%3A%22mcp%22">mcp</a><a class="tag" href="../../search/?q=tag%3A%22agent%22">agent</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -354,6 +354,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -464,6 +469,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

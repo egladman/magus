@@ -114,15 +114,15 @@
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../reference/codes/auth/MGS9004/"><span class="related-card-title">MGS9004: no auth token configured</span><span class="related-card-desc">A command asked for the operator (cli) token but none exists yet. The daemon mints one on its next start, or you can generate it explicitly.</span></a>
-        <a class="related-card" href="../../../reference/codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
-        <a class="related-card" href="../../../reference/codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-describe/"><span class="related-card-title">magus describe</span><span class="related-card-desc">Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+completion%22">magus completion</a><a class="tag" href="../../../search/?q=tag%3A%22completion%22">completion</a><a class="tag" href="../../../search/?q=tag%3A%22bash%22">bash</a><a class="tag" href="../../../search/?q=tag%3A%22zsh%22">zsh</a><a class="tag" href="../../../search/?q=tag%3A%22fish%22">fish</a><a class="tag" href="../../../search/?q=tag%3A%22powershell%22">powershell</a><a class="tag" href="../../../search/?q=tag%3A%22shell%22">shell</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -263,6 +263,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -373,6 +378,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

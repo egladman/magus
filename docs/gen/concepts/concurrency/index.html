@@ -89,18 +89,18 @@ apart:</p>
 <ul>
 <li><strong>Within one run</strong> - the scheduler fans a single invocation out across projects
 and targets, ordered by the dependency graph. This is <a href="../dependencies/">dependencies</a>
-and per-target policy (<code>slots</code>, <code>exclusive</code>) doing their job.</li>
-<li><strong>Across separate runs</strong> - the <strong>workspace lock</strong> stops two <em>independent</em> <code>magus</code>
-processes from mutating the same project at the same time.</li>
+and per-<a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> policy (<code>slots</code>, <code>exclusive</code>) doing their job.</li>
+<li><strong>Across separate runs</strong> - the <strong><a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> lock</strong> stops two <em>independent</em> <code>magus</code>
+processes from mutating the same <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> at the same time.</li>
 </ul>
 <p>The first is about <em>ordering and fan-out</em>; the second is about <em>mutual exclusion</em>.
 They solve different problems and neither replaces the other.</p>
 <h2 id="within-one-run-the-scheduler">Within one run: the scheduler</h2>
-<p>A single <code>magus run</code>/<code>magus affected</code> invocation builds the dependency graph, then
+<p>A single <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code>/<code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> invocation builds the dependency graph, then
 runs targets concurrently where the graph allows. <code>magus.needs</code> edges order the work
 (<a href="../dependencies/">dependencies</a>); a target's <code>slots</code> and <code>exclusive</code> policy tune how
-much of it runs at once (<a href="../targets/">targets</a>). When a daemon is present, that
-fan-out draws from <strong>one shared concurrency pool</strong> across every client
+much of it runs at once (<a href="../targets/">targets</a>). When a <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> is present, that
+fan-out draws from <strong>one shared <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> <a class="glossary-term" href="../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a></strong> across every client
 (<a href="../../guides/daemon/">daemon</a>).</p>
 <p>All of this lives inside one process. It has no bearing on a <em>second</em> <code>magus</code> you
 start in another terminal - the two invocations have separate graphs and separate
@@ -121,7 +121,7 @@ finish, then proceeds automatically.</p>
 <ul>
 <li><strong>Per project, not per workspace.</strong> Runs on <em>different</em> projects proceed in
 parallel; only runs on the <em>same</em> project serialize. The lock is not directory- or
-target-scoped - a project's outputs and cache are the unit being protected, and
+target-scoped - a project's outputs and <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> are the unit being protected, and
 that is exactly a project.</li>
 <li><strong>Advisory.</strong> It serializes <em>magus</em> processes and nothing else. A raw <code>git clean</code>,
 an <code>rm</code>, or any other tool ignores it. The guarantee is &quot;no two magus invocations
@@ -142,10 +142,10 @@ fast instead.
 magus: lock on project web released; starting.
 </code></pre>
 <p>Set <code>MAGUS_NO_WAIT=1</code> to make a contended run <strong>fail fast</strong> instead of blocking -
-useful in CI or a script that would rather error than queue behind another process.</p>
+useful in <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> or a script that would rather error than queue behind another process.</p>
 <p>The wait happens at the very start of the invocation, before the concurrency pool is
-even set up, so a blocked run does not yet appear in <code>magus status</code> (there is nothing
-running to report - it is queued behind the lock). The stderr line above is how you
+even set up, so a blocked run does not yet appear in <code><a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a></code> (there is nothing
+running to report - it is <a class="glossary-term" href="../../glossary/#queued" data-def="A target that wants a slot while the pool is full; it blocks first-in-first-out until a slot frees. The dashboard colors a sample with queued > 0 accordingly.">queued</a> behind the lock). The stderr line above is how you
 know why.</p>
 <h2 id="relationship-to-the-daemon">Relationship to the daemon</h2>
 <p>The <a href="../../guides/daemon/">daemon</a> is the long-lived process that hosts the shared pool and
@@ -171,15 +171,15 @@ compose - the lock is the floor that holds even when nothing else is watching.</
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
-        <a class="related-card" href="../../concepts/dependencies/"><span class="related-card-title">Dependencies</span><span class="related-card-desc">The two dependency mechanisms in magus - magus.needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.</span></a>
-        <a class="related-card" href="../../concepts/services/"><span class="related-card-title">Services</span><span class="related-card-desc">How magus runs long-running service ops, shares one instance across dependents and invocations, and guards against the sprawl and misuse foot-guns.</span></a>
-        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
+        <a class="related-card" href="../../reference/manpage/magus-status/"><span class="related-card-title">magus status</span><span class="related-card-desc">Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22concurrency%22">concurrency</a><a class="tag" href="../../search/?q=tag%3A%22parallelism%22">parallelism</a><a class="tag" href="../../search/?q=tag%3A%22workspace-lock%22">workspace-lock</a><a class="tag" href="../../search/?q=tag%3A%22scheduler%22">scheduler</a><a class="tag" href="../../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../search/?q=tag%3A%22MAGUS_NO_WAIT%22">MAGUS_NO_WAIT</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -320,6 +320,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -430,6 +435,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

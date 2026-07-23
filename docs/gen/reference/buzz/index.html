@@ -110,12 +110,14 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="magusfile-module-reference">Magusfile Module Reference</h1>
-<p>These are the runtime utility modules. Import each under its bare name - <code>import &quot;fs&quot;</code>, then <code>fs.glob(...)</code> - with <code>camelCase</code> methods. magus layers these host methods onto Buzz's own stdlib, so a single <code>import &quot;fs&quot;</code> (or <code>os</code>, <code>crypto</code>) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (<code>*</code>) and a footnote on their page; either form works.</p>
+<p>These are the runtime utility modules. Import each under its bare name - <code>import &quot;fs&quot;</code>, then <code>fs.glob(...)</code> - with <code>camelCase</code> methods. magus layers these host methods onto <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s own stdlib, so a single <code>import &quot;fs&quot;</code> (or <code>os</code>, <code>crypto</code>) carries both surfaces, and the magus forms are <a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (<code>*</code>) and a footnote on their page; either form works.</p>
+<aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-14">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
+
 <h2 id="files-and-paths">Files and paths</h2>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
-<th>Module</th>
+<th><a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">Module</a></th>
 <th>Description</th>
 </tr>
 </thead>
@@ -282,7 +284,7 @@
 </tr>
 <tr>
 <td><a href="charm/"><code>charm</code></a></td>
-<td>Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).</td>
+<td>Constructors for <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> values: RFC 6902 JSON Patches over a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s argv (see docs/charms.md).</td>
 </tr>
 </tbody>
 </table></figure>
@@ -326,7 +328,7 @@
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../search/?q=tag%3A%22modules%22">modules</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../search/?q=tag%3A%22reference%22">reference</a><a class="tag" href="../../search/?q=tag%3A%22fs%22">fs</a><a class="tag" href="../../search/?q=tag%3A%22os%22">os</a><a class="tag" href="../../search/?q=tag%3A%22http%22">http</a><a class="tag" href="../../search/?q=tag%3A%22json%22">json</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -467,6 +469,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -577,6 +584,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

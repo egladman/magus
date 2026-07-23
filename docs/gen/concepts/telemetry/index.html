@@ -116,39 +116,39 @@ config in <a href="../../internal/config/config.go"><code>internal/config/config
 <tbody>
 <tr>
 <td><code>MAGUS_TELEMETRY_ENABLED</code></td>
-<td><code>telemetry.enabled</code></td>
+<td><code><a class="code-xref" href="../../reference/config/#telemetry" data-kind="config" data-def="bool, flag --telemetry-enabled, env MAGUS_TELEMETRY_ENABLED">telemetry.enabled</a></code></td>
 <td><code>false</code></td>
 <td>Turn OTLP export on; magus connects to the endpoint when true</td>
 </tr>
 <tr>
 <td><code>MAGUS_TELEMETRY_ENDPOINT</code></td>
-<td><code>telemetry.endpoint</code></td>
+<td><code><a class="code-xref" href="../../reference/config/#telemetry" data-kind="config" data-def="string, flag --telemetry-endpoint, env MAGUS_TELEMETRY_ENDPOINT">telemetry.endpoint</a></code></td>
 <td>-</td>
 <td>OTLP collector address as <code>host:port</code> (no scheme); required</td>
 </tr>
 <tr>
 <td><code>MAGUS_TELEMETRY_PROTOCOL</code></td>
-<td><code>telemetry.protocol</code></td>
+<td><code><a class="code-xref" href="../../reference/config/#telemetry" data-kind="config" data-def="string, flag --telemetry-protocol, env MAGUS_TELEMETRY_PROTOCOL">telemetry.protocol</a></code></td>
 <td><code>grpc</code></td>
 <td>OTLP wire protocol: <code>grpc</code> or <code>http</code></td>
 </tr>
 <tr>
 <td><code>MAGUS_TELEMETRY_INSECURE</code></td>
-<td><code>telemetry.insecure</code></td>
+<td><code><a class="code-xref" href="../../reference/config/#telemetry" data-kind="config" data-def="bool, flag --telemetry-insecure, env MAGUS_TELEMETRY_INSECURE">telemetry.insecure</a></code></td>
 <td><code>false</code></td>
 <td>Disable TLS for the OTLP exporter (plaintext local collectors)</td>
 </tr>
 <tr>
 <td><code>MAGUS_TELEMETRY_SERVICE_NAME</code></td>
-<td><code>telemetry.service_name</code></td>
+<td><code><a class="code-xref" href="../../reference/config/#telemetry" data-kind="config" data-def="string, flag --telemetry-service-name, env MAGUS_TELEMETRY_SERVICE_NAME">telemetry.service_name</a></code></td>
 <td><code>magus</code></td>
 <td>Value of the resource attribute <code>service.name</code></td>
 </tr>
 <tr>
 <td><code>MAGUS_TELEMETRY_SAMPLE_RATIO</code></td>
-<td><code>telemetry.sample_ratio</code></td>
+<td><code><a class="code-xref" href="../../reference/config/#telemetry" data-kind="config" data-def="float, flag --telemetry-sample-ratio, env MAGUS_TELEMETRY_SAMPLE_RATIO">telemetry.sample_ratio</a></code></td>
 <td><code>1.0</code></td>
-<td>Head-based trace sampling ratio in <code>[0,1]</code></td>
+<td>Head-based <a class="glossary-term" href="../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a> sampling ratio in <code>[0,1]</code></td>
 </tr>
 </tbody>
 </table></figure>
@@ -156,7 +156,7 @@ config in <a href="../../internal/config/config.go"><code>internal/config/config
 <strong>30s</strong>. It batches traces and samples them head-based by <code>sample_ratio</code>
 (<code>1.0</code> = every trace). Metrics are unsampled: every recorded point is exported.</p>
 <h2 id="resource-attributes">Resource attributes</h2>
-<p>Every metric and span carries these resource attributes:</p>
+<p>Every metric and <a class="glossary-term" href="../../glossary/#span" data-def="OpenTelemetry's name for one unit of work under a trace - a target execution, whose sub-operations are child spans. An output reference points at a span's captured output.">span</a> carries these resource attributes:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -175,7 +175,7 @@ config in <a href="../../internal/config/config.go"><code>internal/config/config
 </tr>
 <tr>
 <td><code>magus.workspace.root</code></td>
-<td>the workspace root, when set</td>
+<td>the <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root, when set</td>
 </tr>
 <tr>
 <td><code>process.*</code></td>
@@ -189,8 +189,8 @@ config in <a href="../../internal/config/config.go"><code>internal/config/config
 </table></figure>
 <h2 id="metrics">Metrics</h2>
 <h3 id="cache-local">Cache (local)</h3>
-<p>Low-cardinality aggregate view of the on-disk content-addressed cache; no
-per-project attribute.</p>
+<p>Low-cardinality aggregate view of the on-disk content-addressed <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>; no
+per-<a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> attribute.</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -270,7 +270,7 @@ backend changes.</p>
 <td>counter</td>
 <td><code>{call}</code></td>
 <td><code>op ∈ {get, put}</code>, <code>outcome=error</code></td>
-<td>A remote operation failed</td>
+<td>A remote <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a> failed</td>
 </tr>
 <tr>
 <td><code>magus.cache.remote.duration</code></td>
@@ -323,7 +323,7 @@ backend changes.</p>
 <p><code>strategy</code> is present only when the query reports one. <code>op=build</code> is the full
 graph build.</p>
 <h3 id="target-runs">Target runs</h3>
-<p>Per-project, per-spell. <code>magus.project</code> has unbounded cardinality; see
+<p>Per-project, per-<a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>. <code>magus.project</code> has unbounded cardinality; see
 <a href="#cardinality">Cardinality</a>.</p>
 <figure class="table-scroll"><table>
 <thead>
@@ -341,7 +341,7 @@ graph build.</p>
 <td>counter</td>
 <td><code>{call}</code></td>
 <td><code>magus.project</code>, <code>magus.spell</code>, <code>magus.target</code>, <code>outcome</code>, <code>cache.hit</code></td>
-<td>Target executions, including cache replays</td>
+<td><a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">Target</a> executions, including cache replays</td>
 </tr>
 <tr>
 <td><code>magus.target.duration</code></td>
@@ -371,21 +371,21 @@ per resolved spell per project.</p>
 <td>histogram</td>
 <td><code>s</code></td>
 <td>-</td>
-<td>Time a target waited for a slot</td>
+<td>Time a target waited for a <a class="glossary-term" href="../../glossary/#slot" data-def="One unit of the pool's capacity. A target acquires the slots it needs to run (most take one) and releases them when it finishes; the pool tracks capacity (total slots), running (acquired), and queued (blocked).">slot</a></td>
 </tr>
 <tr>
 <td><code>magus.pool.slots.running</code></td>
 <td>up-down counter</td>
 <td><code>{slot}</code></td>
 <td>-</td>
-<td>Concurrency slots currently running (gauge-like)</td>
+<td><a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">Concurrency</a> slots currently running (gauge-like)</td>
 </tr>
 <tr>
 <td><code>magus.pool.slots.queued</code></td>
 <td>up-down counter</td>
 <td><code>{slot}</code></td>
 <td>-</td>
-<td>Callers currently queued for a slot (gauge-like)</td>
+<td>Callers currently <a class="glossary-term" href="../../glossary/#queued" data-def="A target that wants a slot while the pool is full; it blocks first-in-first-out until a slot frees. The dashboard colors a sample with queued > 0 accordingly.">queued</a> for a slot (gauge-like)</td>
 </tr>
 </tbody>
 </table></figure>
@@ -435,11 +435,11 @@ slots and falls as they release, so its value reads as the live running depth.</
 <tr>
 <td><code>magus.cache.remote.prune</code></td>
 <td>-</td>
-<td>A retention sweep (<code>magus config cache prune --remote</code>)</td>
+<td>A retention sweep (<code><a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> cache prune --remote</code>)</td>
 </tr>
 </tbody>
 </table></figure>
-<p>The <code>magus.cache.hash</code> / <code>replay</code> / <code>snapshot</code> spans break a target's latency
+<p>The <code>magus.cache.hash</code> / <code>replay</code> / <code>snapshot</code> spans break a target's <a class="glossary-term" href="../../glossary/#latency" data-def="How long an operation takes. magus records latency as OpenTelemetry histograms per family - target execution, cache op, pool wait, and graph query - and reports each as a count, sum, and percentiles.">latency</a>
 down by phase: hashing vs. building vs. I/O. The remote <code>get</code>/<code>put</code> spans put a
 network fetch or upload inline in the build trace with its own latency, so a slow
 remote round-trip is visible instead of opaque time inside the target.</p>
@@ -470,15 +470,15 @@ attribute would.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/output-refs/"><span class="related-card-title">Target output references</span><span class="related-card-desc">Every target that runs gets a short reference id (ref1a2b3c) for its captured output. Retrieve any target&#39;s exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.</span></a>
-        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
-        <a class="related-card" href="../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
+        <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../concepts/remote-cache/"><span class="related-card-title">Remote caching</span><span class="related-card-desc">Wire an S3 or GitHub Actions remote cache backend as a spell so CI runners replay signed build artifacts across machines with a strict trust model.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22telemetry%22">telemetry</a><a class="tag" href="../../search/?q=tag%3A%22opentelemetry%22">opentelemetry</a><a class="tag" href="../../search/?q=tag%3A%22otlp%22">otlp</a><a class="tag" href="../../search/?q=tag%3A%22observability%22">observability</a><a class="tag" href="../../search/?q=tag%3A%22metrics%22">metrics</a><a class="tag" href="../../search/?q=tag%3A%22traces%22">traces</a><a class="tag" href="../../search/?q=tag%3A%22logs%22">logs</a><a class="tag" href="../../search/?q=tag%3A%22monitoring%22">monitoring</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -619,6 +619,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -729,6 +734,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

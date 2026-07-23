@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">15 min read</small>
     <article>
 <h1 id="cache-model">Cache model</h1>
-<p>magus's build cache is <strong>content-addressed</strong>: a target's outputs are keyed by the
+<p>magus's build <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> is <strong>content-addressed</strong>: a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s outputs are keyed by the
 SHA-256 of its inputs, so an unchanged target replays its previous outputs instead
 of rerunning. This page is the <strong>local</strong> model: what magus hashes, what invalidates
 a key, what &quot;replay&quot; restores, and where it all lives on disk. The <a href="../remote-cache/">remote
@@ -107,15 +107,15 @@ order enters the key.</li>
 emits the result event; the target's <code>export fun</code> never executes. The saved work
 <em>is</em> the point.</li>
 <li><strong>It is just files.</strong> The store is a directory of blobs, JSON manifests, and
-captured logs under <code>.magus/</code>. There is no database and no daemon in the read
+captured logs under <code>.magus/</code>. There is no database and no <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> in the read
 path. You can <code>ls</code> it, <code>cat</code> a manifest, and reason about a hit or miss with
 ordinary tools.</li>
 </ul>
 <h2 id="needs-provides-claims-a-targets-cache-footprint">needs, provides, claims: a target's cache footprint</h2>
-<p>A bound <a href="../spells/">spell</a> contributes three glob sets to its project. Only
+<p>A bound <a href="../spells/">spell</a> contributes three glob sets to its <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>. Only
 operations are runnable; these three are metadata that make caching and the
-affected set correct (see <a href="../spells/#what-a-spell-provides">What a spell provides</a>).
-Binding a spell contributes its <code>needs</code>/<code>provides</code>/<code>claims</code> to a project's cache
+<a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set correct (see <a href="../spells/#what-a-spell-provides">What a spell provides</a>).
+Binding a <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> contributes its <code>needs</code>/<code>provides</code>/<code>claims</code> to a project's cache
 key and affected set even before you wire a target.</p>
 <figure class="table-scroll"><table>
 <thead>
@@ -146,7 +146,7 @@ key and affected set even before you wire a target.</p>
 <p>Internally these map to a <code>Step</code> the cache hashes and replays: <code>needs</code> become
 <code>Step.Sources</code>, <code>provides</code> become <code>Step.Outputs</code>. <code>claims</code> do not appear in the
 <code>Step</code> at all: they attribute changed files to a project for affected-set
-computation and never touch the cache key or the snapshot. Two rules follow
+computation and never touch the cache key or the <a class="glossary-term" href="../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a>. Two rules follow
 directly:</p>
 <ul>
 <li><strong>Declare every input in <code>needs</code>.</strong> A source file that isn't matched by a <code>needs</code>
@@ -180,11 +180,11 @@ body, so the run can't be the source of truth. magus recovers them from the
 source: it walks each target body and the helpers it calls by name, collecting the
 <strong>string-literal</strong> globs. Two disciplines follow, both enforced:</p>
 <ul>
-<li>A <strong>non-literal argument</strong> (<code>ctx.inputs(someVar)</code>) is a magusfile load error -
+<li>A <strong>non-literal argument</strong> (<code>ctx.inputs(someVar)</code>) is a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error -
 a computed glob is invisible to the static read, and silently dropping it would
 risk a stale hit.</li>
 <li>A call the walk <strong>can't reach</strong> (in an unreferenced helper, or the identifier
-used as a value) never enters a key; <code>magus doctor</code> flags it as
+used as a value) never enters a key; <code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> flags it as
 <a href="../../reference/codes/magusfile/MGS1004/">MGS1004</a>.</li>
 </ul>
 <p>This shares the literal-first discipline of <a href="../dependencies/"><code>magus.needs</code></a>:
@@ -198,10 +198,10 @@ fields changes) forces a global rebuild.</li>
 <li><strong><code>projectPath</code></strong> and <strong><code>target</code></strong> - so the same sources under different targets
 key separately.</li>
 <li><strong><code>charm:</code> lines</strong> - the active <a href="../charms/">charms</a>, sorted by name. A
-charm-variant run (<code>lint:rw</code>) hashes differently from the bare run, because the
+<a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>-variant run (<code>lint:rw</code>) hashes differently from the bare run, because the
 charm changes behavior. Empty charms add nothing, so charm-less runs are
 unaffected.</li>
-<li><strong><code>src:</code> lines</strong> - for every file matched by <code>needs</code>, its workspace-relative path,
+<li><strong><code>src:</code> lines</strong> - for every file matched by <code>needs</code>, its <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>-relative path,
 its content SHA-256, and its executable bit. Files are discovered by a single
 walk, sorted by path, and hashed in parallel. Only the executable bit of the mode
 is folded in (not the full permissions, which would differ across machines with
@@ -225,7 +225,7 @@ unchanged tree re-keys without re-reading every byte; the memo is a performance
 cache for the hash, never a substitute for it.</p>
 <h2 id="invalidation-what-busts-a-key">Invalidation: what busts a key</h2>
 <p>A miss is &quot;no manifest stored under this key.&quot; Anything that changes a
-hashed line above yields a new key, and thus a new (empty) slot:</p>
+hashed line above yields a new key, and thus a new (empty) <a class="glossary-term" href="../../glossary/#slot" data-def="One unit of the pool's capacity. A target acquires the slots it needs to run (most take one) and releases them when it finishes; the pool tracks capacity (total slots), running (acquired), and queued (blocked).">slot</a>:</p>
 <ul>
 <li>editing, adding, or removing a file matched by <code>needs</code>;</li>
 <li>toggling the executable bit on a needed file;</li>
@@ -255,10 +255,10 @@ its still-present entry. Disk is reclaimed separately by eviction and pruning (s
 <tr>
 <td><code>skip_cache</code> target policy</td>
 <td>one target, every run</td>
-<td>Always runs; never replays <strong>or</strong> snapshots (a long-running <code>fs.watch</code> loop, a service op).</td>
+<td>Always runs; never replays <strong>or</strong> snapshots (a long-running <code>fs.watch</code> loop, a <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> op).</td>
 </tr>
 <tr>
-<td><code>magus run &lt;target&gt; --no-cache</code></td>
+<td><code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;target&gt; --no-cache</code></td>
 <td>one target, one invocation</td>
 <td>Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike <code>skip_cache</code>.</td>
 </tr>
@@ -273,7 +273,7 @@ its still-present entry. Disk is reclaimed separately by eviction and pruning (s
 <td>Wipes the on-disk store from outside any run.</td>
 </tr>
 <tr>
-<td><code>cache.immutable</code> (<code>MAGUS_CACHE_IMMUTABLE</code>)</td>
+<td><code><a class="code-xref" href="../../reference/config/#cache" data-kind="config" data-def="bool, flag --cache-immutable, env MAGUS_CACHE_IMMUTABLE">cache.immutable</a></code> (<code>MAGUS_CACHE_IMMUTABLE</code>)</td>
 <td>whole cache, whole run</td>
 <td>Read-only mode: replays hits, but a miss runs the target and does <strong>not</strong> write a new manifest.</td>
 </tr>
@@ -284,7 +284,7 @@ is entirely about what happens to the cache entry afterward (never snapshot vs.
 snapshot-and-refresh). <code>bust_cache</code> and <code>clean --cache</code> both delete entries, at
 different granularities and from different sides of a run. <code>cache.immutable</code> is
 the odd one out: it does not force anything to re-run, it just stops the cache
-from ever writing - the common case is a read-only CI runner or a shared cache
+from ever writing - the common case is a read-only <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runner or a shared cache
 mirror that must not accumulate local entries.</p>
 <h3 id="granularity-project-wide-vs-per-target">Granularity: project-wide vs per-target</h3>
 <p>A project's <code>Step.Sources</code> is not built per-target from scratch: <code>baseStep</code>
@@ -372,7 +372,7 @@ or a broken <code>magus clean</code>, so the model is worth stating once.</p>
 </table></figure>
 <p>The cache role is per-target on purpose. A miss snapshots exactly the outputs in
 that target's <code>Step</code>, and a hit replays exactly those - so an output must be
-declared on the target that <strong>produces</strong> it. This is the <strong>producer-ownership
+declared on the target that <strong>produces</strong> it. This is the <strong>producer-<a class="glossary-term" href="../../glossary/#ownership" data-def="An insight lens: author concentration - the primary author and their share, the distinct-author count (the bus factor), and abandonment.">ownership</a>
 rule</strong>, and violating it is a real bug, not a style nit: a glob declared
 project-wide is in <em>every</em> cacheable target's <code>Step.Outputs</code>, including targets
 that never write it. When one of those unrelated targets gets a cache hit, its
@@ -394,7 +394,7 @@ target, which is a footprint question, never a &quot;what does the project consu
 one.</p>
 <h2 id="on-disk-just-files">On disk: just files</h2>
 <p>The cache lives at <strong><code>.magus/</code></strong> in the workspace root (override with
-<code>MAGUS_CACHE_DIR</code>, or <code>cache.dir</code> in <code>magus.yaml</code>). Its layout is three
+<code>MAGUS_CACHE_DIR</code>, or <code><a class="code-xref" href="../../reference/config/#cache" data-kind="config" data-def="string, flag --cache-dir, env MAGUS_CACHE_DIR">cache.dir</a></code> in <code>magus.yaml</code>). Its layout is three
 directories plus a hash memo:</p>
 <pre><code class="language-text">.magus/
 ├── cas/         content-addressed blobs, sharded by the first two hex chars
@@ -427,11 +427,11 @@ mode, size, and (for symlinks) the link target:</p>
 and a build log for any entry is a file you can open. magus never mutates an
 existing manifest, and a manifest read back under the wrong key or project (copied
 or renamed onto the wrong slot) is treated as a miss rather than trusted.</p>
-<p>Space is bounded two ways. An optional size cap (<code>cache.size_mb</code> /
+<p>Space is bounded two ways. An optional size cap (<code><a class="code-xref" href="../../reference/config/#cache" data-kind="config" data-def="int, flag --cache-size-mb, env MAGUS_CACHE_SIZE_MB">cache.size_mb</a></code> /
 <code>MAGUS_CACHE_SIZE_MB</code>) drives <strong>LRU eviction</strong> of the oldest manifests after a
 build, and orphaned blobs are garbage-collected once no surviving manifest
 references them (blobs are shared, so a blob's bytes are only reclaimed when its
-last referencing manifest is evicted). Out of band, <code>magus config cache prune</code>
+last referencing manifest is evicted). Out of band, <code><a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> cache prune</code>
 evicts entries older than a cutoff. To force a clean rebuild of specific projects,
 <code>magus clean --cache &lt;project&gt;</code> drops their entries. The whole store is portable:
 <code>magus config cache export</code> / <code>import</code> move it as a gzip-tar.</p>
@@ -524,15 +524,15 @@ on.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/dependencies/"><span class="related-card-title">Dependencies</span><span class="related-card-desc">The two dependency mechanisms in magus - magus.needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../concepts/concurrency/"><span class="related-card-title">Concurrency</span><span class="related-card-desc">How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, and the cross-process workspace lock that keeps two separate magus invocations from clobbering each other&#39;s outputs and cache.</span></a>
-        <a class="related-card" href="../../concepts/remote-cache/"><span class="related-card-title">Remote caching</span><span class="related-card-desc">Wire an S3 or GitHub Actions remote cache backend as a spell so CI runners replay signed build artifacts across machines with a strict trust model.</span></a>
+        <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../search/?q=tag%3A%22provides%22">provides</a><a class="tag" href="../../search/?q=tag%3A%22claims%22">claims</a><a class="tag" href="../../search/?q=tag%3A%22cache-key%22">cache-key</a><a class="tag" href="../../search/?q=tag%3A%22invalidation%22">invalidation</a><a class="tag" href="../../search/?q=tag%3A%22replay%22">replay</a><a class="tag" href="../../search/?q=tag%3A%22content-addressed%22">content-addressed</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -673,6 +673,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -783,6 +788,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

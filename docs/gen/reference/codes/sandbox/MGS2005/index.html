@@ -98,7 +98,7 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="mgs2005-kernel-landlock-unavailable-interpreter-level-only">MGS2005: kernel landlock unavailable; interpreter-level only</h1>
-<p>The sandbox is enabled but the host kernel does not support
+<p>The <a class="glossary-term" href="../../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> is enabled but the host kernel does not support
 landlock LSM. Magus continues with interpreter-level enforcement only.</p>
 <pre><code class="language-text">[MGS2005] kernel landlock unavailable; sandbox running with interpreter-level checks only
   reason=sandbox: kernel sandbox unsupported on this host: ...
@@ -110,9 +110,9 @@ layers:</p>
 <li><strong>Kernel layer</strong>: Linux landlock LSM applies the policy via
 <code>landlock_restrict_self</code>, after which every child process inherits
 the restriction across <code>fork+exec</code>.</li>
-<li><strong>Interpreter layer</strong>: the Buzz <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code>
+<li><strong>Interpreter layer</strong>: the <a class="glossary-term" href="../../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code>
 bindings consult the policy in user space before performing any
-operation.</li>
+<a class="glossary-term" href="../../../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a>.</li>
 </ol>
 <p>When the kernel does not have landlock (macOS, Windows, or Linux
 older than 5.13 without the LSM compiled in), only layer 2 runs. The
@@ -121,8 +121,8 @@ enforcement is absent.</p>
 <h2 id="what-still-works">What still works</h2>
 <ul>
 <li>Buzz spells calling <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code> bindings are
-still blocked when they target out-of-workspace paths or secret env
-vars. This covers every spell magus ships and every magusfile
+still blocked when they <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> out-of-<a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> paths or secret env
+vars. This covers every <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> magus ships and every <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>
 written against the documented API.</li>
 <li>Env scrubbing still applies (it runs in pure Go).</li>
 </ul>
@@ -156,14 +156,14 @@ where you accept the reduced enforcement.</li>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
-        <a class="related-card" href="../../../../reference/codes/sandbox/MGS2010/"><span class="related-card-title">MGS2010: sandbox policy mismatch</span><span class="related-card-desc">Fires when a long-running daemon is asked to serve a workspace whose sandbox policy was not part of the union it applied at startup, either undeclared or a differing fingerprint.</span></a>
-        <a class="related-card" href="../../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../../reference/codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
+        <a class="related-card" href="../../../../concepts/sandbox/"><span class="related-card-title">Sandbox model</span><span class="related-card-desc">The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.</span></a>
+        <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS2005%22">MGS2005</a><a class="tag" href="../../../../search/?q=tag%3A%22sandbox%22">sandbox</a><a class="tag" href="../../../../search/?q=tag%3A%22landlock%22">landlock</a><a class="tag" href="../../../../search/?q=tag%3A%22kernel%22">kernel</a><a class="tag" href="../../../../search/?q=tag%3A%22macOS%22">macOS</a><a class="tag" href="../../../../search/?q=tag%3A%22Linux%22">Linux</a><a class="tag" href="../../../../search/?q=tag%3A%22interpreter%22">interpreter</a><a class="tag" href="../../../../search/?q=tag%3A%22enforcement%22">enforcement</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -304,6 +304,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -414,6 +419,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

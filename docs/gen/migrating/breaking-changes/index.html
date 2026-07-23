@@ -86,14 +86,14 @@
 <h1 id="breaking-changes">Breaking changes</h1>
 <p>A backward-incompatible change should show up in a pull request diff, not in a bug
 report after release. magus gives you two mechanisms for this, one per artifact you
-publish: <code>buf-breaking</code> for a protobuf schema, and a drift-gated <code>.lock</code> snapshot
-for a command-line surface. Both turn &quot;did this change break a consumer?&quot; into a
+publish: <code>buf-breaking</code> for a protobuf schema, and a drift-gated <code>.lock</code> <a class="glossary-term" href="../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a>
+for a command-line <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>. Both turn &quot;did this change break a consumer?&quot; into a
 diff a reviewer reads, so nobody has to remember to check.</p>
 <h2 id="proto-schemas-buf-breaking">Proto schemas: buf-breaking</h2>
-<p>The <code>buf</code> spell ships a <code>buf-breaking</code> op that compares your current <code>.proto</code>
+<p>The <code>buf</code> <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> ships a <code>buf-breaking</code> op that compares your current <code>.proto</code>
 schema against a baseline and fails on a wire- or JSON-incompatible edit (a renamed
 field, a changed type, a deleted message). It defaults to the <code>main</code> branch, buf's
-standard CI baseline:</p>
+standard <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> baseline:</p>
 <pre><code class="language-buzz">import &quot;magus&quot;;
 import &quot;magus/spell/buf&quot;;
 
@@ -104,8 +104,8 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     buf[&quot;buf-breaking&quot;]();
 }
 </code></pre>
-<p>Compose it into the read-only <code>lint</code> target alongside <code>buf-lint</code>, <code>go-vet</code>, and the
-rest. <code>magus run lint</code> then forks <code>buf breaking --against .git#branch=main</code>, and a
+<p>Compose it into the read-only <code>lint</code> <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> alongside <code>buf-lint</code>, <code>go-vet</code>, and the
+rest. <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> lint</code> then forks <code>buf breaking --against .git#branch=main</code>, and a
 breaking <code>.proto</code> edit fails the same stage that catches a style violation. Point
 the baseline elsewhere with a function target when a repo uses a different default
 branch or an image baseline.</p>
@@ -113,7 +113,7 @@ branch or an image baseline.</p>
 <p>A proto schema has buf to describe its compatibility. A command-line surface has
 nothing equivalent, so magus tracks its own with a pattern you can copy for any CLI
 you ship.</p>
-<p><code>magus-utils api</code> writes the public surface (every subcommand, flag, project
+<p><code>magus-utils api</code> writes the public surface (every subcommand, flag, <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>
 target, and config key) as a sorted, newline-delimited <code>.lock</code> file, the same flat
 format as <code>urls.lock</code>. The snapshot lives at
 <code>internal/manpage/testdata/api.lock</code>, and <code>TestAPIUpToDate</code> regenerates it in
@@ -152,15 +152,15 @@ same review every other change already goes through.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
+        <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../concepts/sandbox/"><span class="related-card-title">Sandbox model</span><span class="related-card-desc">The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22breaking-changes%22">breaking-changes</a><a class="tag" href="../../search/?q=tag%3A%22compatibility%22">compatibility</a><a class="tag" href="../../search/?q=tag%3A%22buf-breaking%22">buf-breaking</a><a class="tag" href="../../search/?q=tag%3A%22api-lock%22">api-lock</a><a class="tag" href="../../search/?q=tag%3A%22drift-gate%22">drift-gate</a><a class="tag" href="../../search/?q=tag%3A%22changelog%22">changelog</a><a class="tag" href="../../search/?q=tag%3A%22proto%22">proto</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -301,6 +301,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -411,6 +416,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

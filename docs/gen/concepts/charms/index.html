@@ -84,8 +84,10 @@
     <small class="reading-time" title="Estimated reading time">19 min read</small>
     <article>
 <h1 id="charms">Charms</h1>
-<p>A <strong>charm</strong> is a named modifier that changes <em>how</em> a target runs, not <em>which</em> target or project. Where a Target answers &quot;what operation, on what project&quot; (see <a href="../targets/">targets</a>) and a Spell answers &quot;how a tool performs an operation&quot; (see <a href="../spells/">spells</a>), a charm answers <strong>&quot;in what manner.&quot;</strong></p>
-<p>Charms replace the one-off boolean flags (<code>--write</code>, <code>--fix</code>, <code>--verbose</code>) that build tools accumulate. A charm is a <strong>shared, reusable intent</strong> applied as an <strong>RFC 6902 JSON Patch</strong> over the target's argument vector. There is no bespoke per-charm DSL.</p>
+<p>A <strong><a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a></strong> is a named modifier that changes <em>how</em> a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> runs, not <em>which</em> target or <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>. Where a Target answers &quot;what <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a>, on what project&quot; (see <a href="../targets/">targets</a>) and a <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">Spell</a> answers &quot;how a tool performs an operation&quot; (see <a href="../spells/">spells</a>), a charm answers <strong>&quot;in what manner.&quot;</strong></p>
+<aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-8">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
+
+<p>Charms replace the <a class="glossary-term" href="../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a> boolean flags (<code>--write</code>, <code>--fix</code>, <code>--verbose</code>) that build tools accumulate. A charm is a <strong>shared, reusable intent</strong> applied as an <strong>RFC 6902 JSON Patch</strong> over the target's argument vector. There is no bespoke per-charm DSL.</p>
 <h2 id="design-intent">Design intent</h2>
 <ul>
 <li><strong>Shared.</strong> A charm name means the same thing everywhere: <code>rw</code> means &quot;mutate in place&quot; for <code>format</code>, <code>generate</code>, or <code>lint</code>. A charm useful only with one target is a smell; that is a one-off tool flag, not a charm.</li>
@@ -95,7 +97,7 @@
 </ul>
 <h2 id="additive-by-design">Additive by design</h2>
 <p>Charms only ever <em>add</em> intent. You turn one on by naming it (<code>:rw</code>); the active set
-is the union of what you named and the workspace <code>default_charms</code>, and nothing else.
+is the union of what you named and the <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> <code>default_charms</code>, and nothing else.
 There is no per-charm &quot;off&quot; switch, and that absence is deliberate.</p>
 <p>The one subtraction magus offers is coarse: <code>--no-default-charms</code> drops the whole
 default baseline at once, after which you re-add exactly what you want. There is no
@@ -191,16 +193,16 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 </tr>
 </tbody>
 </table></figure>
-<p><code>rw</code> carries no special flag. Like every other charm, you activate it with a <code>:rw</code> suffix (<code>magus run format:rw</code>). There is no <code>-w</code>/<code>--write</code> shortcut and no <code>--write</code> flag: the suffix is the one way to ask for it.</p>
-<p><strong>CI is always read-only.</strong> <code>Magus.RunCI</code> strips the <code>rw</code> charm before dispatch, so the composite <code>ci</code> pipeline can never mutate the tree even if a caller requests it (e.g. <code>ci:rw</code>). <code>rw</code> is the only charm with this strip status; the other built-in (<code>cd</code>) and every workspace charm you define are ordinary vocabulary that survive into <code>ci</code>.</p>
+<p><code>rw</code> carries no special flag. Like every other charm, you activate it with a <code>:rw</code> suffix (<code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> format:rw</code>). There is no <code>-w</code>/<code>--write</code> shortcut and no <code>--write</code> flag: the suffix is the one way to ask for it.</p>
+<p><strong><a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> is always read-only.</strong> <code>Magus.RunCI</code> strips the <code>rw</code> charm before dispatch, so the composite <code>ci</code> pipeline can never mutate the tree even if a caller requests it (e.g. <code>ci:rw</code>). <code>rw</code> is the only charm with this strip status; the other built-in (<code>cd</code>) and every workspace charm you define are ordinary vocabulary that survive into <code>ci</code>.</p>
 <h2 id="defaulting-charms-per-workspace-default-charms">Defaulting charms per workspace (<code>default_charms</code>)</h2>
-<p>Every run is read-only by default. A workspace can opt into a different baseline with <code>default_charms</code> in <code>magus.yaml</code>: charms applied to every <code>magus run</code> and <code>magus x</code> automatically, so a team that wants local autofix does not type <code>:rw</code> each time:</p>
+<p>Every run is read-only by default. A workspace can opt into a different baseline with <code>default_charms</code> in <code>magus.yaml</code>: charms applied to every <code>magus run</code> and <code><a class="code-xref" href="../../reference/manpage/magus-x/" data-kind="command" data-def="Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">magus x</a></code> automatically, so a team that wants local autofix does not type <code>:rw</code> each time:</p>
 <pre><code class="language-yaml"># magus.yaml
 default_charms: [rw] # `magus run format` now writes; no :rw needed
 </code></pre>
 <p>Per-run charms stack on top, exactly as if you had typed the whole set. Three things keep it safe:</p>
 <ul>
-<li><strong><code>magus affected</code> does not apply them</strong>, so CI (which runs <code>magus affected ci</code>) stays read-only regardless of the workspace default.</li>
+<li><strong><code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> does not apply them</strong>, so CI (which runs <code>magus affected ci</code>) stays read-only regardless of the workspace default.</li>
 <li><strong><code>RunCI</code> still strips <code>rw</code></strong>, so even a local <code>magus run ci</code> verifies without writing.</li>
 <li><strong><code>--no-default-charms</code></strong> ignores the defaults for one run (<code>magus run format --no-default-charms</code> to check without rewriting).</li>
 </ul>
@@ -214,7 +216,7 @@ default_charms: [rw] # `magus run format` now writes; no :rw needed
 <p>The patches of all active charms are <strong>concatenated in sorted charm-name order and applied as one sequential patch</strong> over the base argv:</p>
 <ul>
 <li><strong>Deterministic.</strong> <code>lint:rw,debug</code> and <code>lint:debug,rw</code> produce the same result; duplicates are insignificant.</li>
-<li><strong>Composable.</strong> Charms edit individual argv elements, so edits on disjoint positions compose freely. Edits targeting the <em>same</em> position resolve by sorted charm-name order, so one charm silently wins and the other has no effect. Because that winner is an alphabetical accident rather than a declared precedence, magus treats it as a mistake: it warns at run time and flags the overridden charm in <code>magus describe target ...:a,b</code>. Two charms that must both apply should edit different arguments, or one should own the position.</li>
+<li><strong>Composable.</strong> Charms edit individual argv elements, so edits on disjoint positions compose freely. Edits targeting the <em>same</em> position resolve by sorted charm-name order, so one charm silently wins and the other has no effect. Because that winner is an alphabetical accident rather than a declared precedence, magus treats it as a mistake: it warns at run time and flags the overridden charm in <code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> target ...:a,b</code>. Two charms that must both apply should edit different arguments, or one should own the position.</li>
 </ul>
 <p>Example with base <code>go tool golangci-lint run ./...</code>:</p>
 <pre><code class="language-text">rw    : add &quot;--fix&quot; at /3      → go tool golangci-lint run --fix ./...
@@ -230,9 +232,9 @@ project: .  target: lint
   spell: go
     command: go tool golangci-lint run --fix ./... -v
 </code></pre>
-<p>Add charms to the target ref and the <code>command:</code> line updates. Two caveats: a magusfile-function target computes its argv at runtime, so no static command is shown; and <code>describe</code> never executes or writes files even for <code>:rw</code>. (<code>--dry-run</code> reports at the target level; use <code>describe</code> to see the command itself.)</p>
+<p>Add charms to the target ref and the <code>command:</code> line updates. Two caveats: a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>-function target computes its argv at runtime, so no static command is shown; and <code>describe</code> never executes or writes files even for <code>:rw</code>. (<code>--dry-run</code> reports at the target level; use <code>describe</code> to see the command itself.)</p>
 <h3 id="seeing-each-charms-edit---explain">Seeing each charm's edit: <code>--explain</code></h3>
-<p><code>--explain</code> turns the single <code>command:</code> line into a step-by-step trace: the base
+<p><code>--explain</code> turns the single <code>command:</code> line into a step-by-step <a class="glossary-term" href="../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a>: the base
 command, then the command after each active charm's patch, in the deterministic
 sorted-name order magus applies them. It is the RFC 6902 patch made legible, so
 you can see exactly which charm made which edit without reading the patch data.</p>
@@ -253,7 +255,7 @@ line, and a charm whose patch does not apply to the command is reported as
 <h2 id="declaring-what-a-charm-does">Declaring what a charm does</h2>
 <p>A charm only does something for a target that declares it. Declarations live in a spell's <code>charms</code> table, keyed by charm name. Two charm-construction modules exist (pick by where the spell runs), plus the raw-data escape hatch.</p>
 <h3 id="1-built-in-command-spells-import-maguscharm">1. Built-in command spells (<code>import &quot;magus/charm&quot;</code>)</h3>
-<p>A built-in command spell is <strong>self-contained</strong>: it imports only the pure-Buzz modules <code>magus/target</code> and <code>magus/charm</code>, so it compiles to bare bytecode with no host bindings. <code>magus/charm</code> exports the core constructors as <strong>bare functions</strong> (the same flat-import idiom <code>magus/target</code> uses for <code>Target</code>). Each resolves a <em>value anchor</em> to an index so you never count positions:</p>
+<p>A built-in command spell is <strong>self-contained</strong>: it imports only the pure-<a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> modules <code>magus/target</code> and <code>magus/charm</code>, so it compiles to bare bytecode with no host bindings. <code>magus/charm</code> exports the core constructors as <strong>bare functions</strong> (the same flat-import idiom <code>magus/target</code> uses for <code>Target</code>). Each resolves a <em>value anchor</em> to an index so you never count positions:</p>
 <pre><code class="language-buzz">import &quot;magus/target&quot;;
 import &quot;magus/charm&quot;;
 
@@ -265,7 +267,7 @@ fun lint(target: Target) &gt; Command {
     }};
 }
 </code></pre>
-<p><code>magus/charm</code> ships the <strong>core</strong> constructors: <code>append</code>, <code>prepend</code>, <code>after</code>, <code>before</code>, <code>set</code>, <code>drop</code>. For the advanced set (<code>move</code>/<code>copy</code>/<code>test</code>, the predicate <code>*Func</code> variants, <code>path</code>) reach the host <code>charm</code> module from a non-built-in spell (below). The constructors return the same <code>{ops: [...]}</code> record the raw form below produces, so the two interoperate.</p>
+<p><code>magus/charm</code> ships the <strong>core</strong> constructors: <code>append</code>, <code>prepend</code>, <code>after</code>, <code>before</code>, <code>set</code>, <code>drop</code>. For the advanced set (<code>move</code>/<code>copy</code>/<code>test</code>, the predicate <code>*Func</code> variants, <code>path</code>) reach the host <code>charm</code> <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> from a non-built-in spell (below). The constructors return the same <code>{ops: [...]}</code> record the raw form below produces, so the two interoperate.</p>
 <h3 id="2-workspace-spells--magusfiles-import-charm">2. Workspace spells &amp; magusfiles (<code>import &quot;charm&quot;</code>)</h3>
 <p>A workspace spell (imported by path) or a magusfile runs with host bindings, so it imports the host <strong><code>charm</code></strong> module, which carries the <strong>full</strong> constructor set as namespaced methods:</p>
 <pre><code class="language-buzz">import &quot;charm&quot;;
@@ -473,9 +475,9 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <p><strong>Workspace spell</strong>: author a <code>spells/&lt;name&gt;.buzz</code> spell (imported by path) with an <code>ops</code> entry and wire per-project charms there. The spell owns the <em>command</em>; charms tune its <em>args</em>.</p>
-<p><strong><code>::</code> hatch</strong>: <code>magus run go::go-vet api</code> reaches a single spell op directly. It is an escape hatch, not the everyday surface.</p>
+<p><strong><code>::</code> hatch</strong>: <code>magus run go::go-vet api</code> reaches a single spell op directly. It is an escape hatch, not the everyday <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>.</p>
 <h2 id="dynamic-values-no-interpolation-use-the-language">Dynamic values: no interpolation, use the language</h2>
-<p>Charm args are <strong>literal</strong>: there is no <code>${VAR}</code> interpolation, by design. The host language is the interpolation engine:</p>
+<p>Charm args are <strong>literal</strong>: there is no <code>${VAR}</code> interpolation, by design. The host language is the interpolation <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>:</p>
 <ul>
 <li>
 <p><strong>Known at load time:</strong> build the string in code and pass it to a constructor:</p>
@@ -602,15 +604,15 @@ type Charm struct {
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
-        <a class="related-card" href="../../reference/codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
-        <a class="related-card" href="../../reference/codes/charms/MGS6001/"><span class="related-card-title">MGS6001: charm patch does not apply to the command</span><span class="related-card-desc">Fires when magus describe target previews a charm whose JSON Patch is valid in shape but cannot apply to the target&#39;s argv, so the charm is dead on that target.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
+        <a class="related-card" href="../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22charms%22">charms</a><a class="tag" href="../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../search/?q=tag%3A%22argv%22">argv</a><a class="tag" href="../../search/?q=tag%3A%22json-patch%22">json-patch</a><a class="tag" href="../../search/?q=tag%3A%22rfc-6902%22">rfc-6902</a><a class="tag" href="../../search/?q=tag%3A%22modifiers%22">modifiers</a><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -751,6 +753,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -861,6 +868,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

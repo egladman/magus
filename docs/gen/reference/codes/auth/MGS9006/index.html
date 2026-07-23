@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="mgs9006-connector-token-not-found">MGS9006: connector token not found</h1>
-<p><code>magus config mcp connector revoke</code> (or a lookup) named a connector token - by
+<p><code><a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> mcp connector revoke</code> (or a lookup) named a connector token - by
 name or fingerprint - that the store does not contain.</p>
 <pre><code class="language-text">[MGS9006] magus config mcp connector revoke: no connector matches &quot;ci&quot;
   see: .../MGS9006.md
@@ -92,7 +92,7 @@ name or fingerprint - that the store does not contain.</p>
 <h2 id="why">Why</h2>
 <p>Revoke resolves the token you named against the store. Nothing matched: the name
 or fingerprint is wrong, it was already revoked, or it belongs to a different
-daemon's store.</p>
+<a class="glossary-term" href="../../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>'s store.</p>
 <h2 id="resolution">Resolution</h2>
 <p>List what is actually there and revoke by an exact name or fingerprint from the
 list:</p>
@@ -104,7 +104,7 @@ token, magus asks you to disambiguate rather than guess.</p>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
 <li><strong>Not the operator token.</strong> The built-in cli token is not in the connector
-store and is never a revoke target here.</li>
+store and is never a revoke <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> here.</li>
 </ul>
 <h2 id="see-also">See also</h2>
 <ul>
@@ -120,15 +120,15 @@ store and is never a revoke target here.</li>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../../reference/codes/auth/MGS9001/"><span class="related-card-title">MGS9001: bearer token rejected</span><span class="related-card-desc">The daemon refused a request because its bearer token was missing, wrong, expired, or revoked. This is the usual reason an MCP client cannot connect.</span></a>
-        <a class="related-card" href="../../../../reference/codes/auth/MGS9002/"><span class="related-card-title">MGS9002: insecure token file permissions</span><span class="related-card-desc">A magus auth token or connector store file is readable beyond its owner. Magus refuses to use it until the permissions are tightened to 0600.</span></a>
-        <a class="related-card" href="../../../../reference/codes/auth/MGS9005/"><span class="related-card-title">MGS9005: connector name already exists</span><span class="related-card-desc">Creating a connector token with a name already in use. Connector names are unique; pass a different --name or revoke the existing one first.</span></a>
-        <a class="related-card" href="../../../../reference/codes/auth/MGS9003/"><span class="related-card-title">MGS9003: connector store is too new</span><span class="related-card-desc">The connector token store on disk was written by a newer magus than the one reading it, so its format may not be understood. Upgrade magus.</span></a>
+        <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../../reference/buzz/os/"><span class="related-card-title">os module</span><span class="related-card-desc">Process execution.</span></a>
+        <a class="related-card" href="../../../../reference/console/"><span class="related-card-title">Console API</span><span class="related-card-desc">Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.</span></a>
+        <a class="related-card" href="../../../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS9006%22">MGS9006</a><a class="tag" href="../../../../search/?q=tag%3A%22auth%22">auth</a><a class="tag" href="../../../../search/?q=tag%3A%22connector%22">connector</a><a class="tag" href="../../../../search/?q=tag%3A%22token%22">token</a><a class="tag" href="../../../../search/?q=tag%3A%22revoke%22">revoke</a><a class="tag" href="../../../../search/?q=tag%3A%22fingerprint%22">fingerprint</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -269,6 +269,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -379,6 +384,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

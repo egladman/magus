@@ -84,18 +84,18 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="magus-server">magus-server</h1>
-<p>Manage the persistent magus daemon</p>
+<p>Manage the persistent magus <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a></p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> server &lt;start|stop&gt; [flags]</p>
 <h2 id="description">Description</h2>
 <p>Start, stop, or check the liveness of a persistent magus daemon.</p>
 <p>By default every magus invocation starts a short-lived proc server that dies
 when the command exits. The persistent daemon keeps the server alive across
-invocations so workspace discovery, config loading, and the content-addressed
-cache are paid for once. Nested magus calls (from build scripts, editor
+invocations so <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> discovery, config loading, and the content-addressed
+<a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> are paid for once. Nested magus calls (from build scripts, editor
 integrations, etc.) forward work to the daemon automatically.</p>
 <p>The socket address is resolved in priority order:
---socket flag  &gt;  MAGUS_DAEMON_ADDRESS env  &gt;  daemon.address in magus.yaml  &gt;
+--socket flag  &gt;  MAGUS_DAEMON_ADDRESS env  &gt;  <a class="code-xref" href="../../config/#daemon" data-kind="config" data-def="string, flag --daemon-address, env MAGUS_DAEMON_ADDRESS">daemon.address</a> in magus.yaml  &gt;
 stable default ($XDG_RUNTIME_DIR/magus/magus-daemon.sock)</p>
 <p>The socket file acts as the lock: present means a daemon is running, absent
 means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
@@ -114,7 +114,7 @@ check for the file with [ -S &quot;$socket&quot; ] before starting one.</p>
 <p><em>Stop the running daemon</em></p>
 <pre><code class="language-sh">magus server stop
 </code></pre>
-<p><em>Inspect daemon pool state</em></p>
+<p><em>Inspect daemon <a class="glossary-term" href="../../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> state</em></p>
 <pre><code class="language-sh">magus status
 </code></pre>
 <p><em>Use a custom socket path</em></p>
@@ -133,15 +133,15 @@ check for the file with [ -S &quot;$socket&quot; ] before starting one.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../reference/codes/sandbox/MGS2008/"><span class="related-card-title">MGS2008: daemon socket withheld</span><span class="related-card-desc">Fires at debug level when magus withholds the daemon socket vars from an op subprocess (independent of sandbox.enabled), or re-injects them into a recursive magus invocation.</span></a>
+        <a class="related-card" href="../../../guides/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
         <a class="related-card" href="../../../reference/manpage/magus-status/"><span class="related-card-title">magus status</span><span class="related-card-desc">Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.</span></a>
-        <a class="related-card" href="../../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
-        <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+server%22">magus server</a><a class="tag" href="../../../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../../../search/?q=tag%3A%22server%22">server</a><a class="tag" href="../../../search/?q=tag%3A%22socket%22">socket</a><a class="tag" href="../../../search/?q=tag%3A%22persistent%22">persistent</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -282,6 +282,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -392,6 +397,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

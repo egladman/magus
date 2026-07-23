@@ -91,6 +91,19 @@
   --accent-warm-hover: #c2410c;
   --accent-warm-inverse: #ffffff;
 
+  /* Glossary term highlight: a muted highlighter yellow (marker swipe) that marks an
+     auto-linked glossary term as a distinct kind of thing, not another blue link. Its
+     own vars, not --pico-mark-*, so glossary terms never read as transient search hits. */
+  --glossary-highlight: #f7ecab;
+  --glossary-highlight-strong: #efdd85;
+  --glossary-highlight-rule: #c9ad4a;
+
+  /* Demo callout accent: a muted teal, its own identity for "there is a runnable demo of
+     this concept" - distinct from the yellow terms, violet reveal, and blue links. */
+  --demo-accent: #0d7680;
+  --demo-accent-strong: #0a5a54;
+  --demo-accent-bg: #e6f2f0;
+
   /* Syntax tokens (muted, all >=4.5:1 on the code surface). */
   --syn-comment: #636d76;
   --syn-keyword: #715bb0;
@@ -229,6 +242,17 @@
   --accent-warm: #fb923c;
   --accent-warm-hover: #fdba74;
   --accent-warm-inverse: #0b0e12;
+
+  /* Glossary term highlight (dark): a translucent amber wash so the marker reads on the
+     dark surface while the light body text on top stays legible. */
+  --glossary-highlight: rgba(216, 184, 84, 0.20);
+  --glossary-highlight-strong: rgba(216, 184, 84, 0.33);
+  --glossary-highlight-rule: rgba(216, 184, 84, 0.55);
+
+  /* Demo callout accent (dark): a lighter teal that reads on the dark surface. */
+  --demo-accent: #4bb5aa;
+  --demo-accent-strong: #7fd3c9;
+  --demo-accent-bg: rgba(75, 181, 170, 0.12);
 
   --syn-comment: #838e98;
   --syn-keyword: #b79ae6;

@@ -84,10 +84,12 @@
     <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="operations">Operations</h1>
-<p>This document defines an <strong>Operation</strong>, magus's smallest named unit of
+<p>This document defines an <strong><a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">Operation</a></strong>, magus's smallest named unit of
 tool work, and fixes its place in the hierarchy between <a href="../spells/">Spells</a>,
 <a href="../targets/">Targets</a>, and the result a run produces. It also disambiguates the
-two words magus overloads, <em>op</em> and <em>Target</em>.</p>
+two words magus overloads, <em>op</em> and <em><a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">Target</a></em>.</p>
+<aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-5">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
+
 <blockquote>
 <p><strong>Status.</strong> The hierarchy, the <code>ExecResult</code> value type, and the <code>ispell.Op</code> (née
 <code>ispell.Target</code>) Operation type all exist today. A per-op <code>OpResult</code>/<code>TargetResult</code>
@@ -103,18 +105,18 @@ named after the CLI command it runs: <code>go-build</code>, <code>go-vet</code>,
 target body calls ops, ops do the tool work.</p>
 <p>An Operation is one of two declarative shapes, and the shape is its <strong>kind</strong>. A
 <strong>command</strong> op returns a <code>Command</code> (<code>{bin, args, charms}</code>) magus forks directly
-(no shell, one process, run to completion), the default. A <strong>service</strong> op returns a
+(no shell, one process, run to completion), the default. A <strong><a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a></strong> op returns a
 <code>Service</code> (<code>{command, readiness?, stop?, distinct?, idle?}</code>), a long-running process.
-Run directly (<code>magus run dev</code>) a service forks in the foreground and magus <strong>blocks</strong>
+Run directly (<code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> dev</code>) a service forks in the foreground and magus <strong>blocks</strong>
 on it; reached as a dependency (<code>magus.needs</code>) it is instead <strong>supervised in the
 background</strong>: started, readiness-gated, and shared across dependents (see
 <a href="../services/">services</a>). You author either as a function that returns it
 (<code>fun(Target) &gt; Command</code> or <code>fun(Target) &gt; Service</code>) or as a bare record; the kind is
 inferred from the return
 (see <a href="../spells/#an-operation-is-a-command-or-a-service">An operation is a command or a service</a>).
-Because both are declarative data, the argv is charm-patchable, cache-keyable, and
-previewable without running. The kind lives on the op, so one spell mixes command and
-service ops. In-VM work that magus neither forks nor blocks on (a remote cache
+Because both are declarative data, the argv is <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>-patchable, <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>-keyable, and
+previewable without running. The kind lives on the op, so one <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> mixes command and
+service ops. In-VM work that magus neither forks nor blocks on (a <a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a>
 backend) is not an op at all; it is a separate contract magus's core invokes by name.</p>
 <p>An Operation is <em>how</em> a tool performs an action; a <a href="../targets/">Target</a> is <em>what</em>
 you run. You <strong>bind</strong> spells (which contribute ops) and <strong>invoke</strong> targets (which
@@ -144,7 +146,7 @@ target.result event   (per target; no per-op breakdown)
 <tr>
 <td><strong>Spell</strong></td>
 <td>a library of operations</td>
-<td>many spells per project</td>
+<td>many spells per <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a></td>
 <td><code>name</code> + its ops</td>
 </tr>
 <tr>
@@ -261,7 +263,7 @@ operations. magus never names anything just <code>op</code> in the spell API, fo
 <ul>
 <li><strong><code>types.Target</code></strong>: the addressable <strong>work-unit</strong> <code>Path + Name</code>, plus charms
 and changed files. This is <em>the</em> Target (<a href="../targets/">targets</a>).</li>
-<li><strong><code>ispell.Op</code></strong> (formerly <code>ispell.Target</code>): &quot;a single dispatchable surface of a
+<li><strong><code>ispell.Op</code></strong> (formerly <code>ispell.Target</code>): &quot;a single dispatchable <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> of a
 spell,&quot; i.e. an <strong>Operation</strong>. It was named <code>Target</code>, colliding with the
 work-unit above; renamed to <code>Op</code> to formalize this vocabulary.</li>
 </ul>
@@ -272,7 +274,7 @@ preserved. The docs warn against substituting &quot;Operation&quot; for a work-u
 (<a href="../targets/">targets</a>); that warning is about <code>types.Target</code> and never
 protected <code>ispell.Target</code>, which was the actual offender.</p>
 <h2 id="relationship-to-the-value-types">Relationship to the value types</h2>
-<p>The serializable Buzz value types model the <em>nouns</em> around this hierarchy:</p>
+<p>The serializable <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> value types model the <em>nouns</em> around this hierarchy:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -349,15 +351,15 @@ function - there is no intermediate query value.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
-        <a class="related-card" href="../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
-        <a class="related-card" href="../../concepts/remote-cache/"><span class="related-card-title">Remote caching</span><span class="related-card-desc">Wire an S3 or GitHub Actions remote cache backend as a spell so CI runners replay signed build artifacts across machines with a strict trust model.</span></a>
+        <a class="related-card" href="../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
+        <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22operations%22">operations</a><a class="tag" href="../../search/?q=tag%3A%22ops%22">ops</a><a class="tag" href="../../search/?q=tag%3A%22hierarchy%22">hierarchy</a><a class="tag" href="../../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../search/?q=tag%3A%22work-model%22">work-model</a><a class="tag" href="../../search/?q=tag%3A%22execution%22">execution</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -498,6 +500,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -608,6 +615,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

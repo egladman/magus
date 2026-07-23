@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="configuration">Configuration</h1>
-<p>magus resolves configuration from three layers, highest precedence first: a CLI flag, a <code>MAGUS_*</code> environment variable, then the <code>magus.yaml</code> file at the workspace root. This page is the complete inventory of config keys, each with its <code>magus.yaml</code> path, environment variable, CLI flag, and value type.</p>
+<p>magus resolves configuration from three layers, highest precedence first: a CLI flag, a <code>MAGUS_*</code> environment variable, then the <code>magus.yaml</code> file at the <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root. This page is the complete inventory of config keys, each with its <code>magus.yaml</code> path, environment variable, CLI flag, and value type.</p>
 <h2 id="cache">cache</h2>
 <figure class="table-scroll"><table>
 <thead>
@@ -97,31 +97,31 @@
 </thead>
 <tbody>
 <tr>
-<td><code>cache.dir</code></td>
+<td><code><a class="code-xref" href="./#cache" data-kind="config" data-def="string, flag --cache-dir, env MAGUS_CACHE_DIR">cache.dir</a></code></td>
 <td><code>MAGUS_CACHE_DIR</code></td>
 <td><code>--cache-dir</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>cache.immutable</code></td>
+<td><code><a class="code-xref" href="./#cache" data-kind="config" data-def="bool, flag --cache-immutable, env MAGUS_CACHE_IMMUTABLE">cache.immutable</a></code></td>
 <td><code>MAGUS_CACHE_IMMUTABLE</code></td>
 <td><code>--cache-immutable</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>cache.remote.insecure</code></td>
+<td><code><a class="code-xref" href="./#cache" data-kind="config" data-def="bool, flag --cache-remote-insecure, env MAGUS_CACHE_REMOTE_INSECURE">cache.remote.insecure</a></code></td>
 <td><code>MAGUS_CACHE_REMOTE_INSECURE</code></td>
 <td><code>--cache-remote-insecure</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>cache.remote.trusted_keys</code></td>
+<td><code><a class="code-xref" href="./#cache" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_CACHE_REMOTE_TRUSTED_KEYS">cache.remote.trusted_keys</a></code></td>
 <td><code>MAGUS_CACHE_REMOTE_TRUSTED_KEYS</code></td>
 <td><em>(env only)</em></td>
 <td>list <em>(comma-separated, env only)</em></td>
 </tr>
 <tr>
-<td><code>cache.size_mb</code></td>
+<td><code><a class="code-xref" href="./#cache" data-kind="config" data-def="int, flag --cache-size-mb, env MAGUS_CACHE_SIZE_MB">cache.size_mb</a></code></td>
 <td><code>MAGUS_CACHE_SIZE_MB</code></td>
 <td><code>--cache-size-mb</code></td>
 <td>int</td>
@@ -140,13 +140,13 @@
 </thead>
 <tbody>
 <tr>
-<td><code>ci.max_shards</code></td>
+<td><code><a class="code-xref" href="./#ci" data-kind="config" data-def="int, flag --ci-max-shards, env MAGUS_CI_MAX_SHARDS">ci.max_shards</a></code></td>
 <td><code>MAGUS_CI_MAX_SHARDS</code></td>
 <td><code>--ci-max-shards</code></td>
 <td>int</td>
 </tr>
 <tr>
-<td><code>ci.runner_pool_budget</code></td>
+<td><code><a class="code-xref" href="./#ci" data-kind="config" data-def="int, flag --ci-runner-pool-budget, env MAGUS_CI_RUNNER_POOL_BUDGET">ci.runner_pool_budget</a></code></td>
 <td><code>MAGUS_CI_RUNNER_POOL_BUDGET</code></td>
 <td><code>--ci-runner-pool-budget</code></td>
 <td>int</td>
@@ -165,13 +165,13 @@
 </thead>
 <tbody>
 <tr>
-<td><code>console.enabled</code></td>
+<td><code><a class="code-xref" href="./#console" data-kind="config" data-def="bool _(env only)_, env MAGUS_CONSOLE_ENABLED">console.enabled</a></code></td>
 <td><code>MAGUS_CONSOLE_ENABLED</code></td>
 <td><em>(env only)</em></td>
 <td>bool <em>(env only)</em></td>
 </tr>
 <tr>
-<td><code>console.url</code></td>
+<td><code><a class="code-xref" href="./#console" data-kind="config" data-def="string, flag --console-url, env MAGUS_CONSOLE_URL">console.url</a></code></td>
 <td><code>MAGUS_CONSOLE_URL</code></td>
 <td><code>--console-url</code></td>
 <td>string</td>
@@ -190,49 +190,49 @@
 </thead>
 <tbody>
 <tr>
-<td><code>daemon.address</code></td>
+<td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="string, flag --daemon-address, env MAGUS_DAEMON_ADDRESS">daemon.address</a></code></td>
 <td><code>MAGUS_DAEMON_ADDRESS</code></td>
 <td><code>--daemon-address</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>daemon.enabled</code></td>
+<td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="bool, flag --daemon-enabled, env MAGUS_DAEMON_ENABLED">daemon.enabled</a></code></td>
 <td><code>MAGUS_DAEMON_ENABLED</code></td>
 <td><code>--daemon-enabled</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>daemon.idle_ttl</code></td>
+<td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="duration, flag --daemon-idle-ttl, env MAGUS_DAEMON_IDLE_TTL">daemon.idle_ttl</a></code></td>
 <td><code>MAGUS_DAEMON_IDLE_TTL</code></td>
 <td><code>--daemon-idle-ttl</code></td>
 <td>duration</td>
 </tr>
 <tr>
-<td><code>daemon.maintenance.rotate_activities</code></td>
+<td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="duration, flag --daemon-maintenance-rotate-activities, env MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES">daemon.maintenance.rotate_activities</a></code></td>
 <td><code>MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES</code></td>
 <td><code>--daemon-maintenance-rotate-activities</code></td>
 <td>duration</td>
 </tr>
 <tr>
-<td><code>daemon.maintenance.rotate_logs</code></td>
+<td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="duration, flag --daemon-maintenance-rotate-logs, env MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS">daemon.maintenance.rotate_logs</a></code></td>
 <td><code>MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS</code></td>
 <td><code>--daemon-maintenance-rotate-logs</code></td>
 <td>duration</td>
 </tr>
 <tr>
-<td><code>daemon.maintenance.sync_graph</code></td>
+<td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="duration, flag --daemon-maintenance-sync-graph, env MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH">daemon.maintenance.sync_graph</a></code></td>
 <td><code>MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH</code></td>
 <td><code>--daemon-maintenance-sync-graph</code></td>
 <td>duration</td>
 </tr>
 <tr>
-<td><code>daemon.socket</code></td>
+<td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="string, flag --daemon-socket, env MAGUS_DAEMON_SOCKET">daemon.socket</a></code></td>
 <td><code>MAGUS_DAEMON_SOCKET</code></td>
 <td><code>--daemon-socket</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>daemon.workspaces</code></td>
+<td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_DAEMON_WORKSPACES">daemon.workspaces</a></code></td>
 <td><code>MAGUS_DAEMON_WORKSPACES</code></td>
 <td><em>(env only)</em></td>
 <td>list <em>(comma-separated, env only)</em></td>
@@ -294,25 +294,25 @@
 </thead>
 <tbody>
 <tr>
-<td><code>graph.depth</code></td>
+<td><code><a class="code-xref" href="./#graph" data-kind="config" data-def="int, flag --graph-depth, env MAGUS_GRAPH_DEPTH">graph.depth</a></code></td>
 <td><code>MAGUS_GRAPH_DEPTH</code></td>
 <td><code>--graph-depth</code></td>
 <td>int</td>
 </tr>
 <tr>
-<td><code>graph.direction</code></td>
+<td><code><a class="code-xref" href="./#graph" data-kind="config" data-def="string, flag --graph-direction, env MAGUS_GRAPH_DIRECTION">graph.direction</a></code></td>
 <td><code>MAGUS_GRAPH_DIRECTION</code></td>
 <td><code>--graph-direction</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>graph.roots</code></td>
+<td><code><a class="code-xref" href="./#graph" data-kind="config" data-def="string, flag --graph-roots, env MAGUS_GRAPH_ROOTS">graph.roots</a></code></td>
 <td><code>MAGUS_GRAPH_ROOTS</code></td>
 <td><code>--graph-roots</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>graph.spell</code></td>
+<td><code><a class="code-xref" href="./#graph" data-kind="config" data-def="string, flag --graph-spell, env MAGUS_GRAPH_SPELL">graph.spell</a></code></td>
 <td><code>MAGUS_GRAPH_SPELL</code></td>
 <td><code>--graph-spell</code></td>
 <td>string</td>
@@ -331,7 +331,7 @@
 </thead>
 <tbody>
 <tr>
-<td><code>hints.enabled</code></td>
+<td><code><a class="code-xref" href="./#hints" data-kind="config" data-def="bool _(env only)_, env MAGUS_HINTS_ENABLED">hints.enabled</a></code></td>
 <td><code>MAGUS_HINTS_ENABLED</code></td>
 <td><em>(env only)</em></td>
 <td>bool <em>(env only)</em></td>
@@ -350,49 +350,49 @@
 </thead>
 <tbody>
 <tr>
-<td><code>knowledge.max_size_mb</code></td>
+<td><code><a class="code-xref" href="./#knowledge" data-kind="config" data-def="int, flag --knowledge-max-size-mb, env MAGUS_KNOWLEDGE_MAX_SIZE_MB">knowledge.max_size_mb</a></code></td>
 <td><code>MAGUS_KNOWLEDGE_MAX_SIZE_MB</code></td>
 <td><code>--knowledge-max-size-mb</code></td>
 <td>int</td>
 </tr>
 <tr>
-<td><code>knowledge.symbol_indexing.disabled</code></td>
+<td><code><a class="code-xref" href="./#knowledge" data-kind="config" data-def="bool, flag --knowledge-symbol-indexing-disabled, env MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED">knowledge.symbol_indexing.disabled</a></code></td>
 <td><code>MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED</code></td>
 <td><code>--knowledge-symbol-indexing-disabled</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>knowledge.symbol_indexing.min_interval_seconds</code></td>
+<td><code><a class="code-xref" href="./#knowledge" data-kind="config" data-def="int, flag --knowledge-symbol-indexing-min-interval-seconds, env MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS">knowledge.symbol_indexing.min_interval_seconds</a></code></td>
 <td><code>MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS</code></td>
 <td><code>--knowledge-symbol-indexing-min-interval-seconds</code></td>
 <td>int</td>
 </tr>
 <tr>
-<td><code>knowledge.symbol_indexing.quiet_seconds</code></td>
+<td><code><a class="code-xref" href="./#knowledge" data-kind="config" data-def="int, flag --knowledge-symbol-indexing-quiet-seconds, env MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS">knowledge.symbol_indexing.quiet_seconds</a></code></td>
 <td><code>MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS</code></td>
 <td><code>--knowledge-symbol-indexing-quiet-seconds</code></td>
 <td>int</td>
 </tr>
 <tr>
-<td><code>knowledge.vcs.authorship</code></td>
+<td><code><a class="code-xref" href="./#knowledge" data-kind="config" data-def="bool _(env only)_, env MAGUS_KNOWLEDGE_VCS_AUTHORSHIP">knowledge.vcs.authorship</a></code></td>
 <td><code>MAGUS_KNOWLEDGE_VCS_AUTHORSHIP</code></td>
 <td><em>(env only)</em></td>
 <td>bool <em>(env only)</em></td>
 </tr>
 <tr>
-<td><code>knowledge.vcs.enabled</code></td>
+<td><code><a class="code-xref" href="./#knowledge" data-kind="config" data-def="bool, flag --knowledge-vcs-enabled, env MAGUS_KNOWLEDGE_VCS_ENABLED">knowledge.vcs.enabled</a></code></td>
 <td><code>MAGUS_KNOWLEDGE_VCS_ENABLED</code></td>
 <td><code>--knowledge-vcs-enabled</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>knowledge.vcs.max_commits</code></td>
+<td><code><a class="code-xref" href="./#knowledge" data-kind="config" data-def="int, flag --knowledge-vcs-max-commits, env MAGUS_KNOWLEDGE_VCS_MAX_COMMITS">knowledge.vcs.max_commits</a></code></td>
 <td><code>MAGUS_KNOWLEDGE_VCS_MAX_COMMITS</code></td>
 <td><code>--knowledge-vcs-max-commits</code></td>
 <td>int</td>
 </tr>
 <tr>
-<td><code>knowledge.workspaces</code></td>
+<td><code><a class="code-xref" href="./#knowledge" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_KNOWLEDGE_WORKSPACES">knowledge.workspaces</a></code></td>
 <td><code>MAGUS_KNOWLEDGE_WORKSPACES</code></td>
 <td><em>(env only)</em></td>
 <td>list <em>(comma-separated, env only)</em></td>
@@ -411,19 +411,19 @@
 </thead>
 <tbody>
 <tr>
-<td><code>log.format</code></td>
+<td><code><a class="code-xref" href="./#log" data-kind="config" data-def="string, flag --log-format, env MAGUS_LOG_FORMAT">log.format</a></code></td>
 <td><code>MAGUS_LOG_FORMAT</code></td>
 <td><code>--log-format</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>log.level</code></td>
+<td><code><a class="code-xref" href="./#log" data-kind="config" data-def="string, flag --log-level, env MAGUS_LOG_LEVEL">log.level</a></code></td>
 <td><code>MAGUS_LOG_LEVEL</code></td>
 <td><code>--log-level</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>log.silent</code></td>
+<td><code><a class="code-xref" href="./#log" data-kind="config" data-def="bool _(env only)_, env MAGUS_LOG_SILENT">log.silent</a></code></td>
 <td><code>MAGUS_LOG_SILENT</code></td>
 <td><em>(env only)</em></td>
 <td>bool <em>(env only)</em></td>
@@ -442,13 +442,13 @@
 </thead>
 <tbody>
 <tr>
-<td><code>mcp.address</code></td>
+<td><code><a class="code-xref" href="./#mcp" data-kind="config" data-def="string, flag --mcp-address, env MAGUS_MCP_ADDRESS">mcp.address</a></code></td>
 <td><code>MAGUS_MCP_ADDRESS</code></td>
 <td><code>--mcp-address</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>mcp.enabled</code></td>
+<td><code><a class="code-xref" href="./#mcp" data-kind="config" data-def="bool _(env only)_, env MAGUS_MCP_ENABLED">mcp.enabled</a></code></td>
 <td><code>MAGUS_MCP_ENABLED</code></td>
 <td><em>(env only)</em></td>
 <td>bool <em>(env only)</em></td>
@@ -467,7 +467,7 @@
 </thead>
 <tbody>
 <tr>
-<td><code>report.filter</code></td>
+<td><code><a class="code-xref" href="./#report" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_REPORT_FILTER">report.filter</a></code></td>
 <td><code>MAGUS_REPORT_FILTER</code></td>
 <td><em>(env only)</em></td>
 <td>list <em>(comma-separated, env only)</em></td>
@@ -486,13 +486,13 @@
 </thead>
 <tbody>
 <tr>
-<td><code>sandbox.enabled</code></td>
+<td><code><a class="code-xref" href="./#sandbox" data-kind="config" data-def="bool, flag --sandbox-enabled, env MAGUS_SANDBOX_ENABLED">sandbox.enabled</a></code></td>
 <td><code>MAGUS_SANDBOX_ENABLED</code></td>
 <td><code>--sandbox-enabled</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>sandbox.env.passthrough</code></td>
+<td><code><a class="code-xref" href="./#sandbox" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_SANDBOX_ENV_PASSTHROUGH">sandbox.env.passthrough</a></code></td>
 <td><code>MAGUS_SANDBOX_ENV_PASSTHROUGH</code></td>
 <td><em>(env only)</em></td>
 <td>list <em>(comma-separated, env only)</em></td>
@@ -511,37 +511,37 @@
 </thead>
 <tbody>
 <tr>
-<td><code>telemetry.enabled</code></td>
+<td><code><a class="code-xref" href="./#telemetry" data-kind="config" data-def="bool, flag --telemetry-enabled, env MAGUS_TELEMETRY_ENABLED">telemetry.enabled</a></code></td>
 <td><code>MAGUS_TELEMETRY_ENABLED</code></td>
 <td><code>--telemetry-enabled</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>telemetry.endpoint</code></td>
+<td><code><a class="code-xref" href="./#telemetry" data-kind="config" data-def="string, flag --telemetry-endpoint, env MAGUS_TELEMETRY_ENDPOINT">telemetry.endpoint</a></code></td>
 <td><code>MAGUS_TELEMETRY_ENDPOINT</code></td>
 <td><code>--telemetry-endpoint</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>telemetry.insecure</code></td>
+<td><code><a class="code-xref" href="./#telemetry" data-kind="config" data-def="bool, flag --telemetry-insecure, env MAGUS_TELEMETRY_INSECURE">telemetry.insecure</a></code></td>
 <td><code>MAGUS_TELEMETRY_INSECURE</code></td>
 <td><code>--telemetry-insecure</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>telemetry.protocol</code></td>
+<td><code><a class="code-xref" href="./#telemetry" data-kind="config" data-def="string, flag --telemetry-protocol, env MAGUS_TELEMETRY_PROTOCOL">telemetry.protocol</a></code></td>
 <td><code>MAGUS_TELEMETRY_PROTOCOL</code></td>
 <td><code>--telemetry-protocol</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>telemetry.sample_ratio</code></td>
+<td><code><a class="code-xref" href="./#telemetry" data-kind="config" data-def="float, flag --telemetry-sample-ratio, env MAGUS_TELEMETRY_SAMPLE_RATIO">telemetry.sample_ratio</a></code></td>
 <td><code>MAGUS_TELEMETRY_SAMPLE_RATIO</code></td>
 <td><code>--telemetry-sample-ratio</code></td>
 <td>float</td>
 </tr>
 <tr>
-<td><code>telemetry.service_name</code></td>
+<td><code><a class="code-xref" href="./#telemetry" data-kind="config" data-def="string, flag --telemetry-service-name, env MAGUS_TELEMETRY_SERVICE_NAME">telemetry.service_name</a></code></td>
 <td><code>MAGUS_TELEMETRY_SERVICE_NAME</code></td>
 <td><code>--telemetry-service-name</code></td>
 <td>string</td>
@@ -560,19 +560,19 @@
 </thead>
 <tbody>
 <tr>
-<td><code>vcs.base_ref</code></td>
+<td><code><a class="code-xref" href="./#vcs" data-kind="config" data-def="string, flag --vcs-base-ref, env MAGUS_VCS_BASE_REF">vcs.base_ref</a></code></td>
 <td><code>MAGUS_VCS_BASE_REF</code></td>
 <td><code>--vcs-base-ref</code></td>
 <td>string</td>
 </tr>
 <tr>
-<td><code>vcs.enabled</code></td>
+<td><code><a class="code-xref" href="./#vcs" data-kind="config" data-def="bool _(env only)_, env MAGUS_VCS_ENABLED">vcs.enabled</a></code></td>
 <td><code>MAGUS_VCS_ENABLED</code></td>
 <td><em>(env only)</em></td>
 <td>bool <em>(env only)</em></td>
 </tr>
 <tr>
-<td><code>vcs.name</code></td>
+<td><code><a class="code-xref" href="./#vcs" data-kind="config" data-def="string, flag --vcs-name, env MAGUS_VCS_NAME">vcs.name</a></code></td>
 <td><code>MAGUS_VCS_NAME</code></td>
 <td><code>--vcs-name</code></td>
 <td>string</td>
@@ -591,31 +591,31 @@
 </thead>
 <tbody>
 <tr>
-<td><code>volatility.annotate_gha</code></td>
+<td><code><a class="code-xref" href="./#volatility" data-kind="config" data-def="bool, flag --volatility-annotate-gha, env MAGUS_VOLATILITY_ANNOTATE_GHA">volatility.annotate_gha</a></code></td>
 <td><code>MAGUS_VOLATILITY_ANNOTATE_GHA</code></td>
 <td><code>--volatility-annotate-gha</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>volatility.bootstrap_samples</code></td>
+<td><code><a class="code-xref" href="./#volatility" data-kind="config" data-def="int, flag --volatility-bootstrap-samples, env MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES">volatility.bootstrap_samples</a></code></td>
 <td><code>MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES</code></td>
 <td><code>--volatility-bootstrap-samples</code></td>
 <td>int</td>
 </tr>
 <tr>
-<td><code>volatility.enabled</code></td>
+<td><code><a class="code-xref" href="./#volatility" data-kind="config" data-def="bool, flag --volatility-enabled, env MAGUS_VOLATILITY_ENABLED">volatility.enabled</a></code></td>
 <td><code>MAGUS_VOLATILITY_ENABLED</code></td>
 <td><code>--volatility-enabled</code></td>
 <td>bool</td>
 </tr>
 <tr>
-<td><code>volatility.min_samples</code></td>
+<td><code><a class="code-xref" href="./#volatility" data-kind="config" data-def="int, flag --volatility-min-samples, env MAGUS_VOLATILITY_MIN_SAMPLES">volatility.min_samples</a></code></td>
 <td><code>MAGUS_VOLATILITY_MIN_SAMPLES</code></td>
 <td><code>--volatility-min-samples</code></td>
 <td>int</td>
 </tr>
 <tr>
-<td><code>volatility.threshold</code></td>
+<td><code><a class="code-xref" href="./#volatility" data-kind="config" data-def="float, flag --volatility-threshold, env MAGUS_VOLATILITY_THRESHOLD">volatility.threshold</a></code></td>
 <td><code>MAGUS_VOLATILITY_THRESHOLD</code></td>
 <td><code>--volatility-threshold</code></td>
 <td>float</td>
@@ -632,15 +632,15 @@
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../reference/codes/sandbox/MGS2004/"><span class="related-card-title">MGS2004: sandbox.allow unresolved</span><span class="related-card-desc">Fires when a sandbox.allow path in magus.yaml references an env var or path that magus cannot resolve, so the rule is skipped rather than fatal.</span></a>
-        <a class="related-card" href="../../reference/manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
-        <a class="related-card" href="../../reference/codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
+        <a class="related-card" href="../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
+        <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../search/?q=tag%3A%22config%22">config</a><a class="tag" href="../../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../../search/?q=tag%3A%22configuration%22">configuration</a><a class="tag" href="../../search/?q=tag%3A%22environment+variables%22">environment variables</a><a class="tag" href="../../search/?q=tag%3A%22flags%22">flags</a><a class="tag" href="../../search/?q=tag%3A%22reference%22">reference</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -781,6 +781,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -891,6 +896,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

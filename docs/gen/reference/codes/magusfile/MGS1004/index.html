@@ -95,9 +95,9 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1004-unreached-footprint-declaration">MGS1004: unreached footprint declaration</h1>
-<p><code>magus doctor</code> found a <code>ctx.inputs(...)</code> or <code>ctx.outputs(...)</code> call that the
-static extractor cannot reach from any target body. magus reads these
-declarations from the source without running it (a cache hit skips the body
+<p><code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> found a <code>ctx.inputs(...)</code> or <code>ctx.outputs(...)</code> call that the
+static extractor cannot reach from any <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> body. magus reads these
+declarations from the source without running it (a <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> hit skips the body
 entirely), following a target's body and the helpers it calls by name. A call it
 can't reach never enters a cache key.</p>
 <pre><code class="language-text">[MGS1004] 1 magus.inputs/outputs call(s) are not statically reachable from a
@@ -143,8 +143,8 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 <ul>
 <li><strong>Not a hard error.</strong> Nothing blocks the build; it is a <code>magus doctor</code> finding.</li>
 <li><strong>Not the non-literal-argument error.</strong> A computed argument in a <em>reachable</em>
-call (<code>ctx.inputs(x)</code>) is a magusfile load error, because magus sees the call
-but cannot resolve the glob. MGS1004 is the opposite: magus resolves nothing
+call (<code>ctx.inputs(x)</code>) is a <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error, because magus sees the call
+but cannot resolve the glob. <a class="code-xref" href="./" data-kind="code" data-def="Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">MGS1004</a> is the opposite: magus resolves nothing
 because it never reaches the call.</li>
 </ul>
 <h2 id="see-also">See also</h2>
@@ -167,13 +167,13 @@ magus.inputs shares with <code>magus.needs</code>.</li>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
         <a class="related-card" href="../../../../reference/codes/magusfile/MGS1005/"><span class="related-card-title">MGS1005: redundant footprint glob</span><span class="related-card-desc">Fires when a per-target magus.inputs or magus.outputs glob is already declared project-wide, making it a no-op under the additive footprint model.</span></a>
-        <a class="related-card" href="../../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
+        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1008/"><span class="related-card-title">MGS1008: target missing its context parameter</span><span class="related-card-desc">Fires when an exported magusfile function is not a valid target because its first parameter is not a magus\Context. The signature is the contract magus reads statically to build the graph.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1004%22">MGS1004</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../../search/?q=tag%3A%22inputs%22">inputs</a><a class="tag" href="../../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -314,6 +314,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -424,6 +429,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

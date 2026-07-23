@@ -17,6 +17,7 @@ import "assert";
 import "lib/text" as _;
 import "lib/url" as _;
 import "lib/html" as _;
+import "lib/glossary" as _;
 import "engine/meta" as _;
 import "engine/path" as _;
 import "engine/types" as _;
@@ -467,6 +468,21 @@ fun substituteVersionTokens(md: str, site: Site) > str {
 }
 
 
+// injectDemoCallout inserts the "Interactive demo" callout after a page's intro (the first
+// </p>), deep-linking href (a tour card). A distinct component (its own teal identity), not a
+// link or a button - it signals "there is a runnable demonstration of this concept."
+fun injectDemoCallout(html: str, href: str) > str {
+    final play = "<svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><polygon points=\"5 3 19 12 5 21 5 3\"></polygon></svg>";
+    final callout = "<aside class=\"demo-callout\"><span class=\"demo-callout-icon\">" + play + "</span>"
+        + "<div class=\"demo-callout-body\"><p class=\"demo-callout-title\">Interactive demo</p>"
+        + "<p class=\"demo-callout-desc\">Step through this concept live in the guided tour.</p>"
+        + "<a class=\"demo-callout-link\" href=\"" + href + "\">Open the demo <span class=\"oip-arrow\" aria-hidden=\"true\">&#x2197;</span></a>"
+        + "</div></aside>\n";
+    final p = html.indexOf("</p>");
+    if (p == null) { return callout + html; }
+    return html.sub(0, len: p! + 4) + "\n" + callout + html.sub(p! + 4);
+}
+
 // Render one docs/*.md file to a sibling *.html under gen. rel is relative to the
 // docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.
 export fun renderFile(rel: str, site: Site) > void {
@@ -492,6 +508,29 @@ export fun renderFile(rel: str, site: Site) > void {
     if (desc == "") { desc = site.config.description; }
 
     final url = cleanURL(rel, site.blog);
+
+    // Auto-link the first occurrence of each glossary term to its glossary entry, baking the
+    // definition into the link, and record the cross-references. The glossary page itself is
+    // not auto-linked (it defines the terms); instead it gets each term's "referenced on"
+    // backlinks injected under its definition (rendered last, so the set is complete).
+    if (rel == "glossary.md") {
+        html = injectBacklinks(html, site.glossaryBacklinkFragments());
+    } else {
+        final linkRes = linkGlossaryTerms(html, site.glossaryTerms, relativePath(newCleanDirectory(rel, site), "glossary/"));
+        html = linkRes.html;
+        site.addTermRefs(linkRes.linked, url);
+    }
+    // Link inline-code domain references (diagnostic codes, ...) to their reference pages on
+    // every page, glossary included.
+    html = linkCodeEntities(html, site.codeEntities, newCleanDirectory(rel, site));
+
+    // If a tour step demonstrates this concept, inject a "see the demo" callout after the
+    // intro, deep-linking its tour card.
+    final demo = site.demoBySlug[newCleanDirectory(rel, site)];
+    if (demo != null) {
+        html = injectDemoCallout(html, relativePath(newCleanDirectory(rel, site), "tour/") + "#" + demo!.anchor);
+    }
+
     final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), site);
 
     // Directory-index output: every page is <cleanURL>index.html (extensionless). url is

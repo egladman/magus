@@ -112,11 +112,11 @@
 <h1 id="magus">magus</h1>
 <p>Magus core primitives.</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the module under its bare name (<code>import &quot;magus&quot;</code>) and call methods in <code>camelCase</code> (<code>magus.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;magus&quot;</code>) and call methods in <code>camelCase</code> (<code>magus.someMethod</code>).</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="cmd">cmd</h3>
-<p>Escape hatch: run <code>magus &lt;args&gt;</code> for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
+<p>Escape hatch: run <code>magus &lt;args&gt;</code> for any subcommand, in the <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> directory. Prefer the dedicated methods (run, describe, <a class="glossary-term" href="../../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a>, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>; opts.quiet captures the output without echoing it to the <a class="glossary-term" href="../../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a>.</p>
 <p><strong>Signature:</strong> <code>magus.cmd(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L138" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -144,7 +144,7 @@
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="run">run</h3>
-<p>Run <code>magus run &lt;args&gt;</code> recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
+<p>Run <code><a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;args&gt;</code> recursively in the target's project directory and capture its output. Child invocations share the parent's <a class="glossary-term" href="../../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
 <p><strong>Signature:</strong> <code>magus.run(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L155" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -172,7 +172,7 @@
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="describe">describe</h3>
-<p>Run <code>magus describe &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.</p>
+<p>Run <code><a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.</p>
 <p><strong>Signature:</strong> <code>magus.describe(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L160" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -200,7 +200,7 @@
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="insight">insight</h3>
-<p>Run <code>magus insight &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
+<p>Run <code><a class="code-xref" href="../../manpage/magus-insight/" data-kind="command" data-def="Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">magus insight</a> &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
 <p><strong>Signature:</strong> <code>magus.insight(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L165" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -228,7 +228,7 @@
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="doctor">doctor</h3>
-<p>Run <code>magus doctor &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
+<p>Run <code><a class="code-xref" href="../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a> &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
 <p><strong>Signature:</strong> <code>magus.doctor(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L170" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -256,7 +256,7 @@
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="bust-cache">bust_cache</h3>
-<p>Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.</p>
+<p>Invalidate the build <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.</p>
 <p><strong>Signature:</strong> <code>magus.bustCache([project_path])</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L114" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -277,7 +277,7 @@
 </tbody>
 </table></figure>
 <h3 id="has-charm">has_charm</h3>
-<p>True when execution charm <code>name</code> is active, letting a target body branch on a charm carried in context (e.g. has_charm(&quot;rw&quot;)).</p>
+<p>True when execution <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> <code>name</code> is active, letting a target body branch on a charm carried in context (e.g. has_charm(&quot;rw&quot;)).</p>
 <p><strong>Signature:</strong> <code>magus.has_charm(name) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
@@ -310,14 +310,14 @@
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../reference/buzz/archive/"><span class="related-card-title">archive module</span><span class="related-card-desc">Archive creation and extraction with automatic format detection.</span></a>
-        <a class="related-card" href="../../../reference/buzz/charm/"><span class="related-card-title">charm module</span><span class="related-card-desc">Constructors for charm values: RFC 6902 JSON Patches over a target&#39;s argv (see docs/charms.md).</span></a>
-        <a class="related-card" href="../../../reference/buzz/crypto/"><span class="related-card-title">crypto module</span><span class="related-card-desc">Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).</span></a>
+        <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-graph/"><span class="related-card-title">magus graph</span><span class="related-card-desc">Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph&#39;s shape (god nodes, orphans, doc coverage).</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -458,6 +458,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -568,6 +573,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

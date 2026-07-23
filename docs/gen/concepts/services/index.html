@@ -84,11 +84,13 @@
     <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="services">Services</h1>
-<p>A <strong>service op</strong> returns a <code>Service</code>, a long-running process such as a dev server,
+<p>A <strong><a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> op</strong> returns a <code>Service</code>, a long-running process such as a dev server,
 a watcher, or a database container, rather than a <code>Command</code> that runs to completion
 (see <a href="../operations/#what-an-operation-is">Operations</a>). This page covers how magus
 runs services, shares them, and keeps you from the two foot-guns that come with
 long-running processes: accidental sprawl and misuse.</p>
+<aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-9">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
+
 <pre><code class="language-buzz">fun pg(t: Target) &gt; Service {
     return Service{
         command   = Command{bin = &quot;docker&quot;, args = [&quot;run&quot;, &quot;-p&quot;, &quot;5432:5432&quot;, &quot;postgres:15&quot;]},
@@ -100,23 +102,23 @@ long-running processes: accidental sprawl and misuse.</p>
 <h2 id="directly-run-vs-as-a-dependency">Directly run vs. as a dependency</h2>
 <p>A service behaves differently depending on how it is reached:</p>
 <ul>
-<li><strong>Run directly</strong> (<code>magus run dev</code>) it is forked in the <strong>foreground</strong> and magus
+<li><strong>Run directly</strong> (<code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> dev</code>) it is forked in the <strong>foreground</strong> and magus
 <strong>blocks</strong> on it; Ctrl-C signals the process. This is the &quot;run my dev server&quot; case.</li>
-<li><strong>Reached as a dependency</strong> (some target's <code>magus.needs</code> pulls it in) it is
+<li><strong>Reached as a dependency</strong> (some <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s <code>magus.needs</code> pulls it in) it is
 <strong>supervised in the background</strong>: magus starts it, waits for its readiness probe to
 pass, then lets the dependent run against it. It does not block. The service stops
-when the run ends (or stays warm on the daemon, below).</li>
+when the run ends (or stays warm on the <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>, below).</li>
 </ul>
 <h2 id="caching">Caching</h2>
 <p>A service op's target is <strong>inherently uncached</strong> (see
 <a href="../spells/#an-operation-is-a-command-or-a-service">Spells vs Targets</a>): <code>servesTarget</code>
-in the run engine detects that the target is backed by a service op and
+in the run <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> detects that the target is backed by a service op and
 forces <code>NoCache</code> on its step, regardless of any <code>skip_cache</code> declaration. This
 is not an author opt-in - there is no way to make a service op cacheable,
 because caching would mean replaying a &quot;success&quot; result without ever
 starting the process, which defeats the point of a long-running service. See
 <a href="../cache/#opting-out-and-busting">Opting out and busting</a> for the
-author-facing no-cache controls that apply to the rest of a target's
+author-facing no-<a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> controls that apply to the rest of a target's
 non-service work.</p>
 <h2 id="shared-instances">Shared instances</h2>
 <p>Services are deduplicated by a <strong>configuration fingerprint</strong>: a content hash of the
@@ -139,7 +141,7 @@ process never exits, the probe does.</p>
 then reaps it. Teardown has three layers:</p>
 <ul>
 <li><strong>automatic</strong>: the idle timeout above, plus a crash reaper (below);</li>
-<li><strong>all services</strong>: <code>magus server stop --services</code> stops every hosted service (to
+<li><strong>all services</strong>: <code><a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">magus server</a> stop --services</code> stops every hosted service (to
 drop stale state or free held ports) without shutting the daemon down;</li>
 <li><strong>whole daemon</strong>: <code>magus server stop</code> tears the daemon and its services down.</li>
 </ul>
@@ -147,14 +149,14 @@ drop stale state or free held ports) without shutting the daemon down;</li>
 command on startup to <strong>reap orphans</strong> the dead one left behind. Give a container
 service a <code>stop</code> command (e.g. <code>docker stop &lt;name&gt;</code>) so it can be reaped this way.</p>
 <h2 id="guarding-against-foot-guns">Guarding against foot-guns</h2>
-<p>magus is proactive about the two ways services go wrong. Both surface as
+<p>magus is proactive about the two ways services go wrong. Both <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> as
 <a href="../../reference/codes/services/">diagnostics</a>.</p>
 <h3 id="near-duplicate-services-mgs5001referencecodesservicesmgs5001md">Near-duplicate services (<a href="../../reference/codes/services/MGS5001/">MGS5001</a>)</h3>
 <p>When two or more services look like copies of one another (same image and container
 port but differing in some detail), magus will not silently merge them (the difference
 may be load-bearing, like a different database name). Instead it <strong>warns</strong> at run time,
-scoped to the services actually in that run, and <code>magus doctor</code> reports the same across
-the whole workspace. If the divergence is intentional, mark the service <code>distinct</code> with
+scoped to the services actually in that run, and <code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> reports the same across
+the whole <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>. If the divergence is intentional, mark the service <code>distinct</code> with
 a reason:</p>
 <pre><code class="language-buzz">Service{ command = ..., distinct = &quot;billing pins Postgres 16 for the 15 to 16 migration test&quot; }
 </code></pre>
@@ -183,15 +185,15 @@ the check.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
-        <a class="related-card" href="../../reference/codes/services/"><span class="related-card-title">services diagnostics</span><span class="related-card-desc">Landing page for MGS5xxx diagnostics that flag problems with long-running service ops, such as near-duplicate services that should be shared instead of run as separate processes.</span></a>
-        <a class="related-card" href="../../reference/codes/services/MGS5001/"><span class="related-card-title">MGS5001: near-duplicate services</span><span class="related-card-desc">Fires when two or more service ops in a run look like copies of the same service (same image and container port) but differ subtly, so they will run as separate processes instead of one shared instance.</span></a>
-        <a class="related-card" href="../../reference/codes/services/MGS5002/"><span class="related-card-title">MGS5002: service op detaches</span><span class="related-card-desc">Fires when a service op&#39;s process command detaches (docker run -d), which forks the process away from magus and breaks foreground supervision, stdout capture, readiness probing, and graceful stop.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22services%22">services</a><a class="tag" href="../../search/?q=tag%3A%22service+op%22">service op</a><a class="tag" href="../../search/?q=tag%3A%22shared+services%22">shared services</a><a class="tag" href="../../search/?q=tag%3A%22readiness%22">readiness</a><a class="tag" href="../../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../../search/?q=tag%3A%22keep-warm%22">keep-warm</a><a class="tag" href="../../search/?q=tag%3A%22MGS5001%22">MGS5001</a><a class="tag" href="../../search/?q=tag%3A%22MGS5002%22">MGS5002</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -332,6 +334,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -442,6 +449,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

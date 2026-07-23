@@ -103,7 +103,7 @@
 <p>Prefer Go tooling or a local build? See <a href="#install-with-go">Install with Go</a> and <a href="#build-from-source">Build from source</a>.</p>
 <p>Every build is published at <a href="../../public/release">/public/release/</a> alongside its <code>SHA256SUMS</code> manifest and signature. However you install, <a href="#verify-a-release">verify the release</a> first.</p>
 <h2 id="update">Update</h2>
-<p><code>magus self update</code> fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: <a href="../../reference/manpage/magus-self"><code>magus self</code></a>.</p>
+<p><code><a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">magus self</a> update</code> fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: <a href="../../reference/manpage/magus-self"><code>magus self</code></a>.</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -186,7 +186,7 @@ MCowBQYDK2VwAyEA/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 <pre><code class="language-sh">ln -s &quot;$(command -v magus)&quot; ~/.local/bin/mgs
 </code></pre>
 <h2 id="install-with-go">Install with Go</h2>
-<p><code>go install github.com/egladman/magus/cmd/magus@latest</code> is <strong>not currently supported.</strong> magus vendors its embedded Buzz interpreter through a local <code>replace</code> directive in <code>go.mod</code>, and <code>go install</code> refuses any module whose <code>go.mod</code> carries a <code>replace</code> - it fetches the tagged source from the module proxy, where a local path cannot resolve, and fails with:</p>
+<p><code>go install github.com/egladman/magus/cmd/magus@latest</code> is <strong>not currently supported.</strong> magus vendors its embedded <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> interpreter through a local <code>replace</code> directive in <code>go.mod</code>, and <code>go install</code> refuses any <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> whose <code>go.mod</code> carries a <code>replace</code> - it fetches the tagged source from the module proxy, where a local path cannot resolve, and fails with:</p>
 <pre><code class="language-text">The go.mod file for the module providing named packages contains one or
 more replace directives. It must not contain directives that would cause
 it to be interpreted differently than if it were the main module.
@@ -210,7 +210,7 @@ go build -o magus ./cmd/magus
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22download%22">download</a><a class="tag" href="../../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../../search/?q=tag%3A%22release%22">release</a><a class="tag" href="../../search/?q=tag%3A%22self-update%22">self-update</a><a class="tag" href="../../search/?q=tag%3A%22ed25519%22">ed25519</a><a class="tag" href="../../search/?q=tag%3A%22verify%22">verify</a><a class="tag" href="../../search/?q=tag%3A%22signing%22">signing</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -351,6 +351,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -461,6 +466,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

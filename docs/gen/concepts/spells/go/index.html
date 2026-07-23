@@ -97,7 +97,7 @@
     <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="go">go</h1>
-<p>The <code>go</code> spell wires the Go toolchain into a magusfile: each op forks a <code>go</code> (or <code>gofmt</code>) subcommand directly, with no shell. Lint and vulnerability scanning run as <code>go tool</code> invocations so they resolve from the module's tool block rather than PATH.</p>
+<p>The <code>go</code> <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> wires the Go toolchain into a <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>: each op forks a <code>go</code> (or <code>gofmt</code>) subcommand directly, with no shell. Lint and vulnerability scanning run as <code>go tool</code> invocations so they resolve from the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a>'s tool block rather than PATH.</p>
 <p><strong>Runtime name:</strong> <code>go</code> (source <code>spells/golang/</code>)</p>
 <p><strong>Version probe:</strong> <code>go version</code></p>
 <h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
@@ -115,13 +115,13 @@
 <tr>
 <td><code>args</code></td>
 <td><code>[str]</code></td>
-<td>Extra arguments appended to the resolved command. Omit it and a bare <code>go[&quot;&lt;op&gt;&quot;]()</code> forwards <code>magus run &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
+<td>Extra arguments appended to the resolved command. Omit it and a bare <code>go[&quot;&lt;op&gt;&quot;]()</code> forwards <code><a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
 <td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>cwd</code></td>
 <td><code>str</code></td>
-<td>Working directory the command runs in. Defaults to the project directory.</td>
+<td>Working directory the command runs in. Defaults to the <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> directory.</td>
 <td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
@@ -211,7 +211,7 @@ export fun generate(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <h2 id="go-mod-tidy">go-mod-tidy</h2>
-<p>tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes - safe for CI gating); the write charm applies the changes.</p>
+<p>tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes - safe for <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> gating); the write <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> applies the changes.</p>
 <p><strong>Command:</strong> <code>go mod tidy --diff</code></p>
 <h3 id="rw-1">rw</h3>
 <p>Drops <code>--diff</code>.</p>
@@ -239,7 +239,7 @@ export fun tidy(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <h2 id="go-run">go-run</h2>
-<p>go-run compiles and runs a package. Alone among these ops it has no useful bare form: the caller names the package and its flags through the {&quot;args&quot;: [...]} option (go[&quot;go-run&quot;]({&quot;args&quot;: [&quot;../cmd/tool&quot;, &quot;-out&quot;, &quot;x&quot;]}) -&gt; <code>go run ../cmd/tool -out x</code>), so a magusfile drives a repo-local Go tool through the spell - version-pinned, sandbox- and charm-aware - instead of a raw os.exec(&quot;go&quot;, [&quot;run&quot;, ...]).</p>
+<p>go-run compiles and runs a package. Alone among these ops it has no useful bare form: the caller names the package and its flags through the {&quot;args&quot;: [...]} option (go[&quot;go-run&quot;]({&quot;args&quot;: [&quot;../cmd/tool&quot;, &quot;-out&quot;, &quot;x&quot;]}) -&gt; <code>go run ../cmd/tool -out x</code>), so a magusfile drives a repo-local Go tool through the spell - version-pinned, <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>- and charm-aware - instead of a raw os.exec(&quot;go&quot;, [&quot;run&quot;, ...]).</p>
 <p><strong>Command:</strong> <code>go run</code></p>
 <h3 id="example-5">Example</h3>
 
@@ -256,7 +256,7 @@ export fun generate(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <h2 id="go-test">go-test</h2>
-<p>The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). <code>magus run go::go-test:cd</code> (or ci:cd) emits the profile.</p>
+<p>The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage <a class="glossary-term" href="../../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> (e.g. Coveralls). <code>magus run go::go-test:cd</code> (or ci:cd) emits the profile.</p>
 <p><strong>Command:</strong> <code>go test ./...</code></p>
 <h3 id="cd">cd</h3>
 <p>Appends <code>-covermode=atomic</code>, appends <code>-coverprofile=coverage.out</code>.</p>
@@ -379,7 +379,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <h2 id="scip">scip</h2>
-<p>scip is the reserved op that runs the language's SCIP indexer for the knowledge graph. Named for the format, not the binary, so the same verb produces symbols across every language spell (<code>magus run &lt;project&gt;::scip</code>). magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. Run through sh so the env var expands.</p>
+<p>scip is the reserved op that runs the language's SCIP indexer for the <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a>. Named for the format, not the binary, so the same verb produces symbols across every language spell (<code>magus run &lt;project&gt;::scip</code>). magus injects MAGUS_SYMBOL_INDEX with the <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> destination, so the index never lands in the tree; scip-go writes there via --output. Run through sh so the env var expands.</p>
 <p><strong>Command:</strong> <code>sh -c scip-go --output &quot;$MAGUS_SYMBOL_INDEX&quot;</code></p>
     </article>
     </div>
@@ -393,14 +393,14 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../../concepts/spells/rs/"><span class="related-card-title">rs spell</span><span class="related-card-desc">Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.</span></a>
-        <a class="related-card" href="../../../concepts/spells/bash/"><span class="related-card-title">bash spell</span><span class="related-card-desc">Bash spell: shellcheck linting for shell scripts.</span></a>
-        <a class="related-card" href="../../../concepts/spells/buf/"><span class="related-card-title">buf spell</span><span class="related-card-desc">Buf spell: protobuf build, lint, format, and code generation.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../concepts/spells/ts/"><span class="related-card-title">ts spell</span><span class="related-card-desc">TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22go%22">go</a><a class="tag" href="../../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../../search/?q=tag%3A%22golang%22">golang</a><a class="tag" href="../../../search/?q=tag%3A%22build%22">build</a><a class="tag" href="../../../search/?q=tag%3A%22test%22">test</a><a class="tag" href="../../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -541,6 +541,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -651,6 +656,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

@@ -60,6 +60,12 @@ superscript like this[^example] links to a short note at the foot of the page, w
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.
 
+Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a "see also" that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.
+
 [^example]:
     Authored as `text[^label]` in the prose, with a matching `[^label]: note`
     line anywhere in the file.

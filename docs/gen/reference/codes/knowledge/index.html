@@ -87,17 +87,17 @@
     <article>
 <h1 id="knowledge-graph-diagnostics">Knowledge-graph diagnostics</h1>
 <p>Codes in the <code>MGS7xxx</code> range flag ambiguities the knowledge-graph extractor hits
-while assembling the deterministic graph from workspace sources (the graph that
-backs <code>magus query</code>, <code>magus explain</code>, and <code>magus graph</code>). Unlike most magus
+while assembling the deterministic graph from <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> sources (the graph that
+backs <code>magus query</code>, <code>magus explain</code>, and <code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a></code>). Unlike most magus
 diagnostics, these
 are not raised as errors that stop a build: the graph is derived and safe to
 rebuild implicitly, so an ambiguity is recorded as a silent attribute on the
-affected node (visible via <code>magus explain</code>) rather than logged. They mark spots
+<a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> node (visible via <code>magus explain</code>) rather than logged. They mark spots
 where extraction could not resolve something cleanly, for a human to check.</p>
 <h2 id="codes">Codes</h2>
 <ul>
-<li><a href="MGS7001/">MGS7001</a>: a buzz import resolves to no scanned file and is not a
-compiled-in module, so it becomes an inferred edge to the literal path.</li>
+<li><a href="MGS7001/">MGS7001</a>: a <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> import resolves to no scanned file and is not a
+compiled-in <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a>, so it becomes an inferred edge to the literal path.</li>
 <li><a href="MGS7002/">MGS7002</a>: a doc page cites an <code>MGS####</code> code that is not
 registered, so no edge can link the mention to a real diagnostic node.</li>
 </ul>
@@ -107,7 +107,7 @@ registered, so no edge can link the mention to a real diagnostic node.</li>
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../../search/?q=tag%3A%22diagnostics%22">diagnostics</a><a class="tag" href="../../../search/?q=tag%3A%22error+codes%22">error codes</a><a class="tag" href="../../../search/?q=tag%3A%22MGS7xxx%22">MGS7xxx</a><a class="tag" href="../../../search/?q=tag%3A%22extraction%22">extraction</a><a class="tag" href="../../../search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="../../../search/?q=tag%3A%22docs%22">docs</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -248,6 +248,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -358,6 +363,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

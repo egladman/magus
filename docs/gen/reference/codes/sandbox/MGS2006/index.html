@@ -96,7 +96,7 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="mgs2006-likely-path-shim-manager-stripped">MGS2006: likely PATH-shim manager stripped</h1>
-<p>A subprocess failed and magus suspects the cause is sandbox
+<p>A subprocess failed and magus suspects the cause is <a class="glossary-term" href="../../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>
 stripping the env vars that a PATH-shim runtime manager (mise, asdf,
 direnv) relies on.</p>
 <pre><code class="language-text">[MGS2006] mise shims appear stripped from PATH; the build is using system tools instead
@@ -104,14 +104,14 @@ direnv) relies on.</p>
 </code></pre>
 <h2 id="why">Why</h2>
 <p><code>mise</code>, <code>asdf</code>, and <code>direnv</code> work by injecting a shim directory into
-<code>PATH</code> and reading a tool-version file from the workspace. The shim
+<code>PATH</code> and reading a tool-version file from the <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>. The shim
 binary is invoked when the user runs <code>go</code>, then <code>mise</code> looks at its
 own <code>MISE_*</code> env vars to decide which Go version to dispatch to.</p>
 <p>When sandbox strips <code>MISE_*</code> (or <code>ASDF_*</code>, <code>DIRENV_*</code>) from the
 child's environment, the shim runs without configuration and either
 fails or falls back to a system tool the user did not intend to use.</p>
 <h2 id="resolution">Resolution</h2>
-<p>Add the variables your runtime manager needs to <code>sandbox.env.passthrough</code>:</p>
+<p>Add the variables your runtime manager needs to <code><a class="code-xref" href="../../../config/#sandbox" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_SANDBOX_ENV_PASSTHROUGH">sandbox.env.passthrough</a></code>:</p>
 <pre><code class="language-yaml">sandbox:
   env:
     passthrough:
@@ -122,7 +122,7 @@ fails or falls back to a system tool the user did not intend to use.</p>
 <p>Pick the one (or two) you actually use. The wildcard is a suffix match
 so <code>MISE_*</code> covers <code>MISE_DATA_DIR</code>, <code>MISE_SHIMS</code>, <code>__MISE_*</code>, etc.</p>
 <p>These variables do not, by themselves, contain credentials a
-supply-chain attacker would target. They configure a local tool
+supply-chain attacker would <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>. They configure a local tool
 manager. Adding them to the passthrough list does not
 weaken sandbox's secret-protection guarantee.</p>
 <p>If you do not use a PATH-shim manager and this code fires, the
@@ -140,14 +140,14 @@ the failing command.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
-        <a class="related-card" href="../../../../reference/codes/sandbox/MGS2003/"><span class="related-card-title">MGS2003: env vars stripped</span><span class="related-card-desc">Informational notice that the sandbox replaced a child process environment with a curated allowlist, dropping variables like tokens or credentials.</span></a>
-        <a class="related-card" href="../../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../../reference/codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
+        <a class="related-card" href="../../../../reference/codes/sandbox/MGS2001/"><span class="related-card-title">MGS2001: path read denied</span><span class="related-card-desc">Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.</span></a>
+        <a class="related-card" href="../../../../reference/codes/sandbox/MGS2002/"><span class="related-card-title">MGS2002: path write denied</span><span class="related-card-desc">Fires when a spell tries to write to a file outside the workspace and outside the sandbox allowlist, blocking persistence and tampering attacks.</span></a>
+        <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS2006%22">MGS2006</a><a class="tag" href="../../../../search/?q=tag%3A%22sandbox%22">sandbox</a><a class="tag" href="../../../../search/?q=tag%3A%22mise%22">mise</a><a class="tag" href="../../../../search/?q=tag%3A%22asdf%22">asdf</a><a class="tag" href="../../../../search/?q=tag%3A%22direnv%22">direnv</a><a class="tag" href="../../../../search/?q=tag%3A%22PATH%22">PATH</a><a class="tag" href="../../../../search/?q=tag%3A%22shims%22">shims</a><a class="tag" href="../../../../search/?q=tag%3A%22passthrough%22">passthrough</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -288,6 +288,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -398,6 +403,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

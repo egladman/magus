@@ -84,7 +84,7 @@
     <article>
 <h1 id="mgs9004-no-auth-token-configured">MGS9004: no auth token configured</h1>
 <p>A command needed the operator (cli) token - the built-in credential the local
-CLI and daemon authenticate with - but none has been created yet.</p>
+CLI and <a class="glossary-term" href="../../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> authenticate with - but none has been created yet.</p>
 <pre><code class="language-text">[MGS9004] no token configured; run `magus config mcp token generate`
   see: .../MGS9004.md
 </code></pre>
@@ -100,13 +100,13 @@ authenticate with.</p>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
 <li><strong>Not a connector-token problem.</strong> Connector tokens (for MCP clients) are a
-separate store; this is the built-in operator credential. See MGS9001 for a
+separate store; this is the built-in operator credential. See <a class="code-xref" href="../MGS9001/" data-kind="code" data-def="The daemon refused a request because its bearer token was missing, wrong, expired, or revoked. This is the usual reason an MCP client cannot connect.">MGS9001</a> for a
 rejected connector token.</li>
 </ul>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><code>magus config mcp token</code>: print or generate the operator token.</li>
-<li><code>magus server start</code>: starts the daemon, which seeds the token.</li>
+<li><code><a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> mcp token</code>: print or generate the operator token.</li>
+<li><code><a class="code-xref" href="../../../manpage/magus-server/" data-kind="command" data-def="Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">magus server</a> start</code>: starts the daemon, which seeds the token.</li>
 </ul>
     </article>
     </div>
@@ -119,15 +119,15 @@ rejected connector token.</li>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../../reference/codes/auth/MGS9001/"><span class="related-card-title">MGS9001: bearer token rejected</span><span class="related-card-desc">The daemon refused a request because its bearer token was missing, wrong, expired, or revoked. This is the usual reason an MCP client cannot connect.</span></a>
-        <a class="related-card" href="../../../../reference/codes/auth/MGS9002/"><span class="related-card-title">MGS9002: insecure token file permissions</span><span class="related-card-desc">A magus auth token or connector store file is readable beyond its owner. Magus refuses to use it until the permissions are tightened to 0600.</span></a>
-        <a class="related-card" href="../../../../reference/codes/auth/MGS9005/"><span class="related-card-title">MGS9005: connector name already exists</span><span class="related-card-desc">Creating a connector token with a name already in use. Connector names are unique; pass a different --name or revoke the existing one first.</span></a>
         <a class="related-card" href="../../../../reference/codes/auth/MGS9006/"><span class="related-card-title">MGS9006: connector token not found</span><span class="related-card-desc">Revoking or looking up a connector token by a name or fingerprint that matches nothing in the store.</span></a>
+        <a class="related-card" href="../../../../reference/manpage/magus-status/"><span class="related-card-title">magus status</span><span class="related-card-desc">Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.</span></a>
+        <a class="related-card" href="../../../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
+        <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS9004%22">MGS9004</a><a class="tag" href="../../../../search/?q=tag%3A%22auth%22">auth</a><a class="tag" href="../../../../search/?q=tag%3A%22token%22">token</a><a class="tag" href="../../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../../search/?q=tag%3A%22operator%22">operator</a><a class="tag" href="../../../../search/?q=tag%3A%22onboarding%22">onboarding</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -268,6 +268,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -378,6 +383,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

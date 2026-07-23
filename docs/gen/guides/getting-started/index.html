@@ -84,29 +84,29 @@
     <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="getting-started">Getting started</h1>
-<p>This is the guided, command-line path through magus: install the binary, bootstrap a workspace, write your first magusfile, run a target, bind a spell, and compose a <code>ci</code> pipeline you can run against only the projects a change touched. Follow it top to bottom. Every command here is real; run each one as you read.</p>
-<p>If you would rather try magus without installing anything, the <a href="../../playground/">interactive playground</a> runs the same engine in your browser.</p>
+<p>This is the guided, command-line path through magus: install the binary, bootstrap a <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, write your first <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>, run a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, bind a <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>, and compose a <code>ci</code> pipeline you can run against only the projects a change touched. Follow it top to bottom. Every command here is real; run each one as you read.</p>
+<p>If you would rather try magus without installing anything, the <a href="../../playground/">interactive playground</a> runs the same <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> in your browser.</p>
 <h2 id="1-install-magus">1. Install magus</h2>
 <p>magus ships as a single self-contained binary. Follow the <a href="../download/">Download guide</a> for your platform, PATH setup, and signature verification, then confirm the binary is on your PATH:</p>
 <pre><code class="language-sh">magus version
 </code></pre>
-<p>The <a href="../download/">Download guide</a> also covers <code>magus self update</code> and shell completion. This page assumes <code>magus</code> resolves on your PATH from here on.</p>
+<p>The <a href="../download/">Download guide</a> also covers <code><a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">magus self</a> update</code> and shell completion. This page assumes <code>magus</code> resolves on your PATH from here on.</p>
 <h2 id="2-bootstrap-a-workspace-with-magus-init">2. Bootstrap a workspace with <code>magus init</code></h2>
 <p>From the root of your repository:</p>
 <pre><code class="language-sh">magus init
 </code></pre>
-<p><code>magus init</code> bootstraps a magus workspace in the current directory. It:</p>
+<p><code><a class="code-xref" href="../../reference/manpage/magus-init/" data-kind="command" data-def="Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.">magus init</a></code> bootstraps a magus workspace in the current directory. It:</p>
 <ul>
 <li>Writes <strong><code>magus.yaml</code></strong>, the workspace config. By default this goes to the global user config location (<code>$XDG_CONFIG_HOME/magus/</code>); pass <code>--local</code> to write it into the repo instead, which is what you want for checked-in, team-shared config.</li>
 <li>Stubs a starter <strong><code>magusfile.buzz</code></strong> in the repo root: a working file with every canonical stage already declared as a no-op, ready for you to fill in.</li>
 <li>Wires the <strong>VCS merge driver</strong> so <code>magus.yaml</code> and the magusfile merge cleanly. The VCS is taken from <code>--vcs</code> (<code>git</code> or <code>hg</code>), or chosen interactively when stdin is a terminal.</li>
 </ul>
-<p>For a non-interactive run (for example in CI), pick the VCS explicitly and write the config into the repo:</p>
+<p>For a non-interactive run (for example in <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>), pick the VCS explicitly and write the config into the repo:</p>
 <pre><code class="language-sh">magus init --local --vcs git
 </code></pre>
 <p>Other flags: <code>--force</code> overwrites an existing config file, and <code>--global</code> writes only the global config and skips the per-repo magusfile stub and merge driver.</p>
 <h2 id="3-read-your-first-magusfile">3. Read your first magusfile</h2>
-<p>Open the <code>magusfile.buzz</code> that <code>magus init</code> created. It looks roughly like this: every exported function is a runnable target, and the current directory is already registered as a project on defaults.</p>
+<p>Open the <code>magusfile.buzz</code> that <code>magus init</code> created. It looks roughly like this: every exported function is a runnable target, and the current directory is already registered as a <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> on defaults.</p>
 <pre><code class="language-buzz">import &quot;magus&quot;;
 import &quot;os&quot;;
 
@@ -128,15 +128,15 @@ export fun ci(ctx: magus\Context, args: [str]) &gt; void {
 <ul>
 <li><strong>Targets are exported functions.</strong> There is no registration call for a target: export a <code>fun</code>, and its name becomes a runnable target. See <a href="../../concepts/targets/">targets</a> for the full model and the CLI grammar.</li>
 <li><strong><code>magus.needs</code> declares prerequisites.</strong> <code>ctx.needs(format)</code> says &quot;run <code>format</code> first&quot; - you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.</li>
-<li><strong><code>ci</code> is the anchor.</strong> It is an ordinary target you compose with <code>magus.needs</code>. magus does not hardcode its steps, but it is the target <code>magus affected</code> keys off, and it always runs read-only.</li>
+<li><strong><code>ci</code> is the anchor.</strong> It is an ordinary target you compose with <code>magus.needs</code>. magus does not hardcode its steps, but it is the target <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> keys off, and it always runs read-only.</li>
 </ul>
 <p>List what magus discovered, then run the starter <code>build</code>:</p>
 <pre><code class="language-sh">magus ls            # list every discovered project, its files, outputs, and deps
 magus run build     # run the build target for the project under the cwd
 </code></pre>
-<p><code>magus ls</code> prints every project it found; <code>magus run build</code> runs your <code>build</code> target (the starter one echoes a greeting after <code>format</code>). With no project argument, <code>magus run</code> selects the project containing the current directory.</p>
+<p><code><a class="code-xref" href="../../reference/manpage/magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a></code> prints every project it found; <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> build</code> runs your <code>build</code> target (the starter one echoes a greeting after <code>format</code>). With no project argument, <code>magus run</code> selects the project containing the current directory.</p>
 <h2 id="4-bind-your-first-spell">4. Bind your first spell</h2>
-<p>The starter <code>build</code> shells out with <code>os.exec</code>. That is fine for a one-off, but real toolchains belong in a <strong>spell</strong>: a library of tool-native operations plus the cache metadata that toolchain needs. A spell runs nothing on its own; it contributes operations (<code>go-build</code>, <code>go-test</code>, <code>go-vet</code>, ...) that your targets compose, and it tells the cache which files are inputs and outputs. See <a href="../../concepts/spells/">spells</a>, and <a href="../../concepts/spells/#spells-vs-targets">Spells vs Targets</a> for where the line falls.</p>
+<p>The starter <code>build</code> shells out with <code>os.exec</code>. That is fine for a <a class="glossary-term" href="../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a>, but real toolchains belong in a <strong>spell</strong>: a library of tool-native operations plus the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> metadata that toolchain needs. A spell runs nothing on its own; it contributes operations (<code>go-build</code>, <code>go-test</code>, <code>go-vet</code>, ...) that your targets compose, and it tells the cache which files are inputs and outputs. See <a href="../../concepts/spells/">spells</a>, and <a href="../../concepts/spells/#spells-vs-targets">Spells vs Targets</a> for where the line falls.</p>
 <p>Bind the built-in <code>go</code> spell by importing it and listing it in <code>magus.project</code>, then compose its ops into your targets. Op keys are the CLI command in kebab-case, so they are reached by subscript (<code>go[&quot;go-build&quot;]</code>):</p>
 <pre><code class="language-buzz">import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
@@ -170,7 +170,7 @@ magus run lint      # go vet, golangci-lint, govulncheck
 magus run build     # go build
 magus run test      # go test ./...
 </code></pre>
-<p>A note on read vs write: targets are read-only by default, so <code>magus run format</code> <strong>checks</strong> formatting rather than rewriting it. To mutate in place, attach the built-in <code>rw</code> charm:</p>
+<p>A note on read vs write: targets are read-only by default, so <code>magus run format</code> <strong>checks</strong> formatting rather than rewriting it. To mutate in place, attach the built-in <code>rw</code> <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>:</p>
 <pre><code class="language-sh">magus run format:rw   # gofmt -w . (rewrite files)
 magus run lint:rw     # golangci-lint --fix (apply autofixes)
 </code></pre>
@@ -188,7 +188,7 @@ magus run lint:rw     # golangci-lint --fix (apply autofixes)
 <pre><code class="language-sh">magus affected ci             # run ci only for projects your changes touched
 magus affected ci --base main # compare against a specific base ref
 </code></pre>
-<p>If you ever wonder why a project is in the affected set, ask:</p>
+<p>If you ever wonder why a project is in the <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set, ask:</p>
 <pre><code class="language-sh">magus affected ci --explain ./path/to/project
 </code></pre>
 <p><code>magus affected ci</code> is the command your CI runs on every pull request. It keys off the <code>ci</code> anchor, computes the affected set from the VCS diff, and does the minimum work. For CI fan-out across runners, <code>magus affected --plan</code> emits a provider-neutral shard plan; see <a href="../../reference/manpage/magus-affected/"><code>magus affected</code></a> for <code>--plan</code>, <code>--stdin</code>, and bisect.</p>
@@ -228,15 +228,15 @@ magus affected ci --base main # compare against a specific base ref
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../guides/debugging/"><span class="related-card-title">Debugging magusfiles</span><span class="related-card-desc">Drop into an interactive Buzz REPL with magusfile bindings preloaded, or set magus.pry() breakpoints mid-target to inspect frames, locals, and state.</span></a>
-        <a class="related-card" href="../../guides/download/docker/"><span class="related-card-title">Run magus in Docker</span><span class="related-card-desc">Pull and run the official magus container images from GHCR - a multi-arch static image and a glibc variant - mounting your workspace, plus how to verify the cosign signature.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
+        <a class="related-card" href="../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22getting-started%22">getting-started</a><a class="tag" href="../../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../../search/?q=tag%3A%22init%22">init</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../search/?q=tag%3A%22tutorial%22">tutorial</a><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -377,6 +377,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -487,6 +492,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

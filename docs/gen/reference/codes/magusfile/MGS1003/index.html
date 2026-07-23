@@ -95,7 +95,7 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1003-bespoke-phase-fragment-target-name">MGS1003: bespoke phase-fragment target name</h1>
-<p><code>magus doctor</code> found a target whose normalized name is one of <code>typecheck</code>,
+<p><code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> found a <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> whose normalized name is one of <code>typecheck</code>,
 <code>type-check</code>, <code>vet</code>, <code>audit</code>, <code>security</code>, <code>style</code>, or <code>prettify</code>. Each of these
 names a subset of an existing canonical phase - static analysis or formatting -
 rather than a phase of its own.</p>
@@ -106,7 +106,7 @@ covers it (docs/targets.md#the-target-name, see .../MGS1003.md)
 </code></pre>
 <h2 id="why">Why</h2>
 <p><code>lint</code> is defined as &quot;static analysis, type-check&quot; (see
-<a href="../../../../concepts/targets/#the-target-name">targets</a>): a Go project's <code>go vet</code> and a
+<a href="../../../../concepts/targets/#the-target-name">targets</a>): a Go <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s <code>go vet</code> and a
 TypeScript project's <code>tsc --noEmit</code> both compose into <code>lint</code>, the same way
 eslint and golangci-lint do. <code>format</code> plays the analogous role for style/prettify
 tools. A standalone <code>typecheck</code> (or <code>vet</code>, <code>audit</code>, <code>security</code>, <code>style</code>,
@@ -114,14 +114,14 @@ tools. A standalone <code>typecheck</code> (or <code>vet</code>, <code>audit</co
 name.</p>
 <p>The practical cost is that <code>ci</code> is composed from the canonical phases via
 <code>magus.needs</code>. A bespoke <code>typecheck</code> target sitting beside <code>lint</code> is invisible to
-any <code>ci</code> that only needs <code>lint</code> - the type-check silently never runs in CI unless
+any <code>ci</code> that only needs <code>lint</code> - the type-check silently never runs in <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> unless
 someone remembers to add it separately. Folding the op into <code>lint</code> means it rides
 along automatically wherever <code>lint</code> already does.</p>
-<p>This is a <strong>warning</strong>, not a magusfile load error: unlike <a href="../MGS1002/">MGS1002</a>
-(a spell shadow, unresolvable without a rename or an acknowledgment), a bespoke
+<p>This is a <strong>warning</strong>, not a <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error: unlike <a href="../MGS1002/">MGS1002</a>
+(a <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> shadow, unresolvable without a rename or an acknowledgment), a bespoke
 name is a valid, working target - just one that's easy to forget in a pipeline.
 The escape hatch is simply keeping the name if that's a deliberate choice for
-your workspace.</p>
+your <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>.</p>
 <h2 id="resolution">Resolution</h2>
 <p>Move the tool invocation into <code>lint</code> (or <code>format</code> for prettify/style) instead of
 a standalone target:</p>
@@ -152,7 +152,7 @@ known static-analysis/formatting fragments, not any custom target name.</li>
 <ul>
 <li><a href="../../../../concepts/targets/#the-target-name">targets</a>: the seven canonical target
 names and what composes into <code>lint</code>/<code>format</code>.</li>
-<li><code>magus describe targets</code>: lists every target and which spell ops compose into it.</li>
+<li><code><a class="code-xref" href="../../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> targets</code>: lists every target and which spell ops compose into it.</li>
 </ul>
     </article>
     </div>
@@ -167,13 +167,13 @@ names and what composes into <code>lint</code>/<code>format</code>.</li>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
         <a class="related-card" href="../../../../reference/codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
-        <a class="related-card" href="../../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1004/"><span class="related-card-title">MGS1004: unreached footprint declaration</span><span class="related-card-desc">Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.</span></a>
+        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1006/"><span class="related-card-title">MGS1006: unknown target</span><span class="related-card-desc">Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus.needs.</span></a>
+        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1003%22">MGS1003</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../../../search/?q=tag%3A%22format%22">format</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a><a class="tag" href="../../../../search/?q=tag%3A%22naming%22">naming</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -314,6 +314,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -424,6 +429,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

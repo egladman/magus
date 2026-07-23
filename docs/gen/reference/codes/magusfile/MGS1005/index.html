@@ -95,9 +95,9 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1005-redundant-footprint-glob">MGS1005: redundant footprint glob</h1>
-<p><code>magus doctor</code> found a per-target <code>ctx.inputs(...)</code> or <code>ctx.outputs(...)</code>
-glob that is already declared project-wide - either in the project's <code>sources</code>
-/<code>outputs</code> options or contributed by a bound spell. Under the additive footprint
+<p><code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> found a per-<a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> <code>ctx.inputs(...)</code> or <code>ctx.outputs(...)</code>
+glob that is already declared <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>-wide - either in the project's <code>sources</code>
+/<code>outputs</code> options or contributed by a bound <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>. Under the additive footprint
 model, the per-target copy adds nothing.</p>
 <pre><code class="language-text">[MGS1005] 1 per-target magus.inputs/outputs glob(s) duplicate a project-wide
 declaration (a no-op under the additive model); drop the duplicate (see
@@ -105,12 +105,12 @@ declaration (a no-op under the additive model); drop the duplicate (see
   build: ctx.inputs(&quot;src/**&quot;) already in project sources
 </code></pre>
 <h2 id="why">Why</h2>
-<p>A target's cache footprint is the <strong>union</strong> of three layers: the globs a bound
+<p>A target's <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> footprint is the <strong>union</strong> of three layers: the globs a bound
 spell contributes, the project-wide <code>sources</code>/<code>outputs</code>, and the per-target
 <code>magus.inputs</code>/<code>magus.outputs</code>. Per-target declarations only ever <em>add</em> to the
 footprint - they never shrink the project-wide baseline.</p>
 <p>So a per-target glob that repeats one already present project-wide changes
-nothing about the cache key or the snapshot set. It is harmless, but it reads as
+nothing about the cache key or the <a class="glossary-term" href="../../../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a> set. It is harmless, but it reads as
 if it narrowed or specialized the target's footprint when it did not - a
 misleading no-op worth removing.</p>
 <p>This most often happens by copy-paste: the same glob declared both in
@@ -162,14 +162,14 @@ project-wide vs per-target declarations.</li>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1004/"><span class="related-card-title">MGS1004: unreached footprint declaration</span><span class="related-card-desc">Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.</span></a>
-        <a class="related-card" href="../../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
+        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
+        <a class="related-card" href="../../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1005%22">MGS1005</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../../search/?q=tag%3A%22inputs%22">inputs</a><a class="tag" href="../../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -310,6 +310,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -420,6 +425,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

@@ -87,20 +87,20 @@
 <p>magus has two dependency mechanisms that answer two different questions, and
 the story of how they interact is scattered today across getting-started
 (<code>needs</code>), <a href="../workspace/">workspace</a> (<code>depends_on</code>), and
-<a href="../../guides/affected/">affected</a> (the edges the affected closure walks). This page
+<a href="../../guides/affected/">affected</a> (the edges the <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> closure walks). This page
 owns that story end to end.</p>
 <h2 id="the-two-mechanisms-and-the-decision-rule">The two mechanisms and the decision rule</h2>
 <ul>
-<li><strong><code>ctx.needs(...)</code></strong> is target-level, imperative, and blocking at its call
+<li><strong><code>ctx.needs(...)</code></strong> is <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>-level, imperative, and blocking at its call
 site inside the target body. It says &quot;run X before the rest of my body
-executes&quot; - same-project or cross-project, deduped per invocation, run
+executes&quot; - same-<a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> or cross-project, deduped per invocation, run
 once. See <a href="../targets/">targets</a> for the full grammar.</li>
 <li><strong><code>depends_on</code></strong> is project-level, declared in <code>magus.project</code>'s options
 map. It says &quot;that project is upstream of me&quot; - an ordering barrier for
 same-target runs, a seed for the affected closure, and an input to the
-cache key. See <a href="../workspace/#depends_on-cross-project-dependencies">workspace</a>.</li>
+<a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> key. See <a href="../workspace/#depends_on-cross-project-dependencies">workspace</a>.</li>
 </ul>
-<p><strong>Rule of thumb:</strong> reach for <code>needs</code> inside a magusfile to sequence work
+<p><strong>Rule of thumb:</strong> reach for <code>needs</code> inside a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> to sequence work
 (&quot;run <code>generate</code> before I <code>build</code>&quot;); reach for <code>depends_on</code> to declare that
 another project's changes affect you, independent of whether any target
 calls into it directly. A cross-project <code>needs</code> gives you both at
@@ -109,7 +109,7 @@ once - see the fold, below.</p>
 <p>A cross-project <code>ctx.needs(alias.target)</code> (where <code>alias</code> is a project
 imported at the top of the magusfile, whose exported targets it binds as
 callable handles) is <strong>statically extracted</strong> and <strong>unioned into the
-consuming project's <code>DependsOn</code></strong> at workspace-open time
+consuming project's <code>DependsOn</code></strong> at <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>-open time
 (<code>applyCrossProjectDependencies</code>, called from <code>Magus.Open</code>'s <code>load</code>). You
 declare the dependency once, at the target that actually needs it, and it
 counts toward the affected closure and cache-key propagation exactly as if
@@ -121,7 +121,7 @@ access (<code>ctx.needs(alias.target)</code>), and each literal pattern given to
 <code>magus.glob</code> inside a <code>magus.needs</code>. What it cannot evaluate is a <em>computed</em> dependency - a
 handle stored in a variable, returned from a function, or otherwise built at
 runtime. Such a <code>magus.needs</code> call is invisible to the static graph, to
-<code>magus describe</code>, and to the affected set. It still runs correctly at runtime
+<code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a></code>, and to the affected set. It still runs correctly at runtime
 (<code>magus.needs</code> itself has no such restriction), but nothing outside that one
 target's execution knows the edge exists. If a dependency needs to be visible
 to <code>affected</code>/<code>describe</code> without being passed as a plain handle, declare it
@@ -152,7 +152,7 @@ own cache entry; the <em>call from inside this parent</em> does not.</li>
 <li><strong>The key is protected by project-wide source globs, so this is
 safe-but-coarse</strong> (see <a href="../cache/#granularity-project-wide-vs-per-target">cache</a>).
 <code>baseStep</code> seeds every target's sources with the union of every bound
-spell's <code>needs</code> plus the magusfile, so an under-declared <code>needs</code> glob is
+<a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>'s <code>needs</code> plus the magusfile, so an under-declared <code>needs</code> glob is
 the one way a stale hit can slip through - the coarse baseline is the
 safety margin against exactly that. To attach an input to one target rather
 than widen the whole project, declare it in the body with
@@ -160,9 +160,9 @@ than widen the whole project, declare it in the body with
 are read from the AST the same way these <code>needs</code> edges are.</li>
 </ul>
 <h2 id="both-arms-rule-the-static-graph-and-a-dry-run-can-disagree">Both-arms rule: the static graph and a dry run can disagree</h2>
-<p>The static extractor (<code>internal/describe/extract.go</code>) that powers <code>magus describe</code>/<code>magus graph</code> sees <strong>both arms</strong> of a charm-conditional <code>magus.needs</code>
+<p>The static extractor (<code>internal/describe/extract.go</code>) that powers <code>magus describe</code>/<code><a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a></code> sees <strong>both arms</strong> of a <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>-conditional <code>magus.needs</code>
 call (an <code>if ctx.has_charm(&quot;cd&quot;) { ctx.needs(...) } else { ctx.needs(...) }</code>
-shows both edges in the graph). A dry run (<code>magus run --dry-run</code>) evaluates
+shows both edges in the graph). A dry run (<code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> --dry-run</code>) evaluates
 the magusfile for real and sees only the <strong>taken</strong> branch, under whichever
 charms are active. Both are correct for what they represent: the static graph
 is &quot;everything this target could need under some charm,&quot; the dry run is
@@ -180,7 +180,7 @@ point back at each other fail with <code>cross-project cycle: &lt;dir&gt; target
 path that was never discovered/registered fails workspace load with
 <code>magus: dependency not registered (N unresolved)</code>, listing each
 <code>&lt;consumer&gt; -&gt; &lt;dep&gt;</code> pair with a did-you-mean suggestion when one is close.</li>
-<li><strong>MGS4004 (undeclared dependency, runtime hint).</strong> Diagnostic, not a load
+<li><strong><a class="code-xref" href="../../reference/codes/race/MGS4004/" data-kind="code" data-def="Fires when a project not in the dispatch consumes a file written by one that ran, suggesting the dependency graph is missing an edge.">MGS4004</a> (undeclared dependency, runtime hint).</strong> Diagnostic, not a load
 error: when <code>--race</code> detects a path written by one project and read by
 another that was not in the dispatched scope, it warns &quot;potential
 undeclared dependency&quot; - a signal you may be missing a <code>depends_on</code>, not a
@@ -206,7 +206,7 @@ yields no handles, so needs of it is a no-op. Only exported-function targets
 carry a handle; depend on a spell-provided op directly.</p>
 <h2 id="a-service-reached-via-needs-is-supervised-not-foregrounded">A service reached via <code>needs</code> is supervised, not foregrounded</h2>
 <p>A <a href="../services/">service op</a> run <strong>directly</strong> (<code>magus run dev</code>) forks in the
-foreground and blocks until Ctrl-C. The same service reached as a
+foreground and blocks until Ctrl-C. The same <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> reached as a
 <code>magus.needs</code> dependency is instead <strong>supervised in the background</strong>:
 started, gated on its readiness probe, and shared with any other dependent
 that needs the same configuration - the dependent's own body runs without
@@ -233,15 +233,15 @@ this page's caching section builds on.</li>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
-        <a class="related-card" href="../../concepts/targets/ci/"><span class="related-card-title">CI</span><span class="related-card-desc">Compose a ci target from your magusfile, wire the flow with magus.needs, and lock down shared-cache writes with Ed25519 trusted keys.</span></a>
-        <a class="related-card" href="../../concepts/concurrency/"><span class="related-card-title">Concurrency</span><span class="related-card-desc">How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, and the cross-process workspace lock that keeps two separate magus invocations from clobbering each other&#39;s outputs and cache.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22dependencies%22">dependencies</a><a class="tag" href="../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../search/?q=tag%3A%22depends_on%22">depends_on</a><a class="tag" href="../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../search/?q=tag%3A%22cycles%22">cycles</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -382,6 +382,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -492,6 +497,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

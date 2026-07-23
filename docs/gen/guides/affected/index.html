@@ -84,15 +84,15 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="affected">Affected</h1>
-<p><code>magus affected &lt;target&gt;</code> runs a target for every project a version-control diff
-touched, and nothing else. On a large workspace this is the difference between
+<p><code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> &lt;target&gt;</code> runs a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for every <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> a version-control diff
+touched, and nothing else. On a large <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> this is the difference between
 testing five projects and testing five hundred. The <a href="../../reference/manpage/magus-affected/">man page</a>
 is the flag reference; this page is the model behind it.</p>
 <h2 id="design-intent">Design intent</h2>
 <ul>
 <li><strong>The diff decides the scope.</strong> You name a target; the VCS diff picks the
 projects. You never maintain a list of &quot;what to build for this change.&quot;</li>
-<li><strong>Correctness comes from the graph, not a guess.</strong> A project is affected if its
+<li><strong>Correctness comes from the graph, not a guess.</strong> A project is <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> if its
 own sources changed or if anything it depends on is affected. magus walks the
 full transitive closure, so a change deep in a shared library rebuilds every
 dependent, not just its direct neighbors.</li>
@@ -103,7 +103,7 @@ dependent, not just its direct neighbors.</li>
 <p>A project enters the affected set two ways:</p>
 <ol>
 <li><strong>Direct.</strong> One of its source files (its spells' declared globs, plus the
-magusfile) appears in the diff.</li>
+<a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>) appears in the diff.</li>
 <li><strong>Transitive.</strong> A project it depends on is affected. Dependencies come from
 <a href="../../concepts/dependencies/">the two dependency mechanisms</a>: a <code>magus.needs</code> edge, a
 project-level <code>depends_on</code>, or a cross-project target reference (folded
@@ -118,7 +118,7 @@ root. The diff is taken against a base ref: <code>--base</code>, else <code>MAGU
 else the adapter's built-in default (<code>origin/main</code> for git). Two escape hatches:</p>
 <ul>
 <li><code>MAGUS_VCS_COMMAND</code> / <code>vcs.command_name</code> pin or replace the VCS command.</li>
-<li><code>MAGUS_VCS_ENABLED=false</code> (or <code>vcs.enabled: false</code>) short-circuits detection and
+<li><code>MAGUS_VCS_ENABLED=false</code> (or <code><a class="code-xref" href="../../reference/config/#vcs" data-kind="config" data-def="bool _(env only)_, env MAGUS_VCS_ENABLED">vcs.enabled</a>: false</code>) short-circuits detection and
 falls back to the full project set, labelled <code>vcs disabled</code>. Use it where no VCS
 is available (a release tarball, a fresh container) so a build still runs.</li>
 </ul>
@@ -127,7 +127,7 @@ is available (a release tarball, a fresh container) so a build still runs.</li>
 <ul>
 <li><code>--explain &lt;project&gt;</code> - why a project is in the set (changed file or affected dep).</li>
 <li><code>--graph</code> - render the affected scope as a dependency graph (<code>--depth</code> caps it).</li>
-<li><code>--plan</code> - emit a provider-neutral JSON CI shard plan for the set. It always keys
+<li><code>--plan</code> - emit a provider-neutral JSON <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the set. It always keys
 off the <code>ci</code> anchor, so a matrix job fans the affected work across shards.</li>
 <li><code>--bisect &lt;project&gt;</code> - drive VCS bisect using run history to find the commit that
 introduced a regression.</li>
@@ -136,7 +136,7 @@ introduced a regression.</li>
 <p><code>magus affected ci</code> is the workhorse of a monorepo pipeline: it runs the <code>ci</code>
 anchor for exactly the projects a pull request touched. Because
 <a href="../../concepts/charms/#defaulting-charms-per-workspace-default_charms"><code>affected</code> never applies <code>default_charms</code></a>
-and <code>RunCI</code> strips the <code>rw</code> charm, an affected CI run is always read-only no matter
+and <code>RunCI</code> strips the <code>rw</code> <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>, an affected CI run is always read-only no matter
 how the workspace is configured. Fan out at scale with <code>--plan</code> feeding a shard
 matrix.</p>
 <h2 id="watch-integration">Watch integration</h2>
@@ -144,14 +144,14 @@ matrix.</p>
 watcher can drive continuous rebuilds:</p>
 <pre><code class="language-sh">magus watch | magus affected --stdin build
 </code></pre>
-<p><code>magus watch --null</code> pairs with <code>--stdin --null</code> for paths that may contain
+<p><code><a class="code-xref" href="../../reference/manpage/magus-watch/" data-kind="command" data-def="Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">magus watch</a> --null</code> pairs with <code>--stdin --null</code> for paths that may contain
 newlines. See <a href="../tips/">tips</a> for the continuous-build loop.</p>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../../concepts/dependencies/">dependencies</a> - <code>magus.needs</code> versus <code>depends_on</code>, the edges the closure walks.</li>
 <li><a href="../../concepts/targets/">targets</a> - the target grammar these edges resolve against.</li>
 <li><a href="../../concepts/operations/">operations</a> - what a target dispatches to per project.</li>
-<li><a href="../../concepts/cache/">cache</a> - why an affected-but-unchanged target still replays from cache.</li>
+<li><a href="../../concepts/cache/">cache</a> - why an affected-but-unchanged target still replays from <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>.</li>
 </ul>
     </article>
     </div>
@@ -163,15 +163,15 @@ newlines. See <a href="../tips/">tips</a> for the continuous-build loop.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
-        <a class="related-card" href="../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
-        <a class="related-card" href="../../guides/insight/"><span class="related-card-title">Insight</span><span class="related-card-desc">How magus reads VCS history to show where a codebase&#39;s attention and risk concentrate - hotspots, temporal coupling, ownership, and trend - as a behavioral complement to static structure.</span></a>
-        <a class="related-card" href="../../guides/tips/"><span class="related-card-title">Tips and tricks</span><span class="related-card-desc">Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, output field discovery, and recursive invocation.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../guides/getting-started/"><span class="related-card-title">Getting started</span><span class="related-card-desc">A linear, CLI-first walkthrough from installing magus to running your first spell-composed target and a ci pipeline.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../search/?q=tag%3A%22git%22">git</a><a class="tag" href="../../search/?q=tag%3A%22changed-files%22">changed-files</a><a class="tag" href="../../search/?q=tag%3A%22dependency-graph%22">dependency-graph</a><a class="tag" href="../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../search/?q=tag%3A%22bisect%22">bisect</a><a class="tag" href="../../search/?q=tag%3A%22watch%22">watch</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -312,6 +312,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -422,6 +427,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

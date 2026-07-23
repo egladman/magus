@@ -93,7 +93,7 @@
 <h1 id="run-magus-in-docker">Run magus in Docker</h1>
 <p>Official images are published to the GitHub Container Registry at
 <strong><code>ghcr.io/egladman/magus</code></strong>. They are a drop-in alternative to installing the
-binary - handy for CI runners and throwaway environments.</p>
+binary - handy for <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runners and throwaway environments.</p>
 <p>Each image runs magus as its entrypoint against <code>/workspace</code>, as a non-root user.
 Mount your repository there and pass a magus command:</p>
 <pre><code class="language-sh">docker run --rm -v &quot;$PWD&quot;:/workspace ghcr.io/egladman/magus:latest ls
@@ -123,7 +123,7 @@ test.</p>
 <td><code>ghcr.io/egladman/magus:latest-cgo</code></td>
 <td>distroless/cc (glibc)</td>
 <td>linux/amd64</td>
-<td>glibc build that bundles <code>inotify-tools</code>, so <code>magus watch</code> / <code>fs.watch</code> work inside the container.</td>
+<td>glibc build that bundles <code>inotify-tools</code>, so <code><a class="code-xref" href="../../../reference/manpage/magus-watch/" data-kind="command" data-def="Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">magus watch</a></code> / <code>fs.watch</code> work inside the container.</td>
 </tr>
 </tbody>
 </table></figure>
@@ -137,7 +137,7 @@ test.</p>
 <h2 id="verify-the-signature">Verify the signature</h2>
 <p>Every pushed image digest is signed with <a href="https://github.com/sigstore/cosign" rel="noopener noreferrer" target="_blank" data-external>cosign</a>
 keyless (Sigstore OIDC) at release time - no long-lived key. Verify that an image was
-built by this project's release workflow:</p>
+built by this <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s release workflow:</p>
 <pre><code class="language-sh">cosign verify ghcr.io/egladman/magus:latest \
   --certificate-identity-regexp '^https://github.com/egladman/magus/.github/workflows/cd.yaml@.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
@@ -160,14 +160,14 @@ run it.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
-        <a class="related-card" href="../../../concepts/spells/docker/"><span class="related-card-title">docker spell</span><span class="related-card-desc">Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.</span></a>
-        <a class="related-card" href="../../../guides/download/linux/"><span class="related-card-title">Install on Linux</span><span class="related-card-desc">Download, verify, and install the magus binary on Linux (amd64 or arm64) and put it on your PATH - no root, no sudo.</span></a>
-        <a class="related-card" href="../../../guides/download/macos/"><span class="related-card-title">Install on macOS</span><span class="related-card-desc">Download, verify, and install the magus binary on macOS (Apple Silicon or Intel), clear the quarantine flag, and put it on your PATH.</span></a>
+        <a class="related-card" href="../../../guides/getting-started/"><span class="related-card-title">Getting started</span><span class="related-card-desc">A linear, CLI-first walkthrough from installing magus to running your first spell-composed target and a ci pipeline.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../guides/affected/"><span class="related-card-title">Affected</span><span class="related-card-desc">How magus runs a target only for the projects a VCS diff touched, taking the transitive closure over the dependency graph, and the forensic modes that explain, graph, shard, and bisect that set.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22docker%22">docker</a><a class="tag" href="../../../search/?q=tag%3A%22container%22">container</a><a class="tag" href="../../../search/?q=tag%3A%22image%22">image</a><a class="tag" href="../../../search/?q=tag%3A%22ghcr%22">ghcr</a><a class="tag" href="../../../search/?q=tag%3A%22cosign%22">cosign</a><a class="tag" href="../../../search/?q=tag%3A%22install%22">install</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -308,6 +308,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -418,6 +423,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

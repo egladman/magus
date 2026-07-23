@@ -84,9 +84,9 @@
     <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="mcp">MCP</h1>
-<p>When the daemon is running, it also exposes an <strong>MCP (Model Context Protocol) server</strong> over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.</p>
-<p>Magus targets humans first. MCP is always compiled in; it is a runtime layer you turn off with <code>mcp.enabled=false</code> (see <a href="#enabling-and-disabling">Enabling and disabling</a>) when you do not want it.</p>
-<p>For the full agent surface built on top of MCP - the installable skills, <code>MAGUS.md</code> routing, durable memory, and the drift check - see <a href="../agents/">Agents</a>.</p>
+<p>When the <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> is running, it also exposes an <strong>MCP (Model Context Protocol) server</strong> over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.</p>
+<p>Magus targets humans first. MCP is always compiled in; it is a runtime layer you turn off with <code><a class="code-xref" href="../../reference/config/#mcp" data-kind="config" data-def="bool _(env only)_, env MAGUS_MCP_ENABLED">mcp.enabled</a>=false</code> (see <a href="#enabling-and-disabling">Enabling and disabling</a>) when you do not want it.</p>
+<p>For the full agent <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> built on top of MCP - the installable skills, <code>MAGUS.md</code> routing, durable memory, and the drift check - see <a href="../agents/">Agents</a>.</p>
 <h2 id="starting-the-daemon-starts-mcp">Starting the daemon starts MCP</h2>
 <p>You don't need a separate process. Start the daemon as usual:</p>
 <pre><code class="language-sh">magus server start
@@ -94,11 +94,11 @@
 <p>The MCP endpoint comes up alongside it:</p>
 <pre><code class="language-text">http://127.0.0.1:7391/mcp
 </code></pre>
-<p><code>magus doctor</code> reports whether MCP is reachable and prints the endpoint URL.</p>
+<p><code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> reports whether MCP is reachable and prints the endpoint URL.</p>
 <h2 id="is-mcp-actually-reachable">Is MCP actually reachable?</h2>
 <p>An agent host connects to the MCP endpoint over HTTP; nothing starts that endpoint on
 its own, so if the daemon is not running the tools silently disappear from the host.
-<code>magus status</code> reports the endpoint's live health as its own block, checked independently
+<code><a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a></code> reports the endpoint's live <a class="glossary-term" href="../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> as its own block, checked independently
 of the daemon's job socket:</p>
 <pre><code class="language-text">mcp endpoint
   url    http://127.0.0.1:7391/mcp
@@ -115,7 +115,7 @@ of the daemon's job socket:</p>
 <tbody>
 <tr>
 <td><code>serving</code></td>
-<td>listening and a workspace is loaded - the tools are reachable</td>
+<td>listening and a <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> is loaded - the tools are reachable</td>
 </tr>
 <tr>
 <td><code>not-ready</code></td>
@@ -123,7 +123,7 @@ of the daemon's job socket:</p>
 </tr>
 <tr>
 <td><code>unreachable</code></td>
-<td>nothing is listening; start the daemon with <code>magus server start</code></td>
+<td>nothing is listening; start the daemon with <code><a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">magus server</a> start</code></td>
 </tr>
 <tr>
 <td><code>disabled</code></td>
@@ -143,7 +143,7 @@ magus status --probe=liveness,mcp    # fail if the daemon OR the endpoint is dow
 <a href="../daemon/#keeping-the-daemon-running">Keeping the daemon running</a>.</p>
 <h2 id="available-tools">Available tools</h2>
 <p>The daemon exposes 20 tools. This list is authoritative at the time of writing;
-<code>magus describe mcp-tools</code> (or the <code>magus_describe</code> tool with <code>kind: mcp_tools</code>) prints
+<code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> mcp-tools</code> (or the <code>magus_describe</code> tool with <code>kind: mcp_tools</code>) prints
 the live set with full parameters, so trust that over this table if they ever differ.</p>
 <p>Discover:</p>
 <figure class="table-scroll"><table>
@@ -160,7 +160,7 @@ the live set with full parameters, so trust that over this table if they ever di
 </tr>
 <tr>
 <td><code>magus_describe_file</code></td>
-<td>Classify paths against declared globs: owning project, and output (generated) vs source</td>
+<td>Classify paths against declared globs: owning <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, and output (generated) vs source</td>
 </tr>
 <tr>
 <td><code>magus_where</code></td>
@@ -183,15 +183,15 @@ the live set with full parameters, so trust that over this table if they ever di
 <tbody>
 <tr>
 <td><code>magus_run_target</code></td>
-<td>Run a target (<code>build</code>, <code>test</code>, <code>lint</code>, <code>ci</code>, ...) for one or more projects</td>
+<td>Run a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> (<code>build</code>, <code>test</code>, <code>lint</code>, <code>ci</code>, ...) for one or more projects</td>
 </tr>
 <tr>
 <td><code>magus_run_affected</code></td>
-<td>Run a target on only the VCS-affected projects</td>
+<td>Run a target on only the VCS-<a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> projects</td>
 </tr>
 <tr>
 <td><code>magus_affected_plan</code></td>
-<td>Emit a provider-neutral CI shard plan for the affected set</td>
+<td>Emit a provider-neutral <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the affected set</td>
 </tr>
 <tr>
 <td><code>magus_affected_explain</code></td>
@@ -210,11 +210,11 @@ the live set with full parameters, so trust that over this table if they ever di
 <tbody>
 <tr>
 <td><code>magus_doctor</code></td>
-<td>Validate workspace health (config, cache, cycles, tool availability)</td>
+<td>Validate workspace health (config, <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>, cycles, tool availability)</td>
 </tr>
 <tr>
 <td><code>magus_status</code></td>
-<td>Report telemetry/cache settings and the live proc-server pool state</td>
+<td>Report telemetry/cache settings and the live proc-server <a class="glossary-term" href="../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> state</td>
 </tr>
 <tr>
 <td><code>magus_tail_log</code></td>
@@ -226,11 +226,11 @@ the live set with full parameters, so trust that over this table if they ever di
 </tr>
 <tr>
 <td><code>magus_insight</code></td>
-<td>VCS-history lenses: hotspots, files, affinity, ownership, trend</td>
+<td>VCS-history lenses: hotspots, files, <a class="glossary-term" href="../../glossary/#affinity" data-def="An insight lens: projects that change together (temporal coupling). A pair that co-changes without either declaring a dependency on the other is a candidate architectural smell.">affinity</a>, <a class="glossary-term" href="../../glossary/#ownership" data-def="An insight lens: author concentration - the primary author and their share, the distinct-author count (the bus factor), and abandonment.">ownership</a>, <a class="glossary-term" href="../../glossary/#trend" data-def="An insight lens: the recent half of the window against the earlier half. A positive delta is a rising hotspot; a negative one is cooling.">trend</a></td>
 </tr>
 </tbody>
 </table></figure>
-<p>Knowledge graph:</p>
+<p><a class="glossary-term" href="../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">Knowledge graph</a>:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -280,7 +280,7 @@ the live set with full parameters, so trust that over this table if they ever di
 </tr>
 </tbody>
 </table></figure>
-<p>Config mutation is not exposed over MCP. Use the CLI for <code>magus config set</code> and related commands.</p>
+<p>Config mutation is not exposed over MCP. Use the CLI for <code><a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> set</code> and related commands.</p>
 <h2 id="enabling-and-disabling">Enabling and disabling</h2>
 <p>MCP is on by default. To disable it:</p>
 <pre><code class="language-yaml"># magus.yaml
@@ -371,15 +371,15 @@ daemon with a TLS tunnel first if you need that path.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
         <a class="related-card" href="../../guides/agents/"><span class="related-card-title">Agents</span><span class="related-card-desc">How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.</span></a>
-        <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
-        <a class="related-card" href="../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22mcp%22">mcp</a><a class="tag" href="../../search/?q=tag%3A%22model-context-protocol%22">model-context-protocol</a><a class="tag" href="../../search/?q=tag%3A%22ai%22">ai</a><a class="tag" href="../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../search/?q=tag%3A%22claude%22">claude</a><a class="tag" href="../../search/?q=tag%3A%22cursor%22">cursor</a><a class="tag" href="../../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../../search/?q=tag%3A%22ide%22">ide</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -520,6 +520,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -630,6 +635,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

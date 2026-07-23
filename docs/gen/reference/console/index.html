@@ -84,16 +84,16 @@
     <small class="reading-time" title="Estimated reading time">12 min read</small>
     <article>
 <h1 id="console-api">Console API</h1>
-<p>The console is three frozen, read-only GET routes that the magus daemon
+<p>The <a class="glossary-term" href="../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a> is three frozen, read-only GET routes that the magus <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>
 exposes over loopback so the hosted <a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>console</a>
-(its Graph Explorer surface) can display your current workspace.</p>
+(its Graph Explorer <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>) can display your current <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>.</p>
 <p><strong>These read routes cannot change your workspace.</strong> The console's GET API has no
-write surface, no POST routes, and no way to trigger a build, run a target, or
+write surface, no POST routes, and no way to trigger a build, run a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, or
 change configuration - it only reads. This is a design decision, not just a
 security posture (see section 0.3 of the PWA plan).</p>
 <p>The daemon does expose one mutating surface, separate from these read routes: an
 authenticated <a href="#job-control">job-control service</a> that triggers maintenance jobs
-(reconcile the graph, rotate the activity trail or run-logs, clear the cache).
+(reconcile the graph, rotate the activity trail or run-logs, clear the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>).
 It is gated behind the same loopback bind and bearer token, and it cannot run an
 arbitrary command - only a fixed set of maintenance jobs.</p>
 <h2 id="what-the-console-serves">What the console serves</h2>
@@ -108,23 +108,23 @@ arbitrary command - only a fixed set of maintenance jobs.</p>
 <tbody>
 <tr>
 <td><code>GET /api/v1/graph</code></td>
-<td>Merged knowledge graph (same bytes as <code>magus graph export -o json</code>)</td>
+<td>Merged <a class="glossary-term" href="../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a> (same bytes as <code><a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> export -o json</code>)</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/graph?flavor=targets</code></td>
-<td>Target dependency graph (same as <code>magus describe graph -o json</code>)</td>
+<td>Target dependency graph (same as <code><a class="code-xref" href="../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> graph -o json</code>)</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/graph?level=projects</code></td>
-<td>Project skeleton only: project nodes + project edges</td>
+<td><a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">Project</a> skeleton only: project nodes + project edges</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/graph?select=&lt;terms&gt;</code></td>
-<td>Scoped neighborhood (same query engine as <code>magus query</code>)</td>
+<td>Scoped neighborhood (same query <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> as <code>magus query</code>)</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/status</code></td>
-<td>Daemon pool state (same as <code>magus status -o json</code>)</td>
+<td>Daemon <a class="glossary-term" href="../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> state (same as <code><a class="code-xref" href="../manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a> -o json</code>)</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/events</code></td>
@@ -148,7 +148,7 @@ which reads the cached in-memory target graph but does not cache the variant
 serialization). This is a known limitation; memoization per variant is deferred.</p>
 <h2 id="job-control">Job control</h2>
 <p>Separate from the read routes above, the daemon hosts a <strong>mutating</strong> Connect
-service, <code>magus.job.v1.JobService</code>, so a browser client (or the CLI) can trigger
+<a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a>, <code>magus.job.v1.JobService</code>, so a browser client (or the CLI) can trigger
 background maintenance without an open action endpoint. It is the daemon's only
 write surface, and it is bounded: it submits a fixed set of named jobs, never an
 arbitrary command.</p>
@@ -183,13 +183,13 @@ arbitrary command.</p>
 </tbody>
 </table></figure>
 <p>Each submit is fire-and-forget and coalesced (an identical in-flight job is not
-started twice) and returns a metadata snapshot - the job's last run and the
+started twice) and returns a metadata <a class="glossary-term" href="../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a> - the job's last run and the
 current size of what it maintains. The same jobs are reachable from the CLI with
-<code>magus server job &lt;name&gt;</code>. The service is mounted behind the same loopback bind
+<code><a class="code-xref" href="../manpage/magus-server/" data-kind="command" data-def="Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">magus server</a> job &lt;name&gt;</code>. The service is mounted behind the same loopback bind
 and bearer token as everything else here; it is never served unauthenticated.</p>
 <h2 id="how-it-is-secured">How it is secured</h2>
 <p><strong>Loopback only.</strong> The console refuses to mount on any non-loopback bind
-address. If you set <code>mcp.address</code> to a non-loopback IP (for k8s or LAN use),
+address. If you set <code><a class="code-xref" href="../config/#mcp" data-kind="config" data-def="string, flag --mcp-address, env MAGUS_MCP_ADDRESS">mcp.address</a></code> to a non-loopback IP (for k8s or LAN use),
 the console logs a warning and does not register its routes.</p>
 <p><strong>Bearer token.</strong> Every request must carry <code>Authorization: Bearer &lt;token&gt;</code>.
 The token is the same one the MCP server uses. Retrieve it with:</p>
@@ -241,12 +241,12 @@ The graph data never appears in a URL (fragments are used for the fragment
 delivery mode; the live mode uses an Authorization header that browsers do not
 log in the address bar).</p>
 <h2 id="magus-doctor-check"><code>magus doctor</code> check</h2>
-<p><code>magus doctor</code> reports console reachability when the daemon is running:</p>
+<p><code><a class="code-xref" href="../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> reports console reachability when the daemon is running:</p>
 <pre><code>[pass] console: reachable at http://127.0.0.1:7391/api/v1/graph
     bearer token: magus config mcp token print
 </code></pre>
 <p>When the daemon is not running, the check is skipped (not a failure).
-When <code>console.enabled: false</code> is set, the check reports that the console is
+When <code><a class="code-xref" href="../config/#console" data-kind="config" data-def="bool _(env only)_, env MAGUS_CONSOLE_ENABLED">console.enabled</a>: false</code> is set, the check reports that the console is
 disabled.</p>
 <h2 id="live-mode-pairing">Live mode pairing</h2>
 <p><code>magus graph open --live</code> opens the explorer connected to the running daemon.</p>
@@ -295,7 +295,7 @@ the token rides the fragment). The page:</p>
 <p><code>magus graph open --live --targets</code> opens the live target dependency graph:
 <code>http://127.0.0.1:7391/console/graph/#token=&lt;bearer&gt;&amp;flavor=targets</code></p>
 <h3 id="affected-view">Affected view</h3>
-<p>When the daemon has computed an affected set (from <code>magus affected</code> in a CI context), the <code>/api/v1/status</code> response includes an <code>affected</code> array of node ids. The &quot;What does my diff touch?&quot; view is enabled automatically and paints those nodes.</p>
+<p>When the daemon has computed an <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set (from <code><a class="code-xref" href="../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> in a <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> context), the <code>/api/v1/status</code> response includes an <code>affected</code> array of node ids. The &quot;What does my diff touch?&quot; view is enabled automatically and paints those nodes.</p>
 <h2 id="verify-our-claims---dont-take-our-word-for-it">Verify our claims - don't take our word for it</h2>
 <p>Your dependency graph may be confidential. Every claim below is either
 enforced by your browser or checkable by you. Nothing on this page asks for
@@ -432,7 +432,7 @@ worker-side CSP) will be promoted to headers and the <code>&lt;meta&gt;</code> t
 as a fallback for hosts that cannot set headers.</p>
 <h3 id="the-opt-out-remove-us-entirely">The opt-out: remove us entirely</h3>
 <p>If your threat model excludes our hosting altogether: clone the repo, run
-<code>magus run generate docs</code>, and serve the <code>gen/</code> directory on your own
+<code><a class="code-xref" href="../manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> generate docs</code>, and serve the <code>gen/</code> directory on your own
 network. Every page here is origin-agnostic and works identically. (magus
 ships no general-purpose static file server for hosting this site; the only
 servers it binds are the ephemeral loopback <code>--serve</code> graph server and the
@@ -448,10 +448,10 @@ loopback daemon console documented above.)</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../reference/codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
-        <a class="related-card" href="../../reference/codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
-        <a class="related-card" href="../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -597,6 +597,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -707,6 +712,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

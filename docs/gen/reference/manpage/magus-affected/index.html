@@ -84,25 +84,25 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="magus-affected">magus-affected</h1>
-<p>Run a target for VCS-diff affected projects</p>
+<p>Run a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for VCS-diff <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> projects</p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> affected &lt;target&gt; [flags]</p>
 <h2 id="description">Description</h2>
-<p>Run a named target for every project that is affected by changes in
+<p>Run a named target for every <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> that is affected by changes in
 version control. The active VCS adapter is picked by autodetect from .git, .hg,
-or .jj at the workspace root, or pinned with MAGUS_VCS_COMMAND_NAME /
+or .jj at the <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root, or pinned with MAGUS_VCS_COMMAND_NAME /
 vcs.command_name. MAGUS_VCS_COMMAND overrides the command entirely. When
-MAGUS_VCS_ENABLED=false (or vcs.enabled: false) affected detection
+MAGUS_VCS_ENABLED=false (or <a class="code-xref" href="../../config/#vcs" data-kind="config" data-def="bool _(env only)_, env MAGUS_VCS_ENABLED">vcs.enabled</a>: false) affected detection
 short-circuits and falls back to the full project set with the source label
 &quot;vcs disabled&quot;.</p>
 <p>A project is affected if any of its source files changed directly, or if a
 project it depends on is affected (transitive closure over the dependency graph).</p>
 <p>Use --stdin to read changed paths from a pipe instead of running a VCS diff.
-This pairs with magus watch for continuous-build workflows:</p>
-<p>magus watch | magus affected --stdin build</p>
+This pairs with <a class="code-xref" href="../magus-watch/" data-kind="command" data-def="Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">magus watch</a> for continuous-build workflows:</p>
+<p>magus watch | <a class="code-xref" href="./" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> --stdin build</p>
 <p>Forensic modes reason about the affected set instead of executing a target.
 --explain shows why a project is in the set. --plan emits a provider-neutral
-JSON CI shard plan for the affected set (for CI fan-out; always keys off the ci
+JSON <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the affected set (for CI fan-out; always keys off the ci
 anchor). --bisect drives VCS bisect using run history to find the commit that
 introduced a regression.</p>
 <h2 id="options">Options</h2>
@@ -122,7 +122,7 @@ introduced a regression.</p>
 <dt><strong>--graph</strong></dt>
 <dd>Render the dependency graph for the affected scope instead of executing</dd>
 <dt><strong>--max-parallel-budget</strong> <em>int</em></dt>
-<dd>With --plan: cross-shard concurrency cap; 0 = unlimited</dd>
+<dd>With --plan: cross-shard <a class="glossary-term" href="../../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> cap; 0 = unlimited</dd>
 <dt><strong>--max-shards</strong> <em>int</em> (default: 8)</dt>
 <dd>With --plan: maximum CI shards (-1 = unlimited)</dd>
 <dt><strong>--null</strong></dt>
@@ -153,7 +153,7 @@ introduced a regression.</p>
 <dt><strong>generate</strong></dt>
 <dd>Run code generation for selected projects</dd>
 <dt><strong>ci</strong></dt>
-<dd>Run the magusfile's ci target read-only (affected-set anchor)</dd>
+<dd>Run the <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>'s ci target read-only (affected-set anchor)</dd>
 </dl>
 <h2 id="examples">Examples</h2>
 <p><em>Build projects changed since the default base ref</em></p>
@@ -195,15 +195,15 @@ introduced a regression.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../guides/affected/"><span class="related-card-title">Affected</span><span class="related-card-desc">How magus runs a target only for the projects a VCS diff touched, taking the transitive closure over the dependency graph, and the forensic modes that explain, graph, shard, and bisect that set.</span></a>
-        <a class="related-card" href="../../../reference/codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
         <a class="related-card" href="../../../reference/manpage/magus-insight/"><span class="related-card-title">magus insight</span><span class="related-card-desc">Show where a codebase&#39;s attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-run/"><span class="related-card-title">magus run</span><span class="related-card-desc">Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+affected%22">magus affected</a><a class="tag" href="../../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../../search/?q=tag%3A%22changed+files%22">changed files</a><a class="tag" href="../../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../../search/?q=tag%3A%22git%22">git</a><a class="tag" href="../../../search/?q=tag%3A%22bisect%22">bisect</a><a class="tag" href="../../../search/?q=tag%3A%22ci%22">ci</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -344,6 +344,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -454,6 +459,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

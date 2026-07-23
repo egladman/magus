@@ -85,22 +85,22 @@
     <article>
 <h1 id="daemon-and-concurrency">Daemon and concurrency</h1>
 <h2 id="concurrency">Concurrency</h2>
-<p>Magus runs project builds in parallel up to a configurable limit.</p>
+<p>Magus runs <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> builds in parallel up to a configurable limit.</p>
 <pre><code class="language-sh">magus run build --concurrency=4
 magus config set key=concurrency,value=4
 MAGUS_CONCURRENCY=4 magus run build
 </code></pre>
-<p>When a <a href="#daemon">daemon</a> is running, all clients share a single concurrency pool. Parallel CI steps and nested <code>magus</code> invocations all draw from the same budget.</p>
-<p><code>magus status</code> shows the live pool state and current slot usage.</p>
+<p>When a <a href="#daemon">daemon</a> is running, all clients share a single <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> <a class="glossary-term" href="../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a>. Parallel <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> steps and nested <code>magus</code> invocations all draw from the same budget.</p>
+<p><code><a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a></code> shows the live pool state and current <a class="glossary-term" href="../../glossary/#slot" data-def="One unit of the pool's capacity. A target acquires the slots it needs to run (most take one) and releases them when it finishes; the pool tracks capacity (total slots), running (acquired), and queued (blocked).">slot</a> usage.</p>
 <h2 id="daemon">Daemon</h2>
-<p>By default every <code>magus run</code> is a short-lived process with its own concurrency limiter, so parallel invocations oversubscribe the machine. A daemon holds workspace state in memory and enforces <strong>one</strong> concurrency pool across all clients.</p>
+<p>By default every <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code> is a short-lived process with its own concurrency limiter, so parallel invocations oversubscribe the machine. A <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> holds <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> state in memory and enforces <strong>one</strong> concurrency pool across all clients.</p>
 <pre><code class="language-sh">magus server start &amp;        # foreground process; &amp; or a supervisor backgrounds it
 magus server stop           # graceful shutdown; waits for in-flight work
 magus server stop --services # stop the daemon's hosted services, leave the daemon up
 magus status                # live pool + MCP endpoint health (reports the reason when down)
 magus status -W 1s          # poll and reprint every second
 </code></pre>
-<p><code>magus server start</code> runs in the <strong>foreground</strong> and blocks. It does not daemonize itself;
+<p><code><a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">magus server</a> start</code> runs in the <strong>foreground</strong> and blocks. It does not daemonize itself;
 you background it with <code>&amp;</code>, <code>nohup</code>, or - better - a process supervisor so it stays up
 across shells and reboots (see <a href="#keeping-the-daemon-running">Keeping the daemon running</a>).</p>
 <h2 id="two-transports">Two transports</h2>
@@ -108,7 +108,7 @@ across shells and reboots (see <a href="#keeping-the-daemon-running">Keeping the
 socket</strong> is the local control plane (the proc RPC that dispatches jobs, answers status,
 and adopts nested calls into one concurrency pool); it is fast and private (<code>0700</code>), and
 the local CLI - including the <code>--probe=liveness</code> and <code>--probe=readiness</code> checks - uses it.
-An <strong>HTTP server</strong> on <code>mcp.address</code> serves the clients that cannot reach a Unix socket:
+An <strong>HTTP server</strong> on <code><a class="code-xref" href="../../reference/config/#mcp" data-kind="config" data-def="string, flag --mcp-address, env MAGUS_MCP_ADDRESS">mcp.address</a></code> serves the clients that cannot reach a Unix socket:
 agents over <a href="../mcp/">MCP</a> at <code>/mcp</code>, and orchestrators or scripts at the <code>/livez</code>,
 <code>/readyz</code>, and <code>/healthz</code> probe routes.</p>
 <div class="mermaid-src"><pre><code class="language-mermaid">flowchart LR
@@ -129,7 +129,7 @@ agents over <a href="../mcp/">MCP</a> at <code>/mcp</code>, and orchestrators or
     agent --&gt;|HTTP| http
     ext --&gt;|HTTP| http
 </code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
-<p>The Unix socket is the source of truth for daemon state; the HTTP health routes are a thin
+<p>The Unix socket is the source of truth for daemon state; the HTTP <a class="glossary-term" href="../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> routes are a thin
 wrapper that answers by querying that same socket. But only an actual HTTP request proves
 the agent-facing endpoint is bound and serving - a socket check cannot detect an HTTP bind
 failure - so the two listeners can diverge, which is why <code>magus status</code> reports each
@@ -138,11 +138,11 @@ separately.</p>
 <a href="../mcp/">MCP tools</a>, the read-only <a href="../../reference/console/">console routes</a> the browser apps use
 (all reading the same warm <a href="../../concepts/knowledge/">knowledge graph</a>), and one bearer-gated
 <a href="../../reference/console/#job-control">job-control service</a> for maintenance jobs - the daemon's only
-mutating HTTP surface. The full-system view - clients,
+mutating HTTP <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>. The full-system view - clients,
 guards, shared state, and the progressive web app - is the architecture diagram in the
 <a href="https://github.com/egladman/magus#architecture" rel="noopener noreferrer" target="_blank" data-external>README</a>.</p>
 <h2 id="sharing-the-console-to-a-phone">Sharing the console to a phone</h2>
-<p>The console can serve a read-only live view to a phone on the same network. The
+<p>The <a class="glossary-term" href="../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a> can serve a read-only live view to a phone on the same network. The
 &quot;Share to phone&quot; action in the console opens a small dialog with a QR code; a phone
 that scans it loads the console and gets a read-only view of the dashboard, status,
 activity, and logs. It is opt-in and off by default: no listener faces the network
@@ -177,7 +177,7 @@ feature. The standing loopback server stays bound to <code>127.0.0.1</code> as b
 <p>What a leaked QR or URL is worth: at most a few minutes of read-only visibility into
 one workspace's dashboard, status, activity, and logs, from a device already on your
 LAN, and only until the share expires or you open a new one (which kills the old token).
-It cannot run a build, mutate the cache, reach <code>/mcp</code>, or read anything the loopback
+It cannot run a build, mutate the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>, reach <code>/mcp</code>, or read anything the loopback
 console does not already show. There is no standing exposure: when the timer fires the
 listener is gone and the token validates nowhere.</p>
 <h2 id="health-what-magus-status-reports">Health: what <code>magus status</code> reports</h2>
@@ -235,7 +235,7 @@ unguarded, their bodies carry nothing identifying: <code>/livez</code> and <code
 <code>ok</code> or <code>unavailable</code>, and <code>/readyz</code> returns a JSON <code>{&quot;ready&quot;: ..., &quot;components&quot;: [...]}</code>
 where each component has a coarse <code>status</code> (<code>ok</code>, <code>degraded</code>, <code>down</code>, <code>disabled</code>) plus a
 generic, quantitative <code>detail</code> such as <code>1 loaded</code> or <code>0 of 4 up to date</code> - counts and state
-phrases only, never workspace roots, project or service names, filesystem paths, or the
+phrases only, never workspace roots, project or <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> names, filesystem paths, or the
 daemon PID. For the identifying per-subsystem view (workspace roots, per-project
 symbol-index freshness, named service state), read the bearer-authenticated
 <code>GET /api/v1/status</code> instead.</p>
@@ -328,7 +328,7 @@ down.</p>
 <ol>
 <li><code>--daemon-address &lt;unix://...&gt;</code> flag</li>
 <li><code>MAGUS_DAEMON_ADDRESS</code> environment variable</li>
-<li><code>daemon.address</code> in <code>magus.yaml</code></li>
+<li><code><a class="code-xref" href="../../reference/config/#daemon" data-kind="config" data-def="string, flag --daemon-address, env MAGUS_DAEMON_ADDRESS">daemon.address</a></code> in <code>magus.yaml</code></li>
 <li>Stable per-workspace default (<code>unix://&lt;sock-dir&gt;/magus-daemon.sock</code>)</li>
 </ol>
 <p>The default socket is named without a PID so <code>server stop</code> and <code>server status</code> can find it without discovery.</p>
@@ -346,15 +346,15 @@ down.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/services/"><span class="related-card-title">Services</span><span class="related-card-desc">How magus runs long-running service ops, shares one instance across dependents and invocations, and guards against the sprawl and misuse foot-guns.</span></a>
-        <a class="related-card" href="../../reference/manpage/magus-status/"><span class="related-card-title">magus status</span><span class="related-card-desc">Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.</span></a>
-        <a class="related-card" href="../../reference/manpage/magus-server/"><span class="related-card-title">magus server</span><span class="related-card-desc">Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.</span></a>
-        <a class="related-card" href="../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
+        <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../guides/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../reference/console/"><span class="related-card-title">Console API</span><span class="related-card-desc">Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../../search/?q=tag%3A%22concurrency%22">concurrency</a><a class="tag" href="../../search/?q=tag%3A%22magus+server%22">magus server</a><a class="tag" href="../../search/?q=tag%3A%22magus+status%22">magus status</a><a class="tag" href="../../search/?q=tag%3A%22socket%22">socket</a><a class="tag" href="../../search/?q=tag%3A%22pool%22">pool</a><a class="tag" href="../../search/?q=tag%3A%22magus.yaml%22">magus.yaml</a><a class="tag" href="../../search/?q=tag%3A%22shared+services%22">shared services</a><a class="tag" href="../../search/?q=tag%3A%22keep-warm%22">keep-warm</a><a class="tag" href="../../search/?q=tag%3A%22health%22">health</a><a class="tag" href="../../search/?q=tag%3A%22liveness%22">liveness</a><a class="tag" href="../../search/?q=tag%3A%22readiness%22">readiness</a><a class="tag" href="../../search/?q=tag%3A%22probes%22">probes</a><a class="tag" href="../../search/?q=tag%3A%22kubernetes%22">kubernetes</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -495,6 +495,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -605,6 +610,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

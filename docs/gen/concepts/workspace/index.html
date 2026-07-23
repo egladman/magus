@@ -84,13 +84,13 @@
     <small class="reading-time" title="Estimated reading time">10 min read</small>
     <article>
 <h1 id="workspace-and-projects">Workspace and projects</h1>
-<p>A <strong>workspace</strong> is the whole tree magus operates on: a single root directory, its <code>magus.yaml</code>, and the set of projects discovered beneath it. A <strong>project</strong> is one directory inside that tree whose presence of a magusfile registers it, together with the targets it declares. Every target you run (see <a href="../targets/">targets</a>) is addressed by a project <code>Path</code> plus an operation <code>Name</code>; the workspace is the space those paths live in.</p>
-<p>The split is deliberate. The workspace is the unit of <em>discovery, caching, and affected-set computation</em> - it is opened once and shared. A project is the unit of <em>work</em> - it owns a magusfile, binds spells, and declares its dependencies. magus never operates outside the one workspace it discovered.</p>
+<p>A <strong><a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a></strong> is the whole tree magus operates on: a single root directory, its <code>magus.yaml</code>, and the set of projects discovered beneath it. A <strong><a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a></strong> is one directory inside that tree whose presence of a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> registers it, together with the targets it declares. Every <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> you run (see <a href="../targets/">targets</a>) is addressed by a project <code>Path</code> plus an <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a> <code>Name</code>; the workspace is the space those paths live in.</p>
+<p>The split is deliberate. The workspace is the unit of <em>discovery, caching, and <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>-set computation</em> - it is opened once and shared. A project is the unit of <em>work</em> - it owns a magusfile, binds spells, and declares its dependencies. magus never operates outside the one workspace it discovered.</p>
 <h2 id="design-intent">Design intent</h2>
 <ul>
 <li><strong>Files first.</strong> A directory becomes a project because it <em>contains a magusfile</em>, not because you list it in a central manifest. Discovery reads the tree; there is no registry to keep in sync.</li>
 <li><strong>Convention over ceremony.</strong> A bare magusfile with nothing but exported target functions is a complete project on defaults. The optional <code>magus.project({...})</code> call only layers extra policy on top.</li>
-<li><strong>One root, repo-relative paths.</strong> Every project <code>Path</code> is stored relative to the workspace root. This keeps target identity portable across machines and lets the CLI, <code>depends_on</code>, and the cache all speak the same coordinate system.</li>
+<li><strong>One root, repo-relative paths.</strong> Every project <code>Path</code> is stored relative to the workspace root. This keeps target identity portable across machines and lets the CLI, <code>depends_on</code>, and the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> all speak the same coordinate system.</li>
 <li><strong>Explicit dependencies.</strong> Cross-project edges are declared, never inferred. <code>depends_on</code> is the single source of truth for ordering, the affected set, and cache-key propagation.</li>
 </ul>
 <h2 id="what-a-workspace-is">What a workspace is</h2>
@@ -117,12 +117,12 @@
 </tr>
 <tr>
 <td><code>go.mod</code></td>
-<td>the Go-module root, as a last-resort fallback</td>
+<td>the Go-<a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> root, as a last-resort fallback</td>
 </tr>
 </tbody>
 </table></figure>
 <p>magus markers precede <code>go.mod</code>, so an explicit <code>magus.yaml</code> or <code>magusfile.buzz</code> always wins over a stray module boundary. <code>magus.yaml</code> (workspace configuration - see <a href="../../reference/config/">config</a>) lives at the root; it is optional, and its absence does not stop discovery once a root is found by another marker.</p>
-<p>The root is <strong>canonicalised at discovery</strong> (symlinks resolved via <code>filepath.EvalSymlinks</code>). Every project path is then computed relative to that real path, and the sandbox enforces access against resolved paths (see <a href="../sandbox/">sandbox</a> and <a href="../targets/#symlinks">targets.md#symlinks</a>).</p>
+<p>The root is <strong>canonicalised at discovery</strong> (symlinks resolved via <code>filepath.EvalSymlinks</code>). Every project path is then computed relative to that real path, and the <a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> enforces access against resolved paths (see <a href="../sandbox/">sandbox</a> and <a href="../targets/#symlinks">targets.md#symlinks</a>).</p>
 <h2 id="what-a-project-is">What a project is</h2>
 <p>A project is a directory that carries a <strong>declaration file</strong>: <code>magusfile.buzz</code>, or a <code>magusfiles/*.buzz</code> file for the split-magusfile layout. Discovery registers the directory as a project keyed by its repo-relative path; the workspace root itself registers as the path <code>.</code>.</p>
 <p>A project owns:</p>
@@ -168,7 +168,7 @@ export fun ci(ctx: magus\Context, args: [str]) &gt; void {
 <tbody>
 <tr>
 <td><code>spells</code></td>
-<td>binds spell handles to the project, contributing their ops, sources, and outputs</td>
+<td>binds <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> handles to the project, contributing their ops, sources, and outputs</td>
 </tr>
 <tr>
 <td><code>depends_on</code></td>
@@ -219,7 +219,7 @@ nearest known one.</p>
 </tr>
 <tr>
 <td><code>slots</code></td>
-<td>the target holds N concurrency slots while it runs, throttling parallel work</td>
+<td>the target holds N <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> slots while it runs, throttling parallel work</td>
 </tr>
 </tbody>
 </table></figure>
@@ -261,7 +261,7 @@ magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] })
 </code></pre>
 <p>The explicit-path form configures a project that <strong>discovery already found</strong> - it does not create one. The path is relative to the workspace root, not to the declaring magusfile's directory. Passing the magusfile's own directory name here is the classic footgun; to configure the calling project, omit the path. An explicit path that matches no discovered project is a hard error that lists the known projects.</p>
 <h3 id="addressing-projects-on-the-cli">Addressing projects on the CLI</h3>
-<p>Project selection is a <strong>positional</strong> argument to <code>magus run</code>, <code>magus list</code>, and <code>magus clean</code>, never embedded in the target token (see <a href="../targets/#cli-grammar">targets.md#cli-grammar</a>):</p>
+<p>Project selection is a <strong>positional</strong> argument to <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code>, <code>magus list</code>, and <code>magus clean</code>, never embedded in the target token (see <a href="../targets/#cli-grammar">targets.md#cli-grammar</a>):</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -290,9 +290,9 @@ magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] })
 </table></figure>
 <p>Empty and <code>/</code> both fan out to every discovered project. A <code>ws:</code> prefix is <strong>rejected</strong>: magus tells you to use <code>/</code> for all projects instead. An unknown bare path is an error with a did-you-mean suggestion. Because paths are repo-relative, a bare <code>api</code> means the same project regardless of your current directory, while <code>../foo</code> behaves as a shell user expects.</p>
 <h2 id="how-this-connects-to-affected-and-the-cache">How this connects to affected and the cache</h2>
-<p>The workspace/project model is the substrate the affected engine and the cache build on:</p>
+<p>The workspace/project model is the substrate the affected <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> and the cache build on:</p>
 <ul>
-<li><strong>Affected computation</strong> attributes each changed file to the project that owns it, seeds the change, and takes the reverse closure over <code>depends_on</code> to select every dependent. <code>magus affected ci</code> runs only that set. See <a href="../operations/">operations</a> for where affected sits, and the seed/claim mechanics in <a href="../cache/">cache</a>.</li>
+<li><strong>Affected computation</strong> attributes each changed file to the project that owns it, seeds the change, and takes the reverse closure over <code>depends_on</code> to select every dependent. <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> runs only that set. See <a href="../operations/">operations</a> for where affected sits, and the seed/claim mechanics in <a href="../cache/">cache</a>.</li>
 <li><strong>The cache</strong> is content-addressed per target. A target's key includes its own inputs plus the <code>dep:</code> keys of its upstream projects, so cross-project dependencies invalidate transitively without rerunning unaffected work. This page does not restate the key format; see <a href="../cache/">cache</a>.</li>
 </ul>
 <p>Together, discovery gives magus the set of projects, <code>depends_on</code> gives it the edges, and the cache gives it the memory - so a run touches only the minimum the change demands.</p>
@@ -358,15 +358,15 @@ magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] })
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
-        <a class="related-card" href="../../reference/manpage/magus-ls/"><span class="related-card-title">magus ls</span><span class="related-card-desc">List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.</span></a>
-        <a class="related-card" href="../../concepts/dependencies/"><span class="related-card-title">Dependencies</span><span class="related-card-desc">The two dependency mechanisms in magus - magus.needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22workspace%22">workspace</a><a class="tag" href="../../search/?q=tag%3A%22projects%22">projects</a><a class="tag" href="../../search/?q=tag%3A%22discovery%22">discovery</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../search/?q=tag%3A%22depends-on%22">depends-on</a><a class="tag" href="../../search/?q=tag%3A%22monorepo%22">monorepo</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -507,6 +507,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -617,6 +622,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

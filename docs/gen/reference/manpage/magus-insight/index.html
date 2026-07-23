@@ -86,40 +86,40 @@
 <h1 id="magus-insight">magus-insight</h1>
 <p>Behavioral code analysis from VCS and run-outcome history</p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> insight &lt;lens&gt; [flags]</p>
+<p><strong>magus</strong> <a class="glossary-term" href="../../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a> &lt;lens&gt; [flags]</p>
 <h2 id="description">Description</h2>
 <p>Read history to show where a codebase's attention and risk concentrate.
-Four lenses read version-control history; a fifth, volatility, reads run-outcome
+Four lenses read version-control history; a fifth, <a class="glossary-term" href="../../../glossary/#volatility" data-def="A target that fails once and passes on rerun is **volatile**, as opposed to a regression that started failing and stays failing. magus keeps per-target pass/fail history and a Wilson-score volatility rate to tell them apart and auto-retry the noise.">volatility</a>, reads run-outcome
 history instead. The VCS lenses are contextual to the working directory by default -
 run from inside a subtree and each reflects only that subtree's history; pass
---workspace to analyze the whole workspace (the fan-in postflight uses this). The
+--<a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> to analyze the whole workspace (the fan-in postflight uses this). The
 active VCS adapter must report per-commit files (git can).</p>
 <p>VCS-history lenses (the first argument):</p>
 <p>hotspots   Edit frequency x complexity - the prime refactoring targets. The
-project view is the dependency graph heat-coloured by churn (with
-authors, recency, blast radius, and CI duration); --files ranks
+<a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> view is the dependency graph heat-coloured by churn (with
+authors, recency, blast radius, and <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> duration); --files ranks
 individual files by churn x complexity.
-affinity   Projects that change together (temporal coupling). A hidden pair
+<a class="glossary-term" href="../../../glossary/#affinity" data-def="An insight lens: projects that change together (temporal coupling). A pair that co-changes without either declaring a dependency on the other is a candidate architectural smell.">affinity</a>   Projects that change together (temporal coupling). A hidden pair
 co-changes without either declaring a dependency on the other - a
 candidate architectural smell.
-ownership  Author concentration: the primary author and their share, distinct
+<a class="glossary-term" href="../../../glossary/#ownership" data-def="An insight lens: author concentration - the primary author and their share, the distinct-author count (the bus factor), and abandonment.">ownership</a>  Author concentration: the primary author and their share, distinct
 author count (bus factor), and abandonment (projects gone quiet).
-trend      The recent half of the window versus the earlier half: a positive
-delta is a rising hotspot, a negative one is cooling.</p>
+<a class="glossary-term" href="../../../glossary/#trend" data-def="An insight lens: the recent half of the window against the earlier half. A positive delta is a rising hotspot; a negative one is cooling.">trend</a>      The recent half of the window versus the earlier half: a positive
+delta is a rising <a class="glossary-term" href="../../../glossary/#hotspot" data-def="An insight lens: edit frequency times complexity, the prime refactoring targets. The project view heat-colours the dependency graph by churn; --files ranks individual files.">hotspot</a>, a negative one is cooling.</p>
 <p>Run-outcome lens:</p>
-<p>volatility Each (project, target) pair's recent pass/fail/volatile record scored
+<p>volatility Each (project, <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>) pair's recent pass/fail/volatile record scored
 by its Wilson lower bound; a pair at or above the configured threshold
 is flagged volatile - a flakiness signal, the prime stabilization
 targets. It reads the shared runtime-history file, not git, so it takes
 no --commits/--since window and is always workspace-wide.</p>
 <p>report     Every lens plus graph stats as one whole-workspace Markdown document
-(the magusfile's postflight target writes this to the GitHub Actions
+(the <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>'s postflight target writes this to the GitHub Actions
 step summary).</p>
 <p>The VCS lenses read the commit log: --commits caps the scan; --since bounds it by
 date (90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
 affinity also render -o mermaid (the hotspots file view renders a
 churn-vs-complexity quadrant). The structural companion - god nodes, orphans, and
-doc coverage from the knowledge graph - is magus graph stats; the report embeds it.</p>
+doc coverage from the <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a> - is <a class="code-xref" href="../magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> stats; the report embeds it.</p>
 <h2 id="options">Options</h2>
 <dl>
 <dt><strong>--commits</strong> <em>int</em> (default: 500)</dt>
@@ -166,15 +166,15 @@ doc coverage from the knowledge graph - is magus graph stats; the report embeds 
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../../guides/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
         <a class="related-card" href="../../../guides/insight/"><span class="related-card-title">Insight</span><span class="related-card-desc">How magus reads VCS history to show where a codebase&#39;s attention and risk concentrate - hotspots, temporal coupling, ownership, and trend - as a behavioral complement to static structure.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
-        <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../reference/buzz/vcs/"><span class="related-card-title">vcs module</span><span class="related-card-desc">Version-control queries for the current working tree.</span></a>
+        <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../../guides/agents/"><span class="related-card-title">Agents</span><span class="related-card-desc">How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+insight%22">magus insight</a><a class="tag" href="../../../search/?q=tag%3A%22analysis%22">analysis</a><a class="tag" href="../../../search/?q=tag%3A%22hotspots%22">hotspots</a><a class="tag" href="../../../search/?q=tag%3A%22ownership%22">ownership</a><a class="tag" href="../../../search/?q=tag%3A%22coupling%22">coupling</a><a class="tag" href="../../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../../search/?q=tag%3A%22volatility%22">volatility</a><a class="tag" href="../../../search/?q=tag%3A%22flaky%22">flaky</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -315,6 +315,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -425,6 +430,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

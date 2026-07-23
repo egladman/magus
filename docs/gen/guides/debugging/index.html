@@ -86,12 +86,12 @@
 <h1 id="debugging">Debugging</h1>
 <p>Magus has two entry points into an interactive debugging REPL:</p>
 <ul>
-<li><a href="#interactive-repl"><code>magus repl</code></a>: standalone shell with magusfile bindings preloaded.</li>
-<li><a href="#maguspry-breakpoint-in-a-magusfile"><code>magus.pry()</code></a>: <code>binding.pry</code>-style breakpoint, opens the same REPL mid-target with frame context attached.</li>
+<li><a href="#interactive-repl"><code>magus repl</code></a>: standalone shell with <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> bindings preloaded.</li>
+<li><a href="#maguspry-breakpoint-in-a-magusfile"><code>magus.pry()</code></a>: <code>binding.pry</code>-style breakpoint, opens the same REPL mid-<a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> with frame context attached.</li>
 </ul>
-<p>Both share the same evaluator. Pry adds stack-introspection commands (<code>.where</code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...) on top of the base REPL surface. The <a href="#meta-commands">meta-commands</a> and <a href="#multiline-input">multiline input</a> sections apply to both unless noted.</p>
+<p>Both share the same evaluator. Pry adds stack-introspection commands (<code>.where</code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...) on top of the base REPL <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>. The <a href="#meta-commands">meta-commands</a> and <a href="#multiline-input">multiline input</a> sections apply to both unless noted.</p>
 <h2 id="interactive-repl">Interactive REPL</h2>
-<p><code>magus repl</code> opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the <code>magus</code> object (including the host modules and spell bindings) is preloaded. If a <code>magusfile.buzz</code> is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.</p>
+<p><code>magus repl</code> opens an interactive <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> REPL with the same runtime environment available to a magusfile: the <code>magus</code> object (including the host modules and <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> bindings) is preloaded. If a <code>magusfile.buzz</code> is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.</p>
 <p>The REPL accepts Buzz expressions and evaluates them against the magusfile runtime. Output is pretty-printed (max depth 3).</p>
 <pre><code class="language-buzz">// example session
 &gt; os.execSh(&quot;git rev-parse --short HEAD&quot;).stdout
@@ -102,7 +102,7 @@ go
 </code></pre>
 <p>The REPL treats lines starting with <code>//</code> as comments and skips them. Type <code>.help</code> for the meta-command list, <code>.exit</code> (or Ctrl-D) to quit.</p>
 <h3 id="--no-autoload"><code>--no-autoload</code></h3>
-<p>Skip executing the magusfile on start. Useful when you want a blank environment to experiment without side-effects from your project's startup code.</p>
+<p>Skip executing the magusfile on start. Useful when you want a blank environment to experiment without side-effects from your <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s startup code.</p>
 <h3 id="-c-dir"><code>-C &lt;dir&gt;</code></h3>
 <p>Set the working directory for <code>import</code> resolution (default: cwd).</p>
 <pre><code class="language-sh">magus repl -C internal/auth
@@ -122,7 +122,7 @@ go
 # pry&gt;
 </code></pre>
 <p>The prompt is <code>pry&gt;</code> at the innermost frame; <code>pry[N]&gt;</code> after <code>.up</code>/<code>.down</code> to frame N.</p>
-<p><code>magus.pry()</code> is a no-op during <code>magus ls</code> and <code>magus describe</code> so it is safe to leave in place during development. Remove it before committing.</p>
+<p><code>magus.pry()</code> is a no-op during <code><a class="code-xref" href="../../reference/manpage/magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a></code> and <code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a></code> so it is safe to leave in place during development. Remove it before committing.</p>
 <h2 id="meta-commands">Meta-commands</h2>
 <figure class="table-scroll"><table>
 <thead>
@@ -231,7 +231,7 @@ go
 <h2 id="multiline-input">Multiline input</h2>
 <p>The REPL detects incomplete input and reprompts with <code>&gt;&gt;</code> until the expression closes: it reinvokes the Buzz parser on each newline, treats anything that does not yet parse to a complete statement as incomplete, and surfaces type errors immediately.</p>
 <h2 id="--step"><code>--step</code></h2>
-<p>Pause before every subprocess and prompt for a keystroke. Concurrency is forced to 1 so commands execute one at a time.</p>
+<p>Pause before every subprocess and prompt for a keystroke. <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">Concurrency</a> is forced to 1 so commands execute one at a time.</p>
 <pre><code class="language-sh">magus run build --step
 magus affected build --step
 </code></pre>
@@ -280,15 +280,15 @@ magus affected build --step
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../reference/codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
-        <a class="related-card" href="../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
-        <a class="related-card" href="../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
-        <a class="related-card" href="../../guides/getting-started/"><span class="related-card-title">Getting started</span><span class="related-card-desc">A linear, CLI-first walkthrough from installing magus to running your first spell-composed target and a ci pipeline.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../concepts/workspace/"><span class="related-card-title">Workspace and projects</span><span class="related-card-desc">A workspace is the discovered root; a project is a directory whose magusfile registers it, and depends_on wires the two into an ordered, cache-aware graph.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22debugging%22">debugging</a><a class="tag" href="../../search/?q=tag%3A%22repl%22">repl</a><a class="tag" href="../../search/?q=tag%3A%22pry%22">pry</a><a class="tag" href="../../search/?q=tag%3A%22breakpoint%22">breakpoint</a><a class="tag" href="../../search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="../../search/?q=tag%3A%22troubleshooting%22">troubleshooting</a><a class="tag" href="../../search/?q=tag%3A%22diagnostics%22">diagnostics</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -429,6 +429,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -539,6 +544,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

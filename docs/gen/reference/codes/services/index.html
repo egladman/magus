@@ -91,12 +91,12 @@
 ops</a>: services that will run as separate processes when they
 look like they should be one shared instance, and (later) op invocations that
 contradict their declared kind. Magus raises them at run time (as a typed
-<code>DiagnosticError</code>) and, where applicable, as a <code>magus doctor</code> health check so the
+<code>DiagnosticError</code>) and, where applicable, as a <code><a class="code-xref" href="../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> <a class="glossary-term" href="../../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> check so the
 gap is visible before the work runs.</p>
 <h2 id="codes">Codes</h2>
 <ul>
 <li><a href="MGS5001/">MGS5001</a>: near-duplicate services that will run as separate processes.</li>
-<li><a href="MGS5002/">MGS5002</a>: a service op detaches, breaking foreground supervision.</li>
+<li><a href="MGS5002/">MGS5002</a>: a <a class="glossary-term" href="../../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> op detaches, breaking foreground supervision.</li>
 <li><a href="MGS5003/">MGS5003</a>: a command op runs a watcher and never exits.</li>
 </ul>
     </article>
@@ -105,7 +105,7 @@ gap is visible before the work runs.</p>
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22services%22">services</a><a class="tag" href="../../../search/?q=tag%3A%22diagnostics%22">diagnostics</a><a class="tag" href="../../../search/?q=tag%3A%22error+codes%22">error codes</a><a class="tag" href="../../../search/?q=tag%3A%22MGS5xxx%22">MGS5xxx</a><a class="tag" href="../../../search/?q=tag%3A%22service+op%22">service op</a><a class="tag" href="../../../search/?q=tag%3A%22doctor%22">doctor</a><a class="tag" href="../../../search/?q=tag%3A%22sharing%22">sharing</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -246,6 +246,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -356,6 +361,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

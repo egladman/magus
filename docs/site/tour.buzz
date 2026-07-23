@@ -29,7 +29,7 @@ object TourStep {
     fun renderCard(root: str, num: int) > str {
         final src = tourSrc(this.file);
         // The cross-link is inline at the end of the description, not a separate line.
-        return template\render(`      <li class="tour-card">
+        return template\render(`      <li class="tour-card" id="step-{{num}}">
         <div class="tour-head"><span class="tour-num">{{num}}</span><h3>{{title}}</h3></div>
         <p class="tour-desc">{{desc}} <a class="tour-learn" href="{{root}}{{docSlug}}/">{{docLabel}} <span class="xref-arrow" aria-hidden="true">&rarr;</span></a></p>
         <pre class="tour-teaser"><code class="language-buzz">{{teaser}}</code></pre>
@@ -107,8 +107,9 @@ fun playgroundLink(root: str, src: str) > str {
 // renderTourPage writes gen/tour/index.html: a numbered card grid walking a newcomer
 // through magusfiles and Buzz. Synthesized (no .md source), so renderPage()'s srcRel
 // guards drop the provenance/edit chrome.
-export fun renderTourPage(site: Site) > void {
-    final root = rootPrefix("tour/index.md", site);
+// tourSteps is the ordered curriculum, shared by the tour page and collectDemos (which
+// inverts each step's docSlug into a "see the demo" callout on the matching concept page).
+export fun tourSteps() > [TourStep] {
     final steps: [TourStep] = mut [<TourStep>];
     steps.append(TourStep{ file = "01-hello.buzz", title = "Magusfiles: write your first target",
         desc = "A magusfile is a build definition; each exported function is a runnable target.",
@@ -155,6 +156,25 @@ export fun renderTourPage(site: Site) > void {
     steps.append(TourStep{ file = "15-charms-custom.buzz", title = "Custom charms: patch the argv",
         desc = "Declare your own charm as a JSON Patch over a spell op's argv; run op:charm to watch the flag splice in.",
         docLabel = "Charms", docSlug = "concepts/charms" });
+    return steps;
+}
+
+// collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its
+// title + card anchor), pre-walk, so renderFile can inject a "see the demo" callout on the
+// matching concept page.
+export fun collectDemos(site: Site) > void {
+    var n = 1;
+    foreach (step in tourSteps()) {
+        if (step.docSlug != "" and site.demoBySlug[step.docSlug] == null) {
+            site.demoBySlug[step.docSlug] = DemoLink{ title = step.title, anchor = "step-{n}" };
+        }
+        n = n + 1;
+    }
+}
+
+export fun renderTourPage(site: Site) > void {
+    final root = rootPrefix("tour/index.md", site);
+    final steps = tourSteps();
 
     var cards = "";
     var n = 1;

@@ -83,17 +83,17 @@
     <div>
     <article>
 <h1 id="magus-where">magus-where</h1>
-<p>Print the absolute path of a project</p>
+<p>Print the absolute path of a <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a></p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> where [filter...]</p>
 <h2 id="description">Description</h2>
 <p>Fuzzy-match a project by leaf-anchored substring and print its
 absolute path to stdout. Designed for shell substitution:</p>
-<p>cd &quot;$(magus where api)&quot;
+<p>cd &quot;$(<a class="code-xref" href="./" data-kind="command" data-def="Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">magus where</a> api)&quot;
 code &quot;$(magus where dash)&quot;</p>
 <p>Filters are AND-combined substrings. On a unique top score the path is
 printed and the command exits 0. On ambiguity, candidates are listed on
-stderr and the command exits 2. No interactive picker - use magus x for
+stderr and the command exits 2. No interactive picker - use <a class="code-xref" href="../magus-x/" data-kind="command" data-def="Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">magus x</a> for
 that.</p>
 <h2 id="examples">Examples</h2>
 <p><em>Navigate to a project</em></p>
@@ -119,14 +119,14 @@ that.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../reference/manpage/magus-describe/"><span class="related-card-title">magus describe</span><span class="related-card-desc">Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.</span></a>
-        <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../reference/buzz/path/"><span class="related-card-title">path module</span><span class="related-card-desc">Pure path-string math: abs, rel, clean, is_abs, expand_user.</span></a>
-        <a class="related-card" href="../../../reference/codes/auth/MGS9004/"><span class="related-card-title">MGS9004: no auth token configured</span><span class="related-card-desc">A command asked for the operator (cli) token but none exists yet. The daemon mints one on its next start, or you can generate it explicitly.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+where%22">magus where</a><a class="tag" href="../../../search/?q=tag%3A%22where%22">where</a><a class="tag" href="../../../search/?q=tag%3A%22project%22">project</a><a class="tag" href="../../../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../../../search/?q=tag%3A%22fuzzy+match%22">fuzzy match</a><a class="tag" href="../../../search/?q=tag%3A%22navigation%22">navigation</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -267,6 +267,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -377,6 +382,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

@@ -96,12 +96,12 @@ form is produced by the pinned release and you are running a dev build (v0.1.0-5
 </code></pre>
 <p>Three things come with every code, for free:</p>
 <ul>
-<li><strong>A stable code (<code>MGSxxxx</code>)</strong> you can search, grep your CI logs for, or paste to a
+<li><strong>A stable code (<code>MGSxxxx</code>)</strong> you can search, grep your <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> logs for, or paste to a
 teammate. Codes never move once assigned.</li>
 <li><strong>A handwritten resolution page</strong> at the <code>see:</code> URL - a real Why and Resolution
 written by a person, so neither you nor an agent has to reverse-engineer the fix.</li>
 <li><strong>A queryable graph node.</strong> Every code is a node in the <a href="../../concepts/knowledge/">knowledge graph</a>:
-<code>magus explain MGS4005</code> prints the card, and the code page is a first-class doc-site
+<code>magus explain <a class="code-xref" href="../codes/race/MGS4005/" data-kind="code" data-def="A generated output differs on regeneration but its declared inputs are unchanged and a dev build produced it, so the difference is toolchain or version skew, not a source change.">MGS4005</a></code> prints the card, and the code page is a first-class doc-site
 page. Nothing is ad-hoc free text.</li>
 </ul>
 <h2 id="codes-are-grouped-into-families">Codes are grouped into families</h2>
@@ -116,15 +116,15 @@ page. Nothing is ad-hoc free text.</li>
 <tbody>
 <tr>
 <td>MGS1xxx</td>
-<td>magusfile authoring</td>
+<td><a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> authoring</td>
 </tr>
 <tr>
 <td>MGS2xxx</td>
-<td>sandbox / permissions</td>
+<td><a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> / permissions</td>
 </tr>
 <tr>
 <td>MGS3xxx</td>
-<td>workspace scope</td>
+<td><a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> scope</td>
 </tr>
 <tr>
 <td>MGS4xxx</td>
@@ -193,15 +193,15 @@ tool, not re-paid by every person and every agent that hits it.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../reference/codes/charms/"><span class="related-card-title">charm diagnostics</span><span class="related-card-desc">Landing page for MGS6xxx diagnostics that flag problems with how a charm&#39;s JSON Patch interacts with a target&#39;s command.</span></a>
-        <a class="related-card" href="../../reference/codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
-        <a class="related-card" href="../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
-        <a class="related-card" href="../../reference/codes/outputref/"><span class="related-card-title">output-reference diagnostics</span><span class="related-card-desc">Landing page for MGS8xxx diagnostics that flag problems resolving a target-output reference id with magus query, such as a ref that aged out of the cache, an ambiguous prefix, or a malformed ref passed to a ref-only flag.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
+        <a class="related-card" href="../../concepts/engines/"><span class="related-card-title">Engines</span><span class="related-card-desc">Understand the small engine.Engine seam that lets magus run magusfiles on the embedded Buzz VM and how a new scripting language would plug in.</span></a>
+        <a class="related-card" href="../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22diagnostics%22">diagnostics</a><a class="tag" href="../../search/?q=tag%3A%22errors%22">errors</a><a class="tag" href="../../search/?q=tag%3A%22codes%22">codes</a><a class="tag" href="../../search/?q=tag%3A%22MGS%22">MGS</a><a class="tag" href="../../search/?q=tag%3A%22DX%22">DX</a><a class="tag" href="../../search/?q=tag%3A%22drift%22">drift</a><a class="tag" href="../../search/?q=tag%3A%22actionable%22">actionable</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -342,6 +342,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -452,6 +457,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

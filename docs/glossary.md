@@ -215,6 +215,13 @@ The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with `magus query`/`explain`/`path`. See
 [knowledge.md](concepts/knowledge.md).
 
+### MAGUS.md
+
+The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+[knowledge.md](concepts/knowledge.md).
+
 ### Insight
 
 The reports magus derives over the graph and history (hotspots, affinity,

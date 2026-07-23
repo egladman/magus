@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="magus">magus</h1>
-<p>magus - workspace-aware build orchestrator and content-addressed cache</p>
+<p>magus - <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>-aware build orchestrator and content-addressed <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a></p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> [flags] &lt;subcommand&gt; [args]</p>
 <h2 id="description">Description</h2>
@@ -105,7 +105,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.</p>
 <dd>Config file path. Default: search for magus.yaml in CWD, workspace root, and $XDG_CONFIG_HOME/magus/. Must precede the subcommand.</dd>
 <dt><strong>--output</strong> <em>fmt</em>, <strong>-o</strong> <em>fmt</em></dt>
 <dd>Output format: text (default), json, yaml, name, jsonl, or template[=&lt;go-template&gt;]. Honoured by subcommands that emit structured data. A template body renders a Go text/template over the same value -o json emits (field names are the json keys); a bare -o template with no body lists that output's fields instead of rendering - the json keys usable in -o json and -o template, with each field's type and doc.</dd>
-<dt><strong>--concurrency</strong> <em>N</em></dt>
+<dt><strong>--<a class="glossary-term" href="../../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a></strong> <em>N</em></dt>
 <dd>Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or min(NumCPU,8)).</dd>
 <dt><strong>-v</strong></dt>
 <dd>Increase log verbosity. Repeat for more detail (-v, -vv, -vvv).</dd>
@@ -117,33 +117,33 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.</p>
 <dt><strong>describe</strong></dt>
 <dd>Define a magus concept and list its entities. See <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>.</dd>
 <dt><strong>run</strong></dt>
-<dd>Run a target for selected projects. See <a href="../magus-run/"><strong>magus-run</strong>(1)</a>.</dd>
+<dd>Run a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for selected projects. See <a href="../magus-run/"><strong>magus-run</strong>(1)</a>.</dd>
 <dt><strong>x</strong></dt>
-<dd>Interactive shorthand: pick project + target. See <a href="../magus-x/"><strong>magus-x</strong>(1)</a>.</dd>
+<dd>Interactive shorthand: pick <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> + target. See <a href="../magus-x/"><strong>magus-x</strong>(1)</a>.</dd>
 <dt><strong>where</strong></dt>
 <dd>Print the absolute path of a project. See <a href="../magus-where/"><strong>magus-where</strong>(1)</a>.</dd>
 <dt><strong>tail</strong></dt>
 <dd>Stream the most recent cached log (interactive only). See <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>.</dd>
-<dt><strong>affected</strong></dt>
+<dt><strong><a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a></strong></dt>
 <dd>Run a target for VCS-diff affected projects. See <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>.</dd>
-<dt><strong>insight</strong></dt>
+<dt><strong><a class="glossary-term" href="../../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a></strong></dt>
 <dd>Behavioral code analysis from VCS and run-outcome history. See <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>.</dd>
 <dt><strong>graph</strong></dt>
 <dd>The workspace's graphs as objects: deps, export, stats. See <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>.</dd>
 <dt><strong>watch</strong></dt>
 <dd>Emit changed file paths to stdout. See <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>.</dd>
 <dt><strong>status</strong></dt>
-<dd>Inspect concurrency pool and configuration. See <a href="../magus-status/"><strong>magus-status</strong>(1)</a>.</dd>
+<dd>Inspect concurrency <a class="glossary-term" href="../../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> and configuration. See <a href="../magus-status/"><strong>magus-status</strong>(1)</a>.</dd>
 <dt><strong>doctor</strong></dt>
 <dd>Validate the workspace. See <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>.</dd>
 <dt><strong>config</strong></dt>
 <dd>View or update magus configuration. See <a href="../magus-config/"><strong>magus-config</strong>(1)</a>.</dd>
 <dt><strong>server</strong></dt>
-<dd>Manage the persistent magus daemon. See <a href="../magus-server/"><strong>magus-server</strong>(1)</a>.</dd>
+<dd>Manage the persistent magus <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>. See <a href="../magus-server/"><strong>magus-server</strong>(1)</a>.</dd>
 <dt><strong>completion</strong></dt>
 <dd>Print a shell completion script. See <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>.</dd>
 <dt><strong>init</strong></dt>
-<dd>Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See <a href="../magus-init/"><strong>magus-init</strong>(1)</a>.</dd>
+<dd>Bootstrap a workspace (magus.yaml + <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>.<a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> + merge driver). See <a href="../magus-init/"><strong>magus-init</strong>(1)</a>.</dd>
 <dt><strong>self</strong></dt>
 <dd>Manage the magus binary (update). See <a href="../magus-self/"><strong>magus-self</strong>(1)</a>.</dd>
 <dt><strong>version</strong></dt>
@@ -152,93 +152,93 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.</p>
 <h2 id="environment">Environment</h2>
 <dl>
 <dt><strong>MAGUS_CACHE_DIR</strong></dt>
-<dd>Override the default cache location (.magus/ in the workspace root). Equivalent magus.yaml key: <strong>cache.dir</strong>.</dd>
+<dd>Override the default cache location (.magus/ in the workspace root). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#cache" data-kind="config" data-def="string, flag --cache-dir, env MAGUS_CACHE_DIR">cache.dir</a></strong>.</dd>
 <dt><strong>MAGUS_CACHE_IMMUTABLE</strong></dt>
-<dd>When true (or 1), open the cache in read-only mode: replay hits but never write new entries (default: false). Equivalent magus.yaml key: <strong>cache.immutable</strong>.</dd>
+<dd>When true (or 1), open the cache in read-only mode: replay hits but never write new entries (default: false). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#cache" data-kind="config" data-def="bool, flag --cache-immutable, env MAGUS_CACHE_IMMUTABLE">cache.immutable</a></strong>.</dd>
 <dt><strong>MAGUS_CACHE_SIZE_MB</strong></dt>
-<dd>Cache disk usage cap in MB (binary, 1&lt;&lt;20); 0 means unlimited (default: 0). Equivalent magus.yaml key: <strong>cache.size_mb</strong>.</dd>
+<dd>Cache disk usage cap in MB (binary, 1&lt;&lt;20); 0 means unlimited (default: 0). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#cache" data-kind="config" data-def="int, flag --cache-size-mb, env MAGUS_CACHE_SIZE_MB">cache.size_mb</a></strong>.</dd>
 <dt><strong>MAGUS_CACHE_REMOTE_INSECURE</strong></dt>
-<dd>Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only (default: false). Equivalent magus.yaml key: <strong>cache.remote.insecure</strong>.</dd>
+<dd>Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> only (default: false). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#cache" data-kind="config" data-def="bool, flag --cache-remote-insecure, env MAGUS_CACHE_REMOTE_INSECURE">cache.remote.insecure</a></strong>.</dd>
 <dt><strong>MAGUS_LOG_FORMAT</strong></dt>
-<dd>Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: <strong>log.format</strong>.</dd>
+<dd>Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#log" data-kind="config" data-def="string, flag --log-format, env MAGUS_LOG_FORMAT">log.format</a></strong>.</dd>
 <dt><strong>MAGUS_LOG_LEVEL</strong></dt>
-<dd>Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: <strong>log.level</strong>.</dd>
+<dd>Minimum log level: <a class="glossary-term" href="../../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a>, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#log" data-kind="config" data-def="string, flag --log-level, env MAGUS_LOG_LEVEL">log.level</a></strong>.</dd>
 <dt><strong>MAGUS_CONCURRENCY</strong></dt>
 <dd>Maximum number of concurrently running per-project build steps (default: min(NumCPU,8)). Equivalent magus.yaml key: <strong>concurrency</strong>.</dd>
 <dt><strong>MAGUS_HISTORY_PATH</strong></dt>
-<dd>Path to the runtime-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: <strong>history_path</strong>.</dd>
+<dd>Path to the runtime-history JSON shared by <a class="glossary-term" href="../../../glossary/#volatility" data-def="A target that fails once and passes on rerun is **volatile**, as opposed to a regression that started failing and stays failing. magus keeps per-target pass/fail history and a Wilson-score volatility rate to tell them apart and auto-retry the noise.">volatility</a> detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: <strong>history_path</strong>.</dd>
 <dt><strong>MAGUS_DRY_RUN</strong></dt>
 <dd>When 1 or true, print what would run without executing anything (default: false). Equivalent magus.yaml key: <strong>dry_run</strong>.</dd>
 <dt><strong>MAGUS_DEFAULT_CHARMS</strong></dt>
-<dd>Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run. Equivalent magus.yaml key: <strong>default_charms</strong>.</dd>
+<dd>Comma-separated charms applied to every <a class="code-xref" href="../magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a>/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run. Equivalent magus.yaml key: <strong>default_charms</strong>.</dd>
 <dt><strong>MAGUS_VCS_ENABLED</strong></dt>
-<dd>Master switch for VCS-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: <strong>vcs.enabled</strong>.</dd>
+<dd>Master switch for VCS-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#vcs" data-kind="config" data-def="bool _(env only)_, env MAGUS_VCS_ENABLED">vcs.enabled</a></strong>.</dd>
 <dt><strong>MAGUS_VCS_NAME</strong></dt>
-<dd>Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj. Equivalent magus.yaml key: <strong>vcs.name</strong>.</dd>
+<dd>Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj. Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#vcs" data-kind="config" data-def="string, flag --vcs-name, env MAGUS_VCS_NAME">vcs.name</a></strong>.</dd>
 <dt><strong>MAGUS_VCS_BASE_REF</strong></dt>
-<dd>Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalent magus.yaml key: <strong>vcs.base_ref</strong>.</dd>
+<dd>Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#vcs" data-kind="config" data-def="string, flag --vcs-base-ref, env MAGUS_VCS_BASE_REF">vcs.base_ref</a></strong>.</dd>
 <dt><strong>MAGUS_VCS_&lt;NAME&gt;_BASE_REF</strong></dt>
 <dd>Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs</dd>
 <dt><strong>MAGUS_DAEMON_SOCKET</strong></dt>
-<dd>Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: <strong>daemon.socket</strong>.</dd>
+<dd>Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#daemon" data-kind="config" data-def="string, flag --daemon-socket, env MAGUS_DAEMON_SOCKET">daemon.socket</a></strong>.</dd>
 <dt><strong>MAGUS_CI_MAX_SHARDS</strong></dt>
-<dd>Maximum number of parallel CI shards; -1 means unlimited (default: 8). Equivalent magus.yaml key: <strong>ci.max_shards</strong>.</dd>
+<dd>Maximum number of parallel CI shards; -1 means unlimited (default: 8). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#ci" data-kind="config" data-def="int, flag --ci-max-shards, env MAGUS_CI_MAX_SHARDS">ci.max_shards</a></strong>.</dd>
 <dt><strong>MAGUS_CI_RUNNER_POOL_BUDGET</strong></dt>
-<dd>Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited (default: 0). Equivalent magus.yaml key: <strong>ci.runner_pool_budget</strong>.</dd>
+<dd>Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited (default: 0). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#ci" data-kind="config" data-def="int, flag --ci-runner-pool-budget, env MAGUS_CI_RUNNER_POOL_BUDGET">ci.runner_pool_budget</a></strong>.</dd>
 <dt><strong>MAGUS_SHARD</strong></dt>
 <dd>CI matrix shard ID (e.g. &quot;0&quot;); equivalent to magus run --shard; set by .github/actions/magus</dd>
 <dt><strong>MAGUS_N_SHARDS</strong></dt>
 <dd>Total shard count for this matrix run; equivalent to magus run --n-shards; set by .github/actions/magus</dd>
 <dt><strong>MAGUS_GRAPH_DIRECTION</strong></dt>
-<dd>Default graph direction: downstream or upstream (default: downstream). Equivalent magus.yaml key: <strong>graph.direction</strong>.</dd>
-<dt><strong>MAGUS_GRAPH_SPELL</strong></dt>
-<dd>Filter graph output to a single spell. Equivalent magus.yaml key: <strong>graph.spell</strong>.</dd>
+<dd>Default graph direction: downstream or upstream (default: downstream). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#graph" data-kind="config" data-def="string, flag --graph-direction, env MAGUS_GRAPH_DIRECTION">graph.direction</a></strong>.</dd>
+<dt><strong>MAGUS_GRAPH_<a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">SPELL</a></strong></dt>
+<dd>Filter graph output to a single spell. Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#graph" data-kind="config" data-def="string, flag --graph-spell, env MAGUS_GRAPH_SPELL">graph.spell</a></strong>.</dd>
 <dt><strong>MAGUS_GRAPH_DEPTH</strong></dt>
-<dd>Cap displayed graph depth (0 = unlimited) (default: 0). Equivalent magus.yaml key: <strong>graph.depth</strong>.</dd>
+<dd>Cap displayed graph depth (0 = unlimited) (default: 0). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#graph" data-kind="config" data-def="int, flag --graph-depth, env MAGUS_GRAPH_DEPTH">graph.depth</a></strong>.</dd>
 <dt><strong>MAGUS_GRAPH_ROOTS</strong></dt>
-<dd>Comma-separated starting nodes for graph traversal. Equivalent magus.yaml key: <strong>graph.roots</strong>.</dd>
+<dd>Comma-separated starting nodes for graph traversal. Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#graph" data-kind="config" data-def="string, flag --graph-roots, env MAGUS_GRAPH_ROOTS">graph.roots</a></strong>.</dd>
 <dt><strong>MAGUS_TELEMETRY_ENABLED</strong></dt>
-<dd>Turn OTLP export on; magus connects to telemetry.endpoint when true (default: false). Equivalent magus.yaml key: <strong>telemetry.enabled</strong>.</dd>
+<dd>Turn OTLP export on; magus connects to <a class="code-xref" href="../../config/#telemetry" data-kind="config" data-def="string, flag --telemetry-endpoint, env MAGUS_TELEMETRY_ENDPOINT">telemetry.endpoint</a> when true (default: false). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#telemetry" data-kind="config" data-def="bool, flag --telemetry-enabled, env MAGUS_TELEMETRY_ENABLED">telemetry.enabled</a></strong>.</dd>
 <dt><strong>MAGUS_TELEMETRY_ENDPOINT</strong></dt>
 <dd>OTLP collector address as host:port (no scheme); required when telemetry is enabled. Equivalent magus.yaml key: <strong>telemetry.endpoint</strong>.</dd>
 <dt><strong>MAGUS_TELEMETRY_PROTOCOL</strong></dt>
-<dd>OTLP wire protocol: grpc or http (default: grpc). Equivalent magus.yaml key: <strong>telemetry.protocol</strong>.</dd>
+<dd>OTLP wire protocol: grpc or http (default: grpc). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#telemetry" data-kind="config" data-def="string, flag --telemetry-protocol, env MAGUS_TELEMETRY_PROTOCOL">telemetry.protocol</a></strong>.</dd>
 <dt><strong>MAGUS_TELEMETRY_INSECURE</strong></dt>
-<dd>Disable TLS for the OTLP exporter (plaintext local-collector setups) (default: false). Equivalent magus.yaml key: <strong>telemetry.insecure</strong>.</dd>
-<dt><strong>MAGUS_TELEMETRY_SERVICE_NAME</strong></dt>
-<dd>Value of the resource attribute service.name on emitted spans/metrics (default: magus). Equivalent magus.yaml key: <strong>telemetry.service_name</strong>.</dd>
+<dd>Disable TLS for the OTLP exporter (plaintext local-collector setups) (default: false). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#telemetry" data-kind="config" data-def="bool, flag --telemetry-insecure, env MAGUS_TELEMETRY_INSECURE">telemetry.insecure</a></strong>.</dd>
+<dt><strong>MAGUS_TELEMETRY_<a class="glossary-term" href="../../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">SERVICE</a>_NAME</strong></dt>
+<dd>Value of the resource attribute service.name on emitted spans/metrics (default: magus). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#telemetry" data-kind="config" data-def="string, flag --telemetry-service-name, env MAGUS_TELEMETRY_SERVICE_NAME">telemetry.service_name</a></strong>.</dd>
 <dt><strong>MAGUS_TELEMETRY_SAMPLE_RATIO</strong></dt>
-<dd>Head-based trace sampling ratio in [0,1] (default: 1.0). Equivalent magus.yaml key: <strong>telemetry.sample_ratio</strong>.</dd>
+<dd>Head-based trace sampling ratio in [0,1] (default: 1.0). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#telemetry" data-kind="config" data-def="float, flag --telemetry-sample-ratio, env MAGUS_TELEMETRY_SAMPLE_RATIO">telemetry.sample_ratio</a></strong>.</dd>
 <dt><strong>MAGUS_DAEMON_ADDRESS</strong></dt>
-<dd>Adopt-server socket as a unix:// URL; empty auto-generates a per-process socket. Equivalent magus.yaml key: <strong>daemon.address</strong>.</dd>
+<dd>Adopt-server socket as a unix:// URL; empty auto-generates a per-process socket. Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#daemon" data-kind="config" data-def="string, flag --daemon-address, env MAGUS_DAEMON_ADDRESS">daemon.address</a></strong>.</dd>
 <dt><strong>MAGUS_DAEMON_IDLE_TTL</strong></dt>
-<dd>Idle workspace eviction TTL for the multi-workspace daemon; e.g. &quot;6h&quot;, &quot;30m&quot; (default: 6h). Equivalent magus.yaml key: <strong>daemon.idle_ttl</strong>.</dd>
+<dd>Idle workspace eviction TTL for the multi-workspace daemon; e.g. &quot;6h&quot;, &quot;30m&quot; (default: 6h). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#daemon" data-kind="config" data-def="duration, flag --daemon-idle-ttl, env MAGUS_DAEMON_IDLE_TTL">daemon.idle_ttl</a></strong>.</dd>
 <dt><strong>MAGUS_DAEMON_WORKSPACES</strong></dt>
-<dd>Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010). Equivalent magus.yaml key: <strong>daemon.workspaces</strong>.</dd>
+<dd>Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> policies and rejection of out-of-list workspaces (<a class="code-xref" href="../../codes/sandbox/MGS2010/" data-kind="code" data-def="Fires when a long-running daemon is asked to serve a workspace whose sandbox policy was not part of the union it applied at startup, either undeclared or a differing fingerprint.">MGS2010</a>). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#daemon" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_DAEMON_WORKSPACES">daemon.workspaces</a></strong>.</dd>
 <dt><strong>MAGUS_ASSUME_INTERACTIVE</strong></dt>
 <dd>When 1 or true, assume an interactive terminal even if detection says otherwise (default: false). Equivalent magus.yaml key: <strong>assume_interactive</strong>.</dd>
 <dt><strong>MAGUS_MCP_ENABLED</strong></dt>
-<dd>When 0 or false, refuse to start the MCP server (default: true). Equivalent magus.yaml key: <strong>mcp.enabled</strong>.</dd>
+<dd>When 0 or false, refuse to start the MCP server (default: true). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#mcp" data-kind="config" data-def="bool _(env only)_, env MAGUS_MCP_ENABLED">mcp.enabled</a></strong>.</dd>
 <dt><strong>MAGUS_MCP_ADDRESS</strong></dt>
-<dd>host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: <strong>mcp.address</strong>.</dd>
+<dd>host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#mcp" data-kind="config" data-def="string, flag --mcp-address, env MAGUS_MCP_ADDRESS">mcp.address</a></strong>.</dd>
 <dt><strong>MAGUS_HINTS_ENABLED</strong></dt>
-<dd>When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: <strong>hints.enabled</strong>.</dd>
+<dd>When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#hints" data-kind="config" data-def="bool _(env only)_, env MAGUS_HINTS_ENABLED">hints.enabled</a></strong>.</dd>
 <dt><strong>MAGUS_VOLATILITY_ENABLED</strong></dt>
-<dd>Master switch for volatility detection and auto-retry; false disables all retry logic (default: true). Equivalent magus.yaml key: <strong>volatility.enabled</strong>.</dd>
+<dd>Master switch for volatility detection and auto-retry; false disables all retry logic (default: true). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#volatility" data-kind="config" data-def="bool, flag --volatility-enabled, env MAGUS_VOLATILITY_ENABLED">volatility.enabled</a></strong>.</dd>
 <dt><strong>MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES</strong></dt>
-<dd>Number of outcomes below which all failures are retried once (bootstrap phase) (default: 20). Equivalent magus.yaml key: <strong>volatility.bootstrap_samples</strong>.</dd>
+<dd>Number of outcomes below which all failures are retried once (bootstrap phase) (default: 20). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#volatility" data-kind="config" data-def="int, flag --volatility-bootstrap-samples, env MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES">volatility.bootstrap_samples</a></strong>.</dd>
 <dt><strong>MAGUS_VOLATILITY_MIN_SAMPLES</strong></dt>
-<dd>Minimum outcomes required before Wilson-score volatility rate gates retry decisions (default: 20). Equivalent magus.yaml key: <strong>volatility.min_samples</strong>.</dd>
+<dd>Minimum outcomes required before Wilson-score volatility rate gates retry decisions (default: 20). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#volatility" data-kind="config" data-def="int, flag --volatility-min-samples, env MAGUS_VOLATILITY_MIN_SAMPLES">volatility.min_samples</a></strong>.</dd>
 <dt><strong>MAGUS_VOLATILITY_THRESHOLD</strong></dt>
-<dd>Wilson lower-bound volatility rate above which a project+target is considered volatile (default: 0.05). Equivalent magus.yaml key: <strong>volatility.threshold</strong>.</dd>
+<dd>Wilson lower-bound volatility rate above which a project+target is considered volatile (default: 0.05). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#volatility" data-kind="config" data-def="float, flag --volatility-threshold, env MAGUS_VOLATILITY_THRESHOLD">volatility.threshold</a></strong>.</dd>
 <dt><strong>MAGUS_VOLATILITY_ANNOTATE_GHA</strong></dt>
-<dd>When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY (default: true). Equivalent magus.yaml key: <strong>volatility.annotate_gha</strong>.</dd>
+<dd>When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY (default: true). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#volatility" data-kind="config" data-def="bool, flag --volatility-annotate-gha, env MAGUS_VOLATILITY_ANNOTATE_GHA">volatility.annotate_gha</a></strong>.</dd>
 <dt><strong>MAGUS_REPORT_FILTER</strong></dt>
-<dd>Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query). Equivalent magus.yaml key: <strong>report.filter</strong>.</dd>
+<dd>Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#report" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_REPORT_FILTER">report.filter</a></strong>.</dd>
 <dt><strong>MAGUS_SANDBOX_ENABLED</strong></dt>
-<dd>When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension (default: false). Equivalent magus.yaml key: <strong>sandbox.enabled</strong>.</dd>
+<dd>When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and <a class="code-xref" href="../../config/#sandbox" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_SANDBOX_ENV_PASSTHROUGH">sandbox.env.passthrough</a> for extension (default: false). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#sandbox" data-kind="config" data-def="bool, flag --sandbox-enabled, env MAGUS_SANDBOX_ENABLED">sandbox.enabled</a></strong>.</dd>
 <dt><strong>MAGUS_UPDATE_URL</strong></dt>
-<dd>Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel (default: <a href="https://eli.gladman.cc/magus/public/release/index.json" rel="noopener noreferrer" target="_blank" data-external>https://eli.gladman.cc/magus/public/release/index.json</a>)</dd>
+<dd>Env-only, no magus.yaml equivalent: override the release index URL for `<a class="code-xref" href="../magus-self/" data-kind="command" data-def="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">magus self</a> update`; set to a self-hosted copy of index.json to use a private update channel (default: <a href="https://eli.gladman.cc/magus/public/release/index.json" rel="noopener noreferrer" target="_blank" data-external>https://eli.gladman.cc/magus/public/release/index.json</a>)</dd>
 </dl>
 <h2 id="files">Files</h2>
 <dl>
@@ -262,15 +262,15 @@ MAGUS_CACHE_DIR.</dd>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../reference/codes/outputref/"><span class="related-card-title">output-reference diagnostics</span><span class="related-card-desc">Landing page for MGS8xxx diagnostics that flag problems resolving a target-output reference id with magus query, such as a ref that aged out of the cache, an ambiguous prefix, or a malformed ref passed to a ref-only flag.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-describe/"><span class="related-card-title">magus describe</span><span class="related-card-desc">Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
+        <a class="related-card" href="../../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
+        <a class="related-card" href="../../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22build%22">build</a><a class="tag" href="../../../search/?q=tag%3A%22monorepo%22">monorepo</a><a class="tag" href="../../../search/?q=tag%3A%22orchestrator%22">orchestrator</a><a class="tag" href="../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../search/?q=tag%3A%22workspace%22">workspace</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -411,6 +411,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -521,6 +526,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

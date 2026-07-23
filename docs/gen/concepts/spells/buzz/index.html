@@ -97,7 +97,7 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="buzz">buzz</h1>
-<p>The <code>buzz</code> spell checks and tests Buzz sources. Each op finds every <code>.buzz</code> file and runs <code>buzz --check</code>, <code>buzz --test</code>, or the magus interpreter over it.</p>
+<p>The <code>buzz</code> <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> checks and tests <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> sources. Each op finds every <code>.buzz</code> file and runs <code>buzz --check</code>, <code>buzz --test</code>, or the magus interpreter over it.</p>
 <p><strong>Runtime name:</strong> <code>buzz</code> (source <code>spells/buzz/</code>)</p>
 <p><strong>Version probe:</strong> none</p>
 <h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
@@ -115,13 +115,13 @@
 <tr>
 <td><code>args</code></td>
 <td><code>[str]</code></td>
-<td>Extra arguments appended to the resolved command. Omit it and a bare <code>buzz[&quot;&lt;op&gt;&quot;]()</code> forwards <code>magus run &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
+<td>Extra arguments appended to the resolved command. Omit it and a bare <code>buzz[&quot;&lt;op&gt;&quot;]()</code> forwards <code><a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
 <td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>cwd</code></td>
 <td><code>str</code></td>
-<td>Working directory the command runs in. Defaults to the project directory.</td>
+<td>Working directory the command runs in. Defaults to the <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> directory.</td>
 <td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
@@ -170,7 +170,7 @@ export fun test(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <h2 id="magus-buzz">magus-buzz</h2>
-<p>magus-buzz executes each source through <code>magus buzz</code>, magus's own embedded Buzz engine. It has no check-only mode - executing a file compiles, type-checks, and runs it - so this is the runtime sibling of <code>buzz-check</code>. It invokes &quot;$MAGUS&quot;: magus exports MAGUS (the running binary's path, à la GNU Make's $(MAKE)) into every spell subprocess, so this resolves to the current magus even uninstalled / under <code>go run</code>, with no dependence on PATH. (A bare $MAGUS, not ${MAGUS:-magus}: Buzz reads {...} in a string as interpolation, and MAGUS is always set here anyway.)</p>
+<p>magus-buzz executes each source through <code>magus buzz</code>, magus's own embedded Buzz <a class="glossary-term" href="../../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>. It has no check-only mode - executing a file compiles, type-checks, and runs it - so this is the runtime sibling of <code>buzz-check</code>. It invokes &quot;$MAGUS&quot;: magus exports MAGUS (the running binary's path, à la GNU Make's $(MAKE)) into every spell subprocess, so this resolves to the current magus even uninstalled / under <code>go run</code>, with no dependence on PATH. (A bare $MAGUS, not ${MAGUS:-magus}: Buzz reads {...} in a string as interpolation, and MAGUS is always set here anyway.)</p>
 <p><strong>Command:</strong> <code>sh -c find . -name '*.buzz' -print0 | xargs -0 -r -n1 &quot;$MAGUS&quot; buzz</code></p>
 <h3 id="example-2">Example</h3>
 
@@ -196,14 +196,14 @@ export fun run_buzz(ctx: magus\Context, args: [str]) &gt; void {
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../../concepts/spells/go/"><span class="related-card-title">go spell</span><span class="related-card-desc">Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.</span></a>
-        <a class="related-card" href="../../../concepts/spells/rs/"><span class="related-card-title">rs spell</span><span class="related-card-desc">Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.</span></a>
-        <a class="related-card" href="../../../concepts/spells/bash/"><span class="related-card-title">bash spell</span><span class="related-card-desc">Bash spell: shellcheck linting for shell scripts.</span></a>
+        <a class="related-card" href="../../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
+        <a class="related-card" href="../../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="../../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../../search/?q=tag%3A%22gopherbuzz%22">gopherbuzz</a><a class="tag" href="../../../search/?q=tag%3A%22check%22">check</a><a class="tag" href="../../../search/?q=tag%3A%22test%22">test</a><a class="tag" href="../../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -344,6 +344,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -454,6 +459,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

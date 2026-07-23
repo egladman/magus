@@ -84,11 +84,13 @@
     <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="engines">Engines</h1>
-<p>A <strong>magusfile</strong> is written in <a href="https://buzz-lang.dev/" rel="noopener noreferrer" target="_blank" data-external>Buzz</a> and runs on the
-embedded Buzz VM through a small internal seam. A <code>magusfile.buzz</code> exposes the
+<p>A <strong><a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a></strong> is written in <a href="https://buzz-lang.dev/" rel="noopener noreferrer" target="_blank" data-external>Buzz</a> and runs on the
+embedded <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> VM through a small internal seam. A <code>magusfile.buzz</code> exposes the
 <code>magus.*</code> API and composes <a href="../spells/">spells</a>, <a href="../targets/">targets</a>, and
 <a href="../charms/">charms</a>. This page covers the seam and how a new language
 would plug in.</p>
+<aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-4">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
+
 <h2 id="the-engine-interface">The engine interface</h2>
 <p>The backend implements one small interface, <code>engine.Engine</code>, which is a
 factory for <code>engine.Session</code>:</p>
@@ -108,7 +110,7 @@ type Session interface {
     Call(p CallParams, args ...Value) error
 }
 </code></pre>
-<p><code>Value</code> and <code>Table</code> are engine-neutral handles, so host code reads and writes
+<p><code>Value</code> and <code>Table</code> are <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>-neutral handles, so host code reads and writes
 script values without knowing the concrete VM. The backend registers itself at
 <code>init()</code> time:</p>
 <pre><code class="language-go">// internal/interp/engine/buzz/buzz.go
@@ -121,7 +123,7 @@ stock magus binary is <code>buzz</code>.</p>
 <pre><code class="language-go">_ &quot;.../internal/interp/engine/buzz&quot;
 </code></pre>
 <h2 id="the-spell-contract">The spell contract</h2>
-<p>A spell exports a fixed set of <code>mgs_</code>-prefixed functions (see
+<p>A <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> exports a fixed set of <code>mgs_</code>-prefixed functions (see
 <a href="../spells/#authoring-a-custom-spell">spells</a>). The list of optional functions
 and the decoder keys they map to is <strong>single-sourced</strong> in
 <a href="../../internal/spell/contract.go"><code>internal/spell/contract.go</code></a> as
@@ -129,19 +131,19 @@ and the decoder keys they map to is <strong>single-sourced</strong> in
 that one list. A spell's <code>mgs_</code> functions decode to a <code>Spec</code> for every scalar and
 list contribution (<code>needs</code>, <code>provides</code>, <code>claims</code>, <code>version_cmd</code>, <code>opaque</code>) and
 for record-shaped ops (<code>{bin, args, charms}</code>).</p>
-<p>An op is a command or a service; a function-valued op is <code>fun(Target) &gt; Command</code> or
+<p>An op is a command or a <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a>; a function-valued op is <code>fun(Target) &gt; Command</code> or
 <code>fun(Target) &gt; Service</code>, called once at load to record the declarative value it
 returns (a Command's <code>{bin, args, charms}</code> or a Service's <code>{command, readiness?, stop?}</code>,
-a long-running process <code>magus run</code> blocks on). The op's kind is inferred from that
-value, so one spell mixes both. A remote cache backend
+a long-running process <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code> blocks on). The op's kind is inferred from that
+value, so one spell mixes both. A <a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a> backend
 is not an op: it is a spell that exports the backend functions
 (<code>enabled</code>/<code>get_artifact</code>/<code>put_artifact</code>/<code>prune</code>), detected by name and wired with
 <code>magus.cache.remote</code> (see <a href="../remote-cache/">Remote caching</a>).</p>
 <p><strong>Doc-comment capture.</strong> Buzz captures a handler's doc comment at compile time
 (the parser binds the comment to the function node; <code>FunDoc</code> reads it back), and
-<code>magus doctor</code> enforces one on each function-handler target. Note Buzz's
+<code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> enforces one on each function-handler <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>. Note Buzz's
 <code>Chunk.Doc</code> is in-memory only and not serialized to bytecode, so Buzz captures
-docs only for freshly-compiled workspace <code>.buzz</code> spells, never the embedded
+docs only for freshly-compiled <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> <code>.buzz</code> spells, never the embedded
 built-ins.</p>
 <h2 id="host-modules-are-a-superset-of-buzzs-stdlib">Host modules are a superset of Buzz's stdlib</h2>
 <p>magus layers its host methods onto Buzz's own stdlib modules under the <strong>same bare
@@ -150,7 +152,7 @@ additions (<code>os.exec</code>, <code>os.which</code>, ...); <code>import &quot
 <code>fs.glob</code>/<code>readFile</code>; and magus adds whole modules Buzz lacks (<code>vcs</code>, <code>archive</code>,
 <code>http</code>, <code>charm</code>, ...). One import per domain covers the union, with no separate
 <code>extra</code> namespace to remember which side a call lives on.</p>
-<p>Where a method overlaps a Buzz stdlib call, the magus form is <strong>sandbox-aware</strong>
+<p>Where a method overlaps a Buzz stdlib call, the magus form is <strong><a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware</strong>
 while the bare stdlib is not. For example, <code>env.get</code>/<code>lookup</code> honor the env
 allowlist, whereas Buzz's <code>os.env</code> is raw. Those overlaps are noted per-method in the
 <a href="../../reference/buzz/">module reference</a> (either works); the cross-reference lives in
@@ -159,7 +161,7 @@ allowlist, whereas Buzz's <code>os.env</code> is raw. Those overlaps are noted p
 stdlib can't reproduce: magus's <code>os.exit</code> raises a lifecycle error (Buzz's
 hard-exits the process), magus's <code>os.sleep</code> is cancellable (Buzz's blocks), and
 magus's <code>crypto.*_file</code> hashes a file (Buzz's <code>hash</code> only takes a string). These
-stay on the magus surface.</p>
+stay on the magus <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>.</p>
 <p>A workspace spell lives at <code>spells/&lt;name&gt;/spell.buzz</code> (or flat
 <code>spells/&lt;name&gt;.buzz</code>).</p>
 <h2 id="built-in-spell-vs-language-builtins">&quot;Built-in spell&quot; vs language &quot;builtins&quot;</h2>
@@ -195,7 +197,7 @@ are visible rather than surprising.</p>
 <ul>
 <li><a href="../spells/">spells</a>: the <code>mgs_</code> spell contract and how spells compose.</li>
 <li><a href="../targets/">targets</a>: the runnable unit and its CLI grammar.</li>
-<li><a href="../../reference/buzz/">modules/index</a>: the <code>magus.*</code> host module reference.</li>
+<li><a href="../../reference/buzz/">modules/index</a>: the <code>magus.*</code> host <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> reference.</li>
 </ul>
     </article>
     </div>
@@ -209,14 +211,14 @@ are visible rather than surprising.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../concepts/dependencies/"><span class="related-card-title">Dependencies</span><span class="related-card-desc">The two dependency mechanisms in magus - magus.needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.</span></a>
-        <a class="related-card" href="../../concepts/spells/buzz/"><span class="related-card-title">buzz spell</span><span class="related-card-desc">Buzz spell: check and test .buzz sources, plus run them through the magus interpreter.</span></a>
+        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22engines%22">engines</a><a class="tag" href="../../search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="../../search/?q=tag%3A%22vm%22">vm</a><a class="tag" href="../../search/?q=tag%3A%22interpreter%22">interpreter</a><a class="tag" href="../../search/?q=tag%3A%22runtime%22">runtime</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../search/?q=tag%3A%22plugin%22">plugin</a><a class="tag" href="../../search/?q=tag%3A%22session%22">session</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -357,6 +359,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -467,6 +474,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

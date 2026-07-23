@@ -32,6 +32,7 @@ import "lib/date" as _;
 // Directory-index link rewriting (resolve, old->new URL map, re-relativize):
 // rewriteHref/resolvePath/cleanTarget.
 import "lib/html" as _;
+import "lib/glossary" as _;
 // Content-Security-Policy construction + the content hashing under it:
 // computeCSP/scriptHash/fileSha256/cspForRedirectStub and the CSP_* constants.
 import "lib/csp" as _;
@@ -106,7 +107,12 @@ fun walk(rel: str, site: Site) > void {
             if (rel == "" and isGeneratorDir(name, site.config.generatorDirs)) { continue; }
             walk(childRel, site);
         } else {
-            if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, site.config.generatorFiles) == false)) { renderFile(childRel, site); }
+            if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, site.config.generatorFiles) == false)) {
+                // glossary.md renders AFTER the walk (in site_render), once glossaryRefs is
+                // complete, so its per-term "referenced on" backlinks are the full set.
+                if (childRel == "glossary.md") { continue; }
+                renderFile(childRel, site);
+            }
         }
     }
 }
@@ -132,6 +138,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     site.pageUrls = mut {};
     site.writtenPaths = mut {};
     site.docPages = mut [<DocPage>];
+    site.glossaryTerms = mut [<GlossaryTerm>];
+    site.glossaryRefs = mut {};
+    site.pageTerms = mut {};
+    site.codeEntities = mut [<Entity>];
+    site.demoBySlug = mut {};
     site.blogPosts = mut [<BlogPost>];
     site.hasBlogPosts = false;
     if (isDirectory(site.root + "/" + site.blog)) {
@@ -193,6 +204,15 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // "Related" cards resolve titles/URLs against the full corpus. collectDocPages reads only
     // frontmatter, so it is free of the render state below.
     site.collectDocPages("");
+    // Parse the glossary vocabulary before the walk so every page can auto-link its terms.
+    site.collectGlossaryTerms();
+    // Record which glossary terms each page mentions (native, fast) so renderRelated can rank
+    // neighbors by shared vocabulary. Needs docPages + glossaryTerms.
+    site.collectPageTerms();
+    // Catalog inline-code entities (diagnostic codes + CLI commands) for auto-linking.
+    site.collectEntities();
+    // Map each concept to the tour step that demos it, for the "see the demo" callout.
+    collectDemos(site);
 
     renderPlayground(site);
 
@@ -204,6 +224,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
 
     renderRoot(site);
     walk("", site);
+    // glossary.md last: it aggregates the cross-references collected across the whole walk
+    // into per-term backlinks (renderFile injects them for this page).
+    renderFile("glossary.md", site);
     walkBlog(site);
 
     // Build /development/ before writeAliases so its pages are in site.pageUrls for the

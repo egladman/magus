@@ -95,10 +95,10 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1002-spell-import-shadowed">MGS1002: spell import shadowed</h1>
-<p>A workspace defines the same spell import (<code>spells/&lt;name&gt;</code>) at two levels where one
+<p>A <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> defines the same <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> import (<code>spells/&lt;name&gt;</code>) at two levels where one
 directory is an ancestor of the other. Spell imports resolve <strong>root-wins</strong>: the
 copy nearest the workspace root is canonical, so the deeper copy is never loaded.
-The deeper definition is dead code, and this ward blocks the run until you resolve
+The deeper definition is dead code, and this <a class="glossary-term" href="../../../../glossary/#ward" data-def="A coded diagnostic that inspects a resolved op and nudges or blocks an anti-pattern before it runs.">ward</a> blocks the run until you resolve
 or acknowledge it.</p>
 <pre><code class="language-text">[MGS1002] spell import &quot;spells/hello&quot; is defined at web/studio/spells/hello/spell.buzz
 but shadowed by spells/hello/spell.buzz: imports resolve root-wins, so the deeper
@@ -109,16 +109,16 @@ spell is dead. Move or rename it, or acknowledge the shadow in magus.yaml
 <h2 id="why">Why</h2>
 <p>A local spell is imported by a path-style name, <code>import &quot;spells/hello&quot;</code>. magus
 resolves it by walking a <code>spells/</code> directory at every level from the workspace root
-down to the importing magusfile, and the <strong>root-most</strong> match wins (see
+down to the importing <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>, and the <strong>root-most</strong> match wins (see
 <a href="../../../../concepts/workspace/">the workspace model</a>). That rule is deliberate: a spell name
-means one thing across the workspace, the same way a charm name does.</p>
-<p>The consequence is that a <code>spells/hello</code> placed next to a nested project, when a
+means one thing across the workspace, the same way a <a class="glossary-term" href="../../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> name does.</p>
+<p>The consequence is that a <code>spells/hello</code> placed next to a nested <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, when a
 <code>spells/hello</code> also exists higher up, can never be reached. An author who put it
 there expected it to be used; instead the ancestor silently wins. That is a
 footgun, not a self-contradiction, so unlike the kind-coherence wards
 (<a href="../../services/MGS5002/">MGS5002</a>, <a href="../../services/MGS5003/">MGS5003</a>) it can be
 acknowledged rather than only fixed.</p>
-<p>Sibling subtrees are not affected: <code>web/spells/hello</code> and <code>api/spells/hello</code> are
+<p>Sibling subtrees are not <a class="glossary-term" href="../../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>: <code>web/spells/hello</code> and <code>api/spells/hello</code> are
 not a shadow, because no single project's root-to-leaf path sees both. Only an
 ancestor-and-descendant pair triggers this code.</p>
 <h2 id="resolution">Resolution</h2>
@@ -142,7 +142,7 @@ spells:
     - name: spells/hello
       reason: web/studio pins a patched hello until the upstream fix lands
 </code></pre>
-<p>The reason is mandatory, so the intent stays auditable. <code>magus doctor</code> flags an
+<p>The reason is mandatory, so the intent stays auditable. <code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> flags an
 <code>allow_shadow</code> entry whose shadow no longer exists, so stale reasons get pruned.</p>
 </li>
 </ul>
@@ -172,14 +172,14 @@ ship a <code>spells/hello</code>; only an ancestor-descendant pair is a shadow.<
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
-        <a class="related-card" href="../../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../../reference/manpage/magus-init/"><span class="related-card-title">magus init</span><span class="related-card-desc">Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.</span></a>
         <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
+        <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1002%22">MGS1002</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../../../../search/?q=tag%3A%22imports%22">imports</a><a class="tag" href="../../../../search/?q=tag%3A%22shadow%22">shadow</a><a class="tag" href="../../../../search/?q=tag%3A%22ward%22">ward</a><a class="tag" href="../../../../search/?q=tag%3A%22workspace%22">workspace</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -320,6 +320,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -430,6 +435,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

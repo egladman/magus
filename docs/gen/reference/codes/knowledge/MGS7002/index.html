@@ -88,7 +88,7 @@
     <article>
 <h1 id="mgs7002-dangling-doc-reference">MGS7002: dangling doc reference</h1>
 <p>The knowledge-graph builder scans markdown docs and records an inferred
-<code>documents</code> edge from a doc page to each <code>MGS####</code> diagnostic code it mentions
+<code>documents</code> edge from a doc page to each <code>MGS####</code> <a class="glossary-term" href="../../../../glossary/#diagnostic-code" data-def="A stable MGSxxxx identifier attached to a magus warning or error, so it can be referenced and looked up; some are guardrails (see wards), others hard errors.">diagnostic code</a> it mentions
 in its body. When the mentioned code is a registered diagnostic, the edge links
 to a real diagnostic node. When it is not - a typo, a code that was removed, or
 one that was never defined - there is no node to link to, so the builder drops
@@ -97,7 +97,7 @@ this code and the offending references.</p>
 <h2 id="why">Why</h2>
 <p>The graph is deterministic and derived: an edge must have both endpoints. A doc
 that references a code (<code>MGS</code> followed by four digits) that is not registered
-cannot produce a valid edge, so silently emitting one would leave a target with
+cannot produce a valid edge, so silently emitting one would leave a <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> with
 no node - exactly the kind of torn state the builder guarantees against.
 Recording the dangling reference on the doc node instead keeps the mention
 discoverable (the doc clearly meant to cite a code) without inventing a phantom
@@ -112,7 +112,7 @@ on the next build.</li>
 <li>If the code was intentionally removed, update the doc to drop or reword the
 mention.</li>
 <li>To find flagged docs: <code>magus query kind:doc</code>, then <code>magus explain</code> the ones
-whose <code>diagnostic</code> attribute is <code>MGS7002</code> to see the <code>unknown_codes</code> list.</li>
+whose <code>diagnostic</code> attribute is <code><a class="code-xref" href="./" data-kind="code" data-def="Fires when a documentation page mentions an MGS#### diagnostic code that is not registered, so the knowledge-graph extractor cannot link the mention to a real diagnostic node.">MGS7002</a></code> to see the <code>unknown_codes</code> list.</li>
 </ul>
     </article>
     </div>
@@ -125,14 +125,14 @@ whose <code>diagnostic</code> attribute is <code>MGS7002</code> to see the <code
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/knowledge/"><span class="related-card-title">knowledge-graph diagnostics</span><span class="related-card-desc">Landing page for MGS7xxx diagnostics that flag ambiguities the knowledge-graph extractor hits while building the deterministic graph, such as a buzz import that resolves to no file or a doc that cites an unregistered diagnostic code.</span></a>
-        <a class="related-card" href="../../../../reference/codes/knowledge/MGS7001/"><span class="related-card-title">MGS7001: unresolvable buzz import</span><span class="related-card-desc">Fires when the knowledge-graph extractor cannot resolve a workspace-relative buzz import to a scanned file, so the import becomes an inferred edge to the literal path instead of a resolved file-to-file edge.</span></a>
         <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../../../../reference/manpage/magus-graph/"><span class="related-card-title">magus graph</span><span class="related-card-desc">Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph&#39;s shape (god nodes, orphans, doc coverage).</span></a>
+        <a class="related-card" href="../../../../reference/codes/outputref/MGS8003/"><span class="related-card-title">MGS8003: malformed output ref</span><span class="related-card-desc">Fires when magus query output is given an argument that is not a valid ref&lt;hex&gt; id, so the value cannot name a stored output.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS7002%22">MGS7002</a><a class="tag" href="../../../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../../../search/?q=tag%3A%22docs%22">docs</a><a class="tag" href="../../../../search/?q=tag%3A%22diagnostic%22">diagnostic</a><a class="tag" href="../../../../search/?q=tag%3A%22extraction%22">extraction</a><a class="tag" href="../../../../search/?q=tag%3A%22inferred%22">inferred</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -273,6 +273,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -383,6 +388,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

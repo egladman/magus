@@ -89,7 +89,7 @@
     <article>
 <h1 id="mgs5001-near-duplicate-services">MGS5001: near-duplicate services</h1>
 <p>Two or more long-running <a href="../../../../concepts/operations/">service ops</a> in the resolved run
-look like copies of the same service: they share an image repository and a
+look like copies of the same <a class="glossary-term" href="../../../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a>: they share an image repository and a
 container port, but differ in some detail (an environment variable, an image tag,
 a volume), so magus will not silently merge them. Left as-is they run as separate
 processes.</p>
@@ -102,8 +102,8 @@ if these are meant to be one shared service, extract a shared target both need; 
 </code></pre>
 <h2 id="why">Why</h2>
 <p>When several projects each define &quot;their own&quot; Postgres (or app), each service is
-a distinct target, nothing deduplicates them, and bringing up the whole stack
-runs one process per project. That is the sprawl foot-gun: a machine drowning in
+a distinct <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, nothing deduplicates them, and bringing up the whole stack
+runs one process per <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>. That is the sprawl foot-gun: a machine drowning in
 near-identical, resource-hungry containers nobody meant to run separately.</p>
 <p>Magus deduplicates services by a <strong>fingerprint</strong> of their configuration. Two
 services with an identical fingerprint are auto-shared silently. But these
@@ -115,7 +115,7 @@ them on its own and surfaces them to you instead.</p>
 for grouping, so version skew (<code>postgres:15</code> vs <code>postgres:16</code>) still clusters and
 is reported as a difference rather than hidden. Services on <strong>different</strong> container
 ports are treated as intentionally separate and are not flagged at run time (they
-appear only in the <code>magus doctor</code> audit).</p>
+appear only in the <code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> audit).</p>
 <h2 id="fix">Fix</h2>
 <ul>
 <li>If they are meant to be one instance, extract a single shared service target and
@@ -135,14 +135,14 @@ stays meaningful and the decision is auditable.</li>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/services/"><span class="related-card-title">services diagnostics</span><span class="related-card-desc">Landing page for MGS5xxx diagnostics that flag problems with long-running service ops, such as near-duplicate services that should be shared instead of run as separate processes.</span></a>
-        <a class="related-card" href="../../../../reference/codes/services/MGS5002/"><span class="related-card-title">MGS5002: service op detaches</span><span class="related-card-desc">Fires when a service op&#39;s process command detaches (docker run -d), which forks the process away from magus and breaks foreground supervision, stdout capture, readiness probing, and graceful stop.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
         <a class="related-card" href="../../../../concepts/services/"><span class="related-card-title">Services</span><span class="related-card-desc">How magus runs long-running service ops, shares one instance across dependents and invocations, and guards against the sprawl and misuse foot-guns.</span></a>
+        <a class="related-card" href="../../../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
+        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS5001%22">MGS5001</a><a class="tag" href="../../../../search/?q=tag%3A%22services%22">services</a><a class="tag" href="../../../../search/?q=tag%3A%22service+op%22">service op</a><a class="tag" href="../../../../search/?q=tag%3A%22sharing%22">sharing</a><a class="tag" href="../../../../search/?q=tag%3A%22dedup%22">dedup</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a><a class="tag" href="../../../../search/?q=tag%3A%22docker%22">docker</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -283,6 +283,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -393,6 +398,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

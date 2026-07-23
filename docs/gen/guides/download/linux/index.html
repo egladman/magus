@@ -109,7 +109,7 @@ curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/S
 </code></pre>
 <p>Then verify the Ed25519 signature <em>first</em>, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in <a href="../#verify-a-release">Verify a release</a>.</p>
 <h2 id="put-it-on-your-path">Put it on your PATH</h2>
-<p>If <code>magus version</code> prints <code>command not found</code>, the install directory is not on your <code>PATH</code>. Add it once, in your shell rc:</p>
+<p>If <code><a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="Print the magus version string, git commit hash, and build date for the currently installed binary.">magus version</a></code> prints <code>command not found</code>, the install directory is not on your <code>PATH</code>. Add it once, in your shell rc:</p>
 <pre><code class="language-sh"># bash or zsh: append to ~/.bashrc or ~/.zshrc
 export PATH=&quot;$HOME/.local/bin:$PATH&quot;
 </code></pre>
@@ -134,12 +134,12 @@ export PATH=&quot;$HOME/.local/bin:$PATH&quot;
         <a class="related-card" href="../../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
         <a class="related-card" href="../../../guides/download/macos/"><span class="related-card-title">Install on macOS</span><span class="related-card-desc">Download, verify, and install the magus binary on macOS (Apple Silicon or Intel), clear the quarantine flag, and put it on your PATH.</span></a>
         <a class="related-card" href="../../../guides/download/windows/"><span class="related-card-title">Install on Windows</span><span class="related-card-desc">Download, verify, and install the magus binary on Windows (amd64) with PowerShell and put it on your PATH.</span></a>
-        <a class="related-card" href="../../../guides/download/docker/"><span class="related-card-title">Run magus in Docker</span><span class="related-card-desc">Pull and run the official magus container images from GHCR - a multi-arch static image and a glibc variant - mounting your workspace, plus how to verify the cosign signature.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22download%22">download</a><a class="tag" href="../../../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../../../search/?q=tag%3A%22linux%22">linux</a><a class="tag" href="../../../search/?q=tag%3A%22path%22">path</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -280,6 +280,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -390,6 +395,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

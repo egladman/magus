@@ -86,10 +86,10 @@
 <h1 id="coming-from-nx">Coming from Nx</h1>
 <p>This page is for a team that already knows <a href="https://nx.dev" rel="noopener noreferrer" target="_blank" data-external>Nx</a> and wants to
 map that mental model onto magus. Nx and magus solve the same core problem -
-a task graph, an affected set, and a content-addressed cache for a monorepo -
+a task graph, an <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set, and a content-addressed <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> for a monorepo -
 with different philosophies: <strong>Nx infers</strong>, reading <code>package.json</code>/<code>project.json</code>
 and plugin conventions to build its graph; <strong>magus declares</strong>, reading exactly
-what a magusfile says and nothing it guesses. Nothing below is written to make
+what a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> says and nothing it guesses. Nothing below is written to make
 either tool look bad; where Nx has something magus does not, that is stated
 plainly, and vice versa.</p>
 <h2 id="terminology-map">Terminology map</h2>
@@ -102,20 +102,20 @@ plainly, and vice versa.</p>
 </thead>
 <tbody>
 <tr>
-<td>workspace (<code>nx.json</code>)</td>
+<td><a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> (<code>nx.json</code>)</td>
 <td>workspace (<code>magus.yaml</code>)</td>
 </tr>
 <tr>
-<td>project (<code>project.json</code> / <code>package.json</code>)</td>
+<td><a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> (<code>project.json</code> / <code>package.json</code>)</td>
 <td>project (a directory whose <code>magusfile.buzz</code> registers it)</td>
 </tr>
 <tr>
-<td>target (<code>project.json</code> <code>targets</code>)</td>
+<td><a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> (<code>project.json</code> <code>targets</code>)</td>
 <td>target (an exported <code>fun</code> in the magusfile; seven canonical names plus custom - see <a href="../../concepts/targets/#the-target-name">targets</a>)</td>
 </tr>
 <tr>
 <td>executor / plugin</td>
-<td>spell op (a <a href="../../concepts/spells/">spell</a> is a library of tool-native ops)</td>
+<td><a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> op (a <a href="../../concepts/spells/">spell</a> is a library of tool-native ops)</td>
 </tr>
 <tr>
 <td><code>nx:run-commands</code></td>
@@ -139,14 +139,14 @@ plainly, and vice versa.</p>
 </tr>
 <tr>
 <td><code>nx affected</code></td>
-<td><code>magus affected</code></td>
+<td><code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code></td>
 </tr>
 <tr>
 <td><code>nx graph</code></td>
-<td><code>magus graph</code> / <code>magus affected --graph</code> / <code>magus graph open</code></td>
+<td><code><a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a></code> / <code>magus affected --graph</code> / <code>magus graph open</code></td>
 </tr>
 <tr>
-<td>Nx Cloud remote cache (Nx Replay)</td>
+<td>Nx Cloud <a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a> (Nx Replay)</td>
 <td><a href="../../concepts/remote-cache/">magus remote cache</a> (self-hosted backends, Ed25519-signed artifacts)</td>
 </tr>
 <tr>
@@ -155,7 +155,7 @@ plainly, and vice versa.</p>
 </tr>
 <tr>
 <td>generators / scaffolding</td>
-<td>fixed, not extensible: <code>magus init</code> writes a starter magusfile, <code>magus init spell &lt;name&gt;</code> scaffolds one spell stub; there is no generator framework for custom, pluggable scaffolds</td>
+<td>fixed, not extensible: <code><a class="code-xref" href="../../reference/manpage/magus-init/" data-kind="command" data-def="Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.">magus init</a></code> writes a starter magusfile, <code>magus init spell &lt;name&gt;</code> scaffolds one spell stub; there is no generator framework for custom, pluggable scaffolds</td>
 </tr>
 <tr>
 <td>task pipeline (<code>targetDefaults</code> in <code>nx.json</code>)</td>
@@ -167,7 +167,7 @@ plainly, and vice versa.</p>
 <p><strong>Config is code, not JSON.</strong> A magusfile is <a href="../../concepts/engines/">Buzz</a>, a small
 embedded scripting language, not a JSON/YAML document a plugin interprets.
 There is no schema to look up; a target is a function, and its dependencies
-are calls you can trace by reading top to bottom.</p>
+are calls you can <a class="glossary-term" href="../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a> by reading top to bottom.</p>
 <p><strong>Explicit declarations, not plugin inference.</strong> Nx plugins read your
 <code>package.json</code>/config files and infer targets, inputs, and dependencies for
 you - powerful, but the inference is only as good as the plugin's
@@ -181,13 +181,13 @@ whatever string a plugin or <code>project.json</code> names them. magus has seve
 canonical names (<code>build</code>, <code>test</code>, <code>lint</code>, <code>format</code>, <code>clean</code>, <code>generate</code>,
 <code>preflight</code>) plus <code>ci</code>, with a stated <a href="../../concepts/targets/#when-does-a-name-earn-canonical-status">litmus test</a>
 for adding an eighth - custom names are allowed, but the vocabulary is
-deliberately small so <code>magus run lint</code> means the same thing in every project.</p>
+deliberately small so <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> lint</code> means the same thing in every project.</p>
 <p><strong>Read-only by default, not mutate-by-default.</strong> Every magus run is read-only
-unless you add the <code>rw</code> charm (<code>magus run format:rw</code>); Nx targets run
+unless you add the <code>rw</code> <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> (<code>magus run format:rw</code>); Nx targets run
 whatever their executor does, with no equivalent default-safe mode.</p>
 <p><strong>Sandboxed execution.</strong> On Linux, magus confines spell subprocesses with the
 kernel's landlock LSM (see <a href="../../concepts/sandbox/">sandbox</a>); Nx has no equivalent
-process-level sandbox.</p>
+process-level <a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>.</p>
 <p><strong>Single static binary, no Node runtime required.</strong> magus is a compiled Go
 binary; running it does not require Node, npm, or any JS toolchain, even for a
 non-JS workspace. Nx is an npm package and requires Node to run.</p>
@@ -199,10 +199,10 @@ out of the box.</li>
 <li>An extensible generator framework (<code>nx generate</code>, local generators) for
 scaffolding new projects and files with custom, pluggable templates - magus
 has only the two fixed scaffolds above, not a generator system.</li>
-<li>First-party editor extensions (Nx Console) with rich UI for running tasks
+<li>First-party editor extensions (Nx <a class="glossary-term" href="../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">Console</a>) with rich UI for running tasks
 and visualizing the graph.</li>
 <li>Nx Cloud's managed distributed task execution (Nx Agents) and a flaky-task
-retry service, as a hosted product.</li>
+retry <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a>, as a hosted product.</li>
 <li>Years of production maturity across a very wide range of ecosystems.</li>
 </ul>
 <h2 id="what-magus-has-that-nx-does-not">What magus has that Nx does not</h2>
@@ -214,7 +214,7 @@ just an access-token-gated store (see <a href="../../concepts/remote-cache/">rem
 <li>Services as a first-class declarative op kind, with readiness probes,
 shared-instance dedup, and idle teardown (see <a href="../../concepts/services/">services</a>),
 rather than a <code>run-commands</code> invocation of a script you write yourself.</li>
-<li>A <a href="../../concepts/knowledge/">knowledge graph</a> and MCP agent surface: <code>magus query</code> /
+<li>A <a href="../../concepts/knowledge/">knowledge graph</a> and MCP agent <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>: <code>magus query</code> /
 <code>explain</code> / <code>path</code> let an agent (or you) navigate the project/target/spell
 domain instead of grepping.</li>
 <li><a href="../../concepts/volatility/">Volatility detection</a>: magus tracks and reports
@@ -291,14 +291,14 @@ from-scratch walkthrough.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../migrating/breaking-changes/"><span class="related-card-title">Breaking changes</span><span class="related-card-desc">How magus makes backward-incompatible changes visible in review before they reach users - buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI&#39;s public surface.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../concepts/workspace/"><span class="related-card-title">Workspace and projects</span><span class="related-card-desc">A workspace is the discovered root; a project is a directory whose magusfile registers it, and depends_on wires the two into an ordered, cache-aware graph.</span></a>
+        <a class="related-card" href="../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22nx%22">nx</a><a class="tag" href="../../search/?q=tag%3A%22migration%22">migration</a><a class="tag" href="../../search/?q=tag%3A%22monorepo%22">monorepo</a><a class="tag" href="../../search/?q=tag%3A%22terminology%22">terminology</a><a class="tag" href="../../search/?q=tag%3A%22comparison%22">comparison</a><a class="tag" href="../../search/?q=tag%3A%22porting%22">porting</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -439,6 +439,11 @@ auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
@@ -549,6 +554,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

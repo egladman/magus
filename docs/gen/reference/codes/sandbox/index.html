@@ -98,8 +98,8 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="the-sandbox">The sandbox</h1>
-<p>The sandbox confines every magus subprocess and in-process spell to the
-workspace plus a curated allowlist of cache and system paths, and replaces
+<p>The <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> confines every magus subprocess and in-process <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> to the
+<a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> plus a curated allowlist of <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> and system paths, and replaces
 the child-process environment with a minimum allowlist so secret-bearing
 variables do not leak to a compromised third-party spell.</p>
 <p>It is designed to neutralize the class of supply-chain attacks that have
@@ -116,7 +116,7 @@ read-only.</li>
 <li>Inheritance of secret-bearing env vars in child processes:
 <code>AWS_*</code>, <code>GITHUB_TOKEN</code>, <code>VAULT_*</code>, <code>OP_SESSION_*</code>, <code>NPM_TOKEN</code>,
 <code>ANTHROPIC_API_KEY</code>, etc. By default only <code>HOME</code>, <code>PATH</code>, <code>USER</code>,
-locale vars, terminal vars, and the <code>MAGUS_*</code> daemon coordination
+locale vars, terminal vars, and the <code>MAGUS_*</code> <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> coordination
 vars pass through.</li>
 </ul>
 <h2 id="what-sandbox-does-not-block-v1">What sandbox does NOT block (v1)</h2>
@@ -152,7 +152,7 @@ secret in memory at the moment a spell runs, landlock cannot help.</li>
       - &quot;MISE_*&quot;
 </code></pre>
 <p><code>mode</code> is <code>ro</code> (read-only) or <code>rw</code> (read+write). Glob support in
-<code>sandbox.env.passthrough</code> is suffix-only: <code>NAME_*</code> matches everything
+<code><a class="code-xref" href="../../config/#sandbox" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_SANDBOX_ENV_PASSTHROUGH">sandbox.env.passthrough</a></code> is suffix-only: <code>NAME_*</code> matches everything
 that starts with <code>NAME_</code>.</p>
 <h2 id="enforcement-mechanism">Enforcement mechanism</h2>
 <p>Two layers run together:</p>
@@ -161,11 +161,11 @@ that starts with <code>NAME_</code>.</p>
 on itself before any spell code runs. The restriction is inherited
 across <code>fork+exec</code>, so every child process gets the same filesystem
 confinement automatically. No root required.</li>
-<li><strong>Interpreter level.</strong> The Buzz <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code>
+<li><strong>Interpreter level.</strong> The <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code>
 bindings consult the policy before performing any path or process
-operation. This gives spells a friendly <code>MGS2001/MGS2002</code> error
+<a class="glossary-term" href="../../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a>. This gives spells a friendly <code><a class="code-xref" href="MGS2001/" data-kind="code" data-def="Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.">MGS2001</a>/<a class="code-xref" href="MGS2002/" data-kind="code" data-def="Fires when a spell tries to write to a file outside the workspace and outside the sandbox allowlist, blocking persistence and tampering attacks.">MGS2002</a></code> error
 message and is the only enforcement on macOS, Windows, or older Linux
-kernels (see <code>MGS2005.md</code>).</li>
+kernels (see <code><a class="code-xref" href="MGS2005/" data-kind="code" data-def="Notice that the sandbox is enabled but the host lacks kernel landlock, so only interpreter-level enforcement is active on this platform.">MGS2005</a>.md</code>).</li>
 </ol>
 <h2 id="codes">Codes</h2>
 <ul>
@@ -186,7 +186,7 @@ kernels (see <code>MGS2005.md</code>).</li>
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22sandbox%22">sandbox</a><a class="tag" href="../../../search/?q=tag%3A%22diagnostics%22">diagnostics</a><a class="tag" href="../../../search/?q=tag%3A%22error+codes%22">error codes</a><a class="tag" href="../../../search/?q=tag%3A%22MGS2xxx%22">MGS2xxx</a><a class="tag" href="../../../search/?q=tag%3A%22security%22">security</a><a class="tag" href="../../../search/?q=tag%3A%22permissions%22">permissions</a><a class="tag" href="../../../search/?q=tag%3A%22landlock%22">landlock</a><a class="tag" href="../../../search/?q=tag%3A%22supply+chain%22">supply chain</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -327,6 +327,11 @@ auto-retry the noise. See <a href="../../../concepts/volatility/">volatility</a>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
@@ -437,6 +442,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>

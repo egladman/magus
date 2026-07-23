@@ -15,6 +15,7 @@ import "assert";
 import "lib/text" as _;
 import "lib/url" as _;
 import "lib/html" as _;
+import "lib/glossary" as _;
 import "lib/csp" as _;
 import "engine/meta" as _;
 import "engine/path" as _;
@@ -69,6 +70,13 @@ export object BlogPost {
 // DocPage is one docs page's relatedness metadata. tags is ||-joined (split back out
 // by sharedTagCount); overview is true for a landing/index page (page_type: overview).
 // renderRelated() scores these to fill each page's "Related" cards, and
+// DemoLink points a concept page at the tour step that demonstrates it: the step's title
+// and its card anchor on /tour/. Built by tour.collectDemos, consumed by the demo callout.
+export object DemoLink {
+    title: str = "",
+    anchor: str = "",
+}
+
 // renderBreadcrumb() looks one up by url for its title.
 export object DocPage {
     url: str = "",
@@ -158,6 +166,31 @@ export object Site {
     // Docs relatedness corpus, built pre-walk by collectDocPages so each page can
     // pick its Related neighbors.
     docPages: [DocPage] = mut [<DocPage>],
+
+    // Glossary vocabulary, parsed pre-walk from glossary.md (longest term first). Each
+    // rendered docs page auto-links the first occurrence of each term; glossaryRefs
+    // accumulates which page URLs linked each anchor, emitted as glossary-index.json for
+    // the term popover ("referenced on ...").
+    glossaryTerms: [GlossaryTerm] = mut [<GlossaryTerm>],
+    glossaryRefs: {str: [str]} = mut {},
+
+    // Per-page glossary vocabulary: each docs page's clean URL mapped to the "||"-joined,
+    // sorted set of glossary anchors it auto-links (the same set glossaryRefs holds inverted).
+    // Built pre-walk by collectPageTerms so renderRelated can rank a page's neighbors by
+    // shared vocabulary - the "graph" signal - before the first page renders. glossaryRefs
+    // fills DURING the walk and is only complete afterward, so it cannot drive an in-walk
+    // Related block; this forward-built map can. Joined with "||" (never in an anchor slug)
+    // so sharedTagCount counts the overlap without a second helper.
+    pageTerms: {str: str} = mut {},
+
+    // Code-entity catalog (diagnostic codes, and later commands/methods/config), parsed
+    // pre-walk. Each page auto-links the first inline-code occurrence of each entity to its
+    // reference page, with the entity's summary in the popover. Longest-match-first.
+    codeEntities: [Entity] = mut [<Entity>],
+
+    // Concept docSlug -> the tour step that demonstrates it, built pre-walk (tour.collectDemos)
+    // so a concept page can inject a "see the demo" callout linking to its tour card.
+    demoBySlug: {str: DemoLink} = mut {},
 
     // Releases loaded from releases/*.yaml, for the Atom feed, announcement bar,
     // and /public/release/ artifact listing. Ordered newest-first (by file sort,
@@ -379,9 +412,12 @@ export object Site {
 
     // renderRelated builds the "Related" card grid for the page whose source is
     // srcRel, or "" when it is not a docs page or is an overview page (those
-    // enumerate their children in the body). Scores docPages: shared tags (x3),
-    // same section (+4), overview (+3), the documentation index (+1); leads with the
-    // nearest-ancestor overview. Up to four cards, ties broken by URL for stability.
+    // enumerate their children in the body). Neighbors are ranked PRIMARILY by shared
+    // linked glossary terms (the vocabulary graph, from pageTerms), with the older
+    // shared-tags/section signal (shared tags x3, same section +4, overview +3, the
+    // documentation index +1) as the tiebreaker. It leads with the nearest-ancestor
+    // overview. Up to four cards; ties (same term overlap AND same tag signal) broken by
+    // URL for stability.
     fun renderRelated(srcRel: str, root: str) > str {
         var curTags = "";
         var curSection = "";
@@ -426,17 +462,27 @@ export object Site {
             used[leadUrl] = true;
         }
 
-        // Stage 2: score every remaining page and fill up to four cards.
+        // The current page's linked-term set, for the shared-vocabulary (graph) score.
+        var curTerms = "";
+        if (this.pageTerms[curUrl] != null) { curTerms = this.pageTerms[curUrl]!; }
+
+        // Stage 2: score every remaining page and fill up to four cards. The sort key is
+        // the shared-term overlap in the high digits and the tag/section signal in the low
+        // digits, so a lexical compare ranks by shared vocabulary first and falls back to
+        // the tag signal, then to URL. A page qualifies when either signal is positive.
         var scored: [{str: str}] = mut [<{str: str}>];
         foreach (p in this.docPages) {
             if (used[p.url] == null) {
-                var score = 3 * sharedTagCount(curTags, p.tags);
-                if (curSection != "" and p.section == curSection) { score = score + 4; }
-                if (p.overview) { score = score + 3; }
-                if (p.srcRel == this.docs + "/documentation.md") { score = score + 1; }
-                if (score > 0) {
+                var tagSignal = 3 * sharedTagCount(curTags, p.tags);
+                if (curSection != "" and p.section == curSection) { tagSignal = tagSignal + 4; }
+                if (p.overview) { tagSignal = tagSignal + 3; }
+                if (p.srcRel == this.docs + "/documentation.md") { tagSignal = tagSignal + 1; }
+                var pTerms = "";
+                if (this.pageTerms[p.url] != null) { pTerms = this.pageTerms[p.url]!; }
+                final termOverlap = sharedTagCount(curTerms, pTerms);
+                if (termOverlap > 0 or tagSignal > 0) {
                     scored.append(mut {
-                        "key": pad4(score), "url": p.url, "title": p.title, "desc": p.desc
+                        "key": pad4(termOverlap) + pad4(tagSignal), "url": p.url, "title": p.title, "desc": p.desc
                     });
                 }
             }
@@ -470,9 +516,10 @@ export object Site {
     // section overview - the nearest-ancestor overview whose clean URL is a prefix of this
     // one (or this page itself, when it is the overview). It gives every page a structural
     // sibling/child list - the down/lateral axis the breadcrumb (up) and pager (prev/next)
-    // don't provide. The current page is marked aria-current. "" when the page has no section
-    // (no overview ancestor) or the section has no children. curUrl is the page's clean URL;
-    // root is its gen-root-relative prefix.
+    // don't provide. The current page is marked aria-current. When no overview governs the
+    // page, it falls back to listing its OWN direct children (a non-overview parent like
+    // concepts/targets/ still gets a down-axis). "" when the page is a leaf with no children.
+    // curUrl is the page's clean URL; root is its gen-root-relative prefix.
     fun renderSectionNav(srcRel: str, curUrl: str, root: str) > str {
         if (curUrl == "") { return ""; }
         // The section root: this page if it is itself an overview, else the longest
@@ -491,7 +538,11 @@ export object Site {
                 }
             }
         }
-        if (rootUrl == "") { return ""; }
+        // No overview governs this page: if it is itself a parent (its clean URL prefixes
+        // other pages, e.g. concepts/targets/ over concepts/targets/ci/), still give a
+        // down-axis by listing its own direct children. A leaf falls through to the
+        // empty-kids guard below and renders nothing.
+        if (rootUrl == "") { rootUrl = curUrl; }
 
         // Direct children: pages whose clean URL is exactly one path segment deeper than
         // the section root (so a grandchild does not surface in a parent's list).
@@ -520,6 +571,177 @@ export object Site {
 {{/picks}}
         </ul>
 `, {"root": root, "picks": picks});
+    }
+
+    // collectGlossaryTerms parses glossary.md into the term corpus, pre-walk (like
+    // collectDocPages), so every page's render can auto-link the vocabulary.
+    fun collectGlossaryTerms() > void {
+        final path = this.root + "/" + this.docs + "/glossary.md";
+        final f = io\File.open(path, io\FileMode.read);
+        final md = f.readAll();
+        f.close();
+        this.glossaryTerms = parseGlossary(md);
+    }
+
+    // collectPageTerms records, per docs page, the glossary anchors that page auto-links,
+    // so renderRelated can score neighbors by shared vocabulary. Runs pre-walk (after
+    // collectDocPages + collectGlossaryTerms) over the same corpus, applying the same
+    // linkGlossaryTerms pass the walk uses - the map is therefore complete before any
+    // page's Related block renders, which glossaryRefs (built during the walk) is not. The
+    // glossary page defines the terms and is not auto-linked during the walk, so it is
+    // skipped here too. Anchors are sorted and "||"-joined so sharedTagCount counts overlap.
+    fun collectPageTerms() > void {
+        foreach (p in this.docPages) {
+            if (p.srcRel == this.docs + "/glossary.md") { continue; }
+            final f = io\File.open(this.root + "/" + p.srcRel, io\FileMode.read);
+            final md = f.readAll().lower();
+            f.close();
+            // Which glossary terms this page MENTIONS - a native indexOf sweep over the raw
+            // markdown (no second markdown render), so it stays fast over the whole corpus.
+            // Any mention counts; this feeds relatedness ranking, not the on-page links.
+            final hits: [str] = mut [<str>];
+            foreach (t in this.glossaryTerms) {
+                if (md.indexOf(t.term.lower()) != null) { hits.append(t.anchor); }
+            }
+            final sorted = hits.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+            var joined = "";
+            var first = true;
+            foreach (a in sorted) {
+                if (first) { joined = a; first = false; } else { joined = joined + "||" + a; }
+            }
+            this.pageTerms[p.url] = joined;
+        }
+    }
+
+    // fileDescription reads a doc file's frontmatter `description` (the entity popover
+    // summary), or "" if absent.
+    fun fileDescription(path: str) > str {
+        final f = io\File.open(path, io\FileMode.read);
+        final md = f.readAll();
+        f.close();
+        return serialize\jsonDecode(markdown\frontmatter(md)).q("description").stringValue();
+    }
+
+    // collectEntities catalogs every inline-code-linkable domain reference (pre-walk, like
+    // collectGlossaryTerms): diagnostic codes (reference/codes/<group>/MGSxxxx.md) and CLI
+    // commands (reference/manpage/magus-<sub>.md -> "magus <sub>"). token = the string matched
+    // in inline code, url = its clean page, summary = its frontmatter description. Sorted
+    // longest-match-first so "magus affected ci" wins over "magus affected".
+    fun collectEntities() > void {
+        final ents: [Entity] = mut [<Entity>];
+
+        final codesBase = this.root + "/" + this.docs + "/reference/codes";
+        if (isDirectory(codesBase)) {
+            foreach (group in fs\list(codesBase)) {
+                final gdir = codesBase + "/" + group;
+                if (isDirectory(gdir) == false) { continue; }
+                foreach (name in fs\list(gdir)) {
+                    if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
+                    final code = name.sub(0, len: name.len() - 3);
+                    ents.append(Entity{
+                        token = code,
+                        kind = "code",
+                        url = "reference/codes/" + group + "/" + code + "/",
+                        summary = this.fileDescription(gdir + "/" + name),
+                    });
+                }
+            }
+        }
+
+        final manBase = this.root + "/" + this.docs + "/reference/manpage";
+        if (isDirectory(manBase)) {
+            foreach (name in fs\list(manBase)) {
+                if (name.startsWith("magus-") == false or name.endsWith(".md") == false) { continue; }
+                final base = name.sub(0, len: name.len() - 3);   // "magus-run"
+                final sub = base.sub(6);                          // "run"
+                if (sub == "") { continue; }
+                ents.append(Entity{
+                    token = "magus " + sub,
+                    kind = "command",
+                    url = "reference/manpage/" + base + "/",
+                    summary = this.fileDescription(manBase + "/" + name),
+                });
+            }
+        }
+
+        // Module methods: each reference/buzz/<mod>.md H3 is a method; token "mod\method"
+        // (backslash-namespaced, so it never collides with prose), anchor = its goldmark slug.
+        final buzzBase = this.root + "/" + this.docs + "/reference/buzz";
+        if (isDirectory(buzzBase)) {
+            foreach (name in fs\list(buzzBase)) {
+                if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
+                final mod = name.sub(0, len: name.len() - 3);
+                final f = io\File.open(buzzBase + "/" + name, io\FileMode.read);
+                final md = f.readAll();
+                f.close();
+                foreach (line in md.split("\n")) {
+                    if (line.startsWith("### ")) {
+                        final method = line.sub(4).trim();
+                        ents.append(Entity{
+                            token = mod + "\\" + method,
+                            kind = "method",
+                            url = "reference/buzz/" + mod + "/",
+                            anchor = glossarySlug(method),
+                            summary = "",
+                        });
+                    }
+                }
+            }
+        }
+
+        // Config keys: only the qualified (dotted) keys from reference/config.md's tables -
+        // e.g. `cache.remote.insecure`, never the bare generic section names (cache, ci, ...)
+        // which would collide with glossary terms and prose. Anchored to the key's H2 section.
+        final configPath = this.root + "/" + this.docs + "/reference/config.md";
+        if (fs\exists(configPath)) {
+            final f = io\File.open(configPath, io\FileMode.read);
+            final md = f.readAll();
+            f.close();
+            var section = "";
+            foreach (line in md.split("\n")) {
+                if (line.startsWith("## ")) {
+                    section = glossarySlug(line.sub(3).trim());
+                } else if (section != "") {
+                    final row = parseConfigRow(line);
+                    if (row.ok) {
+                        ents.append(Entity{ token = row.key, kind = "config", url = "reference/config/", anchor = section, summary = row.summary });
+                    }
+                }
+            }
+        }
+
+        this.codeEntities = sortEntitiesLongestFirst(ents);
+    }
+
+    // addTermRefs records that every anchor in `anchors` was linked on the page at `url`,
+    // building the "referenced on ..." lists for glossary-index.json.
+    fun addTermRefs(anchors: [str], url: str) > void {
+        foreach (anchor in anchors) {
+            if (this.glossaryRefs[anchor] == null) { this.glossaryRefs[anchor] = mut [<str>]; }
+            this.glossaryRefs[anchor]!.append(url);
+        }
+    }
+
+    // glossaryBacklinkFragments builds, per glossary anchor, the "referenced on" HTML that
+    // injectBacklinks appends under the term on the glossary page: a comma-separated list of
+    // links to the pages that use the term, relative to /glossary/. Called after the walk,
+    // when glossaryRefs holds the complete cross-reference set. This is why the backlinks
+    // live on the glossary page (one place, no duplication) rather than inline on every
+    // page: a term's reference set is a whole-corpus aggregate, unknown until the walk ends.
+    fun glossaryBacklinkFragments() > {str: str} {
+        final byAnchor = mut {<str: str>};
+        foreach (anchor in this.glossaryRefs.keys()) {
+            final urls = this.glossaryRefs[anchor];
+            if (urls == null) { continue; }
+            var links = "";
+            var first = true;
+            foreach (u in urls!) {
+                if (first) { first = false; } else { links = links + ", "; }
+                links = links + "<a href=\"" + relativePath("glossary", u) + "\">" + this.lookupTitle(u) + "</a>";
+            }
+            byAnchor[anchor] = "<p class=\"glossary-backlinks\"><span class=\"glossary-backlinks-label\">Referenced on</span> " + links + "</p>\n";
+        }
+        return byAnchor;
     }
 
     // lookupTitle returns the title of the docs page at a clean gen-root URL (e.g.
@@ -572,9 +794,41 @@ test "renderSectionNav lists an overview's direct children and marks the current
     assert\equal(got.indexOf("targets/") != null, false, "an unrelated section is excluded");
 }
 
-test "renderSectionNav returns empty for a top-level page with no overview ancestor" {
+test "renderSectionNav returns empty for a childless page with no overview ancestor" {
     final s = mut Site{};
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
     s.docPages.append(DocPage{ url = "cache/", title = "Cache", srcRel = "docs/cache.md", section = "cache" });
-    assert\equal(s.renderSectionNav("docs/targets.md", "targets/", "../"), "", "no section nav without an overview parent");
+    assert\equal(s.renderSectionNav("docs/targets.md", "targets/", "../"), "", "no section nav for a leaf with no children");
+}
+
+test "renderSectionNav lists a non-overview parent's own direct children" {
+    final s = mut Site{};
+    // targets/ is NOT an overview and has no overview ancestor, but it is a parent.
+    s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
+    s.docPages.append(DocPage{ url = "targets/ci/", title = "CI", srcRel = "docs/targets/ci.md", section = "targets" });
+    s.docPages.append(DocPage{ url = "targets/ci/deep/", title = "Deep", srcRel = "docs/targets/ci/deep.md", section = "targets" });
+    final got = s.renderSectionNav("docs/targets.md", "targets/", "../");
+    assert\equal(got.indexOf("In this section") != null, true, "child list present for a non-overview parent");
+    assert\equal(got.indexOf("href=\"../targets/ci/\"") != null, true, "direct child listed");
+    assert\equal(got.indexOf("targets/ci/deep/") != null, false, "a grandchild is not a direct child");
+}
+
+test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
+    final s = mut Site{};
+    s.docs = "docs";
+    s.docPages.append(DocPage{ url = "concepts/cache/", title = "Cache", srcRel = "docs/concepts/cache.md", section = "concepts", tags = "a||b" });
+    // Shares 2 glossary terms with cache, no tags.
+    s.docPages.append(DocPage{ url = "concepts/deps/", title = "Deps", srcRel = "docs/concepts/deps.md", section = "concepts", tags = "" });
+    // Shares 0 glossary terms with cache, both tags.
+    s.docPages.append(DocPage{ url = "concepts/tagsy/", title = "Tagsy", srcRel = "docs/concepts/tagsy.md", section = "concepts", tags = "a||b" });
+    s.pageTerms = mut {
+        "concepts/cache/": "cache||replay",
+        "concepts/deps/": "cache||replay",
+        "concepts/tagsy/": "",
+    };
+    final got = s.renderRelated("docs/concepts/cache.md", "../../");
+    final iDeps = got.indexOf("concepts/deps/");
+    final iTagsy = got.indexOf("concepts/tagsy/");
+    assert\equal(iDeps != null and iTagsy != null, true, "both neighbors listed");
+    assert\equal(iDeps! < iTagsy!, true, "the shared-term neighbor outranks the shared-tag-only one");
 }

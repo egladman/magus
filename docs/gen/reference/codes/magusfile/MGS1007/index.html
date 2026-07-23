@@ -95,14 +95,14 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1007-target-dependency-cycle">MGS1007: target dependency cycle</h1>
-<p>A target's dependencies form a cycle: following them leads back to the target
+<p>A <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s dependencies form a cycle: following them leads back to the target
 itself, so it would have to finish before it could start. Magus detects this
 and errors instead of deadlocking.</p>
 <pre><code class="language-text">[MGS1007] cross-project cycle: ../api target &quot;build&quot;
   see: .../MGS1007.md
 </code></pre>
 <h2 id="why">Why</h2>
-<p>Targets declare what they depend on (<code>ctx.needs(...)</code>, cross-project handles).
+<p>Targets declare what they depend on (<code>ctx.needs(...)</code>, cross-<a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> handles).
 Magus runs a target's dependencies before the target. If A depends on B and B
 depends on A - directly, or through a longer chain A -&gt; B -&gt; C -&gt; A - there is no
 valid order: each is waiting on the other. Left unchecked that is a deadlock, so
@@ -120,13 +120,13 @@ acyclic (A -&gt; C, B -&gt; C instead of A &lt;-&gt; B).</li>
 <li><strong>Cross-project cycles</strong> usually mean two projects each build-depend on the
 other. Decide which is the leaf and make the dependency one-directional.</li>
 </ul>
-<p>Run <code>magus describe graph</code> (or open the Graph Explorer) to see the dependency
+<p>Run <code><a class="code-xref" href="../../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> graph</code> (or open the Graph Explorer) to see the dependency
 edges and spot the cycle.</p>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
 <li><strong>Not a data race.</strong> A cycle is a structural dependency loop, not concurrent
-writes; those are the MGS4001-4004 race diagnostics.</li>
-<li><strong>Not caused by concurrency settings.</strong> Lowering concurrency will not resolve
+writes; those are the <a class="code-xref" href="../../race/MGS4001/" data-kind="code" data-def="Fires when two or more concurrent projects modify the same git-tracked file during overlapping execution windows under the same target.">MGS4001</a>-4004 race diagnostics.</li>
+<li><strong>Not caused by <a class="glossary-term" href="../../../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> settings.</strong> Lowering concurrency will not resolve
 a cycle - the dependency graph itself has no valid order.</li>
 </ul>
 <h2 id="see-also">See also</h2>
@@ -146,14 +146,14 @@ a cycle - the dependency graph itself has no valid order.</li>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1006/"><span class="related-card-title">MGS1006: unknown target</span><span class="related-card-desc">Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus.needs.</span></a>
-        <a class="related-card" href="../../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
+        <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../../reference/codes/race/MGS4001/"><span class="related-card-title">MGS4001: filesystem race condition</span><span class="related-card-desc">Fires when two or more concurrent projects modify the same git-tracked file during overlapping execution windows under the same target.</span></a>
+        <a class="related-card" href="../../../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1007%22">MGS1007</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../../../search/?q=tag%3A%22depends%22">depends</a><a class="tag" href="../../../../search/?q=tag%3A%22cycle%22">cycle</a><a class="tag" href="../../../../search/?q=tag%3A%22cross-project%22">cross-project</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:48:44Z">July 22, 2026, 10:48 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" data-tooltip="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d" title="ec8ad84fe7c9962e0f0e1f4be6c5b4e8d002476d">ec8ad84f</a>)</small>
+    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -294,6 +294,11 @@ auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility<
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="magusmd">MAGUS.md</h3>
+<p>The committed routing index at a workspace root, regenerated from the knowledge
+graph: it lists every node and points at the exact query for a given question,
+so it is the entry point an agent reads first. See
+<a href="../../../../concepts/knowledge/">knowledge</a>.</p>
 <h3 id="insight">Insight</h3>
 <p>The reports magus derives over the graph and history (hotspots, affinity,
 ownership, trend). See <a href="../../../../guides/insight/">insight</a>.</p>
@@ -404,6 +409,11 @@ per type:</p>
 superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
 links back. The generated module reference uses them to flag methods that also exist
 in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
 <h2 id="code-block-titles">Code-block titles</h2>
 <p>A fenced block can carry a filename or label in a small caption bar above it, so you
 know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
