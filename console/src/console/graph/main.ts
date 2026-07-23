@@ -428,7 +428,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       if (loopback) hint = " Is `magus graph open --serve` still running?";
       else if (localhostHost)
         hint =
-          " The policy allows 127.0.0.1/[::1], not the `localhost` hostname - use `magus graph open --serve` or edit the URL to use 127.0.0.1.";
+          " The policy allows 127.0.0.1/[::1], not the `localhost` hostname: use `magus graph open --serve` or edit the URL to use 127.0.0.1.";
       setStatus("Could not fetch the graph from that URL (" + errMessage(e) + ")." + hint, true);
     }
   }
@@ -591,7 +591,7 @@ function applyLayeredMode() {
   const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
-      "layered layout is capped at 500 nodes - narrow with a query or the local graph (the CLI applies the same rule to -o mermaid)",
+      "layered layout is capped at 500 nodes: narrow with a query or the local graph (the CLI applies the same rule to -o mermaid)",
       true,
     );
     return false;
@@ -618,7 +618,7 @@ function applyWavesMode() {
   const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
-      "waves layout is capped at 500 nodes - narrow with a query or the local graph",
+      "waves layout is capped at 500 nodes: narrow with a query or the local graph",
       true,
     );
     wavesMeta = null;
@@ -700,7 +700,7 @@ function applyRadialMode(): boolean {
 function layoutBlockedReason(mode: LayoutMode): string | null {
   if (mode === "waves" || mode === "layered") {
     const visCount = (matchSet ? matchSet.size : graph?.nodes.length) ?? 0;
-    if (visCount > LAYERED_MAX) return "capped at 500 visible nodes - narrow with a query first";
+    if (visCount > LAYERED_MAX) return "capped at 500 visible nodes: narrow with a query first";
   }
   if (mode === "radial" && !selected && !focusId) return "select a node first";
   return null;
@@ -711,12 +711,12 @@ function layoutBlockedReason(mode: LayoutMode): string | null {
 // title attributes so the initial render and syncLayoutToggle agree.
 const LAYOUT_TITLES: Record<LayoutMode, string> = {
   force:
-    "Free-floating physics layout - clusters and highly-connected hubs pop out. Best for exploring the whole graph.",
+    "Free-floating physics layout: clusters and highly-connected hubs pop out. Best for exploring the whole graph.",
   layered:
-    "Left-to-right dependency flow - what depends on what, arranged in tiers. Best for reading direction.",
+    "Left-to-right dependency flow: what depends on what, arranged in tiers. Best for reading direction.",
   waves:
-    "Build order - each column is a set of targets magus can run in parallel. Best for seeing what runs when.",
-  radial: "Rings around one node by distance - its neighborhood at a glance. Pick a node first.",
+    "Build order: each column is a set of targets magus can run in parallel. Best for seeing what runs when.",
+  radial: "Rings around one node by distance: its neighborhood at a glance. Pick a node first.",
 };
 // Cycle order for the graph.layout command / l key: skips modes layoutBlockedReason rejects.
 const LAYOUT_ORDER: LayoutMode[] = ["force", "layered", "waves", "radial"];
@@ -1607,7 +1607,7 @@ function focusNode(id: string, depth: number) {
   setStatus(
     "Local graph around " +
       focusNodeObj.label +
-      " - " +
+      ", " +
       matchSet.size +
       " nodes within " +
       depth +
@@ -2107,11 +2107,11 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
     const nProjects = (data.projects || []).length;
     const nTargets = nl.nodes.filter((n) => n.kind === "target").length;
     statusMsg =
-      "target graph - " +
+      "target graph, " +
       nProjects +
       " project" +
       (nProjects === 1 ? "" : "s") +
-      " - " +
+      ", " +
       nTargets +
       " target" +
       (nTargets === 1 ? "" : "s") +
@@ -2245,7 +2245,7 @@ function syncLayoutToggle() {
 // static title attributes so the initial render and syncGraphKindToggle agree.
 const GRAPHKIND_TITLES: Record<GraphFlavor, string> = {
   targets:
-    "The build graph: targets and what they depend on. Switch requires a live workspace (magus graph open --live).",
+    "The target graph: targets and what they depend on. Switch requires a live workspace (magus graph open --live).",
   knowledge:
     "The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph open --live).",
 };
@@ -2267,25 +2267,34 @@ function syncGraphKindToggle() {
   });
 }
 
-// switchGraphKind switches the live-loaded graph between the build (targets) and
-// knowledge flavors. Live-only: a static snapshot has no server to ask for the
-// other flavor, so a click there just re-syncs the toggle back and explains why.
+// switchGraphKind switches the live-loaded graph between the target and knowledge
+// flavors. Live-only: a static snapshot has no server to ask for the other flavor,
+// so a click there just re-syncs the toggle back and explains why. switchingGraphKind
+// guards against a second click landing mid-refetch, which would put two flavor
+// fetches in flight whose responses could arrive out of order and leave graphFlavor
+// disagreeing with the toggle.
+let switchingGraphKind = false;
 async function switchGraphKind(kind: "targets" | "knowledge") {
-  if (kind === graphFlavor) return;
+  if (kind === graphFlavor || switchingGraphKind) return;
   if (!liveHost) {
     setStatus(
-      "To switch between the build and knowledge graphs, open a live workspace: magus graph open --live",
+      "To switch between the target and knowledge graphs, open a live workspace: magus graph open --live",
       true,
     );
     syncGraphKindToggle();
     return;
   }
+  switchingGraphKind = true;
   liveFlavor = kind === "targets" ? "targets" : null;
   liveGraphQuery = kind === "targets" ? "?flavor=targets" : "";
   liveETag = null;
-  await liveRefetchGraph(); // reseeds graph data and sets graphFlavor via liveApplyGraphUpdate
+  try {
+    await liveRefetchGraph(); // reseeds graph data and sets graphFlavor via liveApplyGraphUpdate
+  } finally {
+    switchingGraphKind = false;
+  }
   syncGraphKindToggle();
-  setStatus("Switched to the " + (kind === "targets" ? "build" : "knowledge") + " graph.");
+  setStatus("Switched to the " + (kind === "targets" ? "target" : "knowledge") + " graph.");
 }
 
 // loadDemoGraph swaps the committed demo graph in place via renderLoadedGraph. NOT a page reload: the SPA
@@ -2745,12 +2754,12 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "Circular dependencies: " +
             ids.size +
-            " target(s) caught in a loop - a configuration error to fix.",
+            " target(s) caught in a loop: a configuration error to fix.",
         );
         setResultLine(ids.size + " target" + (ids.size === 1 ? "" : "s") + " in circular dependencies.");
       } else {
         matchSet = null;
-        setStatus("No circular dependencies - the dependency graph is acyclic.");
+        setStatus("No circular dependencies: the dependency graph is acyclic.");
         setResultLine("No circular dependencies.");
       }
       break;
@@ -3037,7 +3046,7 @@ function copyAsMermaid() {
     .writeText("```mermaid\n" + text + "\n```")
     .then(() => {
       setStatus(
-        "Mermaid diagram copied (" + nodes.length + " nodes) - paste into a GitHub comment or PR.",
+        "Mermaid diagram copied (" + nodes.length + " nodes): paste into a GitHub comment or PR.",
       );
     })
     .catch((err) => {
@@ -3121,7 +3130,7 @@ function renderSuggestions() {
   // 0. Targets flavor: the build-order view is unique to magus - lead with it.
   if (graphFlavor === "targets") {
     chips.push({
-      text: "See the build order - what runs in parallel?",
+      text: "See the build order: what runs in parallel?",
       action: () => switchLayout("waves"),
     });
   }
@@ -3131,7 +3140,7 @@ function renderSuggestions() {
     const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree)[0];
     if (top && top.degree > 0) {
       chips.push({
-        text: top.label + " is the biggest hub - what depends on it?",
+        text: top.label + " is the biggest hub: what depends on it?",
         action: () => activateView("blast", top.id),
       });
     }
@@ -3144,7 +3153,7 @@ function renderSuggestions() {
     const cycleEdge = graph.links.find((e) => e.cycle);
     const src = cycleEdge ? endpointId(cycleEdge.source) : null;
     chips.push({
-      text: "A dependency cycle was detected - trace its path?",
+      text: "A dependency cycle was detected: trace its path?",
       action: src ? () => activateView("trace", src) : () => activateView("hubs"),
     });
   }
@@ -3157,7 +3166,7 @@ function renderSuggestions() {
         orphans.length +
         " node" +
         (orphans.length === 1 ? "" : "s") +
-        " with no edges - what's dead?",
+        " with no edges: what's dead?",
       action: () => activateView("orphans"),
     });
   }
@@ -3674,7 +3683,7 @@ function showDisconnectBanner() {
   const now = new Date();
   const hhmm =
     now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-  banner.textContent = "disconnected - showing workspace as of " + hhmm + ", reconnecting...";
+  banner.textContent = "disconnected, showing workspace as of " + hhmm + ", reconnecting...";
   banner.hidden = false;
 }
 
@@ -3905,11 +3914,11 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
     const nProjects = (loaded.data.projects || []).length;
     const nTargets = (rawForPrepare.nodes || []).filter((n) => n.kind === "target").length;
     const base =
-      "target graph - " +
+      "target graph, " +
       nProjects +
       " project" +
       (nProjects === 1 ? "" : "s") +
-      " - " +
+      ", " +
       nTargets +
       " target" +
       (nTargets === 1 ? "" : "s");
@@ -3920,9 +3929,9 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
     else
       setStatus(
         loaded.source === "local"
-          ? "Your workspace graph - it never left your machine."
+          ? "Your workspace graph: it never left your machine."
           : loaded.source === "loopback"
-            ? "Your workspace graph, served over loopback - it never left your network."
+            ? "Your workspace graph, served over loopback: it never left your network."
             : "",
       );
   }
