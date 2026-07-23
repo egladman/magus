@@ -136,6 +136,11 @@ const (
 	// for anything else. It is workspace-agnostic - no magus-specific filenames - so
 	// `query "kind:doc role:agent"` finds the agent-instruction files in any repo.
 	AttrRole = "role"
+	// AttrSection is a doc page's top-level section under docs/ (guides, concepts,
+	// reference, ...), derived from its path so a page is queryable by where it lives
+	// (`query "kind:doc section:guides"`) without hand-tagging every page. Absent for docs
+	// outside a docs/ tree and for top-level docs (docs/glossary.md) that name no section.
+	AttrSection = "section"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are

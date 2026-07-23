@@ -50,6 +50,15 @@ func assembleDocs(root string, spells types.SpellsOutput, projects []types.Targe
 		knownCode[string(c)] = true
 	}
 
+	spellSet := make(map[string]bool, len(spellNames))
+	for _, n := range spellNames {
+		spellSet[n] = true
+	}
+
+	// "magus <sub>" -> the manpage doc documenting it; a doc mentioning `magus run` then
+	// references that manpage (the command's doc IS its node). Sorted keys -> deterministic.
+	manCmds, manDoc := manpageCommands(files)
+
 	for _, rel := range files {
 		src, err := os.ReadFile(filepath.Join(root, rel))
 		if err != nil {
@@ -65,6 +74,9 @@ func assembleDocs(root string, spells types.SpellsOutput, projects []types.Targe
 		// `kind:doc role:agent` in any repo. A page with no frontmatter (a README, a stub)
 		// simply carries no title/tags.
 		docAttrs := map[string]string{AttrRole: roleFromRel(rel)}
+		if sec := sectionFromRel(rel); sec != "" {
+			docAttrs[AttrSection] = sec
+		}
 		if fm, ok := docs.ParseFrontmatter(content); ok {
 			if fm.Title != "" {
 				docAttrs[AttrTitle] = fm.Title
@@ -86,10 +98,10 @@ func assembleDocs(root string, spells types.SpellsOutput, projects []types.Targe
 			s.Edges = append(s.Edges, de...)
 		}
 
-		if code, ok := diagnosticFromPath(rel); ok {
+		if code, ok := diagnosticFromPath(rel); ok && knownCode[code] {
 			s.Edges = append(s.Edges, extractedEdge(dID, diagnosticID(code), types.RelationDocuments, rel))
 		}
-		if name, ok := spellFromPath(rel); ok {
+		if name, ok := spellFromPath(rel, spellSet); ok {
 			s.Edges = append(s.Edges, extractedEdge(dID, spellID(name), types.RelationDocuments, rel))
 		}
 		if name, ok := moduleFromPath(rel); ok {
@@ -127,16 +139,52 @@ func assembleDocs(root string, spells types.SpellsOutput, projects []types.Targe
 				s.Edges = append(s.Edges, extractedEdge(dID, docID(target), types.RelationReferences, rel))
 			}
 		}
+
+		// A body mention of a `magus <sub>` command references its manpage doc - the
+		// doc<->command interconnection. Skip the manpage's self-reference.
+		for _, cmd := range manCmds {
+			docPath := manDoc[cmd]
+			if docPath == rel {
+				continue
+			}
+			if strings.Contains(content, "`"+cmd+"`") {
+				s.Edges = append(s.Edges, inferredEdge(dID, docID(docPath), types.RelationReferences, rel, 0.6))
+			}
+		}
 	}
 	return s
 }
 
-// diagnosticFromPath returns the diagnostic code a docs/codes/**/MGSxxxx.md page
-// documents.
-func diagnosticFromPath(rel string) (string, bool) {
-	if !strings.HasPrefix(rel, "docs/codes/") {
-		return "", false
+// manpageCommands indexes the manpage docs by the command they document: "magus <sub>" ->
+// the <...>/manpage/magus-<sub>.md rel path, with sorted command keys for deterministic
+// iteration. The manpage doc serves as the command's node for cross-referencing, so no
+// separate command node kind is needed to interconnect docs with commands.
+func manpageCommands(files []string) ([]string, map[string]string) {
+	doc := map[string]string{}
+	for _, f := range files {
+		base := filepath.Base(f)
+		if !hasPathSegment(f, "manpage") || !strings.HasPrefix(base, "magus-") || !strings.HasSuffix(base, ".md") {
+			continue
+		}
+		sub := strings.TrimSuffix(strings.TrimPrefix(base, "magus-"), ".md")
+		if sub == "" {
+			continue
+		}
+		doc["magus "+sub] = f
 	}
+	cmds := make([]string, 0, len(doc))
+	for c := range doc {
+		cmds = append(cmds, c)
+	}
+	slices.Sort(cmds)
+	return cmds, doc
+}
+
+// diagnosticFromPath returns the diagnostic code a page named MGSxxxx.md documents. The
+// match is on the FILENAME, directory-agnostic: a code page documents its code wherever the
+// docs tree puts it, so a docs reorg cannot silently sever the edge. The call site gates on
+// the code being registered, so a stray MGSxxxx.md for an unknown code links nothing.
+func diagnosticFromPath(rel string) (string, bool) {
 	stem := strings.TrimSuffix(filepath.Base(rel), ".md")
 	if mgsExactRe.MatchString(stem) {
 		return stem, true
@@ -144,20 +192,32 @@ func diagnosticFromPath(rel string) (string, bool) {
 	return "", false
 }
 
-// spellFromPath returns the spell a docs/spells/<name>.md page documents.
-func spellFromPath(rel string) (string, bool) {
-	return namedDocUnder(rel, "docs/spells")
+// spellFromPath returns the spell a <...>/spells/<name>.md page documents, anchored on a
+// "spells" path SEGMENT (not a fixed prefix) so it survives a docs reorg, and validated
+// against the known spell set so a non-spell page under a spells dir links nothing.
+func spellFromPath(rel string, known map[string]bool) (string, bool) {
+	if !hasPathSegment(rel, "spells") {
+		return "", false
+	}
+	if stem, ok := entityStem(rel); ok && known[stem] {
+		return stem, true
+	}
+	return "", false
 }
 
-// moduleFromPath returns the module a docs/buzz/modules/<name>.md page documents.
+// moduleFromPath returns the module a <...>/buzz/<name>.md page documents, anchored on a
+// "buzz" path segment so it survives a reorg (docs/buzz/modules -> docs/reference/buzz).
 func moduleFromPath(rel string) (string, bool) {
-	return namedDocUnder(rel, "docs/buzz/modules")
+	if !hasPathSegment(rel, "buzz") {
+		return "", false
+	}
+	return entityStem(rel)
 }
 
-// namedDocUnder returns the <name> of a <dir>/<name>.md page, excluding index/
-// README pages that name a section rather than an entity.
-func namedDocUnder(rel, dir string) (string, bool) {
-	if filepath.ToSlash(filepath.Dir(rel)) != dir || !strings.HasSuffix(rel, ".md") {
+// entityStem returns a page's basename stem, rejecting section landing pages (index/README)
+// that name a section rather than an entity.
+func entityStem(rel string) (string, bool) {
+	if !strings.HasSuffix(rel, ".md") {
 		return "", false
 	}
 	stem := strings.TrimSuffix(filepath.Base(rel), ".md")
@@ -166,6 +226,18 @@ func namedDocUnder(rel, dir string) (string, bool) {
 		return "", false
 	}
 	return stem, true
+}
+
+// hasPathSegment reports whether rel contains seg as a full slash-delimited path segment,
+// so a match anchors on a meaningful directory ("spells", "buzz") without hardcoding the
+// full prefix that a docs reorg would break.
+func hasPathSegment(rel, seg string) bool {
+	for _, p := range strings.Split(filepath.ToSlash(rel), "/") {
+		if p == seg {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveDocLink resolves a markdown link target (relative to the linking doc) to
@@ -264,6 +336,21 @@ func roleFromRel(rel string) string {
 	default:
 		return "doc"
 	}
+}
+
+// sectionFromRel returns a doc's top-level section under a docs/ tree (docs/guides/mcp.md
+// -> "guides"), so a page is queryable by where it lives without hand-tagging. Empty for
+// docs outside docs/ and for top-level docs (docs/glossary.md) that name no section.
+func sectionFromRel(rel string) string {
+	const prefix = "docs/"
+	if !strings.HasPrefix(rel, prefix) {
+		return ""
+	}
+	rest := rel[len(prefix):]
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		return rest[:i]
+	}
+	return ""
 }
 
 // uniqSortedStrings returns the sorted unique values of xs.
