@@ -2,11 +2,46 @@ package memory
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestRepoIdentityWorktree proves every worktree of one repo resolves to the same
+// identity, so they share one memory directory - the reason the key is not the checkout
+// path.
+func TestRepoIdentityWorktree(t *testing.T) {
+	main := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(main, ".git"), 0o755))
+
+	wt := t.TempDir()
+	gitfile := "gitdir: " + filepath.Join(main, ".git", "worktrees", "feature-x") + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte(gitfile), 0o644))
+
+	assert.Equal(t, main, repoIdentity(main), "a plain checkout identifies as itself")
+	assert.Equal(t, main, repoIdentity(wt), "a linked worktree identifies as the main repo")
+	bare := t.TempDir()
+	assert.Equal(t, bare, repoIdentity(bare), "no .git: the root is the identity")
+}
+
+func TestDirIsOutsideRepoAndStable(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	root := t.TempDir()
+
+	dir, err := Dir(root)
+	require.NoError(t, err)
+	assert.True(t, filepath.IsAbs(dir))
+	assert.Contains(t, dir, filepath.Join(state, "magus", "memory"))
+	assert.NotContains(t, dir, root, "memory must not live under the repo")
+	assert.Contains(t, filepath.Base(dir), filepath.Base(root)+"-", "dir name leads with the repo basename")
+
+	again, err := Dir(root)
+	require.NoError(t, err)
+	assert.Equal(t, dir, again, "the key is deterministic")
+}
 
 // testRoot isolates the store: XDG_STATE_HOME points at a temp dir, and root is an
 // empty temp dir (no .git, so repoIdentity is root itself).

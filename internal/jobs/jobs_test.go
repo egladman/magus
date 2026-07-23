@@ -27,7 +27,6 @@ func TestAll_IsTheRegistryInOrder(t *testing.T) {
 		{Name: "sync-graph", Desc: "reconcile the knowledge graph to current source (rebuild and reindex)", Argv: []string{"graph", "build"}},
 		{Name: "rotate-activities", Desc: "trim the activity trail back to its cap and drop orphaned payload blobs", Argv: []string{"server", "rotate-activities"}},
 		{Name: "rotate-logs", Desc: "trim the invocation run-log journals back to their cap", Argv: []string{"server", "rotate-logs"}},
-		{Name: "rotate-memory", Desc: "compact the memory progress journal, archiving older entries beside it (decisions are never pruned)", Argv: []string{"server", "rotate-memory"}},
 		{Name: "clear-cache", Desc: "invalidate cached build entries for the workspace", Argv: []string{"clean", "--cache"}},
 	}, All())
 }

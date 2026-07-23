@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/maintenance"
@@ -44,8 +43,6 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverRotateActivities(ctx, root, rest)
 	case jobs.NameRotateLogs:
 		return serverRotateLogs(ctx, root, rest)
-	case jobs.NameRotateMemory:
-		return serverRotateMemory(ctx, root, rest)
 	default:
 		return fmt.Errorf("magus server: unknown target %q (want start, stop, or job); use `%s` to inspect daemon state", sub, clihint.Status)
 	}
@@ -494,36 +491,6 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	}
 	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
-	return nil
-}
-
-// serverRotateMemory is the worker for the rotate-memory job: it compacts the memory
-// PROGRESS journal, keeping a recent window in the live file and archiving the rest
-// to a sidecar beside it. The DECISIONS log is deliberately never pruned - a decision
-// and its why stay durable forever. The memory lives OUTSIDE the repo (the user state
-// dir, keyed by repo identity), so this resolves it from the workspace root the same
-// way the magus_memory MCP tool does. Normally reached via `server job rotate-memory`.
-func serverRotateMemory(ctx context.Context, root string, args []string) error {
-	if _, err := cmdParse("server rotate-memory", args, func(fs *flag.FlagSet) {
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "usage: magus server rotate-memory")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Compact the memory progress journal, archiving older entries to a sidecar.")
-			fmt.Fprintln(os.Stderr, "The decisions log is never pruned. This is the worker for")
-			fmt.Fprintln(os.Stderr, "`magus server job rotate-memory`; prefer that form.")
-		}
-	}); err != nil {
-		return err
-	}
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return fmt.Errorf("server rotate-memory: %w", err)
-	}
-	kept, archived, err := mcp.RotateProgress(m.Root())
-	if err != nil {
-		return fmt.Errorf("server rotate-memory: %w", err)
-	}
-	slog.InfoContext(ctx, "rotated memory progress journal", slog.Int("kept", kept), slog.Int("archived", archived))
 	return nil
 }
 

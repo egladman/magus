@@ -115,12 +115,16 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolMemory),
-		Description: "Durable per-repository memory shared across sessions, models, and agent hosts: three plain-markdown files kept OUTSIDE the repo in the user state directory (worktrees of one repo share them). Files: status (the current snapshot - where work stands, next action, blockers; overwrite with op=write), progress (dated work journal; op=append), decisions (dated log of decisions made and WHY; op=append). Read status and decisions at the start of a session to ramp on what earlier sessions - possibly a different model - established; append as you work. Appends to progress/decisions are date-stamped automatically. Reads are WINDOWED to keep session-start cheap: status returns in full, but a read of progress or decisions returns a table of contents of all entry headings plus the last 5 entries in full; pass op=read_all to get the entire journal when you need older entries. For intra-session scratch notes use magus_scratchpad instead.",
+		Description: "Durable per-repository memory shared across sessions, models, and agent hosts, kept OUTSIDE the repo in the user state directory (worktrees of one repo share it). Memory is a set of discrete RECORDS, each a typed POINTER into the magus domain - not free prose. The payload is one or more refs; a record with no ref is not a memory, it is a query you should just run. Ref kinds: query (a saved `magus query` expression), node (a graph node id), output (a target output ref id), command (a magus invocation), doc (a docs anchor). Record types: pointer (refs only, no prose), decision (a choice PLUS the why - the one place a caption is expected), plan (forward intent PLUS the why). Read at session start (op=list) to ramp on what earlier sessions established; record a decision the moment one is made with its why. Also keeps one cursor snapshot (op=cursor) for 'where did I leave off'. For intra-session scratch notes use magus_scratchpad instead.",
 		Params: []ParamDescriptor{
-			{Name: "file", Type: "string", Required: true, Description: "One of: status, progress, decisions."},
-			{Name: "op", Type: "string", Description: "One of: read (default; windows progress/decisions to a table of contents plus the last 5 entries), read_all (the full journal), write (overwrite), append, clear."},
-			{Name: "content", Type: "string", Description: "The text to write or append. Required for write and append."},
-			{Name: "title", Type: "string", Description: "Optional, append only: a few-word summary folded into the entry's dated heading, so scanning the headings reads as a table of contents. Title every decisions entry."},
+			{Name: "op", Type: "string", Description: "One of: list (default; all records), get, put (create or update - upsert by name), delete, cursor (read the snapshot, or overwrite it when content is given)."},
+			{Name: "name", Type: "string", Description: "The record's kebab-slug identity. Required for get, put, delete."},
+			{Name: "type", Type: "string", Description: "put only: one of pointer, decision, plan."},
+			{Name: "refs", Type: "string", Description: "put only, REQUIRED: the payload, one ref per line as 'kind: target' (e.g. 'query: kind:op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc."},
+			{Name: "body", Type: "string", Description: "put only: the one-line caption for a decision/plan (the why). Omit for a pointer - a pointer carries no prose."},
+			{Name: "status", Type: "string", Description: "put only, optional: the lifecycle field (e.g. accepted, superseded, active, done, stale)."},
+			{Name: "references", Type: "string", Description: "put only, optional: comma-separated names of other memory records this one links to."},
+			{Name: "content", Type: "string", Description: "cursor only: when given, overwrites the cursor snapshot; when omitted, op=cursor reads it."},
 		},
 	},
 	{
