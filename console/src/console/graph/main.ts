@@ -60,7 +60,17 @@ import {
   type TargetGraphOutput,
   endpointId,
 } from "./types.js";
-import { LAYERED_MAX, layoutLayered } from "./layout.js";
+import { LAYERED_COL_W, LAYERED_MAX, layoutLayered, layoutWaves } from "./layout.js";
+import { CARD_COL_W, drawCard, measureCards } from "./cards.js";
+import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
+import { nodeDurationMs, formatDuration } from "./duration.js";
+import {
+  setFlowEdges,
+  setPulses,
+  resetMotion,
+  tick as particlesTick,
+  type FlowEdge,
+} from "./particles.js";
 import { toMermaid } from "./mermaid.js";
 import { detectFlavor, isTargetGraphOutput, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
@@ -129,7 +139,7 @@ const el = (id: string): HTMLElement | null => document.getElementById(id);
 const GRAPH_KEYMAP: Keymap = {
   "graph.search": "/", // focus the node search
   "graph.fit": "f", // zoom to fit
-  "graph.layout": "l", // toggle force / layered layout
+  "graph.layout": "l", // cycle force / layered / waves layout
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 // These handles are the DOM contract with graph.html; the page always provides them, so they are
@@ -187,18 +197,55 @@ let matchSet: Set<string> | null = null; // Set of node ids matching `query`/foc
 let hoverId: string | null = null;
 let focusId: string | null = null; // node the local/focus graph is centered on, or null
 let focusDepth = 2; // hops included in the focus graph
-// Layout mode: "force" (d3 simulation) or "layered" (deterministic Sugiyama DAG layout).
-// Defaults are set per flavor after a graph loads; manual toggle is allowed and survives
-// the URL fragment (#layout=force or #layout=layered). The scale guard refuses layered
-// for more than 500 visible nodes.
-let layoutMode = "force"; // "force" | "layered"
+// Layout mode: "force" (d3 simulation), "layered" (deterministic Sugiyama DAG
+// layout), "waves" (deterministic topological build-order columns), or "radial"
+// (BFS ego rings around a center node). Defaults are set per flavor after a
+// graph loads; manual switching is allowed and survives the URL fragment
+// (#layout=force|layered|waves|radial). The scale guard refuses layered/waves
+// for more than 500 visible nodes; radial requires a selected/focused center.
+type LayoutMode = "force" | "layered" | "waves" | "radial";
+function isLayoutMode(s: string): s is LayoutMode {
+  return s === "force" || s === "layered" || s === "waves" || s === "radial";
+}
+let layoutMode: LayoutMode = "force";
 let graphFlavor: GraphFlavor = "knowledge"; // "knowledge" | "targets"; set in boot/replaceGraph
+// Per-wave membership from the last layoutWaves() call (wavesMeta[i] = the ids in
+// wave i - the array index IS the wave number), for draw()'s column bands/headers
+// and switchLayout's parallelism status. null outside waves mode.
+let wavesMeta: string[][] | null = null;
+// Center id + BFS rings from the last layoutRadial() call (see applyRadialMode),
+// for draw()'s ring guides, the re-center-on-click behavior in selectNode, and
+// the live-refresh fallback in liveApplyGraphUpdate. null outside radial mode.
+let radialCenter: string | null = null;
+let radialRings: string[][] | null = null;
+// One-shot pick mode for the "What's around this?" Ask chip: set when the chip
+// is clicked with nothing selected, cleared (and radial entered) on the next
+// selectNode with an id, or cleared on Esc/query/view activation.
+let pendingRadialPick = false;
+
+// Cards render for the targets flavor in the DAG-shaped modes only; the
+// knowledge constellation keeps circles (density makes cards unreadable).
+// Radial also stays circles for targets - rings are round, wide cards don't fit.
+const cardsActive = () =>
+  graphFlavor === "targets" && (layoutMode === "layered" || layoutMode === "waves");
+
+// isDagMode is true for the deterministic Sugiyama-family layouts (layered and
+// waves): the force sim stays stopped, edges route through dummy bend points,
+// drag sets fx/fy manually, and arrowheads draw. Radial is NOT a dag mode - it
+// draws its own ring guides and skips arrowheads (see applyRadialMode/draw()).
+const isDagMode = () => layoutMode === "layered" || layoutMode === "waves";
+
+// True when the current graph carries DurationMs timing on at least one node
+// (nodeDurationMs covers all three spellings). Recomputed by
+// syncConditionalViews after every graph load; read by draw()'s card branch
+// and the "Color by duration" preset's conditional visibility.
+let graphHasDurations = false;
 
 // ---- Phase 5: question-first views -----------------------------------------
 // Views answer developer questions with graph interactions. The active view is
 // one of: null (default projection), "blast", "trace", "critical", "hubs",
-// "orphans". "affected" is Phase 9 (disabled). Max 7 total.
-let activeView: string | null = null; // null | "blast" | "trace" | "hubs" | "orphans" | "critical"
+// "orphans", "cycles". "affected" is Phase 9 (disabled until live).
+let activeView: string | null = null; // null | "blast" | "trace" | "hubs" | "orphans" | "critical" | "cycles" | "affected"
 let viewNode: string | null = null; // primary node id for blast/trace
 let viewNodeTo: string | null = null; // secondary node id for trace
 // The default projection shows project-level nodes only on first load.
@@ -229,6 +276,7 @@ let liveFlavor: string | null = null; // null (knowledge) or "targets"
 // abort() removes them all. Without teardown the force simulation, its rAF, the observer, and these
 // listeners would keep running in the background after the graph closes.
 let stageResizeObserver: ResizeObserver | null = null;
+let themeObserver: MutationObserver | null = null;
 let lifecycleAbort: AbortController | null = null;
 
 // The graph stays gently "alive": the simulation never fully cools, so nodes
@@ -236,6 +284,47 @@ let lifecycleAbort: AbortController | null = null;
 // and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const idleAlpha = () => (reducedMotion.matches ? 0 : 0.006);
+
+// ---- Phase 6: motion layer (flow particles + live recency pulses) ---------
+// Motion is OFF outside two states: an active path/subset view (blast, trace,
+// critical) with flow particles running along its edges, or a live refresh
+// that just pulsed some nodes. flowOn mirrors whether particles.ts currently
+// holds a non-null flow-edge list (set by buildFlowEdges, cleared at every
+// view-exit site). pulsesPending is set true whenever liveApplyGraphUpdate
+// calls setPulses, and cleared by draw() once tick() reports nothing left to
+// paint (see the draw() motion block) - that self-clearing, plus
+// motionEligible's reducedMotion/document.hidden checks, is what makes
+// motionLoop below stop itself within a frame of there being nothing to show.
+let flowOn = false;
+let pulsesPending = false;
+let motionRaf = 0;
+
+const flowActive = () =>
+  (activeView === "trace" || activeView === "critical" || activeView === "blast") && !!matchSet;
+
+const motionEligible = () =>
+  !reducedMotion.matches && !document.hidden && (flowOn || pulsesPending);
+
+// motionLoop keeps draw() repainting once per frame while motionEligible();
+// the moment it isn't (view cleared, tab hidden, reduced-motion turned on, or
+// pulses expired), it zeroes motionRaf and stops re-arming itself - CPU drops
+// back to the sim's own idle wobble, not zero (that baseline is unaffected).
+function motionLoop() {
+  if (!motionEligible()) {
+    motionRaf = 0;
+    return;
+  }
+  draw();
+  motionRaf = requestAnimationFrame(motionLoop);
+}
+
+// startMotion arms the loop if it isn't already running and there is
+// something eligible to animate; call it from every site that turns flow or
+// pulses on. Guarded by motionRaf so a second call while the loop is already
+// running is a no-op.
+function startMotion() {
+  if (!motionRaf && motionEligible()) motionRaf = requestAnimationFrame(motionLoop);
+}
 
 // ---- theme / palette -------------------------------------------------------
 // One computed-style read per repaint; v() pulls a custom property with a
@@ -493,52 +582,215 @@ function applyLayeredMode() {
   if (sim) {
     sim?.stop();
   }
-  layoutLayered(visNodes, graph.links);
+  if (cardsActive()) {
+    measureCards(ctx, visNodes, (theme ?? readTheme()).font);
+    layoutLayered(visNodes, graph.links, { colW: CARD_COL_W, rowH: 48 });
+  } else {
+    layoutLayered(visNodes, graph.links);
+  }
   draw();
   return true;
 }
 
-// switchLayout changes layoutMode and applies it, wiring the DOM toggle state.
-function switchLayout(mode: string) {
-  layoutMode = mode;
-  const btn = el("layout-toggle-btn");
-  if (btn) {
-    const label = btn.querySelector<HTMLElement>(".pf-v6-c-button__text") ?? btn;
-    label.textContent = mode === "layered" ? "Force" : "Layered";
-    btn.title =
-      mode === "layered" ? "Switch to force-directed simulation" : "Switch to layered DAG layout";
+// applyWavesMode: switch to the waves layout (see layout.ts's layoutWaves) for
+// the visible node/link set. Mirrors applyLayeredMode's scale guard, card
+// measurement, and stopped-sim invariant; additionally stores the per-wave
+// membership in wavesMeta so draw() can paint column bands/headers and
+// switchLayout can report parallelism.
+function applyWavesMode() {
+  const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
+  if (visNodes.length > LAYERED_MAX) {
+    setStatus(
+      "waves layout is capped at 500 nodes - narrow with a query or the local graph",
+      true,
+    );
+    wavesMeta = null;
+    return false;
   }
-  // Show/hide force sliders: hidden in layered mode.
-  const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
-  if (forceControls) forceControls.hidden = mode === "layered";
+  if (sim) {
+    sim?.stop();
+  }
+  if (cardsActive()) {
+    measureCards(ctx, visNodes, (theme ?? readTheme()).font);
+    wavesMeta = layoutWaves(visNodes, graph.links, { colW: CARD_COL_W, rowH: 48 }).waves;
+  } else {
+    wavesMeta = layoutWaves(visNodes, graph.links).waves;
+  }
+  draw();
+  return true;
+}
 
+// reapplyDagLayout re-runs whichever dag layout is currently active (layered or
+// waves) - the shared dispatcher every re-layout call site (query, focus, live
+// refresh, ...) uses so it does not need to know which dag mode is on screen.
+function reapplyDagLayout(): boolean {
+  return layoutMode === "waves" ? applyWavesMode() : applyLayeredMode();
+}
+
+// applyRadialMode: lay out the BFS ego rings (see radial.ts) around the
+// selected (or focused) node. Unlike layered/waves, radial computes its OWN
+// placed set (everything within RADIAL_MAX_RINGS hops of the center, over the
+// visible subset) rather than accepting matchSet as-is - it narrows matchSet
+// to that placed set afterward so the node list/status agree with what's
+// drawn. Nodes that were visible but fell outside the placed set are parked
+// off-canvas (fx/fy = -1e6, the same convention parkHiddenNodes uses) so they
+// don't sit stacked at the origin. Stops the force simulation - radial pins
+// fx/fy like the dag modes, even though it is not one (see isDagMode).
+function applyRadialMode(): boolean {
+  const center = selected ?? focusId;
+  if (!center) return false; // switchLayout guards via layoutBlockedReason; safe fallback
+  const subsetAll = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
+  const subset = subsetAll.some((n) => n.id === center) ? subsetAll : graph.nodes;
+  sim?.stop();
+  // Radial deliberately takes the undirected adjacency() rather than graph.links: the ego
+  // neighborhood spans every edge kind (contains, imports, uses, ...), not just depends_on,
+  // so it has no colW/rowH opts like the DAG layouts - ring radius is fixed (RADIAL_RING_R).
+  const { rings } = layoutRadial(center, subset, adjacency());
+  radialRings = rings;
+  radialCenter = center;
+  const placed = new Set<string>();
+  for (const ring of rings) for (const id of ring) placed.add(id);
+  let hiddenCount = 0;
+  for (const n of subset) {
+    if (!placed.has(n.id)) {
+      n.fx = -1e6;
+      n.fy = -1e6;
+      n.x = -1e6;
+      n.y = -1e6;
+      hiddenCount++;
+    }
+  }
+  matchSet = placed;
+  const centerNode = graph.byId.get(center);
+  setStatus(
+    "radial: " +
+      placed.size +
+      " nodes within " +
+      RADIAL_MAX_RINGS +
+      " hops of " +
+      (centerNode ? centerNode.label : center) +
+      (hiddenCount ? "; " + hiddenCount + " more hidden" : ""),
+  );
+  // Frame the freshly-placed rings. Radial centers on world origin, so without
+  // this the camera stays wherever the previous layout left it and the rings
+  // render off-screen (fitView calls draw()).
+  fitView(matchSet);
+  return true;
+}
+
+// layoutBlockedReason says whether a mode can run right now; the returned string is
+// the reason to show in the button title when it cannot.
+function layoutBlockedReason(mode: LayoutMode): string | null {
+  if (mode === "waves" || mode === "layered") {
+    const visCount = (matchSet ? matchSet.size : graph?.nodes.length) ?? 0;
+    if (visCount > LAYERED_MAX) return "capped at 500 visible nodes - narrow with a query first";
+  }
+  if (mode === "radial" && !selected && !focusId) return "select a node first";
+  return null;
+}
+
+// The layout toggle group's per-mode titles when available (overridden by
+// layoutBlockedReason's reason string when not). Mirrors scaffold.html's static
+// title attributes so the initial render and syncLayoutToggle agree.
+const LAYOUT_TITLES: Record<LayoutMode, string> = {
+  force:
+    "Free-floating physics layout - clusters and highly-connected hubs pop out. Best for exploring the whole graph.",
+  layered:
+    "Left-to-right dependency flow - what depends on what, arranged in tiers. Best for reading direction.",
+  waves:
+    "Build order - each column is a set of targets magus can run in parallel. Best for seeing what runs when.",
+  radial: "Rings around one node by distance - its neighborhood at a glance. Pick a node first.",
+};
+// Cycle order for the graph.layout command / l key: skips modes layoutBlockedReason rejects.
+const LAYOUT_ORDER: LayoutMode[] = ["force", "layered", "waves", "radial"];
+function cycleLayout() {
+  const start = LAYOUT_ORDER.indexOf(layoutMode);
+  for (let i = 1; i <= LAYOUT_ORDER.length; i++) {
+    const next = LAYOUT_ORDER[(start + i) % LAYOUT_ORDER.length];
+    if (!layoutBlockedReason(next)) {
+      switchLayout(next);
+      return;
+    }
+  }
+}
+
+// switchLayout changes layoutMode and applies it, wiring the DOM toggle state.
+function switchLayout(mode: LayoutMode) {
+  if (mode === "radial") {
+    // Refuse without touching layoutMode (stay on whatever was showing); just
+    // re-sync the toggle so a stale disabled/title doesn't linger.
+    if (layoutBlockedReason("radial")) {
+      setStatus("select a node first (click one), then Radial", true);
+      syncLayoutToggle();
+      return;
+    }
+  } else if (layoutMode === "radial") {
+    // Leaving radial: release whatever it parked off-canvas so the next
+    // layout can place those nodes again. Also reset x/y away from the -1e6
+    // parking spot (fitView(null) after this would otherwise include it in
+    // the bounds and collapse zoom to k=0.1) and clear matchSet, so the next
+    // layout shows the full graph instead of radial's placed set - the same
+    // recovery the other park-release sites use.
+    for (const n of graph.nodes) {
+      if (n.fx === -1e6) {
+        n.fx = null;
+        n.fy = null;
+        n.x = 0;
+        n.y = 0;
+      }
+    }
+    radialCenter = null;
+    radialRings = null;
+    matchSet = null;
+  }
+  layoutMode = mode;
+  if (mode !== "waves") wavesMeta = null;
+  syncLayoutToggle();
   updateHash();
 
-  if (mode === "layered") {
-    if (!applyLayeredMode()) {
+  if (mode === "layered" || mode === "waves") {
+    const ok = mode === "waves" ? applyWavesMode() : applyLayeredMode();
+    if (!ok) {
       // Scale guard fired: revert to force mode.
       layoutMode = "force";
+      wavesMeta = null;
       syncLayoutToggle();
-      // Clear fixed positions so the sim can move nodes.
+      // Clear fixed positions so the sim can move nodes, and any routes from
+      // the dag pass so force mode never draws a stale curve.
       for (const n of graph.nodes) {
         n.fx = null;
         n.fy = null;
       }
+      for (const e of graph.links) delete e.points;
       if (sim) {
         sim.alpha(0.5).restart();
       } else {
         startSimulation();
       }
-      // Don't write layout=layered to the hash.
+      // Don't write layout=<mode> to the hash.
       updateHash();
       draw();
+    } else if (mode === "waves" && wavesMeta) {
+      const widest = wavesMeta.reduce((m, ids) => Math.max(m, ids.length), 0);
+      setStatus(
+        "waves: " +
+          wavesMeta.length +
+          " waves; widest wave " +
+          widest +
+          " targets (max parallelism)",
+      );
     }
+  } else if (mode === "radial") {
+    applyRadialMode();
   } else {
-    // Force mode: clear fixed positions so the simulation takes over.
+    // Force mode: clear fixed positions so the simulation takes over, and any
+    // edge routes left over from a dag pass so force mode never draws a stale
+    // curve.
     for (const n of graph.nodes) {
       n.fx = null;
       n.fy = null;
     }
+    for (const e of graph.links) delete e.points;
     if (sim) {
       sim.alpha(0.5).restart();
     } else {
@@ -589,6 +841,72 @@ function draw() {
   ctx.translate(transform.x, transform.y);
   ctx.scale(transform.k, transform.k);
 
+  // Waves mode: paint alternating column bands and per-wave headers first, so
+  // nodes/edges/labels draw on top. x comes from any member node's x (all
+  // share it, per layoutWaves); the y-range is the min/max of the wave
+  // membership's node y. colW matches what applyWavesMode passed to
+  // layoutWaves. Text is drawn in world units (like card labels), so it scales
+  // with zoom; skip it below k=0.35 where it would be unreadable anyway.
+  if (layoutMode === "waves" && wavesMeta) {
+    const colW = cardsActive() ? CARD_COL_W : LAYERED_COL_W;
+    let minY = Infinity,
+      maxY = -Infinity;
+    for (const ids of wavesMeta) {
+      for (const id of ids) {
+        const n = graph.byId.get(id);
+        if (n && n.x != null) {
+          minY = Math.min(minY, n.y);
+          maxY = Math.max(maxY, n.y);
+        }
+      }
+    }
+    if (minY <= maxY) {
+      wavesMeta.forEach((ids, i) => {
+        const first = graph.byId.get(ids[0]);
+        if (!first || first.x == null) return;
+        const waveX = first.x;
+        if (i % 2 === 0) {
+          ctx.globalAlpha = 0.06;
+          ctx.fillStyle = th.border;
+          ctx.fillRect(waveX - colW / 2, minY - 40, colW, maxY - minY + 64);
+        }
+        ctx.globalAlpha = 1;
+        if (transform.k >= 0.35) {
+          ctx.fillStyle = th.muted;
+          ctx.textAlign = "center";
+          ctx.font = "10px " + th.font;
+          ctx.fillText("wave " + i, waveX, minY - 28);
+          ctx.font = "9px " + th.font;
+          ctx.fillText(ids.length + " in parallel", waveX, minY - 16);
+        }
+      });
+    }
+  }
+
+  // Radial mode: paint concentric ring guides centered on the radial center
+  // node, before edges/nodes, so they read as a quiet background grid (same
+  // idiom as the waves bands above). e.points from a prior dag pass may be
+  // stale here (applyRadialMode never computes them), so the edge pass below
+  // gates the routed-curve branch on isDagMode(), not just "not force".
+  const radialPlacedCount =
+    layoutMode === "radial" && radialRings
+      ? radialRings.reduce((n, ring) => n + ring.length, 0)
+      : 0;
+  if (layoutMode === "radial" && radialCenter && radialRings) {
+    const centerNode = graph.byId.get(radialCenter);
+    if (centerNode && centerNode.x != null) {
+      ctx.strokeStyle = th.border;
+      ctx.globalAlpha = 0.25;
+      ctx.lineWidth = 1 / transform.k;
+      for (let d = 1; d < radialRings.length; d++) {
+        ctx.beginPath();
+        ctx.arc(centerNode.x, centerNode.y, d * RADIAL_RING_R, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
   const highlight = selected || hoverId;
   const near = neighbors(highlight);
 
@@ -603,7 +921,6 @@ function draw() {
     !projectionUnfolded && projectionSet && !query && !focusId && !activeView
       ? projectionSet
       : null;
-  ctx.lineWidth = 0.6 / transform.k;
   for (const e of graph.links) {
     // By draw time d3-force has resolved source/target from id strings to the node objects.
     const s = e.source as GNode,
@@ -611,6 +928,21 @@ function draw() {
     if (s.x == null || t.x == null) continue; // not "!s.x": a node validly at x=0 must still draw
     // Default projection: only draw edges where both endpoints are in the projection.
     if (projectionActive && !(projectionActive.has(s.id) && projectionActive.has(t.id))) continue;
+    // Card side-attach: when cards are active, lines attach to card sides
+    // (the lower-x endpoint's right edge -> the higher-x endpoint's left
+    // edge) instead of centers, so edges terminate at the card border. sx/sy
+    // and tx/ty stand in for s.x/s.y and t.x/t.y everywhere below; outside
+    // card mode (or for a node without .w) they equal the plain center.
+    const cardsOn = cardsActive();
+    let sx = s.x,
+      sy = s.y,
+      tx = t.x,
+      ty = t.y;
+    if (cardsOn && (s.w || t.w)) {
+      const sLeft = s.x <= t.x;
+      if (s.w) sx = sLeft ? s.x + s.w / 2 : s.x - s.w / 2;
+      if (t.w) tx = sLeft ? t.x - t.w / 2 : t.x + t.w / 2;
+    }
     let active;
     if (highlight) active = s.id === highlight || t.id === highlight;
     else if (matchSet && !projectionActive) {
@@ -619,43 +951,105 @@ function draw() {
       if (!(matchSet.has(s.id) && matchSet.has(t.id))) continue;
       active = true;
     } else active = true;
+    // Critical-path emphasis: an edge between two nodes both on the current
+    // critical chain reads as the spine - thicker and at full alpha instead
+    // of the default muted stroke.
+    const criticalEdge =
+      activeView === "critical" && !!matchSet && matchSet.has(s.id) && matchSet.has(t.id);
     ctx.strokeStyle = active ? th.muted : th.border;
-    ctx.globalAlpha = active ? 0.55 : 0.1;
+    ctx.globalAlpha = criticalEdge ? 1 : active ? 0.55 : 0.1;
+    ctx.lineWidth = criticalEdge ? 2.2 / transform.k : 0.6 / transform.k;
     // Cycle edges (from the target-graph adapter) get a dashed stroke so they
     // stand out from normal dependency edges. Layout-reversed edges (cycle-break
     // in layered mode) also render dashed.
     const dashed = e.cycle || e.layoutReversed;
     if (dashed) ctx.setLineDash([4 / transform.k, 3 / transform.k]);
+    // Routed edges (multi-layer spans in a DAG mode) carry world-space bend
+    // points ordered ascending-x (dependency end -> dependent end, see
+    // types.ts). Assemble the full polyline (both endpoints + bend points)
+    // sorted by x so it reads correctly regardless of which of s/t is the
+    // geometrically-left endpoint (layoutReversed edges can flip that).
+    const routePts: { x: number; y: number }[] | null =
+      isDagMode() && e.points && e.points.length
+        ? [
+            { x: sx, y: sy },
+            { x: tx, y: ty },
+            ...e.points,
+          ].sort((a, b) => a.x - b.x)
+        : null;
     ctx.beginPath();
-    ctx.moveTo(s.x, s.y);
-    ctx.lineTo(t.x, t.y);
+    if (routePts) {
+      // Smooth curve through the bend points via quadratic segments to their
+      // midpoints (a cheap Catmull-Rom-ish approximation), ending with a
+      // straight segment into the final endpoint.
+      ctx.moveTo(routePts[0].x, routePts[0].y);
+      for (let i = 1; i < routePts.length - 1; i++) {
+        const midX = (routePts[i].x + routePts[i + 1].x) / 2,
+          midY = (routePts[i].y + routePts[i + 1].y) / 2;
+        ctx.quadraticCurveTo(routePts[i].x, routePts[i].y, midX, midY);
+      }
+      ctx.lineTo(routePts[routePts.length - 1].x, routePts[routePts.length - 1].y);
+    } else if (isDagMode()) {
+      // Short edge (single layer span, no bend points): a gentle horizontal-out
+      // bezier so the DAG still reads as flow instead of a ruler-straight line.
+      ctx.moveTo(sx, sy);
+      const dx = tx - sx;
+      if (Math.abs(dx) > 24) ctx.bezierCurveTo(sx + dx * 0.4, sy, tx - dx * 0.4, ty, tx, ty);
+      else ctx.lineTo(tx, ty);
+    } else {
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(t.x, t.y);
+    }
     ctx.stroke();
     if (dashed) ctx.setLineDash([]);
 
-    // Arrowheads: only in layered mode (they add clarity on the DAG's directed
-    // edges; in force mode at demo-graph density they would be visual noise).
-    // Convention matches the Go mermaid emitter (LR direction): the dependency
-    // is placed at a lower x (left) and the dependent at a higher x (right).
-    // In link terms: e.source = dependent (right), e.target = dependency (left).
-    // The arrowhead is drawn at the SOURCE end (the dependent node on the right),
-    // matching mermaid `dependency --> dependent` reading left-to-right.
-    // For layout-reversed back-edges the arrow tip moves to the target end
-    // (the reversed direction is layout-only fiction; the mark calls it out).
-    if (layoutMode === "layered" && active && e.relation === "depends_on") {
+    // Arrowheads: only in dag modes (layered/waves - they add clarity on the
+    // DAG's directed edges; in force mode at demo-graph density they would be
+    // visual noise). Convention matches the Go mermaid emitter (LR direction):
+    // the dependency is placed at a lower x (left) and the dependent at a
+    // higher x (right). In link terms: e.source = dependent (right), e.target
+    // = dependency (left). The arrowhead is drawn at the SOURCE end (the
+    // dependent node on the right), matching mermaid `dependency --> dependent`
+    // reading left-to-right. For layout-reversed back-edges the arrow tip moves
+    // to the target end (the reversed direction is layout-only fiction; the
+    // mark calls it out).
+    if (isDagMode() && active && e.relation === "depends_on") {
       const isReversed = !!e.layoutReversed;
       // Arrow tip: at source (dependent, right) for normal edges; at target for reversed.
       const tipNode = isReversed ? t : s;
-      // Direction vector from the other end toward the tip.
+      // Attach-point coords for the tip end (equal to the plain center outside
+      // card mode, since sx/tx only diverge from s.x/t.x when cardsOn).
+      const tipAttachX = tipNode === s ? sx : tx;
+      const tipAttachY = tipNode === s ? sy : ty;
+      // Direction vector from the other end toward the tip. For a routed edge,
+      // use the nearest bend point instead of the opposite endpoint so the
+      // arrow aligns with the curve's final segment rather than the chord.
       const fromNode = isReversed ? s : t;
-      const dx = tipNode.x - fromNode.x,
-        dy = tipNode.y - fromNode.y;
+      let fromX = fromNode === s ? sx : tx,
+        fromY = fromNode === s ? sy : ty;
+      if (routePts && routePts.length > 2) {
+        const nearest =
+          routePts[0].x === tipAttachX ? routePts[1] : routePts[routePts.length - 2];
+        fromX = nearest.x;
+        fromY = nearest.y;
+      }
+      const dx = tipAttachX - fromX,
+        dy = tipAttachY - fromY;
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
       const ux = dx / len,
         uy = dy / len;
-      // Place the tip at the node's edge (radius + small gap).
-      const tipR = tipNode.r || 5;
-      const tipX = tipNode.x - ux * (tipR + 1 / transform.k);
-      const tipY = tipNode.y - uy * (tipR + 1 / transform.k);
+      // Place the tip at the node's edge: the card's near side (already
+      // computed above as the attach point) when cards are active, else the
+      // circle radius plus a small gap.
+      let tipX: number, tipY: number;
+      if (cardsOn && tipNode.w) {
+        tipX = tipAttachX;
+        tipY = tipAttachY;
+      } else {
+        const tipR = tipNode.r || 5;
+        tipX = tipNode.x - ux * (tipR + 1 / transform.k);
+        tipY = tipNode.y - uy * (tipR + 1 / transform.k);
+      }
       const aLen = 8 / transform.k; // arrowhead length
       const aWid = 4 / transform.k; // arrowhead half-width
       // Perpendicular vector.
@@ -682,6 +1076,20 @@ function draw() {
     let alpha = 1;
     if (highlight) alpha = n.id === highlight || (near && near.has(n.id)) ? 1 : 0.15;
     else if (matchSet && !projectionActive) alpha = matchSet.has(n.id) ? 1 : 0.12;
+    if (cardsActive() && n.w) {
+      const kindColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
+      drawCard(ctx, n, {
+        theme: th,
+        kindColor,
+        alpha,
+        selected: n.id === selected,
+        anchor: n.kind === "target" && n.attrs?.anchor === "true",
+        zoomK: transform.k,
+        durationText:
+          graphHasDurations && nodeDurationMs(n) > 0 ? formatDuration(nodeDurationMs(n)) : null,
+      });
+      continue;
+    }
     ctx.globalAlpha = alpha;
     const nodeColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
     ctx.beginPath();
@@ -710,6 +1118,52 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
+  // Phase 6 motion layer: flow particles along the active view's edges, and
+  // recency-pulse rings from a live refresh. Gated on prefers-reduced-motion
+  // and tab visibility here too (not just in motionEligible/motionLoop) so
+  // nothing paints even when draw() is triggered by something other than the
+  // motion loop (a click, a drag, a theme toggle) while motion should stay
+  // suppressed. Painted after nodes/cards, before labels, so a pulse ring
+  // doesn't clip label text. tick() returning null (no flow, no unexpired
+  // pulses) is what lets pulsesPending self-clear, which is in turn what lets
+  // motionLoop stop re-arming itself once nothing is left to animate.
+  if (!reducedMotion.matches && !document.hidden) {
+    const motion = particlesTick(performance.now());
+    if (!motion) {
+      pulsesPending = false;
+    } else {
+      if (motion.flowPoints.length) {
+        ctx.fillStyle = th.accent;
+        const flowR = 2.2 / transform.k;
+        for (const p of motion.flowPoints) {
+          ctx.globalAlpha = p.alpha;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, flowR, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+      }
+      if (motion.pulses.size) {
+        ctx.strokeStyle = th.accent;
+        ctx.lineWidth = 1.5 / transform.k;
+        for (const [id, progress] of motion.pulses) {
+          const n = graph.byId.get(id);
+          if (!n || n.x == null) continue;
+          ctx.globalAlpha = 0.5 * (1 - progress);
+          if (cardsActive() && n.w) {
+            const grow = (progress * 26) / transform.k;
+            const h = n.h ?? 0;
+            ctx.strokeRect(n.x - n.w / 2 - grow, n.y - h / 2 - grow, n.w + grow * 2, h + grow * 2);
+          } else {
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.r + (progress * 26) / transform.k, 0, 2 * Math.PI);
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
   // Labels: greedy collision-culling. Draw in priority order (the selection, then the
   // highest-degree nodes) and skip any label whose box overlaps one already drawn this
   // frame, so text stays readable instead of stacking into an unreadable smear. This is
@@ -730,7 +1184,12 @@ function draw() {
   for (const n of graph.nodes) {
     if (n.x == null) continue;
     if (projectionActive && !projectionActive.has(n.id)) continue;
-    const show = n.id === highlight || n.degree > 24 || transform.k > 2.2;
+    if (cardsActive() && n.w) continue; // the label is painted inside the card
+    const show =
+      n.id === highlight ||
+      n.degree > 24 ||
+      transform.k > 2.2 ||
+      (layoutMode === "radial" && radialPlacedCount <= 60);
     if (!show) continue;
     if (matchSet && !projectionActive && !matchSet.has(n.id) && n.id !== highlight) continue;
     // Viewport cull (CSS px): drop off-screen labels so the greedy scan below only
@@ -769,6 +1228,16 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
   const rect = canvas.getBoundingClientRect();
   const px = (event.clientX - rect.left - transform.x) / transform.k;
   const py = (event.clientY - rect.top - transform.y) / transform.k;
+  // Card mode: rectangular hit test in reverse draw order (so an overlapping
+  // card on top wins), since sim.find's circle radius doesn't match card shape.
+  if (cardsActive()) {
+    for (let i = graph.nodes.length - 1; i >= 0; i--) {
+      const n = graph.nodes[i];
+      if (n.x == null || !n.w || !n.h) continue;
+      if (Math.abs(px - n.x) <= n.w / 2 && Math.abs(py - n.y) <= n.h / 2) return n;
+    }
+    return null;
+  }
   // In layered mode the simulation may be stopped, but sim.find still works on
   // the node positions. Fall back to a manual scan when sim is null (shouldn't
   // happen, but be safe).
@@ -800,7 +1269,7 @@ function setupZoomDrag() {
     .subject((event) => nodeAtPointer(event.sourceEvent) ?? undefined)
     .on("start", (event) => {
       if (!event.subject) return;
-      if (layoutMode !== "layered" && !event.active) sim?.alphaTarget(0.2).restart();
+      if (!isDagMode() && !event.active) sim?.alphaTarget(0.2).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
     })
@@ -808,8 +1277,8 @@ function setupZoomDrag() {
       if (!event.subject) return;
       event.subject.fx = (event.x - transform.x) / transform.k;
       event.subject.fy = (event.y - transform.y) / transform.k;
-      // In layered mode the sim is stopped; draw manually on each drag event.
-      if (layoutMode === "layered") {
+      // In a dag mode the sim is stopped; draw manually on each drag event.
+      if (isDagMode()) {
         event.subject.x = event.subject.fx;
         event.subject.y = event.subject.fy;
         draw();
@@ -817,7 +1286,7 @@ function setupZoomDrag() {
     })
     .on("end", (event) => {
       if (!event.subject) return;
-      if (layoutMode === "layered") {
+      if (isDagMode()) {
         // Keep the manually dragged position (fx/fy stay set); just redraw.
         draw();
         return;
@@ -1045,7 +1514,17 @@ function selectNode(id: string | null, center: boolean) {
   updateHash();
   if (id && center) centerOn(id);
   syncListSelection();
+  syncLayoutToggle(); // availability tracks selection
   draw();
+
+  // Radial re-centers on whatever gets selected next; the Ask chip's pick-flow
+  // (pendingRadialPick) enters radial the first time a node is selected. Both
+  // go through switchLayout("radial") - never back through selectNode - so
+  // this cannot recurse.
+  if (id && (pendingRadialPick || layoutMode === "radial")) {
+    pendingRadialPick = false;
+    switchLayout("radial");
+  }
 }
 
 function centerOn(id: string) {
@@ -1069,11 +1548,14 @@ function fitView(ids: Set<string> | null) {
     minY = Infinity,
     maxX = -Infinity,
     maxY = -Infinity;
+  const cards = cardsActive();
   for (const n of pts) {
-    minX = Math.min(minX, n.x - n.r);
-    maxX = Math.max(maxX, n.x + n.r);
-    minY = Math.min(minY, n.y - n.r);
-    maxY = Math.max(maxY, n.y + n.r);
+    const hw = cards && n.w ? n.w / 2 : n.r;
+    const hh = cards && n.w ? n.h! / 2 : n.r;
+    minX = Math.min(minX, n.x - hw);
+    maxX = Math.max(maxX, n.x + hw);
+    minY = Math.min(minY, n.y - hh);
+    maxY = Math.max(maxY, n.y + hh);
   }
   const { w, h } = resizeCanvas();
   const pad = 48;
@@ -1116,10 +1598,13 @@ function focusNode(id: string, depth: number) {
       (depth === 1 ? "" : "s") +
       ". Press Esc to clear, [ / ] to change depth.",
   );
-  // Re-run layered layout on the new (local) subset when in layered mode.
-  if (layoutMode === "layered") {
-    for (const e of graph.links) delete e.layoutReversed;
-    applyLayeredMode();
+  // Re-run the dag layout (layered or waves) on the new (local) subset.
+  if (isDagMode()) {
+    for (const e of graph.links) {
+      delete e.layoutReversed;
+      delete e.points;
+    }
+    reapplyDagLayout();
   }
   fitView(matchSet);
 }
@@ -1133,6 +1618,7 @@ function clearFocusOrQuery() {
   focusId = null;
   matchSet = null;
   query = "";
+  pendingRadialPick = false;
   if (searchEl) searchEl.value = "";
   setStatus("");
   // Clear any active view.
@@ -1144,12 +1630,22 @@ function clearFocusOrQuery() {
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
       .forEach((b) => b.removeAttribute("data-active"));
     renderViewCommand(null, null, null);
+    setFlowEdges(null);
+    flowOn = false;
   }
   renderList();
   updateHash();
-  if (layoutMode === "layered") {
-    for (const e of graph.links) delete e.layoutReversed;
-    applyLayeredMode();
+  if (layoutMode === "radial") {
+    // Radial without a center is meaningless; return to the flavor default.
+    switchLayout(graphFlavor === "targets" ? "layered" : "force");
+    return;
+  }
+  if (isDagMode()) {
+    for (const e of graph.links) {
+      delete e.layoutReversed;
+      delete e.points;
+    }
+    reapplyDagLayout();
   } else {
     draw();
   }
@@ -1165,16 +1661,23 @@ function applyLens(name: string) {
 // based on whether the current graph has DurationMs timing data. Called after
 // each graph load (boot and replaceGraph) so the button tracks the data.
 function syncConditionalViews() {
-  const hasDuration =
-    graph &&
-    graph.nodes.some(
-      (n) =>
-        (n.DurationMs || 0) > 0 ||
-        (n.duration_ms || 0) > 0 ||
-        Number((n.attrs && n.attrs.DurationMs) || 0) > 0,
-    );
+  graphHasDurations = !!graph && graph.nodes.some((n) => nodeDurationMs(n) > 0);
   document.querySelectorAll<HTMLElement>("[data-view='critical']").forEach((btn) => {
-    btn.toggleAttribute("data-conditional", !hasDuration);
+    btn.toggleAttribute("data-conditional", !graphHasDurations);
+  });
+  // The "Color by duration" preset shares the same conditional as the
+  // critical-path view: both need timing data to mean anything. It is a PF
+  // button, not a `.console-graph-views__chip`, so graph.css has no
+  // `[data-conditional]` display rule for it - set `hidden` directly (the
+  // global `[hidden] { display: none !important; }` override covers it),
+  // keeping `data-conditional` too as the same semantic marker the chip uses.
+  document.querySelectorAll<HTMLElement>("[data-preset='duration']").forEach((btn) => {
+    btn.toggleAttribute("data-conditional", !graphHasDurations);
+    btn.hidden = !graphHasDurations;
+  });
+  // The "What runs in parallel?" chip only makes sense for target graphs.
+  document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((btn) => {
+    btn.hidden = graphFlavor !== "targets";
   });
 }
 
@@ -1359,6 +1862,7 @@ function termMatches(node: GNode, term: QueryTerm) {
 
 function applyQuery(q: string) {
   focusId = null; // typing a query exits focus/lens/view mode
+  pendingRadialPick = false;
   // Typing a query unfolds the projection (user is exploring details).
   if (!projectionUnfolded && q.trim()) {
     projectionUnfolded = true;
@@ -1375,6 +1879,8 @@ function applyQuery(q: string) {
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
       .forEach((b) => b.removeAttribute("data-active"));
     renderViewCommand(null, null, null);
+    setFlowEdges(null);
+    flowOn = false;
   }
   query = q.trim();
   const terms = query ? parseQuery(query) : [];
@@ -1390,13 +1896,18 @@ function applyQuery(q: string) {
   }
   renderList();
   updateHash();
-  // Re-run layered layout on the new visible subset.
-  if (layoutMode === "layered") {
+  syncLayoutToggle(); // availability tracks matchSet size
+  // Re-run the dag layout (layered or waves) on the new visible subset.
+  if (isDagMode()) {
     // Clear prior layout-reversed flags so cycle-break reruns cleanly.
-    for (const e of graph.links) delete e.layoutReversed;
-    if (!applyLayeredMode()) {
+    for (const e of graph.links) {
+      delete e.layoutReversed;
+      delete e.points;
+    }
+    if (!reapplyDagLayout()) {
       // Scale guard: too many nodes; fall back to force.
       layoutMode = "force";
+      wavesMeta = null;
       syncLayoutToggle();
       // Clear pinned positions so the force sim can move all nodes.
       for (const n of graph.nodes) {
@@ -1565,7 +2076,7 @@ function updateHash() {
 function applyDeepLinks() {
   const params = hashParams();
   // Restore view state: #view=<id>&node=<id>[&to=<id>]
-  const validViews = ["blast", "trace", "critical", "hubs", "orphans"];
+  const validViews = ["blast", "trace", "critical", "hubs", "orphans", "cycles"];
   if (params.view && validViews.includes(params.view)) {
     projectionUnfolded = true; // views show the full graph
     activateView(params.view, params.node || null, params.to || null);
@@ -1576,10 +2087,18 @@ function applyDeepLinks() {
     applyQuery(params.q);
   }
   if (params.node && graph.byId.has(params.node)) selectNode(params.node, true);
-  // Restore layout mode from the fragment (#layout=force or #layout=layered).
+  // Restore layout mode from the fragment (#layout=force|layered|waves|radial).
   // Only switch when the value is valid and differs from the current mode.
-  if (params.layout === "force" || params.layout === "layered") {
-    if (params.layout !== layoutMode) switchLayout(params.layout);
+  // radial additionally requires a #node= that resolved above (selectNode sets
+  // `selected`); without one it falls back to whatever layout is already
+  // showing (the flavor default) with a status note - radial with no center is
+  // meaningless.
+  if (params.layout && isLayoutMode(params.layout)) {
+    if (params.layout === "radial" && !selected) {
+      setStatus("radial needs a #node= to center on; showing the default layout instead.");
+    } else if (params.layout !== layoutMode) {
+      switchLayout(params.layout);
+    }
   }
   // Restore color preset from #preset=<id>.
   if (params.preset) {
@@ -1621,12 +2140,21 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
     raw = data;
   }
   graph = prepareGraph(raw);
-  // Clear any layout-reversed flags from a previous layered pass.
-  for (const e of graph.links) delete e.layoutReversed;
+  // Clear any layout-reversed flags (and stale edge routes) from a previous layered pass.
+  for (const e of graph.links) {
+    delete e.layoutReversed;
+    delete e.points;
+  }
   selected = null;
   hoverId = null;
   focusId = null;
   matchSet = null;
+  radialCenter = null;
+  radialRings = null;
+  pendingRadialPick = false;
+  resetMotion(); // clears flow edges AND any recency pulse mid-flight from the graph being replaced
+  flowOn = false;
+  pulsesPending = false;
   if (searchEl) searchEl.value = "";
   // Reset Phase 5 view/projection state.
   activeView = null;
@@ -1661,24 +2189,37 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   syncConditionalViews();
   // Default layout mode per flavor: targets -> layered, knowledge -> force.
   // Check if the URL fragment requests a specific mode (user override persists).
+  // radial additionally requires its #node= to resolve in the freshly loaded
+  // graph (selected was just reset above); otherwise it falls back to the
+  // flavor default like an invalid layout value would.
   const fragParams = hashParams();
-  const requestedLayout =
-    fragParams.layout === "force" || fragParams.layout === "layered"
+  const radialNodeOk =
+    fragParams.layout === "radial" && !!fragParams.node && graph.byId.has(fragParams.node);
+  const requestedLayout: LayoutMode =
+    isLayoutMode(fragParams.layout) && (fragParams.layout !== "radial" || radialNodeOk)
       ? fragParams.layout
       : graphFlavor === "targets"
         ? "layered"
         : "force";
   layoutMode = requestedLayout;
+  if (layoutMode === "radial") selected = fragParams.node;
+  wavesMeta = null;
   syncLayoutToggle();
-  if (layoutMode === "layered") {
+  if (isDagMode()) {
     startSimulation(); // initializes node positions even if we stop it
     sim?.stop();
-    if (!applyLayeredMode()) {
+    if (!reapplyDagLayout()) {
       // Scale guard fired; fall back to force.
       layoutMode = "force";
+      wavesMeta = null;
       syncLayoutToggle();
       startSimulation();
     }
+  } else if (layoutMode === "radial") {
+    startSimulation(); // initializes node positions even if we stop it
+    applyRadialMode();
+    renderCard(selected);
+    syncListSelection();
   } else {
     startSimulation();
   }
@@ -1696,21 +2237,27 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   draw();
 }
 
-// syncLayoutToggle updates the toggle button label and slider visibility to
-// match the current layoutMode WITHOUT switching the mode (used after loading
-// a new graph where the mode is set directly).
+// syncLayoutToggle updates the layout toggle group's selected state, each mode
+// button's disabled/title (from layoutBlockedReason), the force sliders'
+// visibility, and the bottom-left stage mode indicator to match the current
+// layoutMode WITHOUT switching the mode (used after loading a new graph where
+// the mode is set directly, and called from selectNode/applyQuery so
+// availability tracks state as it changes).
 function syncLayoutToggle() {
-  const btn = el("layout-toggle-btn");
-  if (btn) {
-    const label = btn.querySelector<HTMLElement>(".pf-v6-c-button__text") ?? btn;
-    label.textContent = layoutMode === "layered" ? "Force" : "Layered";
-    btn.title =
-      layoutMode === "layered"
-        ? "Switch to force-directed simulation"
-        : "Switch to layered DAG layout";
-  }
+  document.querySelectorAll<HTMLButtonElement>("[data-layout]").forEach((btn) => {
+    const mode = btn.dataset.layout;
+    if (!mode || !isLayoutMode(mode)) return;
+    btn.classList.toggle("pf-m-selected", mode === layoutMode);
+    const reason = layoutBlockedReason(mode);
+    btn.disabled = !!reason;
+    btn.title = reason ?? LAYOUT_TITLES[mode] ?? "";
+  });
   const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
-  if (forceControls) forceControls.hidden = layoutMode === "layered";
+  if (forceControls) forceControls.hidden = layoutMode !== "force";
+  const modeIndicator = el("graph-mode-indicator");
+  if (modeIndicator) {
+    modeIndicator.textContent = "mode: " + layoutMode[0].toUpperCase() + layoutMode.slice(1);
+  }
 }
 
 // loadDemoGraph swaps the committed demo graph in place via renderLoadedGraph. NOT a page reload: the SPA
@@ -1808,9 +2355,12 @@ function unfoldProjection() {
   if (btn) btn.hidden = true;
   setStatus("");
   updateHash();
-  if (layoutMode === "layered") {
-    for (const e of graph.links) delete e.layoutReversed;
-    applyLayeredMode();
+  if (isDagMode()) {
+    for (const e of graph.links) {
+      delete e.layoutReversed;
+      delete e.points;
+    }
+    reapplyDagLayout();
   } else draw();
 }
 
@@ -1919,12 +2469,8 @@ function shortestDependsOnPath(fromId: string, toId: string) {
 // Longest duration-weighted chain (critical path) using node.DurationMs.
 // Returns an array of node ids, or null if no duration data is present.
 function criticalPath() {
-  const hasDuration = graph.nodes.some(
-    (n) => (n.DurationMs || 0) > 0 || (n.attrs && Number(n.attrs.DurationMs) > 0),
-  );
-  if (!hasDuration) return null;
-  const dur = (n: GNode | undefined) =>
-    +((n && (n.DurationMs || (n.attrs && n.attrs.DurationMs))) || 0);
+  if (!graphHasDurations) return null;
+  const dur = (n: GNode | undefined) => (n ? nodeDurationMs(n) : 0);
   // Longest path in DAG (depends_on subgraph), weighted by node duration.
   const fwdAdj = new Map<string, Set<string>>();
   for (const e of graph.links) {
@@ -1989,9 +2535,12 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   viewNode = nodeId || null;
   viewNodeTo = nodeTo || null;
   focusId = null;
+  pendingRadialPick = false;
   projectionUnfolded = true; // a view always shows the full graph context
   projectionSet = null;
   matchSet = null;
+  setFlowEdges(null); // cleared up front; the tail below rebuilds it once matchSet is final
+  flowOn = false;
   if (searchEl) {
     searchEl.value = "";
   }
@@ -2077,12 +2626,18 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         matchSet = null;
       } else {
         matchSet = new Set(path);
+        const total = path.reduce((sum, id) => {
+          const n = graph.byId.get(id);
+          return sum + (n ? nodeDurationMs(n) : 0);
+        }, 0);
         setStatus(
           "Critical path: " +
             path.length +
             " node" +
             (path.length === 1 ? "" : "s") +
-            " (longest duration-weighted chain).",
+            ", " +
+            formatDuration(total) +
+            " total (longest duration-weighted chain).",
         );
       }
       break;
@@ -2105,6 +2660,27 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           (matchSet.size === 1 ? "" : "s") +
           " with no edges.",
       );
+      break;
+    }
+    case "cycles": {
+      const ids = new Set<string>();
+      for (const e of graph.links) {
+        if (e.cycle) {
+          ids.add(endpointId(e.source));
+          ids.add(endpointId(e.target));
+        }
+      }
+      if (ids.size) {
+        matchSet = ids;
+        setStatus(
+          "Circular dependencies: " +
+            ids.size +
+            " target(s) caught in a loop - a configuration error to fix.",
+        );
+      } else {
+        matchSet = null;
+        setStatus("No circular dependencies - the dependency graph is acyclic.");
+      }
       break;
     }
     case "affected": {
@@ -2130,6 +2706,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   renderList();
   if (matchSet && matchSet.size) fitView(matchSet);
   updateHash();
+  buildFlowEdges(); // matchSet is final now; no-ops for non-flow views
   draw();
 }
 
@@ -2146,9 +2723,154 @@ function clearView() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
+  setFlowEdges(null);
+  flowOn = false;
   renderList();
   updateHash();
   draw();
+}
+
+// preferredModeForView says which display mode a question chip should switch
+// to before applying its view (plan section 14, Decision 2). Two orthogonal
+// axes: display mode (arrangement) and question view (emphasis/filter).
+// Questions are the front door - clicking one may auto-switch the mode - but
+// the mode control stays a manual override, so a question never fights a mode
+// the user just picked by hand. null means "keep whatever mode is already
+// showing" (blast/trace/critical/cycles/affected are fine in any DAG mode or
+// radial; they only need to leave Force, where arrows/direction don't read).
+function preferredModeForView(view: string): LayoutMode | null {
+  switch (view) {
+    case "blast":
+    case "trace":
+    case "critical":
+    case "cycles":
+    case "affected":
+      return layoutMode === "force" ? "layered" : null;
+    case "hubs":
+    case "orphans":
+      return "force"; // connectivity/disconnection reads best as the physics web
+    default:
+      // Unknown view (not one of the question chips above): keep whatever mode is
+      // already showing rather than guessing.
+      return null;
+  }
+}
+
+// askQuestion is the single entry point every "Ask a question" chip
+// (.console-graph-views__chip[data-view]) click routes through: it applies the
+// view's preferred display mode (see preferredModeForView), guarded by
+// layoutBlockedReason so an over-cap or center-less mode is skipped rather than
+// forced (the view still applies in whatever mode is already showing), then
+// dispatches the view exactly like the pre-Decision-2 click handler did -
+// blast/trace enter node-picking mode, affected checks for a live diff, and
+// everything else goes through activateView. This only fires from an EXPLICIT
+// chip click; switchLayout calls from the [data-layout] toggle never call
+// this, so a manual mode pick is never second-guessed.
+function askQuestion(view: string) {
+  const want = preferredModeForView(view);
+  if (want && want !== layoutMode && !layoutBlockedReason(want)) switchLayout(want);
+  if (view === "blast" || view === "trace") {
+    // Enter picking mode: status tells user to click a node. Bypasses
+    // activateView (no node picked yet), so clear any flow left over from
+    // whatever view was active before this click - otherwise particles from
+    // the OLD view's matchSet would keep animating through the picking-mode gap.
+    activeView = view;
+    viewNode = null;
+    viewNodeTo = null;
+    pendingRadialPick = false;
+    setFlowEdges(null);
+    flowOn = false;
+    document
+      .querySelectorAll<HTMLElement>(".console-graph-views__chip")
+      .forEach((x) => x.toggleAttribute("data-active", x.dataset.view === view));
+    renderViewCommand(view, null, null);
+    if (view === "blast") setStatus("Click a node to see what breaks if you change it.");
+    else setStatus("Click the first node for the path (trace view).");
+    updateHash();
+    return;
+  }
+  if (view === "affected") {
+    // Affected view is wired separately in live mode; clicking here when not
+    // in live mode shows a hint instead of an empty view.
+    const aff = window._liveAffectedIds;
+    if (!aff || !aff.size) {
+      setStatus(
+        "affected view: requires live mode (magus graph open --live) with a computed diff.",
+        true,
+      );
+      return;
+    }
+    activateView("affected");
+    return;
+  }
+  activateView(view);
+  if (view === "critical" && graphHasDurations && activePreset !== "duration") {
+    applyPreset("duration");
+  }
+}
+
+// buildFlowEdges (re)builds particles.ts's flow-edge list from the CURRENT
+// activeView/matchSet/graph positions: trace/critical flow along the path
+// (consecutive path nodes joined by their depends_on link, in either stored
+// orientation), blast flows along every depends_on link with both endpoints
+// in matchSet. Each polyline runs dependency -> dependent (e.target is the
+// dependency, e.source the dependent - see the edge-direction convention
+// note in draw()'s edge pass), reusing the same routed bend points (e.points)
+// the DAG layouts computed, so particles follow the curve on screen instead
+// of cutting a chord through it. Call after matchSet is final for the view;
+// it no-ops (and clears any prior flow) when the view isn't a flow view, so
+// it's safe to call unconditionally at a view's settle point.
+function buildFlowEdges() {
+  if (!flowActive()) {
+    setFlowEdges(null);
+    flowOn = false;
+    return;
+  }
+  const edges: FlowEdge[] = [];
+  const pushLinkPolyline = (link: GLink) => {
+    // s = dependent (e.source), t = dependency (e.target); flow travels t -> s.
+    const s = graph.byId.get(endpointId(link.source));
+    const t = graph.byId.get(endpointId(link.target));
+    if (!s || !t || s.x == null || t.x == null) return;
+    // Match draw()'s routePts assembly: collect both endpoints plus any routed
+    // bend points and sort the whole polyline ascending by x. link.points runs
+    // dependency -> dependent for a normal edge, but a layoutReversed cycle
+    // back-edge stores it descending, which would zigzag the particle path if
+    // just concatenated in source/target order.
+    const pts = [{ x: t.x, y: t.y }, { x: s.x, y: s.y }, ...(link.points ?? [])].sort(
+      (a, b) => a.x - b.x,
+    );
+    edges.push({ pts });
+  };
+  if (activeView === "trace" || activeView === "critical") {
+    const path =
+      activeView === "trace"
+        ? viewNode && viewNodeTo
+          ? shortestDependsOnPath(viewNode, viewNodeTo)
+          : null
+        : criticalPath();
+    if (path) {
+      for (let i = 0; i < path.length - 1; i++) {
+        const a = path[i],
+          b = path[i + 1];
+        const link = graph.links.find(
+          (l) =>
+            l.relation === "depends_on" &&
+            ((endpointId(l.source) === a && endpointId(l.target) === b) ||
+              (endpointId(l.source) === b && endpointId(l.target) === a)),
+        );
+        if (link) pushLinkPolyline(link);
+      }
+    }
+  } else if (activeView === "blast" && matchSet) {
+    for (const l of graph.links) {
+      if (l.relation !== "depends_on") continue;
+      if (matchSet.has(endpointId(l.source)) && matchSet.has(endpointId(l.target)))
+        pushLinkPolyline(l);
+    }
+  }
+  flowOn = setFlowEdges(edges.length ? edges : null);
+  if (flowOn) startMotion();
 }
 
 // ---- Phase 5: CLI idiom rendering -------------------------------------------
@@ -2287,9 +3009,12 @@ function renderViewCommand(name: string | null, nodeId?: string | null, nodeTo?:
   must(wrap.querySelector<HTMLElement>(".console-graph-views__copy")).addEventListener(
     "click",
     () => {
-      navigator.clipboard.writeText(cmd).then(() => {
-        setStatus("Copied: " + cmd);
-      });
+      navigator.clipboard
+        .writeText(cmd)
+        .then(() => {
+          setStatus("Copied: " + cmd);
+        })
+        .catch((err) => setStatus("Could not copy: " + errMessage(err), true));
     },
   );
 }
@@ -2305,7 +3030,9 @@ function updateSearchCopyBtn() {
 }
 
 // ---- Phase 5: empty-state suggestions (chips) -------------------------------
-// After a graph loads, compute 3 quick facts and show clickable suggestion chips.
+// After a graph loads, compute up to 3 quick facts and show clickable suggestion
+// chips. Targets graphs lead with the build-order suggestion (the discoverability
+// phase's "wow" - see the plan's ORDERING note); the rest fill remaining slots.
 function renderSuggestions() {
   const wrap = el("suggestions");
   if (!wrap || !graph) {
@@ -2314,8 +3041,16 @@ function renderSuggestions() {
   }
   const chips: { text: string; action: () => void }[] = [];
 
+  // 0. Targets flavor: the build-order view is unique to magus - lead with it.
+  if (graphFlavor === "targets") {
+    chips.push({
+      text: "See the build order - what runs in parallel?",
+      action: () => switchLayout("waves"),
+    });
+  }
+
   // 1. Highest-degree node ("biggest hub").
-  if (graph.nodes.length > 1) {
+  if (graph.nodes.length > 1 && chips.length < 3) {
     const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree)[0];
     if (top && top.degree > 0) {
       chips.push({
@@ -2327,7 +3062,7 @@ function renderSuggestions() {
 
   // 2. Cycle present?
   const hasCycle = graph.links.some((e) => e.cycle);
-  if (hasCycle) {
+  if (hasCycle && chips.length < 3) {
     // Find the first cycle edge source as the starting point for a trace.
     const cycleEdge = graph.links.find((e) => e.cycle);
     const src = cycleEdge ? endpointId(cycleEdge.source) : null;
@@ -2497,6 +3232,33 @@ const COLOR_PRESETS: ColorPreset[] = [
         });
     },
   },
+  {
+    id: "duration",
+    label: "Color by duration",
+    groups: () => {
+      // Quintile buckets by RANK, not linear thresholds: build times are
+      // long-tailed, so a handful of slow outliers would otherwise stretch a
+      // linear scale until everything else looks the same color. Reuse the
+      // depth preset's cool->hot ramp; hot = slow.
+      const palette = ["#0a7ea4", "#2563eb", "#059669", "#d97706", "#dc2626"];
+      const timed = graph.nodes
+        .map((n) => ({ id: n.id, ms: nodeDurationMs(n) }))
+        .filter((n) => n.ms > 0)
+        .sort((a, b) => a.ms - b.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      if (!timed.length) return [];
+      const buckets: Set<string>[] = palette.map(() => new Set<string>());
+      timed.forEach((n, i) => {
+        const bucket = Math.min(
+          palette.length - 1,
+          Math.floor((i * palette.length) / timed.length),
+        );
+        buckets[bucket].add(n.id);
+      });
+      return buckets
+        .map((nodeSet, i) => ({ query: "duration q" + (i + 1), color: palette[i], nodeSet }))
+        .filter((g) => g.nodeSet.size > 0);
+    },
+  },
 ];
 
 let activePreset: string | null = null; // preset id string or null
@@ -2614,6 +3376,17 @@ function recomputeLiveMatchSet() {
       case "orphans":
         matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
         break;
+      case "cycles": {
+        const ids = new Set<string>();
+        for (const e of graph.links) {
+          if (e.cycle) {
+            ids.add(endpointId(e.source));
+            ids.add(endpointId(e.target));
+          }
+        }
+        matchSet = ids.size ? ids : null;
+        break;
+      }
       case "affected": {
         const aff = window._liveAffectedIds;
         matchSet = aff && aff.size ? aff : null;
@@ -2666,6 +3439,13 @@ function liveApplyGraphUpdate(data: GraphPayload) {
     const nl = targetGraphToNodeLink(data);
     raw = { nodes: nl.nodes, links: nl.links };
   }
+  // Snapshot per-node durations from the OLD graph before it's overwritten below,
+  // so the recency-pulse diff at the end of this function (added nodes, or
+  // nodes whose duration changed) has something to compare the new graph against.
+  const prevDurations = new Map<string, number>();
+  if (graph) {
+    for (const n of graph.nodes) prevDurations.set(n.id, nodeDurationMs(n));
+  }
   const prevPos = capturePositions();
   graph = prepareGraph(raw);
 
@@ -2674,30 +3454,62 @@ function liveApplyGraphUpdate(data: GraphPayload) {
   if (hoverId && !graph.byId.has(hoverId)) hoverId = null;
   if (focusId && !graph.byId.has(focusId)) focusId = null;
 
+  // graphHasDurations must reflect the NEW graph before recomputeLiveMatchSet
+  // runs, since a "critical" activeView calls criticalPath(), which now reads
+  // that cached flag instead of re-probing durations itself.
+  syncConditionalViews();
   recomputeLiveMatchSet();
   parkHiddenNodes(); // re-park if the default projection is still active
 
   renderLegend();
   renderList();
-  syncConditionalViews();
 
   // Rebuild the simulation against the new node/link arrays (same pattern as
   // boot/replaceGraph), then reapply captured positions and reheat gently
   // rather than a full alpha=1 restart.
   startSimulation();
   applyPositions(graph.nodes, prevPos);
-  if (layoutMode === "layered") {
+  if (isDagMode()) {
     sim?.stop();
-    for (const e of graph.links) delete e.layoutReversed;
-    if (!applyLayeredMode()) {
+    for (const e of graph.links) {
+      delete e.layoutReversed;
+      delete e.points;
+    }
+    if (!reapplyDagLayout()) {
       layoutMode = "force";
+      wavesMeta = null;
       syncLayoutToggle();
       startSimulation();
       applyPositions(graph.nodes, prevPos);
       sim?.alpha(0.3).restart();
     }
+  } else if (layoutMode === "radial") {
+    sim?.stop();
+    if (radialCenter && graph.byId.has(radialCenter)) {
+      applyRadialMode();
+    } else {
+      // The radial center vanished in the refresh; radial without a center is
+      // meaningless, so fall back to the flavor default.
+      switchLayout(graphFlavor === "targets" ? "layered" : "force");
+      setStatus("radial center no longer exists in the refreshed graph; showing the default layout.");
+    }
   } else {
     sim?.alpha(0.3).restart();
+  }
+  // Rebuild flow edges (positions/routes are now settled) and fire recency
+  // pulses for nodes the refresh added or whose duration changed. A refresh
+  // that touches more than 40 nodes reads as noise rather than signal, so it
+  // is skipped entirely rather than pulsing the whole graph.
+  buildFlowEdges();
+  const changedIds: string[] = [];
+  for (const n of graph.nodes) {
+    const prev = prevDurations.get(n.id);
+    if (prev === undefined || prev !== nodeDurationMs(n)) changedIds.push(n.id);
+  }
+  if (changedIds.length > 0 && changedIds.length <= 40) {
+    setPulses(changedIds, performance.now());
+    pulsesPending = true;
+    startMotion();
   }
   draw();
   updateLiveBadge();
@@ -2909,18 +3721,33 @@ function computeDefaultProjection(hasFragmentDirective: boolean) {
 // per-flavor default), starts the force simulation, and runs the layered
 // layout with its scale-guard fallback. Shared by boot() and bootLive().
 function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) {
-  if (requestedLayout === "force" || requestedLayout === "layered") {
+  if (
+    requestedLayout === "force" ||
+    requestedLayout === "layered" ||
+    requestedLayout === "waves" ||
+    requestedLayout === "radial"
+  ) {
     layoutMode = requestedLayout;
   } else {
     layoutMode = flavor === "targets" ? "layered" : "force";
   }
+  // Radial needs a resolved center (selected/focusId), which isn't available yet
+  // at this point in boot - applyDeepLinks (run afterward by finishInteractiveSetup)
+  // selects the #node= and switches into radial once it resolves, with its own
+  // node-required guard. Fall back to the flavor default here so layoutMode never
+  // sits on "radial" without applyRadialMode ever having run.
+  if (layoutMode === "radial") {
+    layoutMode = flavor === "targets" ? "layered" : "force";
+  }
+  wavesMeta = null;
   syncLayoutToggle();
   startSimulation();
-  if (layoutMode === "layered") {
+  if (isDagMode()) {
     sim?.stop();
-    if (!applyLayeredMode()) {
+    if (!reapplyDagLayout()) {
       // Scale guard fired; fall back to force.
       layoutMode = "force";
+      wavesMeta = null;
       syncLayoutToggle();
       startSimulation();
     }
@@ -2951,14 +3778,18 @@ function parkHiddenNodes() {
 // refresh (liveApplyGraphUpdate), which reseeds data without re-wiring input.
 function finishInteractiveSetup() {
   setupZoomDrag();
+  // Reveal the "What's slow?" (critical) view/preset only when the graph has
+  // DurationMs data. Runs BEFORE applyDeepLinks: a `#view=critical` deep link
+  // calls activateView("critical") -> criticalPath(), which reads the
+  // graphHasDurations flag this sets - it must be current for THIS graph
+  // before that can fire.
+  syncConditionalViews();
   // applyDeepLinks handles q= and node= (layout= is handled by
   // applyLayoutAndSimulation above; applyDeepLinks skips switching when the
   // mode already matches).
   applyDeepLinks();
   // Phase 5: emit empty-state suggestion chips.
   renderSuggestions();
-  // Reveal the "What's slow?" (critical) view only when the graph has DurationMs data.
-  syncConditionalViews();
 }
 
 // renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
@@ -3030,12 +3861,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
   // Wow reveal: once the cold force layout has spread out, frame the whole graph so it lands centered and
   // fully in view instead of cropped to a corner. Only for the default full-graph view - a deep link or
   // the perf-guard projection already frames its own subset, and layered layout is framed by applyLayeredMode.
-  if (
-    projectionUnfolded &&
-    !hasFragmentDirective &&
-    layoutMode !== "layered" &&
-    graph.nodes.length
-  ) {
+  if (projectionUnfolded && !hasFragmentDirective && !isDagMode() && graph.nodes.length) {
     setTimeout(() => fitView(null), 700);
   }
 }
@@ -3123,6 +3949,14 @@ export async function activate() {
 // normal load path and the live-mode load path. Called at the end of boot() and
 // from the live-mode path before it returns.
 function bootWireEvents() {
+  // One AbortController for every window/document lifecycle listener this function wires
+  // (keydown, fullscreenchange, the theme matchMedia change, hashchange, visibilitychange,
+  // reduced-motion change), created up front so every addEventListener call below can route
+  // through its signal - deactivate() then removes them all with a single abort(). A reopened
+  // graph re-runs this block with a fresh controller.
+  lifecycleAbort = new AbortController();
+  const lifecycleSignal = lifecycleAbort.signal;
+
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
   let queryTimer = 0;
@@ -3161,7 +3995,9 @@ function bootWireEvents() {
     });
   }
 
-  // Wire view buttons (.console-graph-views__chip). Blast and trace need node-picking mode.
+  // Wire view buttons (.console-graph-views__chip). Every explicit click routes through
+  // askQuestion (Decision 2: a question may auto-switch the display mode, guarded by
+  // layoutBlockedReason) - never the [data-layout] toggle, which switches mode alone.
   document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => {
     b.addEventListener("click", () => {
       const v = b.dataset.view;
@@ -3171,33 +4007,7 @@ function bootWireEvents() {
         clearView();
         return;
       }
-      if (v === "blast" || v === "trace") {
-        // Enter picking mode: status tells user to click a node.
-        activeView = v;
-        viewNode = null;
-        viewNodeTo = null;
-        document
-          .querySelectorAll<HTMLElement>(".console-graph-views__chip")
-          .forEach((x) => x.toggleAttribute("data-active", x.dataset.view === v));
-        renderViewCommand(v, null, null);
-        if (v === "blast") setStatus("Click a node to see what breaks if you change it.");
-        else setStatus("Click the first node for the path (trace view).");
-        updateHash();
-      } else if (v === "affected") {
-        // Affected view is wired separately in live mode; clicking here
-        // when not in live mode shows a hint.
-        const aff = window._liveAffectedIds;
-        if (!aff || !aff.size) {
-          setStatus(
-            "affected view: requires live mode (magus graph open --live) with a computed diff.",
-            true,
-          );
-          return;
-        }
-        activateView("affected");
-      } else {
-        activateView(v);
-      }
+      askQuestion(v);
     });
   });
 
@@ -3294,16 +4104,20 @@ function bootWireEvents() {
   });
 
   // Keyboard: Esc clears a focus/query; [ and ] shrink/grow the focus depth.
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      clearFocusOrQuery();
-      if (searchEl.blur) searchEl.blur();
-      return;
-    }
-    if (e.target === searchEl) return; // don't hijack typing
-    if (e.key === "[") changeFocusDepth(-1);
-    else if (e.key === "]") changeFocusDepth(1);
-  });
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key === "Escape") {
+        clearFocusOrQuery();
+        if (searchEl.blur) searchEl.blur();
+        return;
+      }
+      if (e.target === searchEl) return; // don't hijack typing
+      if (e.key === "[") changeFocusDepth(-1);
+      else if (e.key === "]") changeFocusDepth(1);
+    },
+    { signal: lifecycleSignal },
+  );
 
   // Command surface + keybindings, the same shape as the log viewer: each action is a named command
   // (dispatching to the existing control) bound to a single key that dodges browser combos and is
@@ -3326,9 +4140,9 @@ function bootWireEvents() {
   });
   registerCommand({
     id: "graph.layout",
-    label: "Toggle layout",
+    label: "Cycle layout",
     group: "Graph",
-    run: () => clickGraph("layout-toggle-btn"),
+    run: () => cycleLayout(),
   });
   installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
 
@@ -3373,18 +4187,22 @@ function bootWireEvents() {
       else appEl.requestFullscreen();
     });
     const fsLabel = fsBtn.querySelector<HTMLElement>(".console-render-btn__label");
-    document.addEventListener("fullscreenchange", () => {
-      const on = document.fullscreenElement === appEl;
-      if (fsLabel) fsLabel.textContent = on ? "Exit" : "Fullscreen";
-      fsBtn.setAttribute("aria-pressed", on ? "true" : "false");
-      // The canvas is sized to its box; refit after the panel resizes.
-      resizeCanvas();
-      if (sim) {
-        sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2));
-        sim.alpha(0.15).restart();
-      }
-      draw();
-    });
+    document.addEventListener(
+      "fullscreenchange",
+      () => {
+        const on = document.fullscreenElement === appEl;
+        if (fsLabel) fsLabel.textContent = on ? "Exit" : "Fullscreen";
+        fsBtn.setAttribute("aria-pressed", on ? "true" : "false");
+        // The canvas is sized to its box; refit after the panel resizes.
+        resizeCanvas();
+        if (sim) {
+          sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2));
+          sim.alpha(0.15).restart();
+        }
+        draw();
+      },
+      { signal: lifecycleSignal },
+    );
   } else if (fsBtn) {
     fsBtn.hidden = true;
   }
@@ -3400,11 +4218,14 @@ function bootWireEvents() {
       draw();
     }, 0);
   };
-  new MutationObserver(rerender).observe(root, {
+  themeObserver = new MutationObserver(rerender);
+  themeObserver.observe(root, {
     attributes: true,
     attributeFilter: ["data-theme"],
   });
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender, {
+    signal: lifecycleSignal,
+  });
 
   // Keep the canvas bitmap in lockstep with its CSS box. A ResizeObserver (not just
   // window "resize") is what makes this robust: the stage also changes size when the
@@ -3428,13 +4249,11 @@ function bootWireEvents() {
       draw();
     });
   };
-  // Capture the observer + route every lifecycle listener through one AbortController's signal, so
-  // deactivate() can disconnect the observer and remove all three listeners at once (a reopened graph
-  // re-runs this block with fresh handles).
+  // stageResizeObserver is disconnected (and the lifecycleSignal aborted, removing every
+  // listener wired above and below through it) by deactivate() - a reopened graph re-runs
+  // this block with fresh handles.
   stageResizeObserver = new ResizeObserver(onStageResize);
   stageResizeObserver.observe(canvas);
-  lifecycleAbort = new AbortController();
-  const lifecycleSignal = lifecycleAbort.signal;
   window.addEventListener(
     "hashchange",
     () => {
@@ -3447,31 +4266,65 @@ function bootWireEvents() {
 
   // Keep the gentle wobble from being a background CPU drain: stop the sim while
   // the tab is hidden, resume when it returns. Also honor a live change to the
-  // reduced-motion preference. In layered mode the sim stays stopped (no wobble).
+  // reduced-motion preference. In a dag mode the sim stays stopped (no wobble).
+  // startMotion() re-arms the Phase 6 motion loop on the same two triggers -
+  // it self-checks motionEligible(), so it's a no-op when there's nothing to
+  // animate or the tab/preference still says not to.
   document.addEventListener(
     "visibilitychange",
     () => {
-      if (!sim) return;
-      if (document.hidden) sim?.stop();
-      else if (layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
+      if (sim) {
+        if (document.hidden) sim.stop();
+        else if (!isDagMode()) sim.alphaTarget(idleAlpha()).restart();
+      }
+      if (!document.hidden) startMotion();
     },
     { signal: lifecycleSignal },
   );
   reducedMotion.addEventListener(
     "change",
     () => {
-      if (sim && layoutMode !== "layered") sim.alphaTarget(idleAlpha()).restart();
+      if (sim && !isDagMode()) sim.alphaTarget(idleAlpha()).restart();
+      startMotion();
     },
     { signal: lifecycleSignal },
   );
 
-  // Wire the layout toggle button.
-  const layoutToggleBtn = el("layout-toggle-btn");
-  if (layoutToggleBtn) {
-    layoutToggleBtn.addEventListener("click", () => {
-      switchLayout(layoutMode === "layered" ? "force" : "layered");
+  // Wire the layout toggle group: each [data-layout] button switches directly
+  // to its mode (disabled buttons - see layoutBlockedReason/syncLayoutToggle - are
+  // inert; the browser already blocks their click, this guard is defensive).
+  document.querySelectorAll<HTMLButtonElement>("[data-layout]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      const mode = btn.dataset.layout;
+      if (mode && isLayoutMode(mode)) switchLayout(mode);
     });
-  }
+  });
+
+  // The Ask panel's "What runs in parallel?" chip is a layout jump, not a view:
+  // it carries no data-view attr, so the .console-graph-views__chip wiring
+  // above skips it.
+  document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const mode = b.dataset.layoutjump;
+      if (mode && isLayoutMode(mode)) switchLayout(mode);
+    });
+  });
+
+  // The Ask panel's "What's around this?" chip: jump straight to radial when a
+  // node is already selected/focused, else enter a one-shot pick mode
+  // (pendingRadialPick) that switchLayout("radial")s on the next selectNode
+  // with an id (see selectNode).
+  document.querySelectorAll<HTMLElement>("[data-radialpick]").forEach((b) => {
+    b.addEventListener("click", () => {
+      if (selected || focusId) {
+        switchLayout("radial");
+      } else {
+        pendingRadialPick = true;
+        setStatus("Click a node to center the radial view.");
+      }
+    });
+  });
 
   // Phase 9: wire the live-mode "Remember this workspace" checkbox.
   const rememberCb = el("live-remember-cb") as HTMLInputElement | null;
@@ -3603,12 +4456,21 @@ async function bootLive() {
 }
 
 // deactivate tears down everything with a lifetime when the console unmounts a graph tab or pane: it
-// stops the force simulation (its rAF wobble is the main background CPU drain), aborts a live SSE stream
-// and cancels its reconnect timer, disconnects the stage ResizeObserver, and removes the window/document
-// lifecycle listeners (via the one AbortController). Idempotent. The standalone page never calls it (the
-// graph lives for the page's lifetime); the console's graph PageModule calls it on deactivate.
+// stops the force simulation (its rAF wobble is the main background CPU drain), cancels the Phase 6
+// motion loop and clears its state, aborts a live SSE stream and cancels its reconnect timer,
+// disconnects the stage ResizeObserver and the theme MutationObserver, and removes the
+// window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone
+// page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
+// calls it on deactivate.
 export function deactivate(): void {
   if (sim) sim?.stop();
+  if (motionRaf) {
+    cancelAnimationFrame(motionRaf);
+    motionRaf = 0;
+  }
+  resetMotion();
+  flowOn = false;
+  pulsesPending = false;
   if (liveSseAbort) {
     liveSseAbort.abort();
     liveSseAbort = null;
@@ -3620,6 +4482,10 @@ export function deactivate(): void {
   if (stageResizeObserver) {
     stageResizeObserver.disconnect();
     stageResizeObserver = null;
+  }
+  if (themeObserver) {
+    themeObserver.disconnect();
+    themeObserver = null;
   }
   if (lifecycleAbort) {
     lifecycleAbort.abort();

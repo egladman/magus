@@ -197,6 +197,19 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   max-height: calc(100% - 1.2rem); min-height: 0;
 }
+/* Bottom-left mode indicator (Decision 3): a quiet persistent readout of the active display
+   mode, kept text-synced by syncLayoutToggle - so the mode stays visible even when it changed
+   via a question chip's auto-switch (askQuestion) rather than a manual pick on the sidebar
+   control. Plain text over the canvas, square (no radius), muted like the legend/status line;
+   pointer-events:none so it never intercepts canvas drag/zoom. */
+.console-graph-stage__mode {
+  position: absolute; bottom: 0.5rem; left: 0.6rem; z-index: 3;
+  margin: 0; padding: 0.1rem 0.4rem;
+  font-size: 0.68rem; line-height: 1.3;
+  color: var(--pf-t--global--text--color--subtle);
+  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 80%, transparent);
+  pointer-events: none;
+}
 .console-graph-legend__title {
   margin: 0; padding: 0 0.25rem 0.3rem;
   font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
@@ -353,7 +366,7 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
   }
 }
 
-/* Reference disclosures (Views, Search syntax, Layout and colors, Loading a graph by URL):
+/* Reference disclosures (Views, Search syntax, Colors and forces, Loading a graph by URL):
    an uppercase, muted, tracked summary label over a bordered, tinted panel (the PF secondary
    background) that expands beneath it. The body is wrapped so only the content gets panel chrome. */
 .console-graph-help { margin: 0.3rem 0 var(--pad); font-size: 0.78rem; line-height: 1.5; border-bottom: none; }
@@ -384,11 +397,11 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
    marker whose title spells out the query syntax, since what to type is not obvious. */
 /* The "?" help glyph beside the query prompt is the shared .console-render-help-glyph (console.css) so it is
    an identical circle across the console apps. */
-/* Layout mode: a compact toggle button with its explanation beneath it. Stacked, because these
-   controls now live in the narrow reference drawer where a button + long hint on one row wrapped
-   into a malformed jumble. */
-.console-graph-display__layoutrow { display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; margin-bottom: 0.2rem; }
-.console-graph-display__hint { font-size: 0.75rem; color: var(--pf-t--global--text--color--subtle); line-height: 1.45; }
+/* Layout mode toggle group: PF component styling only, no bespoke row wrapper needed - the
+   control now lives always-visible in the sidebar (.console-graph-sidebar__modes below), not
+   stacked in the narrow reference drawer, so it no longer needs its own hint text (tooltips
+   carry the teaching per the discoverability phase). */
+.console-graph-display__layoutgroup { margin-top: 0.1rem; }
 
 /* Live layout-force sliders (the "alive" wobble is tunable). Stacked one per row so each label and
    its slider fit the narrow drawer instead of wrapping mid-control. */
@@ -478,6 +491,10 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   border-color: var(--pf-t--global--border--color--default); background: var(--pf-t--global--background--color--primary--default); box-shadow: none;
 }
 .console-graph-views__chip[data-conditional] { display: none; } /* hidden until DurationMs data present */
+/* Chip sets display: inline-flex above, which would otherwise outspecify the [hidden]
+   attribute's UA display:none (same fix as the stage tools below) - the "What runs in
+   parallel?" chip (data-layoutjump) is hidden for non-target graphs via .hidden. */
+.console-graph-views__chip[hidden] { display: none; }
 /* Clear sits apart from the question chips: a quiet text button pushed to the end. */
 .console-graph-views__clear {
   width: auto; margin: 0 0 0 auto; padding: 0.33rem 0.6rem;
@@ -541,6 +558,18 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 }
 /* Size the copy-as-command SVG icon to sit level with the neighboring "?" help control's glyph. */
 .console-graph-querybar .console-render-btn__icon { width: 0.9em; height: 0.9em; flex: 0 0 auto; }
+
+/* Display mode: the always-visible arrangement-axis control (Decision 3), sitting between the
+   search bar and "Ask a question" - same framed-row treatment as the views block below (a label
+   over a bottom-divided row) so the two controls read as siblings, not one nested in the other. */
+.console-graph-sidebar__modes {
+  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-graph-sidebar__modeslabel {
+  margin: 0 0 0.35rem; padding: 0;
+  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--pf-t--global--text--color--subtle);
+}
 
 /* Ask a question: the question-first view chips, surfaced directly in the sidebar (the
    ref-drawer #ask-panel is display:none in the decoupled console). The chips reuse the
