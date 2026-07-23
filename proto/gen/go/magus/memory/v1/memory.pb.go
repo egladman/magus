@@ -4,32 +4,33 @@
 // 	protoc        (unknown)
 // source: magus/memory/v1/memory.proto
 
-// Package magus.memory.v1 is the console-facing MemoryService: an observable and
-// EDITABLE view over the durable magus_memory files (status, progress, decisions) the
-// MCP magus_memory tool writes. It is a SECOND door onto the exact on-disk files that
-// tool maintains - the per-repository markdown under the user's XDG state directory -
-// never a second store of its own. Its reason to exist: agent memory is append-heavy
-// and never rotated by default, so it grows unbounded and an agent can silently bloat
-// it; a human editing/deleting surface is the safety valve. So the service is
-// deliberately read AND write: list the files, read one, replace one's content, or
-// delete one.
+// Package magus.memory.v1 is the console-facing MemoryService: an observable, editable
+// view over the durable agent-memory RECORDS the magus_memory MCP tool writes. It is a
+// SECOND door onto the exact on-disk store that tool maintains - the per-repository
+// records under the user's XDG state directory - never a second store of its own.
 //
-// The content it returns is AGENT-WRITTEN and therefore UNTRUSTED: a client must render
-// it as text/markdown, never as trusted HTML.
+// Memory is a set of discrete records, each a typed POINTER into the magus domain (a
+// saved query, a graph node, an output ref, a command, a doc); only a decision/plan
+// carries a prose caption. Its reason to exist as an editable surface: an agent can
+// accumulate stale or bloated records, and a human read/edit/delete surface is the
+// safety valve. Every record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: a
+// client must render them as text, never as trusted HTML.
 //
-// Access policy: every RPC requires the daemon bearer token. The service is mounted on
-// the loopback listener behind the same guard as the other cli-token console services
-// (magus.job.v1, magus.token.v1) and is NEVER served on the LAN share listener - memory
-// is the operator's own working notes, not a read surface for a shared phone view.
-// buf-breaking gates this file: fields and RPCs may be ADDED (old clients ignore unknown
-// fields), never renumbered or removed.
+// Surface is deliberately minimal (AIP-aligned): List the records, Update one (an upsert
+// keyed by name - allow_missing folds create into update), Delete one. A "delete
+// selected" bulk action is a client-side loop of Delete, not a batch RPC. The cursor
+// snapshot ("where did I leave off") is a singleton, read and overwritten on its own.
+//
+// Access policy: every RPC requires the daemon bearer token, mounted on loopback behind
+// the same guard as the other cli-token console services, and NEVER on the LAN share
+// listener - memory is the operator's own working notes.
 
 package memoryv1
 
 import (
-	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -43,91 +44,143 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// MemoryFile names one file in the closed durable-memory set. status is the current
-// snapshot (overwritten), progress is a dated work journal (appended by agents),
-// decisions is a dated decision log with the why (appended by agents). The set is
-// closed on purpose: adding a value is an API decision every agent host sees.
-type MemoryFile int32
+// MemoryType is the subject axis of a record (stable, closed). pointer carries refs only;
+// decision and plan additionally carry a prose caption (the why the graph cannot derive).
+type MemoryType int32
 
 const (
-	MemoryFile_MEMORY_FILE_UNSPECIFIED MemoryFile = 0
-	MemoryFile_MEMORY_FILE_STATUS      MemoryFile = 1
-	MemoryFile_MEMORY_FILE_PROGRESS    MemoryFile = 2
-	MemoryFile_MEMORY_FILE_DECISIONS   MemoryFile = 3
+	MemoryType_MEMORY_TYPE_UNSPECIFIED MemoryType = 0
+	MemoryType_MEMORY_TYPE_POINTER     MemoryType = 1
+	MemoryType_MEMORY_TYPE_DECISION    MemoryType = 2
+	MemoryType_MEMORY_TYPE_PLAN        MemoryType = 3
 )
 
-// Enum value maps for MemoryFile.
+// Enum value maps for MemoryType.
 var (
-	MemoryFile_name = map[int32]string{
-		0: "MEMORY_FILE_UNSPECIFIED",
-		1: "MEMORY_FILE_STATUS",
-		2: "MEMORY_FILE_PROGRESS",
-		3: "MEMORY_FILE_DECISIONS",
+	MemoryType_name = map[int32]string{
+		0: "MEMORY_TYPE_UNSPECIFIED",
+		1: "MEMORY_TYPE_POINTER",
+		2: "MEMORY_TYPE_DECISION",
+		3: "MEMORY_TYPE_PLAN",
 	}
-	MemoryFile_value = map[string]int32{
-		"MEMORY_FILE_UNSPECIFIED": 0,
-		"MEMORY_FILE_STATUS":      1,
-		"MEMORY_FILE_PROGRESS":    2,
-		"MEMORY_FILE_DECISIONS":   3,
+	MemoryType_value = map[string]int32{
+		"MEMORY_TYPE_UNSPECIFIED": 0,
+		"MEMORY_TYPE_POINTER":     1,
+		"MEMORY_TYPE_DECISION":    2,
+		"MEMORY_TYPE_PLAN":        3,
 	}
 )
 
-func (x MemoryFile) Enum() *MemoryFile {
-	p := new(MemoryFile)
+func (x MemoryType) Enum() *MemoryType {
+	p := new(MemoryType)
 	*p = x
 	return p
 }
 
-func (x MemoryFile) String() string {
+func (x MemoryType) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (MemoryFile) Descriptor() protoreflect.EnumDescriptor {
+func (MemoryType) Descriptor() protoreflect.EnumDescriptor {
 	return file_magus_memory_v1_memory_proto_enumTypes[0].Descriptor()
 }
 
-func (MemoryFile) Type() protoreflect.EnumType {
+func (MemoryType) Type() protoreflect.EnumType {
 	return &file_magus_memory_v1_memory_proto_enumTypes[0]
 }
 
-func (x MemoryFile) Number() protoreflect.EnumNumber {
+func (x MemoryType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use MemoryFile.Descriptor instead.
-func (MemoryFile) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use MemoryType.Descriptor instead.
+func (MemoryType) EnumDescriptor() ([]byte, []int) {
 	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{0}
 }
 
-// MemoryDoc describes one memory file. In a List response the content is omitted (only
-// metadata is carried); Get, Put, and Delete return it with content populated (empty for
-// a deleted or never-written file).
-type MemoryDoc struct {
+// MemoryRefKind is the closed set a ref points at. node/doc/output name a magus-domain
+// node; query/command are re-runnable strings. Every kind resolves or dangles.
+type MemoryRefKind int32
+
+const (
+	MemoryRefKind_MEMORY_REF_KIND_UNSPECIFIED MemoryRefKind = 0
+	MemoryRefKind_MEMORY_REF_KIND_QUERY       MemoryRefKind = 1
+	MemoryRefKind_MEMORY_REF_KIND_NODE        MemoryRefKind = 2
+	MemoryRefKind_MEMORY_REF_KIND_OUTPUT      MemoryRefKind = 3
+	MemoryRefKind_MEMORY_REF_KIND_COMMAND     MemoryRefKind = 4
+	MemoryRefKind_MEMORY_REF_KIND_DOC         MemoryRefKind = 5
+)
+
+// Enum value maps for MemoryRefKind.
+var (
+	MemoryRefKind_name = map[int32]string{
+		0: "MEMORY_REF_KIND_UNSPECIFIED",
+		1: "MEMORY_REF_KIND_QUERY",
+		2: "MEMORY_REF_KIND_NODE",
+		3: "MEMORY_REF_KIND_OUTPUT",
+		4: "MEMORY_REF_KIND_COMMAND",
+		5: "MEMORY_REF_KIND_DOC",
+	}
+	MemoryRefKind_value = map[string]int32{
+		"MEMORY_REF_KIND_UNSPECIFIED": 0,
+		"MEMORY_REF_KIND_QUERY":       1,
+		"MEMORY_REF_KIND_NODE":        2,
+		"MEMORY_REF_KIND_OUTPUT":      3,
+		"MEMORY_REF_KIND_COMMAND":     4,
+		"MEMORY_REF_KIND_DOC":         5,
+	}
+)
+
+func (x MemoryRefKind) Enum() *MemoryRefKind {
+	p := new(MemoryRefKind)
+	*p = x
+	return p
+}
+
+func (x MemoryRefKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MemoryRefKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_magus_memory_v1_memory_proto_enumTypes[1].Descriptor()
+}
+
+func (MemoryRefKind) Type() protoreflect.EnumType {
+	return &file_magus_memory_v1_memory_proto_enumTypes[1]
+}
+
+func (x MemoryRefKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MemoryRefKind.Descriptor instead.
+func (MemoryRefKind) EnumDescriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{1}
+}
+
+// MemoryRef is one typed pointer: the payload of a record.
+type MemoryRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	File          MemoryFile             `protobuf:"varint,1,opt,name=file,proto3,enum=magus.memory.v1.MemoryFile" json:"file,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                             // on-disk basename, e.g. "status.md"
-	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`                       // raw markdown; UNTRUSTED (agent-written)
-	SizeBytes     int64                  `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"` // current on-disk size
-	Modified      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=modified,proto3" json:"modified,omitempty"`                     // last-modified time; unset when the file does not exist
-	Exists        bool                   `protobuf:"varint,6,opt,name=exists,proto3" json:"exists,omitempty"`                        // whether the file is present on disk
+	Kind          MemoryRefKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=magus.memory.v1.MemoryRefKind" json:"kind,omitempty"`
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // node id / path, output ref token, or a raw query/command string
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *MemoryDoc) Reset() {
-	*x = MemoryDoc{}
+func (x *MemoryRef) Reset() {
+	*x = MemoryRef{}
 	mi := &file_magus_memory_v1_memory_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MemoryDoc) String() string {
+func (x *MemoryRef) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MemoryDoc) ProtoMessage() {}
+func (*MemoryRef) ProtoMessage() {}
 
-func (x *MemoryDoc) ProtoReflect() protoreflect.Message {
+func (x *MemoryRef) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_memory_v1_memory_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -139,251 +192,313 @@ func (x *MemoryDoc) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MemoryDoc.ProtoReflect.Descriptor instead.
-func (*MemoryDoc) Descriptor() ([]byte, []int) {
+// Deprecated: Use MemoryRef.ProtoReflect.Descriptor instead.
+func (*MemoryRef) Descriptor() ([]byte, []int) {
 	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *MemoryDoc) GetFile() MemoryFile {
+func (x *MemoryRef) GetKind() MemoryRefKind {
 	if x != nil {
-		return x.File
+		return x.Kind
 	}
-	return MemoryFile_MEMORY_FILE_UNSPECIFIED
+	return MemoryRefKind_MEMORY_REF_KIND_UNSPECIFIED
 }
 
-func (x *MemoryDoc) GetName() string {
+func (x *MemoryRef) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+// Memory is one record. name is the kebab-slug identity; refs are the required payload;
+// body is the caption (decision/plan only); status is the optional lifecycle field;
+// references links to other records by name. create_time/update_time are output-only.
+type Memory struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type          MemoryType             `protobuf:"varint,2,opt,name=type,proto3,enum=magus.memory.v1.MemoryType" json:"type,omitempty"`
+	Refs          []*MemoryRef           `protobuf:"bytes,3,rep,name=refs,proto3" json:"refs,omitempty"`
+	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`                           // free lifecycle string (accepted, superseded, done, stale, ...)
+	Body          string                 `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`                               // UNTRUSTED prose caption; empty for a pointer
+	References    []string               `protobuf:"bytes,6,rep,name=references,proto3" json:"references,omitempty"`                   // other record names (memory -> memory)
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"` // output only
+	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"` // output only
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Memory) Reset() {
+	*x = Memory{}
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Memory) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Memory) ProtoMessage() {}
+
+func (x *Memory) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Memory.ProtoReflect.Descriptor instead.
+func (*Memory) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Memory) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *MemoryDoc) GetContent() string {
+func (x *Memory) GetType() MemoryType {
 	if x != nil {
-		return x.Content
+		return x.Type
+	}
+	return MemoryType_MEMORY_TYPE_UNSPECIFIED
+}
+
+func (x *Memory) GetRefs() []*MemoryRef {
+	if x != nil {
+		return x.Refs
+	}
+	return nil
+}
+
+func (x *Memory) GetStatus() string {
+	if x != nil {
+		return x.Status
 	}
 	return ""
 }
 
-func (x *MemoryDoc) GetSizeBytes() int64 {
+func (x *Memory) GetBody() string {
 	if x != nil {
-		return x.SizeBytes
+		return x.Body
+	}
+	return ""
+}
+
+func (x *Memory) GetReferences() []string {
+	if x != nil {
+		return x.References
+	}
+	return nil
+}
+
+func (x *Memory) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *Memory) GetUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdateTime
+	}
+	return nil
+}
+
+type ListMemoriesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // wired for forward-compat; the store returns all records today
+	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMemoriesRequest) Reset() {
+	*x = ListMemoriesRequest{}
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMemoriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMemoriesRequest) ProtoMessage() {}
+
+func (x *ListMemoriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMemoriesRequest.ProtoReflect.Descriptor instead.
+func (*ListMemoriesRequest) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListMemoriesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
 	}
 	return 0
 }
 
-func (x *MemoryDoc) GetModified() *timestamppb.Timestamp {
+func (x *ListMemoriesRequest) GetPageToken() string {
 	if x != nil {
-		return x.Modified
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListMemoriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Memories      []*Memory              `protobuf:"bytes,1,rep,name=memories,proto3" json:"memories,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"` // always empty until the store paginates
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMemoriesResponse) Reset() {
+	*x = ListMemoriesResponse{}
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMemoriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMemoriesResponse) ProtoMessage() {}
+
+func (x *ListMemoriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMemoriesResponse.ProtoReflect.Descriptor instead.
+func (*ListMemoriesResponse) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ListMemoriesResponse) GetMemories() []*Memory {
+	if x != nil {
+		return x.Memories
 	}
 	return nil
 }
 
-func (x *MemoryDoc) GetExists() bool {
+func (x *ListMemoriesResponse) GetNextPageToken() string {
 	if x != nil {
-		return x.Exists
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type UpdateMemoryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Memory        *Memory                `protobuf:"bytes,1,opt,name=memory,proto3" json:"memory,omitempty"`                                  // memory.name is the identity to upsert
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`        // empty = full replace (the only mode today)
+	AllowMissing  bool                   `protobuf:"varint,3,opt,name=allow_missing,json=allowMissing,proto3" json:"allow_missing,omitempty"` // true => create when absent (AIP-134 upsert)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateMemoryRequest) Reset() {
+	*x = UpdateMemoryRequest{}
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateMemoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateMemoryRequest) ProtoMessage() {}
+
+func (x *UpdateMemoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateMemoryRequest.ProtoReflect.Descriptor instead.
+func (*UpdateMemoryRequest) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *UpdateMemoryRequest) GetMemory() *Memory {
+	if x != nil {
+		return x.Memory
+	}
+	return nil
+}
+
+func (x *UpdateMemoryRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+func (x *UpdateMemoryRequest) GetAllowMissing() bool {
+	if x != nil {
+		return x.AllowMissing
 	}
 	return false
 }
 
-type ListMemoryRequest struct {
+type UpdateMemoryResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Memory        *Memory                `protobuf:"bytes,1,opt,name=memory,proto3" json:"memory,omitempty"` // the stored record, with server-set timestamps
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListMemoryRequest) Reset() {
-	*x = ListMemoryRequest{}
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMemoryRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMemoryRequest) ProtoMessage() {}
-
-func (x *ListMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMemoryRequest.ProtoReflect.Descriptor instead.
-func (*ListMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{1}
-}
-
-type ListMemoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Docs          []*MemoryDoc           `protobuf:"bytes,1,rep,name=docs,proto3" json:"docs,omitempty"` // one per known file, in a stable order; content omitted
-	Dir           string                 `protobuf:"bytes,2,opt,name=dir,proto3" json:"dir,omitempty"`   // absolute path of the directory holding the files
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMemoryResponse) Reset() {
-	*x = ListMemoryResponse{}
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMemoryResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMemoryResponse) ProtoMessage() {}
-
-func (x *ListMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMemoryResponse.ProtoReflect.Descriptor instead.
-func (*ListMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ListMemoryResponse) GetDocs() []*MemoryDoc {
-	if x != nil {
-		return x.Docs
-	}
-	return nil
-}
-
-func (x *ListMemoryResponse) GetDir() string {
-	if x != nil {
-		return x.Dir
-	}
-	return ""
-}
-
-type GetMemoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	File          MemoryFile             `protobuf:"varint,1,opt,name=file,proto3,enum=magus.memory.v1.MemoryFile" json:"file,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetMemoryRequest) Reset() {
-	*x = GetMemoryRequest{}
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetMemoryRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetMemoryRequest) ProtoMessage() {}
-
-func (x *GetMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetMemoryRequest.ProtoReflect.Descriptor instead.
-func (*GetMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *GetMemoryRequest) GetFile() MemoryFile {
-	if x != nil {
-		return x.File
-	}
-	return MemoryFile_MEMORY_FILE_UNSPECIFIED
-}
-
-type GetMemoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Doc           *MemoryDoc             `protobuf:"bytes,1,opt,name=doc,proto3" json:"doc,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetMemoryResponse) Reset() {
-	*x = GetMemoryResponse{}
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetMemoryResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetMemoryResponse) ProtoMessage() {}
-
-func (x *GetMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetMemoryResponse.ProtoReflect.Descriptor instead.
-func (*GetMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *GetMemoryResponse) GetDoc() *MemoryDoc {
-	if x != nil {
-		return x.Doc
-	}
-	return nil
-}
-
-type PutMemoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	File          MemoryFile             `protobuf:"varint,1,opt,name=file,proto3,enum=magus.memory.v1.MemoryFile" json:"file,omitempty"`
-	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"` // the file's full new markdown content (overwrite, not append)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PutMemoryRequest) Reset() {
-	*x = PutMemoryRequest{}
+func (x *UpdateMemoryResponse) Reset() {
+	*x = UpdateMemoryResponse{}
 	mi := &file_magus_memory_v1_memory_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PutMemoryRequest) String() string {
+func (x *UpdateMemoryResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PutMemoryRequest) ProtoMessage() {}
+func (*UpdateMemoryResponse) ProtoMessage() {}
 
-func (x *PutMemoryRequest) ProtoReflect() protoreflect.Message {
+func (x *UpdateMemoryResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_memory_v1_memory_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -395,79 +510,29 @@ func (x *PutMemoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PutMemoryRequest.ProtoReflect.Descriptor instead.
-func (*PutMemoryRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use UpdateMemoryResponse.ProtoReflect.Descriptor instead.
+func (*UpdateMemoryResponse) Descriptor() ([]byte, []int) {
 	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *PutMemoryRequest) GetFile() MemoryFile {
+func (x *UpdateMemoryResponse) GetMemory() *Memory {
 	if x != nil {
-		return x.File
-	}
-	return MemoryFile_MEMORY_FILE_UNSPECIFIED
-}
-
-func (x *PutMemoryRequest) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-type PutMemoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Doc           *MemoryDoc             `protobuf:"bytes,1,opt,name=doc,proto3" json:"doc,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PutMemoryResponse) Reset() {
-	*x = PutMemoryResponse{}
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PutMemoryResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PutMemoryResponse) ProtoMessage() {}
-
-func (x *PutMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PutMemoryResponse.ProtoReflect.Descriptor instead.
-func (*PutMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *PutMemoryResponse) GetDoc() *MemoryDoc {
-	if x != nil {
-		return x.Doc
+		return x.Memory
 	}
 	return nil
 }
 
 type DeleteMemoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	File          MemoryFile             `protobuf:"varint,1,opt,name=file,proto3,enum=magus.memory.v1.MemoryFile" json:"file,omitempty"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	AllowMissing  bool                   `protobuf:"varint,2,opt,name=allow_missing,json=allowMissing,proto3" json:"allow_missing,omitempty"` // true => deleting an absent record is a no-op
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteMemoryRequest) Reset() {
 	*x = DeleteMemoryRequest{}
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[7]
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -479,7 +544,7 @@ func (x *DeleteMemoryRequest) String() string {
 func (*DeleteMemoryRequest) ProtoMessage() {}
 
 func (x *DeleteMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[7]
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -492,26 +557,32 @@ func (x *DeleteMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMemoryRequest.ProtoReflect.Descriptor instead.
 func (*DeleteMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{7}
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *DeleteMemoryRequest) GetFile() MemoryFile {
+func (x *DeleteMemoryRequest) GetName() string {
 	if x != nil {
-		return x.File
+		return x.Name
 	}
-	return MemoryFile_MEMORY_FILE_UNSPECIFIED
+	return ""
+}
+
+func (x *DeleteMemoryRequest) GetAllowMissing() bool {
+	if x != nil {
+		return x.AllowMissing
+	}
+	return false
 }
 
 type DeleteMemoryResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Doc           *MemoryDoc             `protobuf:"bytes,1,opt,name=doc,proto3" json:"doc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteMemoryResponse) Reset() {
 	*x = DeleteMemoryResponse{}
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[8]
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -523,7 +594,7 @@ func (x *DeleteMemoryResponse) String() string {
 func (*DeleteMemoryResponse) ProtoMessage() {}
 
 func (x *DeleteMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1_memory_proto_msgTypes[8]
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -536,61 +607,242 @@ func (x *DeleteMemoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMemoryResponse.ProtoReflect.Descriptor instead.
 func (*DeleteMemoryResponse) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{7}
+}
+
+type GetCursorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCursorRequest) Reset() {
+	*x = GetCursorRequest{}
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCursorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCursorRequest) ProtoMessage() {}
+
+func (x *GetCursorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCursorRequest.ProtoReflect.Descriptor instead.
+func (*GetCursorRequest) Descriptor() ([]byte, []int) {
 	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *DeleteMemoryResponse) GetDoc() *MemoryDoc {
+type GetCursorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"` // UNTRUSTED; empty when the cursor was never written
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCursorResponse) Reset() {
+	*x = GetCursorResponse{}
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCursorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCursorResponse) ProtoMessage() {}
+
+func (x *GetCursorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[9]
 	if x != nil {
-		return x.Doc
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return nil
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCursorResponse.ProtoReflect.Descriptor instead.
+func (*GetCursorResponse) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetCursorResponse) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+type UpdateCursorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCursorRequest) Reset() {
+	*x = UpdateCursorRequest{}
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCursorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCursorRequest) ProtoMessage() {}
+
+func (x *UpdateCursorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCursorRequest.ProtoReflect.Descriptor instead.
+func (*UpdateCursorRequest) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *UpdateCursorRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+type UpdateCursorResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateCursorResponse) Reset() {
+	*x = UpdateCursorResponse{}
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateCursorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateCursorResponse) ProtoMessage() {}
+
+func (x *UpdateCursorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1_memory_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateCursorResponse.ProtoReflect.Descriptor instead.
+func (*UpdateCursorResponse) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1_memory_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateCursorResponse) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
 }
 
 var File_magus_memory_v1_memory_proto protoreflect.FileDescriptor
 
 const file_magus_memory_v1_memory_proto_rawDesc = "" +
 	"\n" +
-	"\x1cmagus/memory/v1/memory.proto\x12\x0fmagus.memory.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xd9\x01\n" +
-	"\tMemoryDoc\x12/\n" +
-	"\x04file\x18\x01 \x01(\x0e2\x1b.magus.memory.v1.MemoryFileR\x04file\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\acontent\x18\x03 \x01(\tR\acontent\x12\x1d\n" +
+	"\x1cmagus/memory/v1/memory.proto\x12\x0fmagus.memory.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"W\n" +
+	"\tMemoryRef\x122\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1e.magus.memory.v1.MemoryRefKindR\x04kind\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\"\xc3\x02\n" +
+	"\x06Memory\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
+	"\x04type\x18\x02 \x01(\x0e2\x1b.magus.memory.v1.MemoryTypeR\x04type\x12.\n" +
+	"\x04refs\x18\x03 \x03(\v2\x1a.magus.memory.v1.MemoryRefR\x04refs\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x12\x12\n" +
+	"\x04body\x18\x05 \x01(\tR\x04body\x12\x1e\n" +
 	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\x126\n" +
-	"\bmodified\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bmodified\x12\x16\n" +
-	"\x06exists\x18\x06 \x01(\bR\x06exists\"\x13\n" +
-	"\x11ListMemoryRequest\"V\n" +
-	"\x12ListMemoryResponse\x12.\n" +
-	"\x04docs\x18\x01 \x03(\v2\x1a.magus.memory.v1.MemoryDocR\x04docs\x12\x10\n" +
-	"\x03dir\x18\x02 \x01(\tR\x03dir\"O\n" +
-	"\x10GetMemoryRequest\x12;\n" +
-	"\x04file\x18\x01 \x01(\x0e2\x1b.magus.memory.v1.MemoryFileB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04file\"A\n" +
-	"\x11GetMemoryResponse\x12,\n" +
-	"\x03doc\x18\x01 \x01(\v2\x1a.magus.memory.v1.MemoryDocR\x03doc\"i\n" +
-	"\x10PutMemoryRequest\x12;\n" +
-	"\x04file\x18\x01 \x01(\x0e2\x1b.magus.memory.v1.MemoryFileB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04file\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\tR\acontent\"A\n" +
-	"\x11PutMemoryResponse\x12,\n" +
-	"\x03doc\x18\x01 \x01(\v2\x1a.magus.memory.v1.MemoryDocR\x03doc\"R\n" +
-	"\x13DeleteMemoryRequest\x12;\n" +
-	"\x04file\x18\x01 \x01(\x0e2\x1b.magus.memory.v1.MemoryFileB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04file\"D\n" +
-	"\x14DeleteMemoryResponse\x12,\n" +
-	"\x03doc\x18\x01 \x01(\v2\x1a.magus.memory.v1.MemoryDocR\x03doc*v\n" +
+	"references\x18\x06 \x03(\tR\n" +
+	"references\x12;\n" +
+	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12;\n" +
+	"\vupdate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"updateTime\"Q\n" +
+	"\x13ListMemoriesRequest\x12\x1b\n" +
+	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"MemoryFile\x12\x1b\n" +
-	"\x17MEMORY_FILE_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12MEMORY_FILE_STATUS\x10\x01\x12\x18\n" +
-	"\x14MEMORY_FILE_PROGRESS\x10\x02\x12\x19\n" +
-	"\x15MEMORY_FILE_DECISIONS\x10\x032\xeb\x02\n" +
-	"\rMemoryService\x12U\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\"s\n" +
+	"\x14ListMemoriesResponse\x123\n" +
+	"\bmemories\x18\x01 \x03(\v2\x17.magus.memory.v1.MemoryR\bmemories\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa8\x01\n" +
+	"\x13UpdateMemoryRequest\x12/\n" +
+	"\x06memory\x18\x01 \x01(\v2\x17.magus.memory.v1.MemoryR\x06memory\x12;\n" +
+	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\x12#\n" +
+	"\rallow_missing\x18\x03 \x01(\bR\fallowMissing\"G\n" +
+	"\x14UpdateMemoryResponse\x12/\n" +
+	"\x06memory\x18\x01 \x01(\v2\x17.magus.memory.v1.MemoryR\x06memory\"N\n" +
+	"\x13DeleteMemoryRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
+	"\rallow_missing\x18\x02 \x01(\bR\fallowMissing\"\x16\n" +
+	"\x14DeleteMemoryResponse\"\x12\n" +
+	"\x10GetCursorRequest\"-\n" +
+	"\x11GetCursorResponse\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\"/\n" +
+	"\x13UpdateCursorRequest\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent\"0\n" +
+	"\x14UpdateCursorResponse\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\tR\acontent*r\n" +
 	"\n" +
-	"ListMemory\x12\".magus.memory.v1.ListMemoryRequest\x1a#.magus.memory.v1.ListMemoryResponse\x12R\n" +
-	"\tGetMemory\x12!.magus.memory.v1.GetMemoryRequest\x1a\".magus.memory.v1.GetMemoryResponse\x12R\n" +
-	"\tPutMemory\x12!.magus.memory.v1.PutMemoryRequest\x1a\".magus.memory.v1.PutMemoryResponse\x12[\n" +
-	"\fDeleteMemory\x12$.magus.memory.v1.DeleteMemoryRequest\x1a%.magus.memory.v1.DeleteMemoryResponseB\xc1\x01\n" +
+	"MemoryType\x12\x1b\n" +
+	"\x17MEMORY_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13MEMORY_TYPE_POINTER\x10\x01\x12\x18\n" +
+	"\x14MEMORY_TYPE_DECISION\x10\x02\x12\x14\n" +
+	"\x10MEMORY_TYPE_PLAN\x10\x03*\xb7\x01\n" +
+	"\rMemoryRefKind\x12\x1f\n" +
+	"\x1bMEMORY_REF_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15MEMORY_REF_KIND_QUERY\x10\x01\x12\x18\n" +
+	"\x14MEMORY_REF_KIND_NODE\x10\x02\x12\x1a\n" +
+	"\x16MEMORY_REF_KIND_OUTPUT\x10\x03\x12\x1b\n" +
+	"\x17MEMORY_REF_KIND_COMMAND\x10\x04\x12\x17\n" +
+	"\x13MEMORY_REF_KIND_DOC\x10\x052\xd7\x03\n" +
+	"\rMemoryService\x12[\n" +
+	"\fListMemories\x12$.magus.memory.v1.ListMemoriesRequest\x1a%.magus.memory.v1.ListMemoriesResponse\x12[\n" +
+	"\fUpdateMemory\x12$.magus.memory.v1.UpdateMemoryRequest\x1a%.magus.memory.v1.UpdateMemoryResponse\x12[\n" +
+	"\fDeleteMemory\x12$.magus.memory.v1.DeleteMemoryRequest\x1a%.magus.memory.v1.DeleteMemoryResponse\x12R\n" +
+	"\tGetCursor\x12!.magus.memory.v1.GetCursorRequest\x1a\".magus.memory.v1.GetCursorResponse\x12[\n" +
+	"\fUpdateCursor\x12$.magus.memory.v1.UpdateCursorRequest\x1a%.magus.memory.v1.UpdateCursorResponseB\xc1\x01\n" +
 	"\x13com.magus.memory.v1B\vMemoryProtoP\x01Z?github.com/egladman/magus/proto/gen/go/magus/memory/v1;memoryv1\xa2\x02\x03MMX\xaa\x02\x0fMagus.Memory.V1\xca\x02\x0fMagus\\Memory\\V1\xe2\x02\x1bMagus\\Memory\\V1\\GPBMetadata\xea\x02\x11Magus::Memory::V1b\x06proto3"
 
 var (
@@ -605,41 +857,48 @@ func file_magus_memory_v1_memory_proto_rawDescGZIP() []byte {
 	return file_magus_memory_v1_memory_proto_rawDescData
 }
 
-var file_magus_memory_v1_memory_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_magus_memory_v1_memory_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_magus_memory_v1_memory_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_magus_memory_v1_memory_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_magus_memory_v1_memory_proto_goTypes = []any{
-	(MemoryFile)(0),               // 0: magus.memory.v1.MemoryFile
-	(*MemoryDoc)(nil),             // 1: magus.memory.v1.MemoryDoc
-	(*ListMemoryRequest)(nil),     // 2: magus.memory.v1.ListMemoryRequest
-	(*ListMemoryResponse)(nil),    // 3: magus.memory.v1.ListMemoryResponse
-	(*GetMemoryRequest)(nil),      // 4: magus.memory.v1.GetMemoryRequest
-	(*GetMemoryResponse)(nil),     // 5: magus.memory.v1.GetMemoryResponse
-	(*PutMemoryRequest)(nil),      // 6: magus.memory.v1.PutMemoryRequest
-	(*PutMemoryResponse)(nil),     // 7: magus.memory.v1.PutMemoryResponse
+	(MemoryType)(0),               // 0: magus.memory.v1.MemoryType
+	(MemoryRefKind)(0),            // 1: magus.memory.v1.MemoryRefKind
+	(*MemoryRef)(nil),             // 2: magus.memory.v1.MemoryRef
+	(*Memory)(nil),                // 3: magus.memory.v1.Memory
+	(*ListMemoriesRequest)(nil),   // 4: magus.memory.v1.ListMemoriesRequest
+	(*ListMemoriesResponse)(nil),  // 5: magus.memory.v1.ListMemoriesResponse
+	(*UpdateMemoryRequest)(nil),   // 6: magus.memory.v1.UpdateMemoryRequest
+	(*UpdateMemoryResponse)(nil),  // 7: magus.memory.v1.UpdateMemoryResponse
 	(*DeleteMemoryRequest)(nil),   // 8: magus.memory.v1.DeleteMemoryRequest
 	(*DeleteMemoryResponse)(nil),  // 9: magus.memory.v1.DeleteMemoryResponse
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*GetCursorRequest)(nil),      // 10: magus.memory.v1.GetCursorRequest
+	(*GetCursorResponse)(nil),     // 11: magus.memory.v1.GetCursorResponse
+	(*UpdateCursorRequest)(nil),   // 12: magus.memory.v1.UpdateCursorRequest
+	(*UpdateCursorResponse)(nil),  // 13: magus.memory.v1.UpdateCursorResponse
+	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
 }
 var file_magus_memory_v1_memory_proto_depIdxs = []int32{
-	0,  // 0: magus.memory.v1.MemoryDoc.file:type_name -> magus.memory.v1.MemoryFile
-	10, // 1: magus.memory.v1.MemoryDoc.modified:type_name -> google.protobuf.Timestamp
-	1,  // 2: magus.memory.v1.ListMemoryResponse.docs:type_name -> magus.memory.v1.MemoryDoc
-	0,  // 3: magus.memory.v1.GetMemoryRequest.file:type_name -> magus.memory.v1.MemoryFile
-	1,  // 4: magus.memory.v1.GetMemoryResponse.doc:type_name -> magus.memory.v1.MemoryDoc
-	0,  // 5: magus.memory.v1.PutMemoryRequest.file:type_name -> magus.memory.v1.MemoryFile
-	1,  // 6: magus.memory.v1.PutMemoryResponse.doc:type_name -> magus.memory.v1.MemoryDoc
-	0,  // 7: magus.memory.v1.DeleteMemoryRequest.file:type_name -> magus.memory.v1.MemoryFile
-	1,  // 8: magus.memory.v1.DeleteMemoryResponse.doc:type_name -> magus.memory.v1.MemoryDoc
-	2,  // 9: magus.memory.v1.MemoryService.ListMemory:input_type -> magus.memory.v1.ListMemoryRequest
-	4,  // 10: magus.memory.v1.MemoryService.GetMemory:input_type -> magus.memory.v1.GetMemoryRequest
-	6,  // 11: magus.memory.v1.MemoryService.PutMemory:input_type -> magus.memory.v1.PutMemoryRequest
-	8,  // 12: magus.memory.v1.MemoryService.DeleteMemory:input_type -> magus.memory.v1.DeleteMemoryRequest
-	3,  // 13: magus.memory.v1.MemoryService.ListMemory:output_type -> magus.memory.v1.ListMemoryResponse
-	5,  // 14: magus.memory.v1.MemoryService.GetMemory:output_type -> magus.memory.v1.GetMemoryResponse
-	7,  // 15: magus.memory.v1.MemoryService.PutMemory:output_type -> magus.memory.v1.PutMemoryResponse
+	1,  // 0: magus.memory.v1.MemoryRef.kind:type_name -> magus.memory.v1.MemoryRefKind
+	0,  // 1: magus.memory.v1.Memory.type:type_name -> magus.memory.v1.MemoryType
+	2,  // 2: magus.memory.v1.Memory.refs:type_name -> magus.memory.v1.MemoryRef
+	14, // 3: magus.memory.v1.Memory.create_time:type_name -> google.protobuf.Timestamp
+	14, // 4: magus.memory.v1.Memory.update_time:type_name -> google.protobuf.Timestamp
+	3,  // 5: magus.memory.v1.ListMemoriesResponse.memories:type_name -> magus.memory.v1.Memory
+	3,  // 6: magus.memory.v1.UpdateMemoryRequest.memory:type_name -> magus.memory.v1.Memory
+	15, // 7: magus.memory.v1.UpdateMemoryRequest.update_mask:type_name -> google.protobuf.FieldMask
+	3,  // 8: magus.memory.v1.UpdateMemoryResponse.memory:type_name -> magus.memory.v1.Memory
+	4,  // 9: magus.memory.v1.MemoryService.ListMemories:input_type -> magus.memory.v1.ListMemoriesRequest
+	6,  // 10: magus.memory.v1.MemoryService.UpdateMemory:input_type -> magus.memory.v1.UpdateMemoryRequest
+	8,  // 11: magus.memory.v1.MemoryService.DeleteMemory:input_type -> magus.memory.v1.DeleteMemoryRequest
+	10, // 12: magus.memory.v1.MemoryService.GetCursor:input_type -> magus.memory.v1.GetCursorRequest
+	12, // 13: magus.memory.v1.MemoryService.UpdateCursor:input_type -> magus.memory.v1.UpdateCursorRequest
+	5,  // 14: magus.memory.v1.MemoryService.ListMemories:output_type -> magus.memory.v1.ListMemoriesResponse
+	7,  // 15: magus.memory.v1.MemoryService.UpdateMemory:output_type -> magus.memory.v1.UpdateMemoryResponse
 	9,  // 16: magus.memory.v1.MemoryService.DeleteMemory:output_type -> magus.memory.v1.DeleteMemoryResponse
-	13, // [13:17] is the sub-list for method output_type
-	9,  // [9:13] is the sub-list for method input_type
+	11, // 17: magus.memory.v1.MemoryService.GetCursor:output_type -> magus.memory.v1.GetCursorResponse
+	13, // 18: magus.memory.v1.MemoryService.UpdateCursor:output_type -> magus.memory.v1.UpdateCursorResponse
+	14, // [14:19] is the sub-list for method output_type
+	9,  // [9:14] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name
@@ -655,8 +914,8 @@ func file_magus_memory_v1_memory_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_memory_v1_memory_proto_rawDesc), len(file_magus_memory_v1_memory_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   9,
+			NumEnums:      2,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

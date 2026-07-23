@@ -1,98 +1,125 @@
 syntax = "proto3";
 
-// Package magus.memory.v1 is the console-facing MemoryService: an observable and
-// EDITABLE view over the durable magus_memory files (status, progress, decisions) the
-// MCP magus_memory tool writes. It is a SECOND door onto the exact on-disk files that
-// tool maintains - the per-repository markdown under the user's XDG state directory -
-// never a second store of its own. Its reason to exist: agent memory is append-heavy
-// and never rotated by default, so it grows unbounded and an agent can silently bloat
-// it; a human editing/deleting surface is the safety valve. So the service is
-// deliberately read AND write: list the files, read one, replace one's content, or
-// delete one.
+// Package magus.memory.v1 is the console-facing MemoryService: an observable, editable
+// view over the durable agent-memory RECORDS the magus_memory MCP tool writes. It is a
+// SECOND door onto the exact on-disk store that tool maintains - the per-repository
+// records under the user's XDG state directory - never a second store of its own.
 //
-// The content it returns is AGENT-WRITTEN and therefore UNTRUSTED: a client must render
-// it as text/markdown, never as trusted HTML.
+// Memory is a set of discrete records, each a typed POINTER into the magus domain (a
+// saved query, a graph node, an output ref, a command, a doc); only a decision/plan
+// carries a prose caption. Its reason to exist as an editable surface: an agent can
+// accumulate stale or bloated records, and a human read/edit/delete surface is the
+// safety valve. Every record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: a
+// client must render them as text, never as trusted HTML.
 //
-// Access policy: every RPC requires the daemon bearer token. The service is mounted on
-// the loopback listener behind the same guard as the other cli-token console services
-// (magus.job.v1, magus.token.v1) and is NEVER served on the LAN share listener - memory
-// is the operator's own working notes, not a read surface for a shared phone view.
-// buf-breaking gates this file: fields and RPCs may be ADDED (old clients ignore unknown
-// fields), never renumbered or removed.
+// Surface is deliberately minimal (AIP-aligned): List the records, Update one (an upsert
+// keyed by name - allow_missing folds create into update), Delete one. A "delete
+// selected" bulk action is a client-side loop of Delete, not a batch RPC. The cursor
+// snapshot ("where did I leave off") is a singleton, read and overwritten on its own.
+//
+// Access policy: every RPC requires the daemon bearer token, mounted on loopback behind
+// the same guard as the other cli-token console services, and NEVER on the LAN share
+// listener - memory is the operator's own working notes.
 package magus.memory.v1;
 
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
-import "buf/validate/validate.proto";
 
-// MemoryService lists, reads, replaces, and deletes the durable memory files. List
-// enumerates the closed set with per-file metadata; Get returns one file's raw markdown;
-// Put replaces one file's whole content; Delete removes one file from disk.
+// MemoryService lists, upserts, and deletes memory records, plus reads/overwrites the
+// singleton cursor snapshot.
 service MemoryService {
-  // ListMemory returns metadata (never content) for every known memory file, plus the
-  // on-disk directory holding them so the operator can find them outside the console.
-  rpc ListMemory(ListMemoryRequest) returns (ListMemoryResponse);
-  // GetMemory returns one file's raw markdown content and metadata. A file that does
-  // not exist yet returns an empty doc with exists=false, not an error.
-  rpc GetMemory(GetMemoryRequest) returns (GetMemoryResponse);
-  // PutMemory replaces one file's whole content with the supplied markdown, creating it
-  // if absent. It is a full overwrite, not an append.
-  rpc PutMemory(PutMemoryRequest) returns (PutMemoryResponse);
-  // DeleteMemory removes one file from disk. Deleting an already-absent file is a no-op
-  // that succeeds and reports exists=false.
+  // ListMemories returns every record in full (records are small). Paginated by contract
+  // so growth never forces a breaking change, though the store returns all records today.
+  rpc ListMemories(ListMemoriesRequest) returns (ListMemoriesResponse);
+  // UpdateMemory upserts a record by name: with allow_missing=true it creates the record
+  // when absent, otherwise it updates in place. An empty update_mask is a full replace.
+  rpc UpdateMemory(UpdateMemoryRequest) returns (UpdateMemoryResponse);
+  // DeleteMemory removes a record by name. With allow_missing=true, deleting an absent
+  // record succeeds as a no-op (idempotent).
   rpc DeleteMemory(DeleteMemoryRequest) returns (DeleteMemoryResponse);
+  // GetCursor returns the cursor snapshot, empty when never written.
+  rpc GetCursor(GetCursorRequest) returns (GetCursorResponse);
+  // UpdateCursor overwrites the cursor snapshot.
+  rpc UpdateCursor(UpdateCursorRequest) returns (UpdateCursorResponse);
 }
 
-// MemoryFile names one file in the closed durable-memory set. status is the current
-// snapshot (overwritten), progress is a dated work journal (appended by agents),
-// decisions is a dated decision log with the why (appended by agents). The set is
-// closed on purpose: adding a value is an API decision every agent host sees.
-enum MemoryFile {
-  MEMORY_FILE_UNSPECIFIED = 0;
-  MEMORY_FILE_STATUS = 1;
-  MEMORY_FILE_PROGRESS = 2;
-  MEMORY_FILE_DECISIONS = 3;
+// MemoryType is the subject axis of a record (stable, closed). pointer carries refs only;
+// decision and plan additionally carry a prose caption (the why the graph cannot derive).
+enum MemoryType {
+  MEMORY_TYPE_UNSPECIFIED = 0;
+  MEMORY_TYPE_POINTER = 1;
+  MEMORY_TYPE_DECISION = 2;
+  MEMORY_TYPE_PLAN = 3;
 }
 
-// MemoryDoc describes one memory file. In a List response the content is omitted (only
-// metadata is carried); Get, Put, and Delete return it with content populated (empty for
-// a deleted or never-written file).
-message MemoryDoc {
-  MemoryFile file = 1;
-  string name = 2;                          // on-disk basename, e.g. "status.md"
-  string content = 3;                       // raw markdown; UNTRUSTED (agent-written)
-  int64 size_bytes = 4;                     // current on-disk size
-  google.protobuf.Timestamp modified = 5;   // last-modified time; unset when the file does not exist
-  bool exists = 6;                          // whether the file is present on disk
+// MemoryRefKind is the closed set a ref points at. node/doc/output name a magus-domain
+// node; query/command are re-runnable strings. Every kind resolves or dangles.
+enum MemoryRefKind {
+  MEMORY_REF_KIND_UNSPECIFIED = 0;
+  MEMORY_REF_KIND_QUERY = 1;
+  MEMORY_REF_KIND_NODE = 2;
+  MEMORY_REF_KIND_OUTPUT = 3;
+  MEMORY_REF_KIND_COMMAND = 4;
+  MEMORY_REF_KIND_DOC = 5;
 }
 
-message ListMemoryRequest {}
-
-message ListMemoryResponse {
-  repeated MemoryDoc docs = 1;   // one per known file, in a stable order; content omitted
-  string dir = 2;                // absolute path of the directory holding the files
+// MemoryRef is one typed pointer: the payload of a record.
+message MemoryRef {
+  MemoryRefKind kind = 1;
+  string target = 2;  // node id / path, output ref token, or a raw query/command string
 }
 
-message GetMemoryRequest {
-  MemoryFile file = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+// Memory is one record. name is the kebab-slug identity; refs are the required payload;
+// body is the caption (decision/plan only); status is the optional lifecycle field;
+// references links to other records by name. create_time/update_time are output-only.
+message Memory {
+  string name = 1;
+  MemoryType type = 2;
+  repeated MemoryRef refs = 3;
+  string status = 4;                          // free lifecycle string (accepted, superseded, done, stale, ...)
+  string body = 5;                            // UNTRUSTED prose caption; empty for a pointer
+  repeated string references = 6;             // other record names (memory -> memory)
+  google.protobuf.Timestamp create_time = 7;  // output only
+  google.protobuf.Timestamp update_time = 8;  // output only
 }
 
-message GetMemoryResponse {
-  MemoryDoc doc = 1;
+message ListMemoriesRequest {
+  int32 page_size = 1;    // wired for forward-compat; the store returns all records today
+  string page_token = 2;
 }
 
-message PutMemoryRequest {
-  MemoryFile file = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
-  string content = 2;  // the file's full new markdown content (overwrite, not append)
+message ListMemoriesResponse {
+  repeated Memory memories = 1;
+  string next_page_token = 2;  // always empty until the store paginates
 }
 
-message PutMemoryResponse {
-  MemoryDoc doc = 1;
+message UpdateMemoryRequest {
+  Memory memory = 1;                          // memory.name is the identity to upsert
+  google.protobuf.FieldMask update_mask = 2;  // empty = full replace (the only mode today)
+  bool allow_missing = 3;                     // true => create when absent (AIP-134 upsert)
+}
+
+message UpdateMemoryResponse {
+  Memory memory = 1;  // the stored record, with server-set timestamps
 }
 
 message DeleteMemoryRequest {
-  MemoryFile file = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  string name = 1;
+  bool allow_missing = 2;  // true => deleting an absent record is a no-op
 }
 
-message DeleteMemoryResponse {
-  MemoryDoc doc = 1;
+message DeleteMemoryResponse {}
+
+message GetCursorRequest {}
+
+message GetCursorResponse {
+  string content = 1;  // UNTRUSTED; empty when the cursor was never written
+}
+
+message UpdateCursorRequest {
+  string content = 1;
+}
+
+message UpdateCursorResponse {
+  string content = 1;
 }
