@@ -588,6 +588,18 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 /* Size the copy-as-command SVG icon to sit level with the neighboring "?" help control's glyph. */
 .console-graph-querybar .console-render-btn__icon { width: 0.9em; height: 0.9em; flex: 0 0 auto; }
 
+/* Graph source: which graph is loaded (build vs knowledge) - sits above Display mode since
+   the graph you are viewing is more fundamental than how it is arranged. Same framed-row
+   treatment (label over a bottom-divided row) as the sibling sidebar sections. */
+.console-graph-sidebar__source {
+  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-graph-sidebar__sourcelabel {
+  margin: 0 0 0.35rem; padding: 0;
+  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
 /* Display mode: the always-visible arrangement-axis control (Decision 3), sitting between the
    search bar and "Ask a question" - same framed-row treatment as the views block below (a label
    over a bottom-divided row) so the two controls read as siblings, not one nested in the other. */

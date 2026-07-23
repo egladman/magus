@@ -43,6 +43,7 @@ import {
   daemonAttach,
   consumeLiveToken,
   getLiveToken,
+  enterSharedModeIfNeeded,
   fetchSSE,
   authHeaders,
   isRemembered,
@@ -2214,6 +2215,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
     }
   }
   draw();
+  syncGraphKindToggle();
 }
 
 // syncLayoutToggle updates the layout toggle group's selected state, each mode
@@ -2237,6 +2239,53 @@ function syncLayoutToggle() {
   if (modeIndicator) {
     modeIndicator.textContent = "mode: " + layoutMode[0].toUpperCase() + layoutMode.slice(1);
   }
+}
+
+// The graph-kind toggle group's per-kind titles when live. Mirrors scaffold.html's
+// static title attributes so the initial render and syncGraphKindToggle agree.
+const GRAPHKIND_TITLES: Record<GraphFlavor, string> = {
+  targets:
+    "The build graph: targets and what they depend on. Switch requires a live workspace (magus graph open --live).",
+  knowledge:
+    "The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph open --live).",
+};
+const GRAPHKIND_LIVE_HINT = "Connect a live workspace to switch graphs: magus graph open --live";
+
+// syncGraphKindToggle updates the graph-source toggle group's selected state and
+// each button's disabled/title to match graphFlavor and live-mode availability.
+// Switching graphs only works against a live daemon (which serves both flavors);
+// in a static snapshot both buttons are disabled with a hint, but the selected
+// one still shows which graph is currently loaded. Called after every graph
+// load (renderLoadedGraph/replaceGraph/liveApplyGraphUpdate) and once at boot.
+function syncGraphKindToggle() {
+  document.querySelectorAll<HTMLButtonElement>("[data-graphkind]").forEach((btn) => {
+    const kind = btn.dataset.graphkind;
+    if (kind !== "targets" && kind !== "knowledge") return;
+    btn.classList.toggle("pf-m-selected", kind === graphFlavor);
+    btn.disabled = !liveHost;
+    btn.title = liveHost ? GRAPHKIND_TITLES[kind] : GRAPHKIND_LIVE_HINT;
+  });
+}
+
+// switchGraphKind switches the live-loaded graph between the build (targets) and
+// knowledge flavors. Live-only: a static snapshot has no server to ask for the
+// other flavor, so a click there just re-syncs the toggle back and explains why.
+async function switchGraphKind(kind: "targets" | "knowledge") {
+  if (kind === graphFlavor) return;
+  if (!liveHost) {
+    setStatus(
+      "To switch between the build and knowledge graphs, open a live workspace: magus graph open --live",
+      true,
+    );
+    syncGraphKindToggle();
+    return;
+  }
+  liveFlavor = kind === "targets" ? "targets" : null;
+  liveGraphQuery = kind === "targets" ? "?flavor=targets" : "";
+  liveETag = null;
+  await liveRefetchGraph(); // reseeds graph data and sets graphFlavor via liveApplyGraphUpdate
+  syncGraphKindToggle();
+  setStatus("Switched to the " + (kind === "targets" ? "build" : "knowledge") + " graph.");
 }
 
 // loadDemoGraph swaps the committed demo graph in place via renderLoadedGraph. NOT a page reload: the SPA
@@ -3539,6 +3588,7 @@ function liveApplyGraphUpdate(data: GraphPayload) {
   }
   draw();
   updateLiveBadge();
+  syncGraphKindToggle();
 }
 
 // liveRefetchGraph re-fetches whichever graph variant is currently loaded
@@ -3890,6 +3940,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
   if (projectionUnfolded && !hasFragmentDirective && !isDagMode() && graph.nodes.length) {
     setTimeout(() => fitView(null), 700);
   }
+  syncGraphKindToggle();
 }
 
 // activate boots the graph explorer against the scaffold already in the document. el() resolves DOM
@@ -4314,6 +4365,17 @@ function bootWireEvents() {
     });
   });
 
+  // Wire the graph-source toggle group: each [data-graphkind] button switches
+  // between the build and knowledge graphs (live-only; see switchGraphKind).
+  document.querySelectorAll<HTMLButtonElement>("[data-graphkind]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.disabled) return;
+      const kind = btn.dataset.graphkind;
+      if (kind === "targets" || kind === "knowledge") switchGraphKind(kind);
+    });
+  });
+  syncGraphKindToggle();
+
   // The Ask panel's "What runs in parallel?" chip is a layout jump, not a view:
   // it carries no data-view attr, so the .console-graph-views__chip wiring
   // above skips it.
@@ -4361,6 +4423,14 @@ async function bootLive() {
   // A static graph was explicitly requested (#data/#src): never take over the live path, so those
   // offline links keep working even when a default daemon is configured.
   if (params.data || params.src) return false;
+
+  // The graph is a SEPARATE bundle from the shell, so the shell's enterSharedModeIfNeeded() does not
+  // set THIS bundle's own-origin flag. Run it here too so a daemon-origin link from `magus graph open
+  // --live` (which carries a #token but no #port) is recognized as own-origin and daemonAttach adopts
+  // location.host. It is a no-op for a #port attach (which needs no origin adoption) and for a cold,
+  // token-less visit. The shell may have already stripped the #token from the URL; getLiveToken() reads
+  // the stashed copy, so adoption still fires.
+  enterSharedModeIfNeeded();
 
   // Explicit-attach only: a #port link, or the daemon-origin/shared console. A mere configured default
   // must not force the explorer into live mode - a cold visit shows the static empty state instead.
