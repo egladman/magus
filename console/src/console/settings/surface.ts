@@ -128,9 +128,9 @@ function buildSection(title: string, body: HTMLElement, lede?: string): HTMLElem
   return sec;
 }
 
-// buildStackedPanel stacks several titled sections into one tab panel - the console keeps just two
-// settings tabs (General, Agent), so each groups its related sections rather than fanning out one tab per
-// section.
+// buildStackedPanel stacks several titled sections into one tab panel - the settings surface keeps a
+// small set of tabs (General, Access, Memory), so a tab groups its related sections rather than fanning
+// out one tab per section.
 function buildStackedPanel(...sections: HTMLElement[]): HTMLElement {
   const panel = h("div", "console-settings-panel");
   panel.append(...sections);
@@ -901,39 +901,25 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // degrade to a clear "connect first" state when none is found.
   //
   // The two LIVE sections are gated by the SERVER, not a client-side mode guess: they always build,
-  // and each hides its own TAB (via tabs.setHidden below) if the daemon declines the service to this
-  // client (onDenied) - a read-only phone share cannot reach TokenService/MemoryService (not mounted
-  // on the share listener, and guarded by token class), so those RPCs come back denied and the tab
+  // and each hides ITS OWN TAB (via tabs.setHidden below) if the daemon declines the service to this
+  // client (onDenied) - a read-only phone share cannot reach TokenService/MemoryService (not mounted on
+  // the share listener, and guarded by token class), so those RPCs come back denied and that tab
   // vanishes. Enforcement lives at the daemon; this only mirrors what the daemon already refuses.
-  // (tabs is const-declared below; onDenied only fires after an async RPC, so it is initialized by then.)
-  // The two LIVE sections live under one "Agent" tab (the agent's memory + the tokens agents connect
-  // with). Each is gated by the SERVER: a read-only phone share cannot reach TokenService/MemoryService,
-  // so those RPCs come back denied. The whole Agent tab drops out only when BOTH are denied (they share
-  // the cli-tier gate, so in practice they deny together); a lone denial leaves the tab with the other
-  // section. (tabs is const-declared below; onDenied only fires after an async RPC, so it is initialized
-  // by then.)
-  let tokensDenied = false;
-  let memoryDenied = false;
-  const hideAgentIfBothDenied = (): void => {
-    if (tokensDenied && memoryDenied) tabs.setHidden("agent", true);
-  };
+  // Tokens (access control) and memory (the records agents write) are DISTINCT concerns, so each owns
+  // its own tab - Access and Memory - and hides independently. (tabs is const-declared below; onDenied
+  // only fires after an async RPC, so it is initialized by then.)
   const tokensSection = buildTokensSection(resolveDaemonHost(), {
-    onDenied: () => {
-      tokensDenied = true;
-      hideAgentIfBothDenied();
-    },
+    onDenied: () => tabs.setHidden("access", true),
   });
   const memorySection = buildMemorySection(resolveDaemonHost(), {
-    onDenied: () => {
-      memoryDenied = true;
-      hideAgentIfBothDenied();
-    },
+    onDenied: () => tabs.setHidden("memory", true),
   });
 
-  // Two tabs only. General stacks the staged sections (daemon address, appearance, keybindings, backup)
-  // plus About; Agent stacks the two live daemon-facing sections. The action bar and pending diff stay
-  // above the tabs: the staged draft is shared across the staged sections, so its commit controls are
-  // global to the surface, not per-tab.
+  // Three tabs. General stacks the staged client sections (daemon address, appearance, keybindings,
+  // backup) plus About; Access and Memory each host one live daemon-facing section, kept apart because
+  // access control and the agents' knowledge store are distinct concerns. The action bar and pending
+  // diff stay above the tabs: the staged draft is shared across the staged sections, so its commit
+  // controls are global to the surface, not per-tab.
   const tabs = buildSettingsTabs([
     {
       id: "general",
@@ -951,14 +937,20 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       ),
     },
     {
-      id: "agent",
-      label: "Agent",
+      id: "access",
+      label: "Access",
       panel: buildStackedPanel(
         buildSection(
           "Access tokens",
           tokensSection.el,
           "List and revoke the daemon's connector tokens and the active phone-share token. Minting stays a CLI-only operation - the console can never create a token.",
         ),
+      ),
+    },
+    {
+      id: "memory",
+      label: "Memory",
+      panel: buildStackedPanel(
         buildSection(
           "Agent memory",
           memorySection.el,
