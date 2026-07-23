@@ -2,14 +2,14 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash",
         "hooks": [
           {
-            "command": "command -v magus >/dev/null 2>&1 || exit 0; exec magus agent hook",
-            "timeout": 10,
-            "type": "command"
+            "type": "command",
+            "command": "command -v magus >/dev/null 2>&1 || exit 0; exec magus agent hook --from-json tool_input.command -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
+            "timeout": 10
           }
-        ],
-        "matcher": "Bash"
+        ]
       }
     ]
   }

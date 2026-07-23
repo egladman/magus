@@ -2,12 +2,11 @@
 exec magus graph verify --dir .
 stdout 'not installed'
 
-# after install it reports up to date, per platform
-exec magus agent install claude
-exec magus agent install codex
+# after install it reports up to date, per location
+exec magus agent install .claude/skills --agents-md
 exec magus graph verify --dir .
-stdout 'agent skills \(claude\): up to date'
-stdout 'agent skills \(codex\): up to date'
+stdout 'agent skills \(.claude/skills\): up to date'
+stdout 'agent skills \(AGENTS.md\): up to date'
 
 # a stale install (older footer) is reported, and --strict makes it a non-zero exit
 cp stale.md .claude/skills/magus-query/SKILL.md

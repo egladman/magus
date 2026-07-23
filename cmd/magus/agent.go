@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -68,39 +69,26 @@ var agentsSection string
 //	     magus-vcs/magus-run/magus-query; agents-section moment-to-skill routing
 //	     table; claude install merges a PreToolUse guard hook into
 //	     .claude/settings.json (magus agent hook)
-const agentSkillVersion = 12
+//	v13: agent-host agnostic surface: install takes explicit destination dirs
+//	     plus --agents-md (platform names removed); agent hook reads any host's
+//	     event via --from-json and renders its deny/advise/pass verdict through
+//	     -o json/yaml/template; the settings.json hook installer is removed in
+//	     favor of documented per-host recipes
+const agentSkillVersion = 13
 
-// skillDirPlatforms maps each skill-directory platform to its repo-relative
-// destination. The bytes written are identical across platforms - the Agent
-// Skills spec is shared - only the discovery location differs. "agents" is the
-// spec's generic project location, read by npx skills and compliant frameworks.
-var skillDirPlatforms = map[string]string{
-	"claude":   ".claude/skills",
-	"opencode": ".opencode/skills",
-	"agents":   ".agents/skills",
-}
-
-// agentsMDPlatform is the platform whose install target is a managed section in
-// AGENTS.md rather than a skill directory. Named for Codex (the largest reader),
-// but the section serves every agent that honors the AGENTS.md contract.
-const agentsMDPlatform = "codex"
-
-// platformNames returns every supported platform, skill-dir ones sorted first,
-// for stable usage/error text.
-func platformNames() []string {
-	names := make([]string, 0, len(skillDirPlatforms)+1)
-	for name := range skillDirPlatforms {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return append(names, agentsMDPlatform)
-}
+// wellKnownSkillDirs are the destinations checkSkillStatuses probes for an
+// installed skill tree. Discovery-only: install never consults this list - the
+// caller names the destination explicitly - but drift checking has to find what
+// previous installs wrote. The Agent Skills spec generic location plus the
+// common host conventions; magus itself is host-agnostic.
+var wellKnownSkillDirs = []string{".agents/skills", ".claude/skills", ".opencode/skills"}
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
-// Today the one subcommand is `install <platform>`, which writes the embedded skill into
-// the consuming repo. Platform is an explicit argument, never auto-detected (per
-// the explicit-and-granular preference); writing into a repo's agent-config dirs
-// happens only through this command, never as a side effect of another.
+// `install` writes the embedded skills into explicitly named destinations, and
+// `hook` evaluates one shell command to a guard verdict. Destinations and event
+// shapes are explicit arguments, never auto-detected (per the explicit-and-
+// granular preference); writing into a repo's agent-config dirs happens only
+// through this command, never as a side effect of another.
 func agentCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return agentUsageErr()
@@ -111,7 +99,7 @@ func agentCmd(ctx context.Context, args []string) error {
 	case "sample":
 		return agentSampleCmd()
 	case "hook":
-		return agentHookCmd(os.Stdin, os.Stdout)
+		return agentHookCmd(os.Stdin, os.Stdout, args[1:])
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
@@ -121,30 +109,34 @@ func agentCmd(ctx context.Context, args []string) error {
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent install <platform> [flags]")
+	fmt.Fprintln(w, "Usage: magus agent install <dir>... [--agents-md] [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Install the magus agent skills into the current repo so an agent knows")
 	fmt.Fprintln(w, "how to use the knowledge graph instead of grepping, run work through")
 	fmt.Fprintln(w, "targets instead of raw tools, triage generated files, and ground")
 	fmt.Fprintln(w, "refactoring proposals in the graph.")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "The skills are one shared source (magus-query, magus-run, magus-vcs,")
-	fmt.Fprintln(w, "magus-architecture, magus-memory, magus-docs); platforms differ only in")
-	fmt.Fprintln(w, "where they discover them.")
+	fmt.Fprintln(w, "magus is agent-host agnostic: the skills are one shared source in the")
+	fmt.Fprintln(w, "cross-agent Agent Skills format, and you name the directory your host")
+	fmt.Fprintln(w, "discovers skills in. Common destinations:")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Platforms:")
-	fmt.Fprintln(w, "  claude     write .claude/skills/ and merge a PreToolUse guard hook into")
-	fmt.Fprintln(w, "             .claude/settings.json (Claude Code); --hooks=false skips the hook")
-	fmt.Fprintln(w, "  opencode   write .opencode/skills/ (OpenCode)")
-	fmt.Fprintln(w, "  agents     write .agents/skills/ (Agent Skills spec generic location)")
-	fmt.Fprintln(w, "  codex      write a managed magus section into AGENTS.md (Codex and")
-	fmt.Fprintln(w, "             any other AGENTS.md-reading agent)")
+	fmt.Fprintln(w, "  .agents/skills     Agent Skills spec generic project location")
+	fmt.Fprintln(w, "  .claude/skills     Claude Code")
+	fmt.Fprintln(w, "  .opencode/skills   OpenCode")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  --agents-md        maintain a managed magus section in AGENTS.md for")
+	fmt.Fprintln(w, "                     hosts that read that contract instead of skill dirs")
+	fmt.Fprintln(w, "                     (created if absent, replaced in place on re-install,")
+	fmt.Fprintln(w, "                     bytes outside the markers never touched)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Other subcommands:")
 	fmt.Fprintln(w, "  sample     print a starter AGENTS.md to stdout to own and tweak; never")
 	fmt.Fprintln(w, "             writes a file, so it cannot clobber an existing one")
-	fmt.Fprintln(w, "  hook       plumbing invoked by the installed Claude Code guard hook; reads")
-	fmt.Fprintln(w, "             one hook event as JSON on stdin, emits a decision on stdout")
+	fmt.Fprintln(w, "  hook       evaluate one shell command against the magus guard rules and")
+	fmt.Fprintln(w, "             emit a deny/advise/pass verdict. Input: arguments, raw stdin,")
+	fmt.Fprintln(w, "             or --from-json <dot.path> to extract it from a JSON event on")
+	fmt.Fprintln(w, "             stdin. Shape the verdict for your host with -o json|yaml|")
+	fmt.Fprintln(w, "             template=<go-template> (bare -o template lists the fields)")
 }
 
 func agentUsageErr() error {
@@ -152,52 +144,40 @@ func agentUsageErr() error {
 	return fmt.Errorf("agent: a subcommand is required (try: install)")
 }
 
-// agentInstallCmd writes the embedded skills for the named platform into dir
-// (default CWD). Unknown platforms error explicitly rather than silently doing
-// nothing, so demand is visible.
+// agentInstallCmd writes the embedded skills into every destination directory
+// named as a positional (repo-relative under --dir), and maintains the AGENTS.md
+// section when --agents-md is set. Destinations are explicit, never inferred
+// from an agent-host name: magus writes the standard format where told and stays
+// out of the host-specific business.
 func agentInstallCmd(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
 	dir := fset.String("dir", ".", "Repo directory to install into")
 	force := fset.Bool("force", false, "Overwrite existing installed skill files")
-	hooks := fset.Bool("hooks", true, "For claude: merge the PreToolUse guard hook into .claude/settings.json")
+	agentsMD := fset.Bool("agents-md", false, "Maintain the managed magus section in AGENTS.md")
 	fset.Usage = func() { agentUsage(os.Stderr) }
-	if err := fset.Parse(args); err != nil {
+	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
-	rest := fset.Args()
-	if len(rest) == 0 {
+	dests := fset.Args()
+	if len(dests) == 0 && !*agentsMD {
 		agentUsage(os.Stderr)
-		return fmt.Errorf("agent install: a platform is required (supported: %s)", strings.Join(platformNames(), ", "))
-	}
-	// The platform is the first positional. Re-parse the tail so a flag written after
-	// it (agent install claude --force) is honored, not only flags written before.
-	// A second positional is rejected below, so the re-parse only ever sees flags.
-	platform := rest[0]
-	if err := fset.Parse(rest[1:]); err != nil {
-		return err
-	}
-	if extra := fset.Args(); len(extra) > 0 {
-		return fmt.Errorf("agent install: one platform at a time, unexpected %q", extra[0])
+		return fmt.Errorf("agent install: name at least one destination directory (e.g. .claude/skills) or pass --agents-md")
 	}
 
 	var written []string
-	var err error
-	switch {
-	case platform == agentsMDPlatform:
-		written, err = installAgentsSection(*dir)
-	case skillDirPlatforms[platform] != "":
-		written, err = installSkillTree(*dir, skillDirPlatforms[platform], *force)
-		if err == nil && platform == "claude" && *hooks {
-			var hookWritten []string
-			hookWritten, err = installClaudeHooks(*dir)
-			written = append(written, hookWritten...)
+	for _, dest := range dests {
+		w, err := installSkillTree(*dir, dest, *force)
+		if err != nil {
+			return err
 		}
-	default:
-		return fmt.Errorf("agent install: platform %q is not supported yet (supported: %s); file an issue to request it",
-			platform, strings.Join(platformNames(), ", "))
+		written = append(written, w...)
 	}
-	if err != nil {
-		return err
+	if *agentsMD {
+		w, err := installAgentsSection(*dir)
+		if err != nil {
+			return err
+		}
+		written = append(written, w...)
 	}
 	for _, p := range written {
 		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
@@ -344,24 +324,24 @@ var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-
 // skill-dir install: every install writes it, so its stamp speaks for the set.
 const anchorSkillRel = "magus-query/SKILL.md"
 
-// skillStatus is the verdict of checking one platform's install against this
+// skillStatus is the verdict of checking one installed location against this
 // binary: whether it is present, and whether it has fallen behind (Stale). The
 // happy value is {Installed: true, Stale: false}.
 type skillStatus struct {
-	Platform  string
+	Location  string
 	Installed bool // the install exists
 	Stale     bool // it exists but its version predates the binary's
 	Detail    string
 }
 
-// checkSkillStatuses inspects every supported platform's install under dir and
-// returns one status per platform that has anything on disk, sorted by platform
-// name. An empty slice means nothing is installed anywhere. It is the read half
-// of the generated-by stamps: install writes the version, this tells an operator
-// or CI when a re-install is due after a magus upgrade.
+// checkSkillStatuses inspects every well-known skill location under dir plus the
+// AGENTS.md section, returning one status per location that has anything on
+// disk, sorted by location. An empty slice means nothing is installed anywhere.
+// It is the read half of the generated-by stamps: install writes the version,
+// this tells an operator or CI when a re-install is due after a magus upgrade.
 func checkSkillStatuses(dir string) []skillStatus {
 	var out []skillStatus
-	for platform, dest := range skillDirPlatforms {
+	for _, dest := range wellKnownSkillDirs {
 		path := filepath.Join(dir, dest, anchorSkillRel)
 		body, err := os.ReadFile(path)
 		if err != nil {
@@ -370,37 +350,38 @@ func checkSkillStatuses(dir string) []skillStatus {
 			}
 			// Present but unreadable (permissions, IO) is a real problem, not "absent":
 			// report it as drift so a --strict CI gate fails instead of passing green.
-			out = append(out, skillStatus{Platform: platform, Installed: true, Stale: true,
+			out = append(out, skillStatus{Location: dest, Installed: true, Stale: true,
 				Detail: "cannot read installed skill: " + err.Error()})
 			continue
 		}
-		out = append(out, gradeStamp(platform, string(body)))
+		out = append(out, gradeStamp(dest, "magus agent install "+dest+" --force", string(body)))
 	}
 	if body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md")); err == nil {
 		if section := agentsSectionRe.Find(body); section != nil {
-			out = append(out, gradeStamp(agentsMDPlatform, string(section)))
+			out = append(out, gradeStamp("AGENTS.md", "magus agent install --agents-md", string(section)))
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Platform < out[j].Platform })
+	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })
 	return out
 }
 
-// gradeStamp grades one install's stamped versions against the running binary.
-func gradeStamp(platform, body string) skillStatus {
+// gradeStamp grades one install's stamped versions against the running binary;
+// reinstall is the command to suggest when it has fallen behind.
+func gradeStamp(location, reinstall, body string) skillStatus {
 	m := footerVersionRe.FindStringSubmatch(body)
 	if m == nil {
-		return skillStatus{Platform: platform, Installed: true, Stale: true,
-			Detail: "installed skill has no version stamp; re-run: magus agent install " + platform + " --force"}
+		return skillStatus{Location: location, Installed: true, Stale: true,
+			Detail: "installed skill has no version stamp; re-run: " + reinstall}
 	}
 	// The regex captured \d+ for both groups, so Atoi cannot fail here.
 	skillVer, _ := strconv.Atoi(m[1])
 	schemaVer, _ := strconv.Atoi(m[2])
 	if skillVer < agentSkillVersion || schemaVer < types.KnowledgeSchemaVersion {
-		return skillStatus{Platform: platform, Installed: true, Stale: true,
-			Detail: fmt.Sprintf("stale (skill v%d/schema v%d; binary v%d/schema v%d); re-run: magus agent install %s --force",
-				skillVer, schemaVer, agentSkillVersion, types.KnowledgeSchemaVersion, platform)}
+		return skillStatus{Location: location, Installed: true, Stale: true,
+			Detail: fmt.Sprintf("stale (skill v%d/schema v%d; binary v%d/schema v%d); re-run: %s",
+				skillVer, schemaVer, agentSkillVersion, types.KnowledgeSchemaVersion, reinstall)}
 	}
-	return skillStatus{Platform: platform, Installed: true,
+	return skillStatus{Location: location, Installed: true,
 		Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", skillVer, schemaVer)}
 }
 
@@ -451,126 +432,119 @@ func agentSampleCmd() error {
 	return nil
 }
 
-// agentHookCommand is the shell line installed into .claude/settings.json as a
-// PreToolUse hook on the Bash tool. It fails open: when magus is not on PATH the
-// hook exits 0 and the tool call proceeds unguarded, rather than erroring on
-// every Bash call in a repo that has the config but not the binary.
-const agentHookCommand = "command -v magus >/dev/null 2>&1 || exit 0; exec magus agent hook"
-
-// installClaudeHooks merges the magus PreToolUse guard hook into
-// <dir>/.claude/settings.json, preserving every other key. Idempotent: an entry
-// whose command invokes `magus agent hook` is replaced in place, never
-// duplicated. A settings file that fails to parse is left untouched (refusing
-// beats clobbering a hand-edited config).
-func installClaudeHooks(dir string) ([]string, error) {
-	path := filepath.Join(dir, ".claude", "settings.json")
-	settings := map[string]any{}
-	if body, err := os.ReadFile(path); err == nil {
-		if jerr := json.Unmarshal(body, &settings); jerr != nil {
-			return nil, fmt.Errorf("agent install: %s is not valid JSON, refusing to touch it: %w", path, jerr)
-		}
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("agent install: read %s: %w", path, err)
-	}
-
-	hooks, ok := settings["hooks"].(map[string]any)
-	if !ok {
-		hooks = map[string]any{}
-		settings["hooks"] = hooks
-	}
-	pre, _ := hooks["PreToolUse"].([]any)
-
-	entry := map[string]any{
-		"matcher": "Bash",
-		"hooks": []any{map[string]any{
-			"type":    "command",
-			"command": agentHookCommand,
-			"timeout": 10,
-		}},
-	}
-	replaced := false
-	for i, e := range pre {
-		if preToolUseEntryIsMagus(e) {
-			pre[i] = entry
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		pre = append(pre, entry)
-	}
-	hooks["PreToolUse"] = pre
-
-	// A plain Marshal would HTML-escape the > and & in the hook command into
-	// > escapes a human then has to read in their settings file.
-	var buf strings.Builder
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(settings); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(path, []byte(buf.String()), 0o644); err != nil {
-		return nil, fmt.Errorf("agent install: write %s: %w", path, err)
-	}
-	return []string{filepath.Join(".claude", "settings.json")}, nil
+// guardVerdict is the neutral result of evaluating one shell command: exactly
+// one decision, carrying the field that decision needs. This envelope is the
+// stable contract an agent host's hook config shapes with -o template (or
+// parses from -o json); the host-specific response dialects live in the
+// documentation, never in code.
+type guardVerdict struct {
+	SchemaVersion int    `json:"schema_version"`
+	Decision      string `json:"decision"`          // deny | advise | pass
+	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
+	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
 }
 
-// preToolUseEntryIsMagus reports whether a PreToolUse entry is the one magus
-// manages: any of its command hooks invokes `magus agent hook`.
-func preToolUseEntryIsMagus(e any) bool {
-	m, ok := e.(map[string]any)
-	if !ok {
-		return false
+const guardSchemaVersion = 1
+
+// agentHookCmd implements `magus agent hook`: evaluate one shell command
+// against the guard rules and emit a verdict. The command arrives as arguments,
+// as raw stdin, or extracted from a JSON event on stdin via --from-json
+// <dot.path> - whichever the calling agent host can produce. The verdict goes
+// out through the standard -o arm, so a host-specific response shape is a
+// documented template, not code. A guard must fail open: an unreadable event is
+// a pass, never an error that would block every tool call.
+func agentHookCmd(in io.Reader, out io.Writer, args []string) error {
+	fset := flag.NewFlagSet("agent hook", flag.ContinueOnError)
+	fromJSON := fset.String("from-json", "", "Extract the command from a JSON document on stdin at this dot-separated path (e.g. tool_input.command)")
+	output := fset.String("output", "", outputFormatHelp)
+	fset.StringVar(output, "o", "", "Short for --output")
+	fset.Usage = func() { agentUsage(os.Stderr) }
+	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+		return err
 	}
-	inner, _ := m["hooks"].([]any)
-	for _, h := range inner {
-		hm, ok := h.(map[string]any)
+	opts, err := ResolveOutput(*output)
+	if err != nil {
+		return err
+	}
+
+	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
+	if command, ok := readGuardCommand(in, fset.Args(), *fromJSON); ok {
+		switch v := evaluateBashGuard(command); {
+		case v.Deny != "":
+			verdict.Decision = "deny"
+			verdict.Reason = v.Deny
+		case v.Context != "":
+			verdict.Decision = "advise"
+			verdict.Context = v.Context
+		}
+	}
+	switch opts.Format {
+	case FormatText:
+		switch verdict.Decision {
+		case "deny":
+			fmt.Fprintln(out, "deny: "+verdict.Reason)
+		case "advise":
+			fmt.Fprintln(out, "advise: "+verdict.Context)
+		default:
+			fmt.Fprintln(out, "pass")
+		}
+		return nil
+	case FormatName:
+		fmt.Fprintln(out, verdict.Decision)
+		return nil
+	}
+	return writeFormatted(out, opts, verdict)
+}
+
+// readGuardCommand resolves the command string from the three input forms:
+// --from-json extraction, positional arguments (joined), or raw stdin (also the
+// "-" positional). The boolean is false when no command could be read - the
+// caller's fail-open path.
+func readGuardCommand(in io.Reader, args []string, fromJSON string) (string, bool) {
+	if fromJSON != "" {
+		doc, err := io.ReadAll(in)
+		if err != nil {
+			return "", false
+		}
+		s, err := extractJSONString(doc, fromJSON)
+		if err != nil {
+			// Visible in the host's debug log, invisible to the session: fail open.
+			fmt.Fprintln(os.Stderr, "agent hook: "+err.Error()+" (failing open)")
+			return "", false
+		}
+		return s, true
+	}
+	if len(args) > 0 && !(len(args) == 1 && args[0] == "-") {
+		return strings.Join(args, " "), true
+	}
+	b, err := io.ReadAll(in)
+	if err != nil || len(bytes.TrimSpace(b)) == 0 {
+		return "", false
+	}
+	return string(b), true
+}
+
+// extractJSONString unmarshals doc and walks a dot-separated path of object
+// keys to a string value.
+func extractJSONString(doc []byte, path string) (string, error) {
+	var v any
+	if err := json.Unmarshal(doc, &v); err != nil {
+		return "", fmt.Errorf("--from-json: stdin is not valid JSON: %w", err)
+	}
+	for _, key := range strings.Split(path, ".") {
+		m, ok := v.(map[string]any)
 		if !ok {
-			continue
+			return "", fmt.Errorf("--from-json: %s: no object to descend into at %q", path, key)
 		}
-		if cmd, _ := hm["command"].(string); strings.Contains(cmd, "magus agent hook") {
-			return true
+		if v, ok = m[key]; !ok {
+			return "", fmt.Errorf("--from-json: %s: key %q not found", path, key)
 		}
 	}
-	return false
-}
-
-// agentHookCmd implements `magus agent hook`: plumbing invoked by the installed
-// Claude Code PreToolUse hook. It reads one hook event as JSON on stdin and
-// emits a decision on stdout. Anything unrecognized - a malformed event, a
-// different event or tool, a command no rule matches - produces no output and
-// exit 0, which the hook contract reads as "proceed": a guard must fail open or
-// it turns every Bash call into a hard failure.
-func agentHookCmd(in io.Reader, out io.Writer) error {
-	var ev struct {
-		HookEventName string `json:"hook_event_name"`
-		ToolName      string `json:"tool_name"`
-		ToolInput     struct {
-			Command string `json:"command"`
-		} `json:"tool_input"`
+	s, ok := v.(string)
+	if !ok {
+		return "", fmt.Errorf("--from-json: %s: value is not a string", path)
 	}
-	if err := json.NewDecoder(in).Decode(&ev); err != nil {
-		return nil
-	}
-	if ev.HookEventName != "PreToolUse" || ev.ToolName != "Bash" {
-		return nil
-	}
-	v := evaluateBashGuard(ev.ToolInput.Command)
-	hso := map[string]any{"hookEventName": "PreToolUse"}
-	switch {
-	case v.Deny != "":
-		hso["permissionDecision"] = "deny"
-		hso["permissionDecisionReason"] = v.Deny
-	case v.Context != "":
-		hso["additionalContext"] = v.Context
-	default:
-		return nil
-	}
-	return json.NewEncoder(out).Encode(map[string]any{"hookSpecificOutput": hso})
+	return s, nil
 }
 
 // bashGuardVerdict classifies one Bash command line. Deny blocks the call with a

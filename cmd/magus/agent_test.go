@@ -51,7 +51,7 @@ func TestAgentsSectionIsPlainASCII(t *testing.T) {
 
 func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 	dir := t.TempDir()
-	written, err := installSkillTree(dir, skillDirPlatforms["claude"], false)
+	written, err := installSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
 	require.NotEmpty(t, written)
 
@@ -65,33 +65,33 @@ func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 	assert.Contains(t, string(body), "knowledge-schema-version:")
 }
 
-// TestInstallSkillTreePlatformsShareBytes proves the multi-platform promise: every
-// skill-dir platform receives byte-identical files, only the destination differs.
-func TestInstallSkillTreePlatformsShareBytes(t *testing.T) {
+// TestInstallSkillTreeDestinationsShareBytes proves the host-agnostic promise:
+// every destination receives byte-identical files, only the directory differs.
+func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 	dir := t.TempDir()
-	for _, dest := range skillDirPlatforms {
+	for _, dest := range wellKnownSkillDirs {
 		_, err := installSkillTree(dir, dest, false)
 		require.NoError(t, err)
 	}
-	claude, err := os.ReadFile(filepath.Join(dir, ".claude/skills", anchorSkillRel))
+	first, err := os.ReadFile(filepath.Join(dir, wellKnownSkillDirs[0], anchorSkillRel))
 	require.NoError(t, err)
-	for platform, dest := range skillDirPlatforms {
+	for _, dest := range wellKnownSkillDirs[1:] {
 		other, err := os.ReadFile(filepath.Join(dir, dest, anchorSkillRel))
 		require.NoError(t, err)
-		assert.Equal(t, string(claude), string(other), "platform %s must receive identical bytes", platform)
+		assert.Equal(t, string(first), string(other), "destination %s must receive identical bytes", dest)
 	}
 }
 
 func TestInstallSkillTreeRefusesThenForces(t *testing.T) {
 	dir := t.TempDir()
-	_, err := installSkillTree(dir, skillDirPlatforms["claude"], false)
+	_, err := installSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
 
-	_, err = installSkillTree(dir, skillDirPlatforms["claude"], false)
+	_, err = installSkillTree(dir, ".claude/skills", false)
 	require.Error(t, err, "a second install without --force must refuse")
 	assert.Contains(t, err.Error(), "already exists")
 
-	_, err = installSkillTree(dir, skillDirPlatforms["claude"], true)
+	_, err = installSkillTree(dir, ".claude/skills", true)
 	assert.NoError(t, err, "--force overwrites")
 }
 
@@ -155,19 +155,19 @@ func TestCheckSkillStatusesNothingInstalled(t *testing.T) {
 
 func TestCheckSkillStatusesCurrent(t *testing.T) {
 	dir := t.TempDir()
-	_, err := installSkillTree(dir, skillDirPlatforms["claude"], false)
+	_, err := installSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
 	_, err = installAgentsSection(dir)
 	require.NoError(t, err)
 
 	statuses := checkSkillStatuses(dir)
-	require.Len(t, statuses, 2, "one status per installed platform")
+	require.Len(t, statuses, 2, "one status per installed location")
 	for _, s := range statuses {
-		assert.True(t, s.Installed, "%s installed", s.Platform)
-		assert.False(t, s.Stale, "a fresh %s install is current", s.Platform)
+		assert.True(t, s.Installed, "%s installed", s.Location)
+		assert.False(t, s.Stale, "a fresh %s install is current", s.Location)
 	}
-	assert.Equal(t, "claude", statuses[0].Platform)
-	assert.Equal(t, agentsMDPlatform, statuses[1].Platform)
+	assert.Equal(t, ".claude/skills", statuses[0].Location)
+	assert.Equal(t, "AGENTS.md", statuses[1].Location)
 }
 
 func TestCheckSkillStatusesStale(t *testing.T) {
@@ -253,86 +253,73 @@ func TestEvaluateBashGuard(t *testing.T) {
 	}
 }
 
-// TestAgentHookCmd covers the stdin-to-stdout plumbing around the guard: a deny
-// decision serializes to the hook contract, an unmatched command and a malformed
-// event both produce no output (fail open), never an error.
+// TestAgentHookCmd covers the neutral plumbing around the guard: the three
+// input forms (arguments, raw stdin, --from-json extraction), the -o arm, and
+// the fail-open contract for unreadable input.
 func TestAgentHookCmd(t *testing.T) {
-	run := func(input string) string {
+	run := func(stdin string, args ...string) string {
 		var out strings.Builder
-		require.NoError(t, agentHookCmd(strings.NewReader(input), &out))
+		require.NoError(t, agentHookCmd(strings.NewReader(stdin), &out, args))
 		return out.String()
 	}
 
-	denied := run(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}`)
-	assert.Contains(t, denied, `"permissionDecision":"deny"`)
-	assert.Contains(t, denied, "magus-vcs")
+	// Argument input, default text output. A command with dash tokens rides
+	// behind the -- terminator so the flag parser leaves it alone.
+	assert.Equal(t, "pass\n", run("", "--", "ls", "-la"))
+	assert.True(t, strings.HasPrefix(run("", "git", "stash"), "deny: "))
 
-	reminded := run(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git commit -m x"}}`)
-	assert.Contains(t, reminded, `"additionalContext"`)
-	assert.NotContains(t, reminded, `"permissionDecision"`)
+	// Raw stdin input ("-" and bare both read stdin).
+	assert.True(t, strings.HasPrefix(run("git commit -m x", "-"), "advise: "))
+	assert.True(t, strings.HasPrefix(run("git stash"), "deny: "))
 
-	assert.Empty(t, run(`{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`))
-	assert.Empty(t, run(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}`))
-	assert.Empty(t, run(`{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{}}`))
-	assert.Empty(t, run(`not json`), "malformed input fails open")
+	// --from-json extraction from a host event document.
+	event := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}`
+	got := run(event, "--from-json", "tool_input.command", "-o", "json")
+	assert.Contains(t, got, `"decision": "deny"`)
+	assert.Contains(t, got, `"schema_version": 1`)
+	assert.Contains(t, got, "magus-vcs")
+
+	// A template renders a host dialect; pass renders empty, deny fills it.
+	tpl := `template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}`
+	assert.Contains(t, run(event, "--from-json", "tool_input.command", "-o", tpl), `"permissionDecision":"deny"`)
+	passEvent := `{"tool_input":{"command":"ls"}}`
+	assert.Empty(t, strings.TrimSpace(run(passEvent, "--from-json", "tool_input.command", "-o", tpl)))
+
+	// -o name is the bare decision word.
+	assert.Equal(t, "deny\n", run(event, "--from-json", "tool_input.command", "-o", "name"))
+
+	// Fail open: malformed JSON, a missing path, and empty stdin are all a pass.
+	assert.Equal(t, "pass\n", run("not json", "--from-json", "tool_input.command"))
+	assert.Equal(t, "pass\n", run(`{"other":1}`, "--from-json", "tool_input.command"))
+	assert.Equal(t, "pass\n", run(""))
 }
 
-// TestInstallClaudeHooksCreatesMergesIdempotent proves the settings merge: a
-// missing file is created, foreign keys survive, and re-install replaces the
-// managed entry instead of duplicating it.
-func TestInstallClaudeHooksCreatesMergesIdempotent(t *testing.T) {
-	dir := t.TempDir()
-	written, err := installClaudeHooks(dir)
+// TestExtractJSONString pins the dot-path walk and its error cases.
+func TestExtractJSONString(t *testing.T) {
+	doc := []byte(`{"a":{"b":"deep"},"top":"x","n":3}`)
+	s, err := extractJSONString(doc, "a.b")
 	require.NoError(t, err)
-	assert.Equal(t, []string{filepath.Join(".claude", "settings.json")}, written)
+	assert.Equal(t, "deep", s)
+	s, err = extractJSONString(doc, "top")
+	require.NoError(t, err)
+	assert.Equal(t, "x", s)
 
-	path := filepath.Join(dir, ".claude", "settings.json")
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), "magus agent hook")
-	assert.Contains(t, string(body), `"matcher": "Bash"`)
-
-	// Foreign keys and hooks survive the merge; ours is added alongside.
-	foreign := `{"permissions":{"allow":["Bash(ls *)"]},"hooks":{"PreToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"their-hook"}]}]}}`
-	require.NoError(t, os.WriteFile(path, []byte(foreign), 0o644))
-	_, err = installClaudeHooks(dir)
-	require.NoError(t, err)
-	body, err = os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Contains(t, string(body), "Bash(ls *)")
-	assert.Contains(t, string(body), "their-hook")
-	assert.Contains(t, string(body), "magus agent hook")
-
-	// Re-install: the managed entry is replaced in place, not appended again.
-	_, err = installClaudeHooks(dir)
-	require.NoError(t, err)
-	body, err = os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Equal(t, 1, strings.Count(string(body), "magus agent hook"))
-	assert.Equal(t, 1, strings.Count(string(body), "their-hook"))
-}
-
-// TestInstallClaudeHooksRefusesInvalidJSON: a hand-edited settings file that no
-// longer parses is an error, never a clobber.
-func TestInstallClaudeHooksRefusesInvalidJSON(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".claude", "settings.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte("{broken"), 0o644))
-	_, err := installClaudeHooks(dir)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "refusing")
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Equal(t, "{broken", string(body), "the broken file is left untouched")
+	_, err = extractJSONString(doc, "a.missing")
+	assert.ErrorContains(t, err, "not found")
+	_, err = extractJSONString(doc, "n")
+	assert.ErrorContains(t, err, "not a string")
+	_, err = extractJSONString(doc, "top.deeper")
+	assert.ErrorContains(t, err, "no object")
+	_, err = extractJSONString([]byte("nope"), "a")
+	assert.ErrorContains(t, err, "not valid JSON")
 }
 
 func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
 	doc := agentSampleDoc()
 	assert.Contains(t, doc, "# AGENTS.md")
-	assert.Contains(t, doc, "## Project")   // a project placeholder to fill in
-	assert.Contains(t, doc, "## magus")     // the reproduced magus block
-	assert.Contains(t, doc, vcsSafetyRule)  // the shared safety rule
+	assert.Contains(t, doc, "## Project")  // a project placeholder to fill in
+	assert.Contains(t, doc, "## magus")    // the reproduced magus block
+	assert.Contains(t, doc, vcsSafetyRule) // the shared safety rule
 	for _, r := range doc {
 		require.Less(t, r, rune(128), "sample AGENTS.md must be plain ASCII")
 	}

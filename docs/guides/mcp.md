@@ -178,7 +178,7 @@ logs and history). How you connect depends on the client:
 
   `claude mcp list` should then report `magus ... - Connected`. **Restart the
   Claude Code session** afterward: a session only discovers MCP tools (and skills
-  installed by `magus agent install claude`) at launch, so an already-open session
+  installed by `magus agent install .claude/skills`) at launch, so an already-open session
   will not see them until it is restarted.
 
 - **Claude Desktop / other IDE plugins** that take a Streamable-HTTP URL plus

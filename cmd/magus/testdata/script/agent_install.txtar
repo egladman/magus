@@ -1,5 +1,5 @@
-# magus agent install writes the four skills into the repo
-exec magus agent install claude
+# magus agent install writes the skills into every named destination directory
+exec magus agent install .claude/skills
 exists .claude/skills/magus-query/SKILL.md
 exists .claude/skills/magus-run/SKILL.md
 exists .claude/skills/magus-vcs/SKILL.md
@@ -7,30 +7,40 @@ exists .claude/skills/magus-architecture/SKILL.md
 grep 'name: magus-query' .claude/skills/magus-query/SKILL.md
 grep 'agent-skill-version: \d' .claude/skills/magus-query/SKILL.md
 
-# every skill-dir platform receives the same tree at its own destination
-exec magus agent install opencode
+# several destinations in one call; the destination is the caller's choice
+exec magus agent install .opencode/skills .agents/skills
 exists .opencode/skills/magus-query/SKILL.md
-exec magus agent install agents
 exists .agents/skills/magus-query/SKILL.md
 
-# codex installs a managed AGENTS.md section; re-install replaces, never duplicates
-exec magus agent install codex
+# --agents-md maintains a managed AGENTS.md section; re-install replaces, never duplicates
+exec magus agent install --agents-md
 grep 'magus:skills:begin' AGENTS.md
-exec magus agent install codex
+exec magus agent install --agents-md
 grep -count=1 'magus:skills:begin' AGENTS.md
 
 # a second skill-dir install refuses to clobber without --force
-! exec magus agent install claude
+! exec magus agent install .claude/skills
 stderr 'already exists'
 
-# --force overwrites in place
-exec magus agent install claude --force
+# --force overwrites in place, and may follow the positional
+exec magus agent install .claude/skills --force
 exists .claude/skills/magus-query/SKILL.md
 
-# an unsupported platform errors explicitly rather than doing nothing
-! exec magus agent install cursor
-stderr 'not supported yet'
-
-# a missing platform is an error
+# no destination and no --agents-md is an explicit error
 ! exec magus agent install
-stderr 'platform is required'
+stderr 'destination directory'
+
+# the hook evaluates a command from a host event and renders any dialect
+stdin event.json
+exec magus agent hook --from-json tool_input.command -o name
+stdout 'deny'
+stdin event.json
+exec magus agent hook --from-json tool_input.command -o 'template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}'
+stdout 'permissionDecision'
+
+# arguments work without stdin, and a benign command passes
+exec magus agent hook git status
+stdout 'pass'
+
+-- event.json --
+{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}

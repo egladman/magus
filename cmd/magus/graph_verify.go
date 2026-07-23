@@ -31,16 +31,16 @@ func graphVerify(_ context.Context, root string, args []string) error {
 
 	statuses := checkSkillStatuses(*dir)
 	if len(statuses) == 0 {
-		fmt.Println("agent skills: not installed (run: magus agent install claude)")
+		fmt.Println("agent skills: not installed (run: magus agent install <dir>, e.g. .claude/skills)")
 		return nil
 	}
 	anyStale := false
 	for _, status := range statuses {
 		if status.Stale {
 			anyStale = true
-			fmt.Printf("agent skills (%s): STALE - %s\n", status.Platform, status.Detail)
+			fmt.Printf("agent skills (%s): STALE - %s\n", status.Location, status.Detail)
 		} else {
-			fmt.Printf("agent skills (%s): %s\n", status.Platform, status.Detail)
+			fmt.Printf("agent skills (%s): %s\n", status.Location, status.Detail)
 		}
 	}
 

@@ -37,9 +37,12 @@ the gap where it will be found (the plans doc, a task, magus_memory).
 - The installed skills are generated: embedded in the binary, stamped with
   agentSkillVersion + knowledge schema version, verified by `magus graph
   verify`. Never hand-edit an installed copy; edit cmd/magus/skills/ and
-  re-run `magus agent install <platform> --force`.
-- Every platform receives identical bytes (a test asserts it). Supporting a
-  new platform means adding a destination, never forking content.
+  re-run `magus agent install <dest-dir> --force` (here: .claude/skills).
+- Every destination receives identical bytes (a test asserts it). magus is
+  agent-host agnostic: no host name appears in code. Host-specific glue (hook
+  event shapes, config dialects) is documentation over the neutral surfaces -
+  explicit install destinations, the agent hook verdict, --from-json
+  extraction, -o template rendering - never a per-host code path.
 - Any change to skill content or the tool surface it documents bumps
   agentSkillVersion with a changelog line.
 - Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the

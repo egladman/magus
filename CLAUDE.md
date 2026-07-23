@@ -12,7 +12,7 @@ hand-edit it.
 
 - `.claude/skills/magus-*` are INSTALLED copies (stamped, checked by
   `magus graph verify`); edit the sources in `cmd/magus/skills/` and re-run
-  `magus agent install claude --force`. Exception: `magus-skill-authoring`
+  `magus agent install .claude/skills --force`. Exception: `magus-skill-authoring`
   is hand-authored - read it before touching the agent surface.
 - Record decisions worth keeping (with the why) via the `magus_memory` MCP
   tool; read its status/decisions files at session start.
@@ -28,7 +28,7 @@ hand-edit it.
 - Test: `magus run test` (or `go test ./...`)
 - Lint + vet + vuln: `magus run lint`
 - Final gate before committing (and especially before pushing): `magus affected ci
-  --no-default-charms` - the full pipeline (lint, build, test, coverage) over
+--no-default-charms` - the full pipeline (lint, build, test, coverage) over
   affected projects with the local `rw` charm stripped, so `generate` runs as a
   drift gate exactly as CI does. Plain `magus affected ci` auto-writes generated
   output locally (the charm note below) and can hide uncommitted-gen drift that
@@ -36,7 +36,7 @@ hand-edit it.
 - Regenerate generated files: `magus run generate`, then commit.
 - Charm note: `magus.yaml` sets `default_charms: [rw]`, so every local run carries
   the `rw` charm implicitly - plain `magus affected ci` is exactly `magus affected
-  ci:rw`, and `generate` writes its output locally. CI strips the default
+ci:rw`, and `generate` writes its output locally. CI strips the default
   (`--no-default-charms` / the ci anchor), so there the same run carries no `rw`
   and `generate` acts as a pure drift gate instead.
 
