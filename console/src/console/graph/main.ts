@@ -1734,44 +1734,6 @@ function groupColorFor(node: GNode) {
   return null;
 }
 
-function addGroup() {
-  const q = (el("group-query") as HTMLInputElement).value.trim();
-  if (!q) return;
-  if (!graph.relIndex) graph.relIndex = relationIndex();
-  groups.push({
-    query: q,
-    color: (el("group-color") as HTMLInputElement).value,
-    terms: parseQuery(q),
-  });
-  (el("group-query") as HTMLInputElement).value = "";
-  renderGroups();
-  draw();
-}
-
-function renderGroups() {
-  const list = el("group-list") as HTMLElement;
-  list.innerHTML = groups
-    .map(
-      (g, i) =>
-        '<span class="console-graph-colorgroup__chip"><span class="console-graph-colorgroup__swatch" style="background:' +
-        escapeHtml(g.color) +
-        '"></span>' +
-        escapeHtml(g.query) +
-        '<button type="button" class="pf-v6-c-button pf-m-plain pf-m-small console-graph-colorgroup__remove" data-i="' +
-        i +
-        '" aria-label="Remove group">' +
-        '<span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span></button></span>',
-    )
-    .join("");
-  list.querySelectorAll<HTMLElement>(".console-graph-colorgroup__remove").forEach((b) =>
-    b.addEventListener("click", () => {
-      groups.splice(Number(b.dataset.i), 1);
-      renderGroups();
-      draw();
-    }),
-  );
-}
-
 // ---- query grammar (the browser twin of `magus query`) ---------------------
 // The SAME fielded grammar the CLI speaks: space-separated terms are ANDed;
 // field filters kind:/project:/relation:/id:/symbol:; free text matches
@@ -3340,7 +3302,6 @@ function applyPreset(presetId: string) {
     document
       .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
       .forEach((b) => b.removeAttribute("data-active"));
-    renderGroups();
     draw();
     updateHash();
     return;
@@ -3358,7 +3319,6 @@ function applyPreset(presetId: string) {
     if (g.nodeSet) entry.nodeSet = g.nodeSet;
     groups.push(entry);
   }
-  renderGroups();
   draw();
   updateHash();
 }
@@ -4130,19 +4090,6 @@ function bootWireEvents() {
       if (preset) applyPreset(preset);
     });
   });
-
-  // Color groups: add a query -> color painting.
-  const groupAdd = el("group-add");
-  const groupQuery = el("group-query");
-  if (groupAdd) {
-    groupAdd.addEventListener("click", addGroup);
-    groupQuery?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        addGroup();
-      }
-    });
-  }
 
   // Live force sliders: adjust the running simulation and gently reheat.
   const wireForce = (id: string, apply: (v: number) => void) => {
