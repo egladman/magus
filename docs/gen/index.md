@@ -99,6 +99,7 @@ A `magusfile.buzz` at the repo root declares your targets as exported functions 
 each one composes operations from the spells you bind:[^playground]
 
 <!-- magus-run-recorder -->
+
 ```buzz
 import "magus";
 import "magus/spell/go";
@@ -347,7 +348,7 @@ The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces b
 
 magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships an agent surface built on the knowledge graph, so an agent asks magus instead of grepping and guessing.
 
-- **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. Install them with `magus agent install claude` (or `codex`, `opencode`).
+- **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. Install them into whatever directory your agent host reads: `magus agent install .claude/skills` (or `.opencode/skills`, `.agents/skills`, `--agents-md` for AGENTS.md hosts).
 - **The committed `MAGUS.md`** is a routing index, regenerated from the graph, that points an agent at the exact query for a given question.
 - **The MCP server** the daemon exposes lets an agent call magus tools directly over the protocol rather than shelling out.[^mcp]
 

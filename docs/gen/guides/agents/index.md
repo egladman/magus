@@ -1,6 +1,6 @@
 ---
 title: Agents
-description: How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.
+description: How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the guard hook any agent host can wire, the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.
 tags:
   [
     agents,
@@ -9,6 +9,8 @@ tags:
     MCP,
     MAGUS.md,
     AGENTS.md,
+    hooks,
+    guard,
     knowledge graph,
     memory,
     claude,
@@ -45,25 +47,26 @@ so an agent working inside one project gets a routing index sized to it.
 
 ## The skills
 
-`magus agent install <platform>` writes five Agent Skills into the platform's
-discovery location. Commit them so every teammate's agent shares the same
-instructions. The skills are one shared source embedded in the binary - the
-Agent Skills format (SKILL.md with name and description frontmatter) is a
-cross-agent spec, so every skill-directory platform receives identical bytes;
-platforms differ only in where they look:
+`magus agent install <dir>...` writes the skills into every destination
+directory you name. Commit them so every teammate's agent shares the same
+instructions. magus is agent-host agnostic: the skills are one shared source
+embedded in the binary in the cross-agent Agent Skills format (SKILL.md with
+name and description frontmatter), every destination receives identical bytes,
+and naming the directory your host discovers skills in is the only
+host-specific step:
 
-| platform   | writes                         | serves                                                    |
-| ---------- | ------------------------------ | --------------------------------------------------------- |
-| `claude`   | `.claude/skills/`              | Claude Code                                               |
-| `opencode` | `.opencode/skills/`            | OpenCode                                                  |
-| `agents`   | `.agents/skills/`              | any Agent Skills spec-compliant framework                 |
-| `codex`    | managed section in `AGENTS.md` | Codex and any AGENTS.md-reading agent (Aider, Droid, ...) |
+| destination         | read by                            |
+| ------------------- | ---------------------------------- |
+| `.agents/skills/`   | Agent Skills spec generic location |
+| `.claude/skills/`   | Claude Code                        |
+| `.opencode/skills/` | OpenCode                           |
 
-The `codex` form does not write skill files: it maintains a marker-delimited
-magus section inside `AGENTS.md` (created if absent, replaced in place on
+For hosts that read the `AGENTS.md` contract (Codex, Aider, Droid, ...)
+instead of skill directories, `--agents-md` maintains a marker-delimited magus
+section inside `AGENTS.md` (created if absent, replaced in place on
 re-install, other content untouched) carrying the same rules in compressed
-form. There are no per-model skill bodies anywhere - supporting a new platform
-means adding a destination, not writing new instructions.
+form. There are no per-model skill bodies anywhere - supporting a new host
+means naming a destination, not writing new instructions.
 
 - `magus-query`: find and relate domain entities with
   `query`/`explain`/`path`/`refs`/`stats` instead of grepping - the query
@@ -103,11 +106,11 @@ duplicated line in every session:
 ## Install and update
 
 ```sh
-magus agent install claude            # writes .claude/skills/, refuses to overwrite
-magus agent install claude --force    # overwrite after a magus upgrade
-magus agent install codex             # writes/refreshes the AGENTS.md section
-magus graph verify                    # are the installed skills current? (per platform)
-magus graph verify --strict           # CI gate: non-zero exit when stale
+magus agent install .claude/skills          # name your host's skill dir; refuses to overwrite
+magus agent install .claude/skills --force  # overwrite after a magus upgrade
+magus agent install --agents-md             # write/refresh the AGENTS.md section
+magus graph verify                          # are the installed skills current? (per location)
+magus graph verify --strict                 # CI gate: non-zero exit when stale
 ```
 
 A host discovers skills at session start, so restart the agent session after a
@@ -118,9 +121,83 @@ rule applies to MCP tools; see [MCP](mcp.md) for connecting the daemon.
 Every installed file (and the AGENTS.md section marker) carries a generated
 stamp with the agent-skill version and the knowledge schema version.
 `magus graph verify` compares those stamps against the running binary for
-every platform it finds installed, so a magus upgrade that changes the tool
-surface shows up as actionable drift instead of silently wrong instructions.
-Do not hand-edit installed skills; change flows through re-running install.
+every well-known location it finds installed (`.agents/skills`,
+`.claude/skills`, `.opencode/skills`, and the AGENTS.md section), so a magus
+upgrade that changes the tool surface shows up as actionable drift instead of
+silently wrong instructions. Do not hand-edit installed skills; change flows
+through re-running install.
+
+## Guard hooks
+
+Most agent hosts can run a hook before executing a shell command. magus ships
+the evaluation, never the harness: `magus agent hook` reads one command,
+applies the guard rules, and emits a neutral verdict.
+
+- `deny`, with a `reason` written for the model: destructive whole-tree VCS
+  operations (`git stash`, `git reset --hard`, `git checkout .`,
+  `git restore .`, `git clean -f`) that permanently destroy uncommitted and
+  untracked work, including a concurrent agent's.
+- `advise`, with `context` to inject while the call proceeds: `git commit` and
+  `git add` (classify the dirty tree first) and raw language tools like
+  `go test` or `pytest` (a magus target covers the work).
+- `pass`: everything else.
+
+That verdict is the whole contract. The command arrives however your host can
+produce it: as arguments, as raw stdin, or extracted from a JSON event on
+stdin with `--from-json <dot.path>`. The verdict leaves through the standard
+output arm: `-o json` (a schema-versioned envelope), `-o yaml`, `-o name` (the
+bare decision word), or `-o template=<go-template>` to render your host's
+response dialect directly - bare `-o template` lists the fields. A host
+integration is therefore a few lines of configuration you own; magus carries
+no host-specific code. An unreadable event fails open as a `pass`: a guard
+that errors on every tool call is worse than no guard.
+
+```sh
+magus agent hook -- git stash                 # deny: whole-tree git stash destroys ...
+echo "go test ./..." | magus agent hook -     # advise: a magus target covers this ...
+magus agent hook -o template                  # list the fields -o json / -o template see
+```
+
+### Claude Code
+
+A `PreToolUse` hook on the `Bash` tool in `.claude/settings.json`. The
+`command -v` prefix fails open when magus is not on PATH; the template renders
+Claude Code's response dialect, emitting nothing on a `pass`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v magus >/dev/null 2>&1 || exit 0; exec magus agent hook --from-json tool_input.command -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Other hosts
+
+Every hook-capable host follows the same three-step recipe: extract the
+command string from the host's event, hand it to `magus agent hook`, and map
+the verdict onto the host's response. As of mid-2026 that covers, at least:
+Cursor (`.cursor/hooks.json`, a `beforeShellExecution` hook mapping deny and
+advise onto `permission` and `agent_message`), Gemini CLI
+(`.gemini/settings.json`, a `BeforeTool` hook with a `run_shell_command`
+matcher mapping deny onto `decision` and `reason`), OpenCode (a
+`.opencode/plugins/` TypeScript plugin whose `tool.execute.before` throws the
+`reason` on deny), and Codex (feature-gated hooks accepting the same response
+shape as Claude Code, plus declarative command rules). Their event shapes and
+response fields are those products' surfaces and change on their schedule -
+consult each host's hook documentation for current field names. The magus side
+of the recipe never changes.
 
 ## The MCP daemon
 
