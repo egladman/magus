@@ -18,7 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -169,11 +169,14 @@ func List(root string) ([]Record, error) {
 		}
 		rec, err := readRecordFile(filepath.Join(rdir, e.Name()))
 		if err != nil {
-			return nil, err
+			// A record is agent-written and hand-editable, so one malformed file (bad
+			// frontmatter, unreadable) must not take down the whole listing. Skip it and
+			// keep going rather than fail the console view and the MCP list wholesale.
+			continue
 		}
 		out = append(out, rec)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	slices.SortFunc(out, func(a, b Record) int { return strings.Compare(a.Name, b.Name) })
 	return out, nil
 }
 

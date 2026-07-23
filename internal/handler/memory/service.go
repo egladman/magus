@@ -1,9 +1,9 @@
 // Package memory is the console-facing MemoryService handler: an observable, editable view
 // over the durable agent-memory RECORDS the MCP magus_memory tool writes. It is a SECOND
-// door onto the EXACT on-disk store that tool maintains (internal/memory), never a second
-// store of its own, so the browser edit surface and the agent-facing tool share one set of
-// records. Its reason to exist: an agent can accumulate stale or bloated records, and a
-// human list/edit/delete surface is the safety valve.
+// door onto the EXACT on-disk store that tool maintains (internal/memory, aliased `store`
+// here), never a second store of its own, so the browser edit surface and the agent-facing
+// tool share one set of records. Its reason to exist: an agent can accumulate stale or
+// bloated records, and a human list/edit/delete surface is the safety valve.
 //
 // A record's body/refs are AGENT-WRITTEN and therefore UNTRUSTED: clients must render them
 // as text, never as trusted HTML. The daemon mounts this on the loopback listener behind
@@ -19,7 +19,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/egladman/magus/internal/memory"
+	store "github.com/egladman/magus/internal/memory"
 	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
 	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
 )
@@ -43,7 +43,7 @@ var _ memoryv1connect.MemoryServiceHandler = (*Service)(nil)
 // ListMemories returns every record in full. Pagination is wired in the contract but the
 // store returns all records today, so next_page_token is always empty.
 func (s *Service) ListMemories(_ context.Context, _ *connect.Request[memoryv1.ListMemoriesRequest]) (*connect.Response[memoryv1.ListMemoriesResponse], error) {
-	recs, err := memory.List(s.ws.Root())
+	recs, err := store.List(s.ws.Root())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -54,40 +54,52 @@ func (s *Service) ListMemories(_ context.Context, _ *connect.Request[memoryv1.Li
 	return connect.NewResponse(&memoryv1.ListMemoriesResponse{Memories: out}), nil
 }
 
-// UpdateMemory upserts a record keyed by memory.name. allow_missing=true creates the
-// record when absent (the upsert); allow_missing=false rejects an absent record with
-// NotFound. An empty update_mask is a full replace, the only mode today.
+// UpdateMemory upserts a record keyed by memory.name. allow_missing=true creates the record
+// when absent (the upsert); allow_missing=false rejects an absent record with NotFound. Only
+// a full replace is supported, so a non-empty update_mask is rejected rather than silently
+// dropping the fields the mask omits.
 func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.UpdateMemoryRequest]) (*connect.Response[memoryv1.UpdateMemoryResponse], error) {
+	if paths := req.Msg.GetUpdateMask().GetPaths(); len(paths) > 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("memory: partial update_mask is not supported; send the full record"))
+	}
 	root := s.ws.Root()
 	rec := recordFromProto(req.Msg.GetMemory())
+	// Validate up front so a schema violation is an honest InvalidArgument, distinct from the
+	// storage failures Put can also return (which are Internal below).
+	if err := store.Validate(rec); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	if !req.Msg.GetAllowMissing() {
-		if _, err := memory.Get(root, rec.Name); err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("memory: no record named "+rec.Name+" (set allow_missing to create it)"))
+		if _, err := store.Get(root, rec.Name); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, connect.NewError(connect.CodeNotFound, errors.New("memory: no record named "+rec.Name+" (set allow_missing to create it)"))
+			}
+			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 	}
-	stored, err := memory.Put(root, rec) // validates the schema
+	stored, err := store.Put(root, rec) // validation already passed, so an error here is storage
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&memoryv1.UpdateMemoryResponse{Memory: recordToProto(stored)}), nil
 }
 
-// DeleteMemory removes a record by name. allow_missing=true makes deleting an absent
-// record a no-op; otherwise an absent record is NotFound.
+// DeleteMemory removes a record by name. allow_missing=true makes deleting an absent record
+// a no-op; otherwise an absent record is NotFound. Any other failure is a storage error.
 func (s *Service) DeleteMemory(_ context.Context, req *connect.Request[memoryv1.DeleteMemoryRequest]) (*connect.Response[memoryv1.DeleteMemoryResponse], error) {
-	err := memory.Delete(s.ws.Root(), req.Msg.GetName(), req.Msg.GetAllowMissing())
+	err := store.Delete(s.ws.Root(), req.Msg.GetName(), req.Msg.GetAllowMissing())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&memoryv1.DeleteMemoryResponse{}), nil
 }
 
 // GetCursor returns the cursor snapshot, empty when never written.
 func (s *Service) GetCursor(_ context.Context, _ *connect.Request[memoryv1.GetCursorRequest]) (*connect.Response[memoryv1.GetCursorResponse], error) {
-	content, err := memory.ReadCursor(s.ws.Root())
+	content, err := store.ReadCursor(s.ws.Root())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -97,7 +109,7 @@ func (s *Service) GetCursor(_ context.Context, _ *connect.Request[memoryv1.GetCu
 // UpdateCursor overwrites the cursor snapshot.
 func (s *Service) UpdateCursor(_ context.Context, req *connect.Request[memoryv1.UpdateCursorRequest]) (*connect.Response[memoryv1.UpdateCursorResponse], error) {
 	content := req.Msg.GetContent()
-	if err := memory.WriteCursor(s.ws.Root(), content); err != nil {
+	if err := store.WriteCursor(s.ws.Root(), content); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&memoryv1.UpdateCursorResponse{Content: content}), nil
@@ -105,7 +117,7 @@ func (s *Service) UpdateCursor(_ context.Context, req *connect.Request[memoryv1.
 
 // recordToProto maps a stored record to the wire message, stamping the output-only
 // timestamps from the store's unix seconds.
-func recordToProto(r memory.Record) *memoryv1.Memory {
+func recordToProto(r store.Record) *memoryv1.Memory {
 	refs := make([]*memoryv1.MemoryRef, len(r.Refs))
 	for i, ref := range r.Refs {
 		refs[i] = &memoryv1.MemoryRef{Kind: refKindToProto(ref.Kind), Target: ref.Target}
@@ -126,12 +138,12 @@ func recordToProto(r memory.Record) *memoryv1.Memory {
 // recordFromProto maps an incoming wire message to a store record. Timestamps are
 // server-set (output only), so they are ignored here. An unspecified/unknown enum maps to
 // an empty string, which the store's Validate rejects.
-func recordFromProto(m *memoryv1.Memory) memory.Record {
-	refs := make([]memory.Ref, len(m.GetRefs()))
+func recordFromProto(m *memoryv1.Memory) store.Record {
+	refs := make([]store.Ref, len(m.GetRefs()))
 	for i, ref := range m.GetRefs() {
-		refs[i] = memory.Ref{Kind: refKindFromProto(ref.GetKind()), Target: ref.GetTarget()}
+		refs[i] = store.Ref{Kind: refKindFromProto(ref.GetKind()), Target: ref.GetTarget()}
 	}
-	return memory.Record{
+	return store.Record{
 		Name: m.GetName(), Type: typeFromProto(m.GetType()), Status: m.GetStatus(),
 		Body: m.GetBody(), Refs: refs, References: m.GetReferences(),
 	}
@@ -139,11 +151,11 @@ func recordFromProto(m *memoryv1.Memory) memory.Record {
 
 func typeToProto(s string) memoryv1.MemoryType {
 	switch s {
-	case memory.TypePointer:
+	case store.TypePointer:
 		return memoryv1.MemoryType_MEMORY_TYPE_POINTER
-	case memory.TypeDecision:
+	case store.TypeDecision:
 		return memoryv1.MemoryType_MEMORY_TYPE_DECISION
-	case memory.TypePlan:
+	case store.TypePlan:
 		return memoryv1.MemoryType_MEMORY_TYPE_PLAN
 	default:
 		return memoryv1.MemoryType_MEMORY_TYPE_UNSPECIFIED
@@ -153,11 +165,11 @@ func typeToProto(s string) memoryv1.MemoryType {
 func typeFromProto(t memoryv1.MemoryType) string {
 	switch t {
 	case memoryv1.MemoryType_MEMORY_TYPE_POINTER:
-		return memory.TypePointer
+		return store.TypePointer
 	case memoryv1.MemoryType_MEMORY_TYPE_DECISION:
-		return memory.TypeDecision
+		return store.TypeDecision
 	case memoryv1.MemoryType_MEMORY_TYPE_PLAN:
-		return memory.TypePlan
+		return store.TypePlan
 	default:
 		return ""
 	}
@@ -165,15 +177,15 @@ func typeFromProto(t memoryv1.MemoryType) string {
 
 func refKindToProto(s string) memoryv1.MemoryRefKind {
 	switch s {
-	case memory.RefKindQuery:
+	case store.RefKindQuery:
 		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_QUERY
-	case memory.RefKindNode:
+	case store.RefKindNode:
 		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_NODE
-	case memory.RefKindOutput:
+	case store.RefKindOutput:
 		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_OUTPUT
-	case memory.RefKindCommand:
+	case store.RefKindCommand:
 		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_COMMAND
-	case memory.RefKindDoc:
+	case store.RefKindDoc:
 		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_DOC
 	default:
 		return memoryv1.MemoryRefKind_MEMORY_REF_KIND_UNSPECIFIED
@@ -183,15 +195,15 @@ func refKindToProto(s string) memoryv1.MemoryRefKind {
 func refKindFromProto(k memoryv1.MemoryRefKind) string {
 	switch k {
 	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_QUERY:
-		return memory.RefKindQuery
+		return store.RefKindQuery
 	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_NODE:
-		return memory.RefKindNode
+		return store.RefKindNode
 	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_OUTPUT:
-		return memory.RefKindOutput
+		return store.RefKindOutput
 	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_COMMAND:
-		return memory.RefKindCommand
+		return store.RefKindCommand
 	case memoryv1.MemoryRefKind_MEMORY_REF_KIND_DOC:
-		return memory.RefKindDoc
+		return store.RefKindDoc
 	default:
 		return ""
 	}

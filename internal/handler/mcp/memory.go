@@ -156,9 +156,4 @@ func splitCommaList(s string) []string {
 	return out
 }
 
-// MemoryDir is the exported view of the per-repository memory directory, delegating to the
-// store's single definition. The console-facing MemoryService handler resolves the same
-// directory through this, so both doors operate on ONE set of files.
-func MemoryDir(root string) (string, error) { return memory.Dir(root) }
-
 var _ types.SpellDriver = (*memoryTool)(nil)

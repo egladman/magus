@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
 )
@@ -62,6 +63,20 @@ func TestUpdateMissingWithoutAllowMissingIsNotFound(t *testing.T) {
 	_, err := s.UpdateMemory(context.Background(), req(&memoryv1.UpdateMemoryRequest{Memory: pointer("ghost", "project:magus")}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+}
+
+// TestUpdateRejectsPartialMask proves a non-empty update_mask is refused rather than
+// silently full-replacing (which would wipe the fields the mask omits).
+func TestUpdateRejectsPartialMask(t *testing.T) {
+	s := newTestService(t)
+	req := &memoryv1.UpdateMemoryRequest{
+		Memory:       pointer("cache-op-surface", "project:magus"),
+		AllowMissing: true,
+		UpdateMask:   &fieldmaskpb.FieldMask{Paths: []string{"status"}},
+	}
+	_, err := s.UpdateMemory(context.Background(), connect.NewRequest(req))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 // TestUpdateRejectsInvalidRecord proves the store's schema validation surfaces as
