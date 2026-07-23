@@ -170,7 +170,6 @@
   display: flex; flex-direction: column;
   background: var(--pf-t--global--background--color--primary--default);
   border-left: 1px solid var(--pf-t--global--border--color--default);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.28);
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
 .console-shell-notify[hidden] { display: none; }
@@ -183,8 +182,17 @@
 .console-shell-notify::after,
 .console-shell-share::after,
 #console-refpanel::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.75rem;
-  background: linear-gradient(to bottom, transparent, var(--pf-t--global--background--color--secondary--default));
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6rem;
+  /* A tall, eased fade: it stays near-transparent through the first half, then ramps into the
+     status-bar grey, so the panel dissolves into the bar with no visible line. Multi-stop with
+     color-mix approximates an ease-in curve a plain two-stop linear cannot. */
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--pf-t--global--background--color--secondary--default) 22%, transparent) 48%,
+    color-mix(in srgb, var(--pf-t--global--background--color--secondary--default) 62%, transparent) 74%,
+    var(--pf-t--global--background--color--secondary--default) 100%
+  );
   pointer-events: none; z-index: 1;
 }
 .console-shell-notify__head {
@@ -373,8 +381,16 @@
   display: flex; flex-direction: column;
   background: var(--pf-t--global--background--color--primary--default);
   border-left: 1px solid var(--pf-t--global--border--color--default);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.28);
   z-index: var(--pf-t--global--z-index--300); /* same tier as the notification panel */
+}
+/* A left-only drop shadow via a pseudo-strip (not box-shadow): it lifts the panel off the content
+   behind it without a symmetric blur bleeding DOWN onto the status bar, which would fight the seamless
+   bottom fade. top/bottom:0 keeps it inside the panel's own height, so nothing spills past the seam. */
+.console-shell-notify::before,
+.console-shell-share::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: -18px; width: 18px;
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.16));
+  pointer-events: none;
 }
 .console-shell-share[hidden] { display: none; }
 .console-shell-share__head {
