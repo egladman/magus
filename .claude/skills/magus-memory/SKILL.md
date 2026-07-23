@@ -1,6 +1,6 @@
 ---
 name: magus-memory
-description: Keep durable, cross-session project memory in a magus workspace via the magus_memory tool - discrete, categorized RECORDS that persist outside the repo and survive model, session, and agent-host changes. Each record is a typed POINTER into the magus domain (a saved query, a graph node, an output ref, a command, a doc), not free prose; only a decision/plan carries a short why. Use at the start of any session (op=list to ramp), and record a decision the moment one is made. Requires a running magus daemon (MCP).
+description: Keep durable, cross-session project memory in a magus workspace via the magus_memory tool. Memory is discrete, categorized RECORDS that persist outside the repo and survive model, session, and agent-host changes. Each record is a typed POINTER into the magus domain (a saved query, a graph node, an output ref, a command, a doc), not free prose; only a decision/plan carries a short why. Use at the start of any session (op=list to ramp), and record a decision the moment one is made. Requires a running magus daemon (MCP).
 license: GPL-3.0-or-later
 compatibility: any-agent
 metadata:
@@ -13,19 +13,19 @@ metadata:
 
 The session ends; the next one may be a different model, a different agent host,
 or weeks later. `magus_memory` keeps a set of durable RECORDS per repository in
-the user's state directory - outside the repo (never committed, never another
-contributor's problem) and shared across every git worktree and branch. What a
-stronger model decided, a smaller model can read and apply.
+the user's state directory. They live outside the repo (never committed, never
+another contributor's problem) and are shared across every git worktree and
+branch. What a stronger model decided, a smaller model can read and apply.
 
 ## What a memory is (and is not)
 
 A memory is a typed POINTER into the magus domain, not a free-text note. The
 payload is one or more `refs`; the ref IS the memory. If you cannot name a ref
-kind for something, it is not a memory - it is a query you should just run.
+kind for something, it is not a memory. It is a query you should just run.
 
-The graph holds the truth (what the code IS); memory holds the curation (which
-query, node, output, or doc mattered, and - for a decision - the why the graph
-cannot derive).
+The graph holds the truth (what the code IS); memory holds the curation: which
+query, node, output, or doc mattered, and, for a decision, the why the graph
+cannot derive.
 
 Ref kinds (the closed set a ref may point at):
 
@@ -41,7 +41,7 @@ Record types (the subject axis):
 
 | type       | payload                                             | prose? |
 | ---------- | --------------------------------------------------- | ------ |
-| `pointer`  | refs only - the saved lens onto graphed knowledge   | no     |
+| `pointer`  | refs only, the saved lens onto graphed knowledge    | no     |
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
 
@@ -50,12 +50,12 @@ There is no free-text/`note` type. A claim that is true about the code is a
 
 ## Session start
 
-1. `magus_memory` {op: "list"} - what is already recorded? Ramp on it. Do not
+1. `magus_memory` {op: "list"} returns what is already recorded. Ramp on it. Do not
    re-litigate a decision recorded here; if new evidence contradicts one, say so
    explicitly and record the reversal (update the record's `status`).
-2. `magus_memory` {op: "cursor"} - where did the last session leave off?
+2. `magus_memory` {op: "cursor"} returns where the last session left off.
 
-Empty results just mean a fresh project - start recording.
+Empty results just mean a fresh project; start recording.
 
 ## Recording
 
@@ -74,7 +74,7 @@ Empty results just mean a fresh project - start recording.
 ## Scope boundaries
 
 - Intra-session working notes (checklists, partial findings) belong in
-  `magus_scratchpad`, which is per-workspace and disposable - not here.
+  `magus_scratchpad`, which is per-workspace and disposable, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity; the tool result

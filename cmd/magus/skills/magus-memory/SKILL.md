@@ -1,6 +1,6 @@
 ---
 name: magus-memory
-description: Keep durable, cross-session project memory in a magus workspace via the magus_memory tool: discrete, categorized RECORDS that persist outside the repo and survive model, session, and agent-host changes. Each record is a typed POINTER into the magus domain (a saved query, a graph node, an output ref, a command, a doc), not free prose; only a decision/plan carries a short why. Use at the start of any session (op=list to ramp), and record a decision the moment one is made. Requires a running magus daemon (MCP).
+description: Keep durable, cross-session project memory in a magus workspace via the magus_memory tool. Memory is discrete, categorized RECORDS that persist outside the repo and survive model, session, and agent-host changes. Each record is a typed POINTER into the magus domain (a saved query, a graph node, an output ref, a command, a doc), not free prose; only a decision/plan carries a short why. Use at the start of any session (op=list to ramp), and record a decision the moment one is made. Requires a running magus daemon (MCP).
 ---
 
 # Durable memory across sessions and models
