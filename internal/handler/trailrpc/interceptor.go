@@ -81,19 +81,41 @@ func methodName(procedure string) string {
 	return procedure
 }
 
+// options holds the interceptor's opt-in switches, set through Option values so the common
+// mutation-only mount stays a three-argument call.
+type options struct {
+	auditReads bool // when true, read verbs are recorded too, not just mutations
+}
+
+// Option configures an Interceptor. See WithAuditReads.
+type Option func(*options)
+
+// WithAuditReads makes the interceptor record READ calls (Get/List/...) in addition to mutations.
+// It is off by default because the trail is for consequential actions, not queries - but the memory
+// service opts in, since a read of the agent's own working notes is itself worth auditing there. The
+// token service does NOT set it, so its ListTokens stays unrecorded.
+func WithAuditReads() Option {
+	return func(o *options) { o.auditReads = true }
+}
+
 // Interceptor records every MUTATING unary call on the service it wraps to the trail under trailDir, with
 // the server-stamped actor and the given kind (one wire Kind per mounted service - the token service is
-// all token_lifecycle). Reads are not recorded (the trail is for consequential actions, not queries).
+// all token_lifecycle). Reads are not recorded by default (the trail is for consequential actions, not
+// queries); pass WithAuditReads to also record read verbs, as the memory service does.
 // Recording is best-effort and post-hoc: it never blocks or fails the RPC - trail.Append swallows I/O
 // errors, matching the trail's "never a precondition for the action it records" contract - and a failed
 // mutation is still recorded, with its error, because an attempted revoke is itself worth auditing.
-func Interceptor(trailDir, actor string, kind trail.Kind) connect.Interceptor {
+func Interceptor(trailDir, actor string, kind trail.Kind, opts ...Option) connect.Interceptor {
+	var cfg options
+	for _, o := range opts {
+		o(&cfg)
+	}
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			start := time.Now()
 			resp, err := next(ctx, req)
 			method := methodName(req.Spec().Procedure)
-			if mutating, _ := classify(method); mutating {
+			if mutating, _ := classify(method); mutating || cfg.auditReads {
 				ev := trail.Event{
 					Ts:      start.UnixMilli(),
 					Kind:    kind,

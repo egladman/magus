@@ -50,6 +50,7 @@ const (
 	Kind_KIND_CONFIG_CHANGE   Kind = 3 // reserved: magus.yaml changed on reload, or a `magus config set` mutation
 	Kind_KIND_TOKEN_LIFECYCLE Kind = 4 // reserved: a connector token was minted or revoked
 	Kind_KIND_SANDBOX_DENIAL  Kind = 5 // reserved: a target attempted a disallowed filesystem write
+	Kind_KIND_MEMORY          Kind = 6 // a console MemoryService action on the durable magus_memory files (reads audited too)
 )
 
 // Enum value maps for Kind.
@@ -61,6 +62,7 @@ var (
 		3: "KIND_CONFIG_CHANGE",
 		4: "KIND_TOKEN_LIFECYCLE",
 		5: "KIND_SANDBOX_DENIAL",
+		6: "KIND_MEMORY",
 	}
 	Kind_value = map[string]int32{
 		"KIND_UNSPECIFIED":     0,
@@ -69,6 +71,7 @@ var (
 		"KIND_CONFIG_CHANGE":   3,
 		"KIND_TOKEN_LIFECYCLE": 4,
 		"KIND_SANDBOX_DENIAL":  5,
+		"KIND_MEMORY":          6,
 	}
 )
 
@@ -618,14 +621,15 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\">\n" +
 	"\x12GetPayloadResponse\x12\x12\n" +
 	"\x04body\x18\x01 \x01(\fR\x04body\x12\x14\n" +
-	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\x8d\x01\n" +
+	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\x9e\x01\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12KIND_MCP_TOOL_CALL\x10\x01\x12\f\n" +
 	"\bKIND_JOB\x10\x02\x12\x16\n" +
 	"\x12KIND_CONFIG_CHANGE\x10\x03\x12\x18\n" +
 	"\x14KIND_TOKEN_LIFECYCLE\x10\x04\x12\x17\n" +
-	"\x13KIND_SANDBOX_DENIAL\x10\x05*E\n" +
+	"\x13KIND_SANDBOX_DENIAL\x10\x05\x12\x0f\n" +
+	"\vKIND_MEMORY\x10\x06*E\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

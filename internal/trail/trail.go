@@ -70,6 +70,11 @@ const (
 	KindConfigChange   Kind = "config_change"   // magus.yaml changed on reload, or a config-set mutation
 	KindTokenLifecycle Kind = "token_lifecycle" // a connector token minted or revoked
 	KindSandboxDenial  Kind = "sandbox_denial"  // a target attempted a disallowed filesystem write
+	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
+	// other kinds it audits READS too (List/Get), not just edits: the memory files are the agent's
+	// own working notes, so knowing when the operator inspected them is part of the governance story,
+	// and the mount opts into read auditing (the agent/MCP door is already audited separately).
+	KindMemory Kind = "memory"
 )
 
 // Outcome values; map to the wire Outcome enum.

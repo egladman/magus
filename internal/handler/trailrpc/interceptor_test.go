@@ -38,6 +38,7 @@ func TestClassify(t *testing.T) {
 		{"RevokeToken", true, true},
 		{"ClearCache", true, true},
 		{"DeleteMemory", true, true},
+		{"UpdateMemory", true, true},
 		{"PutMemory", true, true},
 		{"RotateActivities", true, true},
 		{"SyncGraph", true, true},
@@ -137,6 +138,55 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	got := events[0]
 	if got.Action != "RevokeToken" || got.Actor != "operator" || got.Kind != trail.KindTokenLifecycle || got.Outcome != trail.OutcomeOK {
 		t.Errorf("recorded event = %+v, want RevokeToken/operator/token_lifecycle/ok", got)
+	}
+}
+
+// TestInterceptorAuditReadsRecordsRead pins the WithAuditReads opt-in: with it set, a read verb
+// (ListTokens) IS recorded, alongside the mutation. This is the memory service's mode; the token
+// service (TestInterceptorRecordsMutationSkipsRead) leaves the option off and skips the read.
+func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
+	dir := t.TempDir()
+	path, handler := tokenv1connect.NewTokenServiceHandler(
+		fakeTokenService{},
+		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindMemory, WithAuditReads())),
+	)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := tokenv1connect.NewTokenServiceClient(srv.Client(), srv.URL)
+	ctx := context.Background()
+
+	// Both a read and a mutation are recorded when audit-reads is on.
+	if _, err := client.ListTokens(ctx, connect.NewRequest(&tokenv1.ListTokensRequest{})); err != nil {
+		t.Fatalf("ListTokens: %v", err)
+	}
+	if _, err := client.RevokeToken(ctx, connect.NewRequest(&tokenv1.RevokeTokenRequest{Identifier: "abc"})); err != nil {
+		t.Fatalf("RevokeToken: %v", err)
+	}
+
+	events, err := trail.ReadRecent(dir, 10)
+	if err != nil {
+		t.Fatalf("ReadRecent: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("recorded %d events, want 2 (the read AND the mutation, audit-reads on): %+v", len(events), events)
+	}
+	// Newest-first: the mutation, then the read. Both stamped memory/operator/ok.
+	got := []struct{ action, actor string }{
+		{events[0].Action, events[0].Actor},
+		{events[1].Action, events[1].Actor},
+	}
+	want := []struct{ action, actor string }{
+		{"RevokeToken", "operator"},
+		{"ListTokens", "operator"},
+	}
+	if got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("recorded events = %+v, want RevokeToken then ListTokens (both operator)", got)
+	}
+	if events[0].Kind != trail.KindMemory || events[1].Kind != trail.KindMemory {
+		t.Errorf("recorded kinds = %v,%v, want both %v", events[0].Kind, events[1].Kind, trail.KindMemory)
 	}
 }
 

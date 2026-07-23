@@ -29,6 +29,7 @@ enum Kind {
   KIND_CONFIG_CHANGE = 3;   // reserved: magus.yaml changed on reload, or a `magus config set` mutation
   KIND_TOKEN_LIFECYCLE = 4; // reserved: a connector token was minted or revoked
   KIND_SANDBOX_DENIAL = 5;  // reserved: a target attempted a disallowed filesystem write
+  KIND_MEMORY = 6;          // a console MemoryService action on the durable magus_memory files (reads audited too)
 }
 
 // Outcome is how the action ended.

@@ -394,7 +394,12 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// shareGuarded: memory is the operator's own working notes, not a read surface for a
 			// shared phone view. Its content is agent-written and must be rendered as text, never as
 			// trusted HTML.
-			memoryPath, memoryHandler := memoryv1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus))
+			// Audit every memory RPC to the trail, READS included (WithAuditReads): unlike the token
+			// service, inspecting the agent's own working notes is itself worth recording, so List/Get
+			// are audited alongside the edits. The actor is stamped "operator" from the mount tier, never
+			// caller-supplied. The agent/MCP door onto the same files is audited separately.
+			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindMemory, trailrpc.WithAuditReads()))
+			memoryPath, memoryHandler := memoryv1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit)
 			httpServer.Handle(memoryPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, memoryHandler))))
 			log.Info("[BRIDGE] memory service mounted", slog.String("path", memoryPath))
 
