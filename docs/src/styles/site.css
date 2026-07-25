@@ -1803,11 +1803,9 @@ a code {
    at bottom-right - plus an output panel that attaches below the whole block on first
    run. Both bars live inside .code-block so they read as part of the block, not a
    floating row; squaring every side the pre touches fuses all three into one piece. */
-.code-block.runnable {
-  /* Violet spine down the input block, rhyming with the output panel's violet left
-     border below, so a runnable example and its result read as one input/output pair. */
-  border-left: 3px solid var(--accent-violet);
-}
+/* No accent spine: the input/output pair is carried by the output panel attaching flush
+   below the block, separated by a single rule, the same way the standalone Playground
+   console does it. The bars already say the block is runnable. */
 .code-block.runnable > pre {
   margin-top: 0;
   margin-bottom: 0;
@@ -1824,14 +1822,21 @@ a code {
 }
 .runnable-bar-top {
   border-bottom: 1px solid var(--pico-muted-border-color);
-  border-top-left-radius: 0; /* square to meet the violet spine on the left */
+  border-top-left-radius: var(--pico-border-radius);
   border-top-right-radius: var(--pico-border-radius);
 }
 .runnable-bar-bottom {
   justify-content: flex-end; /* Run sits alone at the bottom-right */
   border-top: 1px solid var(--pico-muted-border-color);
-  border-bottom-left-radius: 0; /* square to meet the violet spine on the left */
+  border-bottom-left-radius: var(--pico-border-radius);
   border-bottom-right-radius: var(--pico-border-radius);
+}
+/* The output panel attaches flush below, so the bar it meets must not round into it. The
+   panel is a SIBLING of .code-block (run-example.ts inserts it after the block), hence the
+   next-sibling test rather than a descendant one. */
+.code-block.runnable:has(+ .runnable-output) .runnable-bar-bottom {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 .run-example {
   padding: 0.2rem 0.65rem;
@@ -1918,24 +1923,30 @@ a code {
 .runnable-bar-top .runnable-copy {
   margin-left: auto; /* push to the right edge of the top bar, opposite Open in Playground */
 }
+/* Program output, not more editor: flush against the block above (no top margin) and set
+   on the flat code surface rather than the bars' sectioning fill, so the eye reads block-
+   then-result instead of a third bar. The single top rule is the only separator. */
 .runnable-output {
-  margin: 0.4rem 0 1rem;
+  margin: 0 0 1rem;
   padding: 0.6rem 0.75rem;
-  background: var(--pico-card-sectioning-background-color);
-  border-left: 3px solid var(--accent-violet, var(--pico-primary));
+  background: var(--pico-code-background-color);
+  border-top: 1px solid var(--pico-muted-border-color);
+  border-bottom-left-radius: var(--pico-border-radius);
+  border-bottom-right-radius: var(--pico-border-radius);
   font-size: 0.9rem;
   white-space: pre-wrap;
 }
+/* A failed run recolors the separator rule - the only border this panel has. */
 .runnable-output.failed {
-  border-left-color: var(--pico-del-color, #b3261e);
+  border-top-color: var(--pico-del-color, #b3261e);
 }
 
 /* Glossary term: the render pass auto-links the first occurrence of each glossary term
    (lib/glossary.buzz). Styled as a Medium-style highlight - a muted highlighter-yellow
    marker swipe (--glossary-highlight) with a subtle marker underline - so an indexed term
    reads as a distinct kind of thing, NOT another underlined navigation link, and without
-   spending more of the violet accent (which already carries the reveal seam and the
-   runnable I/O spine). The tint deepens on hover/focus and while its reveal is open. The
+   spending more of the violet accent (which already carries the reveal seam). The tint
+   deepens on hover/focus and while its reveal is open. The
    underline is an inset box-shadow (no layout shift); box-decoration-break keeps the
    highlight intact across line wraps. glossary-terms.js enhances it into a hover popover
    and a click reveal; with no JS it is still a plain link to the glossary entry. */
