@@ -60,7 +60,7 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
 
       - name: Preflight
         run: magus doctor
@@ -116,15 +116,18 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
 
       # Expose ACTIONS_RESULTS_URL + ACTIONS_RUNTIME_TOKEN to the magus process so
       # the remote-cache backend (magusfiles/cache.buzz) can reach the GitHub
       # Actions Cache service — the runner doesn't pass them to `run:` steps.
       - uses: crazy-max/ghaction-github-runtime@b3a9207c0e1ef41f4cf215303c976869d0c2c1c4 # v3.0.0
 
-      - name: Install webkit (Wails native build deps)
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+      # liblzma-dev/libzstd-dev: setup-magus never installs these (its own
+      # bootstrap build is CGO_ENABLED=0) - but `magus run ci` below compiles
+      # internal/codec's cgo path for real, so this job installs its own.
+      - name: Install native build dependencies (webkit, codec)
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev liblzma-dev libzstd-dev
 
       - name: Annotate affected projects
         continue-on-error: true
@@ -172,7 +175,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
 
       # Restore the prior history, fold in this run's shard histories, and persist.
       - uses: ./.github/actions/magus
@@ -194,7 +197,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
       - name: Confirm the arm64 binary actually installed and runs
         run: |
           set -euo pipefail
@@ -203,6 +206,29 @@ jobs:
             echo "expected an ARM aarch64 binary on PATH" >&2
             exit 1
           }
+
+  # The main matrix pins SETUP_MAGUS_VERSION, which normally resolves via the
+  # prebuilt path - nothing else in CI ever exercises setup-magus's source
+  # build (isolated clone, the ancestor-of-main supply-chain check, the
+  # CGO_ENABLED=0 bootstrap compile). This job forces that path directly.
+  # git-ref targets this repo's own default branch (not a hardcoded "main")
+  # so the ancestor check passes trivially and self-corrects if the default
+  # branch is ever renamed.
+  setup-magus-source-smoke:
+    name: setup-magus (source build smoke test)
+    needs: preflight
+    if: needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.event.repository.default_branch }}
+      - name: Confirm the source-built binary actually runs
+        run: magus version
 
   # postflight is the fan-in: once the matrix joins, summarize the whole run's
   # behavioral code analysis (hotspots, affinity, ownership, trend) into the job
@@ -222,7 +248,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-magus
         with:
-          version: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
       - name: Postflight (insight report → step summary)
         # Scope to the root project so this emits exactly one whole-workspace report
         # (a bare `magus run postflight` would fan out across every project).
