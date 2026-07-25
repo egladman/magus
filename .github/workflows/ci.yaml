@@ -14,17 +14,13 @@ permissions:
   contents: read
 
 env:
-  # Release tag to install; empty builds from source. Deliberately NOT named
-  # MAGUS_VERSION: magus claims the MAGUS_ env prefix for config, and its doctor
-  # env check (run by preflight) fails CI on any unknown MAGUS_* variable.
-  SETUP_MAGUS_VERSION: 'v0.1.0'
   # Exercise the encoding/json/v2 codec across all jobs (shim falls back to v1).
   GOEXPERIMENT: jsonv2
   # PRs open the cache read-only (no local writes, no remote push) so a PR can't
   # poison the shared cache; pushes to main publish.
   MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
   # Remote cache (GitHub Actions Cache v2). Running INSECURE: artifacts are shared
-  # unsigned. Acceptable here as trusted single-repo CI — PRs are read-only
+  # unsigned. Acceptable here as trusted single-repo CI: PRs are read-only
   # (MAGUS_CACHE_IMMUTABLE) and GitHub scopes a PR's cache away from main, so only
   # main pushes write the shared entries. To switch to signed later: set
   # MAGUS_CACHE_REMOTE_INSECURE to '', set the MAGUS_CACHE_PUBLIC_KEY variable, and
@@ -43,9 +39,10 @@ jobs:
     permissions:
       contents: read
     outputs:
-      matrix:       ${{ steps.plan.outputs.matrix }}
-      count:        ${{ steps.plan.outputs.count }}
-      max_parallel: ${{ steps.plan.outputs.max_parallel }}
+      matrix:        ${{ steps.plan.outputs.matrix }}
+      count:         ${{ steps.plan.outputs.count }}
+      max_parallel:  ${{ steps.plan.outputs.max_parallel }}
+      magus_version: ${{ steps.resolve_magus.outputs.tag }}
     steps:
       # RUNNER_TEMP: writable, wiped between jobs, cross-platform. Shared by the
       # cache, shard artifacts, and merge job; the ~/.local/state default isn't
@@ -58,9 +55,25 @@ jobs:
           # Full history so affected-detection's git diff has a merge-base.
           fetch-depth: 0
 
+      # Resolved dynamically instead of a hardcoded tag: this is the
+      # compatibility gate (magus doctor below must pass against it), so it
+      # has to track the latest real release or it goes stale the moment a
+      # new one ships, as v0.1.0 did. Exposed as an output so every job in
+      # this workflow installs the exact version preflight just validated,
+      # instead of each one re-resolving "latest" and risking a mid-run
+      # mismatch.
+      - name: Resolve magus release
+        id: resolve_magus
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ steps.resolve_magus.outputs.tag }}
 
       - name: Preflight
         run: magus doctor
@@ -87,7 +100,7 @@ jobs:
     permissions:
       contents: read
     env:
-      # Signing seed for remote-cache pushes — the *secret*, exposed only on
+      # Signing seed for remote-cache pushes: the *secret*, exposed only on
       # trusted main pushes. Fork PRs never receive it, and PR runs are read-only
       # (MAGUS_CACHE_IMMUTABLE) so they never sign; gating here keeps it off the
       # box on every untrusted run.
@@ -116,16 +129,16 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ needs.preflight.outputs.magus_version }}
 
       # Expose ACTIONS_RESULTS_URL + ACTIONS_RUNTIME_TOKEN to the magus process so
       # the remote-cache backend (magusfiles/cache.buzz) can reach the GitHub
-      # Actions Cache service — the runner doesn't pass them to `run:` steps.
+      # Actions Cache service, since the runner doesn't pass them to `run:` steps.
       - uses: crazy-max/ghaction-github-runtime@b3a9207c0e1ef41f4cf215303c976869d0c2c1c4 # v3.0.0
 
       # liblzma-dev/libzstd-dev: setup-magus never installs these (its own
-      # bootstrap build is CGO_ENABLED=0) - but `magus run ci` below compiles
-      # internal/codec's cgo path for real, so this job installs its own.
+      # bootstrap build is CGO_ENABLED=0), but `magus run ci` below actually
+      # compiles internal/codec's cgo path, so this job installs its own.
       - name: Install native build dependencies (webkit, codec)
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev liblzma-dev libzstd-dev
 
@@ -163,7 +176,7 @@ jobs:
           if-no-files-found: ignore
 
   # Merge the per-shard histories (freshest-wins) and persist for the next run.
-  # main/push only — PRs read but never write (poisoning defense).
+  # main/push only: PRs read but never write (poisoning defense).
   merge-history:
     name: merge run history
     needs: [preflight, ci]
@@ -175,7 +188,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ needs.preflight.outputs.magus_version }}
 
       # Restore the prior history, fold in this run's shard histories, and persist.
       - uses: ./.github/actions/magus
@@ -197,7 +210,7 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ needs.preflight.outputs.magus_version }}
       - name: Confirm the arm64 binary actually installed and runs
         run: |
           set -euo pipefail
@@ -207,13 +220,13 @@ jobs:
             exit 1
           }
 
-  # The main matrix pins SETUP_MAGUS_VERSION, which normally resolves via the
-  # prebuilt path - nothing else in CI ever exercises setup-magus's source
-  # build (isolated clone, the ancestor-of-main supply-chain check, the
-  # CGO_ENABLED=0 bootstrap compile). This job forces that path directly.
-  # git-ref targets this repo's own default branch (not a hardcoded "main")
-  # so the ancestor check passes trivially and self-corrects if the default
-  # branch is ever renamed.
+  # The main matrix installs preflight's resolved release, which normally
+  # resolves via the prebuilt path - nothing else in CI exercises
+  # setup-magus's source build (isolated clone, the ancestor-of-main check,
+  # the CGO_ENABLED=0 bootstrap compile). This job forces that path
+  # directly, targeting this repo's own default branch (not a hardcoded
+  # "main") so the ancestor check passes trivially and self-corrects if the
+  # default branch is ever renamed.
   setup-magus-source-smoke:
     name: setup-magus (source build smoke test)
     needs: preflight
@@ -232,8 +245,8 @@ jobs:
 
   # postflight is the fan-in: once the matrix joins, summarize the whole run's
   # behavioral code analysis (hotspots, affinity, ownership, trend) into the job
-  # step summary. Reporting only — `if: always()` so it posts even on a red build,
-  # and it never gates the pipeline.
+  # step summary. Reporting only: `if: always()` so it posts even on a red
+  # build, and it never gates the pipeline.
   postflight:
     name: insight report
     needs: [preflight, ci]
@@ -248,7 +261,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ env.SETUP_MAGUS_VERSION }}
+          git-ref: ${{ needs.preflight.outputs.magus_version }}
       - name: Postflight (insight report → step summary)
         # Scope to the root project so this emits exactly one whole-workspace report
         # (a bare `magus run postflight` would fan out across every project).

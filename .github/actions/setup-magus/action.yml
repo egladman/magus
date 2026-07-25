@@ -53,7 +53,7 @@ runs:
         # internal/selfupdate/release.pub. This action is consumed by
         # arbitrary repos via `uses: egladman/magus/.github/actions/setup-magus@...`,
         # so it can't assume the magus source tree (or a Go toolchain build of
-        # magus-utils) is checked out — the key has to be self-contained here.
+        # magus-utils) is checked out, so the key has to be self-contained here.
         MAGUS_RELEASE_PUBKEY_HEX: ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779
       run: |
         set -euo pipefail
@@ -103,15 +103,13 @@ runs:
       run: |
         echo "::notice::magus: no signed release artifact for git-ref '${{ inputs.git-ref }}' on $(uname -s)/$(uname -m); compiling from source instead, this step will take noticeably longer than a prebuilt install" >&2
 
-    # Everything below only runs when there's no prebuilt binary to use.
-    # This action never installs liblzma-dev/libzstd-dev/pkg-config: the
-    # bootstrap build is CGO_ENABLED=0 (see the comment on "Build magus from
-    # source" below) and never touches internal/codec's cgo path, so it
-    # doesn't need them. A caller whose OWN downstream step needs them (a real
-    # cgo build of magus itself, e.g. cd.yaml's release-<platform> jobs, or a
-    # cgo test/build of this repo, e.g. ci.yaml's "ci" job) must install its
-    # own - it wouldn't be correct to key that on this action's
-    # installation-strategy, which is unrelated to what the caller does after
+    # Everything below only runs when there's no prebuilt binary. This action
+    # never installs liblzma-dev/libzstd-dev/pkg-config: the bootstrap build
+    # is CGO_ENABLED=0 (see "Build magus from source" below) and never
+    # touches internal/codec's cgo path. A caller whose own downstream step
+    # needs a real cgo build - cd.yaml's release-<platform> jobs, ci.yaml's
+    # "ci" job - installs those itself. Keying that on installation-strategy
+    # would be wrong: it has nothing to do with what the caller does after
     # this action returns.
     - name: Setup Go
       if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
@@ -120,13 +118,12 @@ runs:
         go-version-file: .setup-magus-src/go.mod
         cache: true  # caches ~/go/pkg/mod + ~/.cache/go-build keyed by go.sum
 
-    # Checked out under the workspace as an isolated subdirectory (path:), never
-    # at the workspace root: a caller may already have its own checkout there
-    # (e.g. CD's release jobs, which need their own full-history clone intact
-    # for `git describe --tags` after this action returns) and re-checking out
-    # over it would silently shrink it to this action's shallow depth.
-    # fetch-depth: 0 (full history, all branches) because the next step needs
-    # main's complete commit graph to check ancestry.
+    # Checked out into an isolated subdirectory (path:), never the workspace
+    # root: a caller may already have its own checkout there - CD's release
+    # jobs need their full-history clone intact for `git describe --tags`
+    # afterward - and checking out over it would shrink it to this action's
+    # depth. fetch-depth: 0 because the ancestry check below needs main's
+    # full commit graph.
     - name: Clone magus source code
       if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
