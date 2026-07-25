@@ -258,6 +258,42 @@ Broken in public first, polish second.
 
 ## Backlog
 
+- [ ] **`magus-report`: a skill that drafts a bug report, feature request, or
+      piece of feedback, and probes for the X/Y problem while doing it.** Dry,
+      concise, articulate output; keeps asking why until it reaches the actual
+      problem rather than the solution the reporter already imagined.
+      The value is demonstrated, not hypothetical. The 2026-07-25 session opened
+      with "don't we need to thread ctx to the spells?" - a Y. The honest answer
+      was no, and probing it is what surfaced the X: six `libs/diag` targets
+      broken by a duplicated parameter, and `describe.Extract` silently dropping
+      graph edges when the ctx parameter is named anything else. A skill that
+      did that probing reliably would have arrived faster.
+      Decisions already made, so they do not need relitigating:
+      - **Hand-authored, NOT installed. Do not ship it in the binary yet.**
+        `magus-skill-authoring` is the precedent: committed, deliberately outside
+        the installed set. The unsettled question is audience - a skill for the
+        maintainer drafting issues on this repo is not the same artifact as one
+        for users filing against magus, and the latter needs magus's principles
+        to ship as readable data. Starting hand-authored keeps the reversible
+        option; bundling is the door that does not reopen.
+      - **Name which principle a request touches; do not render a verdict.** The
+        original framing was "assess whether I would even entertain this." Reject
+        that. Automating a maintainer's judgment discourages contributors and is
+        sometimes simply wrong, which is a bad trade for a project whose thesis
+        is enablement. Articulate the tension and leave the call to a human. The
+        valuable cases are the ones where a good idea genuinely conflicts with a
+        principle worth revisiting, and a verdict-shaped skill hides exactly
+        those.
+      - **Delegate the is-this-a-good-idea half to the existing `pre-mortem`
+        skill** (Tiger / Paper Tiger / Elephant), which already produced the
+        second-language No-Go. Do not reimplement that reasoning.
+      Open question worth resolving before building: the prose is the commodity
+      half - any agent writes a tidy issue. The differentiated half is evidence
+      only magus can gather (version, `doctor` output, workspace shape, the
+      failing output ref). That suggests a paste-ready environment block behind a
+      command. Note the tension honestly: that is a new subcommand, against the
+      fold-rather-than-add rule, so it likely belongs as a flag on `doctor`,
+      which already collects most of it.
 - [ ] **A second authoring language (Nim / NimScript?) - the No-Go still
       stands.** This was already pre-mortemed and answered on 2026-07-21
       (`~/.claude/plans/pre-mortem-from-a-robust-snail.md`): No-Go on a second
