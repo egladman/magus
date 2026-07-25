@@ -176,6 +176,20 @@
     --accent-warm-hover: #fdba74;
     --accent-warm-inverse: #0b0e12;
 
+    /* Glossary term highlight (dark): a translucent amber wash so the marker reads on the
+       dark surface while the light body text on top stays legible. Must be repeated here,
+       not only under [data-theme="dark"]: .glossary-term sets a background and inherits
+       its foreground, so an OS-dark visitor who never touched the theme toggle would
+       otherwise get the parchment fill from the light block under near-white body text. */
+    --glossary-highlight: rgba(216, 184, 84, 0.20);
+    --glossary-highlight-strong: rgba(216, 184, 84, 0.33);
+    --glossary-highlight-rule: rgba(216, 184, 84, 0.55);
+
+    /* Demo callout accent (dark): a lighter teal that reads on the dark surface. */
+    --demo-accent: #4bb5aa;
+    --demo-accent-strong: #7fd3c9;
+    --demo-accent-bg: rgba(75, 181, 170, 0.12);
+
     --syn-comment: #838e98;
     --syn-keyword: #b79ae6;
     --syn-string: #8fc79b;
