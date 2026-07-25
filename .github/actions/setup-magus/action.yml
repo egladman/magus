@@ -1,64 +1,67 @@
 name: Setup magus
 description: >
   Install the magus binary into the runner tool cache ($RUNNER_TOOL_CACHE) and
-  restore Go module, Go build, and mise tool caches. Until magus ships a packaged
-  release, the binary is compiled from the checked-out source (a prebuilt release
-  is installed instead when `version` is set) — either way it lands in the tool
-  cache and on PATH, so every job step that follows can run `magus`.
+  add it to PATH. Magus is installed either from a signed GitHub Release or by
+  building from source.
 
 inputs:
-  version:
+  installation-strategy:
     description: >
-      Release tag to install (e.g. v0.5.0), matching the tag exactly - the asset
-      names and the download path are both v-prefixed. Empty string always builds
-      from source using the checked-out code.
-
-      Defaults to a source build on purpose. CD (which pins nothing) must bootstrap
-      from HEAD: magusfile.buzz can legitimately use a host module newer than the
-      last release, so pinning a real tag here would break the very release that
-      ships the module. CI pins deliberately instead, which is what makes it the
-      compatibility gate.
+      Controls how magus is installed. automatic tries a signed release
+      artifact for git-ref first; if none exists (no release for this git-ref,
+      or none published for this OS/arch), it builds that SAME git-ref from
+      source instead - the fallback never substitutes a different version.
+      prebuilt requires a signed release artifact for git-ref and fails if one
+      is unavailable, with no source fallback. source skips the
+      release-artifact lookup entirely and always builds git-ref from source.
+      Any source build - whether automatic's fallback or an explicit source -
+      additionally requires the resolved commit to be an ancestor of main (see
+      the "Verify source commit is reachable from main" step below), so
+      automatic can still fail if git-ref is a real but unmerged tag.
+      One of: automatic, prebuilt, source.
     required: false
-    default: ''
+    default: automatic
+
+  git-ref:
+    description: >
+      Git reference identifying the magus revision to install: a release tag
+      (for example v0.3.0), a branch name, or a commit SHA. Always fetched
+      fresh from egladman/magus into an isolated directory, independent of
+      anything already checked out in this job - callers that want to build
+      the exact commit already on disk (e.g. a release workflow bootstrapping
+      itself from the tag it is building) must pass that ref explicitly.
+      Release tags are required for automatic and prebuilt; branches and
+      commit SHAs only work with source.
+    required: false
+    default: v0.3.0
 
 runs:
   using: composite
   steps:
-    # internal/codec's cgo xz/zstd fast path needs liblzma/libzstd (findable via
-    # pkg-config); without them any cgo `go build`/`go test` on the runner fails.
-    # Installed as system deps so the cgo path stays built and tested everywhere
-    # cd.yaml's release-<platform> jobs run.
-    - name: Install codec build dependencies (Linux)
-      if: runner.os == 'Linux'
-      shell: bash
-      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
-
-    - name: Install codec build dependencies (macOS)
-      if: runner.os == 'macOS'
-      shell: bash
-      run: brew install zstd xz
-
-    - name: Setup Go
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-      with:
-        go-version-file: go.mod
-        cache: true  # caches ~/go/pkg/mod + ~/.cache/go-build keyed by go.sum
-
+    # Check for a prebuilt binary before paying for anything a source build
+    # needs (system packages, a Go toolchain, a clone) - most runs never touch
+    # any of that.
     - name: Install magus from release
       id: prebuilt
-      if: steps.magus-cache.outputs.cache-hit != 'true' && inputs.version != ''
+      if: inputs.installation-strategy != 'source'
+      # Only automatic may fall through to a source build; under prebuilt this
+      # step's failure must fail the job (enforced below), not be swallowed.
+      continue-on-error: ${{ inputs.installation-strategy == 'automatic' }}
       shell: bash
-      continue-on-error: true
       env:
         # Release-signing Ed25519 public key, mirrored from
         # internal/selfupdate/release.pub. This action is consumed by
         # arbitrary repos via `uses: egladman/magus/.github/actions/setup-magus@...`,
         # so it can't assume the magus source tree (or a Go toolchain build of
-        # magus-utils) is checked out — the key has to be self-contained here.
+        # magus-utils) is checked out, so the key has to be self-contained here.
         MAGUS_RELEASE_PUBKEY_HEX: ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779
       run: |
         set -euo pipefail
-        VERSION="${{ inputs.version }}"
+        VERSION="${{ inputs.git-ref }}"
+        if [ -z "${VERSION}" ]; then
+          echo "::error::magus: installation-strategy '${{ inputs.installation-strategy }}' needs git-ref set to a release tag" >&2
+          exit 1
+        fi
         OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
         ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
         BASE="https://github.com/egladman/magus/releases/download/${VERSION}"
@@ -84,25 +87,128 @@ runs:
         tar -xzf "${ASSET}" -C "$RUNNER_TOOL_CACHE/magus/bin" magus
         echo "magus: installed prebuilt ${VERSION} for ${OS}/${ARCH} (signature verified)" >&2
 
-    - name: Build magus from source
-      if: >
-        steps.magus-cache.outputs.cache-hit != 'true' &&
-        (inputs.version == '' || steps.prebuilt.outcome == 'failure')
+    - name: Fail if prebuilt required but unavailable
+      if: inputs.installation-strategy == 'prebuilt' && steps.prebuilt.outcome == 'failure'
       shell: bash
+      run: |
+        echo "::error::magus: no signed release artifact for git-ref '${{ inputs.git-ref }}' on $(uname -s)/$(uname -m); installation-strategy is prebuilt, so no source fallback was attempted. Use automatic to fall back to a source build, or source to build git-ref directly." >&2
+        exit 1
+
+    # Visibility for automatic's silent (continue-on-error) prebuilt failure:
+    # without this, the only sign a source build even happened is the absence
+    # of the "installed prebuilt" log line above.
+    - name: Note fallback to source build
+      if: inputs.installation-strategy == 'automatic' && steps.prebuilt.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::notice::magus: no signed release artifact for git-ref '${{ inputs.git-ref }}' on $(uname -s)/$(uname -m); compiling from source instead, this step will take noticeably longer than a prebuilt install" >&2
+
+    # Everything below only runs when there's no prebuilt binary. This action
+    # never installs liblzma-dev/libzstd-dev/pkg-config: the bootstrap build
+    # is CGO_ENABLED=0 (see "Build magus from source" below) and never
+    # touches internal/codec's cgo path. A caller whose own downstream step
+    # needs a real cgo build - cd.yaml's release-<platform> jobs, ci.yaml's
+    # "ci" job - installs those itself. Keying that on installation-strategy
+    # would be wrong: it has nothing to do with what the caller does after
+    # this action returns.
+    - name: Setup Go
+      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      with:
+        go-version-file: .setup-magus-src/go.mod
+        cache: true  # caches ~/go/pkg/mod + ~/.cache/go-build keyed by go.sum
+
+    # Checked out into an isolated subdirectory (path:), never the workspace
+    # root: a caller may already have its own checkout there - CD's release
+    # jobs need their full-history clone intact for `git describe --tags`
+    # afterward - and checking out over it would shrink it to this action's
+    # depth. fetch-depth: 0 because the ancestry check below needs main's
+    # full commit graph.
+    - name: Clone magus source code
+      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      with:
+        repository: egladman/magus
+        ref: ${{ inputs.git-ref }}
+        path: .setup-magus-src
+        fetch-depth: 0
+
+    # Supply-chain gate: a source build has no signature to check (unlike the
+    # prebuilt path above), so before compiling and running whatever git-ref
+    # points at, require that its commit has actually been merged to main -
+    # i.e. it went through review, not just pushed to some branch or tag. This
+    # stops an attacker who can push refs but not rewrite main (a lesser
+    # compromise than full repo takeover) from getting an unreviewed commit
+    # built and executed with this job's permissions. It does not protect
+    # against main itself being compromised.
+    - name: Verify source commit is reachable from main
+      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      shell: bash
+      working-directory: .setup-magus-src
+      run: |
+        set -euo pipefail
+        git fetch origin main
+        SHA="$(git rev-parse HEAD)"
+        if ! git merge-base --is-ancestor "${SHA}" origin/main; then
+          echo "::error::magus: git-ref '${{ inputs.git-ref }}' resolves to ${SHA}, which is not reachable from egladman/magus main. Refusing to build unreviewed source." >&2
+          exit 1
+        fi
+        echo "magus: ${SHA} is reachable from main" >&2
+
+    - name: Build magus from source
+      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      shell: bash
+      working-directory: .setup-magus-src
       # CGO_ENABLED=0: the bootstrap magus only orchestrates builds (it never needs
       # internal/codec's cgo xz/zstd fast path), so build it pure-Go. This keeps the
       # bootstrap off pkg-config/liblzma/libzstd entirely - on Windows the default
       # cgo build otherwise grabs Strawberry Perl's broken pkg-config and fails before
       # the real release-build (which sets up the mingw toolchain) ever runs.
       run: |
+        if [ "${{ inputs.installation-strategy }}" = "source" ]; then
+          echo "::notice::magus: installation-strategy is source; compiling git-ref '${{ inputs.git-ref }}' instead of downloading a release" >&2
+        fi
         mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
         CGO_ENABLED=0 go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
-        echo "magus: built from source (CGO_ENABLED=0 bootstrap)" >&2
+        echo "magus: built ${{ inputs.git-ref }} from source (CGO_ENABLED=0 bootstrap)" >&2
+
+    # A leftover magus checkout under the caller's workspace is a second
+    # magusfile.buzz/spells tree; if the caller is magus's own repo, its next
+    # `magus` invocation trips MGS1002 (duplicate spell sources) over it.
+    - name: Remove magus source checkout
+      if: always() && (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure')
+      shell: bash
+      run: rm -rf .setup-magus-src
 
     - name: Add magus to PATH
       shell: bash
       run: echo "$RUNNER_TOOL_CACHE/magus/bin" >> "$GITHUB_PATH"
 
+    # No job here runs a daemon, so MCP/console have nothing to listen on.
+    # Exported via GITHUB_ENV so every later `magus` call in the job picks
+    # it up, not just this step. Otherwise magus doctor's console check
+    # always fails (checks_mcp.go's probeBridgeReachability).
+    - name: Disable console/MCP for CI
+      shell: bash
+      run: |
+        echo "MAGUS_CONSOLE_ENABLED=false" >> "$GITHUB_ENV"
+        echo "MAGUS_MCP_ENABLED=false" >> "$GITHUB_ENV"
+
     - name: Verify magus
       shell: bash
       run: magus version
+
+    - name: Write job summary
+      shell: bash
+      run: |
+        {
+          if [ "${{ steps.prebuilt.outcome }}" = "success" ]; then
+            echo "magus: installed prebuilt release, git-ref \`${{ inputs.git-ref }}\` (signature verified)"
+          else
+            echo "magus: built from source, git-ref \`${{ inputs.git-ref }}\` (verified reachable from main)"
+          fi
+          echo
+          echo '```'
+          magus version
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"

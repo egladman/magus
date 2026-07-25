@@ -19,10 +19,11 @@ permissions:
 jobs:
   # One job per native runner: each builds BOTH its own platform's static and
   # dynamically-linked (cgo) binary, back to back on the same runner. Static
-  # cross-compiles trivially (no C toolchain needed) so there's no reason to farm it
-  # out to a separate job — that would just be fanning out for no benefit. cgo needs a
-  # real C toolchain + libzstd/liblzma for that exact platform, which is exactly what
-  # each of these runners already has set up for its own native arch/OS.
+  # cross-compiles trivially (no C toolchain needed), so there's no reason to
+  # farm it out to a separate job. cgo needs a real C toolchain plus
+  # libzstd/liblzma for that exact platform; each job installs those itself
+  # (setup-magus doesn't - its own bootstrap build is CGO_ENABLED=0), via an
+  # "Install codec build dependencies" step, or MSYS2 packages on Windows.
   # contents: read only; none of these see MAGUS_SIGNING_KEY.
   release-linux-amd64:
     name: Build release artifacts (linux/amd64)
@@ -35,7 +36,15 @@ jobs:
           # Full history + tags so the release-build target's version() (git describe
           # --tags) resolves the tag and build_date() reads the commit date.
           fetch-depth: 0
-      - uses: ./.github/actions/setup-magus  # apt-installs liblzma-dev/libzstd-dev on Linux
+      - uses: ./.github/actions/setup-magus
+        with:
+          # CD must bootstrap from the commit it's releasing, not a pinned
+          # older tag - magusfile.buzz can legitimately need host-module code
+          # newer than the last release.
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
       # No remote-cache env is set in CD on purpose: a release builds clean off the
       # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
       # chance of replaying a cached (unsigned) artifact into a release.
@@ -61,6 +70,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
       - name: Build release artifacts (static + dynamic)
         run: |
           magus run release-build:static --no-default-charms
@@ -88,6 +102,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
+      - name: Install codec build dependencies
+        run: brew install zstd xz
       - name: Build release artifacts (arm64 static + dynamic, amd64 static)
         run: |
           magus run release-build:static --no-default-charms
@@ -130,9 +149,12 @@ jobs:
           echo "MAGUS_CGO_PKG_CONFIG_PATH=$(cygpath -m /mingw64/lib/pkgconfig)" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
 
       # release-build:static doesn't need MAGUS_CGO_CC/PKG_CONFIG_PATH (CGO_ENABLED=0
-      # ignores them), so running it here too is harmless — same runner, same shell.
+      # ignores them), so running it here too is harmless: same runner, same shell.
       - name: Build release artifacts (static + dynamic)
         shell: msys2 {0}
         run: |
@@ -164,6 +186,9 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-magus  # provides the Go toolchain for the magus-utils calls below
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -171,8 +196,8 @@ jobs:
           merge-multiple: true
 
       # Every release-<platform> job wrote its own <asset>.sha256 sidecar
-      # (sha256sum-compatible, one line) alongside each tarball — no cross-job
-      # aggregation needed, just concatenate what's on disk.
+      # (sha256sum-compatible, one line) alongside each tarball, so no
+      # cross-job aggregation is needed: just concatenate what's on disk.
       - name: Build combined manifest
         run: cat dist/*.sha256 > dist/SHA256SUMS
 
@@ -206,7 +231,7 @@ jobs:
     # target (docker + cosign spells); `magus run image-build:cd` builds the
     # static (multi-arch) and CGO (amd64) variants, pushes them, and cosign-signs
     # each pushed digest. The same command signs images locally. cosign comes from
-    # mise (.mise.toml) — no cosign-specific action.
+    # mise (.mise.toml); no cosign-specific action.
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
@@ -214,6 +239,9 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          git-ref: ${{ github.ref_name }}
 
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
 
