@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "docs-gen", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "8295", "--directory", "docs/gen"], "port": 8295 }
+    { "name": "serve", "runtimeExecutable": "/tmp/magus-head", "runtimeArgs": ["run", "serve"], "port": 8081 }
   ]
 }
