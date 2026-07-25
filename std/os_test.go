@@ -292,6 +292,49 @@ func TestOsHostname(t *testing.T) {
 	assert.NotEmpty(t, got, "os.hostname returned empty")
 }
 
+// os.executable exists to be paired with fs.stat by a long-lived watcher, so the
+// contract that matters is not just "returns a string" but "returns a path fs.stat
+// can actually resolve into a usable stamp". Assert the pairing, not the string.
+func TestOsExecutable(t *testing.T) {
+	ctx := context.Background()
+
+	exe, err := OsExecutable(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, exe, "os.executable returned empty")
+	assert.True(t, filepath.IsAbs(exe), "os.executable must return an absolute path, got %q", exe)
+
+	// The whole point: fs.stat must succeed on it and yield a non-zero mtime and size,
+	// because a stamp built from zero values could never detect a rebuild.
+	info, err := FsStat(ctx, exe)
+	require.NoError(t, err, "fs.stat could not resolve os.executable's path %q", exe)
+	assert.Positive(t, info.Size, "stat size must be non-zero to be usable as a staleness stamp")
+	assert.Positive(t, info.Mtime, "stat mtime must be non-zero to be usable as a staleness stamp")
+	assert.False(t, info.IsDir, "os.executable must not be a directory")
+
+	// Symlinks are resolved, so calling twice is stable - a stamp that changed on its
+	// own would make the watcher's tripwire fire spuriously on every tick.
+	again, err := OsExecutable(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, exe, again, "os.executable must be stable across calls")
+}
+
+// FsStat's Buzz-boundary map is what a magusfile actually reads, and `size` collides
+// with a built-in map method there, so a magusfile must use st["size"] rather than
+// st.size. Lock the map's key set so the field names the serve tripwire depends on
+// cannot be renamed out from under it.
+func TestFsStatMapKeys(t *testing.T) {
+	// Relative to the package dir, which is the test's working directory.
+	info, err := FsStat(context.Background(), "os.go")
+	require.NoError(t, err)
+
+	m := info.ToMap()
+	require.Contains(t, m, "mtime", "serve's staleness stamp reads st[\"mtime\"]")
+	require.Contains(t, m, "size", "serve's staleness stamp reads st[\"size\"]")
+	assert.Contains(t, m, "mode")
+	assert.Contains(t, m, "is_dir")
+	assert.NotContains(t, m, "modTime", "there is no modTime key; std/examples/fs/stat.buzz once implied otherwise")
+}
+
 // watchCallback adapts a Go func(changed) (stop bool) to the host.Callback the
 // fs.watch binding hands FsWatch.
 type watchCallback struct {

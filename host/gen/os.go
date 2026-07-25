@@ -106,6 +106,13 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return host.StrVal(ret0), nil
 	}))
+	m.MapSet("executable", vm.DirectValue("os.executable", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.OsExecutable(ctx)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.StrVal(ret0), nil
+	}))
 	m.MapSet("retry", vm.DirectValue("os.retry", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		max := host.Int(bzArgs, 0, 0)
 		fn := host.CallbackArg(sess, bzArgs, 1)

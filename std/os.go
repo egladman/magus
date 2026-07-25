@@ -160,6 +160,13 @@ var Os = Module{
 			Impl:    OsHostname,
 		},
 		{
+			Name:    "executable",
+			Doc:     "Return the absolute path of the running magus binary. Pair it with fs.stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    OsExecutable,
+		},
+		{
 			Name: "retry",
 			Doc:  "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.",
 			Args: []Arg{
@@ -185,6 +192,26 @@ func OsHostname(_ context.Context) (string, error) {
 		return "", fmt.Errorf("os.hostname: %w", err)
 	}
 	return name, nil
+}
+
+// OsExecutable returns the absolute path of the running binary. It resolves symlinks so
+// two paths pointing at the same file compare equal, which matters for the intended use:
+// a long-lived watcher stats this path each tick and treats a change as "I am no longer
+// the current build, so anything I generate from here is stale".
+func OsExecutable(_ context.Context) (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("os.executable: %w", err)
+	}
+	// EvalSymlinks so a rebuild through a symlinked path is still seen as the same file,
+	// and so the returned path is the one fs.stat will actually resolve.
+	resolved, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		// The binary can legitimately be gone already - `go run` deletes its temp build
+		// once the process is up. The unresolved path is still the best answer.
+		return exe, nil
+	}
+	return resolved, nil
 }
 
 // OsStdinIsTerminal reports whether stdin is a TTY, reusing the shared terminal

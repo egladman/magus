@@ -521,9 +521,13 @@ if (fs.isFile(&quot;go.mod&quot;)) { std.print(&quot;go.mod is a file&quot;); }
 <pre><code class="language-buzz">import &quot;std&quot;;
 import &quot;fs&quot;;
 
+// Bracket access, not info.size: `size` is a built-in map METHOD, so dot access returns
+// the method rather than the stat field. The time key is `mtime` (Unix millis), not
+// `modTime` - dot access on a missing key is silent, which is how this example went
+// unnoticed while printing nothing useful.
 final info = fs.stat(&quot;go.mod&quot;);
-std.print(info.size);
-std.print(info.modTime);
+std.print(info[&quot;size&quot;]);
+std.print(info[&quot;mtime&quot;]);
 </code></pre>
 <h3 id="copy-file">copy_file</h3>
 <p>Copy the file at src to dst (overwriting), preserving its permission bits.</p>

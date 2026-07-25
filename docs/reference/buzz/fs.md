@@ -308,9 +308,13 @@ Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as
 import "std";
 import "fs";
 
+// Bracket access, not info.size: `size` is a built-in map METHOD, so dot access returns
+// the method rather than the stat field. The time key is `mtime` (Unix millis), not
+// `modTime` - dot access on a missing key is silent, which is how this example went
+// unnoticed while printing nothing useful.
 final info = fs.stat("go.mod");
-std.print(info.size);
-std.print(info.modTime);
+std.print(info["size"]);
+std.print(info["mtime"]);
 ```
 
 ### copy_file

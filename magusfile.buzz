@@ -556,7 +556,38 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
     // prunes any dir named gen/ or node_modules/, so watching docs/, blog/, and
     // console/ never observes a rebuild's own writes and so cannot self-retrigger a
     // rebuild loop. Each try/catch keeps a failed rebuild from ending the watch.
+    // Staleness tripwire. This loop regenerates COMMITTED output (docs/gen) from inside a
+    // long-lived process, so if magus itself is rebuilt underneath it, every later rebuild
+    // writes bytes produced by the old logic: fresh mtimes, no error, wrong content. The
+    // daemon's adoption gate (internal/proc/identity.go) cannot catch this - it compares a
+    // client against a server across IPC, and here there is no second party, only one
+    // process that has quietly gone out of date.
+    // Refuse rather than reload: CLAUDE.md forbids a watch-rebuild loop for magus itself,
+    // so the correct move is to stop generating and make the human restart.
+    final exe = os.executable();
+    final exeStamp = fun() > str {
+        try {
+            final st = fs.stat(exe);
+            // Bracket access, not st.size: `size` is a built-in map METHOD, so dot access
+            // returns the method rather than the stat field.
+            return "{st["mtime"]}:{st["size"]}";
+        } catch (e) {
+            // Binary already gone (a `go run` temp build is deleted once up). Nothing to
+            // compare against, so the tripwire simply stays quiet.
+            return "";
+        }
+    };
+    final startStamp = exeStamp();
+
     fs.watch(["docs", "blog", "console"], fun(changed: [str]) > bool {
+        final nowStamp = exeStamp();
+        if (startStamp != "" and nowStamp != "" and nowStamp != startStamp) {
+            magus.error("serve: the magus binary was rebuilt or upgraded while this server was running");
+            magus.error("  this process still runs the OLD code, so anything it regenerates now would be stale");
+            magus.error("  binary: " + exe);
+            magus.error("  fix: stop this server (Ctrl-C) and start it again to pick up the new build");
+            return true; // end the watch; a stale generator must not keep writing gen/
+        }
         var docsHit = false;
         var consoleHit = false;
         foreach (p in changed) {
