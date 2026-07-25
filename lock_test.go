@@ -177,6 +177,38 @@ func TestWaitingMessageEmittedOnce(t *testing.T) {
 	_ = cmd.Wait()
 }
 
+// TestWaitHeartbeatDoesNotBreakContendedAcquire covers the heartbeat added so a blocked
+// run stops looking hung. The interval is shortened well below the hold time so the
+// heartbeat goroutine definitely ticks during the wait, then the acquire must still
+// succeed and its stop func must return rather than deadlock. Run under -race this also
+// proves the goroutine neither races the acquire nor outlives it.
+//
+// It deliberately installs NO notify hook, because the hook short-circuits the heartbeat;
+// this is the real stderr path a user gets.
+func TestWaitHeartbeatDoesNotBreakContendedAcquire(t *testing.T) {
+	prev := lockWaitHeartbeat
+	lockWaitHeartbeat = 10 * time.Millisecond
+	t.Cleanup(func() { lockWaitHeartbeat = prev })
+
+	cacheDir := t.TempDir()
+	lockDir := filepath.Join(cacheDir, "locks")
+
+	cmd := helperHold(t, lockDir, "hb", 300)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start holder: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	waitForFile(t, filepath.Join(lockDir, "hb", "ready"), 3*time.Second)
+
+	locker := newProjectLocker(cacheDir, false)
+	rel, err := locker.acquire(context.Background(), "hb")
+	if err != nil {
+		t.Fatalf("acquire after heartbeat wait: %v", err)
+	}
+	rel()
+	_ = cmd.Wait()
+}
+
 // TestAcquireAllSortedNoDeadlock proves multi-project acquisition in sorted order
 // is deadlock-safe: two goroutines each lock the same set given in OPPOSING
 // orders and both complete. Sorted acquisition means neither can hold one lock

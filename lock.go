@@ -129,7 +129,9 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 			return nil, &lockContendedError{Project: projectPath}
 		}
 		l.emitWaiting(projectPath)
+		stopHeartbeat := l.startWaitHeartbeat(ctx, projectPath)
 		got, err = fl.TryLockContext(ctx, lockRetryDelay)
+		stopHeartbeat()
 		if err != nil {
 			return nil, fmt.Errorf("workspace lock: lock %s: %w", projectPath, err)
 		}
@@ -197,6 +199,60 @@ func (l *projectLocker) emitWaiting(projectPath string) {
 		p = "."
 	}
 	fmt.Fprintf(os.Stderr, "magus: project %s is being changed by another magus process; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p)
+}
+
+// lockWaitHeartbeat is how often a blocked acquire reprints that it is still waiting.
+// Long enough not to spam a short contention, short enough that a watcher never sits in
+// silence wondering.
+// A var, not a const, so a test can shorten it: the heartbeat only exists to be
+// observed, so it has to be reachable in a test that finishes in milliseconds.
+var lockWaitHeartbeat = 15 * time.Second
+
+// startWaitHeartbeat reprints the wait periodically until the returned stop func is
+// called.
+//
+// emitWaiting alone is not enough, and this is the single worst usability failure magus
+// has: ONE message followed by unbounded silence is indistinguishable from a hang. A
+// human tabs away and later kills the "stuck" command; an agent, which cannot see a
+// terminal at all and often has the stream buffered behind a pipe, concludes magus wedged
+// and kills it too - then reports that magus hangs. Both happened repeatedly against a
+// perfectly healthy run that was politely queued behind `magus run serve`.
+//
+// A periodic line is the evidence of liveness a one-shot notice cannot give, and the
+// elapsed counter is what distinguishes "the holder is working" from "the holder is
+// itself stuck", which is the question the operator actually has. Suppressed when a
+// notify hook is installed so tests keep counting exactly one waiting signal.
+func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath string) func() {
+	if l.notify != nil {
+		return func() {}
+	}
+	p := projectPath
+	if p == "" {
+		p = "."
+	}
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		t := time.NewTicker(lockWaitHeartbeat)
+		defer t.Stop()
+		start := time.Now()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				fmt.Fprintf(os.Stderr,
+					"magus: still waiting for the lock on project %s (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.\n",
+					p, time.Since(start).Round(time.Second))
+			}
+		}
+	}()
+	// Wait for the goroutine to exit so a caller that returns immediately after cannot
+	// interleave a heartbeat line after the resumed/failed message.
+	return func() { close(done); <-stopped }
 }
 
 // emitResumed closes the loop the waiting message opened: the other process finished
