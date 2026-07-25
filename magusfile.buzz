@@ -602,10 +602,18 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
     fs.watch(["docs", "blog", "console"], fun(changed: [str]) > bool {
         final nowStamp = exeStamp();
         if (startStamp != "" and nowStamp != "" and nowStamp != startStamp) {
-            magus.error("serve: the magus binary was rebuilt or upgraded while this server was running");
-            magus.error("  this process still runs the OLD code, so anything it regenerates now would be stale");
-            magus.error("  binary: " + exe);
-            magus.error("  fix: stop this server (Ctrl-C) and start it again to pick up the new build");
+            // One record, not four: this is a single event, and each magus.error is its own
+            // log line. The REMEDY stays inside the error rather than moving to magus.hint,
+            // even though a remedy is what hints are for: emitMagusHint only fires when
+            // interactive.Enabled(), so a hint is silently dropped for an agent or in CI -
+            // precisely the callers that cannot infer the fix themselves. The watch is
+            // ending here, so losing the remedy leaves no way forward. Hints carry what is
+            // safe to lose; this is not.
+            magus.error("serve: the magus binary changed while this server was running (" + exe
+                + "); this process still runs the OLD code, so anything it regenerates now would be stale."
+                + " Stop it (Ctrl-C) and start it again to pick up the new build.");
+            // Advisory, and safe to lose: the general rule behind this one instance.
+            magus.hint("a long-lived magus keeps regenerating with the logic it started with; restart it after a rebuild");
             return true; // end the watch; a stale generator must not keep writing gen/
         }
         var docsHit = false;
