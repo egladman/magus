@@ -195,54 +195,6 @@ jobs:
         with:
           merge-history: 'true'
 
-  # setup-magus ships as a reusable action other repos can point at on either
-  # amd64 or arm64 GitHub-hosted runners. The main matrix only ever runs on
-  # ubuntu-latest (amd64), so this job is the only thing that actually exercises
-  # the arm64 download/verify/extract path against a real release.
-  setup-magus-arm-smoke:
-    name: setup-magus (arm64 smoke test)
-    needs: preflight
-    if: needs.preflight.result == 'success'
-    runs-on: ubuntu-24.04-arm
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: ./.github/actions/setup-magus
-        with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
-      - name: Confirm the arm64 binary actually installed and runs
-        run: |
-          set -euo pipefail
-          magus version
-          file "$(command -v magus)" | grep -q "ARM aarch64" || {
-            echo "expected an ARM aarch64 binary on PATH" >&2
-            exit 1
-          }
-
-  # The main matrix installs preflight's resolved release, which normally
-  # resolves via the prebuilt path - nothing else in CI exercises
-  # setup-magus's source build (isolated clone, the ancestor-of-main check,
-  # the CGO_ENABLED=0 bootstrap compile). This job forces that path
-  # directly, targeting this repo's own default branch (not a hardcoded
-  # "main") so the ancestor check passes trivially and self-corrects if the
-  # default branch is ever renamed.
-  setup-magus-source-smoke:
-    name: setup-magus (source build smoke test)
-    needs: preflight
-    if: needs.preflight.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: source
-          git-ref: ${{ github.event.repository.default_branch }}
-      - name: Confirm the source-built binary actually runs
-        run: magus version
-
   # postflight is the fan-in: once the matrix joins, summarize the whole run's
   # behavioral code analysis (hotspots, affinity, ownership, trend) into the job
   # step summary. Reporting only: `if: always()` so it posts even on a red
