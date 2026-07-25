@@ -79,10 +79,55 @@ truncating it after the fact:
   the failing project plus the ref to fetch the rest.
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
-- `-o json`: when you will parse the result (run records, describe, query),
-  ask for structure instead of scraping human text.
+- `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`. Ask for the
+  shape you want. `json`/`yaml` to parse, `jsonl` to stream records, `name` for
+  bare identifiers one per line, `template=` to project exactly the fields you
+  need and nothing else.
 
-WRONG: `magus run test | head -50` (lossy: drops the failing tail that matters).
+### Never pipe a magus command through a text filter
+
+**Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`,
+or `wc`.** Every magus command already has an output contract, so filtering its
+text after the fact is always the wrong tool. It is not a style preference; it
+actively breaks things:
+
+- It is lossy in the direction that matters. A truncating filter drops the
+  failing tail and the output ref, which is the only part you needed.
+- It hides progress on a long run, so a working command looks hung and gets
+  killed.
+- It scrapes a human-facing layout that is free to change, instead of reading a
+  stable contract that is not.
+- `grep` cannot see structure. A field you matched textually may belong to a
+  different record entirely.
+
+Replace the filter with the flag that already does it:
+
+| Instead of | Use |
+|---|---|
+| `\| grep <field>` | `-o template='{{.Field}}'` |
+| `\| grep -c .` (counting) | `-o json` and read the count, or the verb's own summary |
+| `\| head` / `\| tail` (quieting) | `-s` / `--silent` |
+| `\| grep -i error` | `-s` (a pass prints almost nothing; failures already surface) |
+| `\| awk '{print $1}'` | `-o name` |
+| `\| jq` after `-o text` | `-o json` first, then `jq` |
+
+`jq` on `-o json` is fine: that is consuming a contract, not scraping text. The
+prohibition is on text filters standing in for an output format.
+
+**Piping magus INTO magus is supported and encouraged.** The composition seam is
+`--stdin`, not a tee flag (there is no `--tee`). These are contracts on both
+ends, so they are the opposite of the antipattern above:
+
+```sh
+magus watch | magus affected --stdin        # changed paths -> affected set
+magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
+```
+
+Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
+composition. A pipe whose right-hand side is a text filter is a missing `-o`.
+
+WRONG: `magus run test | head -50` (drops the failing tail that matters).
+WRONG: `magus query "kind:target" -o name | grep -c .` (use the JSON count).
 CORRECT: `magus run test -s`, then fetch the printed ref for full detail.
 
 The silent run plus ref-fetch IS the low-token failure loop: never re-run a

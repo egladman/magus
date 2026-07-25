@@ -61,7 +61,7 @@ stats for smells (see the magus-query skill for the query syntax):
 magus graph stats                    # god nodes, orphans, doc coverage
 for k in project target spell op tool charm module method diagnostic doc file \
          function symbol import owner; do
-  printf "%-11s %s\n" "$k" "$(magus query "kind:$k" -o name | grep -c .)"
+  printf "%-11s %s\n" "$k" "$(magus query "kind:$k" -o json | jq length)"
 done                                  # population per abstraction
 magus explain "<node>"               # compare a kind's edges against a neighbour's
 ```
