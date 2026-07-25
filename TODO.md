@@ -55,48 +55,23 @@ The three buckets mean different things:
       starts paying off for skew between the release that ships it and everything
       after, so shipping it in this tag is worth more than shipping it in the
       next one.
-- [ ] **A long-lived watcher can keep regenerating committed output with stale
-      logic, and nothing catches it.** `magus run serve` runs `fs.watch` inside
-      ONE process and re-runs the docs `render` target internally. Change Go code
-      that the generator depends on and the loop keeps writing `docs/gen/` with
-      the old logic: fresh mtimes, no error, wrong bytes, and `docs/gen/` is
-      committed. CI's drift gate eventually catches the bytes, but it cannot say
-      why, and locally it just looks like churn.
-      The adoption-identity gate in `internal/proc/identity.go` is NOT this. It is
-      excellent and it already fingerprints dev builds by VCS revision, treats
-      dirty builds as per-process unique, and fails closed - its own doc comment
-      describes this exact foot-gun for the daemon. But it is applied only at the
-      IPC boundary (`internal/proc/server.go:415` `versionAdmits`, called from
-      `:426` and `:509`, with the client side at `internal/proc/client.go:43`). It
-      answers "is the binary I am talking to the binary I am". The watch loop has
-      no IPC hop, so it is trivially the same version as itself forever. The
-      question that matters here is a different axis: **is the binary I am still
-      current for the tree I am generating from.**
-      Recommended shape, reusing what exists rather than inventing:
-      - `buildVCS()` (`internal/proc/identity.go:81-97`) already reads
-        `vcs.revision` and `vcs.modified`. That is the ingredient. Two
-        complementary tripwires, checked on each rebuild tick before writing:
-        the running executable's identity changed on disk (covers a user who
-        upgrades magus while a watcher is up), and magus's own build inputs
-        changed in-tree (covers building from source, where `vcs.modified` is
-        already true at startup so a revision compare proves nothing - hash the
-        inputs at startup and re-hash, the `InputFingerprint` pattern already
-        used for knowledge shards).
-      - **Refuse, do not restart.** CLAUDE.md is explicit that magus must not
-        wire a watch-rebuild loop for itself, because it would rebuild and
-        restart mid-run and thrash. So the correct behavior is to stop
-        regenerating and emit a coded diagnostic saying the process is stale and
-        must be restarted. Detect-and-refuse honors the existing doctrine;
-        auto-reload violates it.
-      - `serve` currently watches only `docs`, `blog`, `console`
-        (`magusfile.buzz:558`), so it cannot even observe the relevant change.
-        It would need to watch magus's own sources purely as a tripwire, never as
-        a rebuild trigger.
-      This is the same concept as the version-floor item above, seen from the
-      other side: one is an old binary across a RELEASE boundary, this is an old
-      binary across a PROCESS LIFETIME. Both are "the magus doing this work is
-      not the magus this tree expects." Build one diagnostic concept with two
-      triggers, not two unrelated mechanisms.
+- [ ] **Finish the stale-generator guard: `serve` and `agent install` are done,
+      the rest of the surface is not.** Two shipped this session. `serve` stats
+      `os.executable()` each watch tick and refuses to keep regenerating when the
+      binary changed underneath it. `agent install` now stamps a fingerprint of the
+      embedded skill sources, so `graph verify` catches content drift instead of
+      trusting a hand-bumped counter - that one was found the hard way, by an install
+      from a stale binary writing old skills while verify reported up to date.
+      What remains is every OTHER long-lived or generated-output path with the same
+      shape: the daemon (its adoption gate covers IPC skew but not "my own tree moved
+      on"), and any target that writes committed output from a process that outlives a
+      rebuild. Audit rather than guess which ones qualify.
+      Keep the framing from the version-floor item above: an old binary across a
+      RELEASE boundary and an old binary across a PROCESS LIFETIME are one concept,
+      "the magus doing this work is not the magus this tree expects." The digest
+      approach generalizes - derive the check from bytes, never from a counter a human
+      has to remember to bump.
+
 - [ ] **`setup-magus`'s source-build mode is both unintuitive and wrong by
       default for its stated audience.** Two separate problems:
       - `version: ''` meaning "build from source" overloads the empty string.
