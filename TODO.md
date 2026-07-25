@@ -148,6 +148,35 @@ a per-op span, is a pure Go change at
 
 ## Cheaper before the tag
 
+- [ ] **Rename "flavor". It is not a term magus should use, and it is a wire
+      contract, not just an identifier.** The concept is which KIND of graph is
+      loaded: the knowledge graph, or the target graph. Replacement is `kind`,
+      which is not a new invention - it is already the repo's word for what type
+      of thing something is (`magus query kind:target`), and
+      `console/src/console/graph/main.ts:2281` already names this exact value
+      `kind` while the surrounding code calls it flavor. So the rename converges
+      on vocabulary that is half-adopted already.
+      Pre-tag because it is BREAKING, which was not obvious until traced. Full
+      scope, all four layers:
+      - **HTTP query param** `?flavor=targets` on `GET /api/v1/graph` -
+        `internal/handler/graph/handler.go` (the param, plus
+        `Graph(ctx, flavor, sel string)` on the interface) and
+        `internal/handler/graph/wire.go`.
+      - **CLI link builder** `cmd/magus/graph_open.go:404` emits the fragment
+        param that opens the explorer on the target graph.
+      - **TypeScript**, 97 references across 7 files: `graph/main.ts`,
+        `graph/target-adapter.ts` (`GraphFlavor`, `detectFlavor`,
+        `isTargetGraphOutput`), `graph/types.ts`, `graph/cards.ts`,
+        `graph/mermaid.ts`, `graph/scaffold.html`. One hit in
+        `console/src/console/home.ts` is the English phrase "tool-flavored" in a
+        comment - leave it, it is not the concept.
+      - **Public docs** `docs/reference/console.md:32`, `:51`, `:201` document
+        `?flavor=targets` as API.
+      Decide the compatibility story before starting: accept `kind` while still
+      honoring `flavor` for a release, or break it cleanly in one tag. Breaking it
+      cleanly is defensible right now precisely because the audience is still
+      small - the same reasoning that makes the "surface" rename cheap today and
+      expensive later.
 - [ ] **`ci.yaml` reads as more complex than magus is.** Failed its real test:
       it was going to be shown to someone and got pulled because it looked far
       more advanced than the tool actually is. That is a shop-window problem, and
@@ -252,6 +281,48 @@ Broken in public first, polish second.
       else, and decide whether the flavor picks the filename or one file carries
       both graphs. Note the size asymmetry: the target graph is far smaller than
       1.2MB, so it is a much better cold-visit default if you ever want one.
+- [ ] **Let the graph-kind toggle work offline, now that two demo graphs are
+      committed.** `switchGraphKind` is live-only by construction: it refetches
+      from the daemon with `?flavor=targets`, so on a static snapshot the toggle is
+      disabled with a hint pointing at `magus graph open --live`
+      (`console/src/console/graph/main.ts:2262`, `:2276`). That was correct when
+      the only static graph was the knowledge one - there was genuinely nothing to
+      switch TO.
+      That is no longer true: `gen/graph.json` and `gen/target-graph.json` are both
+      committed and both copied next to the bundle. So on the docs site the toggle
+      could swap between two local files instead of staying disabled, with the live
+      refetch path unchanged when a daemon IS present.
+      Not a bug, and explicitly NOT a reason to change `loadDemoGraph()`
+      (`:2299`), which fires only on a bare `/graph/` with no fragment - no
+      expressed intent to honor, so defaulting to the knowledge graph is right.
+      The gap is that a visitor at the empty state has no route to the target graph
+      unless they know to type `#demo&flavor=targets`, which is the link
+      `magus graph open` writes but nothing on the page advertises.
+- [ ] **The pnpm scripts are doing orchestration that belongs in a magusfile.**
+      `console/package.json` has grown into shell scripting inside JSON:
+      `copy-static` is one line that mkdir -p's five directories, runs eight `cp`
+      invocations, and shells out to a node script; `build-js` chains six esbuild
+      calls; `build-css` chains eight. That is a build graph written as a
+      semicolon-free one-liner, which is precisely the thing magus exists to
+      replace.
+      The concrete cost is not aesthetic. None of those copies declare inputs or
+      outputs, so magus cannot cache them, cannot drift-gate them, and cannot tell
+      what a change affects - every console build redoes all of it. Editing
+      `copy-static` to add the target-graph copy is what surfaced this: nothing
+      anywhere states that `console/gen/graph/graph.json` is a generated artifact
+      derived from another generated artifact.
+      **Name the tension honestly before acting.** There is an existing,
+      deliberate decision pointing the other way: `docs/magusfile.buzz`'s comment
+      states that the esbuild invocations "live in package.json `scripts` as their
+      single source of truth", and the JS convention is `pnpm install
+      --frozen-lockfile` then `pnpm run build`. That exists so the project stays
+      recognizable to a JS developer and works without magus. Reversing it is
+      defensible, but do it as a decision rather than a drive-by.
+      Likely the right split rather than all-or-nothing: keep `build-js`/`build-css`
+      in package.json, where esbuild flags are genuinely JS-toolchain config a JS
+      dev expects to find, and move `copy-static` into magus targets, where the
+      copies become declared outputs that cache and drift-gate. The asset plumbing
+      is orchestration; the bundler flags are configuration.
 - [ ] **CSS linting for the console.** Inconsistent input and button sizes have
       survived several passes because nothing enforces them. Worth checking
       whether a linter can assert the size scale, or whether this wants design
