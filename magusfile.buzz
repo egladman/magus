@@ -205,6 +205,26 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
     fs.writeFile("MAGUS.md", doc + "\n");
 }
 
+// Exports both graphs the browser Graph Explorer can load, so its demo is this
+// workspace's real graph rather than a fixture that would drift from the wire shape the
+// adapter expects. Written into gen/ because they are generated, not authored: the
+// knowledge graph previously sat at docs/graph.json as a hand-run export with no
+// generating target at all, which made it stale by construction with nothing to say so.
+// Whole-workspace scope is why this lives at the root rather than in docs/ - a describe
+// from inside a project only sees that project.
+export fun graph_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("gen/*.json");
+    fs.mkdirall("gen");
+    // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
+    // magus.cmd is the documented escape hatch.
+    final knowledge = magus.cmd(["graph", "export", "-o", "json"], {"quiet": true}).stdout;
+    fs.writeFile(fs.join("gen", "knowledge-graph.json"), knowledge);
+    // The target graph ({definition, projects}), the same bytes as
+    // `magus describe graph -o json`, which is what the explorer's target adapter reads.
+    final targets = magus.describe(["graph", "-o", "json"], {"quiet": true}).stdout;
+    fs.writeFile(fs.join("gen", "target-graph.json"), targets);
+}
+
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in
 // GitHub Actions, appends it to the job step summary. The final CI step; never gates.
 export fun postflight(ctx: magus\Context, args: [str]) > void {

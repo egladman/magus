@@ -1,0 +1,825 @@
+{
+  "definition": "The target dependency graph is the ctx.needs DAG of a project's magusfile: each node is a target (an exported function), each edge a dependency it composes. It is extracted statically from the magusfile source, so it shows every edge — including both arms of a runtime branch — and flags any dependency cycle (which the run path rejects during dispatch).",
+  "projects": [
+    {
+      "path": ".",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "go-build",
+          "declared": "go_build",
+          "doc": "Compiles the version-stamped magus binary.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            }
+          ]
+        },
+        {
+          "name": "image-build",
+          "declared": "image_build",
+          "doc": "Under the cd charm, build+push+sign both static and CGO images unconditionally.",
+          "charms": [
+            "cd",
+            "static"
+          ],
+          "spells": [
+            {
+              "spell": "docker",
+              "ops": [
+                "docker-buildx"
+              ]
+            },
+            {
+              "spell": "cosign",
+              "ops": [
+                "cosign-sign"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "image-scan",
+          "declared": "image_scan",
+          "doc": "Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.",
+          "dependencies": [
+            "image-build"
+          ],
+          "charms": [
+            "rw"
+          ]
+        },
+        {
+          "name": "man-generate",
+          "declared": "man_generate",
+          "doc": "Renders the roff man pages into manpage/ (repo root).",
+          "outputs": [
+            "manpage/*.1"
+          ]
+        },
+        {
+          "name": "bindings-generate",
+          "declared": "bindings_generate",
+          "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
+          "outputs": [
+            "host/gen/*.go"
+          ]
+        },
+        {
+          "name": "spells-generate",
+          "declared": "spells_generate",
+          "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen)."
+        },
+        {
+          "name": "mocks-generate",
+          "declared": "mocks_generate",
+          "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.",
+          "outputs": [
+            "**/gen/mocks/*.go"
+          ]
+        },
+        {
+          "name": "config-generate",
+          "declared": "config_generate",
+          "doc": "Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go."
+        },
+        {
+          "name": "md-generate",
+          "declared": "md_generate",
+          "doc": "Renders MAGUS.md via `magus describe graph`.",
+          "outputs": [
+            "MAGUS.md"
+          ]
+        },
+        {
+          "name": "graph-generate",
+          "declared": "graph_generate",
+          "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.",
+          "outputs": [
+            "gen/*.json"
+          ]
+        },
+        {
+          "name": "postflight",
+          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary."
+        },
+        {
+          "name": "generate",
+          "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
+          "dependencies": [
+            "man-generate",
+            "bindings-generate",
+            "spells-generate",
+            "mocks-generate",
+            "config-generate",
+            "md-generate",
+            "graph-generate"
+          ],
+          "charms": [
+            "rw"
+          ]
+        },
+        {
+          "name": "release-build",
+          "declared": "release_build",
+          "doc": "Builds one release binary for one platform.",
+          "charms": [
+            "static"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "outputs": [
+            "dist/*"
+          ]
+        },
+        {
+          "name": "release-sign",
+          "declared": "release_sign",
+          "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos)."
+        },
+        {
+          "name": "watch",
+          "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            }
+          ]
+        },
+        {
+          "name": "coverage",
+          "doc": "coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "buzz-check",
+          "declared": "buzz_check",
+          "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
+          "spells": [
+            {
+              "spell": "buzz",
+              "ops": [
+                "buzz-check"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "buzz-run",
+          "declared": "buzz_run",
+          "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
+          "spells": [
+            {
+              "spell": "buzz",
+              "ops": [
+                "magus-buzz"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "preflight",
+          "doc": "Gates the build on workspace health by running `magus doctor`."
+        },
+        {
+          "name": "build",
+          "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
+          "dependencies": [
+            "format",
+            "image-build",
+            "go-build"
+          ],
+          "charms": [
+            "container"
+          ]
+        },
+        {
+          "name": "test",
+          "doc": "Formats first, then runs the Go test suite.",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "lint",
+          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint.",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-vet"
+              ]
+            },
+            {
+              "spell": "md",
+              "ops": [
+                "markdownlint"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "format",
+          "doc": "Regenerates, then formats Go and tidies `go.mod`.",
+          "dependencies": [
+            "generate"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-fmt",
+                "go-mod-tidy"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.",
+          "dependencies": [
+            "generate",
+            "lint",
+            "build",
+            "test",
+            "coverage"
+          ]
+        },
+        {
+          "name": "ci-shard",
+          "declared": "ci_shard",
+          "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
+          "charms": [
+            "gha"
+          ]
+        },
+        {
+          "name": "serve",
+          "doc": "serve is the workspace-root dev loop for BOTH deployables."
+        }
+      ],
+      "depends_on": [
+        "libs/gopherbuzz"
+      ]
+    },
+    {
+      "path": "cmd/magus/starter",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "generate",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "format",
+          "dependencies": [
+            "generate"
+          ]
+        },
+        {
+          "name": "lint",
+          "dependencies": [
+            "format"
+          ]
+        },
+        {
+          "name": "build",
+          "dependencies": [
+            "format"
+          ]
+        },
+        {
+          "name": "test",
+          "dependencies": [
+            "format"
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "'ci' is the conventional anchor that `magus affected ci` keys off.",
+          "dependencies": [
+            "lint",
+            "build",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "console",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "test",
+          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "build",
+          "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
+          "dependencies": [
+            "preflight"
+          ],
+          "charms": [
+            "rw"
+          ]
+        },
+        {
+          "name": "lint",
+          "doc": "lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the same way a Go project's lint runs `go vet`.",
+          "dependencies": [
+            "preflight"
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/textsearch",
+              "target": "lint"
+            }
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
+          "dependencies": [
+            "lint",
+            "test",
+            "build"
+          ]
+        }
+      ],
+      "depends_on": [
+        "libs/textsearch"
+      ]
+    },
+    {
+      "path": "docs",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "md-generate",
+          "declared": "md_generate",
+          "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets."
+        },
+        {
+          "name": "changelog-generate",
+          "declared": "changelog_generate",
+          "doc": "changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-run"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "content-generate",
+          "declared": "content_generate",
+          "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-run"
+              ]
+            }
+          ],
+          "outputs": [
+            "reference/buzz/*.md",
+            "concepts/spells/*.md",
+            "concepts/spells.md",
+            "reference/manpage/*.md",
+            "concepts/knowledge.md"
+          ]
+        },
+        {
+          "name": "generate",
+          "doc": "generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.",
+          "dependencies": [
+            "preflight",
+            "content-generate",
+            "md-generate",
+            "changelog-generate"
+          ],
+          "charms": [
+            "rw"
+          ]
+        },
+        {
+          "name": "format",
+          "dependencies": [
+            "generate"
+          ]
+        },
+        {
+          "name": "lint",
+          "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
+          "dependencies": [
+            "format"
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/textsearch",
+              "target": "lint"
+            }
+          ]
+        },
+        {
+          "name": "build",
+          "dependencies": [
+            "generate"
+          ]
+        },
+        {
+          "name": "buzz-test",
+          "declared": "buzz_test",
+          "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve."
+        },
+        {
+          "name": "test",
+          "dependencies": [
+            "format",
+            "buzz-test"
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "'ci' is the anchor `magus affected ci` keys off.",
+          "dependencies": [
+            "generate",
+            "lint",
+            "build",
+            "test"
+          ]
+        },
+        {
+          "name": "build-playground",
+          "declared": "build_playground",
+          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.",
+          "dependencies": [
+            "preflight"
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            }
+          ]
+        },
+        {
+          "name": "build-mermaid",
+          "declared": "build_mermaid",
+          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into the committed gen/assets/mermaid.js.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "build-hljs",
+          "declared": "build_hljs",
+          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into the committed gen/assets/hljs.js.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "render",
+          "doc": "render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate)."
+        }
+      ],
+      "depends_on": [
+        "libs/gopherbuzz",
+        "libs/textsearch"
+      ]
+    },
+    {
+      "path": "libs/diag",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "generate",
+          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "dependencies": [
+            "preflight",
+            "md-generate"
+          ],
+          "charms": [
+            "rw"
+          ]
+        },
+        {
+          "name": "md-generate",
+          "declared": "md_generate",
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
+        },
+        {
+          "name": "format",
+          "dependencies": [
+            "generate"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-fmt",
+                "go-mod-tidy"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "lint",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-vet"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "build",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
+          "dependencies": [
+            "lint",
+            "build",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "libs/gopherbuzz",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "generate",
+          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "dependencies": [
+            "preflight",
+            "md-generate"
+          ],
+          "charms": [
+            "rw"
+          ]
+        },
+        {
+          "name": "md-generate",
+          "declared": "md_generate",
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
+        },
+        {
+          "name": "format",
+          "dependencies": [
+            "generate"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-fmt",
+                "go-mod-tidy"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "lint",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-vet"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "build",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "test",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
+          "dependencies": [
+            "lint",
+            "build",
+            "test"
+          ]
+        },
+        {
+          "name": "pgo-generate",
+          "declared": "pgo_generate",
+          "doc": "Regenerates default.pgo, the Buzz VM's PGO profile."
+        }
+      ]
+    },
+    {
+      "path": "libs/textsearch",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "generate",
+          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "dependencies": [
+            "preflight",
+            "md-generate"
+          ],
+          "charms": [
+            "rw"
+          ]
+        },
+        {
+          "name": "md-generate",
+          "declared": "md_generate",
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
+        },
+        {
+          "name": "lint",
+          "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "test",
+          "doc": "test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
+          "dependencies": [
+            "lint",
+            "test"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "proto",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "generate",
+          "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
+          "spells": [
+            {
+              "spell": "buf",
+              "ops": [
+                "buf-generate"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "lint",
+          "spells": [
+            {
+              "spell": "buf",
+              "ops": [
+                "buf-lint"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ci",
+          "dependencies": [
+            "generate",
+            "lint"
+          ]
+        }
+      ]
+    }
+  ]
+}
