@@ -55,6 +55,14 @@ The three buckets mean different things:
       starts paying off for skew between the release that ships it and everything
       after, so shipping it in this tag is worth more than shipping it in the
       next one.
+      **Derive the ward, do not declare it.** The floor is the easy half; the ward
+      that keeps the floor honest is the half that matters, and it must be computed
+      from what the workspace actually imports rather than from a number someone
+      maintains by hand. This is the same failure the skill-install digest just
+      fixed: a hand-bumped `agentSkillVersion` could not detect content drift, and a
+      floor nobody remembers to raise fails in exactly the same way as a counter
+      nobody remembers to bump. Generalize the rule: a staleness check derived from
+      content is self-maintaining, a declared one is a promise waiting to rot.
 - [ ] **Finish the stale-generator guard: `serve` and `agent install` are done,
       the rest of the surface is not.** Two shipped this session. `serve` stats
       `os.executable()` each watch tick and refuses to keep regenerating when the
@@ -224,8 +232,26 @@ Broken in public first, polish second.
       squared corners at `:1827` and `:1833` that only exist to meet it.
       `docs/playground.html:180` already does the intended thing with a plain
       `border-top` and no accent - reuse that treatment.
-- [ ] **Sample data for the target graph visualizer.** It is hard to evaluate a
-      graph view against an empty graph, and a first-time visitor sees nothing.
+- [ ] **Demo data for the TARGET-graph flavor of the Graph Explorer.** Today only
+      the knowledge-graph demo exists: `docs/graph.json` (1.2MB, a committed
+      `magus graph export -o json`), fetched relative to the bundle at
+      `console/src/console/graph/main.ts:447` and again at `:2298`. Ask for the
+      targets flavor and there is nothing to show.
+      Most of the work is already done, which makes this cheap: the adapter exists
+      (`console/src/console/graph/target-adapter.js` - `detectFlavor`,
+      `isTargetGraphOutput`, `targetGraphToNodeLink`), the explorer already branches
+      on flavor for layout defaults (`main.ts:203`, `:227`) and already round-trips
+      `?flavor=targets` in the URL (`main.ts:263`). What is missing is a data file
+      and the fetch that picks it.
+      Generate it from this repo rather than fabricating one - magus's own target
+      graph IS the honest demo, and a hand-written fixture would drift from the real
+      output shape immediately. `magus describe graph -o json` is the producer.
+      Two things to settle while wiring it: give it a target (`docs/graph.json`
+      currently has no generating target at all, which is why it is a stale
+      hand-export) so both demo graphs regenerate and drift-gate like everything
+      else, and decide whether the flavor picks the filename or one file carries
+      both graphs. Note the size asymmetry: the target graph is far smaller than
+      1.2MB, so it is a much better cold-visit default if you ever want one.
 - [ ] **CSS linting for the console.** Inconsistent input and button sizes have
       survived several passes because nothing enforces them. Worth checking
       whether a linter can assert the size scale, or whether this wants design
