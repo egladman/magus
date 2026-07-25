@@ -28,3 +28,13 @@ coverage.out
 
 # compiled Go test binaries (go test -c / bench runs)
 *.test
+
+# editor autosaves and backups. Not hypothetical: an emacs autosave (#action.yml#) was
+# committed next to .github/actions/setup-magus/action.yml and had to be removed by hand.
+# They sit beside the file they shadow, so they slip into a `git add -A` unnoticed.
+\#*\#
+.\#*
+*~
+*.orig
+*.swp
+*.swo
