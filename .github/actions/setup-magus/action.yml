@@ -184,6 +184,16 @@ runs:
       shell: bash
       run: echo "$RUNNER_TOOL_CACHE/magus/bin" >> "$GITHUB_PATH"
 
+    # No job here runs a daemon, so MCP/console have nothing to listen on.
+    # Exported via GITHUB_ENV so every later `magus` call in the job picks
+    # it up, not just this step. Otherwise magus doctor's console check
+    # always fails (checks_mcp.go's probeBridgeReachability).
+    - name: Disable console/MCP for CI
+      shell: bash
+      run: |
+        echo "MAGUS_CONSOLE_ENABLED=false" >> "$GITHUB_ENV"
+        echo "MAGUS_MCP_ENABLED=false" >> "$GITHUB_ENV"
+
     - name: Verify magus
       shell: bash
       run: magus version
