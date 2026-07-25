@@ -440,11 +440,16 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
   if (wantsDemo(params) || params.view || params.q || params.node) {
     try {
-      setStatus("Loading the magus demo graph...");
-      // Resolve graph.json relative to THIS bundle (gen/console/graph/), not the document: standalone
+      // Two demos ship, both generated from THIS workspace by the root graph-generate
+      // target: the knowledge graph and the target graph. Selected by the same fragment
+      // param the CLI writes (cmd/magus/graph_open.go appends flavor=targets), so
+      // `magus graph open` and a hand-typed #demo&flavor=targets land on the same data.
+      const wantsTargets = params.flavor === "targets";
+      setStatus(wantsTargets ? "Loading the magus demo target graph..." : "Loading the magus demo graph...");
+      // Resolve relative to THIS bundle (gen/console/graph/), not the document: standalone
       // the two share a directory, but the console mounts this surface into a page at a different path,
       // where a document-relative "./graph.json" would miss. import.meta.url makes both paths work.
-      const r = await fetch(new URL("./graph.json", import.meta.url));
+      const r = await fetch(new URL(wantsTargets ? "./target-graph.json" : "./knowledge-graph.json", import.meta.url));
       if (!r.ok) throw new Error("HTTP " + r.status);
       return { data: await r.json(), source: "demo" };
     } catch (e) {
@@ -2295,7 +2300,7 @@ async function loadDemoGraph(): Promise<void> {
   setStatus("Loading the magus demo graph...");
   try {
     // Relative to THIS bundle (gen/graph/), not the document - the console mounts the surface elsewhere.
-    const r = await fetch(new URL("./graph.json", import.meta.url));
+    const r = await fetch(new URL("./knowledge-graph.json", import.meta.url));
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();
     const empty = el("graph-empty-state");
