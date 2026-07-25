@@ -9,10 +9,17 @@ description: >
 inputs:
   version:
     description: >
-      Release tag to install (e.g. v0.5.0). Empty string always builds from
-      source using the checked-out code.
+      Release tag to install (e.g. v0.5.0), matching the tag exactly - the asset
+      names and the download path are both v-prefixed. Empty string always builds
+      from source using the checked-out code.
+
+      Defaults to a source build on purpose. CD (which pins nothing) must bootstrap
+      from HEAD: magusfile.buzz can legitimately use a host module newer than the
+      last release, so pinning a real tag here would break the very release that
+      ships the module. CI pins deliberately instead, which is what makes it the
+      compatibility gate.
     required: false
-    default: '0.2.0'
+    default: ''
 
 runs:
   using: composite
