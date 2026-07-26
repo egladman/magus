@@ -124,9 +124,8 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 </code></pre>
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
-<p>Prefer a picture? Explore this graph in the <a href="https://eli.gladman.cc/magus/console/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>2078 nodes</strong> and <strong>4472 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2082 nodes</strong> and <strong>4482 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -146,91 +145,91 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tr>
 <td>project</td>
 <td style="text-align:right">8</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:project</code></a></td>
+<td><code>magus query kind:project</code></td>
 <td><code>magus</code>, <code>docs</code>, <code>libs/gopherbuzz</code></td>
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">78</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:target</code></a></td>
+<td style="text-align:right">79</td>
+<td><code>magus query kind:target</code></td>
 <td><code>content-generate</code>, <code>generate</code>, <code>generate</code></td>
 </tr>
 <tr>
 <td>spell</td>
 <td style="text-align:right">12</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:spell" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:spell</code></a></td>
+<td><code>magus query kind:spell</code></td>
 <td><code>go</code>, <code>ts</code>, <code>docker</code></td>
 </tr>
 <tr>
 <td>op</td>
 <td style="text-align:right">53</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:op</code></a></td>
+<td><code>magus query kind:op</code></td>
 <td><code>go-build</code>, <code>go-test</code>, <code>go-fmt</code></td>
 </tr>
 <tr>
 <td>tool</td>
 <td style="text-align:right">13</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:tool" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:tool</code></a></td>
+<td><code>magus query kind:tool</code></td>
 <td><code>sh</code>, <code>go</code>, <code>pnpm</code></td>
 </tr>
 <tr>
 <td>charm</td>
 <td style="text-align:right">5</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:charm" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:charm</code></a></td>
+<td><code>magus query kind:charm</code></td>
 <td><code>rw</code>, <code>static</code>, <code>cd</code></td>
 </tr>
 <tr>
 <td>module</td>
 <td style="text-align:right">23</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:module</code></a></td>
-<td><code>fs</code>, <code>charm</code>, <code>vcs</code></td>
+<td><code>magus query kind:module</code></td>
+<td><code>fs</code>, <code>charm</code>, <code>os</code></td>
 </tr>
 <tr>
 <td>method</td>
-<td style="text-align:right">152</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:method</code></a></td>
+<td style="text-align:right">153</td>
+<td><code>magus query kind:method</code></td>
 <td><code>archive.compress</code>, <code>archive.uncompress</code>, <code>charm.after</code></td>
 </tr>
 <tr>
 <td>diagnostic</td>
 <td style="text-align:right">40</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:diagnostic</code></a></td>
+<td><code>magus query kind:diagnostic</code></td>
 <td><code>MGS2001</code>, <code>MGS4001</code>, <code>MGS5002</code></td>
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">184</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:doc</code></a></td>
+<td style="text-align:right">185</td>
+<td><code>magus query kind:doc</code></td>
 <td><code>docs/reference/manpage/magus-doctor.md</code>, <code>docs/concepts/spells.md</code>, <code>docs/reference/manpage/magus-run.md</code></td>
 </tr>
 <tr>
 <td>dir</td>
 <td style="text-align:right">96</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:dir" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:dir</code></a></td>
+<td><code>magus query kind:dir</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum</code>, <code>std/examples/fs</code>, <code>docs/reference/buzz</code></td>
 </tr>
 <tr>
 <td>file</td>
 <td style="text-align:right">225</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:file</code></a></td>
+<td><code>magus query kind:file</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum/config.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code>, <code>magusfile.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1072</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:function</code></a></td>
+<td style="text-align:right">1073</td>
+<td><code>magus query kind:function</code></td>
 <td><code>sel</code>, <code>sendObject</code>, <code>send</code></td>
 </tr>
 <tr>
 <td>import</td>
 <td style="text-align:right">113</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:import</code></a></td>
+<td><code>magus query kind:import</code></td>
 <td><code>std</code>, <code>magus</code>, <code>fs</code></td>
 </tr>
 <tr>
 <td>rationale</td>
 <td style="text-align:right">4</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:rationale" rel="noopener noreferrer" target="_blank" data-external><code>magus query kind:rationale</code></a></td>
+<td><code>magus query kind:rationale</code></td>
 <td><code>NOTE</code>, <code>NOTE</code>, <code>NOTE</code></td>
 </tr>
 </tbody>
@@ -247,50 +246,50 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>.</td>
-<td style="text-align:right">25</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:." rel="noopener noreferrer" target="_blank" data-external><code>magus query project:.</code></a></td>
+<td style="text-align:right">26</td>
+<td><code>magus query project:.</code></td>
 <td><code>generate</code>, <code>format</code>, <code>image-build</code></td>
 </tr>
 <tr>
 <td>cmd/magus/starter</td>
 <td style="text-align:right">7</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:cmd%2Fmagus%2Fstarter" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:cmd/magus/starter</code></a></td>
+<td><code>magus query project:cmd/magus/starter</code></td>
 <td><code>format</code>, <code>ci</code>, <code>build</code></td>
 </tr>
 <tr>
 <td>console</td>
 <td style="text-align:right">5</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:console" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:console</code></a></td>
+<td><code>magus query project:console</code></td>
 <td><code>build</code>, <code>ci</code>, <code>lint</code></td>
 </tr>
 <tr>
 <td>docs</td>
 <td style="text-align:right">15</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:docs" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:docs</code></a></td>
+<td><code>magus query project:docs</code></td>
 <td><code>content-generate</code>, <code>generate</code>, <code>ci</code></td>
 </tr>
 <tr>
 <td>libs/diag</td>
 <td style="text-align:right">8</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Fdiag" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:libs/diag</code></a></td>
+<td><code>magus query project:libs/diag</code></td>
 <td><code>format</code>, <code>generate</code>, <code>build</code></td>
 </tr>
 <tr>
 <td>libs/gopherbuzz</td>
 <td style="text-align:right">9</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Fgopherbuzz" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:libs/gopherbuzz</code></a></td>
+<td><code>magus query project:libs/gopherbuzz</code></td>
 <td><code>build</code>, <code>format</code>, <code>generate</code></td>
 </tr>
 <tr>
 <td>libs/textsearch</td>
 <td style="text-align:right">6</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Ftextsearch" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:libs/textsearch</code></a></td>
+<td><code>magus query project:libs/textsearch</code></td>
 <td><code>lint</code>, <code>generate</code>, <code>preflight</code></td>
 </tr>
 <tr>
 <td>proto</td>
 <td style="text-align:right">3</td>
-<td><a href="https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:proto" rel="noopener noreferrer" target="_blank" data-external><code>magus query project:proto</code></a></td>
+<td><code>magus query project:proto</code></td>
 <td><code>ci</code>, <code>generate</code>, <code>lint</code></td>
 </tr>
 </tbody>
@@ -399,6 +398,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tr>
 <td><code>md-generate</code></td>
 <td>Renders MAGUS.md via <code>magus describe graph</code>.</td>
+</tr>
+<tr>
+<td><code>graph-generate</code></td>
+<td>Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.</td>
 </tr>
 <tr>
 <td><code>coverage</code></td>

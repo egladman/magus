@@ -55,11 +55,11 @@ func (f *fakeWS) Affected(context.Context, string) (*types.AffectedResult, error
 func (f *fakeWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
 	panic("not used")
 }
-func (f *fakeWS) DescribeSpells() types.SpellsOutput         { panic("not used") }
-func (f *fakeWS) DescribeCharms([]string) types.CharmsOutput { panic("not used") }
-func (f *fakeWS) DescribeTargets() types.TargetsOutput       { panic("not used") }
+func (f *fakeWS) DescribeSpells() types.SpellsOutput                    { panic("not used") }
+func (f *fakeWS) DescribeCharms([]string) types.CharmsOutput            { panic("not used") }
+func (f *fakeWS) DescribeTargets() types.TargetsOutput                  { panic("not used") }
 func (f *fakeWS) DescribeGraph(context.Context) types.TargetGraphOutput { panic("not used") }
-func (f *fakeWS) DescribeProjects() types.ProjectsOutput     { panic("not used") }
+func (f *fakeWS) DescribeProjects() types.ProjectsOutput                { panic("not used") }
 func (f *fakeWS) DescribeWorkspaces(types.WorkspaceConfig) types.WorkspacesOutput {
 	panic("not used")
 }
