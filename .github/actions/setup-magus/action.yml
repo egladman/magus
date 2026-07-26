@@ -38,9 +38,13 @@ inputs:
 runs:
   using: composite
   steps:
-    # Check for a prebuilt binary before paying for anything a source build
-    # needs (system packages, a Go toolchain, a clone) - most runs never touch
-    # any of that.
+    - name: Sparse checkout install script
+      if: inputs.installation-strategy != 'source'
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      with:
+        repository: egladman/magus
+        sparse-checkout: 'install.sh'
+
     - name: Install magus from release
       id: prebuilt
       if: inputs.installation-strategy != 'source'
@@ -49,43 +53,16 @@ runs:
       continue-on-error: ${{ inputs.installation-strategy == 'automatic' }}
       shell: bash
       env:
-        # Release-signing Ed25519 public key, mirrored from
-        # internal/selfupdate/release.pub. This action is consumed by
-        # arbitrary repos via `uses: egladman/magus/.github/actions/setup-magus@...`,
-        # so it can't assume the magus source tree (or a Go toolchain build of
-        # magus-utils) is checked out, so the key has to be self-contained here.
         MAGUS_RELEASE_PUBKEY_HEX: ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779
       run: |
         set -euo pipefail
+        INSTALL_PREFIX="$RUNNER_TOOL_CACHE/magus"
         VERSION="${{ inputs.git-ref }}"
         if [ -z "${VERSION}" ]; then
           echo "::error::magus: installation-strategy '${{ inputs.installation-strategy }}' needs git-ref set to a release tag" >&2
           exit 1
         fi
-        OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-        ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-        BASE="https://github.com/egladman/magus/releases/download/${VERSION}"
-        ASSET="magus_${VERSION}_${OS}_${ARCH}.tar.gz"
-        TMP="$(mktemp -d)"
-        trap 'rm -rf "${TMP}"' EXIT
-        cd "${TMP}"
-
-        curl -fsSL "${BASE}/${ASSET}"       -o "${ASSET}"
-        curl -fsSL "${BASE}/SHA256SUMS"     -o SHA256SUMS
-        curl -fsSL "${BASE}/SHA256SUMS.sig" -o SHA256SUMS.sig
-
-        # Verify SHA256SUMS was signed by the magus release key before trusting
-        # any hash in it. DER-wrap the raw 32-byte Ed25519 key as a SubjectPublicKeyInfo
-        # (fixed 12-byte prefix for the Ed25519 OID) so plain openssl can load it.
-        printf '302a300506032b6570032100%s' "${MAGUS_RELEASE_PUBKEY_HEX}" | xxd -r -p > pub.der
-        { echo "-----BEGIN PUBLIC KEY-----"; openssl base64 -in pub.der -A | fold -w 64; echo; echo "-----END PUBLIC KEY-----"; } > pub.pem
-        openssl pkeyutl -verify -pubin -inkey pub.pem -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
-
-        grep "${ASSET}" SHA256SUMS | sha256sum --check --status
-
-        mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
-        tar -xzf "${ASSET}" -C "$RUNNER_TOOL_CACHE/magus/bin" magus
-        echo "magus: installed prebuilt ${VERSION} for ${OS}/${ARCH} (signature verified)" >&2
+        ./install.sh
 
     - name: Fail if prebuilt required but unavailable
       if: inputs.installation-strategy == 'prebuilt' && steps.prebuilt.outcome == 'failure'
