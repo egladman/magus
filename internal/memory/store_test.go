@@ -107,11 +107,11 @@ func TestListEmptyStore(t *testing.T) {
 
 func TestValidateRejections(t *testing.T) {
 	cases := map[string]Record{
-		"bad name":       {Name: "Not Kebab", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}},
-		"unknown type":   {Name: "x", Type: "observation", Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}},
-		"no refs":        {Name: "x", Type: TypePointer},
-		"unknown kind":   {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: "fact", Target: "t"}}},
-		"empty target":   {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "  "}}},
+		"bad name":        {Name: "Not Kebab", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}},
+		"unknown type":    {Name: "x", Type: "observation", Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}},
+		"no refs":         {Name: "x", Type: TypePointer},
+		"unknown kind":    {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: "fact", Target: "t"}}},
+		"empty target":    {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "  "}}},
 		"pointer w/prose": {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}, Body: "not allowed"},
 	}
 	root := testRoot(t)
@@ -147,4 +147,3 @@ func TestCursorRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "left off wiring the @memory shard", got)
 }
-

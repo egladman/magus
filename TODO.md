@@ -235,9 +235,9 @@ Broken in public first, polish second.
       `lookupTitle()` finds no page, so nothing on the site ever links to
       `/guides/` and the asset-integrity gate has no broken link to catch. Worth
       making that case loud rather than silent.
-- [ ] **Subcommands are inconsistently cross-linked.** The token set is built
+- [x] **Subcommands are inconsistently cross-linked.** The token set is built
       from manpage filenames in `docs/engine/types.buzz:667-675` as
-      `"magus " + sub`, so it is one subcommand deep and the literal `magus `
+      `"magus " + sub`, so it is one subcommand deep and the literal `magus`
       prefix is mandatory. Matching is byte-level substring, not regex
       (`docs/lib/glossary.buzz:173-181`, `:188-215`). Three distinct problems,
       worth deciding separately:

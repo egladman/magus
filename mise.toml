@@ -4,7 +4,7 @@
 mgs = "go run ./cmd/magus"
 
 [tools]
-go = "1.26.4"
+go = "1.26.5"
 # node + markdownlint-cli back the markdown spell (md.markdownlint), so the lint gate
 # resolves them from mise, not a stray global. Markdown has no formatter: TypeScript/CSS
 # use biome (a pnpm devDep per project), and prettier was dropped rather than kept only to

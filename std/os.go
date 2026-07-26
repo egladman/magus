@@ -209,6 +209,8 @@ func OsExecutable(_ context.Context) (string, error) {
 	if err != nil {
 		// The binary can legitimately be gone already - `go run` deletes its temp build
 		// once the process is up. The unresolved path is still the best answer.
+		//
+		//nolint:nilerr
 		return exe, nil
 	}
 	return resolved, nil

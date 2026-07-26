@@ -17938,7 +17938,7 @@
     {
       "id": "project:.",
       "kind": "project",
-      "label": "docs-highlighting-missing-d85082",
+      "label": "magus",
       "source": ".",
       "attrs": {
         "engine": "buzz",
@@ -18137,7 +18137,9 @@
       "source": ".",
       "attrs": {
         "declared_as": "bindings_generate",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outdacffc7d",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18179,7 +18181,9 @@
       "doc": "Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out06d8746d",
+        "last_run_ok": "false"
       }
     },
     {
@@ -18211,7 +18215,9 @@
       "doc": "coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "ref44dbd0dd",
+        "last_run_ok": "false"
       }
     },
     {
@@ -18221,7 +18227,9 @@
       "doc": "Regenerates, then formats Go and tidies `go.mod`.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out4ab8a95a",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18231,7 +18239,9 @@
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outa5421d4b",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18285,7 +18295,9 @@
       "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out76d95a7d",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18296,7 +18308,9 @@
       "source": ".",
       "attrs": {
         "declared_as": "man_generate",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "ref1b5cedf6",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18307,7 +18321,9 @@
       "source": ".",
       "attrs": {
         "declared_as": "md_generate",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "ref16b5fa8d",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18391,7 +18407,9 @@
       "doc": "Formats first, then runs the Go test suite.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out372ea95f",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18420,7 +18438,9 @@
       "doc": "'ci' is the conventional anchor that `magus affected ci` keys off.",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outb0c3b1f1",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18429,7 +18449,9 @@
       "label": "format",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out2041e2cc",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18438,7 +18460,9 @@
       "label": "generate",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out2742b8c9",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18465,7 +18489,9 @@
       "label": "test",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out05313ff6",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18475,7 +18501,9 @@
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
       "source": "console",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out7b43d1ce",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18485,7 +18513,9 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
       "source": "console",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "oute0a5aabf",
+        "last_run_ok": "false"
       }
     },
     {
@@ -18514,7 +18544,9 @@
       "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
       "source": "console",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outf4888bdd",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18588,7 +18620,9 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outccd28648",
+        "last_run_ok": "false"
       }
     },
     {
@@ -18608,7 +18642,9 @@
       "label": "format",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out48b85fa9",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18619,7 +18655,7 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outcdffff6d",
+        "last_output_ref": "outa7b4e91a",
         "last_run_ok": "true"
       }
     },
@@ -18630,7 +18666,9 @@
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outa9946cd3",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18661,8 +18699,8 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outbc08f774",
-        "last_run_ok": "true"
+        "last_output_ref": "out93cf0eb9",
+        "last_run_ok": "false"
       }
     },
     {
@@ -18672,7 +18710,7 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outd7fc7993",
+        "last_output_ref": "out77ac72bb",
         "last_run_ok": "true"
       }
     },
@@ -18692,9 +18730,7 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out6e542647",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18703,9 +18739,7 @@
       "label": "format",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outa281d870",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18715,7 +18749,9 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out4a48ffea",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18772,7 +18808,9 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outbb253708",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18781,7 +18819,9 @@
       "label": "format",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out6e0c70fe",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18791,7 +18831,9 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out3ed449a4",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18800,7 +18842,9 @@
       "label": "lint",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out21406c6b",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18860,7 +18904,9 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out08ea3195",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18909,7 +18955,9 @@
       "label": "ci",
       "source": "proto",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out9bc86dfc",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18919,7 +18967,9 @@
       "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
       "source": "proto",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outf004f5d4",
+        "last_run_ok": "true"
       }
     },
     {

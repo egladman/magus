@@ -364,14 +364,28 @@ func computeSkillContentDigest() string {
 			return "unreadable"
 		}
 		// Length-prefix the path so no rename can collide with a content change.
-		fmt.Fprintf(h, "%d:%s\n", len(p), p)
-		h.Write(body)
+		_, err = fmt.Fprintf(h, "%d:%s\n", len(p), p)
+		if err != nil {
+			return "unreadable"
+		}
+		_, err = h.Write(body)
+		if err != nil {
+			return "unreadable"
+		}
 	}
 	// agents-section.md is a separate embed but part of the same installed surface, so
 	// it belongs in the fingerprint: editing it must invalidate an AGENTS.md install
 	// exactly as editing a SKILL.md invalidates a skill dir.
-	fmt.Fprintf(h, "%d:agents-section.md\n", len(agentsSection))
-	h.Write([]byte(agentsSection))
+	_, err := fmt.Fprintf(h, "%d:agents-section.md\n", len(agentsSection))
+	if err != nil {
+		return "unreadable"
+	}
+
+	_, err = h.Write([]byte(agentsSection))
+	if err != nil {
+		return "unreadable"
+	}
+
 	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
