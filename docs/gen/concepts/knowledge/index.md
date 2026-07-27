@@ -93,11 +93,11 @@ magus path "target:.:test" "tool:go"       # a target reaches its tool via targe
 Each spell op carries the base argv it runs on an `argv` attr (rendered with empty
 charms) and `use`s the `tool:<program>` node for its argv[0] - the program, its own kind
 because it is an entity, not an operation. The op's spell `use`s the tool too, so
-`explain tool:go` lists every op and spell that runs go; a target reaches the tool
+`magus explain tool:go` lists every op and spell that runs go; a target reaches the tool
 through its existing `target --uses--> op` edge. (There is no per-target command node:
 its argv was always identical to the op's, so the op carries the model.)
 
-So `explain tool:go` lists every op that runs go:
+So `magus explain tool:go` lists every op that runs go:
 
 <!-- example:explain-tool-go -->
 ```console
@@ -181,7 +181,7 @@ magus explain "symbol:<id>"      # a function's coverage ratio + test_refs (test
 magus query "kind:file" -o json  # each file node's attrs.coverage (covered/total statements)
 ```
 
-After `magus run coverage` (or `ci`), a `coverage` attr (with `covered_stmts` /
+After `magus run test` (or `magus run ci`), a `coverage` attr (with `covered_stmts` /
 `total_stmts`) folds onto file and symbol nodes, and `test_refs` counts the test files
 that reference a symbol. Sort symbols by `coverage` ascending for "what is untested",
 or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
@@ -252,7 +252,7 @@ depth), click a legend color to isolate a kind, and use the **hubs**/**orphans**
 lenses (the visual twin of `magus graph stats`). The page is fully client-side and
 data-agnostic - it also loads any `graph.json` from `magus graph export -o json`
 via the Open-file button or drag-and-drop. This site's own graph is the
-[live demo](../console/).
+[demo](../console/graph/#demo).
 
 ## Schema
 
@@ -396,7 +396,7 @@ filter across everything the graph knows, however it was extracted (magus's own 
 walk or a foreign SCIP index).
 
 Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the default
-query/stats/`graph open`/warm graph never touch them. They load only when a query is
+`magus query`/`magus graph stats`/`magus graph open`/warm graph never touch them. They load only when a query is
 symbol-seeded - `kind:symbol`, a `symbol:` ID, `relation:defines`/`references`, or
 the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
 referencing file (`magus_refs` over MCP, paginated). At very large scale a derived
@@ -422,7 +422,7 @@ file node: `vcs_last_commit` (short SHA of the most recent commit touching the f
 `vcs_last_modified` (its date), `vcs_last_author` (who last touched it), and
 `vcs_commits` (commits touching the file within the window). It also mints an `author`
 node per contributor with an `authored` edge to each file they touched in the window -
-who edits what, so an agent can ask `explain author:Ada` or trace ownership. These edges
+who edits what, so an agent can ask `magus explain author:Ada` or trace ownership. These edges
 are uncapped: `max_commits` already bounds the scan, so a dominant maintainer legitimately
 having many is a fact to teach, not a smell. Set `authorship: false` to keep only the
 per-file `vcs_*` attrs and drop the author layer.
@@ -433,7 +433,7 @@ remote-shareable like the other extracted shards. The `git log` walk is bounded 
 set, and the `authorship` flag), so the standard shard store reuses it whole and it
 re-runs only when one of those actually moves - never on the query path. A non-git
 workspace or a git error simply yields no shard. Because the `vcs_*` attrs vary by commit,
-`graph diff` strips them from both sides, so a file node is not reported as changed just
+`magus graph diff` strips them from both sides, so a file node is not reported as changed just
 because its last commit moved - the diff stays structural.
 
 ## Exporting to external tools
@@ -474,7 +474,7 @@ magus graph diff /tmp/base.json -o json          # machine-readable, with before
 the current config) in an isolated throwaway tree that never touches your real cache;
 it and the positional baseline are mutually exclusive, and it cannot be combined with
 `--global` (the base is a single-workspace build). A baseline file must be a whole-graph
-`graph export -o json` (symbol shards in it are matched automatically; pass `--global`
+`magus graph export -o json` (symbol shards in it are matched automatically; pass `--global`
 if the baseline was global). Edge diffs are structural -
 an edge is identified by (source, target, relation), so a re-scored or re-provenanced
 edge that keeps those three is not reported as a change.
@@ -528,15 +528,15 @@ cursor is stateless and self-validating - it carries the query and a graph
 fingerprint, so a cursor reused against a different query or a graph that changed
 between pages is rejected rather than returning an incoherent slice.
 
-`magus agent install claude` writes four skills into `.claude/skills/` that teach
-an agent HOW to use magus (the repo's `MAGUS.md` says WHAT is in the workspace):
-the knowledge-graph verbs, target-first execution, generated-file triage, and
-graph-grounded refactoring. The skills ship with the binary and teach only the
-tool surface, so they stay current with the magus version rather than the
-workspace. Platform is an explicit argument; only `claude` is supported today.
-Each installed file carries a version footer, and `magus graph verify` (with
-`--strict` for CI) reports when an installed skill has fallen behind the binary
-after an upgrade. See [Agents](../guides/agents.md) for the full surface.
+`magus agent install .agents/skills --agents-md` equips Codex with Agent Skills
+and a managed always-on `AGENTS.md` section. Claude Code uses
+`magus agent install .claude/skills`. The skills teach HOW to use magus (the
+repo's `MAGUS.md` says WHAT is in the workspace): knowledge-graph verbs,
+target-first execution, generated-file triage, and graph-grounded refactoring.
+They ship with the binary and teach only the tool surface, so they stay current
+with the magus version rather than the workspace. Each installed file carries a
+version footer, and `magus graph verify --strict` reports actionable drift after
+an upgrade. See [Agents](../guides/agents.md) for the full host setup.
 
 ## Prior art
 
@@ -562,10 +562,9 @@ than committed. If you want a graph of an arbitrary corpus, Graphify is the
 right tool; the magus graph is narrower and, within its domain, checkable
 edge by edge.
 
-[Obsidian](https://obsidian.md) shaped the memory side, and its influence
-predates the AI wave entirely: durable knowledge as plain, linked markdown
-files the user owns, readable by any tool, has been its position for years. magus
-memory (status, progress, decisions) borrows that files-first stance
-deliberately - the files work without magus. Obsidian is a knowledge base for
-people; magus keeps three small files per repository for agents and the
-humans working alongside them, and stops there.
+[Obsidian](https://obsidian.md) shaped the handoff-journal side: durable,
+linked markdown the user owns and any tool can read. magus borrows that
+files-first stance deliberately, but keeps the scope small: named decisions,
+plans, and pointers that a later person can reopen. It is not automatic agent
+memory. `magus memory verify` makes malformed, stale, and broken-linked entries
+visible instead of quietly skipping them.

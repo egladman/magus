@@ -27,11 +27,12 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+
+	json "github.com/egladman/magus/internal/codec"
 	"os"
 	"path/filepath"
 	"runtime"

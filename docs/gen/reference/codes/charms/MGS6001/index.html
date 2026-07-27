@@ -100,7 +100,7 @@ command (json-patch: index 7 out of range for argv of length 4)
 <h2 id="why">Why</h2>
 <p>A charm is an RFC 6902 patch over a target's argument vector (see
 <a href="../../../../concepts/charms/">charms</a>). Magus validates a charm's <em>shape</em> when the <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>
-loads: the op is one of the six, the path is a <code>/</code>-rooted JSON Pointer, a
+loads: the op is one of the six, the <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> is a <code>/</code>-rooted JSON Pointer, a
 <code>move</code>/<code>copy</code> carries a <code>from</code>. That check cannot know whether the pointer
 resolves, because it does not have the target's argv in hand.</p>
 <p>The pointer is only resolved when the charm is <em>applied</em> to a concrete command.
@@ -111,11 +111,11 @@ four-element argv has nowhere to land. This is what a hand-written positional
 patch drifts into when the base command changes and the counted index is not
 updated (the reason the <a href="../../../../concepts/charms/#the-charm-constructor-reference"><code>charm</code> constructors</a>
 anchor by value instead).</li>
-<li><strong>A failing <code>test</code> op.</strong> <code>{&quot;op&quot;: &quot;test&quot;, &quot;path&quot;: &quot;/1&quot;, &quot;value&quot;: &quot;run&quot;}</code> asserts
-the element is still where the author expected; when it is not, the patch is
+<li><strong>A failing <code>test</code> op.</strong> <code>{&quot;op&quot;: &quot;test&quot;, &quot;path&quot;: &quot;/1&quot;, &quot;value&quot;: &quot;<a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>&quot;}</code> asserts
+the element is still <a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the author expected; when it is not, the patch is
 rejected on purpose.</li>
 </ul>
-<p>Before this diagnostic, <code>magus describe</code> silently dropped the <code>command:</code> line for
+<p>Before this diagnostic, <code>magus <a class="code-xref" href="../../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a></code> silently dropped the <code>command:</code> line for
 such a target: the preview rendered without the charm and without a word, so you
 could not tell a charm had failed to apply until a real run. Magus now surfaces
 it, because a charm that is dead on a target is exactly the kind of

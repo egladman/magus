@@ -70,10 +70,15 @@ type AffinityOutput struct {
 // affinity is "hidden" — i.e. neither project declares a dependency on the other.
 type CoChange struct {
 	A      string `json:"a"      yaml:"a"`
+	AName  string `json:"a_name" yaml:"a_name"`
 	B      string `json:"b"      yaml:"b"`
+	BName  string `json:"b_name" yaml:"b_name"`
 	Count  int    `json:"count"  yaml:"count"`
 	Hidden bool   `json:"hidden,omitempty" yaml:"hidden,omitempty"`
 }
+
+func (c CoChange) ALabel() string { return ProjectDisplayName(c.A, c.AName, "") }
+func (c CoChange) BLabel() string { return ProjectDisplayName(c.B, c.BName, "") }
 
 // OwnershipOutput reports author concentration per project — the knowledge-risk view.
 type OwnershipOutput struct {
@@ -88,6 +93,7 @@ type OwnershipOutput struct {
 // and whether it has gone quiet in the recent half of the window (abandonment risk).
 type Ownership struct {
 	Path         string    `json:"path"                   yaml:"path"`
+	Name         string    `json:"name"                   yaml:"name"`
 	Commits      int       `json:"commits"                yaml:"commits"`
 	Authors      int       `json:"authors"                yaml:"authors"`
 	Primary      string    `json:"primary"                yaml:"primary"`
@@ -96,6 +102,8 @@ type Ownership struct {
 	Stale        bool      `json:"stale,omitempty"        yaml:"stale,omitempty"`
 	LastCommit   time.Time `json:"last_commit,omitempty"  yaml:"last_commit,omitempty"`
 }
+
+func (o Ownership) Label() string { return ProjectDisplayName(o.Path, o.Name, "") }
 
 // TrendOutput ranks projects by whether their activity is rising or cooling — the
 // window is split at its midpoint and the two halves compared.
@@ -109,10 +117,13 @@ type TrendOutput struct {
 // Trend is one project's churn split across the window's two halves; Delta>0 is rising.
 type Trend struct {
 	Path    string `json:"path"    yaml:"path"`
+	Name    string `json:"name"    yaml:"name"`
 	Recent  int    `json:"recent"  yaml:"recent"`
 	Earlier int    `json:"earlier" yaml:"earlier"`
 	Delta   int    `json:"delta"   yaml:"delta"`
 }
+
+func (t Trend) Label() string { return ProjectDisplayName(t.Path, t.Name, "") }
 
 // InsightView bundles the four VCS-history lenses plus the run-outcome volatility lens,
 // without the knowledge-graph axis. It is what the console serves at GET /api/v1/insight:

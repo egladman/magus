@@ -88,7 +88,7 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs5001-near-duplicate-services">MGS5001: near-duplicate services</h1>
-<p>Two or more long-running <a href="../../../../concepts/operations/">service ops</a> in the resolved run
+<p>Two or more long-running <a href="../../../../concepts/operations/">service ops</a> in the resolved <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>
 look like copies of the same <a class="glossary-term" href="../../../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a>: they share an image repository and a
 container port, but differ in some detail (an environment variable, an image tag,
 a volume), so magus will not silently merge them. Left as-is they run as separate
@@ -112,14 +112,14 @@ different <code>POSTGRES_DB</code> means a different database), so magus refuses
 them on its own and surfaces them to you instead.</p>
 <p>The comparison is deliberately conservative: the container port is the identity
 (&quot;5432 means Postgres&quot;) while the host-port binding and the image tag are ignored
-for grouping, so version skew (<code>postgres:15</code> vs <code>postgres:16</code>) still clusters and
+for grouping, so <a class="code-xref" href="../../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> skew (<code>postgres:15</code> vs <code>postgres:16</code>) still clusters and
 is reported as a difference rather than hidden. Services on <strong>different</strong> container
 ports are treated as intentionally separate and are not flagged at run time (they
 appear only in the <code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> audit).</p>
 <h2 id="fix">Fix</h2>
 <ul>
 <li>If they are meant to be one instance, extract a single shared service target and
-have each project <code>magus.needs</code> it, so the dependency graph runs it once.</li>
+have each project <code>magus.needs</code> it, so the dependency <a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> runs it once.</li>
 <li>If the difference is intentional (for example, a test that pins a different
 Postgres major version), mark the service distinct with a reason so the warning
 stays meaningful and the decision is auditable.</li>

@@ -11,13 +11,14 @@ import (
 
 type RawMessage = jsontext.Value
 
-// json/v2 has no default representation for time.Duration (go.dev/issue/71631):
-// marshaling one fails with "no default representation; specify an explicit
-// format". These options marshal a Duration as its string form ("6h0m0s") and
-// parse it back, and are threaded through every codec entry point so any Duration
-// field round-trips through JSON.
+// json/v2 needs an explicit time.Duration representation.
 var (
-	marshalOpts   = jsonv2.WithMarshalers(jsonv2.MarshalToFunc(marshalDuration))
+	marshalOpts = jsonv2.JoinOptions(
+		jsonv2.Deterministic(true),
+		jsonv2.FormatNilSliceAsNull(true),
+		jsonv2.FormatNilMapAsNull(true),
+		jsonv2.WithMarshalers(jsonv2.MarshalToFunc(marshalDuration)),
+	)
 	unmarshalOpts = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(unmarshalDuration))
 )
 
@@ -40,6 +41,7 @@ func unmarshalDuration(dec *jsontext.Decoder, d *time.Duration) error {
 
 func Marshal(v any) ([]byte, error)      { return jsonv2.Marshal(v, marshalOpts) }
 func Unmarshal(data []byte, v any) error { return jsonv2.Unmarshal(data, v, unmarshalOpts) }
+func Valid(data []byte) bool             { return jsontext.Value(data).IsValid() }
 func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
 	data, err := jsonv2.Marshal(v, marshalOpts)
 	if err != nil {

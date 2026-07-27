@@ -100,8 +100,8 @@ form is produced by the pinned release and you are running a dev build (v0.1.0-5
 teammate. Codes never move once assigned.</li>
 <li><strong>A handwritten resolution page</strong> at the <code>see:</code> URL - a real Why and Resolution
 written by a person, so neither you nor an agent has to reverse-engineer the fix.</li>
-<li><strong>A queryable graph node.</strong> Every code is a node in the <a href="../../concepts/knowledge/">knowledge graph</a>:
-<code>magus explain <a class="code-xref" href="../codes/race/MGS4005/" data-kind="code" data-def="A generated output differs on regeneration but its declared inputs are unchanged and a dev build produced it, so the difference is toolchain or version skew, not a source change.">MGS4005</a></code> prints the card, and the code page is a first-class doc-site
+<li><strong>A queryable <a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> node.</strong> Every code is a node in the <a href="../../concepts/knowledge/">knowledge graph</a>:
+<code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="Explain one knowledge-graph node.">magus explain</a> <a class="code-xref" href="../codes/race/MGS4005/" data-kind="code" data-def="A generated output differs on regeneration but its declared inputs are unchanged and a dev build produced it, so the difference is toolchain or version skew, not a source change.">MGS4005</a></code> prints the card, and the code page is a first-class doc-site
 page. Nothing is ad-hoc free text.</li>
 </ul>
 <h2 id="codes-are-grouped-into-families">Codes are grouped into families</h2>
@@ -161,8 +161,8 @@ dirty. When it did, <code>vcs.diagnoseDrift</code> names <em>why</em>, instead o
 actually changed. Real drift: regenerate and commit.</li>
 <li><strong><a href="../codes/race/MGS4005/">MGS4005</a> - environmental drift.</strong> The declared inputs are
 byte-identical to what is committed, but a dev build (or a locally installed tool at a
-different version than the pinned release) rendered them differently - the classic
-markdown-emphasis case, <code>*x*</code> versus <code>_x_</code>. <strong>Not your change; do not commit.</strong></li>
+different <a class="code-xref" href="../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> than the pinned release) rendered them differently - the classic
+markdown-emphasis case, <code>*<a class="code-xref" href="../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a>*</code> versus <code>_x_</code>. <strong>Not your change; do not commit.</strong></li>
 <li><strong><a href="../codes/race/MGS4003/">MGS4003</a> - non-deterministic output.</strong> Same inputs, same
 generator version, output still differs: a reproducibility bug in the generator.</li>
 </ul>

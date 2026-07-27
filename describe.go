@@ -365,7 +365,7 @@ func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
 			continue // best-effort introspection: a project we can't read just omits its graph
 		}
 		for _, src := range srcs {
-			entry := types.TargetGraphProject{Path: p.Path, Engine: src.Engine, DependsOn: p.DependsOn}
+			entry := types.TargetGraphProject{Path: p.Path, Name: types.ProjectLabel(p.Path, p.Dir), Engine: src.Engine, DependsOn: p.DependsOn}
 			if repoRoot != "" {
 				if rel, err := filepath.Rel(repoRoot, p.Dir); err == nil {
 					entry.RelPath = filepath.ToSlash(rel)
@@ -375,6 +375,7 @@ func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
 			// ambiguous "## Project: ." heading; types.ProjectLabel collapses it to the
 			// workspace directory name (e.g. "magus"). A non-root RelPath is kept as-is.
 			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
+			entry.Name = entry.RelPath
 			if src.Engine == "buzz" {
 				nodes := collectTargetNodes(src)
 				resolveNodeRefs(nodes, p.Path)

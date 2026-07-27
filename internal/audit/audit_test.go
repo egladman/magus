@@ -1,10 +1,8 @@
 package audit
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -169,25 +167,19 @@ func TestFinishWarnsOnDescendantWrite(t *testing.T) {
 	// Active dispatch holds only the parent — child writes here are violations.
 	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{"api": {}})
 
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
 	a := Begin(ctx, parent, true)
 	require.NotNil(t, a, "Begin returned nil; expected an audit")
 
 	// Simulate a spell on parent reformatting a file inside the child.
 	writeFile(t, filepath.Join(childDir, "guide.md"), "# new", t2)
 
-	a.Finish(ctx, "format")
-
-	out := buf.String()
-	assert.Contains(t, out, "MGS3001", "expected warning with MGS3001")
-	assert.Contains(t, out, "descendant project boundary crossed")
-	assert.Contains(t, out, "api/docs")
-	assert.Contains(t, out, "guide.md")
-	assert.Contains(t, out, "target=format")
+	err := a.Finish(ctx, "format")
+	require.Error(t, err, "expected a descendant-boundary failure")
+	assert.ErrorIs(t, err, types.DescendantBoundaryCrossed)
+	assert.Contains(t, err.Error(), "api/docs")
+	assert.Contains(t, err.Error(), "guide.md")
+	assert.Contains(t, err.Error(), "target \"format\"")
+	assert.Contains(t, err.Error(), "fix:")
 }
 
 func TestFinishSilentOnNoChanges(t *testing.T) {
@@ -204,15 +196,8 @@ func TestFinishSilentOnNoChanges(t *testing.T) {
 	ctx := types.WithWorkspace(context.Background(), ws)
 	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{"api": {}})
 
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
 	a := Begin(ctx, parent, true)
-	a.Finish(ctx, "format")
-
-	assert.Empty(t, buf.String(), "expected no warnings when descendant tree unchanged")
+	assert.NoError(t, a.Finish(ctx, "format"), "expected no boundary failure when descendant tree unchanged")
 }
 
 func TestFinishNilReceiverNoop(t *testing.T) {
@@ -259,11 +244,6 @@ func TestNestedDescendantAttribution(t *testing.T) {
 	ctx := types.WithWorkspace(context.Background(), ws)
 	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{"api": {}})
 
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
 	a := Begin(ctx, parent, true)
 	require.NotNil(t, a, "Begin returned nil")
 	// topmostRoots must collapse api/docs/v2 into api/docs — only one
@@ -272,17 +252,13 @@ func TestNestedDescendantAttribution(t *testing.T) {
 	assert.Equal(t, "api/docs", a.roots[0].path, "topmost roots should collapse to api/docs")
 
 	writeFile(t, filepath.Join(leafDir, "page.md"), "# new", t2)
-	a.Finish(ctx, "format")
-
-	out := buf.String()
-	assert.Contains(t, out, "descendant=api/docs/v2", "expected attribution to innermost descendant api/docs/v2")
-	assert.NotContains(t, out, "descendant=api/docs ", "expected NO warning attributed to outer api/docs")
-	assert.NotContains(t, out, "descendant=api/docs\n", "expected NO warning attributed to outer api/docs")
+	err := a.Finish(ctx, "format")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "descendant project \"api/docs/v2\"")
+	assert.NotContains(t, err.Error(), "descendant project \"api/docs\"")
 }
 
-// TestReportCapsLargeFileLists verifies that a misbehaving spell that
-// touches more than reportCap files produces a bounded slog payload and
-// surfaces the total count.
+// TestReportCapsLargeFileLists verifies a bounded path list still reports the total.
 func TestReportCapsLargeFileLists(t *testing.T) {
 	tmp := t.TempDir()
 	parentDir := filepath.Join(tmp, "api")
@@ -300,20 +276,14 @@ func TestReportCapsLargeFileLists(t *testing.T) {
 	ctx := types.WithWorkspace(context.Background(), ws)
 	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{"api": {}})
 
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
 	a := Begin(ctx, parent, true)
 	t2 := time.Unix(1_700_000_100, 0)
 	for i := 0; i < n; i++ {
 		writeFile(t, filepath.Join(childDir, fmt.Sprintf("file%03d.md", i)), "y", t2)
 	}
-	a.Finish(ctx, "format")
-
-	out := buf.String()
-	assert.Contains(t, out, fmt.Sprintf("modified_total=%d", n), "expected modified_total when over the cap")
+	err := a.Finish(ctx, "format")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), fmt.Sprintf("(%d total)", n))
 }
 
 // TestWalkHonoursContextCancellation verifies that a cancelled ctx

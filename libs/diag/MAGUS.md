@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **317 nodes** and **313 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **317 nodes** and **317 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -43,7 +43,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `libs/diag` |
-| target | 8 | `magus query kind:target` | `format`, `generate`, `build` |
+| target | 8 | `magus query kind:target` | `format`, `build`, `generate` |
 | spell | 11 | `magus query kind:spell` | `go`, `ts`, `py` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -57,7 +57,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 8 | `magus query project:.` | `format`, `generate`, `build` |
+| . | 8 | `magus query project:.` | `format`, `build`, `generate` |
 
 ## Project: libs/diag
 

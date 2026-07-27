@@ -103,19 +103,19 @@
 the child-process environment with a minimum allowlist so secret-bearing
 variables do not leak to a compromised third-party spell.</p>
 <p>It is designed to neutralize the class of supply-chain attacks that have
-appeared on npm and the VS Code marketplace, where a compromised package
+appeared on npm and the VS Code marketplace, <a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> a compromised package
 or extension reads credentials from disk and exfiltrates them.</p>
 <h2 id="what-sandbox-blocks">What sandbox blocks</h2>
 <ul>
 <li>Reads of files outside <code>&lt;workspace&gt;</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> + <code>/tmp</code> + system libs.
 This denies <code>~/.aws/credentials</code>, <code>~/.vault-token</code>, <code>~/.ssh/id_rsa</code>,
-<code>~/.npmrc</code>, <code>~/.config/op</code>, <code>~/.docker/config.json</code>, <code>~/.kube/config</code>,
+<code>~/.npmrc</code>, <code>~/.<a class="code-xref" href="../../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>/op</code>, <code>~/.docker/config.json</code>, <code>~/.kube/config</code>,
 <code>/etc/shadow</code>, and the rest of the usual supply-chain targets.</li>
 <li>Writes outside <code>&lt;workspace&gt;</code> + <code>/tmp</code>. System library paths are
 read-only.</li>
 <li>Inheritance of secret-bearing env vars in child processes:
 <code>AWS_*</code>, <code>GITHUB_TOKEN</code>, <code>VAULT_*</code>, <code>OP_SESSION_*</code>, <code>NPM_TOKEN</code>,
-<code>ANTHROPIC_API_KEY</code>, etc. By default only <code>HOME</code>, <code>PATH</code>, <code>USER</code>,
+<code>ANTHROPIC_API_KEY</code>, etc. By default only <code>HOME</code>, <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a></code>, <code>USER</code>,
 locale vars, terminal vars, and the <code>MAGUS_*</code> <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> coordination
 vars pass through.</li>
 </ul>
@@ -155,9 +155,9 @@ secret in memory at the moment a spell runs, landlock cannot help.</li>
 <code><a class="code-xref" href="../../config/#sandbox" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_SANDBOX_ENV_PASSTHROUGH">sandbox.env.passthrough</a></code> is suffix-only: <code>NAME_*</code> matches everything
 that starts with <code>NAME_</code>.</p>
 <h2 id="enforcement-mechanism">Enforcement mechanism</h2>
-<p>Two layers run together:</p>
+<p>Two layers <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> together:</p>
 <ol>
-<li><strong>Kernel level.</strong> On Linux ≥5.13, magus calls <code>landlock_restrict_self</code>
+<li><strong>Kernel level.</strong> On Linux ≥5.13, magus calls <code>landlock_restrict_<a class="code-xref" href="../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a></code>
 on itself before any spell code runs. The restriction is inherited
 across <code>fork+exec</code>, so every child process gets the same filesystem
 confinement automatically. No root required.</li>

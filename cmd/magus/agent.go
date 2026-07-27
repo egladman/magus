@@ -3,36 +3,22 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"embed"
-	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/agent"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
 
-// skillFS holds the agent-skill sources embedded at build time, so the knowledge
-// of HOW to use the knowledge graph travels with the binary and installs into any
-// consuming repo. The sources are static (they teach the tool surface, which ships
-// with the magus version) and never embed repo specifics - those live in the
-// generated MAGUS.md the skill defers to.
-//
-// One source tree serves every platform: the Agent Skills format (SKILL.md with
-// name+description frontmatter) is a cross-agent spec, so skill-dir platforms get
-// identical bytes at different destinations, and platforms without skill support
-// get the distilled AGENTS.md section instead. No per-model skill bodies exist.
+// skillFS holds provider-neutral skill bodies embedded at build time.
 //
 //go:embed skills
 var skillFS embed.FS
@@ -44,52 +30,10 @@ var skillFS embed.FS
 //go:embed agents-section.md
 var agentsSection string
 
-// agentSkillVersion is bumped whenever the installed skill content, or the tool
-// surface it documents, changes. Together with the knowledge schema version it
-// stamps the install footer, so the drift check (magus graph verify) can tell a
-// stale installed skill from a current one without diffing bytes.
-//
-//	v1: initial skill (verbs, grammar, reading results, MCP, --global, pagination)
-//	v2: teach CODEOWNERS ownership and the owns relation
-//	v3: teach the refs subcommand / magus_refs (SCIP symbol def+references)
-//	v4: teach the * wildcard in the query grammar
-//	v5: teach the graph diff subcommand (PR blast-radius against a baseline export)
-//	v6: teach the opt-in @vcs git-history attrs on file nodes
-//	v7: purpose-named skill set (magus-query, magus-run, magus-vcs,
-//	    magus-architecture, magus-memory); multi-platform install (claude/
-//	    opencode/agents skill dirs, AGENTS.md section for codex); query-first
-//	    fast path; describe-file triage; durable magus_memory workflow
-//	v8: output-control doctrine (-s/-q silence for runs, -o json as the
-//	    machine-reading default, the JSON envelope shape, MCP-first with quiet
-//	    CLI fallback); magus-vcs frontmatter name aligned with its directory
-//	v9: add magus-docs (navigate magus's own documentation via llms.txt /
-//	    search-index.json, the URL + section scheme, and the in-page nav axes)
-//	v10: magus-vcs teaches environmental-vs-real drift; install injects
-//	    open-standard provenance frontmatter (license, compatibility, metadata)
-//	v11: magus-run teaches CWD-relative project scope; tighten the prose
-//	v12: trigger-first frontmatter descriptions (literal command cues) for
-//	     magus-vcs/magus-run/magus-query; agents-section moment-to-skill routing
-//	     table; claude install merges a PreToolUse guard hook into
-//	     .claude/settings.json (magus agent hook)
-//	v13: agent-host agnostic surface: install takes explicit destination dirs
-//	     plus --agents-md (platform names removed); agent hook reads any host's
-//	     event via --from-json and renders its deny/advise/pass verdict through
-//	     -o json/yaml/template; the settings.json hook installer is removed in
-//	     favor of documented per-host recipes
-//	v14: magus-run forbids piping a magus command through a text filter (grep/head/
-//	     tail/awk) and gives the -o template / -o name / -s substitutions, carving
-//	     out magus-into-magus composition via --stdin and jq over -o json;
-//	     magus-architecture no longer demonstrates grep -c. The install stamp now
-//	     also carries skillContentDigest, so content drift no longer depends on
-//	     remembering to bump this counter.
-const agentSkillVersion = 14
-
-// wellKnownSkillDirs are the destinations checkSkillStatuses probes for an
-// installed skill tree. Discovery-only: install never consults this list - the
-// caller names the destination explicitly - but drift checking has to find what
-// previous installs wrote. The Agent Skills spec generic location plus the
-// common host conventions; magus itself is host-agnostic.
-var wellKnownSkillDirs = []string{".agents/skills", ".claude/skills", ".opencode/skills"}
+// agentSkills binds the command's embedded source assets to the reusable
+// provider-neutral catalog. The CLI owns embedding and presentation; internal/agent
+// owns the artifact's rendering, provenance, installation, and verification.
+var agentSkills = agent.NewCatalog(skillFS, agentsSection, types.KnowledgeSchemaVersion)
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
 // `install` writes the embedded skills into explicitly named destinations, and
@@ -174,14 +118,14 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 
 	var written []string
 	for _, dest := range dests {
-		w, err := installSkillTree(*dir, dest, *force)
+		w, err := agentSkills.InstallSkillTree(*dir, dest, *force)
 		if err != nil {
 			return err
 		}
 		written = append(written, w...)
 	}
 	if *agentsMD {
-		w, err := installAgentsSection(*dir)
+		w, err := agentSkills.InstallAgentsSection(*dir)
 		if err != nil {
 			return err
 		}
@@ -194,295 +138,10 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	return nil
 }
 
-// installSkillTree copies the embedded skills/ tree into <dir>/<dest>/, stamping
-// each markdown file with a generated-by footer. It refuses to overwrite an
-// existing file unless force is set, returning the paths it wrote (repo-relative).
-func installSkillTree(dir, dest string, force bool) ([]string, error) {
-	var written []string
-	err := fs.WalkDir(skillFS, "skills", func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel := strings.TrimPrefix(p, "skills/") // e.g. "magus-query/SKILL.md"
-		outPath := filepath.Join(dir, dest, rel)
-		if !force {
-			if _, err := os.Stat(outPath); err == nil {
-				return fmt.Errorf("agent install: %s already exists (use --force to overwrite)", filepath.Join(dest, rel))
-			}
-		}
-		body, err := skillFS.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(outPath, stampSkill(body), 0o644); err != nil {
-			return fmt.Errorf("agent install: write %s: %w", outPath, err)
-		}
-		written = append(written, filepath.Join(dest, rel))
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return written, nil
-}
-
-// agentsSectionMarkers delimit the managed magus block in AGENTS.md. The begin
-// marker carries the version stamp (same fields as the skill footer) so the
-// drift check reads it the same way. Everything between the markers is owned by
-// magus and replaced wholesale on re-install; bytes outside them are never touched.
-var (
-	agentsSectionBegin = fmt.Sprintf(
-		"<!-- magus:skills:begin generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; do not edit, re-run to update -->",
-		agentSkillVersion, types.KnowledgeSchemaVersion, skillContentDigest)
-	agentsSectionEnd = "<!-- magus:skills:end -->"
-	agentsSectionRe  = regexp.MustCompile(`(?s)<!-- magus:skills:begin .*?-->.*?<!-- magus:skills:end -->`)
-)
-
-// installAgentsSection writes (or replaces) the managed magus section in
-// <dir>/AGENTS.md. Idempotent by construction - the section is regenerated in
-// place - so it takes no force flag. A missing AGENTS.md is created holding just
-// the section.
-func installAgentsSection(dir string) ([]string, error) {
-	path := filepath.Join(dir, "AGENTS.md")
-	block := agentsSectionBegin + "\n\n" + strings.TrimSpace(agentsSection) + "\n\n" + agentsSectionEnd
-	existing, err := os.ReadFile(path)
-	switch {
-	case os.IsNotExist(err):
-		if werr := os.WriteFile(path, []byte(block+"\n"), 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
-	case err != nil:
-		return nil, fmt.Errorf("agent install: read %s: %w", path, err)
-	case agentsSectionRe.Match(existing):
-		out := agentsSectionRe.ReplaceAll(existing, []byte(block))
-		if werr := os.WriteFile(path, out, 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
-	default:
-		out := strings.TrimRight(string(existing), "\n") + "\n\n" + block + "\n"
-		if werr := os.WriteFile(path, []byte(out), 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
-	}
-	return []string{"AGENTS.md"}, nil
-}
-
-// skillFooter is the generated-by marker appended to every installed skill file.
-// It is a greppable, parseable line a drift check reads to compare the installed
-// version against the running binary's; the "do not edit" note steers humans to
-// re-run install rather than hand-edit a generated file.
-var skillFooter = fmt.Sprintf(
-	"\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; do not edit, re-run to update -->\n",
-	agentSkillVersion, types.KnowledgeSchemaVersion, skillContentDigest)
-
-// skillLicense is the SPDX identifier injected into every installed skill's
-// provenance; it tracks the repository's LICENSE.
-const skillLicense = "GPL-3.0-or-later"
-
-// skillProvenance is the machine-owned frontmatter magus injects into every
-// installed skill: the Agent Skills open-standard fields (license, compatibility)
-// plus a metadata map carrying the same version counters as the footer, so a host
-// that reads YAML frontmatter but not the trailing comment still sees the source
-// and version. Source SKILL.md files carry only name/description (and hand-authored
-// allowed-tools); these fields are added at install time, keeping magus the single
-// source of truth for them across every platform.
-var skillProvenance = fmt.Sprintf(
-	"license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n",
-	skillLicense, agentSkillVersion, types.KnowledgeSchemaVersion, skillContentDigest)
-
-// stampSkill injects provenance frontmatter and appends the footer to a skill
-// file's content. The footer is a trailing HTML comment; the provenance goes just
-// inside the leading YAML frontmatter the Agent Skills spec requires. The footer
-// begins with its own newline, so it sits one blank line below the body -
-// deliberate, for readability in the rendered file.
-func stampSkill(body []byte) []byte {
-	body = injectSkillProvenance(body)
-	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), skillFooter...)
-}
-
-// injectSkillProvenance inserts skillProvenance immediately before the closing ---
-// of the leading YAML frontmatter. Insertion is textual, not a YAML re-marshal, so
-// the hand-authored name/description/allowed-tools stay byte-for-byte. A file with
-// no frontmatter is returned unchanged (the footer still stamps it).
-func injectSkillProvenance(body []byte) []byte {
-	s := string(body)
-	if !strings.HasPrefix(s, "---\n") {
-		return body
-	}
-	rel := strings.Index(s[len("---\n"):], "\n---")
-	if rel < 0 {
-		return body
-	}
-	closeAt := len("---\n") + rel + 1 // start of the closing "---" line
-	return []byte(s[:closeAt] + skillProvenance + s[closeAt:])
-}
-
-// skillContentDigest fingerprints the EMBEDDED skill sources: a short hash over every
-// path and body under skills/, walked in sorted order so it is deterministic across
-// builds and platforms.
-//
-// It exists because the version counters cannot detect the two drifts that actually
-// happen. agentSkillVersion is bumped by hand, so editing skill content and forgetting
-// to bump it leaves the drift permanently invisible. Worse, installing with a binary
-// built BEFORE a source edit writes the old bytes under a stamp whose version already
-// matches the current one, and the check reports "up to date" over content that is
-// wrong. Both were observed here: an install from a stale binary wrote skills missing
-// their newest section while graph verify passed green.
-//
-// A digest is derived from the bytes, so it needs nobody to remember anything.
-var skillContentDigest = computeSkillContentDigest()
-
-func computeSkillContentDigest() string {
-	h := sha256.New()
-	var paths []string
-	// WalkDir already yields lexical order, but collect-then-sort makes the guarantee
-	// local rather than inherited, since the digest is only useful if it is stable.
-	if err := fs.WalkDir(skillFS, "skills", func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			paths = append(paths, p)
-		}
-		return nil
-	}); err != nil {
-		// The tree is embedded at build time, so a failure here means the binary itself
-		// is malformed. A sentinel keeps the stamp well-formed and, because it can never
-		// equal a real digest, makes every comparison report drift rather than passing.
-		return "unreadable"
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		body, err := skillFS.ReadFile(p)
-		if err != nil {
-			return "unreadable"
-		}
-		// Length-prefix the path so no rename can collide with a content change.
-		_, err = fmt.Fprintf(h, "%d:%s\n", len(p), p)
-		if err != nil {
-			return "unreadable"
-		}
-		_, err = h.Write(body)
-		if err != nil {
-			return "unreadable"
-		}
-	}
-	// agents-section.md is a separate embed but part of the same installed surface, so
-	// it belongs in the fingerprint: editing it must invalidate an AGENTS.md install
-	// exactly as editing a SKILL.md invalidates a skill dir.
-	_, err := fmt.Fprintf(h, "%d:agents-section.md\n", len(agentsSection))
-	if err != nil {
-		return "unreadable"
-	}
-
-	_, err = h.Write([]byte(agentsSection))
-	if err != nil {
-		return "unreadable"
-	}
-
-	return hex.EncodeToString(h.Sum(nil))[:12]
-}
-
-// footerVersionRe pulls the two versions out of an installed skill's footer (or
-// the AGENTS.md begin marker - same fields), so a drift check can compare them
-// against the running binary without a byte diff.
-var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-schema-version: (\d+)`)
-
-// footerDigestRe pulls the content fingerprint out of a footer. Separate from
-// footerVersionRe on purpose: a skill installed by a magus that predates the digest
-// still parses its versions, so gradeStamp can report "stamped by an older magus"
-// rather than failing to read the stamp at all.
-var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|unreadable)`)
-
-// anchorSkillRel is the skill file whose footer anchors the drift check inside a
-// skill-dir install: every install writes it, so its stamp speaks for the set.
-const anchorSkillRel = "magus-query/SKILL.md"
-
-// skillStatus is the verdict of checking one installed location against this
-// binary: whether it is present, and whether it has fallen behind (Stale). The
-// happy value is {Installed: true, Stale: false}.
-type skillStatus struct {
-	Location  string
-	Installed bool // the install exists
-	Stale     bool // it exists but its version predates the binary's
-	Detail    string
-}
-
-// checkSkillStatuses inspects every well-known skill location under dir plus the
-// AGENTS.md section, returning one status per location that has anything on
-// disk, sorted by location. An empty slice means nothing is installed anywhere.
-// It is the read half of the generated-by stamps: install writes the version,
-// this tells an operator or CI when a re-install is due after a magus upgrade.
-func checkSkillStatuses(dir string) []skillStatus {
-	var out []skillStatus
-	for _, dest := range wellKnownSkillDirs {
-		path := filepath.Join(dir, dest, anchorSkillRel)
-		body, err := os.ReadFile(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			// Present but unreadable (permissions, IO) is a real problem, not "absent":
-			// report it as drift so a --strict CI gate fails instead of passing green.
-			out = append(out, skillStatus{Location: dest, Installed: true, Stale: true,
-				Detail: "cannot read installed skill: " + err.Error()})
-			continue
-		}
-		out = append(out, gradeStamp(dest, "magus agent install "+dest+" --force", string(body)))
-	}
-	if body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md")); err == nil {
-		if section := agentsSectionRe.Find(body); section != nil {
-			out = append(out, gradeStamp("AGENTS.md", "magus agent install --agents-md", string(section)))
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })
-	return out
-}
-
-// gradeStamp grades one install's stamped versions against the running binary;
-// reinstall is the command to suggest when it has fallen behind.
-func gradeStamp(location, reinstall, body string) skillStatus {
-	m := footerVersionRe.FindStringSubmatch(body)
-	if m == nil {
-		return skillStatus{Location: location, Installed: true, Stale: true,
-			Detail: "installed skill has no version stamp; re-run: " + reinstall}
-	}
-	// The regex captured \d+ for both groups, so Atoi cannot fail here.
-	skillVer, _ := strconv.Atoi(m[1])
-	schemaVer, _ := strconv.Atoi(m[2])
-	if skillVer < agentSkillVersion || schemaVer < types.KnowledgeSchemaVersion {
-		return skillStatus{Location: location, Installed: true, Stale: true,
-			Detail: fmt.Sprintf("stale (skill v%d/schema v%d; binary v%d/schema v%d); re-run: %s",
-				skillVer, schemaVer, agentSkillVersion, types.KnowledgeSchemaVersion, reinstall)}
-	}
-	// Versions can agree while the bytes do not, so the digest is the authority. It
-	// catches the two cases the counters structurally cannot: content edited without
-	// bumping agentSkillVersion, and an install performed by a binary built before the
-	// source edit, which writes old content under a current-looking version.
-	d := footerDigestRe.FindStringSubmatch(body)
-	if d == nil {
-		return skillStatus{Location: location, Installed: true, Stale: true,
-			Detail: "installed by a magus that predates the content fingerprint; re-run: " + reinstall}
-	}
-	if d[1] != skillContentDigest {
-		return skillStatus{Location: location, Installed: true, Stale: true,
-			Detail: fmt.Sprintf("content differs from this binary's embedded skills (installed %s, binary %s); re-run: %s",
-				d[1], skillContentDigest, reinstall)}
-	}
-	return skillStatus{Location: location, Installed: true,
-		Detail: fmt.Sprintf("up to date (skill v%d, schema v%d, content %s)", skillVer, schemaVer, skillContentDigest)}
-}
-
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
-// interactive.Enabled() so MAGUS_HINTS_ENABLED=false silences it.
+// the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
 func printAgentInstallNextSteps(written []string) {
-	if !interactive.Enabled() || len(written) == 0 {
+	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
@@ -515,7 +174,7 @@ func agentSampleDoc() string {
 		"     naming, error handling, comment style, and what NOT to touch. -->\n\n" +
 		"## Version control\n\n" +
 		"- " + vcsSafetyRule + "\n\n" +
-		strings.TrimSpace(agentsSection) + "\n"
+		strings.TrimSpace(agentSkills.Section()) + "\n"
 }
 
 // agentSampleCmd prints agentSampleDoc to stdout. It never writes a file: an

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -12,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/types"
 )
@@ -309,7 +309,7 @@ func targetGraphIR(out types.TargetGraphOutput) renderGraph {
 			prefix = fmt.Sprintf("p%d_", i)
 			projGroup = fmt.Sprintf("p%d", i)
 			projGroupOf[p.Path] = projGroup
-			g.Groups = append(g.Groups, renderGroup{ID: projGroup, Label: p.Path})
+			g.Groups = append(g.Groups, renderGroup{ID: projGroup, Label: p.Label()})
 		}
 
 		known := make(map[string]bool, len(p.Nodes))

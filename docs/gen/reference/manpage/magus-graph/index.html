@@ -86,34 +86,34 @@
 <h1 id="magus-graph">magus-graph</h1>
 <p>The <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>'s graphs as objects: deps, export, stats</p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> graph &lt;deps|export|stats|open&gt; [flags]</p>
+<p><strong>magus</strong> <a class="code-xref" href="./" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> &lt;deps|export|stats|open&gt; [flags]</p>
 <h2 id="description">Description</h2>
 <p>The workspace's graphs as objects: emit, export, and measure them. The
-query, explain, and path verbs read the <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a>; <a class="code-xref" href="./" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> is the
+<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a>, <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a>, and <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> verbs read the <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a>; <a class="code-xref" href="./" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> is the
 home of the graph itself.</p>
 <p>Subcommands (the first argument):</p>
 <p>deps     The <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> dependency DAG. A trailing list of project paths roots
 the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
-same view scoped to a run is available as <a class="code-xref" href="../magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;<a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>&gt; --graph
+same view scoped to a <a class="code-xref" href="../magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> is available as <a class="code-xref" href="../magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;<a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>&gt; --graph
 and magus <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> &lt;target&gt; --graph.
 export   The merged knowledge graph: the deterministic, <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>-backed graph of
 the magus domain (projects, targets, spells, ops, charms, modules,
 methods, diagnostics, docs, <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> sources). -o json emits the
 node-link form; -o graphml emits GraphML. External graph viewers
 (Gephi, yEd) read both directly. --select &quot;&lt;terms&gt;&quot; narrows the
-export to a query's neighborhood (same <a class="glossary-term" href="../../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> as magus query); -o dot
+export to a query's neighborhood (same <a class="glossary-term" href="../../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> as <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a>); -o dot
 and -o mermaid render only with --select, since the full graph has too
 many nodes to lay out. The graph is cache-backed under
 &lt;cache&gt;/knowledge; only shards whose sources changed are rebuilt.
 stats    The graph's shape: god nodes (the most connected spells, modules,
-targets - where structural risk concentrates), orphans (docs that
+targets - <a class="code-xref" href="../magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> structural risk concentrates), orphans (docs that
 document nothing, spells no target uses), and doc coverage (the
 share of diagnostics, spells, and modules with a doc). --kind scopes
 every section to one node kind. <a class="glossary-term" href="../../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a> report embeds this section.
 open     Open the workspace's knowledge graph (or target dependency graph with
 --targets) in the hosted, interactive Graph Explorer. The graph is
 delivered privately: by default it rides in the URL fragment
-(#data=...), which browsers never send to a server; --serve instead
+(#data=...), which browsers never send to a <a class="code-xref" href="../magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a>; --serve instead
 hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
 <h3 id="graph-deps-options">graph deps options</h3>
 <dl>
@@ -131,7 +131,7 @@ hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
 <dt><strong>--budget</strong> <em>int</em> (default: 50)</dt>
 <dd>Node budget for --select (how many nodes the neighborhood may collect)</dd>
 <dt><strong>--global</strong></dt>
-<dd>Union the workspaces registered in config (<a class="code-xref" href="../../config/#knowledge" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_KNOWLEDGE_WORKSPACES">knowledge.workspaces</a>); node IDs are namespaced by workspace</dd>
+<dd>Union the workspaces registered in <a class="code-xref" href="../magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> (<a class="code-xref" href="../../config/#knowledge" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_KNOWLEDGE_WORKSPACES">knowledge.workspaces</a>); node IDs are namespaced by workspace</dd>
 <dt><strong>--refresh</strong></dt>
 <dd>Force a full graph rebuild before exporting</dd>
 <dt><strong>--select</strong> <em>string</em></dt>
@@ -157,7 +157,7 @@ hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
 <dt><strong>--targets</strong></dt>
 <dd>Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project</dd>
 <dt><strong>--url</strong> <em>string</em> (default: <a href="https://eli.gladman.cc/magus/console/graph/" rel="noopener noreferrer" target="_blank" data-external>https://eli.gladman.cc/magus/console/graph/</a>)</dt>
-<dd>Base URL of the Graph Explorer page (override for a self-hosted mirror)</dd>
+<dd>Base URL of the Graph Explorer page (override for a <a class="code-xref" href="../magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-hosted mirror)</dd>
 </dl>
 <h2 id="subcommands">Subcommands</h2>
 <dl>
@@ -205,7 +205,7 @@ hands it from an ephemeral 127.0.0.1 loopback server (no size limit).</p>
 <pre><code class="language-sh">magus graph open --targets --print
 </code></pre>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-man/"><strong>magus-man</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>

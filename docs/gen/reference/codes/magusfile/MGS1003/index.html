@@ -136,8 +136,8 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;eslint&quot;]();
 }
 </code></pre>
-<p>If your workspace genuinely wants the check split out for a reason doctor
-can't see (a slow type-check run separately from fast lint, say), keep the
+<p>If your workspace genuinely wants the check split out for a reason <a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a>
+can't see (a slow type-check <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> separately from fast lint, say), keep the
 name - this check only flags it as a naming choice worth a second look.</p>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
@@ -145,7 +145,7 @@ name - this check only flags it as a naming choice worth a second look.</p>
 a <code>magus doctor</code> finding, not a magusfile load failure.</li>
 <li><strong>Not the canonical-name litmus test itself.</strong> See
 <a href="../../../../concepts/targets/#the-target-name">targets</a> for the full &quot;when does a name
-earn canonical status&quot; reasoning; this check only flags the specific set of
+earn canonical <a class="code-xref" href="../../../manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a>&quot; reasoning; this check only flags the specific set of
 known static-analysis/formatting fragments, not any custom target name.</li>
 </ul>
 <h2 id="see-also">See also</h2>

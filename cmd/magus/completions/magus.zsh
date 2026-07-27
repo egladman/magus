@@ -34,6 +34,7 @@ _magus() {
                 'server:manage the persistent daemon (start / stop)'
                 'repl:open an interactive Buzz interpreter'
                 'completion:generate shell completion'
+                'man:install embedded man pages'
                 'init:bootstrap a workspace (magus.yaml + magusfile.buzz)'
                 'self:manage the magus binary (self update / install)'
                 'version:print version, commit, and build date'
@@ -212,6 +213,15 @@ _magus() {
                     if (( CURRENT == 2 )); then
                         local -a shells=(bash zsh fish powershell)
                         _describe 'shell' shells
+                    fi
+                    ;;
+                man)
+                    if (( CURRENT == 2 )); then
+                        local -a subs=('install:write embedded man pages')
+                        _describe 'subcommand' subs
+                    else
+                        local -a flags=(--dir)
+                        _describe 'flag' flags
                     fi
                     ;;
             esac

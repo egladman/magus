@@ -1,25 +1,12 @@
----
-name: magus-memory
-description: Keep durable, cross-session project memory in a magus workspace via the magus_memory tool. Memory is discrete, categorized RECORDS that persist outside the repo and survive model, session, and agent-host changes. Each record is a typed POINTER into the magus domain (a saved query, a graph node, an output ref, a command, a doc), not free prose; only a decision/plan carries a short why. Use at the start of any session (op=list to ramp), and record a decision the moment one is made. Requires a running magus daemon (MCP).
----
+# Handoff journal
 
-# Durable memory across sessions and models
+`magus memory` and `magus_memory` are two frontends to a small, user-owned
+handoff journal. It lives outside the repo, is shared by its worktrees, and is
+visible in the console. It is not automatic model memory: add an entry only
+when a person or a later session needs a named decision, plan, or saved lens.
 
-The session ends; the next one may be a different model, a different agent host,
-or weeks later. `magus_memory` keeps a set of durable RECORDS per repository in
-the user's state directory. They live outside the repo (never committed, never
-another contributor's problem) and are shared across every git worktree and
-branch. What a stronger model decided, a smaller model can read and apply.
-
-## What a memory is (and is not)
-
-A memory is a typed POINTER into the magus domain, not a free-text note. The
-payload is one or more `refs`; the ref IS the memory. If you cannot name a ref
-kind for something, it is not a memory. It is a query you should just run.
-
-The graph holds the truth (what the code IS); memory holds the curation: which
-query, node, output, or doc mattered, and, for a decision, the why the graph
-cannot derive.
+The graph remains the source of truth. A journal entry links back to the query,
+node, output, command, or document that a later reader should reopen.
 
 Ref kinds (the closed set a ref may point at):
 
@@ -42,14 +29,25 @@ Record types (the subject axis):
 There is no free-text/`note` type. A claim that is true about the code is a
 `pointer` of kind `query` (fetch it live) or `output`, never stored prose.
 
-## Session start
+## Read and write deliberately
 
-1. `magus_memory` {op: "list"} returns what is already recorded. Ramp on it. Do not
-   re-litigate a decision recorded here; if new evidence contradicts one, say so
-   explicitly and record the reversal (update the record's `status`).
-2. `magus_memory` {op: "cursor"} returns where the last session left off.
+- At a handoff or session start, use `magus_memory` `{op: "list"}` or
+  `magus memory list`. Empty is normal; do not manufacture journal entries.
+- Use `get` before revisiting a named decision. If evidence has changed, update
+  that entry and its status instead of silently contradicting it.
+- Use `put` for a decision or plan another person would otherwise have to
+  rediscover. The CLI is often clearer for a human:
 
-Empty results just mean a fresh project; start recording.
+  ```sh
+  magus memory put release-gate --type plan \
+    --ref 'command: magus affected ci' --status active \
+    --body 'Run after the documentation render is committed.'
+  ```
+
+- Use `delete` for entries that no longer earn their keep. Run `magus memory
+  verify` (or MCP `{op: "verify"}`) after editing entries or when list reports
+  an issue. It gives a path and repair step for malformed, stale, or broken
+  linked entries.
 
 ## Recording
 
@@ -61,8 +59,6 @@ Empty results just mean a fresh project; start recording.
   nobody; the `body` carries the why, and the refs anchor it to the code.
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
   it, not a sentence that rots.
-- Before ending a session: `magus_memory` {op: "cursor", content: "..."} so the
-  next session's first read is current. A stale cursor is worse than none.
 - Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.
 
 ## Scope boundaries
@@ -71,5 +67,7 @@ Empty results just mean a fresh project; start recording.
   `magus_scratchpad`, which is per-workspace and disposable, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
-- Records live outside the repo, keyed by repository identity; the tool result
-  includes the fields when a human wants to read or edit them via the console.
+- Records live outside the repo, keyed by repository identity. The console,
+  CLI, and MCP all show the same entries. A legacy cursor can still be read for
+  migration, but writes are intentionally retired: one shared cursor lets one
+  session erase another's handoff.

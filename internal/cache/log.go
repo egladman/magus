@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"golang.org/x/term"
 )
@@ -79,10 +78,7 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	tty := h.isTTY()
 	project := recordStr(r, "project") // real path; used for the runnable repro command
-	label := recordStr(r, "label")     // display name; never "" or "." (see types.ProjectLabel)
-	if label == "" {
-		label = project
-	}
+	label := displayProjectLabel(recordStr(r, "label"), project)
 	dur := recordDur(r, "duration")
 	ref := recordStr(r, "ref") // target-output reference id (see internal/cache/output_store.go)
 
@@ -93,16 +89,13 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
 		_, _ = fmt.Fprintf(h.w, "%s %s (cached, %s)\n", h.glyph(tty, "pass", colDimGreen), label, fmtDur(dur))
 		h.printRepro(tty, project, recordStr(r, "target"))
-		h.printRef(tty, ref, false)
+		h.printRef(tty, ref)
 	case "cache.miss":
 		_, _ = fmt.Fprintf(h.w, "%s %s (ran, %s)\n", h.glyph(tty, "pass", colGreen), label, fmtDur(dur))
 		h.printRepro(tty, project, recordStr(r, "target"))
-		h.printRef(tty, ref, false)
+		h.printRef(tty, ref)
 	case "cache.error":
-		errStr := recordStr(r, "error")
-		_, _ = fmt.Fprintf(h.w, "%s %s (ran, %s): %s\n", h.glyph(tty, "fail", colRed), label, fmtDur(dur), errStr)
-		h.printRepro(tty, project, recordStr(r, "target"))
-		h.printRef(tty, ref, true)
+		h.printFailure(tty, label, project, recordStr(r, "target"), dur, recordStr(r, "error"), ref)
 	case "cache.warn":
 		_, _ = fmt.Fprintf(h.w, "%s %s\n", h.glyph(tty, "warn", colYellow), recordStr(r, "msg"))
 	case "cache.summary":
@@ -170,6 +163,20 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	return nil
 }
 
+// displayProjectLabel keeps the real project path for commands while making the
+// root project readable even when a caller did not provide its workspace label.
+func displayProjectLabel(label, project string) string {
+	label = strings.TrimSpace(label)
+	if label != "" && label != "." {
+		return label
+	}
+	project = strings.TrimSpace(project)
+	if project == "" || project == "." {
+		return "workspace"
+	}
+	return project
+}
+
 // ANSI colour codes used by the status glyphs. Cache state is conveyed by colour as
 // well as by the parenthetical: a cached pass is dim, a fresh run is bright green.
 const (
@@ -229,13 +236,9 @@ func formatAttrs(r slog.Record) string {
 	return b.String()
 }
 
-// printRepro prints the standalone `magus run <target> <project>` for the project
-// just reported, so a reader can copy/paste it to run that one project on its own
-// — handy after a fan-out (`magus run`/`magus affected`) to isolate a single
-// project. Indented and dimmed on a TTY; gated on the hints toggle so it can be
-// silenced. A blank target (the non-result events) prints nothing.
+// printRepro prints the standalone `magus run <target> <project>` for a result.
 func (h *prettyHandler) printRepro(tty bool, project, target string) {
-	if !interactive.Enabled() || project == "" || target == "" {
+	if project == "" || target == "" {
 		return
 	}
 	repro := clihint.Run.With(target, project)
@@ -246,12 +249,50 @@ func (h *prettyHandler) printRepro(tty bool, project, target string) {
 	}
 }
 
-// printRef prints a target's output reference id on its OWN bare, unindented line so
-// a triple-click selects exactly the ref - no "ref:" label (the "ref" prefix is
-// self-evident). Dimmed on a TTY to read as low-signal chrome; the escapes are
-// non-printing, so the copied text is still just the ref. On failure it adds the
-// retrieval + open hints - the primary nudge toward a failing target's full output.
-func (h *prettyHandler) printRef(tty bool, ref string, failed bool) {
+// printFailure keeps the failure and every useful next step together so a reader
+// does not need to infer which concurrent project, target, or captured log failed.
+func (h *prettyHandler) printFailure(tty bool, label, project, target string, dur time.Duration, cause, ref string) {
+	heading := label
+	if target != "" {
+		heading += " " + target
+	}
+	_, _ = fmt.Fprintf(h.w, "%s %s (ran, %s)\n", h.glyph(tty, "fail", colRed), heading, fmtDur(dur))
+	if cause != "" {
+		_, _ = fmt.Fprintf(h.w, "  cause: %s\n", failureCauseExcerpt(cause))
+	}
+	if ref != "" {
+		_, _ = fmt.Fprintf(h.w, "  output: %s\n", ref)
+		full := clihint.QueryOutput.With(ref)
+		if tty {
+			_, _ = fmt.Fprintf(h.w, "  \x1b[2minspect: %s\x1b[0m\n", full)
+		} else {
+			_, _ = fmt.Fprintf(h.w, "  inspect: %s\n", full)
+		}
+	} else {
+		_, _ = fmt.Fprintln(h.w, "  output: unavailable (no output was captured)")
+	}
+	if project == "" || target == "" {
+		return
+	}
+	repro := clihint.Run.With(target, project)
+	if tty {
+		_, _ = fmt.Fprintf(h.w, "  \x1b[2mreproduce: %s\x1b[0m\n", repro)
+	} else {
+		_, _ = fmt.Fprintf(h.w, "  reproduce: %s\n", repro)
+	}
+}
+
+func failureCauseExcerpt(cause string) string {
+	const maxRunes = 240
+	cause = strings.Join(strings.Fields(cause), " ")
+	if len([]rune(cause)) <= maxRunes {
+		return cause
+	}
+	return string([]rune(cause)[:maxRunes-1]) + "…"
+}
+
+// printRef prints a successful target's output reference id on its own line.
+func (h *prettyHandler) printRef(tty bool, ref string) {
 	if ref == "" {
 		return
 	}
@@ -259,18 +300,6 @@ func (h *prettyHandler) printRef(tty bool, ref string, failed bool) {
 		_, _ = fmt.Fprintf(h.w, "\x1b[2m%s\x1b[0m\n", ref)
 	} else {
 		_, _ = fmt.Fprintf(h.w, "%s\n", ref)
-	}
-	if !failed {
-		return
-	}
-	full := clihint.QueryOutput.With(ref)
-	open := clihint.QueryOutput.With(ref, "--open")
-	if tty {
-		_, _ = fmt.Fprintf(h.w, "  \x1b[2mfull output: %s\x1b[0m\n", full)
-		_, _ = fmt.Fprintf(h.w, "  \x1b[2mopen in browser: %s\x1b[0m\n", open)
-	} else {
-		_, _ = fmt.Fprintf(h.w, "  full output: %s\n", full)
-		_, _ = fmt.Fprintf(h.w, "  open in browser: %s\n", open)
 	}
 }
 

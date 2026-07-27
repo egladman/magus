@@ -79,7 +79,7 @@
 <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a> is fully assembled but before it executes. The ward inspects the op's
 argv and rejects it when the command contradicts the op's declared <em>kind</em>, so a
 misconfigured op fails immediately with a coded, actionable diagnostic instead of
-misbehaving at run time.</p>
+misbehaving at <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> time.</p>
 <aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-10">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
 
 <p>Wards share the <code>MGSxxxx</code> diagnostic rail with the rest of magus's <a href="../../reference/codes/services/">diagnostics and
@@ -87,7 +87,7 @@ error codes</a>: each ward raises a typed error with a stable
 code, a plain-language explanation, and a suggested fix.</p>
 <h2 id="kind-coherence">Kind coherence</h2>
 <p>magus ops carry a <em>kind</em> - a <strong><a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a></strong> op is a long-running process magus
-supervises in the foreground; a <strong>command</strong> op runs to completion. A ward fires when
+supervises in the foreground; a <strong>command</strong> op runs to <a class="code-xref" href="../../reference/manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a>. A ward fires when
 the argv lies about that kind:</p>
 <ul>
 <li><strong>A service op that detaches</strong> (<a href="../../reference/codes/services/MGS5002/">MGS5002</a>) - <code>docker run -d</code>,
@@ -95,7 +95,7 @@ a <code>--detach</code> flag, and friends fork the process away from magus, so f
 supervision, readiness, and stop all stop working. Drop the detach flag, or make it
 a command op if detaching is what you want.</li>
 <li><strong>A command op that never exits</strong> (<a href="../../reference/codes/services/MGS5003/">MGS5003</a>) - a watcher
-like <code>tsc --watch</code> in a run-to-completion op hangs the run. Make it a service op, or
+like <code>tsc --<a class="code-xref" href="../../reference/manpage/magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a></code> in a run-to-completion op hangs the run. Make it a service op, or
 drop the watch flag.</li>
 </ul>
 <p>Both are mirror images of the same bug: the argv and the kind disagree. Catching it

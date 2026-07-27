@@ -3,13 +3,13 @@ package graph
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/types"

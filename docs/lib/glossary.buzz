@@ -513,6 +513,16 @@ test "linkCodeEntities builds an anchored href for a method ref" {
         "method ref links to its anchor");
 }
 
+test "linkCodeEntities favors a full command over its bare alias" {
+    final ents: [Entity] = mut [<Entity>];
+    ents.append(Entity{ token = "magus affected", kind = "command", url = "reference/manpage/magus-affected/", summary = "run a target for changed projects" });
+    ents.append(Entity{ token = "affected", kind = "command", url = "reference/manpage/magus-affected/", summary = "magus affected" });
+    final sorted = sortEntitiesLongestFirst(ents);
+    assert\equal(linkCodeEntities("<p><code>magus affected ci</code></p>", sorted, ""),
+        "<p><code><a class=\"code-xref\" href=\"reference/manpage/magus-affected/\" data-kind=\"command\" data-def=\"run a target for changed projects\">magus affected</a> ci</code></p>",
+        "full command links once");
+}
+
 test "sortEntitiesLongestFirst orders by descending match length" {
     final es: [Entity] = mut [<Entity>];
     es.append(Entity{ token = "magus affected" });

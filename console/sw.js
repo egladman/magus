@@ -24,6 +24,8 @@ const PRECACHE = [
   BASE + "graph/explorer.js",
   BASE + "graph/graph.css",
   BASE + "graph/scaffold.html",
+  BASE + "graph/knowledge-graph.json",
+  BASE + "graph/target-graph.json",
   BASE + "dashboard/dashboard.js",
   BASE + "dashboard/dashboard.css",
   BASE + "dashboard/scaffold.html",
@@ -45,6 +47,15 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // never touch daemon/loopback or cross-origin
+  if (url.pathname.endsWith("/graph/knowledge-graph.json") || url.pathname.endsWith("/graph/target-graph.json")) {
+    e.respondWith(
+      fetch(req).then((res) => {
+        if (res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone()));
+        return res;
+      }).catch(() => caches.match(req)),
+    );
+    return;
+  }
   e.respondWith(
     caches.match(req).then((hit) => hit || fetch(req).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }

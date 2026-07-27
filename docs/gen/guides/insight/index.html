@@ -84,18 +84,18 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="insight">Insight</h1>
-<p><code><a class="code-xref" href="../../reference/manpage/magus-insight/" data-kind="command" data-def="Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">magus insight</a> &lt;lens&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> reads version-control history to show where a codebase's
+<p><code><a class="code-xref" href="../../reference/manpage/magus-insight/" data-kind="command" data-def="Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">magus insight</a> &lt;lens&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> reads <a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a>-control history to show <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> a codebase's
 attention and risk actually concentrate. Static structure tells you how the code is
 organized; history tells you how it is <em>used</em> - which files churn, which projects
 change together, who owns what. The <a href="../../reference/manpage/magus-insight/">man page</a> lists
 the flags; this page is the intent.</p>
 <h2 id="design-intent">Design intent</h2>
 <ul>
-<li><strong>Behavior over structure.</strong> A dependency graph shows what <em>could</em> affect what.
+<li><strong>Behavior over structure.</strong> A dependency <a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> shows what <em>could</em> affect what.
 History shows what <em>does</em>. A file edited every week is a different risk than one
 untouched for a year, even at the same complexity.</li>
 <li><strong>Contextual by default.</strong> Every lens reflects the working directory's subtree;
-<code>--workspace</code> widens it to the whole <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>. Run it where you are asking the
+<code>--workspace</code> widens it to the whole <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>. <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> it where you are asking the
 question.</li>
 <li><strong>Derived, not stored.</strong> <a class="glossary-term" href="../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">Insight</a> computes from VCS history on demand. There is no
 index to maintain and nothing to keep in sync; the active VCS adapter must report
@@ -127,7 +127,7 @@ question: recent hotspots want a short window, an ownership audit a long one.</p
 <p>Each lens accepts <code>-o text|json|yaml|name</code>; <code>hotspots</code> and <code>affinity</code> also render
 <code>-o mermaid</code> for a diagram you can paste into a review.</p>
 <h2 id="where-it-fits">Where it fits</h2>
-<p>Insight is a read-only lens, never part of a build. Reach for it when you are
+<p><a class="code-xref" href="../../reference/manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">Insight</a> is a read-only lens, never part of a build. Reach for it when you are
 deciding <em>what to work on</em> rather than running work: picking a refactor target
 (hotspots), questioning an architecture (affinity), or planning ownership
 (ownership). The <code>report</code> lens in CI turns that into a recurring signal on every

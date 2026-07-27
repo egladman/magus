@@ -78,6 +78,8 @@ func (m *Magus) Affinity(ctx context.Context, opts types.InsightOptions) (types.
 	pairs := project.Affinity(scan)
 	declared := m.declaredDeps()
 	for i := range pairs {
+		pairs[i].AName = m.projectDisplayName(pairs[i].A)
+		pairs[i].BName = m.projectDisplayName(pairs[i].B)
 		if !declared[pairs[i].A][pairs[i].B] && !declared[pairs[i].B][pairs[i].A] {
 			pairs[i].Hidden = true
 		}
@@ -88,6 +90,13 @@ func (m *Magus) Affinity(ctx context.Context, opts types.InsightOptions) (types.
 		Since:      opts.Since,
 		Pairs:      pairs,
 	}, nil
+}
+
+func (m *Magus) projectDisplayName(path string) string {
+	if p := m.Get(path); p != nil {
+		return types.ProjectLabel(p.Path, p.Dir)
+	}
+	return types.ProjectLabel(path, "")
 }
 
 // declaredDeps returns each project's direct dependency set (both directions are
@@ -111,11 +120,15 @@ func (m *Magus) Ownership(ctx context.Context, opts types.InsightOptions) (types
 	if err != nil {
 		return types.OwnershipOutput{}, err
 	}
+	projects := project.Ownership(scan, project.Midpoint(scan))
+	for i := range projects {
+		projects[i].Name = m.projectDisplayName(projects[i].Path)
+	}
 	return types.OwnershipOutput{
 		Definition: types.OwnershipDefinition,
 		Commits:    opts.Commits,
 		Since:      opts.Since,
-		Projects:   project.Ownership(scan, project.Midpoint(scan)),
+		Projects:   projects,
 	}, nil
 }
 
@@ -134,10 +147,14 @@ func (m *Magus) Trend(ctx context.Context, opts types.InsightOptions) (types.Tre
 	if err != nil {
 		return types.TrendOutput{}, err
 	}
+	projects := project.Trend(scan)
+	for i := range projects {
+		projects[i].Name = m.projectDisplayName(projects[i].Path)
+	}
 	return types.TrendOutput{
 		Definition: types.TrendDefinition,
 		Commits:    opts.Commits,
 		Since:      opts.Since,
-		Projects:   project.Trend(scan),
+		Projects:   projects,
 	}, nil
 }

@@ -63,7 +63,7 @@ Four flags reason about the affected set instead of executing the target:
 
 `magus affected ci` is the workhorse of a monorepo pipeline: it runs the `ci`
 anchor for exactly the projects a pull request touched. Because
-[`affected` never applies `default_charms`](../concepts/charms.md#defaulting-charms-per-workspace-default_charms)
+[`magus affected` never applies `default_charms`](../concepts/charms.md#defaulting-charms-per-workspace-default_charms)
 and `RunCI` strips the `rw` charm, an affected CI run is always read-only no matter
 how the workspace is configured. Fan out at scale with `--plan` feeding a shard
 matrix.

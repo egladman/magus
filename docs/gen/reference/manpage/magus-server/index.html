@@ -86,19 +86,19 @@
 <h1 id="magus-server">magus-server</h1>
 <p>Manage the persistent magus <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a></p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> server &lt;start|stop&gt; [flags]</p>
+<p><strong>magus</strong> <a class="code-xref" href="./" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> &lt;start|stop&gt; [flags]</p>
 <h2 id="description">Description</h2>
 <p>Start, stop, or check the liveness of a persistent magus daemon.</p>
 <p>By default every magus invocation starts a short-lived proc server that dies
 when the command exits. The persistent daemon keeps the server alive across
-invocations so <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> discovery, config loading, and the content-addressed
+invocations so <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> discovery, <a class="code-xref" href="../magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> loading, and the content-addressed
 <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> are paid for once. Nested magus calls (from build scripts, editor
 integrations, etc.) forward work to the daemon automatically.</p>
 <p>The socket address is resolved in priority order:
 --socket flag  &gt;  MAGUS_DAEMON_ADDRESS env  &gt;  <a class="code-xref" href="../../config/#daemon" data-kind="config" data-def="string, flag --daemon-address, env MAGUS_DAEMON_ADDRESS">daemon.address</a> in magus.yaml  &gt;
 stable default ($XDG_RUNTIME_DIR/magus/magus-daemon.sock)</p>
 <p>The socket file acts as the lock: present means a daemon is running, absent
-means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
+means none. Shell <a class="code-xref" href="../magus-init/" data-kind="command" data-def="magus init: Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.">init</a> hooks (e.g. Nix-injected .profile lines) typically
 check for the file with [ -S &quot;$socket&quot; ] before starting one.</p>
 <h2 id="subcommands">Subcommands</h2>
 <dl>
@@ -117,11 +117,11 @@ check for the file with [ -S &quot;$socket&quot; ] before starting one.</p>
 <p><em>Inspect daemon <a class="glossary-term" href="../../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> state</em></p>
 <pre><code class="language-sh">magus status
 </code></pre>
-<p><em>Use a custom socket path</em></p>
+<p><em>Use a custom socket <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a></em></p>
 <pre><code class="language-sh">magus --daemon-address unix:///tmp/m.sock server start
 </code></pre>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-man/"><strong>magus-man</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>

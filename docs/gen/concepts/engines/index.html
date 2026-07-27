@@ -112,7 +112,7 @@ type Session interface {
 </code></pre>
 <p><code>Value</code> and <code>Table</code> are <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>-neutral handles, so host code reads and writes
 script values without knowing the concrete VM. The backend registers itself at
-<code>init()</code> time:</p>
+<code><a class="code-xref" href="../../reference/manpage/magus-init/" data-kind="command" data-def="magus init: Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.">init</a>()</code> time:</p>
 <pre><code class="language-go">// internal/interp/engine/buzz/buzz.go
 func init() { engine.Register(&quot;buzz&quot;, engineImpl{}) }
 </code></pre>
@@ -129,7 +129,7 @@ and the decoder keys they map to is <strong>single-sourced</strong> in
 <a href="../../internal/spell/contract.go"><code>internal/spell/contract.go</code></a> as
 <code>OptionalContract</code>, and the Buzz resolver (<code>internal/spell/resolve.go</code>) iterates
 that one list. A spell's <code>mgs_</code> functions decode to a <code>Spec</code> for every scalar and
-list contribution (<code>needs</code>, <code>provides</code>, <code>claims</code>, <code>version_cmd</code>, <code>opaque</code>) and
+list contribution (<code>needs</code>, <code>provides</code>, <code>claims</code>, <code><a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a>_cmd</code>, <code>opaque</code>) and
 for record-shaped ops (<code>{bin, args, charms}</code>).</p>
 <p>An op is a command or a <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a>; a function-valued op is <code>fun(Target) &gt; Command</code> or
 <code>fun(Target) &gt; Service</code>, called once at load to record the declarative value it
@@ -152,7 +152,7 @@ additions (<code>os.exec</code>, <code>os.which</code>, ...); <code>import &quot
 <code>fs.glob</code>/<code>readFile</code>; and magus adds whole modules Buzz lacks (<code>vcs</code>, <code>archive</code>,
 <code>http</code>, <code>charm</code>, ...). One import per domain covers the union, with no separate
 <code>extra</code> namespace to remember which side a call lives on.</p>
-<p>Where a method overlaps a Buzz stdlib call, the magus form is <strong><a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware</strong>
+<p><a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">Where</a> a method overlaps a Buzz stdlib call, the magus form is <strong><a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware</strong>
 while the bare stdlib is not. For example, <code>env.get</code>/<code>lookup</code> honor the env
 allowlist, whereas Buzz's <code>os.env</code> is raw. Those overlaps are noted per-method in the
 <a href="../../reference/buzz/">module reference</a> (either works); the cross-reference lives in

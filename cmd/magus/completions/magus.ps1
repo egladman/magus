@@ -10,7 +10,7 @@ $__magus_scriptblock = {
 
     $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'tail', 'affected',
                    'insight', 'query', 'explain', 'path', 'graph', 'watch',
-                   'status', 'doctor', 'config', 'server', 'repl', 'completion',
+                   'status', 'doctor', 'config', 'server', 'repl', 'completion', 'man',
                    'init', 'self', 'version', 'clean', 'merge-driver', 'buzz', 'help'
     $verbs         = 'ls', 'build', 'test', 'lint', 'format', 'clean', 'generate', 'ci'
     $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
@@ -137,6 +137,9 @@ $__magus_scriptblock = {
             if ($atArg2) {
                 return Complete-From $shells
             }
+        }
+        'man' {
+            return Complete-From @('install', '--dir')
         }
     }
 }

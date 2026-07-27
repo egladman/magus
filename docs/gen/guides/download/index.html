@@ -91,7 +91,7 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="download">Download</h1>
-<p>magus ships as a single self-contained binary. Pick your platform for step-by-step install and PATH setup, then verify the signature before you run it.</p>
+<p>magus ships as a single <a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contained binary. Pick your platform for step-by-step install and <a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a> setup, then verify the signature before you <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> it.</p>
 <h2 id="install">Install</h2>
 <p>Each platform guide has a copy-paste <code>curl</code> install that pulls the current release, extracts the binary onto your <code>PATH</code>, and points you at verification:</p>
 <ul>
@@ -121,7 +121,7 @@
 <td>Fetch and verify but do not swap</td>
 </tr>
 <tr>
-<td><code>--version v0.4.2</code></td>
+<td><code>--<a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> v0.4.2</code></td>
 <td>Pin to a specific tag</td>
 </tr>
 <tr>
@@ -173,7 +173,7 @@ MCowBQYDK2VwAyEA/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 <p>Raw base64 (32 bytes):</p>
 <pre><code class="language-text">/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 </code></pre>
-<p>The key is embedded in every magus binary via <code>//go:embed</code>, so <code>magus self update</code> trusts it transitively. Rotating the key requires shipping a new release built with the new embedded key; older binaries continue to trust only the previous key.</p>
+<p>The key is embedded in every magus binary via <code>//go:embed</code>, so <code>magus self update</code> trusts it transitively. A planned rotation first ships a release signed by the current key that embeds the replacement key; later releases can use the replacement. Older binaries cannot be remotely revoked if the current key is compromised. The maintainer procedure is in the <a href="../../development/contributing">contributing guide</a>.</p>
 <h2 id="shell-completion">Shell completion</h2>
 <pre><code class="language-sh">magus completion &lt;shell&gt;    # bash / zsh / fish / powershell (or pwsh)
 </code></pre>
@@ -191,6 +191,10 @@ MCowBQYDK2VwAyEA/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 less install.sh
 sh install.sh
 </code></pre>
+<p>Review the script first: it lets you inspect the download, signature verification, and
+installation steps before granting a network response access to your shell.</p>
+<p>The installer selects the static binary by default. Pass <code>--variant dynamic</code> only
+when you specifically need the platform-native build and that release publishes it.</p>
 <h3 id="b-yolo">B. Yolo</h3>
 <pre><code class="language-sh">curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 </code></pre>
@@ -212,7 +216,7 @@ go build -o magus ./cmd/magus
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22download%22">download</a><a class="tag" href="../../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../../search/?q=tag%3A%22release%22">release</a><a class="tag" href="../../search/?q=tag%3A%22self-update%22">self-update</a><a class="tag" href="../../search/?q=tag%3A%22ed25519%22">ed25519</a><a class="tag" href="../../search/?q=tag%3A%22verify%22">verify</a><a class="tag" href="../../search/?q=tag%3A%22signing%22">signing</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-26T22:59:53Z">July 26, 2026, 10:59 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c3d85ab9feb37d501cd917cacc9c255fcea6beef" data-tooltip="c3d85ab9feb37d501cd917cacc9c255fcea6beef" title="c3d85ab9feb37d501cd917cacc9c255fcea6beef">c3d85ab9</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/download.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/download.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

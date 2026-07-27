@@ -45,13 +45,13 @@ func TestEmitDenyHint(t *testing.T) {
 		return string(out)
 	}
 
-	interactive.SetEnabled(true)
-	defer interactive.SetEnabled(true)
+	interactive.SetHintsEnabled(true)
+	defer interactive.SetHintsEnabled(true)
 	got := capture()
 	assert.Contains(t, got, "hint:")
 	assert.Contains(t, got, "magus config set key=sandbox.allow.curl.path,value=/usr/bin/curl")
 
-	interactive.SetEnabled(false)
+	interactive.SetHintsEnabled(false)
 	assert.Empty(t, capture(), "EmitDenyHint should be silent when hints are disabled")
 }
 

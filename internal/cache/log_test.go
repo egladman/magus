@@ -84,21 +84,25 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		assert.NotContains(t, out, "full output:", "a passing run gets no failure hint")
 	})
 
-	t.Run("cache.error ref line + hints", func(t *testing.T) {
+	t.Run("cache.error action card", func(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
 		require.NoError(t, h.Handle(context.Background(), buildRecord(
 			"cache.error",
 			slog.String("project", "api"),
+			slog.String("label", "api"),
+			slog.String("target", "build"),
 			slog.Int64("duration", int64(5*time.Millisecond)),
-			slog.String("error", "build failed"),
+			slog.String("error", "compile failed:\nundefined: Widget"),
 			slog.String("ref", "outdeadbeef"),
 		)))
 		out := buf.String()
-		assert.Contains(t, out, "\noutdeadbeef\n", "the ref must be on its own bare line")
-		assert.Contains(t, out, "full output: magus query output outdeadbeef")
-		assert.Contains(t, out, "open in browser: magus query output outdeadbeef --open")
+		assert.Contains(t, out, "[fail] api build (ran,", "failure heading identifies the project and target")
+		assert.Contains(t, out, "cause: compile failed: undefined: Widget", "multi-line errors should remain scannable")
+		assert.Contains(t, out, "output: outdeadbeef")
+		assert.Contains(t, out, "inspect: magus query output outdeadbeef")
+		assert.Contains(t, out, "reproduce: magus run build api")
 	})
 
 	t.Run("cache.summary", func(t *testing.T) {
@@ -202,6 +206,23 @@ func TestPrettyHandlerUsesLabelForDisplay(t *testing.T) {
 	assert.Contains(t, out, "magus run ci .", "repro must keep the real runnable path")
 }
 
+func TestPrettyHandlerNormalizesMissingRootLabel(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	rec := buildRecord(
+		"cache.error",
+		slog.String("project", "."),
+		slog.String("target", "ci"),
+		slog.Int64("duration", int64(time.Second)),
+		slog.String("error", "failed"),
+	)
+	require.NoError(t, h.Handle(context.Background(), rec), "Handle")
+	out := buf.String()
+	assert.Contains(t, out, "[fail] workspace ci (ran,", "root display must never fall back to a bare dot")
+	assert.NotContains(t, out, "[fail] . ", "root display must never use a bare dot")
+}
+
 // TestPrettyHandlerGenericMessage verifies that a non-cache message renders in the
 // compact generic style: a level tag, the message, and trailing key=value attrs,
 // with no timestamp or level= boilerplate.
@@ -256,9 +277,8 @@ func TestPrettyHandlerSkipsDirAttr(t *testing.T) {
 	assert.Contains(t, dbg.String(), "dir=/repo", "dir attr should be shown at debug level")
 }
 
-// TestPrettyHandlerReproLine verifies that a per-project result prints the
-// copy-pasteable `magus run <target> <project>` line, and that the hints toggle
-// silences it. Not parallel: it flips the process-wide hints switch.
+// TestPrettyHandlerReproLine verifies that a per-project result always prints its
+// copy-pasteable command, including on a non-interactive stream.
 func TestPrettyHandlerReproLine(t *testing.T) {
 	rec := buildRecord(
 		"cache.miss",
@@ -271,13 +291,30 @@ func TestPrettyHandlerReproLine(t *testing.T) {
 	h := newTestHandler(&buf)
 	require.NoError(t, h.Handle(context.Background(), rec), "Handle")
 	assert.Contains(t, buf.String(), "magus run test:debug web/studio", "output does not contain repro command")
+}
 
-	// The hints toggle silences it.
-	interactive.SetEnabled(false)
-	defer interactive.SetEnabled(true)
-	buf.Reset()
-	require.NoError(t, h.Handle(context.Background(), rec), "Handle")
-	assert.NotContains(t, buf.String(), "magus run", "repro command should be suppressed when hints are off")
+func TestPrettyHandlerFailureCardIgnoresHintsToggle(t *testing.T) {
+	interactive.SetHintsEnabled(false)
+	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
+	var buf bytes.Buffer
+	h := newTestHandler(&buf) // a bytes.Buffer is explicitly non-TTY.
+	// The renderer must not make an actionable failure depend on interactive mode.
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.error",
+		slog.String("project", "web"),
+		slog.String("target", "test"),
+		slog.String("error", "exit status 1"),
+		slog.String("ref", "outbadcafe"),
+	)), "Handle")
+	out := buf.String()
+	assert.Contains(t, out, "inspect: magus query output outbadcafe")
+	assert.Contains(t, out, "reproduce: magus run test web")
+}
+
+func TestFailureExcerptBoundsMultilineError(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "one two", failureCauseExcerpt(" one\n\t two "))
+	assert.Len(t, []rune(failureCauseExcerpt(strings.Repeat("x", 300))), 240)
 }
 
 // TestReproTarget verifies the target token the repro line uses: the bare name, or

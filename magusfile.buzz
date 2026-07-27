@@ -54,8 +54,8 @@ magus.project({
         // per invocation.
         "release-build": {"skip_cache": true},
         "release-sign": {"skip_cache": true},
-        // coverage rewrites assets/coverage.svg; a cache hit would skip the write.
-        "coverage": {"skip_cache": true},
+        // test rewrites assets/coverage.svg; a cache hit would skip the write.
+        "test": {"skip_cache": true},
     },
 });
 
@@ -228,7 +228,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in
 // GitHub Actions, appends it to the job step summary. The final CI step; never gates.
 export fun postflight(ctx: magus\Context, args: [str]) > void {
-    final doc = magus.insight(["report", "--workspace"]).stdout; // teed to stdout, like md-generate
+    final doc = magus.insight(["report", "--workspace", "--github-summary"]).stdout; // teed to stdout, like md-generate
     final summaryPath = os.env("GITHUB_STEP_SUMMARY");
     if (summaryPath != null and ("" + summaryPath) != "") {
         final sp = "" + summaryPath;
@@ -376,34 +376,19 @@ fun total_coverage(func_out: str) > str {
     return cell;
 }
 
-// coverage runs the suite with per-package coverage and rewrites the
-// assets/coverage.svg badge. Like `generate`, it then drift-gates: a clean checkout
-// only goes dirty if the committed badge was stale, so `ci` (which depends on this)
-// fails when the badge was not refreshed and committed. Run the `rw` charm
-// (`coverage:rw`) to keep the new badge instead.
-//
-// Per-package, not -coverpkg=./...: cross-package instrumentation rewrites std/*.go
-// with counter statements, which shifts the source line numbers the module-doc
-// generator embeds (it reads runtime source info), tripping TestModuleDocsUpToDate.
-// Per-package leaves dependencies un-instrumented, so those links stay stable.
-export fun coverage(ctx: magus\Context, args: [str]) > void {
+// Tests with race detection, coverage, and a drift-gated coverage badge.
+export fun test(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs.isDirty([fs.join("assets", "coverage.svg")]) == false;
-    // -race here is how ci race-checks the suite (ci needs coverage): magus is a
-    // concurrency orchestrator, so its own tests run under the detector. atomic
-    // covermode is already required by -race, and local `magus run test` stays fast
-    // because it does not run coverage.
-    go["go-test"]({"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
+    ctx.needs(format);
+    go["go-test"]({"env": {"GOEXPERIMENT": "jsonv2"}, "args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     final pct = total_coverage(os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
-    // Soft coverage floor: ci fails when total statement coverage regresses below
-    // this, not only when the badge is stale. Raise it as coverage climbs; lower it
-    // here deliberately if a drop is intended.
-    if (std.parseInt(pct.split(".")[0]) < 55) {
-        throw "coverage: " + pct + "% is below the 55% floor; investigate the regression or lower the floor deliberately";
+    if (std.parseInt(pct.split(".")[0]) < 60) {
+        throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
     fs.writeFile(fs.join("assets", "coverage.svg"), badge.coverage("go coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs.isDirty([fs.join("assets", "coverage.svg")])) {
-        throw "coverage: assets/coverage.svg is stale; re-run `magus run coverage:rw` and commit the badge";
+        throw "test: assets/coverage.svg is stale; re-run `magus run test:rw` and commit the badge";
     }
 }
 
@@ -429,27 +414,26 @@ export fun build(ctx: magus\Context, args: [str])  > void {
         ctx.needs(go_build);
     }
 }
-// Formats first, then runs the Go test suite.
-export fun test(ctx: magus\Context, args: [str])   > void { ctx.needs(format); go["go-test"](); }
-// Formats first, then golangci-lint, go vet, govulncheck, markdownlint. golangci-lint
-// and govulncheck run via os.exec to pass -modfile=go.tool.mod (their deps live there,
-// not in the library go.mod).
+// Formats first, then golangci-lint, go vet, and markdownlint. golangci-lint runs
+// through os.exec to use the tool module rather than the library module.
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
-export fun lint(ctx: magus\Context, args: [str])   > void { ctx.needs(format); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]); md.markdownlint(); }
+export fun lint(ctx: magus\Context, args: [str])   > void { ctx.needs(format); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); md.markdownlint(); }
+export fun security(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    os.withEnv({"GOEXPERIMENT": "jsonv2"}, fun() > void {
+        os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]);
+    });
+}
 // Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):
 // markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all
 // TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely
 // to format markdown.
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
 
-// Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate;
-// the affected/pipeline anchor - one command that also catches unregenerated output.
-// generate is a DIRECT dep (not just transitively via format) so the drift gate is a
-// first-class part of ci, independent of the mutating format/build chain. coverage
-// drift-gates assets/coverage.svg, so a stale badge fails ci instead of rotting silently.
+// Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(generate, lint, build, test, coverage);
+    ctx.needs(lint, security, build, test);
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix
@@ -485,34 +469,22 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void {
     if (fs.exists(p)) { existing = fs.readFile(p); }
     fs.writeFile(p, existing + block);
 
-    // Render a human-readable summary (shard plan + dependency graph) to the job step summary.
+    // Render an actionable, portable summary to the job step summary.
     final summaryPath = os.env("GITHUB_STEP_SUMMARY");
     if (summaryPath != null and ("" + summaryPath) != "") {
         final sp = "" + summaryPath;
         var md = "## Affected CI plan\n\n"
             + plan.q("count").integerValue() + " shard(s), max parallel "
             + plan.q("max_parallel").integerValue() + "\n\n"
-            + "| shard | projects |\n| --- | --- |\n";
-        // Scope the graph to the workspace root ($GITHUB_WORKSPACE), not the nested magus workspace.
-        var graphArgs = mut ["graph", "-o", "mermaid"];
-        var graphOpts = mut {<str: str>};
-        final root = os.env("GITHUB_WORKSPACE");
-        if (root != null and ("" + root) != "") {
-            graphOpts["root"] = "" + root;
-        }
-        var nproj = 0;
+            + "| Shard | Projects |\n| --- | --- |\n";
         foreach (row in plan.q("matrix").listValue()) {
             final projects = row.q("projects").stringValue();
             md = md + "| " + row.q("shard").stringValue() + " | " + projects + " |\n";
-            foreach (proj in projects.split(" ")) {
-                if (proj != "") { graphArgs.append(proj); nproj = nproj + 1; }
-            }
         }
-        if (nproj > 0) {
-            md = md + "\n## Dependency graph (affected)\n\n```mermaid\n"
-                + magus.describe(graphArgs, graphOpts).stdout
-                + "\n```\n";
-        }
+        md = md + "\n**What this means:** each shard runs the listed projects concurrently within the declared limit. "
+            + "To inspect why a project was selected, run `magus affected ci --explain` locally. "
+            + "[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) · "
+            + "[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n";
         var existingSummary = "";
         if (fs.exists(sp)) { existingSummary = fs.readFile(sp); }
         fs.writeFile(sp, existingSummary + md);

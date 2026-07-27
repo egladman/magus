@@ -72,7 +72,7 @@ func writeTemplate(path string, tmpl *template.Template, data any) error {
 	if err != nil {
 		return fmt.Errorf("gofmt %s: %w", path, err)
 	}
-	if err := os.WriteFile(path, formatted, 0o644); err != nil {
+	if err := writeFileIfChanged(path, formatted, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil

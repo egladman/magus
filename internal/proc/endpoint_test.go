@@ -3,7 +3,6 @@ package proc
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

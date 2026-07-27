@@ -99,9 +99,9 @@
 <h1 id="buzz">buzz</h1>
 <p>The <code>buzz</code> <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> checks and tests <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> sources. Each op finds every <code>.buzz</code> file and runs <code>buzz --check</code>, <code>buzz --test</code>, or the magus interpreter over it.</p>
 <p><strong>Runtime name:</strong> <code>buzz</code> (source <code>spells/buzz/</code>)</p>
-<p><strong>Version probe:</strong> none</p>
+<p><strong><a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">Version</a> probe:</strong> none</p>
 <h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
-<p>Every op is invoked as <code>buzz[&quot;&lt;op&gt;&quot;](opts?)</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>, where the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
+<p>Every op is invoked as <code>buzz[&quot;&lt;op&gt;&quot;](opts?)</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>, <a class="code-xref" href="../../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -138,7 +138,7 @@
 </tr>
 </tbody>
 </table></figure>
-<p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
+<p>Charms (the <code>:charm</code> suffix, e.g. <code>magus <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="buzz-check">buzz-check</h2>
 <p>check type-checks every Buzz source without running it (buzz --check). buzz takes one script per invocation, so find feeds xargs one file at a time (-n1; -print0 pairs with -0 for safe paths, and -r skips an empty set - the same -print0 | xargs pattern the bash spell uses for shellcheck.</p>
 <p><strong>Command:</strong> <code>sh -c find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check</code></p>
@@ -170,7 +170,7 @@ export fun test(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <h2 id="magus-buzz">magus-buzz</h2>
-<p>magus-buzz executes each source through <code>magus buzz</code>, magus's own embedded Buzz <a class="glossary-term" href="../../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>. It has no check-only mode - executing a file compiles, type-checks, and runs it - so this is the runtime sibling of <code>buzz-check</code>. It invokes &quot;$MAGUS&quot;: magus exports MAGUS (the running binary's path, à la GNU Make's $(MAKE)) into every spell subprocess, so this resolves to the current magus even uninstalled / under <code>go run</code>, with no dependence on PATH. (A bare $MAGUS, not ${MAGUS:-magus}: Buzz reads {...} in a string as interpolation, and MAGUS is always set here anyway.)</p>
+<p>magus-buzz executes each source through <code>magus buzz</code>, magus's own embedded Buzz <a class="glossary-term" href="../../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>. It has no check-only mode - executing a file compiles, type-checks, and runs it - so this is the runtime sibling of <code>buzz-check</code>. It invokes &quot;$MAGUS&quot;: magus exports MAGUS (the running binary's <a class="code-xref" href="../../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>, à la GNU Make's $(MAKE)) into every spell subprocess, so this resolves to the current magus even uninstalled / under <code>go run</code>, with no dependence on PATH. (A bare $MAGUS, not ${MAGUS:-magus}: Buzz reads {...} in a string as interpolation, and MAGUS is always set here anyway.)</p>
 <p><strong>Command:</strong> <code>sh -c find . -name '*.buzz' -print0 | xargs -0 -r -n1 &quot;$MAGUS&quot; buzz</code></p>
 <h3 id="example-2">Example</h3>
 

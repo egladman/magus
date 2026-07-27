@@ -92,12 +92,12 @@ owns that story end to end.</p>
 <h2 id="the-two-mechanisms-and-the-decision-rule">The two mechanisms and the decision rule</h2>
 <ul>
 <li><strong><code>ctx.needs(...)</code></strong> is <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>-level, imperative, and blocking at its call
-site inside the target body. It says &quot;run X before the rest of my body
+site inside the target body. It says &quot;<a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> <a class="code-xref" href="../../reference/manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">X</a> before the rest of my body
 executes&quot; - same-<a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> or cross-project, deduped per invocation, run
 once. See <a href="../targets/">targets</a> for the full grammar.</li>
 <li><strong><code>depends_on</code></strong> is project-level, declared in <code>magus.project</code>'s options
 map. It says &quot;that project is upstream of me&quot; - an ordering barrier for
-same-target runs, a seed for the affected closure, and an input to the
+same-target runs, a seed for the <a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> closure, and an input to the
 <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> key. See <a href="../workspace/#depends_on-cross-project-dependencies">workspace</a>.</li>
 </ul>
 <p><strong>Rule of thumb:</strong> reach for <code>needs</code> inside a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> to sequence work
@@ -106,7 +106,7 @@ another project's changes affect you, independent of whether any target
 calls into it directly. A cross-project <code>needs</code> gives you both at
 once - see the fold, below.</p>
 <h2 id="the-fold-a-cross-project-needs-also-declares-depends-on">The fold: a cross-project <code>needs</code> also declares <code>depends_on</code></h2>
-<p>A cross-project <code>ctx.needs(alias.target)</code> (where <code>alias</code> is a project
+<p>A cross-project <code>ctx.needs(alias.target)</code> (<a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> <code>alias</code> is a project
 imported at the top of the magusfile, whose exported targets it binds as
 callable handles) is <strong>statically extracted</strong> and <strong>unioned into the
 consuming project's <code>DependsOn</code></strong> at <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>-open time
@@ -120,11 +120,11 @@ reference (<code>ctx.needs(build)</code>), a cross-project handle passed as a me
 access (<code>ctx.needs(alias.target)</code>), and each literal pattern given to
 <code>magus.glob</code> inside a <code>magus.needs</code>. What it cannot evaluate is a <em>computed</em> dependency - a
 handle stored in a variable, returned from a function, or otherwise built at
-runtime. Such a <code>magus.needs</code> call is invisible to the static graph, to
+runtime. Such a <code>magus.needs</code> call is invisible to the static <a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>, to
 <code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a></code>, and to the affected set. It still runs correctly at runtime
 (<code>magus.needs</code> itself has no such restriction), but nothing outside that one
 target's execution knows the edge exists. If a dependency needs to be visible
-to <code>affected</code>/<code>describe</code> without being passed as a plain handle, declare it
+to <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code>/<code>magus <a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a></code> without being passed as a plain handle, declare it
 via <code>depends_on</code> instead.</p>
 <h2 id="what-a-bare-depends-on-does-not-do">What a bare <code>depends_on</code> does NOT do</h2>
 <p><code>depends_on</code> is data, not a call. It never invokes anything by itself:</p>
@@ -172,11 +172,11 @@ is a bug when they do.</p>
 <ul>
 <li><strong>Same-project runtime cycle.</strong> A target that (transitively) needs itself
 fails with <code>buzzpool: dispatch: stack contains &quot;&lt;name&gt;&quot; (cycle detected)</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> -
-the ancestor stack that catches this also catches a direct self-loop
+the ancestor stack that catches this also catches a direct <a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-loop
 (<code>ctx.needs(self)</code> inside <code>self</code>).</li>
 <li><strong>Cross-project runtime cycle.</strong> Two projects whose <code>magus.needs</code> chains
 point back at each other fail with <code>cross-project cycle: &lt;dir&gt; target &quot;&lt;name&gt;&quot;</code>, detected by the same run's <code>CrossDispatch</code> coordinator.</li>
-<li><strong>Unregistered <code>depends_on</code> path.</strong> A <code>depends_on</code> entry naming a project
+<li><strong>Unregistered <code>depends_on</code> <a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>.</strong> A <code>depends_on</code> entry naming a project
 path that was never discovered/registered fails workspace load with
 <code>magus: dependency not registered (N unresolved)</code>, listing each
 <code>&lt;consumer&gt; -&gt; &lt;dep&gt;</code> pair with a did-you-mean suggestion when one is close.</li>
@@ -190,7 +190,7 @@ guarantee.</li>
 <p><code>magus.needs</code> takes target <strong>functions</strong>: a same-project target passed by
 reference (<code>ctx.needs(build, test)</code>) or a cross-project handle a project
 import binds (<code>ctx.needs(alias.target)</code>), or the list of handles <code>magus.glob</code>
-resolves a pattern to. It never takes a string or a query object; a mistyped
+resolves a pattern to. It never takes a string or a <a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a> object; a mistyped
 identifier is an undefined variable and fails at <strong>load</strong>, not at run time. For
 patterns, resolve them to handles with <code>magus.glob</code> and pass the result to
 <code>magus.needs</code>.</p>

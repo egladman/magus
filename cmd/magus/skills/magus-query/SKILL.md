@@ -1,8 +1,3 @@
----
-name: magus-query
-description: Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.
----
-
 # magus knowledge graph
 
 magus keeps a deterministic, cache-backed graph of its own domain. Query it to
@@ -26,10 +21,11 @@ reported.
    the highest-degree anchor nodes. Consult it before running anything, so your
    first query is precise rather than a guess.
 
-2. Then reach for the verbs. Prefer the MCP tools. The fallback is an instruction,
-   not a hint: if an MCP tool errors or no magus daemon is running, run the CLI
-   equivalent from the same row of the table below instead of stopping or
-   grepping.
+2. Then reach for the verbs. Prefer the MCP tools. At session start, or after an
+   MCP call fails, check `magus status --probe=mcp`. If it is unavailable, tell
+   the user once that `magus server start` restores the full agent surface, then
+   use the CLI equivalent from the same row below. Do not stop or grep. CLI
+   fallback remains correct, but has no tool discovery or warm daemon graph.
 
    | question                                      | MCP tool        | CLI                                |
    | --------------------------------------------- | --------------- | ---------------------------------- |

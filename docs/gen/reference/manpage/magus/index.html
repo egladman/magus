@@ -99,9 +99,9 @@ with CLI flags.</p>
 <p>Global flags are accepted by every subcommand and may appear before or
 after the subcommand word. Last-write-wins, matching kubectl conventions.</p>
 <dl>
-<dt><strong>--root</strong> <em>path</em></dt>
+<dt><strong>--root</strong> <em><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a></em></dt>
 <dd>Workspace root. Default: walk up from cwd until go.mod is found. Must precede the subcommand.</dd>
-<dt><strong>--config</strong> <em>path</em></dt>
+<dt><strong>--<a class="code-xref" href="../magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a></strong> <em>path</em></dt>
 <dd>Config file path. Default: search for magus.yaml in CWD, workspace root, and $XDG_CONFIG_HOME/magus/. Must precede the subcommand.</dd>
 <dt><strong>--output</strong> <em>fmt</em>, <strong>-o</strong> <em>fmt</em></dt>
 <dd>Output format: text (default), json, yaml, name, jsonl, or template[=&lt;go-template&gt;]. Honoured by subcommands that emit structured data. A template body renders a Go text/template over the same value -o json emits (field names are the json keys); a bare -o template with no body lists that output's fields instead of rendering - the json keys usable in -o json and -o template, with each field's type and doc.</dd>
@@ -112,41 +112,43 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.</p>
 </dl>
 <h2 id="subcommands">Subcommands</h2>
 <dl>
-<dt><strong>ls</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-ls/" data-kind="command" data-def="magus ls: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">ls</a></strong></dt>
 <dd>List all discovered projects. See <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>.</dd>
-<dt><strong>describe</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a></strong></dt>
 <dd>Define a magus concept and list its entities. See <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>.</dd>
-<dt><strong>run</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a></strong></dt>
 <dd>Run a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for selected projects. See <a href="../magus-run/"><strong>magus-run</strong>(1)</a>.</dd>
-<dt><strong>x</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a></strong></dt>
 <dd>Interactive shorthand: pick <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> + target. See <a href="../magus-x/"><strong>magus-x</strong>(1)</a>.</dd>
-<dt><strong>where</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a></strong></dt>
 <dd>Print the absolute path of a project. See <a href="../magus-where/"><strong>magus-where</strong>(1)</a>.</dd>
-<dt><strong>tail</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-tail/" data-kind="command" data-def="magus tail: Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.">tail</a></strong></dt>
 <dd>Stream the most recent cached log (interactive only). See <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>.</dd>
 <dt><strong><a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a></strong></dt>
-<dd>Run a target for VCS-diff affected projects. See <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>.</dd>
+<dd>Run a target for VCS-diff <a class="code-xref" href="../magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> projects. See <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>.</dd>
 <dt><strong><a class="glossary-term" href="../../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a></strong></dt>
 <dd>Behavioral code analysis from VCS and run-outcome history. See <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>.</dd>
-<dt><strong>graph</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a></strong></dt>
 <dd>The workspace's graphs as objects: deps, export, stats. See <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>.</dd>
-<dt><strong>watch</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a></strong></dt>
 <dd>Emit changed file paths to stdout. See <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>.</dd>
-<dt><strong>status</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a></strong></dt>
 <dd>Inspect concurrency <a class="glossary-term" href="../../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> and configuration. See <a href="../magus-status/"><strong>magus-status</strong>(1)</a>.</dd>
-<dt><strong>doctor</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></strong></dt>
 <dd>Validate the workspace. See <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>.</dd>
 <dt><strong>config</strong></dt>
 <dd>View or update magus configuration. See <a href="../magus-config/"><strong>magus-config</strong>(1)</a>.</dd>
-<dt><strong>server</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a></strong></dt>
 <dd>Manage the persistent magus <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>. See <a href="../magus-server/"><strong>magus-server</strong>(1)</a>.</dd>
-<dt><strong>completion</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a></strong></dt>
 <dd>Print a shell completion script. See <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>.</dd>
-<dt><strong>init</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-man/" data-kind="command" data-def="magus man: Write magus section 1 man pages from the running binary to a user-selected manpath.">man</a></strong></dt>
+<dd>Install the man pages embedded in this binary. See <a href="../magus-man/"><strong>magus-man</strong>(1)</a>.</dd>
+<dt><strong><a class="code-xref" href="../magus-init/" data-kind="command" data-def="magus init: Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.">init</a></strong></dt>
 <dd>Bootstrap a workspace (magus.yaml + <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>.<a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> + merge driver). See <a href="../magus-init/"><strong>magus-init</strong>(1)</a>.</dd>
-<dt><strong>self</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a></strong></dt>
 <dd>Manage the magus binary (update). See <a href="../magus-self/"><strong>magus-self</strong>(1)</a>.</dd>
-<dt><strong>version</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></strong></dt>
 <dd>Print version, commit, and build date. See <a href="../magus-version/"><strong>magus-version</strong>(1)</a>.</dd>
 </dl>
 <h2 id="environment">Environment</h2>
@@ -234,7 +236,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.</p>
 <dt><strong>MAGUS_VOLATILITY_ANNOTATE_GHA</strong></dt>
 <dd>When true, emit ::warning annotations and volatility summary to $GITHUB_STEP_SUMMARY (default: true). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#volatility" data-kind="config" data-def="bool, flag --volatility-annotate-gha, env MAGUS_VOLATILITY_ANNOTATE_GHA">volatility.annotate_gha</a></strong>.</dd>
 <dt><strong>MAGUS_REPORT_FILTER</strong></dt>
-<dd>Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#report" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_REPORT_FILTER">report.filter</a></strong>.</dd>
+<dd>Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a>). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#report" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_REPORT_FILTER">report.filter</a></strong>.</dd>
 <dt><strong>MAGUS_SANDBOX_ENABLED</strong></dt>
 <dd>When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and <a class="code-xref" href="../../config/#sandbox" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_SANDBOX_ENV_PASSTHROUGH">sandbox.env.passthrough</a> for extension (default: false). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#sandbox" data-kind="config" data-def="bool, flag --sandbox-enabled, env MAGUS_SANDBOX_ENABLED">sandbox.enabled</a></strong>.</dd>
 <dt><strong>MAGUS_UPDATE_URL</strong></dt>
@@ -251,7 +253,7 @@ dot-prefixed names are accepted; having both in the same directory is an error.<
 MAGUS_CACHE_DIR.</dd>
 </dl>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-man/"><strong>magus-man</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>

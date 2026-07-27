@@ -108,7 +108,7 @@ landlock LSM. Magus continues with interpreter-level enforcement only.</p>
 layers:</p>
 <ol>
 <li><strong>Kernel layer</strong>: Linux landlock LSM applies the policy via
-<code>landlock_restrict_self</code>, after which every child process inherits
+<code>landlock_restrict_<a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a></code>, after which every child process inherits
 the restriction across <code>fork+exec</code>.</li>
 <li><strong>Interpreter layer</strong>: the <a class="glossary-term" href="../../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code>
 bindings consult the policy in user space before performing any
@@ -142,7 +142,7 @@ cgo) it must require landlock or be rejected up front.</li>
 through documented bindings are still blocked; native-code attacks
 are not possible today.</li>
 <li>Set <code>MAGUS_SANDBOX_ENABLED=0</code> if you do not want the warning on platforms
-where you accept the reduced enforcement.</li>
+<a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> you accept the reduced enforcement.</li>
 </ul>
     </article>
     </div>

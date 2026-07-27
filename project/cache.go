@@ -1,10 +1,10 @@
 package project
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/types"
 )
 

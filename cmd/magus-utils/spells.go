@@ -86,7 +86,7 @@ func runSpells(args []string) error {
 			return fmt.Errorf("marshal %s: %w", srcPath, err)
 		}
 		outPath := filepath.Join(*outDir, spec.Name+".bo")
-		if err := os.WriteFile(outPath, blob, 0o644); err != nil {
+		if err := writeFileIfChanged(outPath, blob, 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", outPath, err)
 		}
 		built = append(built, spec.Name)

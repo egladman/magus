@@ -5,6 +5,7 @@ import "time"
 // Node is a single project node in a structured graph output.
 type Node struct {
 	Path        string   `json:"path" yaml:"path"`
+	Name        string   `json:"name" yaml:"name"`
 	SpellName   string   `json:"spell_name,omitempty" yaml:"spell_name,omitempty"`
 	Children    []string `json:"children" yaml:"children"`
 	Dir         string   `json:"dir,omitempty" yaml:"dir,omitempty"`
@@ -18,6 +19,9 @@ type Node struct {
 	Authors    int        `json:"authors,omitempty" yaml:"authors,omitempty"`
 	LastCommit *time.Time `json:"last_commit,omitempty" yaml:"last_commit,omitempty"`
 }
+
+// Label is the human-facing project name. Path remains the stable machine key.
+func (n Node) Label() string { return ProjectDisplayName(n.Path, n.Name, n.Dir) }
 
 // GraphOutput is the full structured graph for JSON/YAML serialisation or
 // rendering. Named to sit alongside the other *Output result types (e.g.

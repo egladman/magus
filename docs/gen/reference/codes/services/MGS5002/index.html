@@ -89,7 +89,7 @@
     <article>
 <h1 id="mgs5002-service-op-detaches">MGS5002: service op detaches</h1>
 <p>A <a href="../../../../concepts/operations/">service op</a> returned a <code>Service</code> whose process command
-detaches - <code>docker run -d</code> / <code>--detach</code> (or a combined short-flag block like
+detaches - <code>docker <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> -d</code> / <code>--detach</code> (or a combined short-flag block like
 <code>-itd</code>). magus rejects it at resolution, before anything forks.</p>
 <pre><code class="language-text">[MGS5002] service op &quot;db&quot; detaches with &quot;-d&quot;: magus forks a service in the foreground and supervises it, so detaching breaks stdout capture, readiness, and stop. Drop the detach flag, or make this a command op if you really want it detached.
   see: .../MGS5002.md
@@ -100,7 +100,7 @@ process, captures its stdout and stderr, polls the readiness probe against it, a
 sends the stop command to shut it down. A detached process forks away from magus
 immediately, so all four of those become meaningless - magus is left blocking on a
 launcher that already exited, supervising nothing.</p>
-<p>This is not a style preference; it is a self-contradiction between the op's kind
+<p>This is not a style preference; it is a <a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contradiction between the op's kind
 (a long-running, supervised service) and its argv (fire-and-forget). So it is an
 error with no flag-level suppression: the resolution is to change the shape, not to
 silence the check.</p>
@@ -112,7 +112,7 @@ foreground) and is never flagged.</p>
 <li>Drop the detach flag. <code>docker run</code> (no <code>-d</code>) stays in the foreground and streams
 logs, which is exactly what a supervised service wants.</li>
 <li>If you genuinely want a fire-and-forget process that magus does not supervise,
-model it as a command op (which runs to completion) rather than a service op. But
+model it as a command op (which runs to <a class="code-xref" href="../../../manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a>) rather than a service op. But
 prefer a supervised service: magus deliberately discourages spawning a process it
 can no longer see or cleanly tear down.</li>
 </ul>

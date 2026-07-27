@@ -160,9 +160,9 @@ test "build op forks the expected command" {
 `
 
 // printInitSpellNextSteps prints actionable hints after scaffolding a spell.
-// Gated on interactive.Enabled() so MAGUS_HINTS_ENABLED=false silences it.
+// Gated on the user-controlled hints preference, not terminal interactivity.
 func printInitSpellNextSteps(name, pkgDir, path string) {
-	if !interactive.Enabled() {
+	if !interactive.HintsEnabled() {
 		return
 	}
 	// A directory import (pkgDir) resolves to the spell.buzz inside it; the test

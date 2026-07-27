@@ -1,7 +1,7 @@
 ---
 title: MCP
 description: The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.
-tags: [mcp, model-context-protocol, ai, agents, claude, cursor, daemon, ide]
+tags: [mcp, model-context-protocol, ai, agents, claude, codex, cursor, daemon, ide]
 ---
 
 # MCP
@@ -112,7 +112,7 @@ Memory and scratch:
 
 | Tool               | Purpose                                                                            |
 | ------------------ | ---------------------------------------------------------------------------------- |
-| `magus_memory`     | Durable per-repo memory records (typed pointers into the codebase), shared across sessions |
+| `magus_memory`     | User-owned per-repo handoff journal: list/get/put/delete/verify named entries shared across worktrees |
 | `magus_scratchpad` | Private per-workspace scratch file for the agent's intermediate notes              |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
@@ -180,6 +180,40 @@ logs and history). How you connect depends on the client:
   Claude Code session** afterward: a session only discovers MCP tools (and skills
   installed by `magus agent install .claude/skills`) at launch, so an already-open session
   will not see them until it is restarted.
+
+- **Codex** uses user-level `~/.codex/config.toml` to register the local
+  Streamable HTTP endpoint. Do not commit this client configuration. It contains
+  no secret; the token comes from the process environment:
+
+  ```toml
+  [mcp_servers.magus]
+  url = "http://127.0.0.1:7391/mcp"
+  bearer_token_env_var = "MAGUS_MCP_TOKEN"
+  enabled = true
+  ```
+
+  For Codex CLI, start the daemon, export the token in the same shell that will
+  launch Codex, then check registration and endpoint health:
+
+  ```sh
+  magus server start
+  export MAGUS_MCP_TOKEN="$(magus config mcp token print)"
+  codex mcp list
+  magus status --probe=liveness,mcp
+  ```
+
+  For a dedicated, revocable credential, run
+  `magus config mcp connector create --name codex --expires never` and store the
+  printed value as `MAGUS_MCP_TOKEN` in your local secret manager instead. The
+  For the ChatGPT desktop app or Codex IDE extension, set the variable through
+  the OS environment before launching or restarting the client; exporting it in
+  a terminal does not configure an already-running app. Start a new task after
+  the daemon comes up. `codex mcp list` confirms configuration, while
+  `magus status --probe=liveness,mcp` confirms the endpoint is live. If you
+  change `mcp.address`, update the URL in `~/.codex/config.toml` too. In the
+  desktop app, `/mcp` shows connected servers. Install matching guidance with
+  `magus agent install .agents/skills --agents-md`; see [Agents](agents.md#codex)
+  for why Codex needs both locations.
 
 - **Claude Desktop / other IDE plugins** that take a Streamable-HTTP URL plus
   headers use the same shape:

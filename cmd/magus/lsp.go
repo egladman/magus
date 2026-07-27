@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/langservice"
 )
 

@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 
@@ -50,7 +49,7 @@ func runTypes(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
+	if err := writeFileIfChanged(*outPath, out, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", *outPath, err)
 	}
 	return nil

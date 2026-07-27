@@ -8,6 +8,7 @@ import "vcs";
 // import-graph), so this handle lets lint pull in textsearch.lint (type-check + biome) - a
 // lib edit then marks the console affected and re-checks it through the target graph.
 import "project/../libs/textsearch" as textsearch;
+import "project/.." as root;
 
 // magusfile binds this file's own exported targets (build, typecheck, test, ci); ts adds the
 // TypeScript spell so the app's src/ is symbol-capable - its `scip` op indexes it (via tsconfig.json)
@@ -29,8 +30,10 @@ magus.project({
     // pnpm is the package manager - NOT npm; .npmrc's minimum-release-age gate is the reason.
     "sources": ["magusfile.buzz", "*.buzz",
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
-                "index.html", "manifest.webmanifest", "sw.js",
-                "package.json", "pnpm-lock.yaml", "tsconfig.json"],
+                "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
+                "package.json", "pnpm-lock.yaml", "tsconfig.json",
+                "stylelint.config.mjs", "stylelint-control-sizing.mjs",
+                "../gen/knowledge-graph.json", "../gen/target-graph.json"],
     "outputs": ["gen/**"],
     "targets": {
         // build rebuilds the committed gen/ and gates on drift, so it must run every time (skip_cache)
@@ -63,6 +66,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
+    ctx.needs(root.graph_generate);
     final clean_before = vcs.isDirty(["gen"]) == false;
     install();
     os.exec("pnpm", ["run", "build"], ".", {});
@@ -74,10 +78,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the
-// same way a Go project's lint runs `go vet`. Composing tsc into lint (rather than a standalone
-// `typecheck` target) means `magus affected ci`, which needs lint, always covers it - a type error
-// fails lint. Biome (bans any/non-null, enforces formatting) composes in beside tsc, mirroring the docs site.
+// lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // The Reference drawer imports the search grammar from the shared libs/textsearch
@@ -86,6 +87,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     install();
     os.exec("pnpm", ["run", "typecheck"], ".", {});
     os.exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
+    os.exec("pnpm", ["run", "stylelint"], ".", {});
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the

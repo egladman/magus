@@ -107,8 +107,9 @@ func TestDelete(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
-// TestCursorRoundTrip covers the singleton cursor read/overwrite.
-func TestCursorRoundTrip(t *testing.T) {
+// TestCursorWriteIsRetired keeps old console clients from silently overwriting another
+// session's handoff while preserving a read path for an existing legacy cursor.
+func TestCursorWriteIsRetired(t *testing.T) {
 	s := newTestService(t)
 	ctx := context.Background()
 
@@ -117,8 +118,9 @@ func TestCursorRoundTrip(t *testing.T) {
 	assert.Empty(t, got.Msg.GetContent(), "an unwritten cursor reads empty")
 
 	_, err = s.UpdateCursor(ctx, req(&memoryv1.UpdateCursorRequest{Content: "resuming the RPC handler"}))
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	got, err = s.GetCursor(ctx, req(&memoryv1.GetCursorRequest{}))
 	require.NoError(t, err)
-	assert.Equal(t, "resuming the RPC handler", got.Msg.GetContent())
+	assert.Empty(t, got.Msg.GetContent())
 }

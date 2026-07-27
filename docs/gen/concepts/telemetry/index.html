@@ -84,13 +84,13 @@
     <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="telemetry-opentelemetry">Telemetry (OpenTelemetry)</h1>
-<p>magus can export <strong>metrics</strong> and <strong>traces</strong> to any OTLP collector you run.
+<p>magus can export <strong>metrics</strong> and <strong>traces</strong> to any OTLP collector you <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>.
 Telemetry is <strong>OFF by default</strong>: there is no magus-operated backend. The
 collector is yours, and magus connects only to the endpoint you configure.</p>
 <p>This page is the complete reference for everything magus emits. Instrument
 definitions live in
 <a href="../../internal/observability/provider_otel.go"><code>internal/observability/provider_otel.go</code></a>;
-config in <a href="../../internal/config/config.go"><code>internal/config/config.go</code></a>.</p>
+<a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> in <a href="../../internal/config/config.go"><code>internal/config/config.go</code></a>.</p>
 <h2 id="enabling">Enabling</h2>
 <p>In <code>magus.yaml</code>:</p>
 <pre><code class="language-yaml">telemetry:
@@ -170,7 +170,7 @@ config in <a href="../../internal/config/config.go"><code>internal/config/config
 <td><code>telemetry.service_name</code> (default <code>magus</code>)</td>
 </tr>
 <tr>
-<td><code>service.version</code></td>
+<td><code>service.<a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
 <td>the magus build version</td>
 </tr>
 <tr>
@@ -305,11 +305,11 @@ backend changes.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>magus.graph.queries</code></td>
+<td><code>magus.<a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>.queries</code></td>
 <td>counter</td>
 <td><code>{call}</code></td>
 <td><code>op</code>, <code>strategy</code></td>
-<td>Number of graph query operations</td>
+<td>Number of graph <a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a> operations</td>
 </tr>
 <tr>
 <td><code>magus.graph.query.duration</code></td>
@@ -405,7 +405,7 @@ slots and falls as they release, so its value reads as the live running depth.</
 <tr>
 <td><code>magus.target.run</code></td>
 <td><code>magus.project</code>, <code>magus.target</code></td>
-<td>One per target execution (miss path)</td>
+<td>One per target execution (miss <a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>)</td>
 </tr>
 <tr>
 <td><code>magus.cache.hash</code></td>

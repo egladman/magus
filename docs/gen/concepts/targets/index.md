@@ -172,7 +172,7 @@ before lookup, wherever that input enters.
 | Surface                                                 | Example                                                                                                    |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Magusfile declarations (`export fun`)                   | `export fun go_build(...)` registers as `go-build`.                                                        |
-| CLI `run` / `affected` arguments                        | `magus run goBuild` reaches the target declared `go_build`.                                                |
+| CLI `magus run` / `magus affected` arguments            | `magus run goBuild` reaches the target declared `go_build`.                                                |
 | `magus.needs` target handles                            | `ctx.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
 | The per-target policy map (`magus.project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa.                        |
 | Charm names (`NormalizeCharmName`)                      | `target:NoCache` and `target:no-cache` are the same charm.                                                 |
@@ -272,7 +272,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 | **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                                   |
 | **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.                     |
 | **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).                   |
-| **`ci`**   | An ordinary target you compose with `magus.needs`; `Magus.RunCI` only strips `rw`, anchors `affected`, and must-not-no-op. |
+| **`ci`**   | An ordinary target you compose with `magus.needs`; `Magus.RunCI` only strips `rw`, anchors `magus affected`, and must-not-no-op. |
 
 ## See also
 

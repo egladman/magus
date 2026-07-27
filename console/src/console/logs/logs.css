@@ -106,11 +106,14 @@
    .pf-m-small buttons use for their own block padding (button.css --m-small--PaddingBlockStart/End
    both resolve to --pf-t--global--spacer--control--vertical--compact), instead of a hand-rolled
    min-height/padding that drifts out of sync with the button box model. */
-#log-timerange .pf-v6-c-form-control {
+#log-bar-controls[data-control-size="compact"] {
+  --console-control-block-size: var(--pf-t--global--spacer--control--vertical--compact);
+}
+#log-bar-controls[data-control-size="compact"] #log-timerange .pf-v6-c-form-control {
   width: auto;
   --pf-v6-c-form-control--FontSize: 0.72rem;
-  --pf-v6-c-form-control__select--PaddingBlockStart: var(--pf-t--global--spacer--control--vertical--compact);
-  --pf-v6-c-form-control__select--PaddingBlockEnd: var(--pf-t--global--spacer--control--vertical--compact);
+  --pf-v6-c-form-control__select--PaddingBlockStart: var(--console-control-block-size);
+  --pf-v6-c-form-control__select--PaddingBlockEnd: var(--console-control-block-size);
 }
 /* Toolbar buttons: compact (pf-m-small) icon + label. .console-render-btn__icon (svg) + .console-render-btn__label (text) are the
    render/JS hooks setBtnLabel/flashBtnLabel touch and the narrow-screen query drops. */

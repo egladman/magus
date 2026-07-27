@@ -87,12 +87,12 @@
     <div>
     <article>
 <h1 id="mgs8002-ambiguous-output-ref-prefix">MGS8002: ambiguous output ref prefix</h1>
-<p><code>magus query output &lt;ref&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> accepts a unique prefix of a reference id, the same way git
+<p><code><a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> output &lt;ref&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> accepts a unique prefix of a reference id, the same way git
 accepts a short commit hash. This code fires when the prefix you gave matches
 more than one stored ref, so the lookup is ambiguous.</p>
 <h2 id="resolution">Resolution</h2>
 <p>Add more characters until the prefix is unique. The error lists the matching
-refs; copy one in full. Full reference ids are printed on each <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s result
+<a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a>; copy one in full. Full reference ids are printed on each <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s result
 line when it runs.</p>
     </article>
     </div>

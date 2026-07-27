@@ -129,6 +129,7 @@ func ComposeGraph(ws types.WorkspaceRepository, opts ...ComposeOption) types.Gra
 		}
 		node := types.Node{
 			Path:      p.Path,
+			Name:      types.ProjectLabel(p.Path, p.Dir),
 			SpellName: p.Spell,
 			Children:  kids,
 			Dir:       p.Dir,

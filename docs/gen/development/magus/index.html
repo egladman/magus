@@ -125,7 +125,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>2082 nodes</strong> and <strong>4482 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2085 nodes</strong> and <strong>4490 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -150,7 +150,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">79</td>
+<td style="text-align:right">80</td>
 <td><code>magus query kind:target</code></td>
 <td><code>content-generate</code>, <code>generate</code>, <code>generate</code></td>
 </tr>
@@ -198,7 +198,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">185</td>
+<td style="text-align:right">186</td>
 <td><code>magus query kind:doc</code></td>
 <td><code>docs/reference/manpage/magus-doctor.md</code>, <code>docs/concepts/spells.md</code>, <code>docs/reference/manpage/magus-run.md</code></td>
 </tr>
@@ -216,7 +216,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1073</td>
+<td style="text-align:right">1074</td>
 <td><code>magus query kind:function</code></td>
 <td><code>sel</code>, <code>sendObject</code>, <code>send</code></td>
 </tr>
@@ -246,7 +246,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>.</td>
-<td style="text-align:right">26</td>
+<td style="text-align:right">27</td>
 <td><code>magus query project:.</code></td>
 <td><code>generate</code>, <code>format</code>, <code>image-build</code></td>
 </tr>
@@ -328,6 +328,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.</td>
 </tr>
 <tr>
+<td><code>coverage</code></td>
+<td>coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.</td>
+</tr>
+<tr>
 <td><code>buzz-check</code></td>
 <td>Type-checks the standalone Buzz with the upstream <code>buzz</code> toolchain (--check).</td>
 </tr>
@@ -349,7 +353,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td><code>lint</code></td>
-<td>Formats first, then golangci-lint, go vet, govulncheck, markdownlint.</td>
+<td>Formats first, then golangci-lint, go vet, and markdownlint.</td>
+</tr>
+<tr>
+<td><code>security</code></td>
+<td></td>
 </tr>
 <tr>
 <td><code>format</code></td>
@@ -357,7 +365,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td><code>ci</code></td>
-<td>Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.</td>
+<td>Runs the CI gates through their declared dependencies.</td>
 </tr>
 <tr>
 <td><code>ci-shard</code></td>
@@ -402,10 +410,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tr>
 <td><code>graph-generate</code></td>
 <td>Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.</td>
-</tr>
-<tr>
-<td><code>coverage</code></td>
-<td>coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.</td>
 </tr>
 </tbody>
 </table></figure>

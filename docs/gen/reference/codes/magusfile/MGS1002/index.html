@@ -95,10 +95,10 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1002-spell-import-shadowed">MGS1002: spell import shadowed</h1>
-<p>A <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> defines the same <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> import (<code>spells/&lt;name&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>) at two levels where one
+<p>A <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> defines the same <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> import (<code>spells/&lt;name&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>) at two levels <a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> one
 directory is an ancestor of the other. Spell imports resolve <strong>root-wins</strong>: the
 copy nearest the workspace root is canonical, so the deeper copy is never loaded.
-The deeper definition is dead code, and this <a class="glossary-term" href="../../../../glossary/#ward" data-def="A coded diagnostic that inspects a resolved op and nudges or blocks an anti-pattern before it runs.">ward</a> blocks the run until you resolve
+The deeper definition is dead code, and this <a class="glossary-term" href="../../../../glossary/#ward" data-def="A coded diagnostic that inspects a resolved op and nudges or blocks an anti-pattern before it runs.">ward</a> blocks the <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> until you resolve
 or acknowledge it.</p>
 <pre><code class="language-text">[MGS1002] spell import &quot;spells/hello&quot; is defined at web/studio/spells/hello/spell.buzz
 but shadowed by spells/hello/spell.buzz: imports resolve root-wins, so the deeper
@@ -107,7 +107,7 @@ spell is dead. Move or rename it, or acknowledge the shadow in magus.yaml
   see: .../MGS1002.md
 </code></pre>
 <h2 id="why">Why</h2>
-<p>A local spell is imported by a path-style name, <code>import &quot;spells/hello&quot;</code>. magus
+<p>A local spell is imported by a <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>-style name, <code>import &quot;spells/hello&quot;</code>. magus
 resolves it by walking a <code>spells/</code> directory at every level from the workspace root
 down to the importing <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>, and the <strong>root-most</strong> match wins (see
 <a href="../../../../concepts/workspace/">the workspace model</a>). That rule is deliberate: a spell name
@@ -115,7 +115,7 @@ means one thing across the workspace, the same way a <a class="glossary-term" hr
 <p>The consequence is that a <code>spells/hello</code> placed next to a nested <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, when a
 <code>spells/hello</code> also exists higher up, can never be reached. An author who put it
 there expected it to be used; instead the ancestor silently wins. That is a
-footgun, not a self-contradiction, so unlike the kind-coherence wards
+footgun, not a <a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contradiction, so unlike the kind-coherence wards
 (<a href="../../services/MGS5002/">MGS5002</a>, <a href="../../services/MGS5003/">MGS5003</a>) it can be
 acknowledged rather than only fixed.</p>
 <p>Sibling subtrees are not <a class="glossary-term" href="../../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>: <code>web/spells/hello</code> and <code>api/spells/hello</code> are
@@ -158,7 +158,7 @@ ship a <code>spells/hello</code>; only an ancestor-descendant pair is a shadow.<
 <ul>
 <li><a href="../../../../concepts/workspace/">workspace</a>: how spell imports resolve, root-wins, across a nested workspace.</li>
 <li><a href="../../../../concepts/spells/">spells</a>: authoring a spell and binding it to a project.</li>
-<li><code>magus doctor</code>: flags an <code>allow_shadow</code> acknowledgment whose shadow no longer exists.</li>
+<li><code>magus <a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code>: flags an <code>allow_shadow</code> acknowledgment whose shadow no longer exists.</li>
 </ul>
     </article>
     </div>

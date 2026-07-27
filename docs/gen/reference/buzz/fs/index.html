@@ -110,13 +110,13 @@
     <small class="reading-time" title="Estimated reading time">8 min read</small>
     <article>
 <h1 id="fs">fs</h1>
-<p>Filesystem and path primitives.</p>
+<p>Filesystem and <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> primitives.</p>
 <blockquote>
 <p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;fs&quot;</code>) and call methods in <code>camelCase</code> (<code>fs.someMethod</code>).</p>
 </blockquote>
 <!-- -->
 <div class="admonition admonition-note"><p class="admonition-title">Note<a class="convention-hint" href="../../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
-<p>The examples below are reference-only. <code>fs</code> performs real IO (filesystem, process, network, or environment access) that the in-browser playground's <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> cannot provide, so it is not registered there and its examples have no Run button. Pure-compute modules such as <code>strings</code> and <code>json</code> run their examples live in the page.</p>
+<p>The examples below are reference-only. <code>fs</code> performs real IO (filesystem, process, network, or environment access) that the in-browser playground's <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> cannot provide, so it is not registered there and its examples have no <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> button. Pure-compute modules such as <code>strings</code> and <code>json</code> run their examples live in the page.</p>
 </div>
 <h2 id="methods">Methods</h2>
 <h3 id="glob">glob</h3>
@@ -595,7 +595,7 @@ fs.copyFile(&quot;dist/magus&quot;, &quot;/usr/local/bin/magus&quot;);
 fs.copyDir(&quot;assets/&quot;, &quot;dist/assets/&quot;);
 </code></pre>
 <h3 id="watch">watch</h3>
-<p>Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.</p>
+<p>Blocking. <a class="code-xref" href="../../manpage/magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">Watch</a> paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.</p>
 <p><strong>Signature:</strong> <code>fs.watch(paths, callback)</code> · <a href="https://github.com/egladman/magus/blob/main/std/fs.go#L521" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>

@@ -10,8 +10,7 @@ import { must, errMessage } from "../../lib/guards";
 //      loopback (127.0.0.1) or any CORS-enabled URL (e.g. a committed graph.json's
 //      raw link). The same `#src=` the playground uses.
 //   3. a file the visitor drops or picks (a graph.json they exported themselves).
-//   4. the site's own committed demo graph at ./graph.json (the magus repo's
-//      graph), shown to a plain visitor.
+//   4. the site's own committed knowledge or target demo graph, shown on demand.
 //
 // Rendering is canvas + d3-force (bundled locally by esbuild into
 // gen/graph/explorer.js - no CDN, so it works offline once the PWA has cached

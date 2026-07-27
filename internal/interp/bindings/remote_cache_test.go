@@ -6,7 +6,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	json "github.com/egladman/magus/internal/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -149,6 +149,20 @@ func TestSpellRemoteBackendRoundTrip(t *testing.T) {
 	assert.Equal(t, entry, got)
 	_, err = os.Stat(tmpPath)
 	assert.True(t, os.IsNotExist(err), "temp file %s not removed on Close (stat err %v)", tmpPath, err)
+}
+
+func TestSpellRemoteBackendPutFailureIsVisible(t *testing.T) {
+	src := `
+export fun mgs_getName() > str { return "refusing-cache"; }
+export fun put_artifact(target: any, cb: fun(any)) > bool { return false; }
+`
+	path := filepath.Join(t.TempDir(), "refusing-cache.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
+	drv, err := resolveBackendSpell(context.Background(), path)
+	require.NoError(t, err)
+
+	err = (&spellRemoteBackend{drv: drv}).PutArtifact(context.Background(), "pkg/a", "deadbeef", strings.NewReader("artifact"))
+	require.ErrorContains(t, err, "did not store artifact")
 }
 
 func TestResolveBackendSpellMissingName(t *testing.T) {

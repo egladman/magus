@@ -83,7 +83,7 @@
     <div>
     <article>
 <h1 id="mgs9003-connector-store-is-too-new">MGS9003: connector store is too new</h1>
-<p>The connector token store file records a schema version higher than the running
+<p>The connector token store file records a schema <a class="code-xref" href="../../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> higher than the running
 magus understands. A newer magus wrote it; this older one refuses to read it
 rather than risk misparsing credentials.</p>
 <pre><code class="language-text">[MGS9003] auth: connector store /path is version 3, newer than this magus

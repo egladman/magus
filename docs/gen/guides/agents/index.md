@@ -34,7 +34,7 @@ The three artifacts:
 | artifact          | answers                                              | freshness                                                           |
 | ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------- |
 | `MAGUS.md`        | WHAT is in this workspace (targets, counts, anchors) | regenerated with the workspace (`magus describe graph -o markdown`) |
-| `.claude/skills/` | HOW to use the magus tool surface                    | ships with the binary; versioned, drift-checked                     |
+| Agent Skills      | HOW to use the magus tool surface                    | ships with the binary; versioned, drift-checked                     |
 | MCP daemon        | live answers (query, run, explain, logs)             | always current; `magus server start`                                |
 
 The split is deliberate: skills never mention workspace specifics, so they only
@@ -55,18 +55,19 @@ name and description frontmatter), every destination receives identical bytes,
 and naming the directory your host discovers skills in is the only
 host-specific step:
 
-| destination         | read by                            |
-| ------------------- | ---------------------------------- |
-| `.agents/skills/`   | Agent Skills spec generic location |
-| `.claude/skills/`   | Claude Code                        |
-| `.opencode/skills/` | OpenCode                           |
+| destination         | read by                                 |
+| ------------------- | --------------------------------------- |
+| `.agents/skills/`   | Codex and other Agent Skills hosts      |
+| `.claude/skills/`   | Claude Code                             |
+| `.opencode/skills/` | OpenCode                                |
+| `AGENTS.md`         | Codex and other instruction-file hosts  |
 
-For hosts that read the `AGENTS.md` contract (Codex, Aider, Droid, ...)
-instead of skill directories, `--agents-md` maintains a marker-delimited magus
-section inside `AGENTS.md` (created if absent, replaced in place on
-re-install, other content untouched) carrying the same rules in compressed
-form. There are no per-model skill bodies anywhere - supporting a new host
-means naming a destination, not writing new instructions.
+`--agents-md` maintains a marker-delimited magus section inside `AGENTS.md`
+(created if absent, replaced in place on re-install, other content untouched).
+For Codex, `AGENTS.md` and `.agents/skills/` are complementary: the first is
+always-on repository guidance; the second exposes focused workflows on demand.
+There are no per-model skill bodies anywhere - supporting a new host means
+naming a destination, not writing new instructions.
 
 - `magus-query`: find and relate domain entities with
   `query`/`explain`/`path`/`refs`/`stats` instead of grepping - the query
@@ -82,11 +83,11 @@ means naming a destination, not writing new instructions.
   diff of, and committed alongside the sources that produced them.
 - `magus-architecture`: ground refactoring proposals in graph evidence -
   hotspots, affinity (undeclared coupling), blast radius, symbol fan-in,
-  CODEOWNERS - and verify impact with `graph diff`.
-- `magus-memory`: durable cross-session project memory over MCP. Each memory is
-  a typed pointer into the codebase (a saved query, a graph node, an output ref,
-  a doc), not free prose; only a decision carries the why. The graph holds the
-  truth, memory holds the curation. Records survive model and session changes.
+  CODEOWNERS - and verify impact with `magus graph diff`.
+- `magus-memory`: a user-owned handoff journal over CLI, MCP, and console. Each
+  entry points to something magus can reopen; it is not automatic agent memory.
+  Use named decisions and plans when a later person needs the why, then verify
+  stale or malformed entries instead of silently carrying them forward.
 - `magus-docs`: navigate magus's own documentation to answer a how-does-magus-do-X
   question instead of guessing - the doc URL and section scheme, the in-page
   navigation axes, and when to reach for it over the workspace graph.
@@ -109,6 +110,8 @@ duplicated line in every session:
 ```sh
 magus agent install .claude/skills          # name your host's skill dir; refuses to overwrite
 magus agent install .claude/skills --force  # overwrite after a magus upgrade
+magus agent install .agents/skills --agents-md          # Codex: skills + always-on guidance
+magus agent install .agents/skills --agents-md --force  # refresh both after an upgrade
 magus agent install --agents-md             # write/refresh the AGENTS.md section
 magus graph verify                          # are the installed skills current? (per location)
 magus graph verify --strict                 # CI gate: non-zero exit when stale
@@ -127,6 +130,57 @@ every well-known location it finds installed (`.agents/skills`,
 upgrade that changes the tool surface shows up as actionable drift instead of
 silently wrong instructions. Do not hand-edit installed skills; change flows
 through re-running install.
+
+### Codex
+
+Codex needs both the focused skills and the repository guidance:
+
+```sh
+magus agent install .agents/skills --agents-md
+magus server start
+```
+
+Register the local Streamable HTTP server in your user-level
+`~/.codex/config.toml`, never in the repository:
+
+```toml
+[mcp_servers.magus]
+url = "http://127.0.0.1:7391/mcp"
+bearer_token_env_var = "MAGUS_MCP_TOKEN"
+enabled = true
+```
+
+For Codex CLI, set `MAGUS_MCP_TOKEN` in the shell that launches it, then verify
+registration and endpoint health:
+
+```sh
+export MAGUS_MCP_TOKEN="$(magus config mcp token print)"
+codex mcp list
+magus server start
+magus status --probe=liveness,mcp
+```
+
+For a dedicated, revocable credential, create a connector token named `codex`
+instead and store the value it prints in your local secret manager as
+`MAGUS_MCP_TOKEN`. For the ChatGPT desktop app or Codex IDE extension, make that
+variable available through the OS environment before launching or restarting the
+client; an `export` in an unrelated terminal cannot modify an existing app.
+Start a new Codex task after installing skills, changing `AGENTS.md`, changing
+MCP configuration, or starting the daemon: Codex discovers all of those at task
+start. `codex mcp list` confirms configuration only; the status probe confirms
+the endpoint is actually serving. If `mcp.address` changes, update the URL in
+your user-level Codex configuration as well.
+
+### Daemon optional, agent surface preferred
+
+The CLI works without a daemon. It still reads the workspace, runs targets,
+uses the cache, and answers graph queries. What it lacks is MCP tool discovery,
+the daemon's warm graph and background indexes, structured output retrieval,
+and MCP-only capabilities such as scratchpad and memory. An agent must not turn
+that into a blocker: at task start, or after an MCP error, it should run
+`magus status --probe=mcp`; if unavailable, tell the user once to run
+`magus server start`, then use the CLI fallback. The next task picks up the
+full surface after the daemon is running and the client is restarted.
 
 ## Guard hooks
 
@@ -214,8 +268,19 @@ products' own and move on their schedule, so confirm each against the host's
 current docs and expect to adjust.
 
 Not every host reads the Agent Skills format. Claude Code and OpenCode discover
-`SKILL.md` directories; Cursor and most other hosts read an `AGENTS.md` instead,
-which is why their install step is `--agents-md`, not a skills directory.
+`SKILL.md` directories. Codex reads both `.agents/skills/` and `AGENTS.md`;
+Cursor and most other hosts use only `AGENTS.md`.
+
+#### Codex
+
+Codex uses the setup above: `.agents/skills/` for the focused workflows,
+`AGENTS.md` for durable repository guidance, and `.codex/config.toml` for MCP.
+The installed guidance and the MCP server instructions are the right way to
+teach discovery-first behavior. Do not try to enforce a graph query with a
+hook: a hook can observe a tool call, but cannot prove the agent asked the
+right prior question. Reserve hooks for concrete safety rules such as the
+destructive-VCS guard, and keep the workflow guidance visible and testable with
+`magus graph verify --strict`.
 
 #### OpenCode
 
@@ -296,10 +361,12 @@ connected and daemon-less sessions.
 
 Two tools deserve a callout because they carry state across sessions:
 `magus_scratchpad` (a disposable per-workspace working file) and `magus_memory`
-(durable per-repository records, each a typed pointer into the codebase, kept in
-the user state directory outside the repo, shared across branches, worktrees,
-sessions, and models). Both are pull-based: nothing is injected into an agent's context;
-an agent reads them when it chooses to. Captured build output is addressed by
+(a deliberate, user-owned handoff journal of per-repository records, each
+pointing into the codebase, kept in the user state directory outside the repo,
+and shared across branches and worktrees). Both are pull-based: nothing is
+injected into an agent's context. The journal is also available through `magus
+memory list|get|put|delete|verify`; use `verify` to surface stale, malformed,
+or broken linked entries. Captured build output is addressed by
 [output references](../concepts/output-refs.md).
 
 ## Why a daemon, not a wrapper
