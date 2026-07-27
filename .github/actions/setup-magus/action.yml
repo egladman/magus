@@ -128,7 +128,7 @@ runs:
     # built and executed with this job's permissions. It does not protect
     # against main itself being compromised.
     - name: Verify source commit is reachable from main
-      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      if: github.repository != 'egladman/magus' && (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure')
       shell: bash
       working-directory: .setup-magus-src
       run: |
