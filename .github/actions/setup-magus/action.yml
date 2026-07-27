@@ -43,6 +43,7 @@ runs:
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       with:
         repository: egladman/magus
+        path: .setup-magus-install
         sparse-checkout: 'docs/gen/install'
         sparse-checkout-cone-mode: false
 
@@ -53,6 +54,7 @@ runs:
       # step's failure must fail the job (enforced below), not be swallowed.
       continue-on-error: ${{ inputs.installation-strategy == 'automatic' }}
       shell: bash
+      working-directory: .setup-magus-install
       env:
         MAGUS_RELEASE_PUBKEY_HEX: ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779
       run: |
