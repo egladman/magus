@@ -44,6 +44,7 @@ runs:
       with:
         repository: egladman/magus
         sparse-checkout: 'docs/gen/install'
+        sparse-checkout-cone-mode: false
 
     - name: Install magus from release
       id: prebuilt
