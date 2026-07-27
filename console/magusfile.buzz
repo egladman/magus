@@ -93,5 +93,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the
 // build-plus-drift-gate, all first-class ci steps.
 export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
     ctx.needs(lint, test, build);
 }
