@@ -481,8 +481,8 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void {
             + "| Shard | Projects |\n| --- | --- |\n";
         foreach (row in plan.q("matrix").listValue()) {
             var projects = row.q("projects").stringValue();
-            if (projects == ".") { projects = fs.basename(fs.cwd()); }
-            if (projects.startsWith(". ")) { projects = fs.basename(fs.cwd()) + projects.sub(1, projects.len()); }
+            if (projects == ".") { projects = "magus"; }
+            if (projects.startsWith(". ")) { projects = "magus" + projects.sub(1, projects.len()); }
             md = md + "| " + row.q("shard").stringValue() + " | " + projects + " |\n";
         }
         md = md + "\n**What this means:** each shard runs the listed projects concurrently within the declared limit. "
