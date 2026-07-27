@@ -42,7 +42,7 @@ magus.project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 
 // install restores the pinned build-only deps with pnpm (esbuild + the surfaces' d3/uplot/protobuf
 // clients), honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
