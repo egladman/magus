@@ -61,7 +61,8 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ steps.resolve_magus.outputs.tag }}
+          installation-strategy: source
+          git-ref: ${{ github.sha }}
 
       - name: Doctor
         run: magus doctor
@@ -110,7 +111,8 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
+          installation-strategy: source
+          git-ref: ${{ github.sha }}
 
       - uses: crazy-max/ghaction-github-runtime@b3a9207c0e1ef41f4cf215303c976869d0c2c1c4 # v3.0.0
 
