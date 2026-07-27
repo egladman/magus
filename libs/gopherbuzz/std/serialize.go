@@ -2,9 +2,9 @@ package std
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
+	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 

@@ -168,9 +168,13 @@ func (g *Graph) spellProvidesOps(spellID string) bool {
 	return false
 }
 
-// spellUsed reports whether any target uses one of the spell's ops
-// (spell -contains-> op <-uses- target).
+// spellUsed reports whether a target dispatches a spell directly, or one of its
+// operations (spell -contains-> op <-uses- target). The direct edge is the
+// authoritative resolved-dispatch relation; the op edge preserves the exact action.
 func (g *Graph) spellUsed(spellID string) bool {
+	if g.hasInRel(spellID, types.RelationUses) {
+		return true
+	}
 	for _, e := range g.out[spellID] {
 		if e.Relation == types.RelationContains && g.hasInRel(e.Target, types.RelationUses) {
 			return true

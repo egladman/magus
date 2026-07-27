@@ -97,14 +97,14 @@
     <article>
 <h1 id="mgs2006-likely-path-shim-manager-stripped">MGS2006: likely PATH-shim manager stripped</h1>
 <p>A subprocess failed and magus suspects the cause is <a class="glossary-term" href="../../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>
-stripping the env vars that a PATH-shim runtime manager (mise, asdf,
+stripping the env vars that a <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a>-shim runtime manager (mise, asdf,
 direnv) relies on.</p>
 <pre><code class="language-text">[MGS2006] mise shims appear stripped from PATH; the build is using system tools instead
   cmd=go missing_var=MISE_DATA_DIR
 </code></pre>
 <h2 id="why">Why</h2>
 <p><code>mise</code>, <code>asdf</code>, and <code>direnv</code> work by injecting a shim directory into
-<code>PATH</code> and reading a tool-version file from the <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>. The shim
+<code>PATH</code> and reading a tool-<a class="code-xref" href="../../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> file from the <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>. The shim
 binary is invoked when the user runs <code>go</code>, then <code>mise</code> looks at its
 own <code>MISE_*</code> env vars to decide which Go version to dispatch to.</p>
 <p>When sandbox strips <code>MISE_*</code> (or <code>ASDF_*</code>, <code>DIRENV_*</code>) from the

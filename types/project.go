@@ -25,6 +25,15 @@ func ProjectLabel(path, dir string) string {
 	return "(workspace root)"
 }
 
+// ProjectDisplayName returns an explicit display name when available, otherwise
+// derives the shared never-dot label from the project path and directory.
+func ProjectDisplayName(path, name, dir string) string {
+	if name != "" && name != "." {
+		return name
+	}
+	return ProjectLabel(path, dir)
+}
+
 // ProjectRef identifies a project for end-user output, carrying BOTH its stable machine
 // identifier and its human name so no display surface has to re-derive one from the
 // other (the "never print '.'" fix, applied once instead of per call site). Path is the

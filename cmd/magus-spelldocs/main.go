@@ -15,7 +15,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -27,6 +26,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/docs"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/types"

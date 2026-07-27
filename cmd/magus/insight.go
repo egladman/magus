@@ -307,8 +307,12 @@ func volatilityText(out types.VolatilityReport) error {
 // or the bundled struct under -o json/yaml.
 func insightReport(ctx context.Context, root string, args []string) error {
 	// The report's hotspots always include the per-file ranking.
+	var githubSummary bool
 	a, opts, outOpts, err := insightSetup(ctx, root, "report", "Every lens as one Markdown document.", args,
-		func(_ *flag.FlagSet, o *types.InsightOptions) { o.Files = true }, outputMarkdown)
+		func(fs *flag.FlagSet, o *types.InsightOptions) {
+			o.Files = true
+			fs.BoolVar(&githubSummary, "github-summary", false, "use GitHub-compatible Mermaid in Markdown output")
+		}, outputMarkdown)
 	if err != nil {
 		return err
 	}
@@ -343,6 +347,9 @@ func insightReport(ctx context.Context, root string, args []string) error {
 	switch outOpts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(outOpts, report)
+	}
+	if githubSummary {
+		return render.WriteInsightGitHubMarkdown(os.Stdout, report)
 	}
 	return render.WriteInsightMarkdown(os.Stdout, report)
 }

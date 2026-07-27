@@ -93,7 +93,7 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs4002-declared-output-overlap">MGS4002: declared output overlap</h1>
-<p>Two or more projects in the current dispatch declare the same output path glob.
+<p>Two or more projects in the current dispatch declare the same output <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> glob.
 Because both projects produce the same file, the build outcome depends on which
 <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> ran last.</p>
 <pre><code class="language-text">[MGS4002] declared output overlap (see .../MGS4002.md)
@@ -102,11 +102,11 @@ Because both projects produce the same file, the build outcome depends on which
 <h2 id="why">Why</h2>
 <p>Magus records per-project outputs in <code>magus.yaml</code> (or via the Go registration
 API: <code>WithOutputs(...)</code>) so the <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> can replay prior results and prune
-outdated files. When two projects declare the same output glob and run
+outdated files. When two projects declare the same output glob and <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>
 concurrently under the same <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, they will both write to the same path. The
 second writer silently overwrites the first, making the final content depend on
 execution order.</p>
-<p>This check runs at graph construction time, before any spells execute,
+<p>This check runs at <a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> construction time, before any spells execute,
 requiring no <code>--race</code> flag. It operates on static declarations only: if a
 project declares an output glob that overlaps another project's glob exactly,
 the warning fires. It is observational, so magus does not block or reorder

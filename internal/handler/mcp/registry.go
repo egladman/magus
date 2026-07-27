@@ -115,16 +115,16 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolMemory),
-		Description: "Durable per-repository memory shared across sessions, models, and agent hosts, kept OUTSIDE the repo in the user state directory (worktrees of one repo share it). Memory is a set of discrete RECORDS, each a typed POINTER into the magus domain - not free prose. The payload is one or more refs; a record with no ref is not a memory, it is a query you should just run. Ref kinds: query (a saved `magus query` expression), node (a graph node id), output (a target output ref id), command (a magus invocation), doc (a docs anchor). Record types: pointer (refs only, no prose), decision (a choice PLUS the why - the one place a caption is expected), plan (forward intent PLUS the why). Read at session start (op=list) to ramp on what earlier sessions established; record a decision the moment one is made with its why. Also keeps one cursor snapshot (op=cursor) for 'where did I leave off'. For intra-session scratch notes use magus_scratchpad instead.",
+		Description: "A user-owned per-repository handoff journal, shared across worktrees and kept outside the checkout. It is not automatic agent memory: create a named entry only for a decision, plan, or saved pointer a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision and plan entries may carry a short why. Use verify to surface malformed, stale, and broken-linked entries. The CLI (`magus memory`) and console read the same store. For disposable in-session notes use magus_scratchpad. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's handoff.",
 		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: list (default; all records), get, put (create or update - upsert by name), delete, cursor (read the snapshot, or overwrite it when content is given)."},
+			{Name: "op", Type: "string", Description: "One of: list (default; records plus issues), get, put (create or replace by name), delete, verify. cursor is legacy read-only."},
 			{Name: "name", Type: "string", Description: "The record's kebab-slug identity. Required for get, put, delete."},
 			{Name: "type", Type: "string", Description: "put only: one of pointer, decision, plan."},
 			{Name: "refs", Type: "string", Description: "put only, REQUIRED: the payload, one ref per line as 'kind: target' (e.g. 'query: kind:op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc."},
 			{Name: "body", Type: "string", Description: "put only: the one-line caption for a decision/plan (the why). Omit for a pointer - a pointer carries no prose."},
 			{Name: "status", Type: "string", Description: "put only, optional: the lifecycle field (e.g. accepted, superseded, active, done, stale)."},
 			{Name: "references", Type: "string", Description: "put only, optional: comma-separated names of other memory records this one links to."},
-			{Name: "content", Type: "string", Description: "cursor only: when given, overwrites the cursor snapshot; when omitted, op=cursor reads it."},
+			{Name: "content", Type: "string", Description: "Legacy cursor reads only. Cursor writes are retired; use a named plan or decision with put."},
 		},
 	},
 	{

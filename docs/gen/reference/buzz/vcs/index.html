@@ -110,7 +110,7 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="vcs">vcs</h1>
-<p>Version-control queries for the current working tree.</p>
+<p><a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">Version</a>-control queries for the current working tree.</p>
 <blockquote>
 <p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;vcs&quot;</code>) and call methods in <code>camelCase</code> (<code>vcs.someMethod</code>).</p>
 </blockquote>
@@ -138,7 +138,7 @@
 </table></figure>
 <h2 id="methods">Methods</h2>
 <h3 id="root">root</h3>
-<p>Absolute path of the repository root.</p>
+<p>Absolute <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> of the repository root.</p>
 <p><strong>Signature:</strong> <code>vcs.root() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L177" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="diff">diff</h3>
@@ -278,11 +278,11 @@
 </table></figure>
 <p><strong>Returns:</strong> any</p>
 <h3 id="exe">exe</h3>
-<p>Absolute path to the active VCS executable (git/hg/jj), or &quot;&quot; if unresolved. Lets a <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).</p>
+<p>Absolute path to the active VCS executable (git/hg/jj), or &quot;&quot; if unresolved. Lets a <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).</p>
 <p><strong>Signature:</strong> <code>vcs.exe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L417" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="describe">describe</h3>
-<p>Human-readable version string from the nearest tag (git's <code>describe --tags --always --dirty</code>: tag, else short hash, with a -dirty suffix for a modified tree). &quot;&quot; when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.</p>
+<p>Human-readable version string from the nearest tag (git's <code><a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> --tags --always --dirty</code>: tag, else short hash, with a -dirty suffix for a modified tree). &quot;&quot; when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.</p>
 <p><strong>Signature:</strong> <code>vcs.describe() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L403" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
     </article>

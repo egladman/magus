@@ -19,6 +19,11 @@ const noticePrefix = "magus:notice:"
 // are echoed in silent mode; the full log is retained and its path is printed.
 const maxFailTailLines = 50
 
+// maxFailureExcerptLines bounds the default failure display. The full raw log is
+// retained in the output store; this excerpt surfaces the likely cause in a
+// human-readable result instead of replaying an unrelated wall of output.
+const maxFailureExcerptLines = 24
+
 // extractNotices scans the log at path for noticePrefix-marked lines and returns
 // their messages in order. A missing or unreadable log yields no messages.
 func extractNotices(path string) []string {
@@ -66,4 +71,61 @@ func tailLines(data []byte, n int) (tail []byte, omitted int) {
 		}
 	}
 	return data[cut:], lines - n
+}
+
+// failureExcerpt selects a compact set of diagnostic windows from a captured log.
+// Build tools commonly print the decisive error well before their final FAIL footer,
+// so a tail alone is often not actionable. Each matching line keeps one line of
+// context either side; windows are merged and capped. If no diagnostic is recognized,
+// fall back to the final lines, which still include the tool's terminal outcome.
+func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
+	if limit <= 0 {
+		return data, 0
+	}
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
+		return nil, 0
+	}
+
+	important := func(line string) bool {
+		line = strings.ToLower(strings.TrimSpace(line))
+		return strings.Contains(line, "error") ||
+			strings.Contains(line, "fatal") ||
+			strings.Contains(line, "panic") ||
+			strings.Contains(line, "fail") ||
+			strings.Contains(line, "mismatch") ||
+			strings.Contains(line, "undefined") ||
+			strings.Contains(line, "not found") ||
+			strings.Contains(line, "cannot ")
+	}
+
+	selected := make([]bool, len(lines))
+	count := 0
+	for i, line := range lines {
+		if !important(line) {
+			continue
+		}
+		for j := max(0, i-1); j <= min(len(lines)-1, i+1); j++ {
+			if !selected[j] {
+				selected[j] = true
+				count++
+			}
+		}
+	}
+	if count == 0 {
+		start := max(0, len(lines)-limit)
+		return []byte(strings.Join(lines[start:], "\n") + "\n"), start
+	}
+
+	var out []string
+	for i, line := range lines {
+		if !selected[i] {
+			continue
+		}
+		if len(out) == limit {
+			break
+		}
+		out = append(out, line)
+	}
+	return []byte(strings.Join(out, "\n") + "\n"), len(lines) - len(out)
 }

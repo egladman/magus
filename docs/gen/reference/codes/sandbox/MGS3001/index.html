@@ -109,13 +109,13 @@ files there.</p>
 <strong>down</strong> from there. A formatter declared on <code>api</code> is expected to touch
 files under <code>api/</code>, never reach up into siblings, and stop at the
 boundary of any registered descendant project (<code>api/docs</code> here).</p>
-<p>This warning fires when the audit observes filesystem writes inside a
-descendant's tree across the spell's pre/post <a class="glossary-term" href="../../../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a> window. The
-typical cause is a recursive glob in the spell's tool invocation that
-doesn't know about the descendant. For example, <code>prettier --write '**/*.md'</code> running from <code>api/</code> walks straight into <code>api/docs/</code> and
-reformats files there.</p>
-<p>The warning is observational. Magus does not roll back the writes and
-does not fail the build. You (or the spell author) decide what to do.</p>
+<p>Magus fails the <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> when the audit observes filesystem writes inside a
+descendant's tree across the spell's pre/post <a class="glossary-term" href="../../../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a> window. The typical
+cause is a recursive glob in the spell's tool invocation that doesn't know
+about the descendant. For example, <code>prettier --write '**/*.md'</code> running from
+<code>api/</code> walks straight into <code>api/docs/</code> and reformats files there.</p>
+<p>The audit cannot roll back a write that an external tool has already made, but
+the failed target prevents it from being accepted as a successful <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>.</p>
 <h2 id="resolution">Resolution</h2>
 <ol>
 <li>
@@ -136,7 +136,7 @@ Running <code><a class="code-xref" href="../../../manpage/magus-run/" data-kind=
 those files under the descendant's own configuration.</p>
 </li>
 <li>
-<p><strong>If the warning fires during a <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>-wide run</strong> (<code>magus run format</code>) where both the parent and the descendant are dispatching
+<p><strong>If the warning fires during a <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>-wide run</strong> (<code>magus run format</code>) <a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> both the parent and the descendant are dispatching
 concurrently: this should not happen, because the audit excludes descendants
 that are in the active dispatch set. If it does, file an issue with
 the warning output attached.</p>
@@ -161,7 +161,7 @@ ascend&quot; rule the audit enforces at runtime.</li>
         <a class="related-card" href="../../../../reference/codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
         <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
-        <a class="related-card" href="../../../../concepts/sandbox/"><span class="related-card-title">Sandbox model</span><span class="related-card-desc">The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.</span></a>
+        <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">

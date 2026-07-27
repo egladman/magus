@@ -4,6 +4,7 @@ set -eu
 
 VERSION="${VERSION:-latest}"
 BASE_URL="https://github.com/egladman/magus/releases"
+VARIANT="${VARIANT:-static}"
 
 TARGET_OS="${TARGET_OS:-$(uname -s)}"
 TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
@@ -42,19 +43,30 @@ require() {
         die "missing required command: $1"
 }
 
+require_ed25519_openssl() {
+    algorithms="$(openssl list -public-key-algorithms 2>/dev/null)" ||
+        die "OpenSSL 3 with Ed25519 support is required to verify releases"
+    case "$algorithms" in
+        *ED25519*) ;;
+        *) die "OpenSSL 3 with Ed25519 support is required to verify releases" ;;
+    esac
+}
+
 usage() {
     cat <<EOF
 Usage:
-  install.sh [options]
+  install [options]
 
 Options:
   --version VERSION   Install a specific release tag
+  --variant VARIANT   Install static (default) or dynamic binary
   --dry-run           Show what would be installed
   --verbose           Print additional verification details
   --help              Show this help message
 
 Environment:
   VERSION             Release version (default: latest)
+  VARIANT             Binary variant: static (default) or dynamic
   INSTALL_PREFIX      Installation prefix (default: ~/.local)
   TARGET_OS           The operating system's binary to be installed  (default: auto-detected)
   TARGET_ARCH         The architecture's binary to be installed  (default: auto-detected)
@@ -68,6 +80,14 @@ while [ "$#" -gt 0 ]; do
                 die "--version requires a value"
 
             VERSION="$2"
+            shift 2
+            ;;
+
+        --variant)
+            [ "$#" -ge 2 ] ||
+                die "--variant requires static or dynamic"
+
+            VARIANT="$2"
             shift 2
             ;;
 
@@ -99,8 +119,29 @@ curl_get() {
         --show-error \
         --location \
         --proto '=https' \
+        --proto-redir '=https' \
+        --tlsv1.2 \
+        --globoff \
         --max-redirs 5 \
         "$@"
+}
+
+validate_version() {
+    case "$1" in
+        v[0-9]*)
+            case "$1" in
+                *[!0-9A-Za-z.+-]*) die "invalid release version: $1" ;;
+            esac
+            ;;
+        *) die "invalid release version: $1" ;;
+    esac
+}
+
+validate_variant() {
+    case "$1" in
+        static|dynamic) ;;
+        *) die "invalid binary variant '$1' (expected static or dynamic)" ;;
+    esac
 }
 
 # Returns the resolved release tag URL.
@@ -113,11 +154,12 @@ find_release() {
         latest|"")
             curl_get \
                 -o /dev/null \
-                -w "%{redirect_url}" \
+                -w "%{url_effective}" \
                 "${BASE_URL}/latest"
             ;;
 
         v*)
+            validate_version "$VERSION"
             printf '%s/tag/%s\n' "$BASE_URL" "$VERSION"
             ;;
 
@@ -129,7 +171,9 @@ find_release() {
 
 release_version() {
     url="${1:?}"
-    printf '%s\n' "${url##*/}"
+    version="${url##*/}"
+    validate_version "$version"
+    printf '%s\n' "$version"
 }
 
 detect_platform() {
@@ -162,22 +206,21 @@ detect_platform() {
     esac
 }
 
-# Downloads release metadata only.
-#
-# The metadata must be authenticated before downloading any binary artifact.
+# Downloads the signed manifest before any binary artifact.
 download_metadata() {
-    # Usage: download_metadata <release-url>
+    # Usage: download_metadata <version>
 
-    base_url="${1:?}"
+    version="${1:?}"
+    asset_url="${BASE_URL}/download/${version}"
 
     printf 'Downloading release metadata...\n'
 
     curl_get \
-        "${base_url}/SHA256SUMS" \
+        "${asset_url}/SHA256SUMS" \
         -o "${work_dir}/SHA256SUMS"
 
     curl_get \
-        "${base_url}/SHA256SUMS.sig" \
+        "${asset_url}/SHA256SUMS.sig" \
         -o "${work_dir}/SHA256SUMS.sig"
 }
 
@@ -219,9 +262,13 @@ download_artifact() {
     release_url="${1:?}"
     version="$(release_version "$release_url")"
 
-    artifact="magus_${version}_${OS}_${ARCH}.tar.gz"
+    suffix=""
+    if [ "$VARIANT" = "static" ]; then
+        suffix="-static"
+    fi
+    artifact="magus_${version}_${OS}_${ARCH}${suffix}.tar.gz"
 
-    printf 'Downloading %s...\n' "$artifact"
+    printf 'Downloading %s...\n' "$artifact" >&2
 
     curl_get \
         "${BASE_URL}/download/${version}/${artifact}" \
@@ -239,9 +286,30 @@ verify_artifact() {
 
     log "Verifying artifact checksum..."
 
-    grep " ${artifact}\$" SHA256SUMS \
-        | sha256sum --check --status \
-        || die "checksum verification failed"
+    awk -v artifact="$artifact" '
+        ($2 == artifact || $2 == "*" artifact) && length($1) == 64 && $1 ~ /^[0-9A-Fa-f]+$/ {
+            matches++
+            entry = $0
+        }
+        END {
+            if (matches == 1) {
+                print entry
+                exit 0
+            }
+            exit 1
+        }
+    ' SHA256SUMS > SHA256SUMS.selected ||
+        die "signed checksum manifest must contain exactly one SHA-256 entry for ${artifact}"
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum --check --status SHA256SUMS.selected ||
+            die "checksum verification failed"
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 --check --status SHA256SUMS.selected ||
+            die "checksum verification failed"
+    else
+        die "missing SHA-256 verifier: install sha256sum or shasum"
+    fi
 
     log "Artifact checksum verified."
 }
@@ -257,9 +325,10 @@ install_release() {
     printf 'Installation plan:\n'
     printf '  Version: %s\n' "$(release_version "$url")"
     printf '  Platform: %s/%s\n' "$OS" "$ARCH"
-    printf '  Destination: %s/magus\n' "$BIN_DIR"
+    printf '  Variant: %s\n' "$VARIANT"
+    printf '  Destination: %s/bin/magus\n' "$INSTALL_PREFIX"
 
-if is_true "$DRY_RUN"; then
+    if is_true "$DRY_RUN"; then
         return
     fi
 
@@ -267,11 +336,22 @@ if is_true "$DRY_RUN"; then
 
     mkdir -p "${INSTALL_PREFIX}/bin"
 
-    tar -xzf "$archive"
+    archive_members="$(tar -tzf "$archive")" ||
+        die "cannot inspect verified archive"
+    [ "$archive_members" = "magus" ] ||
+        die "verified archive must contain exactly one regular magus binary"
+
+    tar -xzf "$archive" magus ||
+        die "cannot extract verified magus binary"
+    [ -f magus ] && [ ! -L magus ] ||
+        die "verified archive's magus member is not a regular file"
 
     install -m 0755 \
         magus \
         "${INSTALL_PREFIX}/bin/magus"
+
+    "${INSTALL_PREFIX}/bin/magus" man install \
+        --dir "${INSTALL_PREFIX}/share/man/man1"
 
     printf '\n'
     printf 'Successfully installed Magus to:\n'
@@ -288,20 +368,39 @@ if is_true "$DRY_RUN"; then
             printf '  Add it to your shell profile to invoke "magus" directly.\n'
             ;;
     esac
+
+    printf '\n'
+    printf 'Next steps:\n'
+    printf '  Read the quickstart: https://eli.gladman.cc/magus/tour/\n'
+    printf '  Create a workspace: magus init\n'
+    printf '  Read the local manual: man magus\n'
+
+    case "${SHELL:-}" in
+        */bash)
+            printf '  Enable Bash completion: magus completion bash >> ~/.bashrc\n'
+            ;;
+        */zsh)
+            printf '  Enable Zsh completion: magus completion zsh >> ~/.zshrc\n'
+            ;;
+        */fish)
+            printf '  Enable Fish completion: magus completion fish >> ~/.config/fish/config.fish\n'
+            ;;
+    esac
 }
 
 main() {
+    validate_variant "$VARIANT"
+
     require curl
     require tar
     require install
     require openssl
-    require grep
+    require_ed25519_openssl
+    require awk
     require xxd
     require uname
     require mktemp
-    require sha256sum
-
-    umask 022
+    umask 077
 
     detect_platform
 
@@ -315,7 +414,7 @@ main() {
 
     trap cleanup EXIT HUP INT TERM
 
-    download_metadata "$url"
+    download_metadata "$(release_version "$url")"
 
     verify_metadata
 

@@ -116,14 +116,14 @@ strips them from every op subprocess, alongside the other secret-bearing vars
 the vars are simply absent from the environment allowlist. But the sandbox is
 off by default, and &quot;off&quot; rebuilds no environment - the child would otherwise
 inherit the whole parent environment - so magus carries the withholding in an
-explicit code path that runs either way. That is why turning the sandbox off
+explicit code <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> that runs either way. That is why turning the sandbox off
 does not hand these pointers to spells, and why they can go missing from a
 subprocess even in a <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> with no sandbox configured at all.</p>
 <p>A nested <code>magus</code> call is the one exception. It is a recursive invocation of the
 same trusted binary, and it genuinely needs the daemon to coordinate. For that
 case magus re-injects <code>MAGUS_DAEMON_SOCKET</code> and <code>MAGUS_DAEMON_ADDRESS</code> as
 explicit env overrides on the child, and records it with this code.</p>
-<p>The log fires at debug (<code>-v</code>), not info, because a run spawns many ops (and a
+<p>The log fires at debug (<code>-v</code>), not info, because a <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> spawns many ops (and a
 fan-out many recursive invocations) and it would otherwise be pure noise at
 default verbosity. It is an internal correctness note, not an error and not
 user-actionable.</p>
@@ -136,7 +136,7 @@ socket, that is this rule at work - a plain program is not a nested <code>magus<
 is not trusted with the unauthenticated socket. Reach for the pointer through a
 recursive <code>magus</code> call instead. The withheld line explains a missing var; the
 <code>already running under a parent magus</code> error, which now names the inherited
-<code>MAGUS_DAEMON_SOCKET</code>, explains the opposite case where a program mistook the
+<code>MAGUS_DAEMON_SOCKET</code>, explains the opposite case <a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> a program mistook the
 inherited socket for adoption.</p>
 <p>You will see these lines only when running at <code>-v</code> or higher. If you do not
 want the noise, run at default verbosity.</p>

@@ -91,10 +91,10 @@
 </p>
 <!-- Coverage is generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
 <p><a href="https://github.com/egladman/magus/actions/workflows/ci.yaml" rel="noopener noreferrer" target="_blank" data-external><img loading="lazy" decoding="async" alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img loading="lazy" decoding="async" alt="Coverage" src="./assets/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus" rel="noopener noreferrer" target="_blank" data-external><img loading="lazy" decoding="async" alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a></p>
-<p>A fast, cross-platform task orchestrator for polyglot monorepos. One statically linked binary, config as code, no second toolchain to install.</p>
+<p>A fast, cross-platform task orchestrator for polyglot monorepos. One statically linked binary, <a class="code-xref" href="reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> as code, no second toolchain to install.</p>
 <p>Change a file and magus works out which projects it reaches, rebuilds only those, and caches every result so the same work never runs twice.</p>
 <h2 id="why-magus-exists">Why magus exists</h2>
-<p>The tools you run in a monorepo, you run all day. Build, test, lint, switch
+<p>The tools you <a class="code-xref" href="reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> in a monorepo, you run all day. Build, test, lint, switch
 branches, do it again. So friction compounds fast. A few wasted seconds a run,
 one flaky <a class="glossary-term" href="glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, a teammate's botched merge that starts failing on your
 checkout, and now you are babysitting the build instead of shipping the feature.
@@ -102,27 +102,27 @@ Tooling this central earns its place by getting out of the way. It should be
 fast, and genuinely good at the narrow thing it does.</p>
 <p>The other half of the job is knowledge. Monorepos outgrow the people and tools
 reading them. Humans grep; AI agents grep faster and guess more confidently;
-both drown in generated files, legacy patterns, and dependency chains nobody
+both drown in generated files, unfamiliar patterns, and dependency chains nobody
 holds in their head. magus takes the opposite bet. The build tool already has to
 know the repo precisely, down to every <a class="glossary-term" href="glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, every target's inputs and
 declared outputs, and what a diff reaches, so it hands that knowledge back as
 answers instead of leaving everyone to rediscover it.</p>
 <p>That is the rule for the whole <a class="glossary-term" href="glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>. Every verb answers a question,
 deterministically, from declared sources: which projects a change affects,
-whether a file is generated and by what, where a symbol is used, how two things
+whether a file is generated and by what, <a class="code-xref" href="reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> a symbol is used, how two things
 relate. Nothing in magus decides for you, plans for you, or injects itself into
 your workflow. Answering is the tool's job; deciding is yours, or your agent's.</p>
 <p>The same discipline serves both audiences. A teammate on day one and an AI agent
 in a fresh session have the same problem: a repo they cannot yet trust their
-guesses about. magus gives them the same fix. Query the
+guesses about. magus gives them the same fix. <a class="code-xref" href="concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">Query</a> the
 <a href="concepts/knowledge/">knowledge graph</a> instead of grepping, run
 <a href="concepts/targets/">targets</a> instead of raw tools, and let <code><a class="code-xref" href="reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code>
 prove what a change touched. For agents, see <a href="guides/agents/">Agents</a>.</p>
 <h2 id="how-it-works">How it works</h2>
-<p>Four ideas carry most of the tool. Each has a deeper page; this is the short version.</p>
+<p>Four ideas carry most of the tool. Each has a deeper page; this is the short <a class="code-xref" href="reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a>.</p>
 <h3 id="affected-sets">Affected sets</h3>
-<p>magus keeps a dependency graph of your projects and knows which files each
-target reads. Change a file and <code>magus affected &lt;target&gt;</code><a class="convention-hint" href="conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> runs only the
+<p>magus keeps a dependency <a class="code-xref" href="reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> of your projects and knows which files each
+target reads. Change a file and <code>magus <a class="code-xref" href="reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> &lt;target&gt;</code><a class="convention-hint" href="conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> runs only the
 projects that change can reach, in dependency order. <code>magus affected ci</code> runs
 the full pipeline over that set, so <a class="glossary-term" href="glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> does the least work a change requires
 and still catches breakage in a project you never opened. See <a href="concepts/targets/ci/">CI</a>.</p>
@@ -134,9 +134,9 @@ the input hash is the key, and the stored outputs are addressed by their own
 content hash, so a replay is a byte-for-byte reproduction of the recorded run.</p>
 <h3 id="the-knowledge-graph">The knowledge graph</h3>
 <p>Because magus already knows every project, target, <a class="glossary-term" href="glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>, and how they relate,
-it exposes that as a graph you can query. <code>magus query &quot;kind:target lint&quot;</code> finds
-nodes, <code>magus explain &lt;node&gt;</code> shows a node's edges and what reaches it, and
-<code>magus refs &lt;symbol&gt;</code> lists where a symbol is defined and used from a SCIP
+it exposes that as a graph you can query. <code><a class="code-xref" href="concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> &quot;kind:target lint&quot;</code> finds
+nodes, <code><a class="code-xref" href="concepts/knowledge/" data-kind="command" data-def="Explain one knowledge-graph node.">magus explain</a> &lt;node&gt;</code> shows a node's edges and what reaches it, and
+<code><a class="code-xref" href="concepts/knowledge/" data-kind="command" data-def="Find a symbol's definition and references.">magus refs</a> &lt;symbol&gt;</code> lists where a symbol is defined and used from a SCIP
 index.<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> The same graph answers &quot;is this file generated,&quot; &quot;what does my diff
 touch,&quot; and &quot;how do these two things relate&quot; without grepping. See the
 <a href="concepts/knowledge/">knowledge graph</a>.</p>
@@ -151,8 +151,15 @@ single tool invocation. Learn the four words and the rest of the surface reads
 the same way.</p>
 <h2 id="getting-started">Getting started</h2>
 <h3 id="install">Install</h3>
-<p>magus ships as a single self-contained binary, so there is no second toolchain
-to install. See the <a href="guides/download/">Download guide</a>.</p>
+<p>magus ships as a single <a class="code-xref" href="reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contained binary, so there is no second toolchain
+to install.</p>
+<pre><code class="language-sh">curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install -o install.sh
+less install.sh
+sh install.sh
+</code></pre>
+<p>Reviewing the downloaded script before executing it lets you audit the URL, verification,
+and installation steps instead of piping an unreviewed network response directly to your shell.
+See the <a href="guides/download/">Download guide</a> for platform details, verification, and updates.</p>
 <h3 id="a-first-look">A first look</h3>
 <p>magus targets are written in <a href="https://buzz-lang.dev/" rel="noopener noreferrer" target="_blank" data-external>Buzz</a>, a small typed
 scripting language it embeds. A <code>magusfile.buzz</code> at the repo root declares your
@@ -193,8 +200,8 @@ magus affected ci                         # the pipeline, over only what your di
 magus query &quot;kind:spell&quot;                  # what the graph knows
 magus describe file docs/gen/index.html   # is this file generated, and by what
 </code></pre>
-<p>Nothing here plans a workflow or decides for you. <code>describe file</code> tells you a
-path is a generated output so you skip its diff; <code>affected ci</code> tells you which
+<p>Nothing here plans a workflow or decides for you. <code><a class="code-xref" href="reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> file</code> tells you a
+<a class="code-xref" href="concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> is a generated output so you skip its diff; <code>magus affected ci</code> tells you which
 projects a change reaches so you run no more than that.</p>
 <h2 id="architecture">Architecture</h2>
 <p>One process (<code><a class="code-xref" href="reference/manpage/magus-server/" data-kind="command" data-def="Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">magus server</a> start</code>) exposes the <a class="glossary-term" href="glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> through two standing listeners, one per audience, and every browser page is a separate static asset; the binary serves no HTML. A third listener is raised only on demand: &quot;share to phone&quot; opens a time-boxed LAN listener that serves the read-only <a class="glossary-term" href="glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a> to a phone on the same network, then tears itself down. The diagram below is the whole system: the clients, the transports and their guards, the shared in-memory state, the background jobs and knowledge-graph pipeline that keep it warm, and how the browser console reaches (or does without) the <a class="glossary-term" href="glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>.</p>
@@ -214,7 +221,7 @@ projects a change reaches so you run no more than that.</p>
     serve[&quot;Ephemeral loopback server&lt;br/&gt;graph open --serve (Safari fallback)&quot;]
 
     sources[&quot;Declared sources&lt;br/&gt;magusfiles, docs, buzz,&lt;br/&gt;SCIP index, git history, CODEOWNERS&quot;]
-    gjson[&quot;Graph export -o json&lt;br/&gt;docs/graph.json (offline PWA)&lt;br/&gt;MAGUS.md (routing index)&quot;]
+    gjson[&quot;Graph export -o json&lt;br/&gt;console graph demo data&lt;br/&gt;MAGUS.md (routing index)&quot;]
 
     subgraph daemon[&quot;magus daemon - one process, magus server start (project: root Go module, cmd/magus + internal/*)&quot;]
         sock[&quot;Unix domain socket&lt;br/&gt;proc RPC, private 0700&lt;br/&gt;internal/proc&quot;]
@@ -316,10 +323,10 @@ is the <a href="https://github.com/egladman/magus/tree/main/docs" rel="noopener 
 the wire contracts are the <a href="https://github.com/egladman/magus/tree/main/proto/magus" rel="noopener noreferrer" target="_blank" data-external><code>proto/magus</code></a>
 protobufs.</p>
 <p>Green is the Unix domain socket, the local control plane: it dispatches
-<code>run</code>/<code>affected</code> into one shared <a href="guides/daemon/#concurrency">concurrency pool</a>,
+<code><a class="code-xref" href="reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code>/<code>magus affected</code> into one shared <a href="guides/daemon/#concurrency">concurrency pool</a>,
 answers <code><a class="code-xref" href="reference/manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a></code>, and adopts nested <code>magus</code> calls. Fast and private
 (<code>0700</code>); the local CLI and the liveness/readiness probes use it.</p>
-<p>Orange is the HTTP server on <code><a class="code-xref" href="reference/config/#mcp" data-kind="config" data-def="string, flag --mcp-address, env MAGUS_MCP_ADDRESS">mcp.address</a></code>, for clients that cannot reach a Unix
+<p>Orange is the HTTP <a class="code-xref" href="reference/manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> on <code><a class="code-xref" href="reference/config/#mcp" data-kind="config" data-def="string, flag --mcp-address, env MAGUS_MCP_ADDRESS">mcp.address</a></code>, for clients that cannot reach a Unix
 socket. It carries <a href="guides/mcp/">MCP</a> for agents at <code>/mcp</code>, the read-only
 <a href="reference/console/#what-the-console-serves"><code>/api/v1</code></a> console routes,
 Connect services for metrics and the activity trail, and one bearer-gated
@@ -345,13 +352,13 @@ fires the git hook, which submits one coalesced graph-build job over the socket.
 <a href="#the-browser-console">The browser console</a> below.</p>
 <p>The graph itself is assembled from declared sources as shards (the <a class="glossary-term" href="glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>
 registry, docs, <code>@symbols</code> from SCIP, <code>@vcs</code> from git history, <code>CODEOWNERS</code>).
-<code><a class="code-xref" href="reference/manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> export -o json</code> writes the committed <code>docs/graph.json</code> that the
-offline console loads, and <code><a class="code-xref" href="reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> graph -o markdown</code> writes the
+<code><a class="code-xref" href="reference/manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> export -o json</code> writes the graph data copied into the console's
+offline demo, and <code>magus <a class="code-xref" href="reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> graph -o markdown</code> writes the
 <code>MAGUS.md</code> routing index; live, the daemon serves the same graph byte-identical
 at <code>/api/v1/graph</code>.</p>
 </details>
 <p>Because the two listeners are separate, they can diverge: the socket can be
-healthy while the HTTP/MCP endpoint failed to bind, which is why <code>magus status</code>
+healthy while the HTTP/MCP endpoint failed to bind, which is why <code>magus <a class="code-xref" href="reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a></code>
 reports each one on its own line.</p>
 <h2 id="the-browser-console">The browser console</h2>
 <p>magus is fully featured from the terminal, so everything here is optional. Alongside the CLI, the daemon can drive four read-only browser surfaces.</p>
@@ -363,7 +370,7 @@ reports each one on its own line.</p>
 matching surface.</p>
 <ul>
 <li><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Dashboard</a> shows live daemon health, the <a class="glossary-term" href="glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> <a class="glossary-term" href="glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a>, running targets, and cache activity.<sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup></li>
-<li><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> navigates targets, spells, and their dependency graph (<code>magus graph open</code>).<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup></li>
+<li><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Graph Explorer</a> navigates targets, spells, and their dependency graph (<code><a class="code-xref" href="reference/manpage/magus-graph/" data-kind="command" data-def="Open a graph explorer for the workspace graph.">magus graph open</a></code>).<sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup></li>
 <li><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Log Viewer</a> reads or streams any past run's captured output (<code>magus query output &lt;ref&gt; --open</code>).<sup id="fnref:5"><a href="#fn:5" class="footnote-ref" role="doc-noteref">5</a></sup></li>
 <li><a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>Activity Trail</a> shows the daemon's recent actions: MCP calls, background jobs, and config changes.<sup id="fnref:6"><a href="#fn:6" class="footnote-ref" role="doc-noteref">6</a></sup></li>
 </ul>
@@ -376,7 +383,7 @@ matching surface.</p>
 <h2 id="working-with-ai-agents">Working with AI agents</h2>
 <p>magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships an agent surface built on the <a class="glossary-term" href="glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a>, so an agent asks magus instead of grepping and guessing.</p>
 <ul>
-<li><strong>Installable skills</strong> teach an agent to query the graph, run work through targets, and triage generated files. Install them into whatever directory your agent host reads: <code>magus agent install .claude/skills</code> (or <code>.opencode/skills</code>, <code>.agents/skills</code>, <code>--agents-md</code> for AGENTS.md hosts).</li>
+<li><strong>Installable skills</strong> teach an agent to query the graph, run work through targets, and triage generated files. For Codex, install both its Agent Skills and the managed always-on guidance: <code>magus agent install .agents/skills --agents-md</code>. Claude Code uses <code>.claude/skills</code>; see <a href="guides/agents/">Agents</a> for the full host setup.</li>
 <li><strong>The committed <code>MAGUS.md</code></strong> is a routing index, regenerated from the graph, that points an agent at the exact query for a given question.</li>
 <li><strong>The MCP server</strong> the daemon exposes lets an agent call magus tools directly over the protocol rather than shelling out.<sup id="fnref:7"><a href="#fn:7" class="footnote-ref" role="doc-noteref">7</a></sup></li>
 </ul>
@@ -401,7 +408,7 @@ that project. They are generated by <code>magus describe graph -o markdown</code
 <pre><code class="language-sh">mise install           # installs the pinned Go, Node, esbuild, and TinyGo
 go build -o magus ./cmd/magus
 </code></pre>
-<p>Only building the <code>magus</code> binary? Go alone is enough and you can skip <code>mise install</code>; you need it for the docs site (<code><a class="code-xref" href="reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> generate docs</code>) and the playground.</p>
+<p>Only building the <code>magus</code> binary? Go alone is enough: run <code>GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus</code>. Use <code>mise install</code> for the docs site (<code>magus run generate docs</code>) and the playground.</p>
 <h3 id="running-the-tests">Running the tests</h3>
 <p>Run the tests through magus itself, since the whole point is that magus builds and tests magus:</p>
 <pre><code class="language-sh">magus run ci

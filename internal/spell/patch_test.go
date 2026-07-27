@@ -1,9 +1,9 @@
 package spell
 
 import (
-	"encoding/json"
 	"testing"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/types"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"

@@ -5,22 +5,22 @@ import (
 	"io"
 )
 
-// enabled is the package-level switch set once after config is loaded.
-var enabled = true
+// hintsEnabled controls actionable hints; it is unrelated to TTY detection.
+var hintsEnabled = true
 
-// SetEnabled sets whether hints are emitted.
-func SetEnabled(on bool) {
-	enabled = on
+// SetHintsEnabled sets whether actionable hints are emitted.
+func SetHintsEnabled(on bool) {
+	hintsEnabled = on
 }
 
-// Enabled reports whether hints are active.
-func Enabled() bool {
-	return enabled
+// HintsEnabled reports whether actionable hints are active.
+func HintsEnabled() bool {
+	return hintsEnabled
 }
 
 // Emit writes "hint: <msg>\n" to w when hints are enabled.
 func Emit(w io.Writer, msg string) {
-	if !Enabled() {
+	if !HintsEnabled() {
 		return
 	}
 	fmt.Fprintf(w, "hint: %s\n", msg)

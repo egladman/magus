@@ -93,8 +93,8 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="mgs4004-potential-undeclared-dependency">MGS4004: potential undeclared dependency</h1>
-<p>A <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> that did not run in this dispatch consumes a file written by a project
-that did run. The dependency graph is likely missing an edge. The build works
+<p>A <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> that did not <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> in this dispatch consumes a file written by a project
+that did run. The dependency <a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> is likely missing an edge. The build works
 today because of accidental ordering, but a future parallelism increase or
 scheduling reorder could expose a real race.</p>
 <pre><code class="language-text">[MGS4004] potential undeclared dependency (see .../MGS4004.md)
@@ -103,7 +103,7 @@ scheduling reorder could expose a real race.</p>
 <h2 id="why">Why</h2>
 <p>The dependency graph defines what depends on what: project <code>worker</code> depends on
 <code>api</code> <em>only</em> if <code>worker.dependsOn</code> contains <code>api</code> or <code>api</code> appears in <code>worker</code>'s
-inferred sources (a glob that matches a path inside <code>api/</code>).</p>
+inferred sources (a glob that matches a <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> inside <code>api/</code>).</p>
 <p>When the graph is correct, <code><a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> build</code> schedules <code>api</code> strictly before
 <code>worker</code> because of the edge. When the graph is missing an edge but <code>worker</code>
 still happens to consume <code>api</code>'s output, three things are simultaneously true:</p>
@@ -133,7 +133,7 @@ the producer in automatically:</p>
 sources:
   - ../api/dist/schema.json # explicit dep
 </code></pre>
-<p>Either way, after the edit, <code>magus affected</code> will correctly include both
+<p>Either way, after the edit, <code>magus <a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a></code> will correctly include both
 producer and consumer when either changes.</p>
 <h3 id="2-if-the-consumer-should-not-consume-the-producers-output">2. If the consumer should not consume the producer's output</h3>
 <p>Sometimes <a class="code-xref" href="./" data-kind="code" data-def="Fires when a project not in the dispatch consumes a file written by one that ran, suggesting the dependency graph is missing an edge.">MGS4004</a> fires because the consumer's source glob is too broad and

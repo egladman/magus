@@ -194,6 +194,7 @@ type TargetSpellUse struct {
 // of node names that begins and ends at the same node) when the DAG is not acyclic.
 type TargetGraphProject struct {
 	Path   string            `json:"path"             yaml:"path"`
+	Name   string            `json:"name"             yaml:"name"`
 	Engine string            `json:"engine,omitempty" yaml:"engine,omitempty"`
 	Nodes  []TargetGraphNode `json:"nodes,omitempty"  yaml:"nodes,omitempty"`
 	Cycle  []string          `json:"cycle,omitempty"  yaml:"cycle,omitempty"`
@@ -213,10 +214,11 @@ type TargetGraphProject struct {
 // uses so none prints a bare ".": the pre-collapsed RelPath (which reads as the repo
 // name for the workspace root), falling back to the shared never-'.' rule on Path.
 func (p TargetGraphProject) Label() string {
-	if p.RelPath != "" && p.RelPath != "." {
-		return p.RelPath
+	name := p.Name
+	if name == "" {
+		name = p.RelPath
 	}
-	return ProjectLabel(p.Path, "")
+	return ProjectDisplayName(p.Path, name, "")
 }
 
 // TargetGraphOutput is the top-level result for "describe graph".

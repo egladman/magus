@@ -67,6 +67,19 @@ func TestStatsOrphans(t *testing.T) {
 	assert.NotContains(t, ids, "spell:magusfile", "a declared spell with no ops (structural) is not an orphan")
 }
 
+func TestStatsDirectSpellDispatchCountsAsUse(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: "spell:ts", Kind: types.KindSpell, Label: "ts", Attrs: map[string]string{AttrDeclared: "true"}})
+	g.AddNode(types.KnowledgeNode{ID: "op:ts:tsc", Kind: types.KindOp, Label: "tsc"})
+	g.AddNode(types.KnowledgeNode{ID: "target:.:build", Kind: types.KindTarget, Label: "build"})
+	g.AddEdge(types.KnowledgeEdge{Source: "spell:ts", Target: "op:ts:tsc", Relation: types.RelationContains, Confidence: types.ConfidenceExtracted, Score: 1})
+	g.AddEdge(types.KnowledgeEdge{Source: "target:.:build", Target: "spell:ts", Relation: types.RelationUses, Confidence: types.ConfidenceExtracted, Score: 1})
+
+	for _, orphan := range g.Stats("").Orphans {
+		assert.NotEqual(t, "spell:ts", orphan.ID)
+	}
+}
+
 func TestStatsConnectivity(t *testing.T) {
 	// The fixture has one connected component around spell:go/target:.:build/op:go:build, another around
 	// spell:cosign/op, another around spell:rust/op, the documented MGS1001<->doc pair, the isolated

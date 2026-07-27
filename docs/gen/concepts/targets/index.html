@@ -88,10 +88,10 @@
     <small class="reading-time" title="Estimated reading time">11 min read</small>
     <article>
 <h1 id="targets">Targets</h1>
-<p>A <strong><a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">Target</a></strong> is the addressable unit of work in magus: <em>what <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a></em> (Path) and <em>what <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a></em> (Name). Everything else (shards, <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> filters, charms) is configuration layered on top, not part of the Target's identity.</p>
+<p>A <strong><a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">Target</a></strong> is the addressable unit of work in magus: <em>what <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a></em> (<a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">Path</a>) and <em>what <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a></em> (Name). Everything else (shards, <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> filters, charms) is configuration layered on top, not part of the Target's identity.</p>
 <aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-1">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
 
-<p>A target is <em>what</em> you run (<code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> lint</code>); a spell is <em>how</em> a tool does it. See <a href="../spells/#spells-vs-targets">Spells vs Targets</a>.</p>
+<p>A target is <em>what</em> you <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> (<code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> lint</code>); a spell is <em>how</em> a tool does it. See <a href="../spells/#spells-vs-targets">Spells vs Targets</a>.</p>
 <h2 id="the-struct">The struct</h2>
 <pre><code class="language-go">type Target struct {
     Path   string   // project path relative to workspace root
@@ -182,7 +182,7 @@
 </tr>
 </tbody>
 </table></figure>
-<p>The canonical serialized form of a resolved Target (what <code>Target.String()</code> emits and what <code>describe</code>/logs show) is <code>path:name</code> (e.g. <code>web/studio:test</code>). That is the output form; the grammar above is how you type it.</p>
+<p>The canonical serialized form of a resolved Target (what <code>Target.String()</code> emits and what <code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a></code>/logs show) is <code>path:name</code> (e.g. <code>web/studio:test</code>). That is the output form; the grammar above is how you type it.</p>
 <h2 id="path-resolution-on-the-cli">Path resolution on the CLI</h2>
 <p><code>Path</code> is stored <strong>relative to the <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root</strong>, but the CLI accepts project names from anywhere in the tree. Arguments to <code>magus run</code>, <code>magus list</code>, and <code>magus clean</code> resolve as follows:</p>
 <figure class="table-scroll"><table>
@@ -200,7 +200,7 @@
 <td><code>api</code> → <code>api</code></td>
 </tr>
 <tr>
-<td>dot-relative (<code>./x</code>, <code>../x</code>)</td>
+<td>dot-relative (<code>./<a class="code-xref" href="../../reference/manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a></code>, <code>../x</code>)</td>
 <td>current working directory</td>
 <td><code>../api</code> → <code>web/api</code></td>
 </tr>
@@ -221,7 +221,7 @@
 <li><strong>Absolute paths</strong> (<code>/etc</code>, <code>C:\foo</code>): project paths must be repo-relative.</li>
 <li><strong>Paths that escape the workspace root</strong> (<code>../../outside</code>): magus never operates outside the workspace it discovered.</li>
 </ul>
-<p>Resolution is implemented by <code>internal/file/path.Resolve(input, anchor)</code>, where the anchor is the cwd expressed relative to the workspace root. The same helper backs <code>WithDependsOn</code> in a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>, so dependency paths and CLI arguments obey identical rules.</p>
+<p>Resolution is implemented by <code>internal/file/path.Resolve(input, anchor)</code>, <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the anchor is the cwd expressed relative to the workspace root. The same helper backs <code>WithDependsOn</code> in a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>, so dependency paths and CLI arguments obey identical rules.</p>
 <h3 id="symlinks">Symlinks</h3>
 <p>The workspace root is canonicalised (symlinks resolved) at discovery, and the <a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> enforces access against <strong>real, resolved paths</strong> on Linux via the kernel landlock LSM. A symlink inside the workspace pointing at <code>/etc</code> grants no access to <code>/etc</code>.</p>
 <p>Two consequences:</p>
@@ -269,7 +269,7 @@
 </tr>
 </tbody>
 </table></figure>
-<p>There is also <code>ci</code>: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with <code>magus.needs</code>. <code>Magus.RunCI</code> treats it specially in exactly three ways: it strips the <code>rw</code> charm (<a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a> always runs read-only), it is the anchor <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> and <code>magus affected --plan</code> key off, and it must not silently no-op - a selected scope with no project declaring <code>ci</code> is a load error (see <a href="../dependencies/">dependencies</a>), not a quiet success.</p>
+<p>There is also <code>ci</code>: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with <code>magus.needs</code>. <code>Magus.RunCI</code> treats it specially in exactly three ways: it strips the <code>rw</code> charm (<a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a> always runs read-only), it is the anchor <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> and <code>magus <a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --plan</code> key off, and it must not silently no-op - a selected scope with no project declaring <code>ci</code> is a load error (see <a href="../dependencies/">dependencies</a>), not a quiet success.</p>
 <p>Tool operations compose <strong>into</strong> these targets; they are not targets of their own. All static analysis - <code>go-vet</code>, <code>golangci-lint</code>, <code>cargo-clippy</code>, type-checks - and security scanning (<code>govulncheck</code>) belong under <code>lint</code> (its definition is &quot;static analysis, type-check&quot;), not a bespoke <code>vet</code>, <code>audit</code>, or <code>security</code> target. A slow security scan can instead be gated in <code>ci</code>. Reserve custom target names for genuinely distinct work with no canonical home (a <code>deploy</code> or <code>release</code>), not for fragmenting a canonical phase.</p>
 <p>Custom target names must use the target-name charset: letters, digits, <code>-</code>, <code>_</code> (<code>types.ValidateTargetName</code>). <code>:</code>, <code>@</code>, and <code>/</code> are reserved for the grammar above.</p>
 <h3 id="when-does-a-name-earn-canonical-status">When does a name earn canonical status?</h3>
@@ -324,7 +324,7 @@ every spelling that normalizes to it reaches the same target.</li>
 <li><strong>Collisions are a hard load error.</strong> Two declarations that collapse to the
 same canonical name (e.g. <code>fooBar</code> and <code>foo_bar</code>, both normalizing to
 <code>foo-bar</code>) make magus refuse the magusfile, naming the offending pair.</li>
-<li><strong>Convention drift is a <code>doctor</code> warning, not an error.</strong> Mixed conventions
+<li><strong>Convention drift is a <code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code> warning, not an error.</strong> Mixed conventions
 across a workspace still resolve correctly, but <code>magus doctor</code> warns when it
 sees more than one naming convention, since call sites across CI YAML,
 scripts, and docs can drift out of sync with whichever one you typed.</li>
@@ -343,7 +343,7 @@ scripts, and docs can drift out of sync with whichever one you typed.</li>
 <td><code>export fun go_build(...)</code> registers as <code>go-build</code>.</td>
 </tr>
 <tr>
-<td>CLI <code>run</code> / <code>affected</code> arguments</td>
+<td>CLI <code>magus run</code> / <code>magus affected</code> arguments</td>
 <td><code>magus run goBuild</code> reaches the target declared <code>go_build</code>.</td>
 </tr>
 <tr>
@@ -479,7 +479,7 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
 </tr>
 <tr>
 <td><strong><code>ci</code></strong></td>
-<td>An ordinary target you compose with <code>magus.needs</code>; <code>Magus.RunCI</code> only strips <code>rw</code>, anchors <code>affected</code>, and must-not-no-op.</td>
+<td>An ordinary target you compose with <code>magus.needs</code>; <code>Magus.RunCI</code> only strips <code>rw</code>, anchors <code>magus affected</code>, and must-not-no-op.</td>
 </tr>
 </tbody>
 </table></figure>

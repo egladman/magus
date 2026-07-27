@@ -421,7 +421,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="path">path</h3>
 <p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.</p>
-<p><strong>Signature:</strong> <code>charm.path(argv, anchor) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L284" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>charm.<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>(argv, anchor) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L284" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -612,7 +612,7 @@
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="test">test</h3>
-<p>Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).</p>
+<p>Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> errors).</p>
 <p><strong>Signature:</strong> <code>charm.test(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L360" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>

@@ -11,7 +11,7 @@ import (
 func TestParseMemoryRefs(t *testing.T) {
 	// One ref per line, split on the FIRST colon so a target with its own colons or
 	// commas (a query expression, a namespaced node ID) survives intact.
-	refs, err := parseMemoryRefs("query: kind:op depends cache\nnode: file:internal/hash/hasher.go\n\noutput: out1a2b3c")
+	refs, err := memory.ParseRefs("query: kind:op depends cache\nnode: file:internal/hash/hasher.go\n\noutput: out1a2b3c")
 	require.NoError(t, err)
 	assert.Equal(t, []memory.Ref{
 		{Kind: "query", Target: "kind:op depends cache"},
@@ -19,11 +19,11 @@ func TestParseMemoryRefs(t *testing.T) {
 		{Kind: "output", Target: "out1a2b3c"},
 	}, refs)
 
-	empty, err := parseMemoryRefs("   \n\n")
+	empty, err := memory.ParseRefs("   \n\n")
 	require.NoError(t, err)
 	assert.Empty(t, empty, "blank lines yield no refs")
 
-	_, err = parseMemoryRefs("this line has no colon")
+	_, err = memory.ParseRefs("this line has no colon")
 	assert.Error(t, err, "a ref without a kind: prefix is rejected")
 }
 

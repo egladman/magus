@@ -3,8 +3,8 @@
   "schema_version": 6,
   "directed": true,
   "multigraph": false,
-  "node_count": 2082,
-  "edge_count": 4482,
+  "node_count": 2105,
+  "edge_count": 4588,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -353,13 +353,112 @@
       }
     },
     {
+      "id": "dir:.agents",
+      "kind": "dir",
+      "label": ".agents",
+      "source": ".agents",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "15",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.agents/skills",
+      "kind": "dir",
+      "label": ".agents/skills",
+      "source": ".agents/skills",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "14",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.agents/skills/magus-architecture",
+      "kind": "dir",
+      "label": ".agents/skills/magus-architecture",
+      "source": ".agents/skills/magus-architecture",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.agents/skills/magus-changes",
+      "kind": "dir",
+      "label": ".agents/skills/magus-changes",
+      "source": ".agents/skills/magus-changes",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.agents/skills/magus-docs",
+      "kind": "dir",
+      "label": ".agents/skills/magus-docs",
+      "source": ".agents/skills/magus-docs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.agents/skills/magus-memory",
+      "kind": "dir",
+      "label": ".agents/skills/magus-memory",
+      "source": ".agents/skills/magus-memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.agents/skills/magus-query",
+      "kind": "dir",
+      "label": ".agents/skills/magus-query",
+      "source": ".agents/skills/magus-query",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.agents/skills/magus-run",
+      "kind": "dir",
+      "label": ".agents/skills/magus-run",
+      "source": ".agents/skills/magus-run",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.agents/skills/magus-vcs",
+      "kind": "dir",
+      "label": ".agents/skills/magus-vcs",
+      "source": ".agents/skills/magus-vcs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
       "id": "dir:.claude",
       "kind": "dir",
       "label": ".claude",
       "source": ".claude",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "15",
+        "dir_files": "17",
         "dir_languages": "markdown"
       }
     },
@@ -370,7 +469,7 @@
       "source": ".claude/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "14",
+        "dir_files": "16",
         "dir_languages": "markdown"
       }
     },
@@ -379,6 +478,17 @@
       "kind": "dir",
       "label": ".claude/skills/magus-architecture",
       "source": ".claude/skills/magus-architecture",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:.claude/skills/magus-changes",
+      "kind": "dir",
+      "label": ".claude/skills/magus-changes",
+      "source": ".claude/skills/magus-changes",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "1",
@@ -502,7 +612,7 @@
       "source": "cmd",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "16",
+        "dir_files": "18",
         "dir_languages": "buzz,markdown"
       }
     },
@@ -524,7 +634,7 @@
       "source": "cmd/magus",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "14",
+        "dir_files": "16",
         "dir_languages": "markdown"
       }
     },
@@ -535,7 +645,7 @@
       "source": "cmd/magus/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "12",
+        "dir_files": "14",
         "dir_languages": "markdown"
       }
     },
@@ -544,6 +654,17 @@
       "kind": "dir",
       "label": "cmd/magus/skills/magus-architecture",
       "source": "cmd/magus/skills/magus-architecture",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:cmd/magus/skills/magus-changes",
+      "kind": "dir",
+      "label": "cmd/magus/skills/magus-changes",
+      "source": "cmd/magus/skills/magus-changes",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "1",
@@ -700,7 +821,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "105",
+        "dir_files": "106",
         "dir_languages": "markdown"
       }
     },
@@ -821,7 +942,7 @@
       "source": "docs/reference/manpage",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "19",
+        "dir_files": "20",
         "dir_languages": "markdown"
       }
     },
@@ -1409,10 +1530,82 @@
       }
     },
     {
+      "id": "doc:.agents/skills/magus-architecture/SKILL.md",
+      "kind": "doc",
+      "label": ".agents/skills/magus-architecture/SKILL.md",
+      "source": ".agents/skills/magus-architecture/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.agents/skills/magus-changes/SKILL.md",
+      "kind": "doc",
+      "label": ".agents/skills/magus-changes/SKILL.md",
+      "source": ".agents/skills/magus-changes/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.agents/skills/magus-docs/SKILL.md",
+      "kind": "doc",
+      "label": ".agents/skills/magus-docs/SKILL.md",
+      "source": ".agents/skills/magus-docs/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.agents/skills/magus-memory/SKILL.md",
+      "kind": "doc",
+      "label": ".agents/skills/magus-memory/SKILL.md",
+      "source": ".agents/skills/magus-memory/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.agents/skills/magus-query/SKILL.md",
+      "kind": "doc",
+      "label": ".agents/skills/magus-query/SKILL.md",
+      "source": ".agents/skills/magus-query/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.agents/skills/magus-run/SKILL.md",
+      "kind": "doc",
+      "label": ".agents/skills/magus-run/SKILL.md",
+      "source": ".agents/skills/magus-run/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.agents/skills/magus-vcs/SKILL.md",
+      "kind": "doc",
+      "label": ".agents/skills/magus-vcs/SKILL.md",
+      "source": ".agents/skills/magus-vcs/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
       "id": "doc:.claude/skills/magus-architecture/SKILL.md",
       "kind": "doc",
       "label": ".claude/skills/magus-architecture/SKILL.md",
       "source": ".claude/skills/magus-architecture/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.claude/skills/magus-changes/SKILL.md",
+      "kind": "doc",
+      "label": ".claude/skills/magus-changes/SKILL.md",
+      "source": ".claude/skills/magus-changes/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -1469,6 +1662,15 @@
       "source": ".claude/skills/magus-vcs/SKILL.md",
       "attrs": {
         "role": "skill"
+      }
+    },
+    {
+      "id": "doc:AGENTS.md",
+      "kind": "doc",
+      "label": "AGENTS.md",
+      "source": "AGENTS.md",
+      "attrs": {
+        "role": "agent"
       }
     },
     {
@@ -1577,6 +1779,15 @@
       "kind": "doc",
       "label": "cmd/magus/skills/magus-architecture/SKILL.md",
       "source": "cmd/magus/skills/magus-architecture/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:cmd/magus/skills/magus-changes/SKILL.md",
+      "kind": "doc",
+      "label": "cmd/magus/skills/magus-changes/SKILL.md",
+      "source": "cmd/magus/skills/magus-changes/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -2156,7 +2367,7 @@
       "attrs": {
         "role": "doc",
         "section": "guides",
-        "tags": "mcp,model-context-protocol,ai,agents,claude,cursor,daemon,ide",
+        "tags": "mcp,model-context-protocol,ai,agents,claude,codex,cursor,daemon,ide",
         "title": "MCP"
       }
     },
@@ -3214,6 +3425,18 @@
         "section": "reference",
         "tags": "cli,magus ls,list,projects,discovery,workspace",
         "title": "magus ls"
+      }
+    },
+    {
+      "id": "doc:docs/reference/manpage/magus-man.md",
+      "kind": "doc",
+      "label": "docs/reference/manpage/magus-man.md",
+      "source": "docs/reference/manpage/magus-man.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "cli,magus man,manpage,documentation,install",
+        "title": "magus man"
       }
     },
     {
@@ -5585,7 +5808,7 @@
       "id": "function:badge.buzz:whole_percent",
       "kind": "function",
       "label": "whole_percent",
-      "doc": "whole_percent reads a figure's integer part (\"56.8\" -\u003e 56). std\\parseInt returns null on non-numeric input, which we turn into a clear error so a bad figure fails loudly instead of rendering wrong.",
+      "doc": "whole_percent reads a figure's integer part (\"56.8\" -> 56). std\\parseInt returns null on non-numeric input, which we turn into a clear error so a bad figure fails loudly instead of rendering wrong.",
       "source": "badge.buzz:29"
     },
     {
@@ -5750,7 +5973,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:64",
+      "source": "console/magusfile.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -5760,7 +5983,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
-      "source": "console/magusfile.buzz:93",
+      "source": "console/magusfile.buzz:95",
       "attrs": {
         "exported": "true"
       }
@@ -5770,14 +5993,14 @@
       "kind": "function",
       "label": "install",
       "doc": "install restores the pinned build-only deps with pnpm (esbuild + the surfaces' d3/uplot/protobuf clients), honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the release-age gate.",
-      "source": "console/magusfile.buzz:47"
+      "source": "console/magusfile.buzz:50"
     },
     {
       "id": "function:console/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "doc": "lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the same way a Go project's lint runs `go vet`. Composing tsc into lint (rather than a standalone `typecheck` target) means `magus affected ci`, which needs lint, always covers it - a type error fails lint. Biome (bans any/non-null, enforces formatting) composes in beside tsc, mirroring the docs site.",
-      "source": "console/magusfile.buzz:81",
+      "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
+      "source": "console/magusfile.buzz:82",
       "attrs": {
         "exported": "true"
       }
@@ -5786,7 +6009,7 @@
       "id": "function:console/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "console/magusfile.buzz:42",
+      "source": "console/magusfile.buzz:45",
       "attrs": {
         "exported": "true"
       }
@@ -5796,7 +6019,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
-      "source": "console/magusfile.buzz:54",
+      "source": "console/magusfile.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -5805,7 +6028,7 @@
       "id": "function:docs/engine/blog.buzz:renderBlogIndex",
       "kind": "function",
       "label": "renderBlogIndex",
-      "doc": "renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain \u003cul\u003e under renderPage(), so it inherits nav/breadcrumb/footer.",
+      "doc": "renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain <ul> under renderPage(), so it inherits nav/breadcrumb/footer.",
       "source": "docs/engine/blog.buzz:167",
       "attrs": {
         "exported": "true"
@@ -5822,7 +6045,7 @@
       "id": "function:docs/engine/blog.buzz:renderBlogPost",
       "kind": "function",
       "label": "renderBlogPost",
-      "doc": "renderBlogPost renders one blog/\u003cfile\u003e.md as its own directory-index page. base is the basename (e.g. \"2026-07-01-hello-blog.md\"); the URL is date-scoped blog/YYYY/MM/DD/slug/ (via blogURLPath), so permalinks sort by date and never collide across years. Post metadata is captured into site.blogPosts for the index page.",
+      "doc": "renderBlogPost renders one blog/<file>.md as its own directory-index page. base is the basename (e.g. \"2026-07-01-hello-blog.md\"); the URL is date-scoped blog/YYYY/MM/DD/slug/ (via blogURLPath), so permalinks sort by date and never collide across years. Post metadata is captured into site.blogPosts for the index page.",
       "source": "docs/engine/blog.buzz:24",
       "attrs": {
         "exported": "true"
@@ -5832,7 +6055,7 @@
       "id": "function:docs/engine/discovery.buzz:llmsIndexBody",
       "kind": "function",
       "label": "llmsIndexBody",
-      "doc": "llmsIndexBody builds gen/llms.txt (the llms.txt convention): an H1, a one-line summary, then every docs page as \"- [title](base+url): description\", sorted by URL for a byte-stable artifact. base is the link prefix (baseURL, else \"/\"). Links point at each page's \u003curl\u003eindex.md Markdown sibling, so an agent fetches clean content. Pure so a unit test can pin the output.",
+      "doc": "llmsIndexBody builds gen/llms.txt (the llms.txt convention): an H1, a one-line summary, then every docs page as \"- [title](base+url): description\", sorted by URL for a byte-stable artifact. base is the link prefix (baseURL, else \"/\"). Links point at each page's <url>index.md Markdown sibling, so an agent fetches clean content. Pure so a unit test can pin the output.",
       "source": "docs/engine/discovery.buzz:40"
     },
     {
@@ -5859,7 +6082,7 @@
       "id": "function:docs/engine/feeds.buzz:renderBlogAtom",
       "kind": "function",
       "label": "renderBlogAtom",
-      "doc": "renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of site.blogPosts, newest first. Per \u003centry\u003e: title, link (absolute), id (same URL), updated (post date), summary (description), author. Feed-level updated = newest post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.",
+      "doc": "renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL), updated (post date), summary (description), author. Feed-level updated = newest post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.",
       "source": "docs/engine/feeds.buzz:16",
       "attrs": {
         "exported": "true"
@@ -5869,7 +6092,7 @@
       "id": "function:docs/engine/feeds.buzz:renderReleasesAtom",
       "kind": "function",
       "label": "renderReleasesAtom",
-      "doc": "renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed releases (newest first as authored). Per \u003centry\u003e: title = version, link = site.config.repoURL/releases/tag/\u003cver\u003e, id = same, updated = release date, summary = the section body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on having at least one released version.",
+      "doc": "renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed releases (newest first as authored). Per <entry>: title = version, link = site.config.repoURL/releases/tag/<ver>, id = same, updated = release date, summary = the section body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on having at least one released version.",
       "source": "docs/engine/feeds.buzz:52",
       "attrs": {
         "exported": "true"
@@ -5880,7 +6103,7 @@
       "kind": "function",
       "label": "abandonedLinkCheck",
       "doc": "abandonedLinkCheck is the parity gate: every URL the site has shipped before (recorded in URL_LOCK) must still resolve, so a renamed or deleted page can't silently start 404-ing on inbound links and bookmarks. To retire a URL on purpose, either add a redirect (frontmatter `aliases:`, whose stub keeps the old URL resolving) or list it in retired.urls.lock. Runs every render; the lock only grows (updateUrlLock, under the rw charm).",
-      "source": "docs/engine/gates.buzz:356",
+      "source": "docs/engine/gates.buzz:357",
       "attrs": {
         "exported": "true"
       }
@@ -5899,7 +6122,7 @@
       "id": "function:docs/engine/gates.buzz:buildCommits",
       "kind": "function",
       "label": "buildCommits",
-      "doc": "buildCommits parses one git-log pass: - metaCommits: path -\u003e \"full|short|stamp\" of the FIRST (newest) sighting; drives the always-visible \"Last updated\" footer line. - metaHistory: path -\u003e up to HISTORY_MAX \"full|short|stamp|subject\" entries, newest- first; drives the collapsed history panel. The log prints \"SUBJ:\u003csubject\u003e\" after each \"\u003e\u003e\u003e\" header so both fields ride together without a second git spawn.",
+      "doc": "buildCommits parses one git-log pass: - metaCommits: path -> \"full|short|stamp\" of the FIRST (newest) sighting; drives the always-visible \"Last updated\" footer line. - metaHistory: path -> up to HISTORY_MAX \"full|short|stamp|subject\" entries, newest- first; drives the collapsed history panel. The log prints \"SUBJ:<subject>\" after each \">>>\" header so both fields ride together without a second git spawn.",
       "source": "docs/engine/gates.buzz:143",
       "attrs": {
         "exported": "true"
@@ -5949,7 +6172,7 @@
       "kind": "function",
       "label": "pageKey",
       "doc": "pageKey normalizes a scanReferencesInHTML result (a gen-root-relative path with no trailing slash - \"spells/go\", \"index.html\", \"assets/x.png\") to a page key: \"\" for the home page, else the directory that holds the page's index.html. Asset paths pass through unchanged and simply never match a real page key.",
-      "source": "docs/engine/gates.buzz:320",
+      "source": "docs/engine/gates.buzz:321",
       "attrs": {
         "exported": "true"
       }
@@ -5958,7 +6181,7 @@
       "id": "function:docs/engine/gates.buzz:pruneStaleOutputs",
       "kind": "function",
       "label": "pruneStaleOutputs",
-      "doc": "pruneStaleOutputs deletes gen/ output whose source no longer produces it - a renamed/removed page, a deleted post, a dropped alias, a release out of CHANGELOG.md. gen/ is not wiped before each render, so this keeps it from accumulating orphans: for every \"\u003cdir\u003e/index.html\" not in writtenPaths and not in alwaysKeep, delete the whole directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so neither trips on a stale page's dangling reference to content removed with it.",
+      "doc": "pruneStaleOutputs deletes gen/ output whose source no longer produces it - a renamed/removed page, a deleted post, a dropped alias, a release out of CHANGELOG.md. gen/ is not wiped before each render, so this keeps it from accumulating orphans: for every \"<dir>/index.html\" not in writtenPaths and not in alwaysKeep, delete the whole directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so neither trips on a stale page's dangling reference to content removed with it.",
       "source": "docs/engine/gates.buzz:265",
       "attrs": {
         "exported": "true"
@@ -5968,8 +6191,8 @@
       "id": "function:docs/engine/gates.buzz:readURLSet",
       "kind": "function",
       "label": "readURLSet",
-      "doc": "readURLSet reads a newline-delimited URL file into a set, skipping blanks and \"#\" comments. Missing file -\u003e empty set (the bootstrap case for URL_LOCK).",
-      "source": "docs/engine/gates.buzz:337",
+      "doc": "readURLSet reads a newline-delimited URL file into a set, skipping blanks and \"#\" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).",
+      "source": "docs/engine/gates.buzz:338",
       "attrs": {
         "exported": "true"
       }
@@ -5989,7 +6212,7 @@
       "kind": "function",
       "label": "updateUrlLock",
       "doc": "updateUrlLock folds this build's URLs into URL_LOCK and rewrites it sorted. It only adds - a URL that drops out of the build stays in the ledger so the gate keeps demanding a redirect or an explicit retirement for it. Called under the rw charm so a plain (checking) render never mutates the tree.",
-      "source": "docs/engine/gates.buzz:375",
+      "source": "docs/engine/gates.buzz:376",
       "attrs": {
         "exported": "true"
       }
@@ -6008,8 +6231,8 @@
       "id": "function:docs/engine/gates.buzz:writeSiteManifest",
       "kind": "function",
       "label": "writeSiteManifest",
-      "doc": "writeSiteManifest emits gen/site-manifest.sha256: one \"\u003csha256\u003e  \u003cpath\u003e\\n\" line (standard sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/, repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js (served assets) only after site_render() returns - computing the manifest earlier would omit them. Excludes its own output path (a file cannot hash itself).",
-      "source": "docs/engine/gates.buzz:304",
+      "doc": "writeSiteManifest emits gen/site-manifest.sha256: one \"<sha256>  <path>\\n\" line (standard sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/, repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js (served assets) only after site_render() returns - computing the manifest earlier would omit them. Excludes its own output path (a file cannot hash itself).",
+      "source": "docs/engine/gates.buzz:305",
       "attrs": {
         "exported": "true"
       }
@@ -6028,7 +6251,7 @@
       "id": "function:docs/engine/meta.buzz:deriveTitle",
       "kind": "function",
       "label": "deriveTitle",
-      "doc": "deriveTitle reads the title from the first H1, stripping backticks (a heading like `# `fs``) so it reads as plain text in \u003ctitle\u003e, breadcrumb, pager, and search index. Frontmatter titles bypass this and are used verbatim.",
+      "doc": "deriveTitle reads the title from the first H1, stripping backticks (a heading like `# `fs``) so it reads as plain text in <title>, breadcrumb, pager, and search index. Frontmatter titles bypass this and are used verbatim.",
       "source": "docs/engine/meta.buzz:15",
       "attrs": {
         "exported": "true"
@@ -6038,7 +6261,7 @@
       "id": "function:docs/engine/meta.buzz:insertSinceBadge",
       "kind": "function",
       "label": "insertSinceBadge",
-      "doc": "insertSinceBadge places an \"Added in \u003cversion\u003e\" marker under the H1 so a reader can tell whether a feature exists in their installed magus. magus follows Go-style compatibility (no v2), so one page serves every version and just notes when a thing arrived. since is the frontmatter `since:` value; no-op without a `since:` or an H1 to anchor to.",
+      "doc": "insertSinceBadge places an \"Added in <version>\" marker under the H1 so a reader can tell whether a feature exists in their installed magus. magus follows Go-style compatibility (no v2), so one page serves every version and just notes when a thing arrived. since is the frontmatter `since:` value; no-op without a `since:` or an H1 to anchor to.",
       "source": "docs/engine/meta.buzz:121",
       "attrs": {
         "exported": "true"
@@ -6156,7 +6379,7 @@
       "id": "function:docs/engine/nav.buzz:renderTocList",
       "kind": "function",
       "label": "renderTocList",
-      "doc": "renderTocList builds the \"On this page\" block from a page's h2/h3 headings (goldmark puts each on its own line with a slug id); h3s nest under their h2. Returns \"\" below three headings - too little for a sidebar. Returns just the title + list; renderPage() wraps it in the .toc \u003caside\u003e, and toc.js adds scroll-spy + the collapse toggle.",
+      "doc": "renderTocList builds the \"On this page\" block from a page's h2/h3 headings (goldmark puts each on its own line with a slug id); h3s nest under their h2. Returns \"\" below three headings - too little for a sidebar. Returns just the title + list; renderPage() wraps it in the .toc <aside>, and toc.js adds scroll-spy + the collapse toggle.",
       "source": "docs/engine/nav.buzz:69",
       "attrs": {
         "exported": "true"
@@ -6166,14 +6389,14 @@
       "id": "function:docs/engine/page.buzz:injectDemoCallout",
       "kind": "function",
       "label": "injectDemoCallout",
-      "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first \u003c/p\u003e), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
+      "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first </p>), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
       "source": "docs/engine/page.buzz:486"
     },
     {
       "id": "function:docs/engine/page.buzz:render404",
       "kind": "function",
       "label": "render404",
-      "doc": "render404 writes gen/404.html - the themed page GitHub Pages serves for any unmatched path. GH Pages keeps the deep 404 URL in the address bar, so ordinary relative paths would break; this page uses root-absolute paths (/\u003cbasePath\u003e/site.css, etc.) - the one deliberate exception to the relative-link scheme. basePath comes from site.config.baseURL (https://eli.gladman.cc/magus/ -\u003e \"/magus/\"), falling back to \"/\" when empty so the page still renders locally from the server root.",
+      "doc": "render404 writes gen/404.html - the themed page GitHub Pages serves for any unmatched path. GH Pages keeps the deep 404 URL in the address bar, so ordinary relative paths would break; this page uses root-absolute paths (/<basePath>/site.css, etc.) - the one deliberate exception to the relative-link scheme. basePath comes from site.config.baseURL (https://eli.gladman.cc/magus/ -> \"/magus/\"), falling back to \"/\" when empty so the page still renders locally from the server root.",
       "source": "docs/engine/page.buzz:34",
       "attrs": {
         "exported": "true"
@@ -6304,7 +6527,7 @@
       "id": "function:docs/engine/route.buzz:climbFromDir",
       "kind": "function",
       "label": "climbFromDir",
-      "doc": "climbFromDir returns the \"../\" prefix from a gen-relative directory back to gen's root, one \"../\" per segment (\"console/dashboard\" -\u003e \"../../\"). App pages derive their nav prefix from their output location so it can't drift from the write path.",
+      "doc": "climbFromDir returns the \"../\" prefix from a gen-relative directory back to gen's root, one \"../\" per segment (\"console/dashboard\" -> \"../../\"). App pages derive their nav prefix from their output location so it can't drift from the write path.",
       "source": "docs/engine/route.buzz:38",
       "attrs": {
         "exported": "true"
@@ -6353,7 +6576,7 @@
       "id": "function:docs/engine/route.buzz:sitePathPrefix",
       "kind": "function",
       "label": "sitePathPrefix",
-      "doc": "sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL (\"https://host/magus/\" -\u003e \"/magus/\"), or \"/\" when baseURL is unset. Used only where depth is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.",
+      "doc": "sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL (\"https://host/magus/\" -> \"/magus/\"), or \"/\" when baseURL is unset. Used only where depth is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.",
       "source": "docs/engine/route.buzz:46",
       "attrs": {
         "exported": "true"
@@ -6392,7 +6615,7 @@
       "id": "function:docs/lib/conventions.buzz:injectConventionHints",
       "kind": "function",
       "label": "injectConventionHints",
-      "doc": "injectConventionHints adds a \"?\" hint into each rendered convention marker: an admonition title and a code-block caption. It runs after the content transforms, so it sees the final \u003cp class=\"admonition-title\"\u003e / \u003cfigcaption\u003e markup. The conventions page itself is skipped by the caller (it defines these). A marker whose section is missing from the corpus is left untouched.",
+      "doc": "injectConventionHints adds a \"?\" hint into each rendered convention marker: an admonition title and a code-block caption. It runs after the content transforms, so it sees the final <p class=\"admonition-title\"> / <figcaption> markup. The conventions page itself is skipped by the caller (it defines these). A marker whose section is missing from the corpus is left untouched.",
       "source": "docs/lib/conventions.buzz:85",
       "attrs": {
         "exported": "true"
@@ -6402,7 +6625,7 @@
       "id": "function:docs/lib/conventions.buzz:injectFirstPlaceholderHint",
       "kind": "function",
       "label": "injectFirstPlaceholderHint",
-      "doc": "injectFirstPlaceholderHint appends a \"?\" hint after the FIRST inline \u003ccode\u003e on the page that holds an angle-bracket placeholder (\u0026lt;...\u0026gt;), linking to the placeholders convention. First occurrence only - like the glossary linker - so a page that uses the syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced block by having no newline, so a multi-line code block is never hinted.",
+      "doc": "injectFirstPlaceholderHint appends a \"?\" hint after the FIRST inline <code> on the page that holds an angle-bracket placeholder (&lt;...&gt;), linking to the placeholders convention. First occurrence only - like the glossary linker - so a page that uses the syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced block by having no newline, so a multi-line code block is never hinted.",
       "source": "docs/lib/conventions.buzz:100"
     },
     {
@@ -6426,7 +6649,7 @@
       "id": "function:docs/lib/csp.buzz:computeCSP",
       "kind": "function",
       "label": "computeCSP",
-      "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspHome for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin \u003clink rel=prefetch\u003e hover-warm, and the service worker registration all fall back to default-src (via worker-src -\u003e child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site nee",
+      "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspHome for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker registration all fall back to default-src (via worker-src -> child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site nee",
       "source": "docs/lib/csp.buzz:95",
       "attrs": {
         "exported": "true"
@@ -6436,7 +6659,7 @@
       "id": "function:docs/lib/csp.buzz:cspForRedirectStub",
       "kind": "function",
       "label": "cspForRedirectStub",
-      "doc": "cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or external script; its only content is one inline \u003cscript\u003e that differs per stub, so it cannot share the site-wide hash list. script is the exact text redirectScript(rel) (lib/html.buzz) produces, so the hash always matches what ships.",
+      "doc": "cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or external script; its only content is one inline <script> that differs per stub, so it cannot share the site-wide hash list. script is the exact text redirectScript(rel) (lib/html.buzz) produces, so the hash always matches what ships.",
       "source": "docs/lib/csp.buzz:117",
       "attrs": {
         "exported": "true"
@@ -6446,7 +6669,7 @@
       "id": "function:docs/lib/csp.buzz:extractInlineScripts",
       "kind": "function",
       "label": "extractInlineScripts",
-      "doc": "extractInlineScripts pulls the text of every attribute-less `\u003cscript\u003e...\u003c/script\u003e` block out of html, in order. Matches only the literal \"\u003cscript\u003e\" open tag: a `\u003cscript src=...\u003e` is an external load already covered by script-src 'self', not a hash-source candidate.",
+      "doc": "extractInlineScripts pulls the text of every attribute-less `<script>...</script>` block out of html, in order. Matches only the literal \"<script>\" open tag: a `<script src=...>` is an external load already covered by script-src 'self', not a hash-source candidate.",
       "source": "docs/lib/csp.buzz:34",
       "attrs": {
         "exported": "true"
@@ -6466,7 +6689,7 @@
       "id": "function:docs/lib/csp.buzz:scriptHash",
       "kind": "function",
       "label": "scriptHash",
-      "doc": "scriptHash returns a CSP `sha256-\u003cbase64\u003e` source for js's exact text (the same bytes a browser hashes against a hash-source script-src). crypto.hash returns lowercase hex; CSP hash-sources are base64, so hexDecode back to raw digest bytes before base64-encoding.",
+      "doc": "scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes a browser hashes against a hash-source script-src). crypto.hash returns lowercase hex; CSP hash-sources are base64, so hexDecode back to raw digest bytes before base64-encoding.",
       "source": "docs/lib/csp.buzz:26",
       "attrs": {
         "exported": "true"
@@ -6486,7 +6709,7 @@
       "id": "function:docs/lib/date.buzz:blogDateAttr",
       "kind": "function",
       "label": "blogDateAttr",
-      "doc": "blogDateAttr is the date-only \"YYYY-MM-DD\" that pairs with blogDate() in \u003ctime datetime\u003e.",
+      "doc": "blogDateAttr is the date-only \"YYYY-MM-DD\" that pairs with blogDate() in <time datetime>.",
       "source": "docs/lib/date.buzz:30",
       "attrs": {
         "exported": "true"
@@ -6526,7 +6749,7 @@
       "id": "function:docs/lib/dom.buzz:el",
       "kind": "function",
       "label": "el",
-      "doc": "el wraps raw body in \u003ctag attrs\u003e...\u003c/tag\u003e. attrs is \"\" or a run of attr() calls.",
+      "doc": "el wraps raw body in <tag attrs>...</tag>. attrs is \"\" or a run of attr() calls.",
       "source": "docs/lib/dom.buzz:15",
       "attrs": {
         "exported": "true"
@@ -6536,7 +6759,7 @@
       "id": "function:docs/lib/dom.buzz:esc",
       "kind": "function",
       "label": "esc",
-      "doc": "esc escapes text for HTML element content (\u0026 \u003c \u003e).",
+      "doc": "esc escapes text for HTML element content (& < >).",
       "source": "docs/lib/dom.buzz:25",
       "attrs": {
         "exported": "true"
@@ -6546,7 +6769,7 @@
       "id": "function:docs/lib/dom.buzz:voidEl",
       "kind": "function",
       "label": "voidEl",
-      "doc": "voidEl is an unclosed element: \u003ctag attrs\u003e (meta, link, img).",
+      "doc": "voidEl is an unclosed element: <tag attrs> (meta, link, img).",
       "source": "docs/lib/dom.buzz:20",
       "attrs": {
         "exported": "true"
@@ -6556,7 +6779,7 @@
       "id": "function:docs/lib/feed.buzz:atomDate",
       "kind": "function",
       "label": "atomDate",
-      "doc": "atomDate normalizes a frontmatter date to RFC3339 UTC (bare date -\u003e T00:00:00Z).",
+      "doc": "atomDate normalizes a frontmatter date to RFC3339 UTC (bare date -> T00:00:00Z).",
       "source": "docs/lib/feed.buzz:29",
       "attrs": {
         "exported": "true"
@@ -6566,7 +6789,7 @@
       "id": "function:docs/lib/feed.buzz:escapeXml",
       "kind": "function",
       "label": "escapeXml",
-      "doc": "escapeXml is escapeAttr's XML form (five entities, \u0026 last to avoid double-encoding).",
+      "doc": "escapeXml is escapeAttr's XML form (five entities, & last to avoid double-encoding).",
       "source": "docs/lib/feed.buzz:8",
       "attrs": {
         "exported": "true"
@@ -6576,7 +6799,7 @@
       "id": "function:docs/lib/feed.buzz:xmlAttribute",
       "kind": "function",
       "label": "xmlAttribute",
-      "doc": "Minimal XML leaves; every body and value funnels through escapeXml. Container tags with their own namespaces (\u003cfeed\u003e, \u003curlset\u003e, \u003centry\u003e, \u003curl\u003e) stay written inline.",
+      "doc": "Minimal XML leaves; every body and value funnels through escapeXml. Container tags with their own namespaces (<feed>, <urlset>, <entry>, <url>) stay written inline.",
       "source": "docs/lib/feed.buzz:15",
       "attrs": {
         "exported": "true"
@@ -6620,7 +6843,7 @@
       "id": "function:docs/lib/glossary.buzz:applyLinks",
       "kind": "function",
       "label": "applyLinks",
-      "doc": "applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are parallel and longest-first) in open ... \u003c/a\u003e, matching natively on the masked `searchable` and inserting into html right-to-left so earlier positions never shift. Returns the linked html and the keys linked (longest-first). If masking changed the length (a non-ASCII case fold, not expected in these docs), it returns html unlinked rather than misplace a link.",
+      "doc": "applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are parallel and longest-first) in open ... </a>, matching natively on the masked `searchable` and inserting into html right-to-left so earlier positions never shift. Returns the linked html and the keys linked (longest-first). If masking changed the length (a non-ASCII case fold, not expected in these docs), it returns html unlinked rather than misplace a link.",
       "source": "docs/lib/glossary.buzz:188"
     },
     {
@@ -6641,7 +6864,7 @@
       "id": "function:docs/lib/glossary.buzz:glossarySlug",
       "kind": "function",
       "label": "glossarySlug",
-      "doc": "glossarySlug mirrors goldmark's heading-id slug: lowercase, spaces AND underscores to hyphens, drop any char that is not a-z, 0-9, or hyphen. \"Output reference\" -\u003e \"output-reference\"; \"MAGUS.md\" -\u003e \"magusmd\"; \"write_file\" -\u003e \"write-file\".",
+      "doc": "glossarySlug mirrors goldmark's heading-id slug: lowercase, spaces AND underscores to hyphens, drop any char that is not a-z, 0-9, or hyphen. \"Output reference\" -> \"output-reference\"; \"MAGUS.md\" -> \"magusmd\"; \"write_file\" -> \"write-file\".",
       "source": "docs/lib/glossary.buzz:31",
       "attrs": {
         "exported": "true"
@@ -6651,7 +6874,7 @@
       "id": "function:docs/lib/glossary.buzz:injectBacklinks",
       "kind": "function",
       "label": "injectBacklinks",
-      "doc": "injectBacklinks appends each term's \"referenced on\" fragment (byAnchor[anchor], a caller-built HTML string) at the END of that term's section on the glossary page - just before the next \u003ch3\u003e/\u003ch2\u003e heading, so it sits below the definition. The glossary is rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure string surgery; anchors with no fragment are left untouched.",
+      "doc": "injectBacklinks appends each term's \"referenced on\" fragment (byAnchor[anchor], a caller-built HTML string) at the END of that term's section on the glossary page - just before the next <h3>/<h2> heading, so it sits below the definition. The glossary is rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure string surgery; anchors with no fragment are left untouched.",
       "source": "docs/lib/glossary.buzz:358",
       "attrs": {
         "exported": "true"
@@ -6661,7 +6884,7 @@
       "id": "function:docs/lib/glossary.buzz:isSkipContainer",
       "kind": "function",
       "label": "isSkipContainer",
-      "doc": "isSkipContainer is true for tags whose text content must never be auto-linked: pre (fenced code always), a (no nested links), and headings. Inline \u003ccode\u003e is skipped only in prose mode (glossary terms) - code entities (MGSxxxx codes, commands, mod\\method) DELIBERATELY link inside inline code, which is where those references appear.",
+      "doc": "isSkipContainer is true for tags whose text content must never be auto-linked: pre (fenced code always), a (no nested links), and headings. Inline <code> is skipped only in prose mode (glossary terms) - code entities (MGSxxxx codes, commands, mod\\method) DELIBERATELY link inside inline code, which is where those references appear.",
       "source": "docs/lib/glossary.buzz:112"
     },
     {
@@ -6674,7 +6897,7 @@
       "id": "function:docs/lib/glossary.buzz:linkCodeEntities",
       "kind": "function",
       "label": "linkCodeEntities",
-      "doc": "linkCodeEntities links the first occurrence of each entity's match string (inside inline code or prose, never a fenced \u003cpre\u003e block) to its reference page, baking the summary into data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).",
+      "doc": "linkCodeEntities links the first occurrence of each entity's match string (inside inline code or prose, never a fenced <pre> block) to its reference page, baking the summary into data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).",
       "source": "docs/lib/glossary.buzz:285",
       "attrs": {
         "exported": "true"
@@ -6684,7 +6907,7 @@
       "id": "function:docs/lib/glossary.buzz:linkGlossaryTerms",
       "kind": "function",
       "label": "linkGlossaryTerms",
-      "doc": "linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be ordered longest-first so multi-word terms win over their substrings) to relToGlossary + \"#\" + anchor, and records which anchors were linked. A page carrying the \"\u003c!-- magus-noglossary --\u003e\" opt-out marker is returned verbatim (marker stripped) with nothing linked.",
+      "doc": "linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be ordered longest-first so multi-word terms win over their substrings) to relToGlossary + \"#\" + anchor, and records which anchors were linked. A page carrying the \"<!-- magus-noglossary -->\" opt-out marker is returned verbatim (marker stripped) with nothing linked.",
       "source": "docs/lib/glossary.buzz:222",
       "attrs": {
         "exported": "true"
@@ -6694,14 +6917,14 @@
       "id": "function:docs/lib/glossary.buzz:lowerByte",
       "kind": "function",
       "label": "lowerByte",
-      "doc": "lowerByte lowercases an ASCII byte (A-Z -\u003e a-z), leaving others untouched. Used to compare bytes case-insensitively WITHOUT allocating a lowercased substring per position - the hot path here runs over every character of every page for every term, so allocation-free byte comparison is what keeps a full-site render fast.",
+      "doc": "lowerByte lowercases an ASCII byte (A-Z -> a-z), leaving others untouched. Used to compare bytes case-insensitively WITHOUT allocating a lowercased substring per position - the hot path here runs over every character of every page for every term, so allocation-free byte comparison is what keeps a full-site render fast.",
       "source": "docs/lib/glossary.buzz:55"
     },
     {
       "id": "function:docs/lib/glossary.buzz:maskLinkable",
       "kind": "function",
       "label": "maskLinkable",
-      "doc": "maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced by a space and the linkable text lowercased. Non-linkable = inside a tag (\u003c .. \u003e), an HTML comment, or a skip container (pre/a/headings, plus inline code when skipInlineCode). A native indexOf then lands only in linkable text, so the ONE interpreted pass over the page is this build - not one scan per term, which is the difference between a fast render and a ten-minute one. Emits per-run pieces (not per char) so allocat",
+      "doc": "maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced by a space and the linkable text lowercased. Non-linkable = inside a tag (< .. >), an HTML comment, or a skip container (pre/a/headings, plus inline code when skipInlineCode). A native indexOf then lands only in linkable text, so the ONE interpreted pass over the page is this build - not one scan per term, which is the difference between a fast render and a ten-minute one. Emits per-run pieces (not per char) so allocat",
       "source": "docs/lib/glossary.buzz:141"
     },
     {
@@ -6735,7 +6958,7 @@
       "id": "function:docs/lib/glossary.buzz:scanPastByte",
       "kind": "function",
       "label": "scanPastByte",
-      "doc": "scanPastByte returns the index just past the next `target` byte at/after `from`, or the end of html. An allocation-free replacement for html.sub(from).indexOf(\u003cchar\u003e) + 1.",
+      "doc": "scanPastByte returns the index just past the next `target` byte at/after `from`, or the end of html. An allocation-free replacement for html.sub(from).indexOf(<char>) + 1.",
       "source": "docs/lib/glossary.buzz:62"
     },
     {
@@ -6766,7 +6989,7 @@
       "id": "function:docs/lib/glossary.buzz:tagNameLower",
       "kind": "function",
       "label": "tagNameLower",
-      "doc": "tagNameLower reads the tag name at a '\u003c' (skipping a leading '/'), lowercased.",
+      "doc": "tagNameLower reads the tag name at a '<' (skipping a leading '/'), lowercased.",
       "source": "docs/lib/glossary.buzz:92"
     },
     {
@@ -6780,7 +7003,7 @@
       "id": "function:docs/lib/html.buzz:aliasStub",
       "kind": "function",
       "label": "aliasStub",
-      "doc": "aliasStub is the redirect page written at each alias: meta-refresh + canonical + scripted replace + a plain \u003ca\u003e, so it works with or without JavaScript. csp is the caller-computed policy (cspForRedirectStub, hashing redirectScript(rel) - the page's only content, so default-src 'none' plus that one script hash suffices).",
+      "doc": "aliasStub is the redirect page written at each alias: meta-refresh + canonical + scripted replace + a plain <a>, so it works with or without JavaScript. csp is the caller-computed policy (cspForRedirectStub, hashing redirectScript(rel) - the page's only content, so default-src 'none' plus that one script hash suffices).",
       "source": "docs/lib/html.buzz:255",
       "attrs": {
         "exported": "true"
@@ -6820,7 +7043,7 @@
       "id": "function:docs/lib/html.buzz:lazyImages",
       "kind": "function",
       "label": "lazyImages",
-      "doc": "lazyImages adds loading=\"lazy\" decoding=\"async\" to every \u003cimg\u003e without a loading or fetchpriority attribute (author markup wins, so the hero stays eager).",
+      "doc": "lazyImages adds loading=\"lazy\" decoding=\"async\" to every <img> without a loading or fetchpriority attribute (author markup wins, so the hero stays eager).",
       "source": "docs/lib/html.buzz:131",
       "attrs": {
         "exported": "true"
@@ -6890,7 +7113,7 @@
       "id": "function:docs/lib/html.buzz:stripMdFromLinkText",
       "kind": "function",
       "label": "stripMdFromLinkText",
-      "doc": "stripMdFromLinkText drops a trailing \".md\" from LINK TEXT (between \u003e and \u003c/a\u003e). rewriteLinks cleans the href, but a path-named link (e.g. [workspace.md](workspace.md), common in the glossary) still shows a stale \".md\". Only \".md\" immediately before \u003c/a\u003e is touched, so bare path-named links are hit and other link text left alone.",
+      "doc": "stripMdFromLinkText drops a trailing \".md\" from LINK TEXT (between > and </a>). rewriteLinks cleans the href, but a path-named link (e.g. [workspace.md](workspace.md), common in the glossary) still shows a stale \".md\". Only \".md\" immediately before </a> is touched, so bare path-named links are hit and other link text left alone.",
       "source": "docs/lib/html.buzz:349",
       "attrs": {
         "exported": "true"
@@ -6900,7 +7123,7 @@
       "id": "function:docs/lib/html.buzz:tagAdmonition",
       "kind": "function",
       "label": "tagAdmonition",
-      "doc": "tagAdmonition turns GitHub-alert blockquotes (\"\u003cblockquote\u003e\\n\u003cp\u003e[!TYPE]\\n...\") into \u003cdiv class=\"admonition admonition-\u003ctype\u003e\"\u003e callouts. Unknown types pass through.",
+      "doc": "tagAdmonition turns GitHub-alert blockquotes (\"<blockquote>\\n<p>[!TYPE]\\n...\") into <div class=\"admonition admonition-<type>\"> callouts. Unknown types pass through.",
       "source": "docs/lib/html.buzz:308",
       "attrs": {
         "exported": "true"
@@ -6910,7 +7133,7 @@
       "id": "function:docs/lib/html.buzz:tagCodeTitle",
       "kind": "function",
       "label": "tagCodeTitle",
-      "doc": "tagCodeTitle wraps the \u003cpre\u003e after a \"\u003c!-- magus-code-title: NAME --\u003e\" marker in a \u003cfigure class=\"code-block-titled\"\u003e with a \u003cfigcaption\u003e; drops the marker.",
+      "doc": "tagCodeTitle wraps the <pre> after a \"<!-- magus-code-title: NAME -->\" marker in a <figure class=\"code-block-titled\"> with a <figcaption>; drops the marker.",
       "source": "docs/lib/html.buzz:270",
       "attrs": {
         "exported": "true"
@@ -6920,7 +7143,7 @@
       "id": "function:docs/lib/html.buzz:tagMermaid",
       "kind": "function",
       "label": "tagMermaid",
-      "doc": "tagMermaid wraps each mermaid fence in a \u003cdiv class=\"mermaid-src\"\u003e carrying a no-JS caption (mermaid-init.js renders it to SVG when JS is on).",
+      "doc": "tagMermaid wraps each mermaid fence in a <div class=\"mermaid-src\"> carrying a no-JS caption (mermaid-init.js renders it to SVG when JS is on).",
       "source": "docs/lib/html.buzz:153",
       "attrs": {
         "exported": "true"
@@ -6930,7 +7153,7 @@
       "id": "function:docs/lib/html.buzz:tagRunnable",
       "kind": "function",
       "label": "tagRunnable",
-      "doc": "tagRunnable swaps the \u003cpre\u003e after a \"\u003c!-- magus-run --\u003e\" / \"\u003c!-- magus-run-recorder --\u003e\" marker with a data-magus-run \u003cpre\u003e so run-example.js can find opt-in blocks; drops the marker. Every magus-authored doc marker shares the \"magus-\" prefix (and mirrors to a \"data-magus-\" attribute) so generated hooks are obviously ours.",
+      "doc": "tagRunnable swaps the <pre> after a \"<!-- magus-run -->\" / \"<!-- magus-run-recorder -->\" marker with a data-magus-run <pre> so run-example.js can find opt-in blocks; drops the marker. Every magus-authored doc marker shares the \"magus-\" prefix (and mirrors to a \"data-magus-\" attribute) so generated hooks are obviously ours.",
       "source": "docs/lib/html.buzz:74",
       "attrs": {
         "exported": "true"
@@ -6940,7 +7163,7 @@
       "id": "function:docs/lib/html.buzz:tagRunnableMarker",
       "kind": "function",
       "label": "tagRunnableMarker",
-      "doc": "tagRunnableMarker replaces the \u003cpre\u003e following each marker with openTag; a marker not immediately before a fence is just dropped.",
+      "doc": "tagRunnableMarker replaces the <pre> following each marker with openTag; a marker not immediately before a fence is just dropped.",
       "source": "docs/lib/html.buzz:81",
       "attrs": {
         "exported": "true"
@@ -6950,7 +7173,7 @@
       "id": "function:docs/lib/html.buzz:wrapTables",
       "kind": "function",
       "label": "wrapTables",
-      "doc": "wrapTables wraps each \u003ctable\u003e in a \u003cfigure class=\"table-scroll\"\u003e so a wide table scrolls horizontally instead of overflowing on narrow screens. goldmark emits a bare \u003ctable\u003e that Pico renders full-bleed with no overflow handling.",
+      "doc": "wrapTables wraps each <table> in a <figure class=\"table-scroll\"> so a wide table scrolls horizontally instead of overflowing on narrow screens. goldmark emits a bare <table> that Pico renders full-bleed with no overflow handling.",
       "source": "docs/lib/html.buzz:176",
       "attrs": {
         "exported": "true"
@@ -6980,7 +7203,7 @@
       "id": "function:docs/lib/text.buzz:decodeEntities",
       "kind": "function",
       "label": "decodeEntities",
-      "doc": "decodeEntities turns HTML entities back into characters for a plain-text description. \u0026amp; decodes LAST so \"\u0026amp;lt;\" is not double-decoded into \"\u003c\".",
+      "doc": "decodeEntities turns HTML entities back into characters for a plain-text description. &amp; decodes LAST so \"&amp;lt;\" is not double-decoded into \"<\".",
       "source": "docs/lib/text.buzz:132",
       "attrs": {
         "exported": "true"
@@ -7000,7 +7223,7 @@
       "id": "function:docs/lib/text.buzz:firstPathSegment",
       "kind": "function",
       "label": "firstPathSegment",
-      "doc": "firstPathSegment returns the leading segment of a clean URL (\"spells/go/\" -\u003e \"spells\").",
+      "doc": "firstPathSegment returns the leading segment of a clean URL (\"spells/go/\" -> \"spells\").",
       "source": "docs/lib/text.buzz:43",
       "attrs": {
         "exported": "true"
@@ -7050,7 +7273,7 @@
       "id": "function:docs/lib/text.buzz:strLess",
       "kind": "function",
       "label": "strLess",
-      "doc": "strLess is lexicographic byte ordering; buzz has no `\u003c` on str, so the sibling pager spells it out to sort filenames deterministically.",
+      "doc": "strLess is lexicographic byte ordering; buzz has no `<` on str, so the sibling pager spells it out to sort filenames deterministically.",
       "source": "docs/lib/text.buzz:90",
       "attrs": {
         "exported": "true"
@@ -7169,7 +7392,7 @@
       "id": "function:docs/magusfile.buzz:build_hljs",
       "kind": "function",
       "label": "build_hljs",
-      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Run after bumping the version in package.json; commit the regenerated artifact.",
+      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Run after bumping the version in package.json; commit the regenerated artifact.",
       "source": "docs/magusfile.buzz:276",
       "attrs": {
         "exported": "true"
@@ -7179,7 +7402,7 @@
       "id": "function:docs/magusfile.buzz:build_mermaid",
       "kind": "function",
       "label": "build_mermaid",
-      "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Run after bumping the mermaid version in package.json; commit the regenerated artifact.",
+      "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Run after bumping the mermaid version in package.json; commit the regenerated artifact.",
       "source": "docs/magusfile.buzz:263",
       "attrs": {
         "exported": "true"
@@ -7189,7 +7412,7 @@
       "id": "function:docs/magusfile.buzz:build_playground",
       "kind": "function",
       "label": "build_playground",
-      "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm itself) and survive regeneration untouched, so CI - which has no TinyGo - never rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo \u003e= 0.40; the glue must come from the same TinyGo tha",
+      "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm itself) and survive regeneration untouched, so CI - which has no TinyGo - never rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from the same TinyGo tha",
       "source": "docs/magusfile.buzz:243",
       "attrs": {
         "exported": "true"
@@ -7210,7 +7433,7 @@
       "kind": "function",
       "label": "changelog_generate",
       "doc": "changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. Released sections are generated (like MAGUS.md) and must not be edited by hand. generate calls this; the drift gate catches any manual edit to a released section on the next render.",
-      "source": "docs/magusfile.buzz:116",
+      "source": "docs/magusfile.buzz:117",
       "attrs": {
         "exported": "true"
       }
@@ -7230,7 +7453,7 @@
       "kind": "function",
       "label": "content_generate",
       "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the g",
-      "source": "docs/magusfile.buzz:132",
+      "source": "docs/magusfile.buzz:133",
       "attrs": {
         "exported": "true"
       }
@@ -7248,8 +7471,8 @@
       "id": "function:docs/magusfile.buzz:generate",
       "kind": "function",
       "label": "generate",
-      "doc": "generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed. The `rw` charm (`generate:rw`) keeps the result instead of gating.",
-      "source": "docs/magusfile.buzz:173",
+      "doc": "generate is the full publication and drift gate. Use render while iterating on docs.",
+      "source": "docs/magusfile.buzz:172",
       "attrs": {
         "exported": "true"
       }
@@ -7258,14 +7481,14 @@
       "id": "function:docs/magusfile.buzz:generateJsBundles",
       "kind": "function",
       "label": "generateJsBundles",
-      "source": "docs/magusfile.buzz:162"
+      "source": "docs/magusfile.buzz:164"
     },
     {
       "id": "function:docs/magusfile.buzz:generateProtoClient",
       "kind": "function",
       "label": "generateProtoClient",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages - the d3-force graph explorer, the CodeMirror playground editor, and the vendored mermaid/highlight.js libraries. These are pnpm-managed packages (package.json + pnpm-lock.yaml), so they follow the JS convention: `pnpm install --frozen-lockfile` restores the pinned deps (honoring .npmrc's minimum-release-age gate), `pnpm run build` runs the esbuild invocations, which live in package.json \"scripts\" as their single source of truth",
-      "source": "docs/magusfile.buzz:158"
+      "source": "docs/magusfile.buzz:160"
     },
     {
       "id": "function:docs/magusfile.buzz:lint",
@@ -7282,7 +7505,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run md-generate docs`.",
-      "source": "docs/magusfile.buzz:107",
+      "source": "docs/magusfile.buzz:108",
       "attrs": {
         "exported": "true"
       }
@@ -7291,7 +7514,7 @@
       "id": "function:docs/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/magusfile.buzz:102",
+      "source": "docs/magusfile.buzz:103",
       "attrs": {
         "exported": "true"
       }
@@ -7300,8 +7523,8 @@
       "id": "function:docs/magusfile.buzz:render",
       "kind": "function",
       "label": "render",
-      "doc": "render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate). The workspace-root `serve` dev loop os.exec's `magus run render docs` on every docs/blog change - running it as its own sub-invocation is what lets render.buzz's flat imports (lib/text, lib/html, ...) resolve, since they are looked up relative to this project's dir, not the workspace root.",
-      "source": "docs/magusfile.buzz:291",
+      "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
+      "source": "docs/magusfile.buzz:286",
       "attrs": {
         "exported": "true"
       }
@@ -7363,7 +7586,7 @@
       "id": "function:docs/site/development.buzz:renderDevelopmentPage",
       "kind": "function",
       "label": "renderDevelopmentPage",
-      "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"\u003cdir\u003e/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail.",
+      "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"<dir>/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail.",
       "source": "docs/site/development.buzz:21"
     },
     {
@@ -7421,7 +7644,7 @@
       "id": "function:docs/site/release.buzz:semverSortKey",
       "kind": "function",
       "label": "semverSortKey",
-      "doc": "semverSortKey returns a zero-padded sort key: \"v0.10.0.yaml\" -\u003e \"0000.0010.0000\", so lexicographic order matches numeric semver. Unknown formats fall through to the original name (safe: sort-only).",
+      "doc": "semverSortKey returns a zero-padded sort key: \"v0.10.0.yaml\" -> \"0000.0010.0000\", so lexicographic order matches numeric semver. Unknown formats fall through to the original name (safe: sort-only).",
       "source": "docs/site/release.buzz:12",
       "attrs": {
         "exported": "true"
@@ -7465,7 +7688,7 @@
       "id": "function:docs/site/tour.buzz:renderPlayground",
       "kind": "function",
       "label": "renderPlayground",
-      "doc": "renderPlayground writes gen/playground/index.html from the hand-authored playground.html, injecting the shared nav at its \u003c!-- site-nav --\u003e placeholder. The playground is standalone (custom head, wasm, own scripts), so it skips renderPage(); templating just the nav keeps it in lockstep with every other page. Its bottom chrome is the console status bar (in playground.html), not the docs footer.",
+      "doc": "renderPlayground writes gen/playground/index.html from the hand-authored playground.html, injecting the shared nav at its <!-- site-nav --> placeholder. The playground is standalone (custom head, wasm, own scripts), so it skips renderPage(); templating just the nav keeps it in lockstep with every other page. Its bottom chrome is the console status bar (in playground.html), not the docs footer.",
       "source": "docs/site/tour.buzz:50",
       "attrs": {
         "exported": "true"
@@ -7574,7 +7797,7 @@
       "id": "function:docs/tour/04-buzz.buzz:fact",
       "kind": "function",
       "label": "fact",
-      "doc": "Recursion again, building a product. `eval fact(10)` -\u003e 3628800.",
+      "doc": "Recursion again, building a product. `eval fact(10)` -> 3628800.",
       "source": "docs/tour/04-buzz.buzz:16"
     },
     {
@@ -7588,7 +7811,7 @@
       "id": "function:docs/tour/04-buzz.buzz:reduce",
       "kind": "function",
       "label": "reduce",
-      "doc": "Higher-order: a function that takes a function, invoked with an inline closure. `eval sum([2, 4, 6, 8])` -\u003e 20.",
+      "doc": "Higher-order: a function that takes a function, invoked with an inline closure. `eval sum([2, 4, 6, 8])` -> 20.",
       "source": "docs/tour/04-buzz.buzz:23"
     },
     {
@@ -7862,7 +8085,7 @@
       "id": "function:docs/tour/12-magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "doc": "The conventional anchor `magus affected ci` keys off. It declares no work of its own; it fans out to lint, build, and test, which share the format -\u003e generate -\u003e preflight spine and each run once. Try `run ci` to see the plan.",
+      "doc": "The conventional anchor `magus affected ci` keys off. It declares no work of its own; it fans out to lint, build, and test, which share the format -> generate -> preflight spine and each run once. Try `run ci` to see the plan.",
       "source": "docs/tour/12-magusfile.buzz:147",
       "attrs": {
         "exported": "true"
@@ -8645,7 +8868,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/config.buzz:parseRule",
       "kind": "function",
       "label": "parseRule",
-      "doc": "parseRule parses `app=X title=\"Some Name\" \u003ccommand\u003e`: any mix of the two criteria (bare or double-quoted values), then the command. Null when a criterion or the command is missing.",
+      "doc": "parseRule parses `app=X title=\"Some Name\" <command>`: any mix of the two criteria (bare or double-quoted values), then the command. Null when a criterion or the command is missing.",
       "source": "libs/gopherbuzz/examples/bubblegum/config.buzz:487",
       "attrs": {
         "exported": "true"
@@ -9394,7 +9617,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/inspect.buzz:consoleLines",
       "kind": "function",
       "label": "consoleLines",
-      "doc": "consoleLines is Retool's \"explore what's available\": every command the keymap, rules, config.buzz, and the buzz\u003e prompt can use — served by the live WM itself, so it can't go stale the way external docs do.",
+      "doc": "consoleLines is Retool's \"explore what's available\": every command the keymap, rules, config.buzz, and the buzz> prompt can use — served by the live WM itself, so it can't go stale the way external docs do.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/inspect.buzz:57",
       "attrs": {
         "exported": "true"
@@ -9404,7 +9627,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/inspect.buzz:inspectLines",
       "kind": "function",
       "label": "inspectLines",
-      "doc": "inspectLines is what the inspector overlay renders: the live objects — screens, trees (tagged with app names), the registry, the effective config. Everything here is also reachable from eval; the overlay is the read-only window, the buzz\u003e prompt is the write end.",
+      "doc": "inspectLines is what the inspector overlay renders: the live objects — screens, trees (tagged with app names), the registry, the effective config. Everything here is also reachable from eval; the overlay is the read-only window, the buzz> prompt is the write end.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/inspect.buzz:22",
       "attrs": {
         "exported": "true"
@@ -9762,7 +9985,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/rules.buzz:onWindowRule",
       "kind": "function",
       "label": "onWindowRule",
-      "doc": "onWindowRule registers a window hook written in Buzz -- the programmable half of window rules. rules.buzz (loaded into this very session, so this function is in its scope) calls it with a closure:  onWindowRule(fun (app: str, title: str, id: int) \u003e [any] { if (app == \"Music\") { return [floating()]; } return []; });  Return a list of typed command values (see helpers above); return [] for no action. Hooks accumulate in registration order, so `layout export`'s generated rules and hand-written ones coexist (ha",
+      "doc": "onWindowRule registers a window hook written in Buzz -- the programmable half of window rules. rules.buzz (loaded into this very session, so this function is in its scope) calls it with a closure:  onWindowRule(fun (app: str, title: str, id: int) > [any] { if (app == \"Music\") { return [floating()]; } return []; });  Return a list of typed command values (see helpers above); return [] for no action. Hooks accumulate in registration order, so `layout export`'s generated rules and hand-written ones coexist (ha",
       "source": "libs/gopherbuzz/examples/bubblegum/core/rules.buzz:67",
       "attrs": {
         "exported": "true"
@@ -9956,7 +10179,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/scan.buzz:started",
       "kind": "function",
       "label": "started",
-      "doc": "started reports whether the WM has finished its initial adopt. Exposed to rules hooks so a rule can bin-pack only at startup and defer interactive arrivals to the prompt, e.g.  if (ws \u003e 0 and !started()) { return \"move workspace {ws}\"; }",
+      "doc": "started reports whether the WM has finished its initial adopt. Exposed to rules hooks so a rule can bin-pack only at startup and defer interactive arrivals to the prompt, e.g.  if (ws > 0 and !started()) { return \"move workspace {ws}\"; }",
       "source": "libs/gopherbuzz/examples/bubblegum/core/scan.buzz:25",
       "attrs": {
         "exported": "true"
@@ -10099,7 +10322,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/session.buzz:maybeSaveSession",
       "kind": "function",
       "label": "maybeSaveSession",
-      "doc": "maybeSaveSession rewrites the session file only when the (window -\u003e workspace) mapping actually changed - the signature is plain struct reads, no AX, so it is cheap to call every reconcile. Driven from tick(), so the file survives a crash, not just a clean quit.",
+      "doc": "maybeSaveSession rewrites the session file only when the (window -> workspace) mapping actually changed - the signature is plain struct reads, no AX, so it is cheap to call every reconcile. Driven from tick(), so the file survives a crash, not just a clean quit.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/session.buzz:55",
       "attrs": {
         "exported": "true"
@@ -10129,7 +10352,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/session.buzz:saveSession",
       "kind": "function",
       "label": "saveSession",
-      "doc": "saveSession writes one \"\u003cws\u003e\\t\u003capp\u003e\" line per tiled window. Floating and scratchpad windows are skipped - they are ephemeral, not part of the layout.",
+      "doc": "saveSession writes one \"<ws>\\t<app>\" line per tiled window. Floating and scratchpad windows are skipped - they are ephemeral, not part of the layout.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/session.buzz:33",
       "attrs": {
         "exported": "true"
@@ -10606,7 +10829,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/zlayer.buzz:gridCells",
       "kind": "function",
       "label": "gridCells",
-      "doc": "gridCells lays n cells out in the smallest near-square grid that fits the rect: cols is the smallest c with c*c \u003e= n, rows is ceil(n/cols). Pure geometry, no AX, so it is unit-tested directly. Returns one [x, y, w, h] per cell in row-major order.",
+      "doc": "gridCells lays n cells out in the smallest near-square grid that fits the rect: cols is the smallest c with c*c >= n, rows is ceil(n/cols). Pure geometry, no AX, so it is unit-tested directly. Returns one [x, y, w, h] per cell in row-major order.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/zlayer.buzz:32",
       "attrs": {
         "exported": "true"
@@ -10616,7 +10839,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/zlayer.buzz:layoutBackLayer",
       "kind": "function",
       "label": "layoutBackLayer",
-      "doc": "layoutBackLayer positions every inactive-workspace tiled window into the background grid on its own screen. Idempotent: a window keeps its cell across calls (same membership -\u003e same order -\u003e same frame), so re-running it on every switch and reconcile tick doesn't visibly move a settled window. Floating windows are left to parkLeaving (it minimizes them, preserving their hand- placed frame); user-minimized windows stay in the Dock.",
+      "doc": "layoutBackLayer positions every inactive-workspace tiled window into the background grid on its own screen. Idempotent: a window keeps its cell across calls (same membership -> same order -> same frame), so re-running it on every switch and reconcile tick doesn't visibly move a settled window. Floating windows are left to parkLeaving (it minimizes them, preserving their hand- placed frame); user-minimized windows stay in the Dock.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/zlayer.buzz:60",
       "attrs": {
         "exported": "true"
@@ -10923,7 +11146,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/launcher.buzz:strLess",
       "kind": "function",
       "label": "strLess",
-      "doc": "strLess is lexicographic string ordering by code unit. Upstream buzz has no `\u003c` operator on str, so the alphabetical tie-break is spelled out here; both runtimes provide str.byte.",
+      "doc": "strLess is lexicographic string ordering by code unit. Upstream buzz has no `<` operator on str, so the alphabetical tie-break is spelled out here; both runtimes provide str.byte.",
       "source": "libs/gopherbuzz/examples/bubblegum/launcher.buzz:114"
     },
     {
@@ -11983,7 +12206,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/platform/macos/frameworks.buzz:dataSymAddr",
       "kind": "function",
       "label": "dataSymAddr",
-      "doc": "dataSymAddr returns a data symbol's own address (C's `\u0026name`) rather than the pointer it stores — for struct-valued globals (the CFDictionary callbacks) whose address, not contents, is what the C API wants.",
+      "doc": "dataSymAddr returns a data symbol's own address (C's `&name`) rather than the pointer it stores — for struct-valued globals (the CFDictionary callbacks) whose address, not contents, is what the C API wants.",
       "source": "libs/gopherbuzz/examples/bubblegum/platform/macos/frameworks.buzz:80"
     },
     {
@@ -12154,7 +12377,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/platform/macos/permissions.buzz:openAccessibilitySettings",
       "kind": "function",
       "label": "openAccessibilitySettings",
-      "doc": "openAccessibilitySettings deep-links System Settings to Privacy \u0026 Security → Accessibility — the exact pane with our toggle — via the public URL scheme.",
+      "doc": "openAccessibilitySettings deep-links System Settings to Privacy & Security → Accessibility — the exact pane with our toggle — via the public URL scheme.",
       "source": "libs/gopherbuzz/examples/bubblegum/platform/macos/permissions.buzz:65",
       "attrs": {
         "exported": "true"
@@ -12845,7 +13068,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/traymenu.buzz:menuHeight",
       "kind": "function",
       "label": "menuHeight",
-      "doc": "menuHeight is the panel height for n rows — the WM needs it to place the panel (it drops down from the tray icon) and to size the click target. With items present (n \u003e= 2) it reserves headerGap below the header for the divider + space.",
+      "doc": "menuHeight is the panel height for n rows — the WM needs it to place the panel (it drops down from the tray icon) and to size the click target. With items present (n >= 2) it reserves headerGap below the header for the divider + space.",
       "source": "libs/gopherbuzz/examples/bubblegum/traymenu.buzz:50",
       "attrs": {
         "exported": "true"
@@ -13329,7 +13552,7 @@
       "id": "function:magusfile.buzz:bindings_generate",
       "kind": "function",
       "label": "bindings_generate",
-      "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
+      "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
       "source": "magusfile.buzz:172",
       "attrs": {
         "exported": "true"
@@ -13340,7 +13563,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:424",
+      "source": "magusfile.buzz:409",
       "attrs": {
         "exported": "true"
       }
@@ -13349,21 +13572,21 @@
       "id": "function:magusfile.buzz:build_date",
       "kind": "function",
       "label": "build_date",
-      "doc": "Commit record date (RFC3339) for reproducible builds; empty =\u003e \"unknown\".",
+      "doc": "Commit record date (RFC3339) for reproducible builds; empty => \"unknown\".",
       "source": "magusfile.buzz:75"
     },
     {
       "id": "function:magusfile.buzz:build_release_variant",
       "kind": "function",
       "label": "build_release_variant",
-      "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line \u003casset\u003e.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 \u003e dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix.",
+      "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix.",
       "source": "magusfile.buzz:264"
     },
     {
       "id": "function:magusfile.buzz:build_variant",
       "kind": "function",
       "label": "build_variant",
-      "doc": "Builds one image variant; publish =\u003e multi-arch --push + cosign-sign, else single-arch --load.",
+      "doc": "Builds one image variant; publish => multi-arch --push + cosign-sign, else single-arch --load.",
       "source": "magusfile.buzz:105"
     },
     {
@@ -13371,7 +13594,7 @@
       "kind": "function",
       "label": "buzz_check",
       "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": "magusfile.buzz:411",
+      "source": "magusfile.buzz:396",
       "attrs": {
         "exported": "true"
       }
@@ -13381,7 +13604,7 @@
       "kind": "function",
       "label": "buzz_run",
       "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": "magusfile.buzz:416",
+      "source": "magusfile.buzz:401",
       "attrs": {
         "exported": "true"
       }
@@ -13390,8 +13613,8 @@
       "id": "function:magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "doc": "Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output. generate is a DIRECT dep (not just transitively via format) so the drift gate is a first-class part of ci, independent of the mutating format/build chain. coverage drift-gates assets/coverage.svg, so a stale badge fails ci instead of rotting silently.",
-      "source": "magusfile.buzz:451",
+      "doc": "Runs the CI gates through their declared dependencies.",
+      "source": "magusfile.buzz:435",
       "attrs": {
         "exported": "true"
       }
@@ -13401,7 +13624,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:457",
+      "source": "magusfile.buzz:441",
       "attrs": {
         "exported": "true"
       }
@@ -13423,21 +13646,11 @@
       }
     },
     {
-      "id": "function:magusfile.buzz:coverage",
-      "kind": "function",
-      "label": "coverage",
-      "doc": "coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge. Like `generate`, it then drift-gates: a clean checkout only goes dirty if the committed badge was stale, so `ci` (which depends on this) fails when the badge was not refreshed and committed. Run the `rw` charm (`coverage:rw`) to keep the new badge instead.  Per-package, not -coverpkg=./...: cross-package instrumentation rewrites std/*.go with counter statements, which shifts the source line numbers the module-doc g",
-      "source": "magusfile.buzz:389",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
       "id": "function:magusfile.buzz:format",
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:444",
+      "source": "magusfile.buzz:432",
       "attrs": {
         "exported": "true"
       }
@@ -13508,8 +13721,8 @@
       "id": "function:magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint. golangci-lint and govulncheck run via os.exec to pass -modfile=go.tool.mod (their deps live there, not in the library go.mod). The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by `magus affected ci` when it's affected - the root does not reach into it.",
-      "source": "magusfile.buzz:439",
+      "doc": "Formats first, then golangci-lint, go vet, and markdownlint. golangci-lint runs through os.exec to use the tool module rather than the library module. The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by `magus affected ci` when it's affected - the root does not reach into it.",
+      "source": "magusfile.buzz:421",
       "attrs": {
         "exported": "true"
       }
@@ -13559,7 +13772,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gates the build on workspace health by running `magus doctor`.",
-      "source": "magusfile.buzz:421",
+      "source": "magusfile.buzz:406",
       "attrs": {
         "exported": "true"
       }
@@ -13569,7 +13782,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:525"
+      "source": "magusfile.buzz:497"
     },
     {
       "id": "function:magusfile.buzz:release_build",
@@ -13603,14 +13816,23 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:539"
+      "source": "magusfile.buzz:511"
+    },
+    {
+      "id": "function:magusfile.buzz:security",
+      "kind": "function",
+      "label": "security",
+      "source": "magusfile.buzz:422",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two committed gen/ trees with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than in either one. On a sourc",
-      "source": "magusfile.buzz:560",
+      "source": "magusfile.buzz:532",
       "attrs": {
         "exported": "true"
       }
@@ -13629,8 +13851,8 @@
       "id": "function:magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "doc": "Formats first, then runs the Go test suite.",
-      "source": "magusfile.buzz:433",
+      "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
+      "source": "magusfile.buzz:380",
       "attrs": {
         "exported": "true"
       }
@@ -13709,7 +13931,7 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:cache_key",
       "kind": "function",
       "label": "cache_key",
-      "doc": "cache_key derives the object key from the spec hash (already unique per project; hex, so URL-safe — no extra encoding needed in the canonical URI). NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose: S3 folds CACHE_VERSION into the key string (\"magus-\u003chash\u003e-\u003cversion\u003e\"), while GHA keeps the version in a separate `version` request field. Do NOT change the emitted string here — it would invalidate every existing S3 artifact. Track the inconsistency for follow-up only.",
+      "doc": "cache_key derives the object key from the spec hash (already unique per project; hex, so URL-safe — no extra encoding needed in the canonical URI). NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose: S3 folds CACHE_VERSION into the key string (\"magus-<hash>-<version>\"), while GHA keeps the version in a separate `version` request field. Do NOT change the emitted string here — it would invalidate every existing S3 artifact. Track the inconsistency for follow-up only.",
       "source": "spells/aws/s3-cache/spell.buzz:118"
     },
     {
@@ -14601,72 +14823,67 @@
       "id": "function:spells/golang/spell.buzz:goBuild",
       "kind": "function",
       "label": "goBuild",
-      "source": "spells/golang/spell.buzz:37"
+      "source": "spells/golang/spell.buzz:16"
     },
     {
       "id": "function:spells/golang/spell.buzz:goClean",
       "kind": "function",
       "label": "goClean",
-      "source": "spells/golang/spell.buzz:38"
+      "source": "spells/golang/spell.buzz:17"
     },
     {
       "id": "function:spells/golang/spell.buzz:goFmt",
       "kind": "function",
       "label": "goFmt",
-      "source": "spells/golang/spell.buzz:47"
+      "source": "spells/golang/spell.buzz:21"
     },
     {
       "id": "function:spells/golang/spell.buzz:goGenerate",
       "kind": "function",
       "label": "goGenerate",
-      "source": "spells/golang/spell.buzz:39"
+      "source": "spells/golang/spell.buzz:18"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModTidy",
       "kind": "function",
       "label": "goModTidy",
-      "doc": "tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes - safe for CI gating); the write charm applies the changes.",
-      "source": "spells/golang/spell.buzz:71"
+      "source": "spells/golang/spell.buzz:40"
     },
     {
       "id": "function:spells/golang/spell.buzz:goRun",
       "kind": "function",
       "label": "goRun",
-      "doc": "go-run compiles and runs a package. Alone among these ops it has no useful bare form: the caller names the package and its flags through the {\"args\": [...]} option (go[\"go-run\"]({\"args\": [\"../cmd/tool\", \"-out\", \"x\"]}) -\u003e `go run ../cmd/tool -out x`), so a magusfile drives a repo-local Go tool through the spell - version-pinned, sandbox- and charm-aware - instead of a raw os.exec(\"go\", [\"run\", ...]).",
-      "source": "spells/golang/spell.buzz:45"
+      "source": "spells/golang/spell.buzz:19"
     },
     {
       "id": "function:spells/golang/spell.buzz:goTest",
       "kind": "function",
       "label": "goTest",
-      "doc": "The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.",
-      "source": "spells/golang/spell.buzz:63"
+      "source": "spells/golang/spell.buzz:34"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVet",
       "kind": "function",
       "label": "goVet",
-      "source": "spells/golang/spell.buzz:77"
+      "source": "spells/golang/spell.buzz:46"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVulncheck",
       "kind": "function",
       "label": "goVulncheck",
-      "doc": "Scans for known vulnerabilities in the module's call graph. Command as a `go tool` (like golangci-lint) so it resolves from go.mod's tool block, not PATH.",
-      "source": "spells/golang/spell.buzz:80"
+      "source": "spells/golang/spell.buzz:47"
     },
     {
       "id": "function:spells/golang/spell.buzz:golangCILint",
       "kind": "function",
       "label": "golangCILint",
-      "source": "spells/golang/spell.buzz:53"
+      "source": "spells/golang/spell.buzz:27"
     },
     {
       "id": "function:spells/golang/spell.buzz:mgs_getLanguage",
       "kind": "function",
       "label": "mgs_getLanguage",
-      "doc": "mgs_getLanguage names the source language this spell adapts, canonical and lowercase so it matches the language attr on the Go files and symbols SCIP ingests. It lets `magus query language:go` reach this adapter alongside the code it builds.",
-      "source": "spells/golang/spell.buzz:30",
+      "source": "spells/golang/spell.buzz:12",
       "attrs": {
         "exported": "true"
       }
@@ -14675,7 +14892,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
-      "source": "spells/golang/spell.buzz:19",
+      "source": "spells/golang/spell.buzz:4",
       "attrs": {
         "exported": "true"
       }
@@ -14684,7 +14901,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_getVersionCommand",
       "kind": "function",
       "label": "mgs_getVersionCommand",
-      "source": "spells/golang/spell.buzz:25",
+      "source": "spells/golang/spell.buzz:10",
       "attrs": {
         "exported": "true"
       }
@@ -14693,8 +14910,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listIgnoreDirs",
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
-      "doc": "mgs_listIgnoreDirs names non-source dirs the go ecosystem generates, pruned from the input-hashing walk so vendored code is not hashed as a source. Dot-dirs are skipped structurally, so only vendor belongs here.",
-      "source": "spells/golang/spell.buzz:35",
+      "source": "spells/golang/spell.buzz:14",
       "attrs": {
         "exported": "true"
       }
@@ -14703,7 +14919,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listRequiredGlobs",
       "kind": "function",
       "label": "mgs_listRequiredGlobs",
-      "source": "spells/golang/spell.buzz:21",
+      "source": "spells/golang/spell.buzz:6",
       "attrs": {
         "exported": "true"
       }
@@ -14712,7 +14928,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/golang/spell.buzz:90",
+      "source": "spells/golang/spell.buzz:52",
       "attrs": {
         "exported": "true"
       }
@@ -14721,8 +14937,7 @@
       "id": "function:spells/golang/spell.buzz:scipGo",
       "kind": "function",
       "label": "scipGo",
-      "doc": "scip is the reserved op that runs the language's SCIP indexer for the knowledge graph. Named for the format, not the binary, so the same verb produces symbols across every language spell (`magus run \u003cproject\u003e::scip`). magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. Run through sh so the env var expands.",
-      "source": "spells/golang/spell.buzz:86"
+      "source": "spells/golang/spell.buzz:48"
     },
     {
       "id": "function:spells/markdown/spell.buzz:markdownlint",
@@ -15762,6 +15977,14 @@
       }
     },
     {
+      "id": "import:project/..",
+      "kind": "import",
+      "label": "project/..",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
       "id": "import:project/../libs/gopherbuzz",
       "kind": "import",
       "label": "project/../libs/gopherbuzz",
@@ -16356,7 +16579,7 @@
       "id": "method:env.parse_dotenv",
       "kind": "method",
       "label": "env.parse_dotenv",
-      "doc": "Parse .env-format content into a name-\u003evalue map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
+      "doc": "Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
       "attrs": {
         "buzz": "env.parseDotenv(content) → map[string]string"
       }
@@ -16365,7 +16588,7 @@
       "id": "method:env.read_dotenv",
       "kind": "method",
       "label": "env.read_dotenv",
-      "doc": "Read a .env file and return its name-\u003evalue map (parse_dotenv over the file contents). Errors if the file cannot be read.",
+      "doc": "Read a .env file and return its name->value map (parse_dotenv over the file contents). Errors if the file cannot be read.",
       "attrs": {
         "buzz": "env.readDotenv(path) → map[string]string"
       }
@@ -16662,7 +16885,7 @@
       "id": "method:http.server",
       "kind": "method",
       "label": "http.server",
-      "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -\u003e dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
+      "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
       "attrs": {
         "buzz": "http.server(opts) → int"
       }
@@ -16698,7 +16921,7 @@
       "id": "method:magus.cmd",
       "kind": "method",
       "label": "magus.cmd",
-      "doc": "Escape hatch: run `magus \u003cargs\u003e` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+      "doc": "Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus.cmd(args, [opts]) → map[string]any"
       }
@@ -16707,7 +16930,7 @@
       "id": "method:magus.describe",
       "kind": "method",
       "label": "magus.describe",
-      "doc": "Run `magus describe \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
+      "doc": "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
       "attrs": {
         "buzz": "magus.describe(args, [opts]) → map[string]any"
       }
@@ -16716,7 +16939,7 @@
       "id": "method:magus.doctor",
       "kind": "method",
       "label": "magus.doctor",
-      "doc": "Run `magus doctor \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+      "doc": "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus.doctor(args, [opts]) → map[string]any"
       }
@@ -16734,7 +16957,7 @@
       "id": "method:magus.insight",
       "kind": "method",
       "label": "magus.insight",
-      "doc": "Run `magus insight \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+      "doc": "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus.insight(args, [opts]) → map[string]any"
       }
@@ -16743,7 +16966,7 @@
       "id": "method:magus.run",
       "kind": "method",
       "label": "magus.run",
-      "doc": "Run `magus run \u003cargs\u003e` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+      "doc": "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus.run(args, [opts]) → map[string]any"
       }
@@ -16959,7 +17182,7 @@
       "id": "method:semver.compare",
       "kind": "method",
       "label": "semver.compare",
-      "doc": "Compare two semver strings; op is \"==\", \"!=\", \"\u003c\", \"\u003c=\", \"\u003e\", or \"\u003e=\" - true when the relation holds.",
+      "doc": "Compare two semver strings; op is \"==\", \"!=\", \"<\", \"<=\", \">\", or \">=\" - true when the relation holds.",
       "attrs": {
         "buzz": "semver.compare(a, op, b) → bool"
       }
@@ -17040,7 +17263,7 @@
       "id": "method:template.render",
       "kind": "method",
       "label": "template.render",
-      "doc": "Render a Mustache template against a context value (usually a name-\u003evalue map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
+      "doc": "Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
       "attrs": {
         "buzz": "template.render(template, data) → string"
       }
@@ -17049,7 +17272,7 @@
       "id": "method:template.render_partials",
       "kind": "method",
       "label": "template.render_partials",
-      "doc": "Render a Mustache template that includes partials via {{\u003ename}}, resolving each name against the partials map (name-\u003etemplate string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
+      "doc": "Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
       "attrs": {
         "buzz": "template.renderPartials(template, data, partials) → string"
       }
@@ -18133,7 +18356,7 @@
       "id": "target:.:bindings-generate",
       "kind": "target",
       "label": "bindings-generate",
-      "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
+      "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
       "source": ".",
       "attrs": {
         "declared_as": "bindings_generate",
@@ -18178,11 +18401,11 @@
       "id": "target:.:ci",
       "kind": "target",
       "label": "ci",
-      "doc": "Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.",
+      "doc": "Runs the CI gates through their declared dependencies.",
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out06d8746d",
+        "last_output_ref": "out11f4ebc7",
         "last_run_ok": "false"
       }
     },
@@ -18194,7 +18417,9 @@
       "source": ".",
       "attrs": {
         "declared_as": "ci_shard",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out8a3ee835",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18205,19 +18430,9 @@
       "source": ".",
       "attrs": {
         "declared_as": "config_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:.:coverage",
-      "kind": "target",
-      "label": "coverage",
-      "doc": "coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.",
-      "source": ".",
-      "attrs": {
         "engine": "buzz",
-        "last_output_ref": "ref44dbd0dd",
-        "last_run_ok": "false"
+        "last_output_ref": "outdc0442b1",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18240,7 +18455,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outa5421d4b",
+        "last_output_ref": "outa7eca03d",
         "last_run_ok": "true"
       }
     },
@@ -18292,11 +18507,11 @@
       "id": "target:.:lint",
       "kind": "target",
       "label": "lint",
-      "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint.",
+      "doc": "Formats first, then golangci-lint, go vet, and markdownlint.",
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out76d95a7d",
+        "last_output_ref": "outfbc0c728",
         "last_run_ok": "true"
       }
     },
@@ -18344,7 +18559,9 @@
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out98581780",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18380,6 +18597,15 @@
       }
     },
     {
+      "id": "target:.:security",
+      "kind": "target",
+      "label": "security",
+      "source": ".",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:.:serve",
       "kind": "target",
       "label": "serve",
@@ -18404,12 +18630,12 @@
       "id": "target:.:test",
       "kind": "target",
       "label": "test",
-      "doc": "Formats first, then runs the Go test suite.",
+      "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out372ea95f",
-        "last_run_ok": "true"
+        "last_output_ref": "out2bb66305",
+        "last_run_ok": "false"
       }
     },
     {
@@ -18439,7 +18665,7 @@
       "source": "cmd/magus/starter",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outb0c3b1f1",
+        "last_output_ref": "outf2c6c384",
         "last_run_ok": "true"
       }
     },
@@ -18471,7 +18697,9 @@
       "label": "lint",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "oute06c6349",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18502,7 +18730,7 @@
       "source": "console",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out7b43d1ce",
+        "last_output_ref": "out59f7f5cf",
         "last_run_ok": "true"
       }
     },
@@ -18522,10 +18750,12 @@
       "id": "target:console:lint",
       "kind": "target",
       "label": "lint",
-      "doc": "lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the same way a Go project's lint runs `go vet`.",
+      "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
       "source": "console",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outb90387ad",
+        "last_run_ok": "false"
       }
     },
     {
@@ -18545,7 +18775,7 @@
       "source": "console",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outf4888bdd",
+        "last_output_ref": "outb463dadb",
         "last_run_ok": "true"
       }
     },
@@ -18562,7 +18792,7 @@
       "id": "target:docs:build-hljs",
       "kind": "target",
       "label": "build-hljs",
-      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into the committed gen/assets/hljs.js.",
+      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.",
       "source": "docs",
       "attrs": {
         "declared_as": "build_hljs",
@@ -18573,7 +18803,7 @@
       "id": "target:docs:build-mermaid",
       "kind": "target",
       "label": "build-mermaid",
-      "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into the committed gen/assets/mermaid.js.",
+      "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.",
       "source": "docs",
       "attrs": {
         "declared_as": "build_mermaid",
@@ -18599,7 +18829,9 @@
       "source": "docs",
       "attrs": {
         "declared_as": "buzz_test",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outb99daf6d",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18621,7 +18853,7 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outccd28648",
+        "last_output_ref": "out7e8bc7c0",
         "last_run_ok": "false"
       }
     },
@@ -18651,11 +18883,11 @@
       "id": "target:docs:generate",
       "kind": "target",
       "label": "generate",
-      "doc": "generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.",
+      "doc": "generate is the full publication and drift gate.",
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outa7b4e91a",
+        "last_output_ref": "out8e46080b",
         "last_run_ok": "true"
       }
     },
@@ -18695,11 +18927,11 @@
       "id": "target:docs:render",
       "kind": "target",
       "label": "render",
-      "doc": "render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate).",
+      "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out93cf0eb9",
+        "last_output_ref": "outbca07ce2",
         "last_run_ok": "false"
       }
     },
@@ -18730,7 +18962,9 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outca26f074",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18739,7 +18973,9 @@
       "label": "format",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out822f5622",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18750,7 +18986,7 @@
       "source": "libs/diag",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out4a48ffea",
+        "last_output_ref": "out5b0cb072",
         "last_run_ok": "true"
       }
     },
@@ -18760,7 +18996,9 @@
       "label": "lint",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outbfe8878d",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18809,7 +19047,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outbb253708",
+        "last_output_ref": "outdb4fdf0c",
         "last_run_ok": "true"
       }
     },
@@ -18820,7 +19058,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out6e0c70fe",
+        "last_output_ref": "outa2c7b17b",
         "last_run_ok": "true"
       }
     },
@@ -18832,7 +19070,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out3ed449a4",
+        "last_output_ref": "out2d61ddd7",
         "last_run_ok": "true"
       }
     },
@@ -18843,7 +19081,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out21406c6b",
+        "last_output_ref": "out877988a2",
         "last_run_ok": "true"
       }
     },
@@ -18894,7 +19132,9 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out164d1bf1",
+        "last_run_ok": "false"
       }
     },
     {
@@ -18916,7 +19156,9 @@
       "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outebeacd42",
+        "last_run_ok": "true"
       }
     },
     {
@@ -18956,7 +19198,7 @@
       "source": "proto",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out9bc86dfc",
+        "last_output_ref": "outcecb24ff",
         "last_run_ok": "true"
       }
     },
@@ -18978,7 +19220,9 @@
       "label": "lint",
       "source": "proto",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out2794d8ae",
+        "last_run_ok": "true"
       }
     },
     {
@@ -19113,14 +19357,6 @@
     },
     {
       "source": "charm:rw",
-      "target": "target:.:coverage",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "charm:rw",
       "target": "target:.:generate",
       "relation": "references",
       "confidence": "extracted",
@@ -19130,6 +19366,14 @@
     {
       "source": "charm:rw",
       "target": "target:.:image-scan",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "charm:rw",
+      "target": "target:.:test",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -19192,6 +19436,126 @@
       "provenance": "."
     },
     {
+      "source": "dir:.agents",
+      "target": "dir:.agents/skills",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills"
+    },
+    {
+      "source": "dir:.agents/skills",
+      "target": "dir:.agents/skills/magus-architecture",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-architecture"
+    },
+    {
+      "source": "dir:.agents/skills",
+      "target": "dir:.agents/skills/magus-changes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-changes"
+    },
+    {
+      "source": "dir:.agents/skills",
+      "target": "dir:.agents/skills/magus-docs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-docs"
+    },
+    {
+      "source": "dir:.agents/skills",
+      "target": "dir:.agents/skills/magus-memory",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-memory"
+    },
+    {
+      "source": "dir:.agents/skills",
+      "target": "dir:.agents/skills/magus-query",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-query"
+    },
+    {
+      "source": "dir:.agents/skills",
+      "target": "dir:.agents/skills/magus-run",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-run"
+    },
+    {
+      "source": "dir:.agents/skills",
+      "target": "dir:.agents/skills/magus-vcs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-vcs"
+    },
+    {
+      "source": "dir:.agents/skills/magus-architecture",
+      "target": "doc:.agents/skills/magus-architecture/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "dir:.agents/skills/magus-changes",
+      "target": "doc:.agents/skills/magus-changes/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-changes/SKILL.md"
+    },
+    {
+      "source": "dir:.agents/skills/magus-docs",
+      "target": "doc:.agents/skills/magus-docs/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "dir:.agents/skills/magus-memory",
+      "target": "doc:.agents/skills/magus-memory/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-memory/SKILL.md"
+    },
+    {
+      "source": "dir:.agents/skills/magus-query",
+      "target": "doc:.agents/skills/magus-query/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "dir:.agents/skills/magus-run",
+      "target": "doc:.agents/skills/magus-run/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "dir:.agents/skills/magus-vcs",
+      "target": "doc:.agents/skills/magus-vcs/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-vcs/SKILL.md"
+    },
+    {
       "source": "dir:.claude",
       "target": "dir:.claude/skills",
       "relation": "contains",
@@ -19206,6 +19570,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": ".claude/skills/magus-architecture"
+    },
+    {
+      "source": "dir:.claude/skills",
+      "target": "dir:.claude/skills/magus-changes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".claude/skills/magus-changes"
     },
     {
       "source": "dir:.claude/skills",
@@ -19262,6 +19634,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": ".claude/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "dir:.claude/skills/magus-changes",
+      "target": "doc:.claude/skills/magus-changes/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".claude/skills/magus-changes/SKILL.md"
     },
     {
       "source": "dir:.claude/skills/magus-docs",
@@ -19433,6 +19813,14 @@
     },
     {
       "source": "dir:cmd/magus/skills",
+      "target": "dir:cmd/magus/skills/magus-changes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "cmd/magus/skills/magus-changes"
+    },
+    {
+      "source": "dir:cmd/magus/skills",
       "target": "dir:cmd/magus/skills/magus-docs",
       "relation": "contains",
       "confidence": "extracted",
@@ -19478,6 +19866,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "cmd/magus/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "dir:cmd/magus/skills/magus-changes",
+      "target": "doc:cmd/magus/skills/magus-changes/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "cmd/magus/skills/magus-changes/SKILL.md"
     },
     {
       "source": "dir:cmd/magus/skills/magus-docs",
@@ -20830,6 +21226,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/manpage/magus-ls.md"
+    },
+    {
+      "source": "dir:docs/reference/manpage",
+      "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
     },
     {
       "source": "dir:docs/reference/manpage",
@@ -22920,6 +23324,102 @@
       "provenance": "std/examples/template/render_partials.buzz"
     },
     {
+      "source": "doc:.agents/skills/magus-architecture/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-docs/SKILL.md",
+      "target": "diagnostic:MGS2001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-docs/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-docs/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".agents/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-query/SKILL.md",
+      "target": "diagnostic:MGS2001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-insight.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".agents/skills/magus-run/SKILL.md"
+    },
+    {
       "source": "doc:.claude/skills/magus-architecture/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
@@ -23193,10 +23693,26 @@
     },
     {
       "source": "doc:README.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
       "target": "doc:docs/reference/manpage/magus-graph.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "README.md"
     },
     {
@@ -23685,6 +24201,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/concepts/dependencies.md"
+    },
+    {
+      "source": "doc:docs/concepts/dependencies.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/concepts/dependencies.md"
     },
     {
@@ -24821,6 +25345,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/concepts/targets.md"
+    },
+    {
+      "source": "doc:docs/concepts/targets.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/concepts/targets.md"
     },
     {
@@ -28185,6 +28717,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-affected.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-affected.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28322,6 +28862,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-completion.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-completion.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-completion.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -28473,6 +29021,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-config.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-config.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-config.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28610,6 +29166,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-describe.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-describe.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-describe.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -28761,6 +29325,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-doctor.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-doctor.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-doctor.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28898,6 +29470,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-graph.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-graph.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-graph.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29049,6 +29629,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-init.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-init.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-init.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "extracted",
@@ -29186,6 +29774,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-insight.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-insight.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-insight.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29337,6 +29933,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-ls.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-ls.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-ls.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "extracted",
@@ -29416,6 +30020,158 @@
       "provenance": "docs/reference/manpage/magus-ls.md"
     },
     {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-completion.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-config.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-graph.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-init.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-insight.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-self.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-server.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-tail.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-version.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-watch.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-where.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-x.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
       "source": "doc:docs/reference/manpage/magus-run.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
@@ -29482,6 +30238,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-run.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-run.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-run.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29626,6 +30390,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-self.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-self.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-self.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29770,6 +30542,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-server.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-server.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-server.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29914,6 +30694,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-status.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-status.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-status.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30058,6 +30846,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-tail.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-tail.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-tail.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30202,6 +30998,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-version.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-version.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-version.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30346,6 +31150,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-watch.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-watch.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-watch.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30490,6 +31302,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-where.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-where.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-where.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30634,6 +31454,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-x.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-x.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-x.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30786,6 +31614,14 @@
     {
       "source": "doc:docs/reference/manpage/magus.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus.md",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31274,6 +32110,14 @@
     {
       "source": "file:console/magusfile.buzz",
       "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "file:console/magusfile.buzz",
+      "target": "import:project/..",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -42433,14 +43277,6 @@
     },
     {
       "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:coverage",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -42586,6 +43422,14 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:rerender_docs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:security",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -49896,14 +50740,6 @@
       "provenance": "magusfile.buzz"
     },
     {
-      "source": "function:magusfile.buzz:coverage",
-      "target": "function:magusfile.buzz:total_coverage",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
       "source": "function:magusfile.buzz:go_build",
       "target": "function:magusfile.buzz:ld_flags",
       "relation": "calls",
@@ -50002,6 +50838,14 @@
     {
       "source": "function:magusfile.buzz:serve",
       "target": "function:magusfile.buzz:rerender_docs",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:test",
+      "target": "function:magusfile.buzz:total_coverage",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -51860,6 +52704,14 @@
     },
     {
       "source": "project:.",
+      "target": "dir:.agents",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents"
+    },
+    {
+      "source": "project:.",
       "target": "dir:.claude",
       "relation": "contains",
       "confidence": "extracted",
@@ -51921,6 +52773,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "std"
+    },
+    {
+      "source": "project:.",
+      "target": "doc:AGENTS.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "AGENTS.md"
     },
     {
       "source": "project:.",
@@ -52044,14 +52904,6 @@
     },
     {
       "source": "project:.",
-      "target": "target:.:coverage",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "project:.",
       "target": "target:.:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -52157,6 +53009,14 @@
     {
       "source": "project:.",
       "target": "target:.:release-sign",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "target:.:security",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -52273,6 +53133,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "project:console",
+      "target": "project:.",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
     },
     {
       "source": "project:console",
@@ -52425,6 +53293,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/render.buzz"
+    },
+    {
+      "source": "project:docs",
+      "target": "project:.",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
     },
     {
       "source": "project:docs",
@@ -53404,8 +54280,24 @@
       "provenance": "."
     },
     {
+      "source": "target:.:buzz-check",
+      "target": "spell:buzz",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
       "source": "target:.:buzz-run",
       "target": "op:buzz:magus-buzz",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:buzz-run",
+      "target": "spell:buzz",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -53421,23 +54313,15 @@
     },
     {
       "source": "target:.:ci",
-      "target": "target:.:coverage",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:ci",
-      "target": "target:.:generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:ci",
       "target": "target:.:lint",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:ci",
+      "target": "target:.:security",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -53452,12 +54336,12 @@
       "provenance": "."
     },
     {
-      "source": "target:.:coverage",
-      "target": "op:go:go-test",
-      "relation": "uses",
+      "source": "target:.:config-generate",
+      "target": "diagnostic:MGS3001",
+      "relation": "emits",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "."
+      "provenance": "runtime"
     },
     {
       "source": "target:.:format",
@@ -53470,6 +54354,14 @@
     {
       "source": "target:.:format",
       "target": "op:go:go-mod-tidy",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:format",
+      "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -53549,6 +54441,14 @@
     },
     {
       "source": "target:.:go-build",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:go-build",
       "target": "target:libs/gopherbuzz:build",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -53566,6 +54466,22 @@
     {
       "source": "target:.:image-build",
       "target": "op:docker:docker-buildx",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:image-build",
+      "target": "spell:cosign",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:image-build",
+      "target": "spell:docker",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -53597,6 +54513,22 @@
     },
     {
       "source": "target:.:lint",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint",
+      "target": "spell:md",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:lint",
       "target": "target:.:format",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -53612,8 +54544,40 @@
       "provenance": "."
     },
     {
+      "source": "target:.:release-build",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:security",
+      "target": "target:.:format",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:test",
+      "target": "diagnostic:MGS3001",
+      "relation": "emits",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "runtime"
+    },
+    {
       "source": "target:.:test",
       "target": "op:go:go-test",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:test",
+      "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -53630,6 +54594,14 @@
     {
       "source": "target:.:watch",
       "target": "op:go:go-build",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:watch",
+      "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -53706,6 +54678,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "cmd/magus/starter"
+    },
+    {
+      "source": "target:console:build",
+      "target": "target:.:graph-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
     },
     {
       "source": "target:console:build",
@@ -53806,6 +54786,14 @@
     {
       "source": "target:docs:changelog-generate",
       "target": "op:go:go-run",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:changelog-generate",
+      "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -54133,6 +55121,14 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/config.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -54198,6 +55194,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -54292,6 +55296,14 @@
       "provenance": "docs"
     },
     {
+      "source": "target:docs:content-generate",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
       "source": "target:docs:format",
       "target": "target:docs:generate",
       "relation": "depends_on",
@@ -54373,6 +55385,14 @@
     },
     {
       "source": "target:libs/diag:build",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/diag"
+    },
+    {
+      "source": "target:libs/diag:build",
       "target": "target:libs/diag:format",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -54421,6 +55441,14 @@
     },
     {
       "source": "target:libs/diag:format",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/diag"
+    },
+    {
+      "source": "target:libs/diag:format",
       "target": "target:libs/diag:generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -54453,6 +55481,14 @@
     },
     {
       "source": "target:libs/diag:lint",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/diag"
+    },
+    {
+      "source": "target:libs/diag:lint",
       "target": "target:libs/diag:format",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -54469,6 +55505,14 @@
     },
     {
       "source": "target:libs/diag:test",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/diag"
+    },
+    {
+      "source": "target:libs/diag:test",
       "target": "target:libs/diag:format",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -54478,6 +55522,14 @@
     {
       "source": "target:libs/gopherbuzz:build",
       "target": "op:go:go-build",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "target:libs/gopherbuzz:build",
+      "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -54533,6 +55585,14 @@
     },
     {
       "source": "target:libs/gopherbuzz:format",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "target:libs/gopherbuzz:format",
       "target": "target:libs/gopherbuzz:generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -54565,6 +55625,14 @@
     },
     {
       "source": "target:libs/gopherbuzz:lint",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "target:libs/gopherbuzz:lint",
       "target": "target:libs/gopherbuzz:format",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -54574,6 +55642,14 @@
     {
       "source": "target:libs/gopherbuzz:test",
       "target": "op:go:go-test",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "target:libs/gopherbuzz:test",
+      "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -54660,8 +55736,24 @@
       "provenance": "proto"
     },
     {
+      "source": "target:proto:generate",
+      "target": "spell:buf",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "proto"
+    },
+    {
       "source": "target:proto:lint",
       "target": "op:buf:buf-lint",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "proto"
+    },
+    {
+      "source": "target:proto:lint",
+      "target": "spell:buf",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,

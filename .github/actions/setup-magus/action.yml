@@ -43,7 +43,7 @@ runs:
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       with:
         repository: egladman/magus
-        sparse-checkout: 'install.sh'
+        sparse-checkout: 'docs/gen/install'
 
     - name: Install magus from release
       id: prebuilt
@@ -62,7 +62,7 @@ runs:
           echo "::error::magus: installation-strategy '${{ inputs.installation-strategy }}' needs git-ref set to a release tag" >&2
           exit 1
         fi
-        ./install.sh
+        sh ./docs/gen/install
 
     - name: Fail if prebuilt required but unavailable
       if: inputs.installation-strategy == 'prebuilt' && steps.prebuilt.outcome == 'failure'
@@ -88,13 +88,6 @@ runs:
     # "ci" job - installs those itself. Keying that on installation-strategy
     # would be wrong: it has nothing to do with what the caller does after
     # this action returns.
-    - name: Setup Go
-      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-      with:
-        go-version-file: .setup-magus-src/go.mod
-        cache: true  # caches ~/go/pkg/mod + ~/.cache/go-build keyed by go.sum
-
     # Checked out into an isolated subdirectory (path:), never the workspace
     # root: a caller may already have its own checkout there - CD's release
     # jobs need their full-history clone intact for `git describe --tags`
@@ -109,6 +102,19 @@ runs:
         ref: ${{ inputs.git-ref }}
         path: .setup-magus-src
         fetch-depth: 0
+
+    # setup-go reads the version from the source revision being installed. Clone
+    # first: on an automatic fallback the caller's checkout can be a different
+    # revision, and .setup-magus-src does not exist until the preceding step.
+    - name: Setup Go
+      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+      with:
+        go-version-file: .setup-magus-src/go.mod
+        # Key this isolated source checkout, not the caller's potentially
+        # different revision at the workspace root.
+        cache: true
+        cache-dependency-path: .setup-magus-src/go.sum
 
     # Supply-chain gate: a source build has no signature to check (unlike the
     # prebuilt path above), so before compiling and running whatever git-ref

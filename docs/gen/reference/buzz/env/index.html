@@ -311,7 +311,7 @@
 <p><strong>Returns:</strong> map[string]string</p>
 <h3 id="read-dotenv">read_dotenv</h3>
 <p>Read a .env file and return its name-&gt;value map (parse_dotenv over the file contents). Errors if the file cannot be read.</p>
-<p><strong>Signature:</strong> <code>env.readDotenv(path) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L242" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code>env.readDotenv(<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L242" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -332,7 +332,7 @@
 </table></figure>
 <p><strong>Returns:</strong> map[string]string</p>
 <h3 id="load-dotenv">load_dotenv</h3>
-<p>Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-run.</p>
+<p>Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-<a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>.</p>
 <p><strong>Signature:</strong> <code>env.loadDotenv(path)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L253" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>

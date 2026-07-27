@@ -115,12 +115,12 @@ already on the current call stack when it is requested again is a cycle.</p>
 <li><strong>Find the back-edge.</strong> Follow the <code>needs</code>/cross-project dependencies from the
 named target until you return to it. One of those edges is the one to cut.</li>
 <li><strong>Invert or extract.</strong> If two targets genuinely need each other's output,
-factor the shared work into a third target both depend on, so the graph stays
+factor the shared work into a third target both depend on, so the <a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> stays
 acyclic (A -&gt; C, B -&gt; C instead of A &lt;-&gt; B).</li>
 <li><strong>Cross-project cycles</strong> usually mean two projects each build-depend on the
 other. Decide which is the leaf and make the dependency one-directional.</li>
 </ul>
-<p>Run <code><a class="code-xref" href="../../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> graph</code> (or open the Graph Explorer) to see the dependency
+<p><a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> <code><a class="code-xref" href="../../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> graph</code> (or open the Graph Explorer) to see the dependency
 edges and spot the cycle.</p>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
@@ -132,7 +132,7 @@ a cycle - the dependency graph itself has no valid order.</li>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../../../../concepts/targets/">targets</a>: how targets declare dependencies.</li>
-<li><code>magus describe graph</code>: the dependency edges, to locate the cycle.</li>
+<li><code>magus <a class="code-xref" href="../../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> graph</code>: the dependency edges, to locate the cycle.</li>
 </ul>
     </article>
     </div>

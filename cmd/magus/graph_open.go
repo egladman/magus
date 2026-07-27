@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/auth"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"

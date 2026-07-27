@@ -1,7 +1,7 @@
-// Package memory is the durable, per-repository agent-memory store: discrete,
-// categorized records (one markdown file per memory, YAML frontmatter carrying the
-// structured fields) plus a single "cursor" snapshot. It is the ONE place that owns
-// where memory lives and how a record is serialized; the MCP tool
+// Package memory is the durable, per-repository handoff journal: discrete,
+// categorized records (one markdown file per entry, YAML frontmatter carrying the
+// structured fields) plus a legacy cursor snapshot. It is the one place that owns
+// where journal entries live and how a record is serialized; the MCP tool
 // (internal/handler/mcp), the console RPC (internal/handler/memory), and the
 // knowledge-graph @memory shard all read/write through it.
 //
@@ -54,22 +54,40 @@ const (
 // (query/node/output/command/doc); Target is the payload (a node ID or path, an output ref
 // token, or a raw query/command string).
 type Ref struct {
-	Kind   RefKind `yaml:"kind"`
-	Target string  `yaml:"target"`
+	Kind   RefKind `json:"kind" yaml:"kind"`
+	Target string  `json:"target" yaml:"target"`
 }
 
 // Record is one persisted memory. The payload is one or more typed Refs; Body is a
 // prose caption present only for decision/plan records (empty for pointer). Created
 // and Updated are unix seconds, stamped by the store (output-only to callers).
 type Record struct {
-	Name       string     `yaml:"name"`
-	Type       RecordType `yaml:"type"`
-	Status     string     `yaml:"status,omitempty"`
-	Refs       []Ref      `yaml:"refs"`
-	References []string   `yaml:"references,omitempty"`
-	Created    int64      `yaml:"created,omitempty"`
-	Updated    int64      `yaml:"updated,omitempty"`
-	Body       string     `yaml:"-"`
+	Name       string     `json:"name" yaml:"name"`
+	Type       RecordType `json:"type" yaml:"type"`
+	Status     string     `json:"status,omitempty" yaml:"status,omitempty"`
+	Refs       []Ref      `json:"refs" yaml:"refs"`
+	References []string   `json:"references,omitempty" yaml:"references,omitempty"`
+	Created    int64      `json:"created" yaml:"created,omitempty"`
+	Updated    int64      `json:"updated" yaml:"updated,omitempty"`
+	Body       string     `json:"body,omitempty" yaml:"-"`
+}
+
+// Issue is one actionable problem found by Verify. A warning does not make a
+// journal unreadable; an error does and causes list consumers to stop rather than
+// quietly omit the entry.
+type Issue struct {
+	Severity string `json:"severity"`
+	Code     string `json:"code"`
+	Path     string `json:"path"`
+	Record   string `json:"record,omitempty"`
+	Message  string `json:"message"`
+	Hint     string `json:"hint"`
+}
+
+// Verification is the deterministic result of checking a handoff journal.
+type Verification struct {
+	Records int     `json:"records"`
+	Issues  []Issue `json:"issues"`
 }
 
 // nameRE is the record name shape: a kebab slug. It doubles as the on-disk basename,
@@ -149,40 +167,125 @@ func Validate(r Record) error {
 	if r.Type == TypePointer && strings.TrimSpace(r.Body) != "" {
 		return errors.New("memory: a pointer carries no prose; its refs are the payload (only decision/plan take a caption)")
 	}
+	for _, name := range r.References {
+		if !nameRE.MatchString(name) {
+			return fmt.Errorf("memory: reference %q must be a kebab slug", name)
+		}
+	}
 	return nil
 }
 
-// List returns every record in name order. A missing store is not an error - it just
-// has no records yet.
+// ParseRefs parses one ref per line in "kind: target" form. Newline is the only
+// separator because queries and node IDs commonly contain spaces, colons, or commas.
+func ParseRefs(s string) ([]Ref, error) {
+	var refs []Ref
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		i := strings.IndexByte(line, ':')
+		if i < 0 {
+			return nil, fmt.Errorf("memory: ref %q must be written as 'kind: target' (kinds: query, node, output, command, doc)", line)
+		}
+		refs = append(refs, Ref{Kind: RefKind(strings.TrimSpace(line[:i])), Target: strings.TrimSpace(line[i+1:])})
+	}
+	return refs, nil
+}
+
+// List returns every record in name order. An invalid on-disk entry is an error rather
+// than a silently skipped record; run Verify for every problem and its repair hint.
 func List(root string) ([]Record, error) {
-	dir, err := Dir(root)
+	recs, issues, err := Inspect(root)
 	if err != nil {
 		return nil, err
+	}
+	if len(issues) != 0 {
+		return nil, issuesError(issues)
+	}
+	return recs, nil
+}
+
+// Verify scans every entry without hiding malformed files or broken journal links.
+// A missing store is valid and reports zero entries.
+func Verify(root string) (Verification, error) {
+	recs, issues, err := Inspect(root)
+	if err != nil {
+		return Verification{}, err
+	}
+	return Verification{Records: len(recs), Issues: issues}, nil
+}
+
+// Inspect returns readable entries and every detected issue. It is for frontends that
+// can present warnings alongside records; callers that only need safe records use List.
+func Inspect(root string) ([]Record, []Issue, error) {
+	return scan(root)
+}
+
+func scan(root string) ([]Record, []Issue, error) {
+	dir, err := Dir(root)
+	if err != nil {
+		return nil, nil, err
 	}
 	rdir := filepath.Join(dir, recordsSubdir)
 	ents, err := os.ReadDir(rdir)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("memory: list: %w", err)
+		return nil, nil, fmt.Errorf("memory: list: %w", err)
 	}
-	var out []Record
+	out := make([]Record, 0)
+	issues := make([]Issue, 0)
 	for _, e := range ents {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
 			continue
 		}
-		rec, err := readRecordFile(filepath.Join(rdir, e.Name()))
+		path := filepath.Join(rdir, e.Name())
+		rec, err := readRecordFile(path)
 		if err != nil {
-			// A record is agent-written and hand-editable, so one malformed file (bad
-			// frontmatter, unreadable) must not take down the whole listing. Skip it and
-			// keep going rather than fail the console view and the MCP list wholesale.
+			issues = append(issues, Issue{
+				Severity: "error", Code: "invalid-entry", Path: path,
+				Message: err.Error(),
+				Hint:    "Repair or remove this file, then run `magus memory verify` again.",
+			})
 			continue
 		}
 		out = append(out, rec)
 	}
 	slices.SortFunc(out, func(a, b Record) int { return strings.Compare(a.Name, b.Name) })
-	return out, nil
+	known := make(map[string]struct{}, len(out))
+	for _, rec := range out {
+		known[rec.Name] = struct{}{}
+		if strings.EqualFold(rec.Status, "stale") {
+			issues = append(issues, Issue{
+				Severity: "warning", Code: "stale-entry", Path: filepath.Join(rdir, rec.Name+".md"), Record: rec.Name,
+				Message: "entry is marked stale",
+				Hint:    "Refresh it with `magus memory put` or remove it with `magus memory delete`.",
+			})
+		}
+	}
+	for _, rec := range out {
+		for _, ref := range rec.References {
+			if _, ok := known[ref]; !ok {
+				issues = append(issues, Issue{
+					Severity: "error", Code: "missing-reference", Path: filepath.Join(rdir, rec.Name+".md"), Record: rec.Name,
+					Message: fmt.Sprintf("references missing entry %q", ref),
+					Hint:    "Create the referenced entry, update this entry with `magus memory put`, or delete the broken reference.",
+				})
+			}
+		}
+	}
+	return out, issues, nil
+}
+
+func issuesError(issues []Issue) error {
+	for _, issue := range issues {
+		if issue.Severity == "error" {
+			return fmt.Errorf("memory: journal has invalid entries; run `magus memory verify` for repair steps (%s)", issue.Message)
+		}
+	}
+	return nil
 }
 
 // Get returns one record by name, or os.ErrNotExist if it is absent.
@@ -293,9 +396,14 @@ func readRecordFile(path string) (Record, error) {
 		return Record{}, fmt.Errorf("memory: %s: %w", filepath.Base(path), err)
 	}
 	r.Body = strings.TrimSpace(string(m[2]))
-	// The filename is the identity; trust it over a mismatched frontmatter name so a
-	// hand-renamed file still resolves.
-	r.Name = strings.TrimSuffix(filepath.Base(path), ".md")
+	name := strings.TrimSuffix(filepath.Base(path), ".md")
+	if r.Name != "" && r.Name != name {
+		return Record{}, fmt.Errorf("memory: %s: frontmatter name %q does not match filename %q", filepath.Base(path), r.Name, name)
+	}
+	r.Name = name
+	if err := Validate(r); err != nil {
+		return Record{}, fmt.Errorf("memory: %s: %w", filepath.Base(path), err)
+	}
 	return r, nil
 }
 

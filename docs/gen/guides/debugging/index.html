@@ -89,7 +89,7 @@
 <li><a href="#interactive-repl"><code>magus repl</code></a>: standalone shell with <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> bindings preloaded.</li>
 <li><a href="#maguspry-breakpoint-in-a-magusfile"><code>magus.pry()</code></a>: <code>binding.pry</code>-style breakpoint, opens the same REPL mid-<a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> with frame context attached.</li>
 </ul>
-<p>Both share the same evaluator. Pry adds stack-introspection commands (<code>.where</code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...) on top of the base REPL <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>. The <a href="#meta-commands">meta-commands</a> and <a href="#multiline-input">multiline input</a> sections apply to both unless noted.</p>
+<p>Both share the same evaluator. Pry adds stack-introspection commands (<code>.<a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a></code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...) on top of the base REPL <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>. The <a href="#meta-commands">meta-commands</a> and <a href="#multiline-input">multiline input</a> sections apply to both unless noted.</p>
 <h2 id="interactive-repl">Interactive REPL</h2>
 <p><code>magus repl</code> opens an interactive <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> REPL with the same runtime environment available to a magusfile: the <code>magus</code> object (including the host modules and <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> bindings) is preloaded. If a <code>magusfile.buzz</code> is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.</p>
 <p>The REPL accepts Buzz expressions and evaluates them against the magusfile runtime. Output is pretty-printed (max depth 3).</p>
@@ -153,7 +153,7 @@ go
 <td>Resume execution</td>
 </tr>
 <tr>
-<td><code>.load &lt;path&gt;</code></td>
+<td><code>.load &lt;<a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>&gt;</code></td>
 <td style="text-align:center">✓</td>
 <td style="text-align:center">✓</td>
 <td>Execute a file in the current session</td>
@@ -222,7 +222,7 @@ go
 <td><code>.finish</code></td>
 <td style="text-align:center"></td>
 <td style="text-align:center">✓</td>
-<td>Run until the current frame returns</td>
+<td><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> until the current frame returns</td>
 </tr>
 </tbody>
 </table></figure>

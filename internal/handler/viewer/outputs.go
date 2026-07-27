@@ -1,13 +1,13 @@
 package viewer
 
 import (
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
 
 	"github.com/egladman/magus/internal/cache"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler"
 )
 

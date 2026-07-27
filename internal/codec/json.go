@@ -16,6 +16,8 @@ func Marshal(v any) ([]byte, error) { return json.Marshal(v) }
 // Unmarshal decodes JSON data into v.
 func Unmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }
 
+func Valid(data []byte) bool { return json.Valid(data) }
+
 // MarshalIndent encodes v as indented JSON using prefix and indent.
 func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
 	return json.MarshalIndent(v, prefix, indent)

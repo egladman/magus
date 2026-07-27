@@ -140,7 +140,7 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&
 <ul>
 <li><strong>Not a hard error.</strong> The duplicate is a no-op; nothing blocks the build.</li>
 <li><strong>Not subsumption-aware.</strong> This check matches globs exactly. A per-target glob
-that is <em>subsumed</em> by a broader project-wide pattern (<code>src/config.go</code> under
+that is <em>subsumed</em> by a broader project-wide pattern (<code>src/<a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>.go</code> under
 <code>**/*.go</code>) is also redundant but is not flagged here.</li>
 </ul>
 <h2 id="see-also">See also</h2>

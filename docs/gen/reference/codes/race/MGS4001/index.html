@@ -109,8 +109,8 @@ finished last.</p>
     reason: &quot;&quot;
 </code></pre>
 <h2 id="why">Why</h2>
-<p>Magus dispatches projects in parallel whenever the dependency graph allows it.
-When two projects both run <code>go mod tidy</code>, <code>go work sync</code>, or any other tool
+<p>Magus dispatches projects in parallel whenever the dependency <a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> allows it.
+When two projects both <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> <code>go mod tidy</code>, <code>go work sync</code>, or any other tool
 that rewrites a shared file (lock files, <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> sums, generated assets), the
 result depends on which project finishes last. In the best case the file ends up
 correct but with inconsistent intermediate state; in the worst case the two
@@ -138,7 +138,7 @@ file that all writers produce identically), add a suppression entry:</p>
   reason: &quot;go.work.sum is regenerated identically by both projects&quot;
 </code></pre>
 <p>The paste-ready YAML is printed alongside each finding (see example above).
-<code>path_pattern</code> accepts glob syntax or a bare basename. <code>project_pair</code> is
+<code><a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>_pattern</code> accepts glob syntax or a bare basename. <code>project_pair</code> is
 order-independent. Omit <code>project_pair</code> to suppress the pattern for any pair.</p>
 <h3 id="2-serialise-the-conflicting-operations">2. Serialise the conflicting operations</h3>
 <p>If the race is real, run the conflicting <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> sequentially instead of in

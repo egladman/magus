@@ -110,11 +110,11 @@ breaking <code>.proto</code> edit fails the same stage that catches a style viol
 the baseline elsewhere with a function target when a repo uses a different default
 branch or an image baseline.</p>
 <h2 id="cli-surfaces-a-drift-gated-apilock">CLI surfaces: a drift-gated api.lock</h2>
-<p>A proto schema has buf to describe its compatibility. A command-line surface has
+<p>A proto schema has buf to <a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> its compatibility. A command-line surface has
 nothing equivalent, so magus tracks its own with a pattern you can copy for any CLI
 you ship.</p>
 <p><code>magus-utils api</code> writes the public surface (every subcommand, flag, <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>
-target, and config key) as a sorted, newline-delimited <code>.lock</code> file, the same flat
+target, and <a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> key) as a sorted, newline-delimited <code>.lock</code> file, the same flat
 format as <code>urls.lock</code>. The snapshot lives at
 <code>internal/manpage/testdata/api.lock</code>, and <code>TestAPIUpToDate</code> regenerates it in
 memory and compares. Change the CLI and the test fails until you regenerate:</p>
@@ -126,11 +126,11 @@ whether the change is acceptable, the same judgment <code>buf-breaking</code> au
 protos.</p>
 <p>To adopt this for your own tool: emit its public surface as a sorted list, commit
 the list, and add a test that regenerates and compares. The list is derived from
-one source of truth (magus builds it from the man page registry plus the config
+one source of truth (magus builds it from the <a class="code-xref" href="../../reference/manpage/magus-man/" data-kind="command" data-def="magus man: Write magus section 1 man pages from the running binary to a user-selected manpath.">man</a> page registry plus the config
 keys), so it never drifts from the real CLI.</p>
 <h2 id="acceptance-model">Acceptance model</h2>
 <p>magus deliberately keeps this lightweight. There is no allowlist file to maintain
-and no <code>doctor</code> check that a machine has to interpret. Acceptance is a human reading
+and no <code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code> check that a machine has to interpret. Acceptance is a human reading
 a diff:</p>
 <ol>
 <li>The drift gate fails on any surface change, breaking or not.</li>
@@ -155,7 +155,7 @@ same review every other change already goes through.</p>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
-        <a class="related-card" href="../../concepts/sandbox/"><span class="related-card-title">Sandbox model</span><span class="related-card-desc">The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.</span></a>
+        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
     </div>
   </section>
   <div class="page-provenance container">

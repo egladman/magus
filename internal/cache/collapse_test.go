@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"testing"
@@ -18,22 +17,6 @@ import (
 func collapseCache(t *testing.T) *Cache {
 	t.Helper()
 	return &Cache{dir: t.TempDir(), log: slog.Default(), logLevel: slog.LevelInfo, collapse: true}
-}
-
-// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	orig := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = orig }()
-
-	fn()
-	require.NoError(t, w.Close())
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-	return string(out)
 }
 
 // TestCaptureRunCollapseSuppressesOutputOnSuccess verifies a passing project's
@@ -54,30 +37,25 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 	assert.Empty(t, out, "collapse mode should withhold subprocess output on success")
 }
 
-// TestCaptureRunCollapseReplaysOnFailure verifies that on failure the withheld
-// output is replayed raw on stdout (copy/paste friendly), with an attributing
-// header on the stderr live view, so the error is not lost to the collapse.
-func TestCaptureRunCollapseReplaysOnFailure(t *testing.T) {
+// TestCaptureRunCollapseShowsFailureExcerpt verifies that on failure collapse
+// displays a bounded diagnostic excerpt on stderr, while retaining the full log.
+func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	c := collapseCache(t)
 	lp := c.logPath("svc/api", "cafef00d")
 	want := errors.New("boom")
 
-	var stdoutBuf string
 	stderrOut := captureStderr(t, func() {
-		stdoutBuf = captureStdout(t, func() {
-			_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
-				stdout, _ := runPkg.OutputWriters(ctx)
-				fmt.Fprintln(stdout, "lint: undefined symbol foo")
-				return want
-			})
-			require.ErrorIs(t, err, want)
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, "lint: undefined symbol foo")
+			return want
 		})
+		require.ErrorIs(t, err, want)
 	})
 
-	// Header (attribution) on the stderr live view; raw body on stdout.
+	// Header and concise diagnostic are both on the human-facing stderr stream.
 	assert.Contains(t, stderrOut, "-- svc/api (failed) --")
-	assert.Contains(t, stdoutBuf, "lint: undefined symbol foo")
-	assert.NotContains(t, stdoutBuf, "-- svc/api (failed) --", "stdout body must stay raw (no header)")
+	assert.Contains(t, stderrOut, "lint: undefined symbol foo")
 	// The failure log is retained (Run persists it to the output store under a ref
 	// so `magus query ref...` can replay a failing target's exact output).
 	data, statErr := os.ReadFile(lp)

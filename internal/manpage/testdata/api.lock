@@ -108,6 +108,7 @@ subcommand graph
 subcommand init
 subcommand insight
 subcommand ls
+subcommand man
 subcommand run
 subcommand self
 subcommand server

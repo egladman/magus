@@ -677,8 +677,25 @@ export object Site {
                     url = "reference/manpage/" + base + "/",
                     summary = this.fileDescription(manBase + "/" + name),
                 });
+                ents.append(Entity{
+                    token = sub,
+                    kind = "command",
+                    url = "reference/manpage/" + base + "/",
+                    summary = "magus " + sub + ": " + this.fileDescription(manBase + "/" + name),
+                });
             }
         }
+
+        ents.append(Entity{ token = "magus query", kind = "command", url = "concepts/knowledge/", summary = "Search the knowledge graph." });
+        ents.append(Entity{ token = "magus explain", kind = "command", url = "concepts/knowledge/", summary = "Explain one knowledge-graph node." });
+        ents.append(Entity{ token = "magus path", kind = "command", url = "concepts/knowledge/", summary = "Show the shortest path between knowledge-graph nodes." });
+        ents.append(Entity{ token = "magus refs", kind = "command", url = "concepts/knowledge/", summary = "Find a symbol's definition and references." });
+        ents.append(Entity{ token = "magus graph open", kind = "command", url = "reference/manpage/magus-graph/", summary = "Open a graph explorer for the workspace graph." });
+        ents.append(Entity{ token = "query", kind = "command", url = "concepts/knowledge/", summary = "magus query: search the knowledge graph." });
+        ents.append(Entity{ token = "explain", kind = "command", url = "concepts/knowledge/", summary = "magus explain: explain one knowledge-graph node." });
+        ents.append(Entity{ token = "path", kind = "command", url = "concepts/knowledge/", summary = "magus path: show the shortest path between knowledge-graph nodes." });
+        ents.append(Entity{ token = "refs", kind = "command", url = "concepts/knowledge/", summary = "magus refs: find a symbol's definition and references." });
+        ents.append(Entity{ token = "graph open", kind = "command", url = "reference/manpage/magus-graph/", summary = "magus graph open: open a graph explorer." });
 
         // Module methods: each reference/buzz/<mod>.md H3 is a method; token "mod\method"
         // (backslash-namespaced, so it never collides with prose), anchor = its goldmark slug.

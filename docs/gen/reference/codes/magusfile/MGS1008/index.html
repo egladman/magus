@@ -98,7 +98,7 @@
 <p>Every <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> is an exported <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> function whose FIRST parameter is a
 <code>magus\Context</code>. An exported function without it is rejected at load, because the
 signature is the contract magus reads - statically, without running the body - to
-build the dependency graph and <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> footprint.</p>
+build the dependency <a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> and <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> footprint.</p>
 <pre><code class="language-text">[MGS1008] target &quot;build&quot; must receive a magus\Context as its first parameter:
 change its signature to export fun build(ctx: magus\Context, args: [str])
   see: .../MGS1008.md

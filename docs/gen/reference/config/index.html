@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="configuration">Configuration</h1>
-<p>magus resolves configuration from three layers, highest precedence first: a CLI flag, a <code>MAGUS_*</code> environment variable, then the <code>magus.yaml</code> file at the <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root. This page is the complete inventory of config keys, each with its <code>magus.yaml</code> path, environment variable, CLI flag, and value type.</p>
+<p>magus resolves configuration from three layers, highest precedence first: a CLI flag, a <code>MAGUS_*</code> environment variable, then the <code>magus.yaml</code> file at the <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root. This page is the complete inventory of <a class="code-xref" href="../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> keys, each with its <code>magus.yaml</code> <a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>, environment variable, CLI flag, and value type.</p>
 <h2 id="cache">cache</h2>
 <figure class="table-scroll"><table>
 <thead>
@@ -221,7 +221,7 @@
 </tr>
 <tr>
 <td><code><a class="code-xref" href="./#daemon" data-kind="config" data-def="duration, flag --daemon-maintenance-sync-graph, env MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH">daemon.maintenance.sync_graph</a></code></td>
-<td><code>MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH</code></td>
+<td><code>MAGUS_DAEMON_MAINTENANCE_SYNC_<a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">GRAPH</a></code></td>
 <td><code>--daemon-maintenance-sync-graph</code></td>
 <td>duration</td>
 </tr>
@@ -269,7 +269,7 @@
 <td>list <em>(comma-separated, env only)</em></td>
 </tr>
 <tr>
-<td><code>dry_run</code></td>
+<td><code>dry_<a class="code-xref" href="../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a></code></td>
 <td><code>MAGUS_DRY_RUN</code></td>
 <td><code>-u</code>, <code>--dry-run</code></td>
 <td>bool</td>

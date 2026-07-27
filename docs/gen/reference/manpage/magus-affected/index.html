@@ -84,24 +84,24 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="magus-affected">magus-affected</h1>
-<p>Run a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for VCS-diff <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> projects</p>
+<p><a class="code-xref" href="../magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for VCS-diff <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> projects</p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> affected &lt;target&gt; [flags]</p>
+<p><strong>magus</strong> <a class="code-xref" href="./" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> &lt;target&gt; [flags]</p>
 <h2 id="description">Description</h2>
 <p>Run a named target for every <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> that is affected by changes in
-version control. The active VCS adapter is picked by autodetect from .git, .hg,
+<a class="code-xref" href="../magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> control. The active VCS adapter is picked by autodetect from .git, .hg,
 or .jj at the <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root, or pinned with MAGUS_VCS_COMMAND_NAME /
 vcs.command_name. MAGUS_VCS_COMMAND overrides the command entirely. When
 MAGUS_VCS_ENABLED=false (or <a class="code-xref" href="../../config/#vcs" data-kind="config" data-def="bool _(env only)_, env MAGUS_VCS_ENABLED">vcs.enabled</a>: false) affected detection
 short-circuits and falls back to the full project set with the source label
 &quot;vcs disabled&quot;.</p>
 <p>A project is affected if any of its source files changed directly, or if a
-project it depends on is affected (transitive closure over the dependency graph).</p>
+project it depends on is affected (transitive closure over the dependency <a class="code-xref" href="../magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>).</p>
 <p>Use --stdin to read changed paths from a pipe instead of running a VCS diff.
 This pairs with <a class="code-xref" href="../magus-watch/" data-kind="command" data-def="Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">magus watch</a> for continuous-build workflows:</p>
-<p>magus watch | <a class="code-xref" href="./" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> --stdin build</p>
+<p>magus <a class="code-xref" href="../magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a> | <a class="code-xref" href="./" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> --stdin build</p>
 <p>Forensic modes reason about the affected set instead of executing a target.
---explain shows why a project is in the set. --plan emits a provider-neutral
+--<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a> shows why a project is in the set. --plan emits a provider-neutral
 JSON <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the affected set (for CI fan-out; always keys off the ci
 anchor). --bisect drives VCS bisect using run history to find the commit that
 introduced a regression.</p>
@@ -138,7 +138,7 @@ introduced a regression.</p>
 </dl>
 <h2 id="targets">Targets</h2>
 <dl>
-<dt><strong>ls</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-ls/" data-kind="command" data-def="magus ls: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">ls</a></strong></dt>
 <dd>Print selected projects without executing anything</dd>
 <dt><strong>build</strong></dt>
 <dd>Build selected projects</dd>
@@ -184,7 +184,7 @@ introduced a regression.</p>
 <pre><code class="language-sh">magus affected --bisect ./apps/myapp
 </code></pre>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-man/"><strong>magus-man</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>

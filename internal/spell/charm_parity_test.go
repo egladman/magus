@@ -2,11 +2,11 @@ package spell_test
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/host"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"

@@ -76,17 +76,17 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#claude-code" title="Claude Code">Claude Code</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
+        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#claude-code" title="Claude Code">Claude Code</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">12 min read</small>
+    <small class="reading-time" title="Estimated reading time">14 min read</small>
     <article>
 <h1 id="agents">Agents</h1>
 <p>magus knows more about a <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> than any agent can rediscover by reading
 files: the <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> DAG, every <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s inputs and declared outputs, which files
-are generated, what a diff affects, where churn and coupling concentrate. The
+are generated, what a diff affects, <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> churn and coupling concentrate. The
 agent <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> exposes that knowledge through three artifacts that divide
 cleanly. One rule governs all of it: every tool answers a question from
 declared sources; none of them decides, plans, or injects itself into the
@@ -104,16 +104,16 @@ The three artifacts:</p>
 <tr>
 <td><code>MAGUS.md</code></td>
 <td>WHAT is in this workspace (targets, counts, anchors)</td>
-<td>regenerated with the workspace (<code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> graph -o markdown</code>)</td>
+<td>regenerated with the workspace (<code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> <a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> -o markdown</code>)</td>
 </tr>
 <tr>
-<td><code>.claude/skills/</code></td>
+<td>Agent Skills</td>
 <td>HOW to use the magus tool surface</td>
 <td>ships with the binary; versioned, drift-checked</td>
 </tr>
 <tr>
 <td>MCP <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a></td>
-<td>live answers (query, run, explain, logs)</td>
+<td>live answers (<a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a>, <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>, <a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a>, logs)</td>
 <td>always current; <code><a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">magus server</a> start</code></td>
 </tr>
 </tbody>
@@ -142,7 +142,7 @@ host-specific step:</p>
 <tbody>
 <tr>
 <td><code>.agents/skills/</code></td>
-<td>Agent Skills spec generic location</td>
+<td>Codex and other Agent Skills hosts</td>
 </tr>
 <tr>
 <td><code>.claude/skills/</code></td>
@@ -152,17 +152,21 @@ host-specific step:</p>
 <td><code>.opencode/skills/</code></td>
 <td>OpenCode</td>
 </tr>
+<tr>
+<td><code>AGENTS.md</code></td>
+<td>Codex and other instruction-file hosts</td>
+</tr>
 </tbody>
 </table></figure>
-<p>For hosts that read the <code>AGENTS.md</code> contract (Codex, Aider, Droid, ...)
-instead of skill directories, <code>--agents-md</code> maintains a marker-delimited magus
-section inside <code>AGENTS.md</code> (created if absent, replaced in place on
-re-install, other content untouched) carrying the same rules in compressed
-form. There are no per-model skill bodies anywhere - supporting a new host
-means naming a destination, not writing new instructions.</p>
+<p><code>--agents-md</code> maintains a marker-delimited magus section inside <code>AGENTS.md</code>
+(created if absent, replaced in place on re-install, other content untouched).
+For Codex, <code>AGENTS.md</code> and <code>.agents/skills/</code> are complementary: the first is
+always-on repository guidance; the second exposes focused workflows on demand.
+There are no per-model skill bodies anywhere - supporting a new host means
+naming a destination, not writing new instructions.</p>
 <ul>
 <li><code>magus-query</code>: find and relate domain entities with
-<code>query</code>/<code>explain</code>/<code>path</code>/<code>refs</code>/<code>stats</code> instead of grepping - the query
+<code>query</code>/<code>explain</code>/<code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a></code>/<code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a></code>/<code>stats</code> instead of grepping - the query
 grammar, reading node IDs and edge provenance, <a class="glossary-term" href="../../glossary/#ownership" data-def="An insight lens: author concentration - the primary author and their share, the distinct-author count (the bus factor), and abandonment.">ownership</a>, cross-workspace
 queries.</li>
 <li><code>magus-run</code>: run work through top-level targets (<code>build</code>, <code>test</code>, <code>lint</code>,
@@ -175,12 +179,12 @@ generated files are regenerated, never hand-edited, never worth reading a
 diff of, and committed alongside the sources that produced them.</li>
 <li><code>magus-architecture</code>: ground refactoring proposals in graph evidence -
 hotspots, <a class="glossary-term" href="../../glossary/#affinity" data-def="An insight lens: projects that change together (temporal coupling). A pair that co-changes without either declaring a dependency on the other is a candidate architectural smell.">affinity</a> (undeclared coupling), blast radius, symbol fan-in,
-CODEOWNERS - and verify impact with <code>graph diff</code>.</li>
-<li><code>magus-memory</code>: durable cross-session project memory over MCP. Each memory is
-a typed pointer into the codebase (a saved query, a graph node, an output ref,
-a doc), not free prose; only a decision carries the why. The graph holds the
-truth, memory holds the curation. Records survive model and session changes.</li>
-<li><code>magus-docs</code>: navigate magus's own documentation to answer a how-does-magus-do-X
+CODEOWNERS - and verify impact with <code><a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> diff</code>.</li>
+<li><code>magus-memory</code>: a user-owned handoff journal over CLI, MCP, and <a class="glossary-term" href="../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a>. Each
+entry points to something magus can reopen; it is not automatic agent memory.
+Use named decisions and plans when a later person needs the why, then verify
+stale or malformed entries instead of silently carrying them forward.</li>
+<li><code>magus-docs</code>: navigate magus's own documentation to answer a how-does-magus-do-<a class="code-xref" href="../../reference/manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">X</a>
 question instead of guessing - the doc URL and section scheme, the in-page
 navigation axes, and when to reach for it over the workspace graph.</li>
 </ul>
@@ -199,6 +203,8 @@ the workspace WHAT. Both are generated - edit neither by hand.</li>
 <h2 id="install-and-update">Install and update</h2>
 <pre><code class="language-sh">magus agent install .claude/skills          # name your host's skill dir; refuses to overwrite
 magus agent install .claude/skills --force  # overwrite after a magus upgrade
+magus agent install .agents/skills --agents-md          # Codex: skills + always-on guidance
+magus agent install .agents/skills --agents-md --force  # refresh both after an upgrade
 magus agent install --agents-md             # write/refresh the AGENTS.md section
 magus graph verify                          # are the installed skills current? (per location)
 magus graph verify --strict                 # CI gate: non-zero exit when stale
@@ -208,13 +214,51 @@ fresh install (or a <code>--force</code> refresh) before it can invoke the new s
 already-open session keeps the skill set it launched with. The same launch-time
 rule applies to MCP tools; see <a href="../mcp/">MCP</a> for connecting the daemon.</p>
 <p>Every installed file (and the AGENTS.md section marker) carries a generated
-stamp with the agent-skill version and the knowledge schema version.
-<code><a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> verify</code> compares those stamps against the running binary for
+stamp with the agent-skill <a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> and the knowledge schema version.
+<code>magus graph verify</code> compares those stamps against the running binary for
 every well-known location it finds installed (<code>.agents/skills</code>,
 <code>.claude/skills</code>, <code>.opencode/skills</code>, and the AGENTS.md section), so a magus
 upgrade that changes the tool surface shows up as actionable drift instead of
 silently wrong instructions. Do not hand-edit installed skills; change flows
 through re-running install.</p>
+<h3 id="codex">Codex</h3>
+<p>Codex needs both the focused skills and the repository guidance:</p>
+<pre><code class="language-sh">magus agent install .agents/skills --agents-md
+magus server start
+</code></pre>
+<p>Register the local Streamable HTTP <a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> in your user-level
+<code>~/.codex/<a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>.toml</code>, never in the repository:</p>
+<pre><code class="language-toml">[mcp_servers.magus]
+url = &quot;http://127.0.0.1:7391/mcp&quot;
+bearer_token_env_var = &quot;MAGUS_MCP_TOKEN&quot;
+enabled = true
+</code></pre>
+<p>For Codex CLI, set <code>MAGUS_MCP_TOKEN</code> in the shell that launches it, then verify
+registration and endpoint <a class="glossary-term" href="../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a>:</p>
+<pre><code class="language-sh">export MAGUS_MCP_TOKEN=&quot;$(magus config mcp token print)&quot;
+codex mcp list
+magus server start
+magus status --probe=liveness,mcp
+</code></pre>
+<p>For a dedicated, revocable credential, create a connector token named <code>codex</code>
+instead and store the value it prints in your local secret manager as
+<code>MAGUS_MCP_TOKEN</code>. For the ChatGPT desktop app or Codex IDE extension, make that
+variable available through the OS environment before launching or restarting the
+client; an <code>export</code> in an unrelated terminal cannot modify an existing app.
+Start a new Codex task after installing skills, changing <code>AGENTS.md</code>, changing
+MCP configuration, or starting the daemon: Codex discovers all of those at task
+start. <code>codex mcp list</code> confirms configuration only; the <a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a> probe confirms
+the endpoint is actually serving. If <code><a class="code-xref" href="../../reference/config/#mcp" data-kind="config" data-def="string, flag --mcp-address, env MAGUS_MCP_ADDRESS">mcp.address</a></code> changes, update the URL in
+your user-level Codex configuration as well.</p>
+<h3 id="daemon-optional-agent-surface-preferred">Daemon optional, agent surface preferred</h3>
+<p>The CLI works without a daemon. It still reads the workspace, runs targets,
+uses the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>, and answers graph queries. What it lacks is MCP tool discovery,
+the daemon's warm graph and background indexes, structured output retrieval,
+and MCP-only capabilities such as scratchpad and memory. An agent must not turn
+that into a blocker: at task start, or after an MCP error, it should run
+<code><a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a> --probe=mcp</code>; if unavailable, tell the user once to run
+<code>magus server start</code>, then use the CLI fallback. The next task picks up the
+full surface after the daemon is running and the client is restarted.</p>
 <h2 id="guard-hooks">Guard hooks</h2>
 <p>Most agent hosts can run a hook before executing a shell command. magus
 supplies the rule evaluation; the host supplies the hook that calls it.
@@ -290,8 +334,17 @@ mid-2026, with the confidence caveats called out inline. Those docs are the
 products' own and move on their schedule, so confirm each against the host's
 current docs and expect to adjust.</p>
 <p>Not every host reads the Agent Skills format. Claude Code and OpenCode discover
-<code>SKILL.md</code> directories; Cursor and most other hosts read an <code>AGENTS.md</code> instead,
-which is why their install step is <code>--agents-md</code>, not a skills directory.</p>
+<code>SKILL.md</code> directories. Codex reads both <code>.agents/skills/</code> and <code>AGENTS.md</code>;
+Cursor and most other hosts use only <code>AGENTS.md</code>.</p>
+<h4 id="codex-1">Codex</h4>
+<p>Codex uses the setup above: <code>.agents/skills/</code> for the focused workflows,
+<code>AGENTS.md</code> for durable repository guidance, and <code>.codex/config.toml</code> for MCP.
+The installed guidance and the MCP server instructions are the right way to
+teach discovery-first behavior. Do not try to enforce a graph query with a
+hook: a hook can observe a tool call, but cannot prove the agent asked the
+right prior question. Reserve hooks for concrete safety rules such as the
+destructive-VCS guard, and keep the workflow guidance visible and testable with
+<code>magus graph verify --strict</code>.</p>
 <h4 id="opencode">OpenCode</h4>
 <p>OpenCode discovers Agent Skills from <code>.opencode/skills/</code> (and also reads
 <code>.claude/skills/</code>, so if you already installed there for Claude Code, OpenCode
@@ -345,20 +398,21 @@ exec magus agent hook --from-json command -o 'template={{if eq .decision &quot;d
 <h2 id="the-mcp-daemon">The MCP daemon</h2>
 <p><code>magus server start</code> brings up the daemon, and the MCP server with it. Agents
 connected over MCP get the same verbs as the CLI plus run/log/scratchpad tools;
-<code>magus describe mcp-tools</code> lists all of them with parameters. See
+<code>magus <a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> mcp-tools</code> lists all of them with parameters. See
 <a href="../mcp/">MCP</a> for transport and token setup, and
 <a href="../../concepts/knowledge/">Knowledge graph</a> for the graph the query tools read.</p>
 <p>Skills prefer the MCP tools and fall back to the CLI, so they work in both
 connected and daemon-less sessions.</p>
 <p>Two tools deserve a callout because they carry state across sessions:
 <code>magus_scratchpad</code> (a disposable per-workspace working file) and <code>magus_memory</code>
-(durable per-repository records, each a typed pointer into the codebase, kept in
-the user state directory outside the repo, shared across branches, worktrees,
-sessions, and models). Both are pull-based: nothing is injected into an agent's context;
-an agent reads them when it chooses to. Captured build output is addressed by
+(a deliberate, user-owned handoff journal of per-repository records, each
+pointing into the codebase, kept in the user state directory outside the repo,
+and shared across branches and worktrees). Both are pull-based: nothing is
+injected into an agent's context. The journal is also available through <code>magus memory list|get|put|delete|verify</code>; use <code>verify</code> to surface stale, malformed,
+or broken linked entries. Captured build output is addressed by
 <a href="../../concepts/output-refs/">output references</a>.</p>
 <h2 id="why-a-daemon-not-a-wrapper">Why a daemon, not a wrapper</h2>
-<p>The skeptical read is reasonable. If an agent can already run <code>magus query</code> in a
+<p>The skeptical read is reasonable. If an agent can already run <code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a></code> in a
 shell, what does an MCP server add? If the server only ran the CLI and handed back
 its stdout, the answer would be nothing, plus a round trip. That is not what this
 server does, and the difference is the context the agent has to work with.</p>

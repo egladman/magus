@@ -2,12 +2,12 @@ package status
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )

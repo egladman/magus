@@ -38,16 +38,16 @@ func TestEmit_DefaultOn(t *testing.T) {
 	assert.True(t, strings.HasPrefix(buf.String(), "hint: "), "Emit output = %q; want prefix %q", buf.String(), "hint: ")
 }
 
-func TestEmit_SetEnabledFalse(t *testing.T) {
-	SetEnabled(false)
-	t.Cleanup(func() { SetEnabled(true) })
+func TestEmit_SetHintsEnabledFalse(t *testing.T) {
+	SetHintsEnabled(false)
+	t.Cleanup(func() { SetHintsEnabled(true) })
 	var buf bytes.Buffer
 	Emit(&buf, "try `magus run` instead")
-	assert.Zero(t, buf.Len(), "Emit wrote %q with SetEnabled(false); want nothing", buf.String())
+	assert.Zero(t, buf.Len(), "Emit wrote %q with hints disabled; want nothing", buf.String())
 }
 
-func TestEmit_SetEnabledTrue(t *testing.T) {
-	SetEnabled(true)
+func TestEmit_SetHintsEnabledTrue(t *testing.T) {
+	SetHintsEnabled(true)
 	var buf bytes.Buffer
 	Emit(&buf, "try `magus run` instead")
 	assert.True(t, strings.HasPrefix(buf.String(), "hint: "), "Emit output = %q; want prefix %q", buf.String(), "hint: ")

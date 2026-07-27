@@ -91,19 +91,19 @@
     <article>
 <h1 id="mgs4006-stale-generated-output">MGS4006: stale generated output</h1>
 <p>A generated output changed when you regenerated it, and one of its declared inputs is
-also dirty. The output is stale: a source input moved on from the version the committed
+also dirty. The output is stale: a source input moved on from the <a class="code-xref" href="../../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> the committed
 output was built from, so the committed output no longer reflects its inputs.</p>
 <pre><code class="language-text">[MGS4006] generated output drifted and a declared input changed; re-run
 `magus run generate:rw` and commit
 </code></pre>
 <h2 id="why">Why</h2>
-<p>This is real content drift, not toolchain noise (contrast <a href="../MGS4005/">MGS4005</a>, where
+<p>This is real content drift, not toolchain noise (contrast <a href="../MGS4005/">MGS4005</a>, <a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a>
 the inputs are unchanged). A declared input - a source file the generator reads - changed
 without the generated output being regenerated to match. Left uncommitted, the repository
 ships a generated file that disagrees with its own source.</p>
 <h2 id="resolution">Resolution</h2>
 <p>Regenerate and commit: <code><a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> generate:rw</code>, then commit the updated outputs alongside
-the input change that caused them. This is the expected, healthy path - the output simply
+the input change that caused them. This is the expected, healthy <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> - the output simply
 needs to catch up with its inputs.</p>
     </article>
     </div>

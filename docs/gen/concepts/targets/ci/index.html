@@ -84,7 +84,7 @@
 }
 </code></pre>
 <h2 id="recommendations">Recommendations</h2>
-<p>We document this order; we don't enforce it. Chain steps with <code>magus.needs</code> where order matters (e.g. <code>test</code> depends on <code>build</code>).</p>
+<p>We document this order; we don't enforce it. Chain steps with <code>magus.needs</code> <a class="code-xref" href="../../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> order matters (e.g. <code>test</code> depends on <code>build</code>).</p>
 <div class="mermaid-src"><pre><code class="language-mermaid">flowchart TD
     cmd[&quot;magus affected ci&quot;] --&gt; preflight
     subgraph targets[&quot;Targets (composed in your magusfile)&quot;]
@@ -103,7 +103,7 @@ cache:
     trusted_keys:
       - &quot;&lt;base64 Ed25519 public key&gt;&quot; # magus config cache key generate
 </code></pre>
-<p>A complementary defense is to open the cache <strong>read-only on untrusted refs</strong>: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and <a class="glossary-term" href="../../../glossary/#volatility" data-def="A target that fails once and passes on rerun is **volatile**, as opposed to a regression that started failing and stays failing. magus keeps per-target pass/fail history and a Wilson-score volatility rate to tell them apart and auto-retry the noise.">volatility</a> detector read it): restore always, save only from trusted pushes.</p>
+<p>A complementary defense is to open the cache <strong>read-only on untrusted <a class="code-xref" href="../../knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a></strong>: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> history (the forecaster and <a class="glossary-term" href="../../../glossary/#volatility" data-def="A target that fails once and passes on rerun is **volatile**, as opposed to a regression that started failing and stays failing. magus keeps per-target pass/fail history and a Wilson-score volatility rate to tell them apart and auto-retry the noise.">volatility</a> detector read it): restore always, save only from trusted pushes.</p>
 <pre><code class="language-yaml"># PRs replay the cache and see main's history, but write neither
 MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
 </code></pre>

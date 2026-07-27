@@ -141,9 +141,9 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 <p>If the flagged call is genuinely dead code, delete it.</p>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
-<li><strong>Not a hard error.</strong> Nothing blocks the build; it is a <code>magus doctor</code> finding.</li>
+<li><strong>Not a hard error.</strong> Nothing blocks the build; it is a <code>magus <a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code> finding.</li>
 <li><strong>Not the non-literal-argument error.</strong> A computed argument in a <em>reachable</em>
-call (<code>ctx.inputs(x)</code>) is a <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error, because magus sees the call
+call (<code>ctx.inputs(<a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a>)</code>) is a <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error, because magus sees the call
 but cannot resolve the glob. <a class="code-xref" href="./" data-kind="code" data-def="Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">MGS1004</a> is the opposite: magus resolves nothing
 because it never reaches the call.</li>
 </ul>

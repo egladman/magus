@@ -1,13 +1,13 @@
 package viewer
 
 import (
-	"encoding/json"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -96,7 +96,7 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="mgs2007-exec-denied-by-sandbox">MGS2007: exec denied by sandbox</h1>
-<p>A <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> tried to execute a binary whose resolved path is outside the
+<p>A <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> tried to execute a binary whose resolved <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> is outside the
 configured allowlist.</p>
 <pre><code class="language-text">[MGS2007] exec denied: /home/user/.local/bin/exfil
 </code></pre>
@@ -115,7 +115,7 @@ which is allowed.</p>
 bug.</p>
 </li>
 <li>
-<p><strong>Third-party spells trying to run a tool you installed locally</strong>
+<p><strong>Third-party spells trying to <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> a tool you installed locally</strong>
 (e.g. a custom binary under <code>~/.local/bin</code>): the spell expects an
 external binary it did not ship. Add the directory to your allowlist:</p>
 <pre><code class="language-yaml">sandbox:

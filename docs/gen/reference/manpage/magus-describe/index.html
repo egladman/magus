@@ -86,20 +86,20 @@
 <h1 id="magus-describe">magus-describe</h1>
 <p>Define a magus concept and list its entities</p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> describe &lt;noun&gt; [&lt;name&gt;] [flags]</p>
+<p><strong>magus</strong> <a class="code-xref" href="./" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> &lt;noun&gt; [&lt;name&gt;] [flags]</p>
 <h2 id="description">Description</h2>
 <p>Define a magus concept and list every entity of that kind. The noun is
 one of <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>, <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>, <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a>, or mcp-tool; singular
 and plural are interchangeable. Pass a name after the noun to detail a single
 entity instead of listing them all. (The <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a> lives under magus
-graph: export for the merged graph, stats for its shape.)</p>
+<a class="code-xref" href="../magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>: export for the merged graph, stats for its shape.)</p>
 <p>The charm noun is the inverse of a target ref: &quot;describe charm rw&quot; lists every
 target that declares the rw charm and the argv edit each one makes, the transpose
 of the charms a single &quot;describe target&quot; lists.</p>
 <p>For a target ref (e.g. &quot;api:build&quot;, or &quot;:test&quot; for all projects) magus prints the
 fully-evaluated dispatch plan: the workspace-rooted source and output globs, the
 spells that fire, the charm-applied command, and any per-target policy. Add a charm
-and --explain (e.g. &quot;lint:rw --explain&quot;) to see each charm reshape the command one
+and --<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a> (e.g. &quot;lint:rw --explain&quot;) to see each charm reshape the command one
 step at a time.</p>
 <h2 id="options">Options</h2>
 <dl>
@@ -125,7 +125,7 @@ step at a time.</p>
 <pre><code class="language-sh">magus describe target --explain lint:rw,debug
 </code></pre>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-man/"><strong>magus-man</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>

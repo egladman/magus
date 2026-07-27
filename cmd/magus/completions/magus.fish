@@ -23,6 +23,7 @@ function __magus_subcommands
         server       'manage the persistent daemon (start / stop)' \
         repl         'open an interactive Buzz interpreter' \
         completion   'generate shell completion' \
+        man          'install embedded man pages' \
         init         'bootstrap a workspace (magus.yaml + magusfile.buzz)' \
         self         'manage the magus binary (self update / install)' \
         version      'print version, commit, and build date' \
@@ -176,4 +177,6 @@ for _cmd in magus mgs
     complete -c $_cmd -n '__fish_seen_subcommand_from init' -l vcs -d 'VCS to wire the merge driver for (git|hg)'
 
     complete -c $_cmd -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish powershell'
+    complete -c $_cmd -n '__fish_seen_subcommand_from man' -a 'install'
+    complete -c $_cmd -n '__fish_seen_subcommand_from man' -l dir -d 'directory for section 1 man pages' -r
 end

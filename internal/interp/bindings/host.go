@@ -10,11 +10,11 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 )
 
-// emitMagusHint prints msg through the shared hint channel, honoring the global
-// hints toggle. Advisory only, never fatal. No dedup — it would mean
+// emitMagusHint prints msg through the shared hint channel, honoring the user
+// hints preference. Advisory only, never fatal. No dedup — it would mean
 // process-global state that leaks across runs in the daemon.
 func emitMagusHint(msg string) {
-	if !interactive.Enabled() {
+	if !interactive.HintsEnabled() {
 		return
 	}
 	interactive.Emit(os.Stderr, msg)

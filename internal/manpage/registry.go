@@ -23,6 +23,7 @@ var All = []Command{
 	configCommand,
 	serverCommand,
 	completionCommand,
+	manCommand,
 	initCommand,
 	selfCommand,
 	versionCommand,
@@ -568,6 +569,22 @@ var completionCommand = Command{
 		{"Zsh", "magus completion zsh >> ~/.zshrc"},
 		{"Fish", "magus completion fish >> ~/.config/fish/config.fish"},
 		{"PowerShell", "magus completion powershell >> $PROFILE"},
+	},
+}
+
+var manCommand = Command{
+	Name:        "man",
+	Short:       "Install the man pages embedded in this binary",
+	Description: "Write magus section 1 man pages from the running binary to a user-selected manpath.",
+	Tags:        []string{"cli", "magus man", "manpage", "documentation", "install"},
+	Long:        `Write the complete magus manpage set carried by this binary. The installer uses this command to place the pages under the selected installation prefix.`,
+	Usage:       "magus man install [--dir DIR]",
+	Children: []Command{
+		{Name: "install", Short: "Write the embedded section 1 man pages"},
+	},
+	Examples: []Example{
+		{"Install to the default user manpath", "magus man install"},
+		{"Install to a custom prefix", "magus man install --dir ~/.local/share/man/man1"},
 	},
 }
 

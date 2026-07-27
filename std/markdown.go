@@ -3,7 +3,6 @@ package std
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -15,6 +14,8 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	"gopkg.in/yaml.v3"
+
+	json "github.com/egladman/magus/internal/codec"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module markdown -lang buzz -out ../host/gen/markdown.go

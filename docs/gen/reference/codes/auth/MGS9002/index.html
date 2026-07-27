@@ -100,12 +100,12 @@ machine is effectively shared. Magus treats loose permissions as a hard error
 <p>Tighten the file to owner-only read/write, exactly as the message says:</p>
 <pre><code class="language-sh">chmod 600 &lt;path&gt;
 </code></pre>
-<p>Then re-run the command. If the file lives on a filesystem that cannot represent
+<p>Then re-<a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> the command. If the file lives on a filesystem that cannot represent
 Unix permissions, move the magus state directory to one that can.</p>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><code><a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> mcp token</code>: where the operator token lives.</li>
-<li><code>magus config mcp connector</code>: the connector store.</li>
+<li><code><a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> mcp token</code>: <a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the operator token lives.</li>
+<li><code>magus <a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> mcp connector</code>: the connector store.</li>
 </ul>
     </article>
     </div>

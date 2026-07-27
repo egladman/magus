@@ -136,6 +136,7 @@
 - [magus init](https://eli.gladman.cc/magus/reference/manpage/magus-init/index.md): Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.
 - [magus insight](https://eli.gladman.cc/magus/reference/manpage/magus-insight/index.md): Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.
 - [magus ls](https://eli.gladman.cc/magus/reference/manpage/magus-ls/index.md): List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.
+- [magus man](https://eli.gladman.cc/magus/reference/manpage/magus-man/index.md): Write magus section 1 man pages from the running binary to a user-selected manpath.
 - [magus run](https://eli.gladman.cc/magus/reference/manpage/magus-run/index.md): Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.
 - [magus self](https://eli.gladman.cc/magus/reference/manpage/magus-self/index.md): Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.
 - [magus server](https://eli.gladman.cc/magus/reference/manpage/magus-server/index.md): Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.

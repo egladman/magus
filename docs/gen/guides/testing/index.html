@@ -111,7 +111,7 @@ test &quot;collectAlias trims slashes and records every alias&quot; {
     assert.equal(s.aliasTarget, {&quot;old-path&quot;: &quot;new-path/&quot;}, &quot;alias recorded, slashes trimmed&quot;);
 }
 </code></pre>
-<p>Run the tests:</p>
+<p><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> the tests:</p>
 <pre><code class="language-bash">magus buzz -t --embedded render.buzz   # a single file
 magus run buzz-test                    # the project's test target
 </code></pre>
@@ -229,7 +229,7 @@ per-test controls, callable from inside an <code>it</code> body:</p>
 <tr>
 <td><code>s.fatal(message)</code></td>
 <td><code>t.Fatal</code></td>
-<td>Records a failure and stops the body, for a broken precondition where the soft matchers would keep going</td>
+<td>Records a failure and stops the body, for a broken precondition <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the soft matchers would keep going</td>
 </tr>
 <tr>
 <td><code>s.cleanup(fn)</code></td>

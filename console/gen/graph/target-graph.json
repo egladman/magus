@@ -3,6 +3,7 @@
   "projects": [
     {
       "path": ".",
+      "name": "magus",
       "engine": "buzz",
       "nodes": [
         {
@@ -69,7 +70,7 @@
         {
           "name": "bindings-generate",
           "declared": "bindings_generate",
-          "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
+          "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
           "outputs": [
             "host/gen/*.go"
           ]
@@ -171,8 +172,11 @@
           ]
         },
         {
-          "name": "coverage",
-          "doc": "coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.",
+          "name": "test",
+          "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
+          "dependencies": [
+            "format"
+          ],
           "charms": [
             "rw"
           ],
@@ -228,23 +232,8 @@
           ]
         },
         {
-          "name": "test",
-          "doc": "Formats first, then runs the Go test suite.",
-          "dependencies": [
-            "format"
-          ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-test"
-              ]
-            }
-          ]
-        },
-        {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint.",
+          "doc": "Formats first, then golangci-lint, go vet, and markdownlint.",
           "dependencies": [
             "format"
           ],
@@ -261,6 +250,12 @@
                 "markdownlint"
               ]
             }
+          ]
+        },
+        {
+          "name": "security",
+          "dependencies": [
+            "format"
           ]
         },
         {
@@ -281,13 +276,12 @@
         },
         {
           "name": "ci",
-          "doc": "Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.",
+          "doc": "Runs the CI gates through their declared dependencies.",
           "dependencies": [
-            "generate",
             "lint",
+            "security",
             "build",
-            "test",
-            "coverage"
+            "test"
           ]
         },
         {
@@ -309,6 +303,7 @@
     },
     {
       "path": "cmd/magus/starter",
+      "name": "cmd/magus/starter",
       "engine": "buzz",
       "nodes": [
         {
@@ -357,6 +352,7 @@
     },
     {
       "path": "console",
+      "name": "console",
       "engine": "buzz",
       "nodes": [
         {
@@ -377,11 +373,17 @@
           ],
           "charms": [
             "rw"
+          ],
+          "cross_dependencies": [
+            {
+              "project": ".",
+              "target": "graph-generate"
+            }
           ]
         },
         {
           "name": "lint",
-          "doc": "lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the same way a Go project's lint runs `go vet`.",
+          "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
           "dependencies": [
             "preflight"
           ],
@@ -403,11 +405,13 @@
         }
       ],
       "depends_on": [
+        ".",
         "libs/textsearch"
       ]
     },
     {
       "path": "docs",
+      "name": "docs",
       "engine": "buzz",
       "nodes": [
         {
@@ -445,6 +449,7 @@
           ],
           "outputs": [
             "reference/buzz/*.md",
+            "reference/config.md",
             "concepts/spells/*.md",
             "concepts/spells.md",
             "reference/manpage/*.md",
@@ -453,7 +458,7 @@
         },
         {
           "name": "generate",
-          "doc": "generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.",
+          "doc": "generate is the full publication and drift gate.",
           "dependencies": [
             "preflight",
             "content-generate",
@@ -528,7 +533,7 @@
         {
           "name": "build-mermaid",
           "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into the committed gen/assets/mermaid.js.",
+          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
           ]
@@ -536,23 +541,25 @@
         {
           "name": "build-hljs",
           "declared": "build_hljs",
-          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into the committed gen/assets/hljs.js.",
+          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.",
           "dependencies": [
             "preflight"
           ]
         },
         {
           "name": "render",
-          "doc": "render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate)."
+          "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks."
         }
       ],
       "depends_on": [
+        ".",
         "libs/gopherbuzz",
         "libs/textsearch"
       ]
     },
     {
       "path": "libs/diag",
+      "name": "libs/diag",
       "engine": "buzz",
       "nodes": [
         {
@@ -644,6 +651,7 @@
     },
     {
       "path": "libs/gopherbuzz",
+      "name": "libs/gopherbuzz",
       "engine": "buzz",
       "nodes": [
         {
@@ -740,6 +748,7 @@
     },
     {
       "path": "libs/textsearch",
+      "name": "libs/textsearch",
       "engine": "buzz",
       "nodes": [
         {
@@ -787,6 +796,7 @@
     },
     {
       "path": "proto",
+      "name": "proto",
       "engine": "buzz",
       "nodes": [
         {

@@ -30,14 +30,10 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
-	"golang.org/x/term"
 )
 
 // collapseOnSuccess decides whether per-project subprocess output is withheld until a
-// failure (showing only a status line on success). It is enabled only for interactive
-// pretty runs at default verbosity: a non-TTY/CI stdout keeps full streaming so logs
-// stay complete, -v (level below Info) streams live, --silent has its own stricter
-// handling, and json/text formats are never collapsed.
+// failure. It is the default for human output; -v streams live.
 func collapseOnSuccess(l config.Log) bool {
 	switch strings.ToLower(l.Format) {
 	case "pretty", "plain", "":
@@ -48,7 +44,7 @@ func collapseOnSuccess(l config.Log) bool {
 	if l.IsSilent() || l.SlogLevel() < slog.LevelInfo {
 		return false
 	}
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return true
 }
 
 // Magus is the high-level orchestrator. Not safe for concurrent use. Inspect-constructed workspaces have no cache.

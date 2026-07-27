@@ -84,22 +84,22 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="editor-setup">Editor setup</h1>
-<p>magus ships a language server for the <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> files you author: magusfiles and
+<p>magus ships a language <a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> for the <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> files you author: magusfiles and
 spells. <code>magus buzz lsp</code> speaks the Language Server Protocol over stdio, so any editor
 with a generic LSP client can offer, for a <code>*.buzz</code> file:</p>
 <ul>
-<li><strong>Completion</strong> - <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> names on <code>import &quot;...&quot;</code>, module members after a <code>.</code>
+<li><strong><a class="code-xref" href="../../reference/manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">Completion</a></strong> - <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> names on <code>import &quot;...&quot;</code>, module members after a <code>.</code>
 (<code>fs.</code>, <code>os.</code>, <code>charm.</code>), and bare identifiers, each with its signature and doc.</li>
 <li><strong>Hover</strong> - the signature and documentation of the symbol under the cursor.</li>
 <li><strong>Signature help</strong> - the callee's parameter list while you type inside a call.</li>
 </ul>
 <p>The analysis is the same <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> the <a href="../../playground/">interactive playground</a>
 uses; <code>magus buzz lsp</code> is just the transport that hands it to your editor. It reads the
-document text the editor sends and needs no <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, config, or <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>.</p>
+document text the editor sends and needs no <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, <a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>, or <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>.</p>
 <h2 id="prerequisites">Prerequisites</h2>
 <ul>
 <li>
-<p><code>magus</code> on your <code>PATH</code> (see the <a href="../download/">Download guide</a>). Confirm with
+<p><code>magus</code> on your <code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a></code> (see the <a href="../download/">Download guide</a>). Confirm with
 <code><a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="Print the magus version string, git commit hash, and build date for the currently installed binary.">magus version</a></code>.</p>
 </li>
 <li>
@@ -162,7 +162,7 @@ client.start();
 <p>Pair it with a <code>languages</code> contribution in <code>package.json</code> mapping the <code>.buzz</code>
 extension to a <code>buzz</code> language id. Any editor that speaks generic LSP (Sublime via
 LSP, Emacs via <code>eglot</code>/<code>lsp-mode</code>, Zed via an extension) wires up the same way:
-run <code>magus buzz lsp</code>, stdio transport, <code>buzz</code> documents.</p>
+<a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> <code>magus buzz lsp</code>, stdio transport, <code>buzz</code> documents.</p>
 <h2 id="what-it-does-not-do-yet">What it does not do (yet)</h2>
 <p>The server is scoped to the three edit-time features above. It does not publish
 diagnostics, format on save, or resolve cross-file go-to-definition. For those,

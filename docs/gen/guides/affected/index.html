@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="affected">Affected</h1>
-<p><code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> &lt;target&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> runs a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for every <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> a version-control diff
+<p><code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> &lt;target&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> runs a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for every <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> a <a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a>-control diff
 touched, and nothing else. On a large <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> this is the difference between
 testing five projects and testing five hundred. The <a href="../../reference/manpage/magus-affected/">man page</a>
 is the flag reference; this page is the model behind it.</p>
@@ -92,12 +92,12 @@ is the flag reference; this page is the model behind it.</p>
 <ul>
 <li><strong>The diff decides the scope.</strong> You name a target; the VCS diff picks the
 projects. You never maintain a list of &quot;what to build for this change.&quot;</li>
-<li><strong>Correctness comes from the graph, not a guess.</strong> A project is <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> if its
-own sources changed or if anything it depends on is affected. magus walks the
+<li><strong>Correctness comes from the <a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>, not a guess.</strong> A project is <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> if its
+own sources changed or if anything it depends on is <a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a>. magus walks the
 full transitive closure, so a change deep in a shared library rebuilds every
 dependent, not just its direct neighbors.</li>
-<li><strong>The same set is inspectable and executable.</strong> The set you would run is the set
-<code>--explain</code> describes and <code>--plan</code> shards. One computation, several lenses.</li>
+<li><strong>The same set is inspectable and executable.</strong> The set you would <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> is the set
+<code>--<a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a></code> describes and <code>--plan</code> shards. One computation, several lenses.</li>
 </ul>
 <h2 id="what-counts-as-affected">What counts as affected</h2>
 <p>A project enters the affected set two ways:</p>
@@ -119,7 +119,7 @@ else the adapter's built-in default (<code>origin/main</code> for git). Two esca
 <ul>
 <li><code>MAGUS_VCS_COMMAND</code> / <code>vcs.command_name</code> pin or replace the VCS command.</li>
 <li><code>MAGUS_VCS_ENABLED=false</code> (or <code><a class="code-xref" href="../../reference/config/#vcs" data-kind="config" data-def="bool _(env only)_, env MAGUS_VCS_ENABLED">vcs.enabled</a>: false</code>) short-circuits detection and
-falls back to the full project set, labelled <code>vcs disabled</code>. Use it where no VCS
+falls back to the full project set, labelled <code>vcs disabled</code>. Use it <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> no VCS
 is available (a release tarball, a fresh container) so a build still runs.</li>
 </ul>
 <h2 id="forensic-modes">Forensic modes</h2>
@@ -135,7 +135,7 @@ introduced a regression.</li>
 <h2 id="ci">CI</h2>
 <p><code>magus affected ci</code> is the workhorse of a monorepo pipeline: it runs the <code>ci</code>
 anchor for exactly the projects a pull request touched. Because
-<a href="../../concepts/charms/#defaulting-charms-per-workspace-default_charms"><code>affected</code> never applies <code>default_charms</code></a>
+<a href="../../concepts/charms/#defaulting-charms-per-workspace-default_charms"><code>magus affected</code> never applies <code>default_charms</code></a>
 and <code>RunCI</code> strips the <code>rw</code> <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>, an affected CI run is always read-only no matter
 how the workspace is configured. Fan out at scale with <code>--plan</code> feeding a shard
 matrix.</p>

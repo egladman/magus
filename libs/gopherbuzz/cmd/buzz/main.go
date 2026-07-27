@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -27,6 +26,7 @@ import (
 	"strings"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )

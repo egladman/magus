@@ -84,7 +84,7 @@ Raw base64 (32 bytes):
 /7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 ```
 
-The key is embedded in every magus binary via `//go:embed`, so `magus self update` trusts it transitively. Rotating the key requires shipping a new release built with the new embedded key; older binaries continue to trust only the previous key.
+The key is embedded in every magus binary via `//go:embed`, so `magus self update` trusts it transitively. A planned rotation first ships a release signed by the current key that embeds the replacement key; later releases can use the replacement. Older binaries cannot be remotely revoked if the current key is compromised. The maintainer procedure is in the [contributing guide](../development/contributing/).
 
 ## Shell completion
 
@@ -118,6 +118,12 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install -o ins
 less install.sh
 sh install.sh
 ```
+
+Review the script first: it lets you inspect the download, signature verification, and
+installation steps before granting a network response access to your shell.
+
+The installer selects the static binary by default. Pass `--variant dynamic` only
+when you specifically need the platform-native build and that release publishes it.
 
 
 ### B. Yolo

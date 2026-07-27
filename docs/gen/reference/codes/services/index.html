@@ -88,10 +88,10 @@
     <article>
 <h1 id="services-diagnostics">Services diagnostics</h1>
 <p>Codes in the <code>MGS5xxx</code> range flag problems with long-running <a href="../../../concepts/operations/">service
-ops</a>: services that will run as separate processes when they
+ops</a>: services that will <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> as separate processes when they
 look like they should be one shared instance, and (later) op invocations that
 contradict their declared kind. Magus raises them at run time (as a typed
-<code>DiagnosticError</code>) and, where applicable, as a <code><a class="code-xref" href="../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> <a class="glossary-term" href="../../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> check so the
+<code>DiagnosticError</code>) and, <a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> applicable, as a <code><a class="code-xref" href="../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> <a class="glossary-term" href="../../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> check so the
 gap is visible before the work runs.</p>
 <h2 id="codes">Codes</h2>
 <ul>

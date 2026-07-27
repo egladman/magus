@@ -87,7 +87,7 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="mgs7002-dangling-doc-reference">MGS7002: dangling doc reference</h1>
-<p>The knowledge-graph builder scans markdown docs and records an inferred
+<p>The knowledge-<a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> builder scans markdown docs and records an inferred
 <code>documents</code> edge from a doc page to each <code>MGS####</code> <a class="glossary-term" href="../../../../glossary/#diagnostic-code" data-def="A stable MGSxxxx identifier attached to a magus warning or error, so it can be referenced and looked up; some are guardrails (see wards), others hard errors.">diagnostic code</a> it mentions
 in its body. When the mentioned code is a registered diagnostic, the edge links
 to a real diagnostic node. When it is not - a typo, a code that was removed, or
@@ -111,7 +111,7 @@ The code marks the doc for a human to check, not a hard failure.</p>
 on the next build.</li>
 <li>If the code was intentionally removed, update the doc to drop or reword the
 mention.</li>
-<li>To find flagged docs: <code>magus query kind:doc</code>, then <code>magus explain</code> the ones
+<li>To find flagged docs: <code><a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> kind:doc</code>, then <code><a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="Explain one knowledge-graph node.">magus explain</a></code> the ones
 whose <code>diagnostic</code> attribute is <code><a class="code-xref" href="./" data-kind="code" data-def="Fires when a documentation page mentions an MGS#### diagnostic code that is not registered, so the knowledge-graph extractor cannot link the mention to a real diagnostic node.">MGS7002</a></code> to see the <code>unknown_codes</code> list.</li>
 </ul>
     </article>

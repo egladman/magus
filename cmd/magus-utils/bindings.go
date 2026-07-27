@@ -56,10 +56,22 @@ func runBindings(args []string) error {
 	if err != nil {
 		return fmt.Errorf("emit: %w", err)
 	}
-	if err := os.WriteFile(*outPath, out, 0o644); err != nil {
+	if err := writeFileIfChanged(*outPath, out, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", *outPath, err)
 	}
 	return nil
+}
+
+// writeFileIfChanged preserves timestamps for unchanged generated files.
+func writeFileIfChanged(path string, data []byte, perm os.FileMode) error {
+	current, err := os.ReadFile(path)
+	if err == nil && bytes.Equal(current, data) {
+		return nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.WriteFile(path, data, perm)
 }
 
 func titleCase(s string) string {

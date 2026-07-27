@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="magus-run">magus-run</h1>
-<p>Run a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for selected projects</p>
+<p><a class="code-xref" href="./" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> for selected projects</p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> run &lt;target&gt; [flags] [<a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>...]</p>
 <h2 id="description">Description</h2>
@@ -99,7 +99,7 @@ the rw <a class="glossary-term" href="../../../glossary/#charm" data-def="An exe
 <h2 id="options">Options</h2>
 <dl>
 <dt><strong>--depth</strong> <em>int</em></dt>
-<dd>With --graph: cap displayed depth (0 = unlimited)</dd>
+<dd>With --<a class="code-xref" href="../magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>: cap displayed depth (0 = unlimited)</dd>
 <dt><strong>--dry-run</strong></dt>
 <dd>Print what would run without executing</dd>
 <dt><strong>--graph</strong></dt>
@@ -111,7 +111,7 @@ the rw <a class="glossary-term" href="../../../glossary/#charm" data-def="An exe
 </dl>
 <h2 id="targets">Targets</h2>
 <dl>
-<dt><strong>ls</strong></dt>
+<dt><strong><a class="code-xref" href="../magus-ls/" data-kind="command" data-def="magus ls: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">ls</a></strong></dt>
 <dd>Print selected projects without executing anything</dd>
 <dt><strong>build</strong></dt>
 <dd>Build selected projects</dd>
@@ -126,7 +126,7 @@ the rw <a class="glossary-term" href="../../../glossary/#charm" data-def="An exe
 <dt><strong>generate</strong></dt>
 <dd>Run code generation for selected projects</dd>
 <dt><strong>ci</strong></dt>
-<dd>Run the magusfile's ci target read-only (affected-set anchor)</dd>
+<dd>Run the magusfile's ci target read-only (<a class="code-xref" href="../magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a>-set anchor)</dd>
 </dl>
 <h2 id="examples">Examples</h2>
 <p><em>Build everything</em></p>
@@ -160,12 +160,12 @@ the rw <a class="glossary-term" href="../../../glossary/#charm" data-def="An exe
 <pre><code class="language-sh">magus run build -o jsonl --tee build.jsonl
 </code></pre>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-man/"><strong>magus-man</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../magus-ls/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus ls</span></a>
+      <a class="page-nav-prev" href="../magus-man/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus man</span></a>
       <a class="page-nav-next" href="../magus-self/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus self</span></a>
     </nav>
   </main>

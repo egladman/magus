@@ -110,7 +110,7 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="magusfile-module-reference">Magusfile Module Reference</h1>
-<p>These are the runtime utility modules. Import each under its bare name - <code>import &quot;fs&quot;</code>, then <code>fs.glob(...)</code> - with <code>camelCase</code> methods. magus layers these host methods onto <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s own stdlib, so a single <code>import &quot;fs&quot;</code> (or <code>os</code>, <code>crypto</code>) carries both surfaces, and the magus forms are <a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (<code>*</code>) and a footnote on their page; either form works.</p>
+<p>These are the runtime utility modules. Import each under its bare name - <code>import &quot;fs&quot;</code>, then <code>fs.glob(...)</code> - with <code>camelCase</code> methods. magus layers these host methods onto <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s own stdlib, so a single <code>import &quot;fs&quot;</code> (or <code>os</code>, <code>crypto</code>) carries both surfaces, and the magus forms are <a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware <a class="code-xref" href="../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (<code>*</code>) and a footnote on their page; either form works.</p>
 <aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-14">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
 
 <h2 id="files-and-paths">Files and paths</h2>
@@ -124,7 +124,7 @@
 <tbody>
 <tr>
 <td><a href="fs/"><code>fs</code></a></td>
-<td>Filesystem and path primitives.</td>
+<td>Filesystem and <a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> primitives.</td>
 </tr>
 <tr>
 <td><a href="path/"><code>path</code></a></td>
@@ -261,7 +261,7 @@
 <tbody>
 <tr>
 <td><a href="semver/"><code>semver</code></a></td>
-<td>Semantic version parsing and comparison (SemVer 2.0.0).</td>
+<td>Semantic <a class="code-xref" href="../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> parsing and comparison (SemVer 2.0.0).</td>
 </tr>
 <tr>
 <td><a href="vcs/"><code>vcs</code></a></td>

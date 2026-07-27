@@ -116,15 +116,15 @@ into the artifact (linker build IDs, <code>pkg/build.go</code> ldflags, source m
 generation timestamps).</li>
 <li><strong>Map iteration order.</strong> Go and Python iterate maps in random order; a
 generator that emits code from a map without sorting keys will produce
-different bytes each run.</li>
+different bytes each <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>.</li>
 <li><strong>Parallel work-stealing leaking into output.</strong> Worker IDs, goroutine IDs, or
 the order of fan-in results landing in a manifest.</li>
 <li><strong>PID / hostname / cwd in the output.</strong> Some toolchains embed these by
-default (e.g. <code>pip</code> embeds the build tempdir path into compiled <code>.pyc</code>).</li>
+default (e.g. <code>pip</code> embeds the build tempdir <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> into compiled <code>.pyc</code>).</li>
 <li><strong>Random salt / nonce.</strong> Crypto helpers used at build time without a fixed
 seed.</li>
 </ul>
-<p>This check is expensive: it doubles the wall-clock time of the affected
+<p>This check is expensive: it doubles the wall-clock time of the <a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a>
 build, and the second pass cannot benefit from the cache. Run it for <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>
 nightly or a manual audit rather than every push.</p>
 <h2 id="resolution">Resolution</h2>
@@ -143,7 +143,7 @@ diffoscope /tmp/run1/bundle.js api/dist/bundle.js
 <p>Common fixes:</p>
 <ul>
 <li><strong>Embedded timestamps:</strong> ldflag the build time to a fixed value
-(<code>-X main.BuildTime=$(git log -1 --format=%cI)</code> ties it to the commit
+(<code>-<a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">X</a> main.BuildTime=$(git log -1 --format=%cI)</code> ties it to the commit
 timestamp, which is deterministic).</li>
 <li><strong>Map iteration:</strong> sort keys before emitting (<code>slices.Sort(maps.Keys(m))</code>).</li>
 <li><strong>Tempdir paths:</strong> use a fixed relative path or strip the absolute prefix.</li>

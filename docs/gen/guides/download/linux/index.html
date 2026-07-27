@@ -91,17 +91,19 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="install-on-linux">Install on Linux</h1>
-<p>magus ships as a single self-contained binary. Download it with <code>curl</code>, extract it into a <code>PATH</code> directory you own - no root, no <code>sudo</code> - then <a href="../#verify-a-release">verify it</a> before first run.</p>
+<p>magus ships as a single <a class="code-xref" href="../../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contained binary. Download it with <code>curl</code>, extract it into a <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a></code> directory you own - no root, no <code>sudo</code> - then <a href="../#verify-a-release">verify it</a> before first <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>.</p>
 <h2 id="quick-install">Quick install</h2>
 <pre><code class="language-sh">VERSION=v0.2.1
 ARCH=amd64            # or arm64 on ARM
-curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}.tar.gz&quot;
+curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}-static.tar.gz&quot;
 mkdir -p ~/.local/bin
-tar -xzf &quot;magus_${VERSION}_linux_${ARCH}.tar.gz&quot;
+tar -xzf &quot;magus_${VERSION}_linux_${ARCH}-static.tar.gz&quot;
 mv magus ~/.local/bin/
 magus version
 </code></pre>
-<p><code>${VERSION}</code> above is the current release. Every build - both <code>amd64</code>/<code>arm64</code> and the statically linked <code>-static</code> variants for musl or minimal images - is listed at <a href="../../../public/release">/public/release/</a>.</p>
+<p><code>${<a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">VERSION</a>}</code> above is the current release. This is the static build, the default for
+the installer. Dynamic builds are also listed at <a href="../../../public/release">/public/release/</a>
+when you need one.</p>
 <h2 id="verify-the-download">Verify the download</h2>
 <p>Fetch the manifest and its signature next to the tarball:</p>
 <pre><code class="language-sh">curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS&quot;

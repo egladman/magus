@@ -50,7 +50,7 @@ runtime. Such a `magus.needs` call is invisible to the static graph, to
 `magus describe`, and to the affected set. It still runs correctly at runtime
 (`magus.needs` itself has no such restriction), but nothing outside that one
 target's execution knows the edge exists. If a dependency needs to be visible
-to `affected`/`describe` without being passed as a plain handle, declare it
+to `magus affected`/`magus describe` without being passed as a plain handle, declare it
 via `depends_on` instead.
 
 ## What a bare `depends_on` does NOT do

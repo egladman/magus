@@ -4,8 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"strings"
+
+	json "github.com/egladman/magus/internal/codec"
 )
 
 // Pagination for magus_query is stateless: the cursor is an opaque token the

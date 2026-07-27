@@ -2,11 +2,11 @@ package std
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 

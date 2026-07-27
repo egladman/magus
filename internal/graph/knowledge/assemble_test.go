@@ -168,6 +168,10 @@ func TestAssembleEdges(t *testing.T) {
 	assert.True(t, hasEdge(out, "project:pkg/a", "project:pkg/b", types.RelationDependsOn), "project depends_on project")
 	assert.True(t, hasEdge(out, "target:pkg/a:build", "target:pkg/a:gen", types.RelationDependsOn), "intra-project target dep")
 	assert.True(t, hasEdge(out, "target:pkg/a:build", "target:pkg/b:build", types.RelationDependsOn), "cross-project target dep")
+	assert.Contains(t, out.Links, types.KnowledgeEdge{
+		Source: "target:pkg/a:build", Target: "spell:go", Relation: types.RelationUses,
+		Confidence: types.ConfidenceExtracted, Score: 1, Provenance: "pkg/a",
+	}, "target dispatches spell")
 	assert.True(t, hasEdge(out, "target:pkg/a:build", "op:go:go-build", types.RelationUses), "target uses op")
 	assert.True(t, hasEdge(out, "charm:rw", "target:pkg/a:build", types.RelationReferences), "charm references target")
 	assert.True(t, hasEdge(out, "spell:go", "op:go:go-build", types.RelationContains), "spell contains op")

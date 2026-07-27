@@ -85,13 +85,13 @@
 <h1 id="magus-ls">magus-ls</h1>
 <p>List all discovered projects</p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> ls [flags]</p>
+<p><strong>magus</strong> <a class="code-xref" href="./" data-kind="command" data-def="magus ls: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">ls</a> [flags]</p>
 <h2 id="description">Description</h2>
 <p>Print every discovered <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> in the <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> along with its language
 pack, source files, outputs, dependencies, and tool requirements.</p>
 <p>Output defaults to a human-readable text format. Use the global -o flag with
 json or yaml for structured output suitable for scripting. -o name prints one
-project path per line. -o template accepts a Go text/template evaluated
+project <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> per line. -o template accepts a Go text/template evaluated
 against the value -o json emits, so its field names are the json keys.</p>
 <h2 id="examples">Examples</h2>
 <p><em>List all projects</em></p>
@@ -107,13 +107,13 @@ against the value -o json emits, so its field names are the json keys.</p>
 <pre><code class="language-sh">magus ls -o template='{{range .projects}}{{.path}}{{&quot;\n&quot;}}{{end}}'
 </code></pre>
 <h2 id="see-also">See Also</h2>
-<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
+<p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-man/"><strong>magus-man</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-self/"><strong>magus-self</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../magus-insight/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus insight</span></a>
-      <a class="page-nav-next" href="../magus-run/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus run</span></a>
+      <a class="page-nav-next" href="../magus-man/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus man</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">

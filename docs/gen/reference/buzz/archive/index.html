@@ -116,7 +116,7 @@
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="uncompress">uncompress</h3>
-<p>Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts keys: strip (int, strip N leading path components), max_size (int, uncompressed byte cap, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).</p>
+<p>Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts keys: strip (int, strip N leading <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> components), max_size (int, uncompressed byte cap, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).</p>
 <p><strong>Signature:</strong> <code>archive.uncompress(src, dest, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/archive.go#L112" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>

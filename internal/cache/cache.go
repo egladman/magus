@@ -1034,14 +1034,19 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 			}
 		case collapse:
 			// The live view (status + indented stage lines) went to stderr while the
-			// project ran. On failure replay the raw, unindented subprocess output to
-			// stdout so it stays copy/paste and pipe friendly (2>/dev/null yields just
-			// the failures). The header is part of the live view, hence stderr.
+			// project ran. Show a small, diagnostic-focused excerpt rather than replaying
+			// the entire raw log: the latter often hides the cause under successful test
+			// lines. The cache error emitted immediately afterward supplies the output
+			// ref for the complete, verbatim log.
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
-				_, _ = os.Stdout.Write(data)
-				if data[len(data)-1] != '\n' {
-					_, _ = fmt.Fprintln(os.Stdout)
+				excerpt, omitted := failureExcerpt(data, maxFailureExcerptLines)
+				if omitted > 0 {
+					_, _ = fmt.Fprintf(os.Stderr, "... %d log line(s) omitted; showing likely diagnostics\n", omitted)
+				}
+				_, _ = os.Stderr.Write(excerpt)
+				if len(excerpt) > 0 && excerpt[len(excerpt)-1] != '\n' {
+					_, _ = fmt.Fprintln(os.Stderr)
 				}
 			}
 		case quiet:

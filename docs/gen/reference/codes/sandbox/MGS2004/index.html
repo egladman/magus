@@ -97,7 +97,7 @@
     <article>
 <h1 id="mgs2004-sandboxallow-entry-failed-to-resolve">MGS2004: sandbox.allow entry failed to resolve</h1>
 <p>A <code>sandbox.allow</code> entry in <code>magus.yaml</code> (or an equivalent built-in
-<a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> allowlist) referenced a path that magus could not resolve.</p>
+<a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> allowlist) referenced a <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> that magus could not resolve.</p>
 <pre><code class="language-text">[MGS2004] sandbox.allow entry failed to resolve; skipped
   path=$NONEXISTENT_VAR/cache
 </code></pre>
@@ -114,7 +114,7 @@ environment magus runs in.</li>
 outside a specific shell.</li>
 <li>Remove the entry if it was a typo.</li>
 </ul>
-<p>The path is intentionally skipped rather than failing the run: a
+<p>The path is intentionally skipped rather than failing the <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>: a
 missing optional <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> should not block a build. If your build then
 fails for a different reason (e.g. <a class="code-xref" href="../MGS2001/" data-kind="code" data-def="Fires when a spell tries to read a file outside the workspace and outside the configured sandbox allowlist, typically a credential store.">MGS2001</a> on the same path), you have
 a clear chain to follow.</p>

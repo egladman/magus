@@ -890,14 +890,13 @@ func (m *Magus) buildVolatilityRuntime(ctx context.Context) *volatility.Runtime 
 	return volatility.NewRuntime(&h, m.cfg.HistoryPath, m.volatilityConfig(), affected)
 }
 
-// runTarget executes name on every spell in p under an audit that warns on out-of-dispatch writes.
+// runTarget executes name on every spell in p and rejects writes into descendant projects.
 func runTarget(ctx context.Context, p *types.Project, name string) error {
 	a := audit.Begin(ctx, p, types.HasCharm(ctx, types.CharmReadWrite))
 	err := forEachSpell(ctx, p, name, func(ctx context.Context, s *types.Spell) error {
 		return invokeSpell(ctx, p, name, s)
 	})
-	a.Finish(ctx, name)
-	return err
+	return errors.Join(err, a.Finish(ctx, name))
 }
 
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.

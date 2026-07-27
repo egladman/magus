@@ -56,7 +56,7 @@ func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 	op := paramString(req.Params, "op", "list")
 	switch op {
 	case "list":
-		recs, err := memory.List(root)
+		recs, issues, err := memory.Inspect(root)
 		if err != nil {
 			return types.InvokeResponse{}, err
 		}
@@ -64,7 +64,7 @@ func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 		for i, r := range recs {
 			views[i] = toRecordView(r)
 		}
-		return types.InvokeResponse{Data: map[string]any{"records": views}}, nil
+		return types.InvokeResponse{Data: map[string]any{"records": views, "issues": issues}}, nil
 
 	case "get":
 		name := paramString(req.Params, "name", "")
@@ -75,7 +75,7 @@ func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 		return types.InvokeResponse{Data: toRecordView(rec)}, nil
 
 	case "put":
-		refs, err := parseMemoryRefs(paramString(req.Params, "refs", ""))
+		refs, err := memory.ParseRefs(paramString(req.Params, "refs", ""))
 		if err != nil {
 			return types.InvokeResponse{}, err
 		}
@@ -100,48 +100,31 @@ func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 		}
 		return types.InvokeResponse{Data: map[string]any{"deleted": name}}, nil
 
+	case "verify":
+		report, err := memory.Verify(root)
+		if err != nil {
+			return types.InvokeResponse{}, err
+		}
+		return types.InvokeResponse{Data: report}, nil
+
 	case "cursor":
 		// The cursor is the single "where did I leave off" snapshot, kept beside the
 		// record set. Passing content overwrites it; omitting content reads it.
 		if _, writing := req.Params["content"]; writing {
-			content := paramString(req.Params, "content", "")
-			if err := memory.WriteCursor(root, content); err != nil {
-				return types.InvokeResponse{}, err
-			}
-			return types.InvokeResponse{Data: map[string]any{"cursor": content}}, nil
+			return types.InvokeResponse{}, errors.New("mcp: cursor writes are retired because one shared snapshot is unsafe across sessions; create or update a named plan/decision with op=put instead")
 		}
 		content, err := memory.ReadCursor(root)
 		if err != nil {
 			return types.InvokeResponse{}, err
 		}
-		return types.InvokeResponse{Data: map[string]any{"cursor": content}}, nil
+		return types.InvokeResponse{Data: map[string]any{
+			"cursor":  content,
+			"warning": "legacy cursor snapshot; use named handoff-journal entries with op=put instead",
+		}}, nil
 
 	default:
-		return types.InvokeResponse{}, errors.New("mcp: memory op must be one of list, get, put, delete, cursor")
+		return types.InvokeResponse{}, errors.New("mcp: memory op must be one of list, get, put, delete, verify (cursor is legacy read-only)")
 	}
-}
-
-// parseMemoryRefs parses the `refs` param: one ref per line as "kind: target". It splits
-// each line on the FIRST colon only, so a target that itself contains colons or commas (a
-// query expression, a namespaced node ID) survives intact - newline is the sole record
-// separator. Kind and target validity is enforced downstream by memory.Validate.
-func parseMemoryRefs(s string) ([]memory.Ref, error) {
-	var refs []memory.Ref
-	for _, line := range strings.Split(s, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		i := strings.IndexByte(line, ':')
-		if i < 0 {
-			return nil, fmt.Errorf("mcp: ref %q must be written as 'kind: target' (kinds: query, node, output, command, doc)", line)
-		}
-		refs = append(refs, memory.Ref{
-			Kind:   memory.RefKind(strings.TrimSpace(line[:i])),
-			Target: strings.TrimSpace(line[i+1:]),
-		})
-	}
-	return refs, nil
 }
 
 // splitCommaList splits a comma-separated param (memory-to-memory reference names) into a

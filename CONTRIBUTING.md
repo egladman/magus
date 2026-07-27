@@ -80,3 +80,25 @@ aliases: [install] # clean, gen-root-relative old paths
 
 The build emits a redirect stub at each alias and fails if an alias collides with
 a real page or is claimed twice.
+
+## Release-signing key rotation
+
+The release public key has a few intentional, reviewable copies: the binary's
+`internal/selfupdate/release.pub`, `docs/gen/install`, the setup action, and
+the download guide. `TestReleaseTrustAnchorMatchesInstallerAndCI` makes a
+mismatch between those copies fail CI. Never put the private Ed25519 seed in
+the repository or a release artifact.
+
+For a planned rotation, create a compatibility release signed with the current
+key but built with the replacement public key. Users who install that release
+can verify later releases signed by the replacement key. Then move the
+`MAGUS_SIGNING_KEY` secret to the replacement private key and publish future
+releases with it. Update every public-key copy above in the same change, run
+the trust-anchor test, and dry-run the installer before publishing.
+
+A compromised key cannot be revoked from binaries that already trust it: those
+binaries cannot distinguish a legitimate replacement from an attacker-signed
+one. Treat that as an incident: stop using the compromised signing secret,
+publish the replacement binary and public key through an independent trusted
+channel, and ask affected users to reinstall manually. Do not describe that
+path as an automatic update.

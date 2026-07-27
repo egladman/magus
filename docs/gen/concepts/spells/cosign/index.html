@@ -99,9 +99,9 @@
 <h1 id="cosign">cosign</h1>
 <p>The <code>cosign</code> <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> forks the Sigstore <code>cosign</code> CLI to sign, attest, and verify artifacts. Signing and attestation pass <code>--yes</code> for non-interactive (<a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>) use.</p>
 <p><strong>Runtime name:</strong> <code>cosign</code> (source <code>spells/cosign/</code>)</p>
-<p><strong>Version probe:</strong> <code>cosign version</code></p>
+<p><strong><a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">Version</a> probe:</strong> <code>cosign version</code></p>
 <h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
-<p>Every op is invoked as <code>cosign[&quot;&lt;op&gt;&quot;](opts?)</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>, where the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
+<p>Every op is invoked as <code>cosign[&quot;&lt;op&gt;&quot;](opts?)</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>, <a class="code-xref" href="../../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -138,7 +138,7 @@
 </tr>
 </tbody>
 </table></figure>
-<p>Charms (the <code>:charm</code> suffix, e.g. <code>magus run test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
+<p>Charms (the <code>:charm</code> suffix, e.g. <code>magus <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="cosign-attest">cosign-attest</h2>
 <p><strong>Command:</strong> <code>cosign attest --yes</code></p>
 <h3 id="example">Example</h3>

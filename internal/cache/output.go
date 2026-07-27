@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/journal"
 )
 

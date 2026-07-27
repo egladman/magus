@@ -88,9 +88,9 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="mgs5003-command-op-never-exits">MGS5003: command op never exits</h1>
-<p>A command <a href="../../../../concepts/operations/">op</a> runs a known watch tool with <code>--watch</code> (for
+<p>A command <a href="../../../../concepts/operations/">op</a> runs a known <a class="code-xref" href="../../../manpage/magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a> tool with <code>--watch</code> (for
 example <code>tsc --watch</code>, <code>vitest --watch</code>, or <code>npx tsc --watch</code>). A command op is
-meant to run to completion, but a watcher never terminates, so the run would hang
+meant to <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> to <a class="code-xref" href="../../../manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a>, but a watcher never terminates, so the run would hang
 waiting for it. magus rejects it at resolution.</p>
 <pre><code class="language-text">[MGS5003] command op &quot;typecheck&quot; runs a watcher with &quot;--watch&quot;: a command op runs to completion, so a never-exiting watch process hangs the run. Make this a service op instead.
   see: .../MGS5003.md

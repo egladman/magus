@@ -95,7 +95,7 @@
 byte-identical to what is committed, and you are running a dev build. The committed
 form was produced by the pinned release (the compatibility contract: <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> regenerates
 with a checksum-verified release binary), so a dev build rendering it differently is
-version or toolchain skew, not a change you made.</p>
+<a class="code-xref" href="../../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> or toolchain skew, not a change you made.</p>
 <pre><code class="language-text">[MGS4005] generated output drifted but its declared inputs are unchanged; the committed
 form is produced by the pinned release and you are running a dev build (v0.1.0-5-gabc123)
 - not your change, do not commit
@@ -106,7 +106,7 @@ generator and tool versions. When the inputs are unchanged, the only remaining v
 is the generator/tool version. A local HEAD build, a locally installed formatter
 (prettier, a badge renderer), or any tool whose version differs from the pinned release
 can render the same inputs to different bytes - the classic markdown-emphasis case
-(<code>*x*</code> vs <code>_x_</code>). That difference is real, but it is not your change, and committing it
+(<code>*<a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a>*</code> vs <code>_x_</code>). That difference is real, but it is not your change, and committing it
 would just re-introduce the same skew against the next machine.</p>
 <h2 id="resolution">Resolution</h2>
 <p>Do not commit the drift. Discard it (<code>git checkout -- &lt;paths&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>) and move on. If the

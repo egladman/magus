@@ -1,63 +1,29 @@
 package cache
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestExtractNotices(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "run.log")
-	body := strings.Join([]string{
-		"compiling foo",
-		"magus:notice: deployed api v1.2.3",
-		"  magus:notice:   indented and padded   ",
-		"not important: regular line",
-		"prefixed magus:notice: not at line start",
-		"magus:notice:",
-	}, "\n")
-	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+func TestFailureExcerptFindsEarlyDiagnostic(t *testing.T) {
+	t.Parallel()
+	data := []byte("preparing suite\n# example.test\nlink: fingerprint mismatch: got A, want B\nok package/one\nok package/two\nFAIL\n")
 
-	got := extractNotices(path)
-	assert.Equal(t, []string{
-		"deployed api v1.2.3",
-		"indented and padded",
-		"", // bare marker yields an empty message, still in order
-	}, got)
+	excerpt, omitted := failureExcerpt(data, maxFailureExcerptLines)
+
+	assert.Positive(t, omitted)
+	assert.Contains(t, string(excerpt), "# example.test")
+	assert.Contains(t, string(excerpt), "link: fingerprint mismatch: got A, want B")
+	assert.Contains(t, string(excerpt), "FAIL")
 }
 
-func TestExtractNoticesMissingFile(t *testing.T) {
-	assert.Nil(t, extractNotices(filepath.Join(t.TempDir(), "nope.log")))
-}
+func TestFailureExcerptFallsBackToTail(t *testing.T) {
+	t.Parallel()
+	data := []byte("one\ntwo\nthree\nfour\n")
 
-func TestTailLines(t *testing.T) {
-	data := []byte("l1\nl2\nl3\nl4\nl5\n")
+	excerpt, omitted := failureExcerpt(data, 2)
 
-	tail, omitted := tailLines(data, 2)
-	assert.Equal(t, "l4\nl5\n", string(tail))
-	assert.Equal(t, 3, omitted)
-
-	tail, omitted = tailLines(data, 5)
-	assert.Equal(t, string(data), string(tail))
-	assert.Equal(t, 0, omitted)
-
-	tail, omitted = tailLines(data, 99)
-	assert.Equal(t, string(data), string(tail))
-	assert.Equal(t, 0, omitted)
-
-	tail, omitted = tailLines(data, 0)
-	assert.Equal(t, string(data), string(tail))
-	assert.Equal(t, 0, omitted)
-}
-
-func TestTailLinesNoTrailingNewline(t *testing.T) {
-	data := []byte("a\nb\nc")
-	tail, omitted := tailLines(data, 2)
-	assert.Equal(t, "b\nc", string(tail))
-	assert.Equal(t, 1, omitted)
+	assert.Equal(t, 2, omitted)
+	assert.Equal(t, "three\nfour\n", string(excerpt))
 }

@@ -5,12 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )

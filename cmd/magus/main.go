@@ -22,6 +22,7 @@
 //	magus status [flags]                inspect the concurrency pool of a running parent magus
 //	magus doctor                        validate the workspace
 //	magus config <subcommand>           view or update magus configuration
+//	magus memory <subcommand>           manage the durable handoff journal
 //	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
 //	magus completion <shell>            print a shell completion script
 //	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
@@ -32,7 +33,6 @@
 // Run any subcommand with -h/--help for its own flag list.
 //
 //go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
-//go:generate go run ../magus-configdocs -out ../../docs/reference/config.md
 package main
 
 import (
@@ -153,7 +153,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server);
 		// both analyze source text directly, needing no workspace, config, or daemon.
 		return dispatchProfile{}
-	case "completion", "self":
+	case "completion", "self", "man":
 		return dispatchProfile{needsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no
@@ -291,7 +291,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 	// Hints default on when Hints.Enabled is nil.
 	hintsOn := cfg.Hints.Enabled == nil || *cfg.Hints.Enabled
-	interactive.SetEnabled(hintsOn)
+	interactive.SetHintsEnabled(hintsOn)
 
 	global.quiet = extractQuietFlag(args)
 	if v := extractVerbosityCount(args); v > 0 {
@@ -532,6 +532,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return doctorCmd(ctx, root, subArgs)
 	case "config":
 		return configCmd(ctx, root, globalCfg, subArgs)
+	case "memory":
+		return memoryCmd(ctx, root, subArgs)
 	case "repl":
 		return replCmd(ctx, root, subArgs)
 	case "server":
@@ -540,6 +542,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return mcpCmd(ctx, subArgs)
 	case "completion":
 		return completion(subArgs)
+	case "man":
+		return manCmd(subArgs)
 	case "init":
 		return initCmd(ctx, root, subArgs)
 	case "agent":
@@ -562,7 +566,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 var knownSubcommands = []string{
 	"ls", "describe", "run", "x", "where", "tail",
 	"affected", "insight", "query", "explain", "path", "refs", "graph", "watch", "status", "doctor",
-	"config", "server", "repl", "completion", "init", "self", "version",
+	"config", "memory", "server", "repl", "completion", "man", "init", "self", "version",
 	"clean", "merge-driver", "buzz", "agent",
 	"help",
 }
@@ -594,6 +598,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  repl           open an interactive Buzz interpreter")
 	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (stdlib only; no host bindings)")
 	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
+	fmt.Fprintln(os.Stderr, "  man            install the man pages embedded in this binary")
 	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)")
 	fmt.Fprintln(os.Stderr, "  agent          install the knowledge-graph agent skill into a repo (agent install claude)")
 	fmt.Fprintln(os.Stderr, "  self           manage the magus binary (self update / install)")

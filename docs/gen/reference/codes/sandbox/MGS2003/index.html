@@ -102,7 +102,7 @@ curated allowlist and one or more variables were dropped.</p>
   cmd=go stripped_count=14
 </code></pre>
 <h2 id="why">Why</h2>
-<p>The default allowlist is intentionally small: <code>HOME</code>, <code>PATH</code>, <code>USER</code>,
+<p>The default allowlist is intentionally small: <code>HOME</code>, <code><a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a></code>, <code>USER</code>,
 locale and terminal vars, plus the <code>MAGUS_*</code> <a class="glossary-term" href="../../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> coordination vars.
 Everything else is stripped so that a compromised <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> cannot
 exfiltrate <code>AWS_ACCESS_KEY_ID</code>, <code>GITHUB_TOKEN</code>, <code>VAULT_TOKEN</code>,
@@ -112,7 +112,7 @@ succeeded; this message exists so you can spot when a tool's behaviour
 changes because a variable it expected is no longer present.</p>
 <h2 id="resolution">Resolution</h2>
 <p>If a tool depends on a non-secret variable being inherited (a Go build
-that needs <code>GOPATH</code>, an npm build that needs <code>NPM_CONFIG_CACHE</code>, mise
+that needs <code>GOPATH</code>, an npm build that needs <code>NPM_<a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">CONFIG</a>_CACHE</code>, mise
 shims that need <code>MISE_*</code>), add it to the passthrough list:</p>
 <pre><code class="language-yaml">sandbox:
   env:

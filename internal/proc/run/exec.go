@@ -50,10 +50,7 @@ type ExecResult struct {
 	Started bool   // whether the process actually started; distinguishes a -1 exit from a start failure
 }
 
-// ToMap renders the result as the {stdout, stderr, code, ok} map that is the
-// single shared shape of magus's exec surfaces (os.exec and captured spell
-// targets both return it). stdout/stderr are trimmed of surrounding whitespace;
-// ok reports a zero exit.
+// ToMap renders the shared exec result shape.
 func (r ExecResult) ToMap() map[string]any {
 	return map[string]any{
 		"stdout": strings.TrimSpace(r.Stdout),
@@ -63,25 +60,12 @@ func (r ExecResult) ToMap() map[string]any {
 	}
 }
 
-// Exec is the shared subprocess primitive behind magus's exec surfaces (os.exec
-// and fork spell targets). It applies the sandbox policy from ctx (exec-deny
-// check plus frozen BaseEnv), layers ExecOptions.Env overrides, streams output
-// through the ctx OutputWriters, optionally captures it, and cancels with the
-// same graceful signal and WaitDelay as Run. A sandbox exec denial returns an
-// MGS2007 diagnostic before the process starts (Started=false). The returned
-// error is the raw subprocess error (joined with ctx.Err on cancellation);
-// callers format their own "exit N" / start-failure messages from ExecResult.
+// Exec runs a subprocess with the current sandbox policy and output writers.
 func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (ExecResult, error) {
 	if types.Tracing(ctx) {
-		// A dry run skips execution and returns a benign success, tracing the command
-		// at info so the planned command shows without -v; a normal run logs it at
-		// debug below, after the sandbox check, then executes it.
 		slog.InfoContext(ctx, "run.exec", "cmd", name, "args", args, "dir", opts.Dir)
 		return ExecResult{Started: true, Code: 0}, nil
 	}
-	// Emit a structured exec event (the command about to run) when inside a captured target
-	// step, so the log viewer groups the output that follows under its command without
-	// parsing a "$ cmd" echo out of the text. Only fires within a step, not internal probes.
 	if project, target, ok := journal.StepFromContext(ctx); ok {
 		journal.Emit(ctx, journal.Event{
 			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
@@ -105,17 +89,8 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	}
 	env, withheldDaemon := childEnv(policy, opts.Env)
 	c.Env = env
-	// Count the env vars this sandbox withheld from the child (magus's own allowlist
-	// scrub, not a kernel action); attributed to the current step's project.
 	sandbox.RecordEnvDropped(ctx, policy)
 	if len(withheldDaemon) > 0 {
-		// Transparency breadcrumb. magus withholds its OWN daemon/pool pointers from every op
-		// subprocess: they are unauthenticated (MGS2008) and their mere presence makes a program
-		// that links proc - including magus's own binaries - believe it is adopted under a parent.
-		// This is INDEPENDENT of sandbox.enabled, so it is the answer to the otherwise-baffling
-		// "the sandbox is off, why is MAGUS_DAEMON_SOCKET missing in my recipe/test?". Debug, not
-		// Info: it fires on most ops during a run, so reach for it with -v when chasing a missing
-		// var. A nested magus (runMagus) re-injects these, so they never show as withheld there.
 		slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
 			"withheld magus daemon pointer(s) from op subprocess (done regardless of sandbox.enabled)"),
 			"vars", withheldDaemon)
@@ -136,9 +111,6 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		c.Stdout, c.Stderr = outW, errW
 	}
 
-	// The single record of every subprocess magus spawns, with its working
-	// directory: the first thing to reach for when a target behaves differently
-	// than its command run by hand. dir is the resolved cwd ("" inherits ours).
 	slog.DebugContext(ctx, "run.exec", "cmd", name, "args", args, "dir", c.Dir)
 
 	runErr := c.Run()
@@ -166,21 +138,10 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	return res, runErr
 }
 
-// DaemonForwardVars are magus's internal daemon/pool pointers. They must never reach an
-// arbitrary op subprocess: the socket is unauthenticated (MGS2008), and a program that links
-// proc - magus's own test binaries - would mistake an inherited socket for "already adopted
-// under a parent magus". The sandbox allowlist (internal/sandbox/env) already omits them, but
-// the sandbox is off by default, so childEnv strips them from the base env UNCONDITIONALLY.
-// A legitimate nested magus (runMagus in std/magus.go) re-injects them as Env overrides, which
-// layer last and win - so the withholding here and the re-injection there must name the same set.
+// DaemonForwardVars never reach ordinary op subprocesses.
 var DaemonForwardVars = []string{"MAGUS_DAEMON_SOCKET", "MAGUS_DAEMON_ADDRESS"}
 
-// childEnv builds the subprocess environment: the sandbox's frozen BaseEnv (or the process
-// environment when unsandboxed) with the daemon pool pointers withheld (see DaemonForwardVars),
-// then the magus self-reference vars (see SelfVars), then the caller's overrides. Later entries
-// win, so a caller may still override the self-reference vars or re-add a daemon pointer. The
-// second return value names the daemon pointers actually withheld from the child - present in the
-// base and not re-added by an override - so the caller can surface a breadcrumb (see Exec).
+// childEnv layers self-reference variables and caller overrides over the base environment.
 func childEnv(policy *sandbox.Policy, overrides []string) (env, withheld []string) {
 	var base []string
 	if policy != nil {
@@ -201,8 +162,6 @@ func childEnv(policy *sandbox.Policy, overrides []string) (env, withheld []strin
 	return env, withheld
 }
 
-// withoutEnvVars returns a fresh copy of env with every "NAME=value" entry whose NAME is in drop
-// removed. Malformed entries (no '=') are treated as a bare name and kept unless dropped.
 func withoutEnvVars(env, drop []string) []string {
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
@@ -217,7 +176,6 @@ func withoutEnvVars(env, drop []string) []string {
 	return out
 }
 
-// hasEnvVar reports whether env holds a "name" or "name=..." entry.
 func hasEnvVar(env []string, name string) bool {
 	prefix := name + "="
 	for _, kv := range env {
@@ -228,20 +186,7 @@ func hasEnvVar(env []string, name string) bool {
 	return false
 }
 
-// SelfVars returns the magus self-reference variables injected into every magus
-// subprocess, mirroring GNU Make's exported $(MAKE) and $(MAKELEVEL):
-//
-//   - MAGUS - the running binary's resolved path. Lets a spell or recipe re-invoke
-//     magus reliably (`"$MAGUS" buzz ...`) with no dependence on PATH or an install,
-//     including under `go run` (the temp build). The sandbox already grants exec on
-//     this same resolved path (see sandbox defaults).
-//   - MAGUS_LEVEL - the recursion depth this child runs at: the current process's
-//     depth (from its own MAGUS_LEVEL; absent means 0, the top-level invocation)
-//     plus one. So the counter climbs by one per magus process; a recipe can read
-//     $MAGUS_LEVEL to tell how deep it is or guard against runaway recursion.
-//
-// Exported so the magus.cmd recursion path (which builds its child env by hand)
-// injects the same pair.
+// SelfVars returns the binary path and recursion depth for child magus processes.
 func SelfVars() []string {
 	out := make([]string, 0, 2)
 	if exe := magusExe(); exe != "" {
@@ -251,10 +196,7 @@ func SelfVars() []string {
 	return out
 }
 
-// CurrentLevel is this process's magus recursion depth, read from MAGUS_LEVEL
-// (absent or invalid means 0, the top-level invocation). A value > 0 means this
-// process was spawned by another magus, so it must not stand up its own daemon:
-// it forwards adoptable work to, and shares the pool of, the top-level process.
+// CurrentLevel returns this process's magus recursion depth.
 func CurrentLevel() int {
 	if n, err := strconv.Atoi(os.Getenv("MAGUS_LEVEL")); err == nil && n >= 0 {
 		return n
@@ -262,8 +204,6 @@ func CurrentLevel() int {
 	return 0
 }
 
-// magusExe resolves the running magus binary's path once, following symlinks so it
-// matches the sandbox's exec grant. Empty if it cannot be determined.
 var magusExe = sync.OnceValue(func() string {
 	exe, err := os.Executable()
 	if err != nil {

@@ -84,7 +84,7 @@
     <small class="reading-time" title="Estimated reading time">4 min read</small>
     <article>
 <h1 id="target-output-references">Target output references</h1>
-<p>A pretty <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code> interleaves magus's own status lines with each <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s real
+<p>A pretty <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code> interleaves magus's own <a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a> lines with each <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s real
 stdout and stderr. Two things are then hard: telling magus chrome from a target's
 output, and pulling out ONE target's full output - especially a failure - to share
 with a teammate, an agent, or another tool.</p>
@@ -93,7 +93,7 @@ for its captured output, printed on its own line:</p>
 <pre><code class="language-text">[pass] docs test (1.2s)
 ref1a2b3c
 </code></pre>
-<p>Retrieve that exact output at any time with <code>magus query output</code>:</p>
+<p>Retrieve that exact output at any time with <code><a class="code-xref" href="../knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> output</code>:</p>
 <pre><code class="language-sh">magus query output ref1a2b3c
 </code></pre>
 <p>It writes the raw bytes to stdout and nothing else, so it pipes cleanly anywhere.</p>
@@ -109,17 +109,17 @@ refcc49db1f
   open in browser: magus query output refcc49db1f --open
 </code></pre>
 <h2 id="retrieval-magus-query-output-ref">Retrieval: <code>magus query output &lt;ref&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></h2>
-<p><code>magus query</code> doubles as the retrieval verb through an explicit <code>output</code> subcommand.
+<p><code>magus <a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a></code> doubles as the retrieval verb through an explicit <code>output</code> subcommand.
 <code>magus query output ref1a2b3c</code> prints that execution's captured output instead of
 searching the <a href="../knowledge/">knowledge graph</a>. It is a subcommand, not a shape-routed
-positional, so a free-text search term can never collide with a ref id - <code>magus query refactor</code> always searches the graph.</p>
+positional, so a free-text search term can never collide with a ref id - <code>magus query refactor</code> always searches the <a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>.</p>
 <ul>
 <li><code>magus query output ref1a2b3c</code> - print the exact output to stdout.</li>
 <li><code>magus query output ref1a2b3c -o json</code> - the descriptor (ref, <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, target,
 status, duration) plus the output as one record; <code>-o yaml</code> too.</li>
 <li><code>magus query output ref1a2b3c --open</code> - open the output in the browser <a href="#the-log-viewer">log viewer</a>.</li>
 </ul>
-<p>Refs prefix-match like a git short hash: type as few characters as are unique, and
+<p><a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">Refs</a> prefix-match like a git short hash: type as few characters as are unique, and
 an ambiguous prefix lists the candidates.</p>
 <p>For the LATEST log of a project or target (rather than a specific past execution),
 <a href="../../guides/debugging/"><code>magus tail</code></a> is a convenience, with <code>-f</code> to follow a running build.</p>
@@ -151,7 +151,7 @@ a <code>magus query output</code> one-liner (per section too), so you can pass a
 and a pretty/raw toggle shows the exact captured bytes. It is the log analog of
 <a href="../knowledge/"><code>magus graph open</code></a>: the ref and the output both ride the link fragment
 (<code>#ref=...&amp;data=...</code>, gzipped then base64url-encoded), decoded in your browser. The
-fragment is never sent to any server, so nothing about the run - not even its ref - ever
+fragment is never sent to any <a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a>, so nothing about the <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> - not even its ref - ever
 leaves your machine.</p>
 <p>For a very large log, print it instead (<code>magus query output ref1a2b3c</code>) and pipe it - a URL
 fragment is bounded by the browser's address-bar length.</p>
@@ -160,7 +160,7 @@ choose which browser to launch, so you can override your desktop default per com
 <pre><code class="language-sh">BROWSER=firefox magus query output ref1a2b3c --open
 </code></pre>
 <p><code>BROWSER</code> may be a colon-separated list of commands, each optionally containing <code>%s</code>
-where the URL is substituted (otherwise the URL is appended). With <code>BROWSER</code> unset,
+<a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the URL is substituted (otherwise the URL is appended). With <code>BROWSER</code> unset,
 magus uses your desktop's default handler (<code>open</code>, <code>xdg-open</code>, or the Windows
 equivalent).</p>
 <h2 id="for-agents-and-mcp">For agents and MCP</h2>
@@ -205,10 +205,10 @@ that is not a well-formed <code>ref&lt;hex&gt;</code> id, so it cannot name a st
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../guides/agents/"><span class="related-card-title">Agents</span><span class="related-card-desc">How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the guard hook any agent host can wire, the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.</span></a>
         <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
         <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
         <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
-        <a class="related-card" href="../../reference/console/"><span class="related-card-title">Console API</span><span class="related-card-desc">Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.</span></a>
     </div>
   </section>
   <div class="page-provenance container">

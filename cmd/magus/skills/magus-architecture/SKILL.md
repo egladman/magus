@@ -1,8 +1,3 @@
----
-name: magus-architecture
-description: Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.
----
-
 # Architecture decisions from the graph
 
 magus already measured the workspace: what depends on what, what changes
