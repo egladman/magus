@@ -63,7 +63,7 @@ jobs:
         with:
           git-ref: ${{ steps.resolve_magus.outputs.tag }}
 
-      - name: Preflight
+      - name: Doctor
         run: magus doctor
 
       - name: Restore magus run history

@@ -418,12 +418,14 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // through os.exec to use the tool module rather than the library module.
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
-export fun lint(ctx: magus\Context, args: [str])   > void { ctx.needs(format); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); md.markdownlint(); }
-export fun security(ctx: magus\Context, args: [str]) > void {
+export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
+    os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]);
+    go["go-vet"]();
     os.withEnv({"GOEXPERIMENT": "jsonv2"}, fun() > void {
         os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]);
     });
+    md.markdownlint();
 }
 // Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):
 // markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all
@@ -433,7 +435,7 @@ export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate);
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, security, build, test);
+    ctx.needs(lint, build, test);
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix
