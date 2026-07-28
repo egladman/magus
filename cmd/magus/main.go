@@ -91,6 +91,10 @@ func runCLI() int {
 		if res.cleanup != nil {
 			res.cleanup()
 		}
+		// Restore the terminal before anything else tears down: an
+		// interrupted run must not hand the shell back with the sticky
+		// error region's scroll margins still set.
+		restoreTerminal()
 		stopSignals()
 	}
 

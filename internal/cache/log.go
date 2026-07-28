@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/interactive/clihint"
-	"golang.org/x/term"
+	"github.com/egladman/magus/internal/interactive/tty"
 )
 
 // levelTrace mirrors config.LevelTrace (slog.LevelDebug-4); duplicated here
@@ -21,7 +21,7 @@ const levelTrace slog.Level = slog.LevelDebug - 4
 // newLogger returns a *slog.Logger for the given format ("text", "json", or "pretty") and level.
 //
 // Human formats (pretty, plain) render to stderr so stdout stays clean for machine
-// output; json/text keep their slog handlers. Pretty uses the shared prettyHandler,
+// output; json/text keep their slog handlers. Pretty uses the shared PrettyHandler,
 // which is also installed as the process-wide default logger (see cmd/magus) so that
 // general diagnostics render in the same compact style as cache events instead of raw
 // "time=... level=..." lines interleaving with the pretty output.
@@ -36,47 +36,131 @@ func newLogger(format string, level slog.Level) *slog.Logger {
 	}
 }
 
-// prettyHandler renders both cache events (known cache.* messages) and general
+// PrettyHandler renders both cache events (known cache.* messages) and general
 // diagnostics in a compact, scannable style: coloured ASCII status glyphs on a TTY,
 // bracketed prefixes on plain streams. It carries no timestamps or level=/key=
 // boilerplate; that noise is what makes raw slog output hard to read interactively.
-type prettyHandler struct {
+//
+// On a TTY, errors are written into a sticky region at the bottom of the
+// terminal so they never scroll off, under a live pool status line (scroll
+// margins are set on the first cache.pool or cache.error, and reset on
+// cache.summary or Close). Non-TTY writers fall through to plain output;
+// the region is harmless when disabled.
+type PrettyHandler struct {
 	mu    sync.Mutex
 	w     io.Writer // write destination (os.Stderr in production; bytes.Buffer in tests)
-	fd    *os.File  // nil means non-TTY; used only for IsTerminal checks
+	probe tty.Probe
 	level slog.Level
+	// err latches the first write failure seen during a single Handle
+	// call so the many print helpers can stay linear instead of each
+	// growing an error branch. Reset at the top of Handle, returned at
+	// the bottom; guarded by mu like every other field.
+	err    error
+	region *tty.Region // sticky error region; disabled when the writer is not a TTY
 }
 
-// NewPrettyHandler builds the unified pretty handler. If w is an *os.File its
-// terminal-ness drives colour; any other writer (e.g. a bytes.Buffer in tests, or a
-// pipe) renders plain. TTY detection runs per-Handle so late redirects are noticed.
-func NewPrettyHandler(w io.Writer, level slog.Level) slog.Handler {
-	h := &prettyHandler{w: w, level: level}
-	if f, ok := w.(*os.File); ok {
-		h.fd = f
+// NewPrettyHandler builds the unified pretty handler. Colour is driven by the
+// terminal-ness of w's file descriptor (any writer exposing Fd(), not just an
+// *os.File); a writer without one -- a bytes.Buffer in tests, a pipe -- renders
+// plain. TTY detection runs per-Handle so late redirects are noticed.
+//
+// On a TTY writer, a sticky region is reserved at the bottom of the terminal:
+// a live pool status line on top, then [fail] lines that do not scroll off.
+// The reservation is lazy (the region opens on the first cache.pool or
+// cache.error) and reset on cache.summary or Close; a pipe / bytes.Buffer /
+// non-TTY writer disables it.
+func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
+	return newPrettyHandler(w, level, tty.SystemProbe)
+}
+
+// newPrettyHandler is the probe-injecting form. Tests use it to render
+// terminal output into a buffer without opening a pty.
+func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler {
+	return &PrettyHandler{
+		w:      w,
+		probe:  p,
+		level:  level,
+		region: tty.NewRegion(w, stickyRegionRows, p),
 	}
-	return h
 }
 
-func (h *prettyHandler) isTTY() bool {
-	if h.fd == nil {
+// stickyRegionRows is how many terminal rows the sticky region claims:
+// one for the live pool status line, five for failures. Small on
+// purpose, so the scrolling output above stays the main view.
+const stickyRegionRows = 6
+
+// rendersStatus reports whether this handler has a live region to paint
+// a status line into. The cache asks before emitting pool samples, so a
+// piped, JSON, or CI run pays nothing for a feature it cannot show.
+func (h *PrettyHandler) rendersStatus() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.region.Enabled()
+}
+
+// Close releases the sticky error region if one was reserved. Idempotent
+// and safe to defer; required so a panic or interrupted run does not leave
+// the terminal with the scroll margins still set. The next non-magus
+// command the user runs inherits a clean terminal state.
+func (h *PrettyHandler) Close() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.region.Release()
+}
+
+// wantsColor reports whether output to this writer should carry ANSI
+// colour: the writer must be a terminal, and NO_COLOR must be unset.
+// It is consulted per record so a late redirect is noticed.
+//
+// The descriptor comes from tty.Fd, so any writer exposing Fd() is
+// treated uniformly and the region sees the same writer this does.
+func (h *PrettyHandler) wantsColor() bool {
+	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
-	return term.IsTerminal(int(h.fd.Fd())) && os.Getenv("NO_COLOR") == ""
+	fd, ok := tty.Fd(h.w)
+	if !ok {
+		return false
+	}
+	return h.probe.IsTerminal(fd)
 }
 
-func (h *prettyHandler) Enabled(_ context.Context, lvl slog.Level) bool { return lvl >= h.level }
-func (h *prettyHandler) WithAttrs(_ []slog.Attr) slog.Handler           { return h }
-func (h *prettyHandler) WithGroup(_ string) slog.Handler                { return h }
+// fail latches the first write error of the current record. Reading and
+// writing h.err is safe because Handle holds h.mu for the whole record.
+func (h *PrettyHandler) fail(err error) {
+	if err != nil && h.err == nil {
+		h.err = err
+	}
+}
 
-func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
+// printf writes one formatted line to the handler's writer, latching
+// the first error so callers stay linear. Once a write has failed the
+// rest of the record is skipped: a broken stderr will not recover
+// mid-line, and continuing would only pile up identical errors.
+func (h *PrettyHandler) printf(format string, args ...any) {
+	if h.err != nil {
+		return
+	}
+	_, err := fmt.Fprintf(h.w, format, args...)
+	h.fail(err)
+}
+
+func (h *PrettyHandler) Enabled(_ context.Context, lvl slog.Level) bool { return lvl >= h.level }
+func (h *PrettyHandler) WithAttrs(_ []slog.Attr) slog.Handler           { return h }
+func (h *PrettyHandler) WithGroup(_ string) slog.Handler                { return h }
+
+func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	if ctx.Err() != nil {
 		return nil
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	tty := h.isTTY()
+	// One record, one error: clear the latch on entry so a failure on an
+	// earlier record does not suppress this one's output.
+	h.err = nil
+
+	colorize := h.wantsColor()
 	project := recordStr(r, "project") // real path; used for the runnable repro command
 	label := displayProjectLabel(recordStr(r, "label"), project)
 	dur := recordDur(r, "duration")
@@ -87,51 +171,63 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// Cached: passed without running. Dimmed green so a cache hit reads as
 		// low-signal next to work that actually ran. Cache state lives in the parens,
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
-		_, _ = fmt.Fprintf(h.w, "%s %s (cached, %s)\n", h.glyph(tty, "pass", colDimGreen), label, fmtDur(dur))
-		h.printRepro(tty, project, recordStr(r, "target"))
-		h.printRef(tty, ref)
+		h.printf("%s %s (cached, %s)\n", h.glyph(colorize, "pass", colDimGreen), label, fmtDur(dur))
+		h.printRepro(colorize, project, recordStr(r, "target"))
+		h.printRef(colorize, ref)
 	case "cache.miss":
-		_, _ = fmt.Fprintf(h.w, "%s %s (ran, %s)\n", h.glyph(tty, "pass", colGreen), label, fmtDur(dur))
-		h.printRepro(tty, project, recordStr(r, "target"))
-		h.printRef(tty, ref)
+		h.printf("%s %s (ran, %s)\n", h.glyph(colorize, "pass", colGreen), label, fmtDur(dur))
+		h.printRepro(colorize, project, recordStr(r, "target"))
+		h.printRef(colorize, ref)
 	case "cache.error":
-		h.printFailure(tty, label, project, recordStr(r, "target"), dur, recordStr(r, "error"), ref)
+		h.printFailure(colorize, label, project, recordStr(r, "target"), dur, recordStr(r, "error"), ref)
 	case "cache.warn":
-		_, _ = fmt.Fprintf(h.w, "%s %s\n", h.glyph(tty, "warn", colYellow), recordStr(r, "msg"))
+		h.printf("%s %s\n", h.glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
+	case "cache.pool":
+		// A live occupancy counter, pinned to the top row of the sticky
+		// region. It is deliberately not printed on a non-TTY: this event
+		// fires twice per step, and replaying every sample into a pipe or
+		// a CI log would bury the actual results. SetStatus drops it when
+		// the region is disabled, so no branch is needed here.
+		h.fail(h.region.SetStatus(formatPool(
+			recordInt(r, "running"), recordInt(r, "capacity"), recordInt(r, "queued"))))
 	case "cache.summary":
 		cached := recordInt(r, "hits")
 		ran := recordInt(r, "misses")
 		failed := recordInt(r, "errors")
 		elapsed := recordDur(r, "elapsed")
-		if tty {
-			_, _ = fmt.Fprintf(h.w, "\nSummary: %d cached, %d ran, %d failed (%s)\n",
+		if colorize {
+			h.printf("\nSummary: %d cached, %d ran, %d failed (%s)\n",
 				cached, ran, failed, fmtDur(elapsed))
 		} else {
-			_, _ = fmt.Fprintf(h.w, "[summary] %d cached, %d ran, %d failed (%s)\n",
+			h.printf("[summary] %d cached, %d ran, %d failed (%s)\n",
 				cached, ran, failed, fmtDur(elapsed))
 		}
+		// End of run: release the sticky error region so the user's
+		// shell prompt returns to a clean full-screen terminal. Safe
+		// to call when the region was never opened (idempotent).
+		h.fail(h.region.Release())
 	case "cache.dry.banner":
-		if tty {
-			_, _ = fmt.Fprintf(h.w, "\x1b[2mdry run - commands shown, not executed\x1b[0m\n")
+		if colorize {
+			h.printf("\x1b[2mdry run - commands shown, not executed\x1b[0m\n")
 		} else {
-			_, _ = fmt.Fprintf(h.w, "dry run - commands shown, not executed\n")
+			h.printf("dry run - commands shown, not executed\n")
 		}
 	case "cache.dry":
 		// Neutral glyph: a dry run has no pass/fail outcome (nothing executes).
-		_, _ = fmt.Fprintf(h.w, "%s %s %s\n", h.glyph(tty, "dry", colDim), label, recordStr(r, "target"))
+		h.printf("%s %s %s\n", h.glyph(colorize, "dry", colDim), label, recordStr(r, "target"))
 	case "cache.scope":
 		label := recordStr(r, "label")
 		source := recordStr(r, "source")
 		if source != "" {
-			_, _ = fmt.Fprintf(h.w, "projects: %s (%s)\n", label, source)
+			h.printf("projects: %s (%s)\n", label, source)
 		} else {
-			_, _ = fmt.Fprintf(h.w, "projects: %s\n", label)
+			h.printf("projects: %s\n", label)
 		}
 	case "cache.charms":
 		if charms := recordStr(r, "charms"); charms != "" {
-			_, _ = fmt.Fprintf(h.w, "charms: %s\n", charms)
+			h.printf("charms: %s\n", charms)
 		} else {
-			_, _ = fmt.Fprintf(h.w, "charms: (none)\n")
+			h.printf("charms: (none)\n")
 		}
 	case "run.exec":
 		// Every subprocess magus spawns (os.exec, fork spells) logs through this event
@@ -142,10 +238,10 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		if args := recordStrs(r, "args"); len(args) > 0 {
 			cmd += " " + strings.Join(args, " ")
 		}
-		if tty {
-			_, _ = fmt.Fprintf(h.w, "  \x1b[2m$ %s\x1b[0m\n", cmd)
+		if colorize {
+			h.printf("  \x1b[2m$ %s\x1b[0m\n", cmd)
 		} else {
-			_, _ = fmt.Fprintf(h.w, "  $ %s\n", cmd)
+			h.printf("  $ %s\n", cmd)
 		}
 	case "cache.stage":
 		// One indented line per magus.needs sub-target as it completes, so a collapsed
@@ -156,11 +252,11 @@ func (h *prettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		if recordStr(r, "error") != "" {
 			name, color = "fail", colRed
 		}
-		_, _ = fmt.Fprintf(h.w, "  %s %s %s (%s)\n", h.glyph(tty, name, color), label, target, fmtDur(dur))
+		h.printf("  %s %s %s (%s)\n", h.glyph(colorize, name, color), label, target, fmtDur(dur))
 	default:
-		h.handleGeneric(tty, r)
+		h.handleGeneric(colorize, r)
 	}
-	return nil
+	return h.err
 }
 
 // displayProjectLabel keeps the real project path for commands while making the
@@ -192,9 +288,9 @@ const (
 // outcome words; cache state (cached vs ran) is shown separately in the line's
 // parenthetical, the orthogonal split every major build tool uses (e.g. Bazel's
 // "(cached) PASSED"). Named to match the doctor command's statusGlyph.
-func (h *prettyHandler) glyph(tty bool, label, color string) string {
+func (h *PrettyHandler) glyph(colorize bool, label, color string) string {
 	s := "[" + label + "]"
-	if tty {
+	if colorize {
 		return "\x1b[" + color + "m" + s + "\x1b[0m"
 	}
 	return s
@@ -205,7 +301,7 @@ func (h *prettyHandler) glyph(tty bool, label, color string) string {
 // attrs trailing dimmed. No timestamp or level= boilerplate. The "dir" attr that the
 // process-wide handler stamps on every context-aware record is suppressed above debug
 // level, since it is a correlation aid, not something a reader needs on each line.
-func (h *prettyHandler) handleGeneric(tty bool, r slog.Record) {
+func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	label, color := "debug", colDim
 	switch {
 	case r.Level >= slog.LevelError:
@@ -216,10 +312,10 @@ func (h *prettyHandler) handleGeneric(tty bool, r slog.Record) {
 		label, color = "info", colDim
 	}
 	attrs := formatAttrs(r)
-	if tty && attrs != "" {
+	if colorize && attrs != "" {
 		attrs = "\x1b[2m" + attrs + "\x1b[0m"
 	}
-	_, _ = fmt.Fprintf(h.w, "%s %s%s\n", h.glyph(tty, label, color), r.Message, attrs)
+	h.printf("%s %s%s\n", h.glyph(colorize, label, color), r.Message, attrs)
 }
 
 // formatAttrs renders a record's attrs as " key=value" pairs, skipping the noisy
@@ -237,48 +333,75 @@ func formatAttrs(r slog.Record) string {
 }
 
 // printRepro prints the standalone `magus run <target> <project>` for a result.
-func (h *prettyHandler) printRepro(tty bool, project, target string) {
+func (h *PrettyHandler) printRepro(colorize bool, project, target string) {
 	if project == "" || target == "" {
 		return
 	}
 	repro := clihint.Run.With(target, project)
-	if tty {
-		_, _ = fmt.Fprintf(h.w, "  \x1b[2m%s\x1b[0m\n", repro)
+	if colorize {
+		h.printf("  \x1b[2m%s\x1b[0m\n", repro)
 	} else {
-		_, _ = fmt.Fprintf(h.w, "  %s\n", repro)
+		h.printf("  %s\n", repro)
 	}
 }
 
 // printFailure keeps the failure and every useful next step together so a reader
 // does not need to infer which concurrent project, target, or captured log failed.
-func (h *prettyHandler) printFailure(tty bool, label, project, target string, dur time.Duration, cause, ref string) {
+//
+// The heading goes to the sticky error region (so it never scrolls off)
+// when one is reserved; the trailing cause / output / inspect / reproduce
+// lines stay in the scrolling region so the user can copy them with
+// normal terminal selection. Non-TTY writers and disabled regions fall
+// through to plain output unchanged.
+func (h *PrettyHandler) printFailure(colorize bool, label, project, target string, dur time.Duration, cause, ref string) {
 	heading := label
 	if target != "" {
 		heading += " " + target
 	}
-	_, _ = fmt.Fprintf(h.w, "%s %s (ran, %s)\n", h.glyph(tty, "fail", colRed), heading, fmtDur(dur))
-	if cause != "" {
-		_, _ = fmt.Fprintf(h.w, "  cause: %s\n", failureCauseExcerpt(cause))
-	}
-	if ref != "" {
-		_, _ = fmt.Fprintf(h.w, "  output: %s\n", ref)
-		full := clihint.QueryOutput.With(ref)
-		if tty {
-			_, _ = fmt.Fprintf(h.w, "  \x1b[2minspect: %s\x1b[0m\n", full)
-		} else {
-			_, _ = fmt.Fprintf(h.w, "  inspect: %s\n", full)
+	if h.region.Enabled() {
+		// Write only the heading to the sticky region; the trailing
+		// lines (cause, output, inspect, reproduce) stay in the
+		// scrolling region above where the user can select them
+		// without fighting the live update.
+		//
+		// The glyph is rendered uncoloured here even though this is a
+		// TTY: the region wraps the whole line in bold red, and a
+		// coloured glyph would close that with its own reset, leaving
+		// the project and target after it in the default colour.
+		line := fmt.Sprintf("%s %s (ran, %s)", h.glyph(false, "fail", colRed), heading, fmtDur(dur))
+		if err := h.region.WriteLine(line); err != nil {
+			// Deliberately not latched. Latching here would short-circuit
+			// printf and swallow the cause, output ref, and reproduce
+			// command below -- the detail the user most needs on the one
+			// path where the terminal is already misbehaving. Repeat the
+			// heading plainly instead so the failure is never invisible.
+			h.printf("%s %s (ran, %s)\n", h.glyph(colorize, "fail", colRed), heading, fmtDur(dur))
 		}
 	} else {
-		_, _ = fmt.Fprintln(h.w, "  output: unavailable (no output was captured)")
+		h.printf("%s %s (ran, %s)\n", h.glyph(colorize, "fail", colRed), heading, fmtDur(dur))
+	}
+	if cause != "" {
+		h.printf("  cause: %s\n", failureCauseExcerpt(cause))
+	}
+	if ref != "" {
+		h.printf("  output: %s\n", ref)
+		full := clihint.QueryOutput.With(ref)
+		if colorize {
+			h.printf("  \x1b[2minspect: %s\x1b[0m\n", full)
+		} else {
+			h.printf("  inspect: %s\n", full)
+		}
+	} else {
+		h.printf("  output: unavailable (no output was captured)\n")
 	}
 	if project == "" || target == "" {
 		return
 	}
 	repro := clihint.Run.With(target, project)
-	if tty {
-		_, _ = fmt.Fprintf(h.w, "  \x1b[2mreproduce: %s\x1b[0m\n", repro)
+	if colorize {
+		h.printf("  \x1b[2mreproduce: %s\x1b[0m\n", repro)
 	} else {
-		_, _ = fmt.Fprintf(h.w, "  reproduce: %s\n", repro)
+		h.printf("  reproduce: %s\n", repro)
 	}
 }
 
@@ -292,14 +415,14 @@ func failureCauseExcerpt(cause string) string {
 }
 
 // printRef prints a successful target's output reference id on its own line.
-func (h *prettyHandler) printRef(tty bool, ref string) {
+func (h *PrettyHandler) printRef(colorize bool, ref string) {
 	if ref == "" {
 		return
 	}
-	if tty {
-		_, _ = fmt.Fprintf(h.w, "\x1b[2m%s\x1b[0m\n", ref)
+	if colorize {
+		h.printf("\x1b[2m%s\x1b[0m\n", ref)
 	} else {
-		_, _ = fmt.Fprintf(h.w, "%s\n", ref)
+		h.printf("%s\n", ref)
 	}
 }
 
@@ -371,4 +494,21 @@ func recordInt(r slog.Record, key string) int {
 		return true
 	})
 	return i
+}
+
+// formatPool renders the concurrency pool's occupancy for the status
+// line: "pool 3/8 running, 2 queued".
+//
+// The vocabulary is the workspace-wide one: work in progress is
+// "running" (never "active"), work waiting for a slot is "queued"
+// (never "pending"), matching `magus status` and the pool inspector so a
+// reader learns the words once. The queued clause is omitted when
+// nothing is waiting, since a steady "0 queued" is noise on a line the
+// user is watching for change.
+func formatPool(running, capacity, queued int) string {
+	s := fmt.Sprintf("pool %d/%d running", running, capacity)
+	if queued > 0 {
+		s += fmt.Sprintf(", %d queued", queued)
+	}
+	return s
 }

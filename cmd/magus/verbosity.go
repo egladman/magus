@@ -5,9 +5,11 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/std"
 )
 
@@ -100,8 +102,48 @@ func levelName(lvl slog.Level) string {
 	return lvl.String()
 }
 
+// displayHandler is the pretty handler currently installed as the process-wide
+// default, or nil when the configured format does not use one. applyDisplay runs
+// more than once per invocation (once while parsing global flags, again after
+// magus.yaml is loaded), and each pretty handler owns a terminal region; holding
+// the live one here lets each call release its predecessor.
+//
+// Guarded by displayMu: applyDisplay runs on the startup path while
+// restoreTerminal can run from the signal-driven cleanup path.
+var (
+	displayMu      sync.Mutex
+	displayHandler *cache.PrettyHandler
+)
+
+// restoreTerminal undoes any terminal state this run reserved: the sticky error
+// region's DECSTBM scroll margins. runCLI calls it on every exit path, including
+// the signal path, so an interrupted run does not hand the user back a shell
+// pinned inside a scroll region.
+//
+// It both closes the handler it knows about and resets the scroll margins
+// unconditionally. The second step is not redundant: the cache builds its own
+// pretty handler for cache events (see internal/cache.Open), and that one --
+// not this one -- is what actually reserves a region during a normal run.
+// Scroll margins belong to the terminal rather than to whoever set them, so one
+// reset here covers every handler without threading ownership through the cache.
+func restoreTerminal() {
+	displayMu.Lock()
+	h := displayHandler
+	displayHandler = nil
+	displayMu.Unlock()
+
+	if h != nil {
+		_ = h.Close()
+	}
+	_ = tty.ResetScrollMargins(os.Stderr, tty.SystemProbe)
+}
+
 // applyDisplay configures the process-global slog logger and writes the resolved level back to globalCfg.
 func applyDisplay() {
+	// Release the previous handler's region before installing a replacement,
+	// so a second call does not strand the first one's scroll margins.
+	restoreTerminal()
+
 	// --silent implies --quiet's suppression; the extra behavior rides on Log.Silent.
 	quiet := global.quiet || global.silent
 	lvl := effectiveLevel(global.verbose, quiet)
@@ -124,7 +166,11 @@ func applyDisplay() {
 		// Render general diagnostics through the same compact handler as cache
 		// events so they share one style and stop interleaving as raw
 		// "time=... level=..." lines with the pretty output.
-		h = cache.NewPrettyHandler(os.Stderr, lvl)
+		ph := cache.NewPrettyHandler(os.Stderr, lvl)
+		displayMu.Lock()
+		displayHandler = ph
+		displayMu.Unlock()
+		h = ph
 	}
 	slog.SetDefault(slog.New(dirHandler{h}))
 }
