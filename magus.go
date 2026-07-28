@@ -566,6 +566,7 @@ func (m *Magus) volatilityConfig() volatility.Config {
 		BootstrapSamples: m.cfg.Volatility.BootstrapSamples,
 		MinSamples:       m.cfg.Volatility.MinSamples,
 		Threshold:        m.cfg.Volatility.Threshold,
+		Annotate:         m.cfg.Volatility.AnnotateGHA,
 	}
 }
 

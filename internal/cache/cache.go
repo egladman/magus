@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/journal"
 	runPkg "github.com/egladman/magus/internal/proc/run"
@@ -49,6 +50,14 @@ type Cache struct {
 	exportMu       sync.RWMutex  // guards Export/Import against concurrent Run writes
 	evictMu        sync.Mutex    // serialises evictLRU so concurrent Runs don't over-evict each other's fresh manifests
 	remote         RemoteBackend // optional remote backend; nil = local-only
+	// annotator folds failure output and raises notices for whichever CI
+	// provider is running the job; Nop off CI, so call sites never branch.
+	// annotateMu serialises a whole failure block (group open, dump, group
+	// close): projects run concurrently, and a peer's output landing between
+	// a group's markers would fold that peer's log into this project's
+	// section.
+	annotator  annotate.Annotator
+	annotateMu sync.Mutex
 
 	// Remote-artifact signing: signer signs on push, verifier authenticates on
 	// import. signingSeed/trustedKeys hold the raw option inputs until Open builds
@@ -159,6 +168,8 @@ func Open(dir string, opts ...Option) (*Cache, error) {
 		logLevel: defaultLevel,
 		mtimes:   newMtimeStore(dir, log),
 		outputs:  NewOutputStore(dir),
+		// Annotations go to stderr alongside the failure dump they wrap.
+		annotator: annotate.Detect(os.Stderr),
 	}
 	for _, o := range opts {
 		o(c)
@@ -171,6 +182,16 @@ func Open(dir string, opts ...Option) (*Cache, error) {
 	}
 	warnIfCoarseMtimeResolution(dir, c.log)
 	return c, nil
+}
+
+// annotations returns the CI annotator, falling back to Nop for a Cache
+// built as a struct literal rather than through Open. Tests do that, and a
+// nil interface would panic on the first Active call.
+func (c *Cache) annotations() annotate.Annotator {
+	if c.annotator == nil {
+		return annotate.Nop{}
+	}
+	return c.annotator
 }
 
 // initSigning builds the signer and verifier from the raw option inputs, so a
@@ -1029,6 +1050,37 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	}
 
 	if runErr != nil {
+		// Under GitHub Actions, fold the dump into a collapsible section and
+		// raise the failure itself as an annotation. The dump is verbose and
+		// belongs behind a fold; the annotation is what reaches the pull
+		// request, so a reviewer sees which target failed without opening the
+		// log at all. Groups are cosmetic elsewhere, so nothing changes for
+		// any other host.
+		ann := c.annotations()
+		if ann.Active() {
+			c.annotateMu.Lock()
+			defer c.annotateMu.Unlock()
+			what := projectPath
+			if target != "" {
+				what += " " + target
+			}
+			// Expanded, not folded: a failure is the one thing the reader must
+			// not have to click for. Providers that cannot express an expanded
+			// section leave the output inline instead of hiding it.
+			_ = ann.StartGroup(annotate.Group{
+				ID:    annotate.SanitizeID("magus-fail-" + what),
+				Title: "failed: " + what,
+			})
+			defer func() {
+				_ = ann.EndGroup(annotate.SanitizeID("magus-fail-" + what))
+				_ = ann.Annotate(annotate.Annotation{
+					Level:   annotate.LevelError,
+					Title:   "magus: " + what,
+					File:    projectPath,
+					Message: runErr.Error(),
+				})
+			}()
+		}
 		switch {
 		case c.silent:
 			// Bound the dump to the log's tail and keep the full log so its path resolves.
@@ -1038,7 +1090,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				if omitted > 0 {
 					_, _ = fmt.Fprintf(os.Stderr, "... %d earlier line(s) omitted; full log: %s\n", omitted, logPath)
 				}
-				_, _ = os.Stderr.Write(tail)
+				_, _ = io.WriteString(os.Stderr, ann.Quote(string(tail)))
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
 		case collapse:
@@ -1053,7 +1105,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 				if omitted > 0 {
 					_, _ = fmt.Fprintf(os.Stderr, "... %d log line(s) omitted; showing likely diagnostics\n", omitted)
 				}
-				_, _ = os.Stderr.Write(excerpt)
+				_, _ = io.WriteString(os.Stderr, ann.Quote(string(excerpt)))
 				if len(excerpt) > 0 && excerpt[len(excerpt)-1] != '\n' {
 					_, _ = fmt.Fprintln(os.Stderr)
 				}
@@ -1061,7 +1113,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		case quiet:
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
-				_, _ = os.Stderr.Write(data)
+				_, _ = io.WriteString(os.Stderr, ann.Quote(string(data)))
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
 		}

@@ -79,6 +79,36 @@ func buildCacheNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	return ns
 }
 
+// buildCINS assembles magus.ci for a magusfile. It exposes provider(),
+// which wires an imported spell as this workspace's CI provider:
+//
+//	import "spells/github/actions" as github
+//	magus.ci.provider(github)
+//
+// The spell supplies job-log structure for whatever CI system it targets:
+// fold markers around failure output, annotations that surface on a pull
+// request, and a suggested concurrency for that provider's runners. Every
+// op is optional, because providers differ in what they support at all
+// (see internal/ci/annotate).
+//
+// A declared provider wins over magus's built-ins, so a workspace can
+// override the bundled GitHub Actions support with its own spell.
+func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
+	ns := vm.NewMap()
+	ns.MapSet("provider", directVal(obs, "magus.ci.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf("magus.ci.provider: expected an imported spell handle")
+		}
+		nv, ok := args[0].MapGet("name")
+		if !ok || !nv.IsStr() || nv.AsString() == "" {
+			return vm.Null, fmt.Errorf("magus.ci.provider: argument is not a spell handle (no name)")
+		}
+		SetCIProvider(nv.AsString())
+		return vm.Null, nil
+	}))
+	return ns
+}
+
 // dispatchBuzzExternal runs the cross-project target an external handle names,
 // through the run's CrossDispatch coordinator (run-once + cross-project cycle
 // detection). The project path is resolved with file.Resolve against the caller's
