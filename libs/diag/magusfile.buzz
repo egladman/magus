@@ -19,7 +19,7 @@ import "magus/spell/go";
 import "fs";
 import "vcs";
 
-magus.project({
+magus\project({
     "spells": [magusfile, go],
     // Generated catalog; cached so a hit restores it without re-describing.
     "outputs": ["MAGUS.md"],
@@ -39,19 +39,19 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
+    final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
     ctx.needs(md_generate);
     if (ctx.has_charm("rw")) { return; }
 
-    if (clean_before and vcs.isDirty(["MAGUS.md"])) {
+    if (clean_before and vcs\isDirty(["MAGUS.md"])) {
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diag` and commit";
     }
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
 export fun md_generate(ctx: magus\Context, args: [str]) > void {
-    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
-    fs.writeFile("MAGUS.md", doc + "\n");
+    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
 }
 
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }

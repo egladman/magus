@@ -5,7 +5,7 @@
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["govulncheck"]();

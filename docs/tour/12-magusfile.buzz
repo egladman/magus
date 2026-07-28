@@ -34,7 +34,7 @@ final LINT_SLOTS: int = 4;
 // Everything else relies on the cache by default (magus keys each target on its
 // declared inputs and replays outputs when they are unchanged), which is the whole
 // point, so we do NOT opt targets out of it here.
-magus.project({
+magus\project({
     "spells": [buf, go, ts, docker],
     "outputs": ["gen/**", "bin/**"],
     "targets": {

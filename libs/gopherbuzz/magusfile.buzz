@@ -22,7 +22,7 @@ import "os";
 import "fs";
 import "vcs";
 
-magus.project({
+magus\project({
     "spells": [magusfile, go],
     // Generated catalog; cached so a hit restores it without re-describing.
     "outputs": ["MAGUS.md"],
@@ -45,19 +45,19 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 // not it is committed; only a regeneration that changes a clean file fails.
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
+    final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
     ctx.needs(md_generate);
     if (ctx.has_charm("rw")) { return; }
 
-    if (clean_before and vcs.isDirty(["MAGUS.md"])) {
+    if (clean_before and vcs\isDirty(["MAGUS.md"])) {
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/gopherbuzz` and commit";
     }
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
 export fun md_generate(ctx: magus\Context, args: [str]) > void {
-    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
-    fs.writeFile("MAGUS.md", doc + "\n");
+    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
 }
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](); }
@@ -80,22 +80,22 @@ export fun pgo_generate(ctx: magus\Context, args: [str]) > void {
     final tmp = "default.pgo.tmp";
 
     // allow_failure: excluded benches exit non-zero, but only the profile matters.
-    os.exec("go", ["test", "-run=^$",
+    os\exec("go", ["test", "-run=^$",
         "-bench=" + bench,
         "-skip=" + skip,
         "-benchtime=1s", "-cpuprofile=" + tmp, "-o", "/dev/null", "."],
         "", {"allow_failure": true});
 
-    if (!fs.exists(tmp)) {
+    if (!fs\exists(tmp)) {
         throw "pgo-generate: no profile produced";
     }
-    final profile = fs.readFile(tmp);
-    fs.removeAll(tmp);
+    final profile = fs\readFile(tmp);
+    fs\removeAll(tmp);
     // Commit only a non-empty profile so a failed run can't clobber a good one.
     if (profile.len() == 0) {
         throw "pgo-generate: empty profile produced";
     }
-    fs.writeFile("default.pgo", profile);
-    magus.info("wrote default.pgo ({profile.len()} bytes)");
-    magus.info("verify: benchstat over -pgo=off vs -pgo=./default.pgo (-bench=Call -count=10)");
+    fs\writeFile("default.pgo", profile);
+    magus\info("wrote default.pgo ({profile.len()} bytes)");
+    magus\info("verify: benchstat over -pgo=off vs -pgo=./default.pgo (-bench=Call -count=10)");
 }

@@ -8,12 +8,12 @@
 import "magus";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    magus.info("compiling");
+    magus\info("compiling");
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
-    magus.info("testing");
+    magus\info("testing");
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {

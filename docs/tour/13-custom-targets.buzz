@@ -8,7 +8,7 @@
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     go["go-build"]();
@@ -23,13 +23,13 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // canonical targets use, then does its own extra work.
 export fun release(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ci);
-    magus.info("tagging and publishing the release");
+    magus\info("tagging and publishing the release");
 }
 
 // A target can also invoke another imperatively with magus.run - the dynamic
 // alternative to a static magus.needs edge. `run deploy` records the nested
 // call in the plan.
 export fun deploy(ctx: magus\Context, args: [str]) > void {
-    magus.run(["release"]);
-    magus.info("rolling out to production");
+    magus\run(["release"]);
+    magus\info("rolling out to production");
 }

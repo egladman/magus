@@ -7,7 +7,7 @@
 import "magus";
 import "magus/spell/go";     // the Go toolchain: go-build, go-test, go-vet, ...
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     go["go-build"]();

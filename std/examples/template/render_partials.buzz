@@ -10,5 +10,5 @@ final partials = {
     "footer": `<footer>{{title}}</footer>`,
 };
 
-std.print(template.renderPartials(page, {"title": "magus", "body": "hi"}, partials));
+std\print(template\renderPartials(page, {"title": "magus", "body": "hi"}, partials));
 // -> "<header>magus</header><main>hi</main><footer>magus</footer>"

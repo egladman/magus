@@ -1,5 +1,5 @@
 import "std";
 import "strings";
 
-std.print(strings.capitalize("hELLO"));
+std\print(strings\capitalize("hELLO"));
 // -> "Hello"

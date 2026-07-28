@@ -8,7 +8,7 @@
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 // Read the active charm set with has_charm, then branch. (Most real spell ops do
 // this flip internally, so you usually get rw for free; here it is spelled out so

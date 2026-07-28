@@ -11,7 +11,7 @@
 
 import "magus/spell/buf";
 
-magus.project({
+magus\project({
     "spells": [buf],
     "outputs": ["gen/**"],
 });

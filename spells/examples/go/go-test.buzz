@@ -4,7 +4,7 @@
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     go["go-test"]({ "args": ["-race"] });

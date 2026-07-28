@@ -33,7 +33,7 @@ fun sum(items: [int]) > int {
 // evaluates them for real (the calls run inside the string interpolation), so the
 // trace shows the actual numbers, not placeholders.
 export fun demo(ctx: magus\Context, args: [str]) > void {
-    magus.info("fibo(20)  = {fibo(20)}");
-    magus.info("fact(10) = {fact(10)}");
-    magus.info("sum      = {sum([2, 4, 6, 8])}");
+    magus\info("fibo(20)  = {fibo(20)}");
+    magus\info("fact(10) = {fact(10)}");
+    magus\info("sum      = {sum([2, 4, 6, 8])}");
 }

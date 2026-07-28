@@ -3,7 +3,7 @@
 import "magus";
 import "magus/spell/docker";
 
-magus.project({ "spells": [docker] });
+magus\project({ "spells": [docker] });
 
 export fun image_check(ctx: magus\Context, args: [str]) > void {
     docker["docker-build-check"]({ "args": ["."] });

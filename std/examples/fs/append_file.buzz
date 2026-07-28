@@ -1,3 +1,3 @@
 import "fs";
 
-fs.appendFile("dist/build.log", "compile done\n");
+fs\appendFile("dist/build.log", "compile done\n");
