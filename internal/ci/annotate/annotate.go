@@ -29,8 +29,10 @@ package annotate
 
 import (
 	"io"
+	"os"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // Level is an annotation's severity. Providers spell these differently
@@ -106,18 +108,18 @@ type Annotator interface {
 	EndGroup(id string) error
 	// Annotate raises a message outside the job log.
 	Annotate(a Annotation) error
-	// Concurrency is the provider's suggested parallelism for its runners,
-	// or 0 for no opinion. Hosted runners are typically far smaller than
-	// the machine count suggests, so a provider that knows its own sizing
-	// saves every user from discovering it.
-	Concurrency() int
 	// Quote returns text safe to replay into the job log, neutralising any
 	// provider command syntax it contains.
 	//
 	// This is not cosmetic. magus captures a subprocess's output and
-	// replays it, so a test that prints "::error::" or "##vso[...]" would
-	// otherwise have the runner execute it: a dependency's output could
-	// forge annotations or mask values in someone else's CI.
+	// replays it, so a test that prints "::error::" or a GitLab section
+	// marker would otherwise be interpreted by the runner: a dependency's
+	// output could forge annotations or close a section magus opened.
+	//
+	// A provider supplies the line prefixes that introduce its commands
+	// once, rather than being consulted per line - see QuoteWith. That is
+	// what keeps this affordable on a path that runs over every replayed
+	// line of a failing build's output.
 	Quote(text string) string
 }
 
@@ -129,32 +131,17 @@ func (Nop) Active() bool              { return false }
 func (Nop) StartGroup(Group) error    { return nil }
 func (Nop) EndGroup(string) error     { return nil }
 func (Nop) Annotate(Annotation) error { return nil }
-func (Nop) Concurrency() int          { return 0 }
 func (Nop) Quote(text string) string  { return text }
-
-// builtins are the providers compiled into magus, consulted in order.
-// This slice is the only place the binary enumerates CI vendors.
-//
-// A built-in exists so the common case needs no configuration. Providers
-// beyond these arrive as spells (see RegisterOpener), which is how a
-// third party adds one without changing magus.
-var builtins = []func(io.Writer) Annotator{
-	newGitHubActions,
-	newGitLabCI,
-}
 
 var (
 	openerMu sync.RWMutex
 	opener   func(io.Writer) Annotator
 )
 
-// RegisterOpener installs a hook that can supply a spell-backed
+// RegisterOpener installs the hook that supplies a spell-backed
 // Annotator. The bindings layer registers it at init, so core selects a
-// spell provider without linking the Buzz VM - the same indirection
+// provider without linking the Buzz VM - the same indirection
 // [cache.RegisterRemoteBackendOpener] uses for remote cache backends.
-//
-// A registered opener wins over the built-ins: a workspace that names a
-// provider explicitly means it.
 func RegisterOpener(fn func(io.Writer) Annotator) {
 	openerMu.Lock()
 	defer openerMu.Unlock()
@@ -162,22 +149,20 @@ func RegisterOpener(fn func(io.Writer) Annotator) {
 }
 
 // Detect returns the Annotator for the provider running this job, or
-// [Nop] when none is recognised.
+// [Nop] when none is active.
 //
-// A spell provider is preferred when one is registered and active;
-// otherwise the built-ins are probed by environment, which is each
-// provider's own documented signal and so needs no configuration.
+// Every provider is a spell: magus ships no CI syntax of its own, so a
+// workspace opts in by naming one (magus.ci.provider), and adding support
+// for a new system is a spell someone writes rather than a change to
+// magus. A spell that reports itself inactive - the github spell outside
+// Actions - yields Nop, so an unconditional wiring costs nothing
+// elsewhere.
 func Detect(w io.Writer) Annotator {
 	openerMu.RLock()
 	fn := opener
 	openerMu.RUnlock()
 	if fn != nil {
 		if a := fn(w); a != nil && a.Active() {
-			return a
-		}
-	}
-	for _, newBuiltin := range builtins {
-		if a := newBuiltin(w); a.Active() {
 			return a
 		}
 	}
@@ -208,3 +193,59 @@ func SanitizeID(s string) string {
 	}
 	return strings.Trim(b.String(), "-")
 }
+
+// QuoteWith neutralises any line in text that begins with one of the
+// given command prefixes, by dropping the prefix's first character so
+// the provider no longer recognises the line as a command.
+//
+// Providers hand over their prefixes once, at resolution, rather than
+// being asked per line: this runs over every replayed line of a failing
+// build's output, which is the one path where crossing into a spell's VM
+// per call would cost more than the whole feature is worth. It is the
+// declarative half of an otherwise fully spell-implemented contract.
+//
+// Dropping the first character rather than inserting one keeps the result
+// plain ASCII and still legible: "::error::x" becomes ":error::x", and a
+// GitLab marker loses the escape byte that introduced it, leaving text a
+// reader can still see. Leading whitespace is preserved.
+func QuoteWith(text string, prefixes []string) string {
+	if len(prefixes) == 0 {
+		return text
+	}
+	var hit bool
+	for _, p := range prefixes {
+		if p != "" && strings.Contains(text, p) {
+			hit = true
+			break
+		}
+	}
+	if !hit {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	for i, ln := range lines {
+		trimmed := strings.TrimLeft(ln, " \t")
+		for _, p := range prefixes {
+			if p != "" && strings.HasPrefix(trimmed, p) {
+				_, size := utf8.DecodeRuneInString(trimmed)
+				lines[i] = ln[:len(ln)-len(trimmed)] + trimmed[size:]
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// OnCI reports whether magus is running in an automated environment,
+// independent of which one.
+//
+// It reads CI, the de-facto convention every major provider sets
+// (GitHub, GitLab, CircleCI, Travis, Buildkite, and others). That is a
+// cross-vendor signal rather than a vendor name, so consulting it here
+// does not put provider knowledge back into the binary.
+//
+// This answers a different question from [Detect]: a workspace that
+// wires no provider spell still runs on CI, and callers that only need
+// to know "is a human at this terminal" - to suppress a hint whose
+// command addresses local state, say - should not require one.
+func OnCI() bool { return os.Getenv("CI") != "" }

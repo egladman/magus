@@ -59,23 +59,24 @@ func openSpellAnnotator(io.Writer) annotate.Annotator {
 //	group_end({id})                            -> bool  close it
 //	annotate({level, message, title, code,
 //	          file, line, end_line, col, end_col}) -> bool  raise a notice
-//	concurrency()                              -> int   suggested parallelism
+//	quote_prefixes()                           -> [str] line prefixes that
+//	                                                   introduce a command
 //
 // The adapter has no provider knowledge, so the binary stays CI-agnostic
 // and a new provider is a spell rather than a change to magus.
 //
 // Every op here fires at most once per project (a group around a failure)
-// or once per run (enabled, concurrency), never per log line. That is what
-// makes crossing into the VM affordable: a per-line hook would need a
-// declarative descriptor evaluated once instead, not a call per line.
+// or once per run (enabled, quote_prefixes), never per log line. That is
+// what makes crossing into the VM affordable, and why quoting is declared
+// as a prefix list read once rather than a hook called per line.
 type spellAnnotator struct {
 	drv types.SpellDriver
 
 	mu          sync.Mutex
 	activeKnown bool
 	active      bool
-	concurrency int
-	concKnown   bool
+	prefixes    []string
+	prefixKnown bool
 }
 
 // ctx is the context spell ops run under. The annotator is reached from
@@ -133,40 +134,41 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 	})
 }
 
-// Concurrency reads the spell's optional concurrency() op once. A spell
-// that declares none, or returns a non-positive value, expresses no
-// opinion and the caller falls back to its own default.
-func (a *spellAnnotator) Concurrency() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.concKnown {
-		return a.concurrency
-	}
-	resp, err := a.drv.Invoke(a.ctx(), types.InvokeRequest{Target: "concurrency"})
-	if err == nil {
-		switch v := resp.Data.(type) {
-		case int:
-			a.concurrency = v
-		case int64:
-			a.concurrency = int(v)
-		case float64:
-			a.concurrency = int(v)
-		}
-		a.concKnown = true
-	}
-	if a.concurrency < 0 {
-		a.concurrency = 0
-	}
-	return a.concurrency
+// Quote neutralises the provider's own command syntax in replayed output.
+//
+// The spell declares its command prefixes once, via quote_prefixes, and
+// the matching runs here in Go. That split is the point: this is called
+// for every replayed line of a failing build's output, so asking the
+// spell per line would cost far more than the feature is worth, while
+// asking it once costs nothing and keeps the syntax knowledge in the
+// spell where it belongs.
+func (a *spellAnnotator) Quote(text string) string {
+	return annotate.QuoteWith(text, a.quotePrefixes())
 }
 
-// Quote is deliberately not delegated to the spell. It runs over every
-// replayed line of captured output, which is the one path where crossing
-// into the VM per call would be too expensive to accept. A spell provider
-// therefore gets no say in neutralising injected commands; a provider
-// whose syntax needs quoting belongs in the Go builtins beside the
-// GitHub one until a declarative form for this exists.
-func (a *spellAnnotator) Quote(text string) string { return text }
+// quotePrefixes reads the spell's optional quote_prefixes op once. A
+// spell that declares none contributes no prefixes, and replayed output
+// passes through untouched.
+func (a *spellAnnotator) quotePrefixes() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.prefixKnown {
+		return a.prefixes
+	}
+	resp, err := a.drv.Invoke(a.ctx(), types.InvokeRequest{Target: "quote_prefixes"})
+	if err != nil {
+		return nil // transient: do not latch an empty list
+	}
+	if list, ok := resp.Data.([]any); ok {
+		for _, v := range list {
+			if s, ok := v.(string); ok && s != "" {
+				a.prefixes = append(a.prefixes, s)
+			}
+		}
+	}
+	a.prefixKnown = true
+	return a.prefixes
+}
 
 // call invokes an optional op, treating an undeclared op as success. A
 // spell implements only the verbs its provider supports, and the missing

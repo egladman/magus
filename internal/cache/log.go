@@ -140,7 +140,7 @@ func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler
 		probe:  p,
 		level:  level,
 		region: tty.NewRegion(w, stickyRegionRows, p),
-		onCI:   annotate.Detect(io.Discard).Active(),
+		onCI:   annotate.OnCI(),
 	}
 }
 

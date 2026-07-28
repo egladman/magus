@@ -582,7 +582,7 @@ func TestPrettyHandlerRendersStatusGatesEmission(t *testing.T) {
 // ephemeral runner, so the command can never work for the person reading
 // it, while the failing output is already dumped inline above.
 func TestPrettyHandlerSuppressesInspectHintOnCI(t *testing.T) {
-	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("CI", "true")
 
 	var buf bytes.Buffer
 	h := newPrettyHandler(&buf, slog.LevelInfo, plainProbe{})
@@ -606,8 +606,7 @@ func TestPrettyHandlerSuppressesInspectHintOnCI(t *testing.T) {
 }
 
 func TestPrettyHandlerKeepsInspectHintOffCI(t *testing.T) {
-	t.Setenv("GITHUB_ACTIONS", "")
-	t.Setenv("GITLAB_CI", "")
+	t.Setenv("CI", "")
 
 	var buf bytes.Buffer
 	h := newPrettyHandler(&buf, slog.LevelInfo, plainProbe{})

@@ -1,0 +1,141 @@
+// GitLab CI provider spell for magus. Emits the section markers GitLab folds a
+// job log by. Wire it in a magusfile:
+//
+//   import "spells/gitlab/ci" as gitlab
+//   magus.ci.provider(gitlab)
+//
+// magus knows nothing about GitLab: it speaks only the generic CI provider
+// contract (see internal/ci/annotate), calling group_start / group_end /
+// annotate / quote_prefixes. Every marker below lives here, in Buzz, so adding
+// a provider is a spell someone writes rather than a change to magus.
+//
+// This spell doubles as the worked example of the contract, because it needs
+// the parts GitHub Actions does not:
+//
+//   - a section is keyed by an id distinct from its title
+//   - every marker carries a wall-clock second
+//   - collapse is a flag, so an expanded section is expressible
+//   - there is no in-log annotation syntax at all, so annotate is a no-op
+//
+// That last one is the normal case, not a gap: GitLab surfaces findings from
+// report artifacts a job uploads, never from what it prints.
+//
+// Marker syntax (the \r + ESC [0K pairs hide the marker itself from the
+// rendered log):
+//
+//   ESC[0Ksection_start:<unix>:<id>[collapsed=true]\rESC[0K<title>
+//   ESC[0Ksection_end:<unix>:<id>\rESC[0K
+
+namespace ci;
+
+import "os";
+import "std";
+import "magus/target";
+
+export fun mgs_getName() > str { return "ci"; }
+
+// ESC is built from its code point: a literal escape byte in source would be
+// invisible to anyone reading this file.
+final ESC = std.char(27);
+// HIDE is the "erase to end of line" pair GitLab uses to keep the marker itself
+// out of the rendered log.
+final HIDE = ESC + "[0K";
+
+// getenv reads one environment variable, returning "" when unset (os.env returns
+// null for an unset var; callers test against "").
+fun getenv(name: str) > str {
+    final v = os.env(name);
+    if (v == null) { return ""; }
+    return "" + v;
+}
+
+// enabled gates the whole provider on running under GitLab CI, which sets
+// GITLAB_CI=true for every job. magus probes this once, so wiring the spell
+// unconditionally costs nothing anywhere else.
+export fun enabled(target: Target, cb: fun(any)) > bool {
+    return getenv("GITLAB_CI") == "true";
+}
+
+// nowSeconds is the wall-clock second every section marker carries. os.time()
+// is epoch millis.
+fun nowSeconds() > int {
+    return (os.time() / 1000).floor();
+}
+
+// sanitizeID reduces an id to what GitLab accepts for a section name: letters,
+// digits, underscore, dot, and dash. magus keys sections by project path, which
+// contains slashes, so this is not optional. Runs of rejected characters
+// collapse to one dash rather than a long unreadable stretch of separators.
+fun sanitizeID(s: str) > str {
+    var acc = "";
+    var lastDash = false;
+    for (var i = 0; i < s.len(); i = i + 1) {
+        final ch = s.sub(i, 1);
+        final keep = (ch >= "a" and ch <= "z")
+            or (ch >= "A" and ch <= "Z")
+            or (ch >= "0" and ch <= "9")
+            or ch == "_" or ch == "." or ch == "-";
+        if (keep) {
+            acc = acc + ch;
+            lastDash = false;
+        } else if (!lastDash) {
+            acc = acc + "-";
+            lastDash = true;
+        }
+    }
+    while (acc.len() > 0 and acc.sub(0, 1) == "-") { acc = acc.sub(1, acc.len() - 1); }
+    while (acc.len() > 0 and acc.sub(acc.len() - 1, 1) == "-") { acc = acc.sub(0, acc.len() - 1); }
+    return acc;
+}
+
+// group_start opens a section. Unlike Actions, GitLab can show one expanded, so
+// a caller asking for that gets it rather than having the fold skipped.
+export fun group_start(target: Target, cb: fun(any)) > bool {
+    final io = {<str, any>};
+    cb(io);
+    final id = sanitizeID("" + io["id"]);
+    // A section with no name could never be closed, so emit nothing.
+    if (id == "") { return true; }
+    var collapsed = "";
+    if (io["collapsed"] == true) { collapsed = "[collapsed=true]"; }
+    std.print(HIDE + "section_start:" + nowSeconds() + ":" + id + collapsed
+        + "\r" + HIDE + ("" + io["title"]));
+    return true;
+}
+
+export fun group_end(target: Target, cb: fun(any)) > bool {
+    final io = {<str, any>};
+    cb(io);
+    final id = sanitizeID("" + io["id"]);
+    if (id == "") { return true; }
+    std.print(HIDE + "section_end:" + nowSeconds() + ":" + id + "\r" + HIDE);
+    return true;
+}
+
+// annotate does nothing: GitLab has no in-log annotation syntax. Declaring the
+// op and returning true says "this provider does not do that" explicitly,
+// rather than leaving magus to infer it from a missing export.
+export fun annotate(target: Target, cb: fun(any)) > bool {
+    return true;
+}
+
+// quote_prefixes declares the line prefix that introduces a section marker, so
+// replayed subprocess output cannot close a section magus opened or forge one.
+// magus reads this once and does the per-line matching itself.
+export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
+    return [HIDE + "section_"];
+}
+
+import "assert";
+
+test "sanitizeID folds a project path into a legal section name" {
+    assert\equal(sanitizeID("libs/textsearch"), "libs-textsearch", "slashes become dashes");
+    assert\equal(sanitizeID("magus-fail-api build"), "magus-fail-api-build", "spaces become dashes");
+    assert\equal(sanitizeID("keeps_dots.and-dashes"), "keeps_dots.and-dashes", "legal characters survive");
+}
+
+test "sanitizeID collapses runs and trims separators" {
+    assert\equal(sanitizeID("collapses///runs"), "collapses-runs", "a run of rejects is one dash");
+    assert\equal(sanitizeID("/leading/and/trailing/"), "leading-and-trailing", "edges are trimmed");
+    assert\equal(sanitizeID(""), "", "empty stays empty");
+}
