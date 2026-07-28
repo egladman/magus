@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive/tty"
 )
@@ -57,6 +58,64 @@ type PrettyHandler struct {
 	// the bottom; guarded by mu like every other field.
 	err    error
 	region *tty.Region // sticky error region; disabled when the writer is not a TTY
+	status statusLine  // live counters painted into the region's first row
+	// onCI suppresses hints whose command cannot work where it is printed.
+	// Resolved once at construction: the environment does not change
+	// mid-run, and this is consulted per failure.
+	onCI bool
+}
+
+// statusLine accumulates what the sticky region's top row shows: pool
+// occupancy plus the running tally, so a reader watching the bottom of
+// the screen knows how far along the run is without scrolling.
+//
+// Counters live here rather than being read back from the Cache because
+// the handler already sees every event that changes them, and a handler
+// that reached into the cache for state it was just told about would
+// invert the direction the rest of this file flows.
+type statusLine struct {
+	capacity, running, queued int
+	passed, failed, cached    int
+	// start is when the first event arrived, which is close enough to the
+	// run's start for a progress readout and needs no plumbing.
+	start time.Time
+}
+
+// render composes the status row. Clauses that carry no information are
+// omitted: a steady "0 queued" or "0 failed" is noise on a line whose
+// whole job is to show change.
+func (s statusLine) render(now time.Time) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "pool %d/%d running", s.running, s.capacity)
+	if s.queued > 0 {
+		fmt.Fprintf(&b, ", %d queued", s.queued)
+	}
+	if done := s.passed + s.cached + s.failed; done > 0 {
+		fmt.Fprintf(&b, "   %d ok", s.passed+s.cached)
+		if s.cached > 0 {
+			fmt.Fprintf(&b, " (%d cached)", s.cached)
+		}
+		if s.failed > 0 {
+			fmt.Fprintf(&b, "  %d failed", s.failed)
+		}
+	}
+	if !s.start.IsZero() {
+		fmt.Fprintf(&b, "   %s", fmtDur(now.Sub(s.start)))
+	}
+	return b.String()
+}
+
+// paintStatus repaints the region's status row. It is called after every
+// event that moves a counter, so the row tracks the run rather than only
+// the pool samples that first populated it. A disabled region drops it.
+func (h *PrettyHandler) paintStatus() {
+	if !h.region.Enabled() {
+		return
+	}
+	if h.status.start.IsZero() {
+		h.status.start = time.Now()
+	}
+	h.fail(h.region.SetStatus(h.status.render(time.Now())))
 }
 
 // NewPrettyHandler builds the unified pretty handler. Colour is driven by the
@@ -81,6 +140,7 @@ func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler
 		probe:  p,
 		level:  level,
 		region: tty.NewRegion(w, stickyRegionRows, p),
+		onCI:   annotate.Detect(io.Discard).Active(),
 	}
 }
 
@@ -174,22 +234,30 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.printf("%s %s (cached, %s)\n", h.glyph(colorize, "pass", colDimGreen), label, fmtDur(dur))
 		h.printRepro(colorize, project, recordStr(r, "target"))
 		h.printRef(colorize, ref)
+		h.status.cached++
+		h.paintStatus()
 	case "cache.miss":
 		h.printf("%s %s (ran, %s)\n", h.glyph(colorize, "pass", colGreen), label, fmtDur(dur))
 		h.printRepro(colorize, project, recordStr(r, "target"))
 		h.printRef(colorize, ref)
+		h.status.passed++
+		h.paintStatus()
 	case "cache.error":
 		h.printFailure(colorize, label, project, recordStr(r, "target"), dur, recordStr(r, "error"), ref)
+		h.status.failed++
+		h.paintStatus()
 	case "cache.warn":
 		h.printf("%s %s\n", h.glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
 	case "cache.pool":
-		// A live occupancy counter, pinned to the top row of the sticky
-		// region. It is deliberately not printed on a non-TTY: this event
-		// fires twice per step, and replaying every sample into a pipe or
-		// a CI log would bury the actual results. SetStatus drops it when
+		// A live occupancy sample, folded into the row pinned at the top of
+		// the sticky region. Deliberately not printed on a non-TTY: this
+		// fires twice per step, and replaying every sample into a pipe or a
+		// CI log would bury the actual results. paintStatus drops it when
 		// the region is disabled, so no branch is needed here.
-		h.fail(h.region.SetStatus(formatPool(
-			recordInt(r, "running"), recordInt(r, "capacity"), recordInt(r, "queued"))))
+		h.status.capacity = recordInt(r, "capacity")
+		h.status.running = recordInt(r, "running")
+		h.status.queued = recordInt(r, "queued")
+		h.paintStatus()
 	case "cache.summary":
 		cached := recordInt(r, "hits")
 		ran := recordInt(r, "misses")
@@ -385,11 +453,21 @@ func (h *PrettyHandler) printFailure(colorize bool, label, project, target strin
 	}
 	if ref != "" {
 		h.printf("  output: %s\n", ref)
-		full := clihint.QueryOutput.With(ref)
-		if colorize {
-			h.printf("  \x1b[2minspect: %s\x1b[0m\n", full)
-		} else {
-			h.printf("  inspect: %s\n", full)
+		// The inspect hint is suppressed on CI. An output ref addresses a
+		// blob in the local cache of the machine that produced it, so on an
+		// ephemeral runner the command is guaranteed not to work for the
+		// person reading the log - and the runner has already dumped the
+		// failing output inline above it, which is what they wanted anyway.
+		// Printing an un-runnable command next to the answer is worse than
+		// printing nothing. The ref itself stays: it correlates this failure
+		// with the run's journal and with the console.
+		if !h.onCI {
+			full := clihint.QueryOutput.With(ref)
+			if colorize {
+				h.printf("  \x1b[2minspect: %s\x1b[0m\n", full)
+			} else {
+				h.printf("  inspect: %s\n", full)
+			}
 		}
 	} else {
 		h.printf("  output: unavailable (no output was captured)\n")
@@ -494,21 +572,4 @@ func recordInt(r slog.Record, key string) int {
 		return true
 	})
 	return i
-}
-
-// formatPool renders the concurrency pool's occupancy for the status
-// line: "pool 3/8 running, 2 queued".
-//
-// The vocabulary is the workspace-wide one: work in progress is
-// "running" (never "active"), work waiting for a slot is "queued"
-// (never "pending"), matching `magus status` and the pool inspector so a
-// reader learns the words once. The queued clause is omitted when
-// nothing is waiting, since a steady "0 queued" is noise on a line the
-// user is watching for change.
-func formatPool(running, capacity, queued int) string {
-	s := fmt.Sprintf("pool %d/%d running", running, capacity)
-	if queued > 0 {
-		s += fmt.Sprintf(", %d queued", queued)
-	}
-	return s
 }

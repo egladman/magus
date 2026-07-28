@@ -483,22 +483,47 @@ func TestPrettyHandlerNonTTYSkipsStickyRegion(t *testing.T) {
 	assert.Contains(t, out, "[fail] api build (ran,", "plain prefix still present")
 }
 
-func TestFormatPool(t *testing.T) {
+func TestStatusLineRender(t *testing.T) {
 	t.Parallel()
+	base := time.Now()
 	for _, tc := range []struct {
-		name                      string
-		running, capacity, queued int
-		want                      string
+		name string
+		line statusLine
+		want string
 	}{
-		{"nothing queued omits the clause", 3, 8, 0, "pool 3/8 running"},
-		{"queued work is shown", 8, 8, 2, "pool 8/8 running, 2 queued"},
-		{"idle pool", 0, 4, 0, "pool 0/4 running"},
+		{"pool only, nothing done yet", statusLine{capacity: 8, running: 3}, "pool 3/8 running"},
+		{"queued work is shown", statusLine{capacity: 8, running: 8, queued: 2}, "pool 8/8 running, 2 queued"},
+		{"a quiet queue is omitted", statusLine{capacity: 4}, "pool 0/4 running"},
+		{
+			"tally appears once work completes",
+			statusLine{capacity: 8, running: 2, passed: 3, cached: 2},
+			"pool 2/8 running   5 ok (2 cached)",
+		},
+		{
+			"failures are called out",
+			statusLine{capacity: 8, running: 1, passed: 4, failed: 1},
+			"pool 1/8 running   4 ok  1 failed",
+		},
+		{
+			"a clean run shows no cached or failed clause",
+			statusLine{capacity: 8, running: 1, passed: 4},
+			"pool 1/8 running   4 ok",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, formatPool(tc.running, tc.capacity, tc.queued))
+			assert.Equal(t, tc.want, tc.line.render(base))
 		})
 	}
+}
+
+// TestStatusLineRenderShowsElapsed keeps the progress readout honest: the
+// row is what a reader watches to know a long run is still moving.
+func TestStatusLineRenderShowsElapsed(t *testing.T) {
+	t.Parallel()
+	start := time.Now()
+	line := statusLine{capacity: 4, running: 1, start: start}
+	assert.Contains(t, line.render(start.Add(90*time.Second)), "1m30s")
 }
 
 // TestPrettyHandlerPoolEventPaintsTheStatusRow verifies a cache.pool
@@ -550,4 +575,51 @@ func TestPrettyHandlerRendersStatusGatesEmission(t *testing.T) {
 	var term ttyBuf
 	assert.True(t, newTerminalHandler(&term).rendersStatus(),
 		"a terminal-backed handler does")
+}
+
+// TestPrettyHandlerSuppressesInspectHintOnCI covers the friction an output
+// ref creates in a job log: it addresses a blob in the local cache of an
+// ephemeral runner, so the command can never work for the person reading
+// it, while the failing output is already dumped inline above.
+func TestPrettyHandlerSuppressesInspectHintOnCI(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+
+	var buf bytes.Buffer
+	h := newPrettyHandler(&buf, slog.LevelInfo, plainProbe{})
+	require.True(t, h.onCI, "the handler must notice it is on CI")
+
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.error",
+		slog.String("project", "api"),
+		slog.String("target", "build"),
+		slog.Int64("duration", int64(5*time.Millisecond)),
+		slog.String("error", "boom"),
+		slog.String("ref", "outdeadbeef"),
+	)))
+
+	out := buf.String()
+	assert.Contains(t, out, "output: outdeadbeef", "the ref stays: it correlates with the journal")
+	assert.NotContains(t, out, "magus query output",
+		"a command that cannot work here must not be printed")
+	assert.Contains(t, out, "reproduce: magus run build api",
+		"reproduce still works anywhere, so it stays")
+}
+
+func TestPrettyHandlerKeepsInspectHintOffCI(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("GITLAB_CI", "")
+
+	var buf bytes.Buffer
+	h := newPrettyHandler(&buf, slog.LevelInfo, plainProbe{})
+	require.False(t, h.onCI)
+
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.error",
+		slog.String("project", "api"),
+		slog.String("target", "build"),
+		slog.Int64("duration", int64(5*time.Millisecond)),
+		slog.String("error", "boom"),
+		slog.String("ref", "outdeadbeef"),
+	)))
+	assert.Contains(t, buf.String(), "inspect: magus query output outdeadbeef")
 }
