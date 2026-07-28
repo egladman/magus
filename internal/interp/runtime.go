@@ -257,18 +257,18 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	}
 	slog.DebugContext(ctx, "interp: run magusfile target", "target", target, "dir", workDir)
 
-	buzzSess, targetMap, err := execBuzzSrc(ctx, src, false)
+	load, err := execBuzzSrc(ctx, src, false)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = buzzSess.Close() }()
+	defer func() { _ = load.Session.Close() }()
 
 	norm := targetNameNormalizerFrom(ctx)
 	key := norm.NormalizeTargetName(target)
-	fn, ok := targetMap[key]
+	fn, ok := load.Targets[key]
 	if !ok {
 		var names []string
-		for k := range targetMap {
+		for k := range load.Targets {
 			names = append(names, k)
 		}
 		slices.Sort(names)
@@ -295,14 +295,14 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 
 // parseBuzz executes src in parse mode to collect target names.
 func parseBuzz(ctx context.Context, src *Source) ([]Target, error) {
-	buzzSess, targetMap, err := execBuzzSrc(ctx, src, true)
+	load, err := execBuzzSrc(ctx, src, true)
 	if err != nil {
 		return nil, err
 	}
-	_ = buzzSess.Close()
+	_ = load.Session.Close()
 
 	var names []string
-	for name := range targetMap {
+	for name := range load.Targets {
 		names = append(names, name)
 	}
 	slices.Sort(names)
@@ -333,7 +333,17 @@ func ctxlessTargetErr(name string) error {
 }
 
 // execBuzzSrc creates a Buzz Session, registers bindings, and executes source files.
-func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Session, map[string]vm.Callable, error) {
+// loadedBuzz is a magusfile load: a freshly-executed session plus its exposed
+// target map. The two are produced together and always returned together,
+// so the old (*Session, map[string]vm.Callable, error) signature carried
+// a nil-nil-error shape on every failure; bundling them here reduces the
+// return to the idiomatic (value, error) pair.
+type loadedBuzz struct {
+	Session *buzz.Session
+	Targets map[string]vm.Callable
+}
+
+func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz, error) {
 	// Carry the magusfile source on the context for the whole load, so the module
 	// resolver registered below (which captures this ctx) can resolve top-level
 	// `import "project/<path>"` cross-project handles during execution. Run mode
@@ -388,7 +398,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		data, err := os.ReadFile(path)
 		if err != nil {
 			_ = buzzSess.Close()
-			return nil, nil, fmt.Errorf("magusfile: read %s: %w", rel, err)
+			return nil, fmt.Errorf("magusfile: read %s: %w", rel, err)
 		}
 		code := string(data)
 		for name, importPath := range importBoundNames(code) {
@@ -404,12 +414,12 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		if buzzSpellImportCheckFn != nil {
 			if err := buzzSpellImportCheckFn(spellImportNames(code)); err != nil {
 				_ = buzzSess.Close()
-				return nil, nil, fmt.Errorf("magusfile: %s: %w", rel, err)
+				return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
 			}
 		}
 		if err := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) }); err != nil {
 			_ = buzzSess.Close()
-			return nil, nil, fmt.Errorf("magusfile: exec %s: %w", rel, err)
+			return nil, fmt.Errorf("magusfile: exec %s: %w", rel, err)
 		}
 	}
 
@@ -438,19 +448,19 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		// A target that shadows a same-named import makes the module read null; fail at load.
 		if importPath, clash := importNames[name]; clash {
 			_ = buzzSess.Close()
-			return nil, nil, importTargetCollisionErr(name, importPath)
+			return nil, importTargetCollisionErr(name, importPath)
 		}
 		key := norm.NormalizeTargetName(name)
 		if prev, dup := seen[key]; dup {
 			_ = buzzSess.Close()
-			return nil, nil, targetCollisionErr(prev, name, key)
+			return nil, targetCollisionErr(prev, name, key)
 		}
 		// Every target must receive a magus.Context as its first parameter - the
 		// signature IS the contract magus reads statically to build the graph. Reject the
 		// old ctx-less form at load rather than dispatching it with the wrong arguments.
 		if !ctxForm[key] {
 			_ = buzzSess.Close()
-			return nil, nil, ctxlessTargetErr(name)
+			return nil, ctxlessTargetErr(name)
 		}
 		seen[key] = name
 		captured := val
@@ -464,15 +474,19 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*buzz.Sessio
 		}
 	}
 
-	return buzzSess, targetMap, nil
+	return &loadedBuzz{Session: buzzSess, Targets: targetMap}, nil
 }
 
 // NewBuzzWorkerFunc returns the buzz.WorkerFunc that creates a pre-warmed Buzz
 // session for src. Safe to call from multiple goroutines because execBuzzSrc reads
 // sources by absolute path and does not acquire chdirMu.
 func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
-	return func(ctx context.Context) (*buzz.Session, map[string]vm.Callable, error) {
-		return execBuzzSrc(ctx, src, false)
+	return func(ctx context.Context) (*buzz.WorkerSession, error) {
+		load, err := execBuzzSrc(ctx, src, false)
+		if err != nil {
+			return nil, err
+		}
+		return &buzz.WorkerSession{Session: load.Session, Targets: load.Targets}, nil
 	}
 }
 

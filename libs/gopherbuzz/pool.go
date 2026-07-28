@@ -22,9 +22,19 @@ type Semaphore interface {
 	Yield(ctx context.Context, fn func() error) error
 }
 
+// WorkerSession is the pre-warmed pair a WorkerFunc returns: a freshly-executed
+// Buzz session plus the target map derived from its exports. The two are
+// produced together and always returned together, so bundling them in one
+// struct keeps callers from having to handle the "half-loaded" nil-nil-error
+// shape the old three-return signature carried.
+type WorkerSession struct {
+	Session *Session
+	Targets map[string]vmpackage.Callable
+}
+
 // WorkerFunc creates a pre-warmed Buzz session and target map for the pool.
 // The session is owned by the pool worker and must not be used concurrently.
-type WorkerFunc func(ctx context.Context) (*Session, map[string]vmpackage.Callable, error)
+type WorkerFunc func(ctx context.Context) (*WorkerSession, error)
 
 // TargetMemo is a per-invocation run-once tracker. It ensures a target executes
 // at most once within one top-level dispatch, even when concurrent `depends_on`
@@ -375,14 +385,14 @@ func (p *Pool) releaseWorker(ctx context.Context, w *poolWorker) {
 
 func (p *Pool) newWorker(ctx context.Context) (*poolWorker, error) {
 	start := time.Now()
-	sess, targets, err := p.newSession(ctx)
+	ws, err := p.newSession(ctx)
 	if obs := poolObserverFrom(ctx); obs != nil {
 		obs.SessionWarm(ctx, time.Since(start), err)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &poolWorker{sess: sess, targets: targets}, nil
+	return &poolWorker{sess: ws.Session, targets: ws.Targets}, nil
 }
 
 // Close shuts down all idle sessions after in-flight jobs finish and release theirs.
