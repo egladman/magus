@@ -1,10 +1,8 @@
 package annotate
 
 import (
-	"bytes"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +16,8 @@ func TestLevelString(t *testing.T) {
 }
 
 // TestNopIsInertButUsable is what lets core call the annotator
-// unconditionally: off CI every verb succeeds and writes nothing.
+// unconditionally: with no provider wired, every verb succeeds and does
+// nothing.
 func TestNopIsInertButUsable(t *testing.T) {
 	t.Parallel()
 	var n Nop
@@ -26,9 +25,8 @@ func TestNopIsInertButUsable(t *testing.T) {
 	assert.NoError(t, n.StartGroup(Group{Title: "x"}))
 	assert.NoError(t, n.EndGroup("x"))
 	assert.NoError(t, n.Annotate(Annotation{Message: "x"}))
-	assert.Zero(t, n.Concurrency(), "no opinion off CI")
 	assert.Equal(t, "::error::untouched", n.Quote("::error::untouched"),
-		"with no provider there is nothing to neutralise")
+		"with no provider there is no syntax to neutralise")
 }
 
 func TestSanitizeID(t *testing.T) {
@@ -53,43 +51,37 @@ func TestSanitizeID(t *testing.T) {
 // outside this set, so a project path cannot key a section unsanitised.
 func TestSanitizeIDProducesOnlyAcceptedCharacters(t *testing.T) {
 	t.Parallel()
-	got := SanitizeID("a/b:c d\\e@f#g")
-	for _, r := range got {
+	for _, r := range SanitizeID("a/b:c d\\e@f#g") {
 		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
 			(r >= '0' && r <= '9') || r == '_' || r == '.' || r == '-'
 		assert.True(t, ok, "character %q is not accepted in a section name", r)
 	}
 }
 
-func TestDetectFallsBackToNop(t *testing.T) {
-	t.Setenv("GITHUB_ACTIONS", "")
+// TestDetectIsNopWithoutAProvider is the shipped default: magus carries no
+// CI syntax of its own, so a workspace that names no provider gets none.
+func TestDetectIsNopWithoutAProvider(t *testing.T) {
 	RegisterOpener(nil)
-	assert.IsType(t, Nop{}, Detect(io.Discard), "no provider means no annotations")
+	assert.IsType(t, Nop{}, Detect(io.Discard))
 }
 
-func TestDetectPrefersARegisteredOpener(t *testing.T) {
-	t.Setenv("GITHUB_ACTIONS", "true") // a built-in would otherwise match
+func TestDetectUsesAnActiveProvider(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-
 	RegisterOpener(func(io.Writer) Annotator { return stubProvider{active: true} })
-	assert.IsType(t, stubProvider{}, Detect(io.Discard),
-		"a workspace that names a provider explicitly means it")
+	assert.IsType(t, stubProvider{}, Detect(io.Discard))
 }
 
-// TestDetectIgnoresAnInactiveOpener keeps a declared-but-dormant spell
-// provider from suppressing the built-in that actually applies.
-func TestDetectIgnoresAnInactiveOpener(t *testing.T) {
-	t.Setenv("GITHUB_ACTIONS", "true")
+// TestDetectIgnoresAnInactiveProvider covers the common wiring: a spell is
+// declared unconditionally in the magusfile and reports itself inactive
+// off its own CI system, which must cost nothing.
+func TestDetectIgnoresAnInactiveProvider(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-
 	RegisterOpener(func(io.Writer) Annotator { return stubProvider{active: false} })
-	assert.IsType(t, &githubActions{}, Detect(io.Discard))
+	assert.IsType(t, Nop{}, Detect(io.Discard))
 }
 
-func TestDetectToleratesAnOpenerReturningNil(t *testing.T) {
-	t.Setenv("GITHUB_ACTIONS", "")
+func TestDetectToleratesAProviderReturningNil(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-
 	RegisterOpener(func(io.Writer) Annotator { return nil })
 	require.NotPanics(t, func() { _ = Detect(io.Discard) })
 	assert.IsType(t, Nop{}, Detect(io.Discard))
@@ -102,209 +94,50 @@ func (s stubProvider) Active() bool            { return s.active }
 func (stubProvider) StartGroup(Group) error    { return nil }
 func (stubProvider) EndGroup(string) error     { return nil }
 func (stubProvider) Annotate(Annotation) error { return nil }
-func (stubProvider) Concurrency() int          { return 0 }
 func (stubProvider) Quote(text string) string  { return text }
 
 var _ Annotator = stubProvider{}
 
-func newGitHub(t *testing.T, buf *bytes.Buffer) Annotator {
-	t.Helper()
-	t.Setenv("GITHUB_ACTIONS", "true")
-	return newGitHubActions(buf)
-}
-
-func TestGitHubActiveOnlyForTheDocumentedValue(t *testing.T) {
-	for _, tc := range []struct {
-		value string
-		want  bool
-	}{
-		{"true", true},
-		{"", false},
-		{"false", false},
-		{"1", false}, // Actions sets exactly "true"; anything else is another host
-	} {
-		t.Run("GITHUB_ACTIONS="+tc.value, func(t *testing.T) {
-			t.Setenv("GITHUB_ACTIONS", tc.value)
-			assert.Equal(t, tc.want, (&githubActions{}).Active())
-		})
-	}
-}
-
-func TestGitHubCollapsedGroup(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitHub(t, &buf)
-	require.NoError(t, g.StartGroup(Group{ID: "api", Title: "build api", Collapsed: true}))
-	require.NoError(t, g.EndGroup("api"))
-	assert.Equal(t, "::group::build api\n::endgroup::\n", buf.String())
-}
-
-// TestGitHubExpandedGroupIsNotFolded is the behaviour that matters most:
-// Actions has no expanded section, and folding a failure would hide the
-// one thing the reader needs. The group is skipped instead.
-func TestGitHubExpandedGroupIsNotFolded(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitHub(t, &buf)
-	require.NoError(t, g.StartGroup(Group{ID: "api", Title: "failed: api", Collapsed: false}))
-	assert.Empty(t, buf.String(), "an expanded request must not become a fold")
-}
-
-func TestGitHubAnnotationCarriesLocationAndCode(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitHub(t, &buf)
-	require.NoError(t, g.Annotate(Annotation{
-		Level:   LevelError,
-		Message: "undefined: Widget",
-		Title:   "compile failed",
-		Code:    "MGS1002",
-		File:    "pkg/api/main.go",
-		Line:    12,
-		Col:     4,
-	}))
-	assert.Equal(t,
-		"::error file=pkg/api/main.go,line=12,col=4,title=MGS1002 compile failed::undefined: Widget\n",
-		buf.String())
-}
-
-func TestGitHubAnnotationOmitsUnsetFields(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitHub(t, &buf)
-	require.NoError(t, g.Annotate(Annotation{Level: LevelWarning, Message: "heads up"}))
-	assert.Equal(t, "::warning::heads up\n", buf.String())
-}
-
-// TestGitHubEscapesMultiLineMessages guards the case that loses the most
-// information: a raw newline ends the workflow command, so the rest of a
-// failure's cause would spill into the log as loose text.
-func TestGitHubEscapesMultiLineMessages(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitHub(t, &buf)
-	require.NoError(t, g.Annotate(Annotation{
-		Level:   LevelError,
-		Message: "compile failed:\nundefined: Widget",
-	}))
-	got := buf.String()
-	assert.Equal(t, "::error::compile failed:%0Aundefined: Widget\n", got)
-	assert.Equal(t, 1, bytes.Count([]byte(got), []byte("\n")),
-		"exactly one real newline, the one ending the command")
-}
-
-// TestGitHubEscapesPropertySeparators keeps a title containing a comma or
-// colon from being read as the start of another property.
-func TestGitHubEscapesPropertySeparators(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitHub(t, &buf)
-	require.NoError(t, g.Annotate(Annotation{Level: LevelNotice, Title: "a,b:c", Message: "m"}))
-	assert.Contains(t, buf.String(), "title=a%2Cb%3Ac")
-}
-
-func TestGitHubConcurrency(t *testing.T) {
-	t.Run("hosted runners are small", func(t *testing.T) {
-		t.Setenv("RUNNER_ENVIRONMENT", "github-hosted")
-		assert.Equal(t, 4, (&githubActions{}).Concurrency())
-	})
-	t.Run("self-hosted is the user's own hardware", func(t *testing.T) {
-		t.Setenv("RUNNER_ENVIRONMENT", "self-hosted")
-		assert.Zero(t, (&githubActions{}).Concurrency(), "magus offers no opinion")
-	})
-}
-
-// TestGitHubQuoteDefusesInjectedCommands is a security property, not
+// TestQuoteWithDefusesInjectedCommands is a security property, not
 // cosmetics: magus replays captured subprocess output, so a dependency
-// printing a workflow command could otherwise forge annotations or mask
-// values in someone else's CI.
-func TestGitHubQuoteDefusesInjectedCommands(t *testing.T) {
+// printing a workflow command could otherwise forge annotations or close
+// a section magus opened.
+func TestQuoteWithDefusesInjectedCommands(t *testing.T) {
 	t.Parallel()
-	g := &githubActions{}
+	gh := []string{"::"}
 
-	assert.Equal(t, ":::error::forged", g.Quote("::error::forged"))
-	assert.Equal(t, "  :::add-mask::secret", g.Quote("  ::add-mask::secret"),
-		"indentation is preserved so the line still reads naturally")
-
-	multi := g.Quote("ok\n::error::forged\nstill ok")
-	assert.Equal(t, "ok\n:::error::forged\nstill ok", multi)
+	assert.Equal(t, ":error::forged", QuoteWith("::error::forged", gh),
+		"dropping the prefix's first character leaves readable text that is no longer a command")
+	assert.Equal(t, "  :add-mask::secret", QuoteWith("  ::add-mask::secret", gh),
+		"indentation is preserved so the line still reads as it was written")
+	assert.Equal(t, "ok\n:error::forged\nstill ok",
+		QuoteWith("ok\n::error::forged\nstill ok", gh))
 }
 
-func TestGitHubQuoteLeavesOrdinaryTextAlone(t *testing.T) {
+func TestQuoteWithLeavesOrdinaryTextAlone(t *testing.T) {
 	t.Parallel()
-	g := &githubActions{}
-	assert.Equal(t, "all good", g.Quote("all good"))
-	assert.Equal(t, "http://x/y", g.Quote("http://x/y"), "a mid-line colon pair is not a command")
-	assert.Equal(t, "see foo::bar", g.Quote("see foo::bar"))
+	gh := []string{"::"}
+	assert.Equal(t, "all good", QuoteWith("all good", gh))
+	assert.Equal(t, "http://x/y", QuoteWith("http://x/y", gh),
+		"a mid-line colon pair does not start a command")
+	assert.Equal(t, "see foo::bar", QuoteWith("see foo::bar", gh))
 }
 
-func newGitLab(t *testing.T, buf *bytes.Buffer) *gitlabCI {
-	t.Helper()
-	t.Setenv("GITLAB_CI", "true")
-	g := &gitlabCI{w: buf, now: func() time.Time { return time.Unix(1700000000, 0) }}
-	return g
-}
-
-func TestGitLabActiveOnlyForTheDocumentedValue(t *testing.T) {
-	for _, tc := range []struct {
-		value string
-		want  bool
-	}{{"true", true}, {"", false}, {"false", false}} {
-		t.Run("GITLAB_CI="+tc.value, func(t *testing.T) {
-			t.Setenv("GITLAB_CI", tc.value)
-			assert.Equal(t, tc.want, (&gitlabCI{}).Active())
-		})
-	}
-}
-
-// TestGitLabSectionCarriesIDAndTimestamp is the case GitHub cannot
-// exercise: GitLab keys a section by a machine name and requires a
-// wall-clock second in every marker.
-func TestGitLabSectionCarriesIDAndTimestamp(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitLab(t, &buf)
-	require.NoError(t, g.StartGroup(Group{ID: "magus-fail-api", Title: "failed: api", Collapsed: true}))
-	require.NoError(t, g.EndGroup("magus-fail-api"))
-	assert.Equal(t,
-		"\x1b[0Ksection_start:1700000000:magus-fail-api[collapsed=true]\r\x1b[0Kfailed: api\n"+
-			"\x1b[0Ksection_end:1700000000:magus-fail-api\r\x1b[0K\n",
-		buf.String())
-}
-
-// TestGitLabHonoursExpandedSections is the other half of the contrast:
-// unlike GitHub, GitLab can show a section open, so a failure is grouped
-// AND visible rather than skipped.
-func TestGitLabHonoursExpandedSections(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitLab(t, &buf)
-	require.NoError(t, g.StartGroup(Group{ID: "api", Title: "failed: api", Collapsed: false}))
-	assert.Contains(t, buf.String(), "section_start:1700000000:api\r")
-	assert.NotContains(t, buf.String(), "collapsed=true")
-}
-
-func TestGitLabSanitizesSectionIDs(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitLab(t, &buf)
-	require.NoError(t, g.StartGroup(Group{ID: "libs/text search", Title: "t", Collapsed: true}))
-	assert.Contains(t, buf.String(), ":libs-text-search[")
-}
-
-func TestGitLabSkipsAnUnnamedSection(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitLab(t, &buf)
-	require.NoError(t, g.StartGroup(Group{Title: "no id"}))
-	require.NoError(t, g.EndGroup(""))
-	assert.Empty(t, buf.String(), "a section with no name could never be closed")
-}
-
-// TestGitLabAnnotateIsANoOp records a capability GitLab does not have:
-// findings come from report artifacts, not the log.
-func TestGitLabAnnotateIsANoOp(t *testing.T) {
-	var buf bytes.Buffer
-	g := newGitLab(t, &buf)
-	require.NoError(t, g.Annotate(Annotation{Level: LevelError, Message: "boom"}))
-	assert.Empty(t, buf.String())
-	assert.Zero(t, g.Concurrency(), "runner sizing is not discoverable on GitLab")
-}
-
-func TestGitLabQuoteDefusesSectionMarkers(t *testing.T) {
+// TestQuoteWithHandlesAMultiBytePrefix covers GitLab, whose marker is
+// introduced by an escape byte: the first character must be dropped
+// whole, never split.
+func TestQuoteWithHandlesAMultiBytePrefix(t *testing.T) {
 	t.Parallel()
-	g := &gitlabCI{}
-	assert.Equal(t, "[0Ksection_end:1:x", g.Quote("\x1b[0Ksection_end:1:x"),
-		"captured output must not be able to close a section magus opened")
-	assert.Equal(t, "ordinary", g.Quote("ordinary"))
+	gl := []string{"\x1b[0Ksection_"}
+	assert.Equal(t, "[0Ksection_end:1:x",
+		QuoteWith("\x1b[0Ksection_end:1:x", gl),
+		"the escape is dropped, so GitLab reads the rest as ordinary text")
+}
+
+func TestQuoteWithNoPrefixesIsIdentity(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "::error::x", QuoteWith("::error::x", nil),
+		"a provider that declares no command syntax quotes nothing")
+	assert.Equal(t, "::error::x", QuoteWith("::error::x", []string{""}),
+		"an empty prefix matches nothing rather than everything")
 }
