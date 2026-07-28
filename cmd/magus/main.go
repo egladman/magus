@@ -44,12 +44,10 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/egladman/magus"
@@ -80,7 +78,7 @@ func runCLI() int {
 
 	args := expandVerbosityArgs(os.Args[1:])
 
-	rootCtx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	rootCtx, stopSignals := watchInterrupts(context.Background())
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)
