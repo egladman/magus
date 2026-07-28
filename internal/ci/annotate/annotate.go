@@ -140,6 +140,7 @@ func (Nop) Quote(text string) string  { return text }
 // third party adds one without changing magus.
 var builtins = []func(io.Writer) Annotator{
 	newGitHubActions,
+	newGitLabCI,
 }
 
 var (

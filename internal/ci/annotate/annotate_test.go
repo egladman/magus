@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -229,4 +230,81 @@ func TestGitHubQuoteLeavesOrdinaryTextAlone(t *testing.T) {
 	assert.Equal(t, "all good", g.Quote("all good"))
 	assert.Equal(t, "http://x/y", g.Quote("http://x/y"), "a mid-line colon pair is not a command")
 	assert.Equal(t, "see foo::bar", g.Quote("see foo::bar"))
+}
+
+func newGitLab(t *testing.T, buf *bytes.Buffer) *gitlabCI {
+	t.Helper()
+	t.Setenv("GITLAB_CI", "true")
+	g := &gitlabCI{w: buf, now: func() time.Time { return time.Unix(1700000000, 0) }}
+	return g
+}
+
+func TestGitLabActiveOnlyForTheDocumentedValue(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  bool
+	}{{"true", true}, {"", false}, {"false", false}} {
+		t.Run("GITLAB_CI="+tc.value, func(t *testing.T) {
+			t.Setenv("GITLAB_CI", tc.value)
+			assert.Equal(t, tc.want, (&gitlabCI{}).Active())
+		})
+	}
+}
+
+// TestGitLabSectionCarriesIDAndTimestamp is the case GitHub cannot
+// exercise: GitLab keys a section by a machine name and requires a
+// wall-clock second in every marker.
+func TestGitLabSectionCarriesIDAndTimestamp(t *testing.T) {
+	var buf bytes.Buffer
+	g := newGitLab(t, &buf)
+	require.NoError(t, g.StartGroup(Group{ID: "magus-fail-api", Title: "failed: api", Collapsed: true}))
+	require.NoError(t, g.EndGroup("magus-fail-api"))
+	assert.Equal(t,
+		"\x1b[0Ksection_start:1700000000:magus-fail-api[collapsed=true]\r\x1b[0Kfailed: api\n"+
+			"\x1b[0Ksection_end:1700000000:magus-fail-api\r\x1b[0K\n",
+		buf.String())
+}
+
+// TestGitLabHonoursExpandedSections is the other half of the contrast:
+// unlike GitHub, GitLab can show a section open, so a failure is grouped
+// AND visible rather than skipped.
+func TestGitLabHonoursExpandedSections(t *testing.T) {
+	var buf bytes.Buffer
+	g := newGitLab(t, &buf)
+	require.NoError(t, g.StartGroup(Group{ID: "api", Title: "failed: api", Collapsed: false}))
+	assert.Contains(t, buf.String(), "section_start:1700000000:api\r")
+	assert.NotContains(t, buf.String(), "collapsed=true")
+}
+
+func TestGitLabSanitizesSectionIDs(t *testing.T) {
+	var buf bytes.Buffer
+	g := newGitLab(t, &buf)
+	require.NoError(t, g.StartGroup(Group{ID: "libs/text search", Title: "t", Collapsed: true}))
+	assert.Contains(t, buf.String(), ":libs-text-search[")
+}
+
+func TestGitLabSkipsAnUnnamedSection(t *testing.T) {
+	var buf bytes.Buffer
+	g := newGitLab(t, &buf)
+	require.NoError(t, g.StartGroup(Group{Title: "no id"}))
+	require.NoError(t, g.EndGroup(""))
+	assert.Empty(t, buf.String(), "a section with no name could never be closed")
+}
+
+// TestGitLabAnnotateIsANoOp records a capability GitLab does not have:
+// findings come from report artifacts, not the log.
+func TestGitLabAnnotateIsANoOp(t *testing.T) {
+	var buf bytes.Buffer
+	g := newGitLab(t, &buf)
+	require.NoError(t, g.Annotate(Annotation{Level: LevelError, Message: "boom"}))
+	assert.Empty(t, buf.String())
+	assert.Zero(t, g.Concurrency(), "runner sizing is not discoverable on GitLab")
+}
+
+func TestGitLabQuoteDefusesSectionMarkers(t *testing.T) {
+	t.Parallel()
+	g := &gitlabCI{}
+	assert.Equal(t, "[0Ksection_end:1:x", g.Quote("\x1b[0Ksection_end:1:x"),
+		"captured output must not be able to close a section magus opened")
+	assert.Equal(t, "ordinary", g.Quote("ordinary"))
 }
