@@ -370,9 +370,10 @@ body {
   letter-spacing: 0.04em;
   color: var(--pico-muted-color);
 }
-/* The aside stacks two lists: "In this section" (structural siblings, injected by
-   render.buzz's renderSectionNav) over "On this page". The first title hugs the top;
-   a following one gets breathing room so the two groups read as distinct. */
+/* The aside stacks up to three lists: "In this section" (direct children), then
+   "Everything here" (the whole branch beneath, when it has more depth than that),
+   then "On this page". The first title hugs the top; a following one gets breathing
+   room so the groups read as distinct. */
 .toc nav .toc-title:not(:first-child) {
   margin-top: 1.1rem;
 }
@@ -382,6 +383,21 @@ body {
   color: var(--pico-primary);
   font-weight: 600;
 }
+/* "Everything here": the full branch beneath this page, flattened into one list
+   with depth carried as an indent class rather than nested <ul>s, so a screen
+   reader reads it in document order instead of descending and re-ascending.
+   Only rendered when the branch is deeper than the "In this section" list above
+   it, so the two are never the same list twice. */
+.toc nav .subtree-nav a {
+  color: var(--pico-muted-color);
+}
+.toc nav .subtree-nav a:hover {
+  color: var(--pico-contrast);
+}
+.subtree-d2 { padding-left: 0.85rem; }
+.subtree-d3 { padding-left: 1.7rem; }
+.subtree-d4 { padding-left: 2.55rem; }
+
 /* "Tap outside or press Esc to close" hint at the foot of the TOC. Only the mobile
    bottom sheet (below) reveals it; hidden on the desktop sidebar, where there is
    nothing to dismiss. Mirrors the nav dropdown's .nav-menu-hint default hide. */
