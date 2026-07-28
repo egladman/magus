@@ -173,17 +173,39 @@ func WriteHotspotQuadrant(w io.Writer, out types.HotspotOutput) error {
 	return err
 }
 
-// WriteInsightMarkdown writes the combined `magus insight report`.
-func WriteInsightMarkdown(w io.Writer, r types.InsightReport) error {
-	return writeInsightMarkdown(w, r, writeMermaid)
+// InsightOption mutates the rendering configuration passed to
+// WriteInsightMarkdown. The functional-options pattern keeps the surface
+// narrow today and leaves room to add more without breaking callers.
+type InsightOption func(*insightConfig)
+
+type insightConfig struct {
+	mermaidSafe bool
 }
 
-// WriteInsightGitHubMarkdown writes a GitHub-safe report. GitHub's Mermaid
-// renderer deliberately trails the upstream feature set, so this path keeps the
-// useful dependency flow but omits presentation-only syntax. The tables retain
-// the labels, counts, and actions that the diagram would otherwise carry.
-func WriteInsightGitHubMarkdown(w io.Writer, r types.InsightReport) error {
-	return writeInsightMarkdown(w, r, writeGitHubMermaid)
+// WithMermaidSafe opts the report into the Mermaid subset older or partial
+// renderers reliably support: no quadrantChart, no click directives, no
+// subgraph/classDef, plain flowchart edges with table-retained labels. The
+// default emits the richer output for tools that render the full Mermaid
+// spec (the CLI, the local docs site, offline renderers). The name is
+// vendor-neutral because the subset matches the lowest common denominator
+// across renderers, not any single vendor.
+func WithMermaidSafe() InsightOption {
+	return func(c *insightConfig) { c.mermaidSafe = true }
+}
+
+// WriteInsightMarkdown writes the combined `magus insight report`. Pass
+// InsightOption values to shape the render; without options the report uses
+// the richer Mermaid output.
+func WriteInsightMarkdown(w io.Writer, r types.InsightReport, opts ...InsightOption) error {
+	cfg := insightConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	render := writeMermaid
+	if cfg.mermaidSafe {
+		render = writeGitHubMermaid
+	}
+	return writeInsightMarkdown(w, r, render)
 }
 
 type mermaidRenderer func(io.Writer, renderGraph) error

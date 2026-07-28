@@ -15,7 +15,10 @@ import (
 )
 
 func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
-	root := t.TempDir()
+	// A workspace named "magus" so the root display reads as "magus" rather
+	// than as the temp dir's auto-generated basename.
+	root := filepath.Join(t.TempDir(), "magus")
+	require.NoError(t, os.MkdirAll(root, 0o755))
 	gitRun(t, root, "init", "-q")
 	commitInsightFiles(t, root, "Ada", "2026-01-01T00:00:00Z", map[string]string{
 		"magusfile.buzz":      "# root\n",
@@ -37,7 +40,7 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	m := ws.(*Magus)
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	require.NoError(t, err)
-	rootName := filepath.Base(canonicalRoot)
+	rootName := "magus"
 	opts := types.InsightOptions{Commits: 10}
 
 	affinity, err := m.Affinity(context.Background(), opts)

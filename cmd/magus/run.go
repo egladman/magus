@@ -283,7 +283,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []string, cwd string) ([]types.Target, string, error) {
 	anchor := cwdAnchor(ws.Root(), cwd)
 	if t.Path != "" {
-		resolved, err := resolveProjectArg(t.Path, anchor)
+		resolved, err := file.ResolveProject(t.Path, anchor)
 		if err != nil {
 			return nil, "", err
 		}
@@ -294,7 +294,7 @@ func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []
 	if len(projectArgs) > 0 {
 		var all []types.Target
 		for _, arg := range projectArgs {
-			resolved, err := resolveProjectArg(arg, anchor)
+			resolved, err := file.ResolveProject(arg, anchor)
 			if err != nil {
 				return nil, "", err
 			}
@@ -392,17 +392,6 @@ func projectLabelFor(m *magus.Magus, path string) string {
 		return types.ProjectLabel(p.Path, p.Dir)
 	}
 	return types.ProjectLabel(path, "")
-}
-
-// resolveProjectArg canonicalises a CLI project argument to a workspace-relative
-// path. Dot-relative paths resolve against anchor, bare paths stay
-// workspace-relative, and absolute or escaping paths are rejected. The ""
-// and "/" all-projects sentinels pass through for ExpandPath to fan out.
-func resolveProjectArg(arg, anchor string) (string, error) {
-	if arg == "" || arg == "/" {
-		return arg, nil
-	}
-	return file.Resolve(arg, anchor)
 }
 
 // cwdAnchor returns cwd as a slash path relative to root, the anchor for

@@ -12,7 +12,10 @@ import (
 )
 
 func TestComposeGraph(t *testing.T) {
-	root := t.TempDir()
+	// A workspace named "magus" so the root display reads as "magus" rather
+	// than as the temp dir's auto-generated basename.
+	root := filepath.Join(t.TempDir(), "magus")
+	require.NoError(t, os.MkdirAll(root, 0o755))
 	canonicalRoot, err := filepath.EvalSymlinks(root)
 	require.NoError(t, err)
 	for _, path := range []string{".", "api", "docs"} {
@@ -36,7 +39,7 @@ func TestComposeGraph(t *testing.T) {
 		Roots:     []string{"."},
 		Nodes: []types.Node{{
 			Path:        ".",
-			Name:        filepath.Base(canonicalRoot),
+			Name:        "magus",
 			Children:    []string{},
 			Dir:         canonicalRoot,
 			BlastRadius: 3,

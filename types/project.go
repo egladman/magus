@@ -5,60 +5,95 @@ import (
 	"slices"
 )
 
-// ProjectLabel is the human-facing display name for a project, used in logs and
-// generated docs so a project at the workspace root never renders as the ambiguous
-// "" or ".". A non-root path is shown as-is; the root project falls back to the
-// workspace directory's base name (e.g. "magus"), then to "(workspace root)" when
-// even that is unavailable. dir is the project's absolute directory ("" if unknown).
-//
-// This is the single normalization point for the "never print '.'" rule; callers in
-// the run/cache logging path, describe, and MAGUS.md rendering all route through it.
-func ProjectLabel(path, dir string) string {
-	if path != "" && path != "." {
-		return path
+// workspaceScheme is the URI scheme every project reference renders as when
+// piped back into a command: "workspace://<path>". The scheme is metadata,
+// not display content, the same way "https://" is hidden in a browser bar -
+// human-facing output strips it via the Display form.
+const workspaceScheme = "workspace://"
+
+// ProjectRef is the canonical project reference: holds the data once
+// (workspace-relative path plus optional absolute dir) and exposes two
+// render methods. One source of truth means the URI form and the display
+// form cannot drift - they share the same fields and the same ProjectLabel
+// / WorkspaceRef helpers both delegate to a method on this struct.
+type ProjectRef struct {
+	// Path is the workspace-relative identifier: "." for the root, "pkg/foo"
+	// for a nested project. Always forward-slash, never absolute, never escapes.
+	Path string `json:"path" yaml:"path"`
+	// Name is the human label. It coincides with Path for a nested project and
+	// diverges for the root, which reads as the workspace directory's base name
+	// rather than a bare ".". Carried on the wire because consumers of
+	// SymbolIndexStatus and friends have always been able to read it without
+	// re-deriving it from a directory they do not have.
+	Name string `json:"name" yaml:"name"`
+	// Dir is the project's absolute directory ("" if unknown), used only to
+	// derive Name for the root. Never serialized: it is a host-specific
+	// absolute path, and every consumer of this type reads workspace-relative
+	// data. Putting it on the wire would leak the user's directory layout.
+	Dir string `json:"-" yaml:"-"`
+}
+
+// NewProjectRef builds a ProjectRef from a workspace-relative path and the
+// project's absolute directory. The dir feeds the root display name; pass
+// "" when it is not known.
+func NewProjectRef(path, dir string) ProjectRef {
+	r := ProjectRef{Path: path, Dir: dir}
+	r.Name = r.Display()
+	return r
+}
+
+// WorkspaceURI renders the project as a "workspace://<path>" reference -
+// the machine-readable form users pipe back into commands (magus run,
+// magus describe, magus query). An empty path is the workspace root, so
+// error messages and structured output never print a bare "." or "".
+func (r ProjectRef) WorkspaceURI() string {
+	if r.Path == "" {
+		return workspaceScheme + "."
 	}
-	if dir != "" {
-		if base := filepath.Base(dir); base != "" && base != "." && base != string(filepath.Separator) {
+	return workspaceScheme + r.Path
+}
+
+// Display renders the project for human consumption: the bare path for
+// nested projects, the dir basename for the root (so a bare "." never
+// appears in logs or Mermaid labels), and "(workspace root)" as the final
+// fallback. Use this in every place a human reads the path; use WorkspaceURI
+// in every place the user is expected to copy it back into a command.
+func (r ProjectRef) Display() string {
+	if r.Path != "" && r.Path != "." {
+		return r.Path
+	}
+	if r.Dir != "" {
+		if base := filepath.Base(r.Dir); base != "" && base != "." && base != string(filepath.Separator) {
 			return base
 		}
 	}
 	return "(workspace root)"
 }
 
-// ProjectDisplayName returns an explicit display name when available, otherwise
-// derives the shared never-dot label from the project path and directory.
+// ProjectLabel is a convenience for the Display form when the caller only
+// has a path and a dir, not a ProjectRef value. Routes through the struct so
+// the two forms share one definition; add new rendering rules to Display,
+// and ProjectLabel picks them up automatically.
+func ProjectLabel(path, dir string) string {
+	return ProjectRef{Path: path, Dir: dir}.Display()
+}
+
+// WorkspaceRef is a convenience for the WorkspaceURI form when the caller
+// only has a path. The dir is intentionally absent: a URI is path-only, and
+// Display's dir-based root naming has no place in the machine-readable form.
+func WorkspaceRef(path string) string {
+	return ProjectRef{Path: path}.WorkspaceURI()
+}
+
+// ProjectDisplayName returns an explicit display name when available,
+// otherwise derives the shared never-dot label from the project path and
+// directory. Used where a project carries a declared human name (a name:
+// annotation in magusfile) that should win over the path-derived default.
 func ProjectDisplayName(path, name, dir string) string {
 	if name != "" && name != "." {
 		return name
 	}
 	return ProjectLabel(path, dir)
-}
-
-// ProjectRef identifies a project for end-user output, carrying BOTH its stable machine
-// identifier and its human name so no display surface has to re-derive one from the
-// other (the "never print '.'" fix, applied once instead of per call site). Path is the
-// workspace-relative identifier used for addressing, RPC, and cache keys ("." for the
-// workspace root); Name is the readable label (ProjectLabel: the repo/dir base name for
-// the root, e.g. "magus", the path otherwise). They coincide for a nested project and
-// diverge for the root, so surfaces carry both rather than pick one and lose information.
-type ProjectRef struct {
-	Path string `json:"path" yaml:"path"`
-	Name string `json:"name" yaml:"name"`
-}
-
-// NewProjectRef builds a display ref from a project's workspace-relative path and its
-// absolute directory (dir feeds the root project's name via ProjectLabel).
-func NewProjectRef(path, dir string) ProjectRef {
-	return ProjectRef{Path: path, Name: ProjectLabel(path, dir)}
-}
-
-// Display returns "Name" when path and name coincide, else "Name (path)" - the explicit
-// both-values form for a single-line human render where the path adds disambiguation.
-func (r ProjectRef) Display() string {
-	if r.Name == r.Path || r.Path == "" {
-		return r.Name
-	}
-	return r.Name + " (" + r.Path + ")"
 }
 
 // Binding is the per-spell registration state attached to a project.
