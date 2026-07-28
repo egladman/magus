@@ -401,6 +401,81 @@ Broken in public first, polish second.
       plus benchstat evidence before any of it counts. Measure the JSON decode
       on a cold graph build first; if it is not on the hot path, this stays a
       backlog item forever, which is a fine outcome.
+- [x] **Sticky error region in interactive output.** LANDED. `internal/interactive/tty`
+      grew `Probe` (TTY detection and sizing behind an interface, stubbable in
+      tests) and `Region` (DECSTBM reserve / write / release, sticky or
+      scrolling). `internal/cache`'s pretty handler reserves five sticky rows
+      lazily on the first `cache.error`, writes only the `[fail]` heading there
+      (cause / output / inspect / reproduce stay in the scrolling region so the
+      user can select them), and releases on `cache.summary`. `releaseDisplay`
+      in `cmd/magus` resets the scroll margins on every exit path including the
+      signal path. The alternate screen buffer is never used; non-TTY writers
+      get byte-identical plain output.
+
+      Still open: resize. `Region` re-queries the terminal height per write, but
+      the width and the reserved margins are fixed at reserve time, so a resize
+      mid-run leaves the region sized for the old terminal. The TODO's own
+      escape hatch (bail to streaming on the first SIGWINCH) is unimplemented.
+      Original entry retained below for that remaining work.
+
+- [ ] **Sticky error region: resize handling.** Bazel/Gradle/Cargo/Maven
+      all reserve the bottom N terminal lines for failures so a failing target
+      never scrolls off. magus's plain "dump and go" output makes a multi-target
+      failure easy to miss, especially when the user is reading the bottom of
+      the screen for progress. Implementation sketch: detect TTY (already have
+      `term.IsTerminal`), reserve N lines via DECSTBM (`\e[<top>;<bottom>r`) with
+      reset (`\e[r`) on exit + signal, render streaming `[pass]` lines into the
+      scrolling region above, render `[fail]` lines into the sticky region,
+      and fall back to today's plain output on non-TTY (pipe, CI log, `script`).
+      Watchouts: interaction with `magus query output <ref>` (operator may want
+      to scroll back to captured output), resize during a run, and CI/log
+      recorders. Separate PR with its own design pass; not appropriate to
+      bundle with the smaller alignment fix.
+
+      **Hard constraint: additive, never destructive.** This feature is the
+      difference between useful and obnoxious. NX's TUI is a useful reference
+      for what to NOT do: it enters the alternate screen buffer (`\e[?1049h`),
+      rewrites the screen on every event, and suppresses the user's scrollback.
+      The result is a tool that owns the user's terminal — copying is hard,
+      scrolling is impossible, and the shell's previous output is lost. The
+      single rule that prevents this is **never enter the alternate screen
+      buffer**: DECSTBM keeps the existing scrollback visible and scrollable
+      while reserving a region for sticky errors, which is exactly the additive
+      shape this feature needs. Other constraints: reset on exit + SIGINT (or
+      the user's shell is left with a broken window), pipe / CI / `script`
+      output stays the plain text it is today (no ANSI escapes, no escape
+      codes, no full-screen mode), resize-aware (either re-query on SIGWINCH or
+      bail to streaming on the first resize), and the sticky region stays
+      small — three to five lines, never a multi-pane layout.
+- [ ] **Auto-copy on sticky-region selection, opt-in.** OpenCode's TUI
+      selects-and-copies text automatically when the user drags over a line.
+      It is divisive: the user themselves initially found it obnoxious before
+      warming to it; nobody else ships it widely, which is a signal. If we
+      ever adopt it, the design must be off by default (no surprise on first
+      run), opt-in via `magus.yaml:output.auto_copy_selection`, scoped to the
+      sticky region only (selection in the scrolling region stays the
+      standard "highlight, not copy" mental model), and single-line only
+      (multi-line selection is too easy to trigger by mistake). Clipboard
+      ownership matters: disable the feature when there is no usable
+      clipboard (no DISPLAY on X11, no Wayland socket, headless). Re-evaluate
+      after the sticky region lands and we have real interactive feedback;
+      this idea is easier to assess when the foundation is in place.
+
+      **Hard constraint: additive, never destructive.** This feature is the
+      difference between useful and obnoxious. NX's TUI is a useful reference
+      for what to NOT do: it enters the alternate screen buffer (`\e[?1049h`),
+      rewrites the screen on every event, and suppresses the user's scrollback.
+      The result is a tool that owns the user's terminal — copying is hard,
+      scrolling is impossible, and the shell's previous output is lost. The
+      single rule that prevents this is **never enter the alternate screen
+      buffer**: DECSTBM keeps the existing scrollback visible and scrollable
+      while reserving a region for sticky errors, which is exactly the additive
+      shape this feature needs. Other constraints: reset on exit + SIGINT (or
+      the user's shell is left with a broken window), pipe / CI / `script`
+      output stays the plain text it is today (no ANSI escapes, no escape
+      codes, no full-screen mode), resize-aware (either re-query on SIGWINCH or
+      bail to streaming on the first resize), and the sticky region stays
+      small — three to five lines, never a multi-pane layout.
 
 ## Loose ends noticed in passing
 
