@@ -38,9 +38,9 @@ Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fa
 import "std";
 import "http";
 
-final r = http.get("https://api.github.com/repos/egladman/magus");
-std.print(r.status);
-std.print(r.body.sub(0, 80) + "...");
+final r = http\get("https://api.github.com/repos/egladman/magus");
+std\print(r.status);
+std\print(r.body.sub(0, 80) + "...");
 ```
 
 ### post
@@ -65,7 +65,7 @@ import "http";
 
 // Post JSON with a curl-style opts map for retry behaviour.
 // Escape { and } as \{ \} so Buzz does not try to interpolate them.
-final r = http.post(
+final r = http\post(
     "https://httpbin.org/post",
     "\{\"target\":\"build\"\}",
     {"Content-Type": "application/json"},
@@ -95,7 +95,7 @@ Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, 
 import "http";
 
 // request lets you pick any method; useful for PUT/PATCH/DELETE.
-final r = http.request(
+final r = http\request(
     "PUT",
     "https://httpbin.org/put",
     "hello",
@@ -123,6 +123,6 @@ import "http";
 
 // Serve the current build output over http on port 8080 for quick sharing.
 // Blocks until the process exits.
-http.server({"dir": "dist/", "port": 8080});
+http\server({"dir": "dist/", "port": 8080});
 ```
 

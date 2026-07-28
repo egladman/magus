@@ -413,6 +413,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).",
 	},
 	{
+		GoPath:   "TargetTimeout",
+		YamlPath: "target_timeout",
+		EnvVar:   "MAGUS_TARGET_TIMEOUT",
+		Flag:     fieldtype.FlagNames{Long: "target-timeout"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus",
+	},
+	{
 		GoPath:   "HistoryPath",
 		YamlPath: "history_path",
 		EnvVar:   "MAGUS_HISTORY_PATH",

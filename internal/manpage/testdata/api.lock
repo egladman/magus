@@ -46,6 +46,7 @@ config sandbox.enabled
 config sandbox.env.passthrough
 config spells.allow_shadow.<name>.name
 config spells.allow_shadow.<name>.reason
+config target_timeout
 config telemetry.enabled
 config telemetry.endpoint
 config telemetry.headers

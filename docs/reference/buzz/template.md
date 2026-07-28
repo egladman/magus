@@ -35,7 +35,7 @@ import "template";
 
 // Backtick raw strings hold the Mustache verbatim; a double-quoted "{{name}}"
 // would collide with Buzz's own {expr} string interpolation.
-std.print(template.render(`Hello {{name}}`, {"name": "world"}));
+std\print(template\render(`Hello {{name}}`, {"name": "world"}));
 // -> "Hello world"
 ```
 
@@ -69,7 +69,7 @@ final partials = {
     "footer": `<footer>{{title}}</footer>`,
 };
 
-std.print(template.renderPartials(page, {"title": "magus", "body": "hi"}, partials));
+std\print(template\renderPartials(page, {"title": "magus", "body": "hi"}, partials));
 // -> "<header>magus</header><main>hi</main><footer>magus</footer>"
 ```
 

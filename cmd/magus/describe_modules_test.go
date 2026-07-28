@@ -39,7 +39,8 @@ func TestBuildModulesOutput_Detail(t *testing.T) {
 	}
 	lk, ok := byName["lookup"]
 	require.True(t, ok, "env.lookup missing from detail view")
-	assert.True(t, strings.HasPrefix(lk.buzz, "env.lookup("), "Buzz sig = %q, want env.lookup(...)", lk.buzz)
+	assert.True(t, strings.HasPrefix(lk.buzz, `env\lookup(`),
+		"Buzz sig = %q, want env\\lookup(...): namespace access is backslash-qualified", lk.buzz)
 	assert.NotEmpty(t, lk.native, "env.lookup should carry a native Buzz cross-reference")
 }
 

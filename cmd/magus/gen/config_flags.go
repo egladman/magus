@@ -69,6 +69,7 @@ var ConfigFlags = []ConfigFlag{
 	{"knowledge-symbol-indexing-quiet-seconds", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS", "int"},
 	{"knowledge-symbol-indexing-min-interval-seconds", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS", "int"},
 	{"concurrency", "MAGUS_CONCURRENCY", "int"},
+	{"target-timeout", "MAGUS_TARGET_TIMEOUT", "duration"},
 	{"history-path", "MAGUS_HISTORY_PATH", "string"},
 	{"dry-run", "MAGUS_DRY_RUN", "bool"},
 	{"assume-interactive", "MAGUS_ASSUME_INTERACTIVE", "bool"},
@@ -127,6 +128,7 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.IntVar(&cfg.Knowledge.SymbolIndexing.QuietSeconds, "knowledge-symbol-indexing-quiet-seconds", cfg.Knowledge.SymbolIndexing.QuietSeconds, "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS: QuietSeconds is how long a project's sources must be quiet after the last change")
 	fs.IntVar(&cfg.Knowledge.SymbolIndexing.MinIntervalSeconds, "knowledge-symbol-indexing-min-interval-seconds", cfg.Knowledge.SymbolIndexing.MinIntervalSeconds, "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).")
+	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus")
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")
 	fs.BoolVar(&cfg.AssumeInteractive, "assume-interactive", cfg.AssumeInteractive, "MAGUS_ASSUME_INTERACTIVE: AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.")

@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -244,4 +246,49 @@ func TestDiagCollectorCollects(t *testing.T) {
 	// snapshot is a copy: mutating it must not affect the collector.
 	snap[0].Unit = "mutated"
 	assert.Equal(t, "a:build", d.snapshot()[0].Unit)
+}
+
+// TestWithTargetDeadlineIsOffByDefault pins the default: a zero timeout must
+// not wrap the context at all. A deadline set near a legitimate target's
+// runtime fails builds that were fine, so opting in is the user's call.
+func TestWithTargetDeadlineIsOffByDefault(t *testing.T) {
+	t.Parallel()
+	m := &Magus{}
+
+	ctx, cancel := m.withTargetDeadline(t.Context())
+	defer cancel()
+
+	_, ok := ctx.Deadline()
+	assert.False(t, ok, "no timeout configured means no deadline")
+	assert.NoError(t, ctx.Err())
+}
+
+func TestWithTargetDeadlineBoundsATarget(t *testing.T) {
+	t.Parallel()
+	m := &Magus{cfg: config.Config{TargetTimeout: 50 * time.Millisecond}}
+
+	ctx, cancel := m.withTargetDeadline(t.Context())
+	defer cancel()
+
+	deadline, ok := ctx.Deadline()
+	require.True(t, ok, "a configured timeout must set a deadline")
+	assert.WithinDuration(t, time.Now().Add(50*time.Millisecond), deadline, 20*time.Millisecond)
+
+	<-ctx.Done()
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded,
+		"a target that outruns its budget is cancelled, which the VM samples on loop back edges")
+}
+
+// TestWithTargetDeadlineCancelReleasesTheTimer guards the leak: every handler
+// defers the returned cancel, and the no-timeout path must return a callable
+// one rather than nil.
+func TestWithTargetDeadlineCancelReleasesTheTimer(t *testing.T) {
+	t.Parallel()
+	for _, timeout := range []time.Duration{0, time.Minute} {
+		m := &Magus{cfg: config.Config{TargetTimeout: timeout}}
+		_, cancel := m.withTargetDeadline(t.Context())
+		require.NotNil(t, cancel)
+		assert.NotPanics(t, func() { cancel() })
+		assert.NotPanics(t, func() { cancel() }, "cancel is idempotent")
+	}
 }

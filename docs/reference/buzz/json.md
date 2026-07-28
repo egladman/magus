@@ -32,9 +32,9 @@ Decode a JSON string into a value (map, list, string, number, or boolean).
 import "std";
 import "json";
 
-final v = json.parse("\{\"name\": \"api\", \"port\": 8080\}");
-std.print(v["name"]);
-std.print(v["port"]);
+final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
+std\print(v["name"]);
+std\print(v["port"]);
 // -> api
 // -> 8080
 ```
@@ -60,11 +60,11 @@ import "std";
 import "json";
 
 final config = { "target": "build", "parallel": true };
-std.print(json.stringify(config));
+std\print(json\stringify(config));
 // -> {"parallel":true,"target":"build"}
 
 // Pretty-printed with two-space indent:
-std.print(json.stringify(config, "  "));
+std\print(json\stringify(config, "  "));
 ```
 
 [^buzz-stdlib-json-parse]: `json\parse` is also in Buzz's standard library (`serialize.jsonDecode`); the magus form is sandbox-aware.
