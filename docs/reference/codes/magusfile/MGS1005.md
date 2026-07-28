@@ -1,6 +1,6 @@
 ---
 title: "MGS1005: redundant footprint glob"
-description: Fires when a per-target magus.inputs or magus.outputs glob is already declared project-wide, making it a no-op under the additive footprint model.
+description: Fires when a per-target magus\inputs or magus\outputs glob is already declared project-wide, making it a no-op under the additive footprint model.
 tags: [MGS1005, magusfile, cache, inputs, outputs, doctor]
 ---
 
@@ -22,7 +22,7 @@ declaration (a no-op under the additive model); drop the duplicate (see
 
 A target's cache footprint is the **union** of three layers: the globs a bound
 spell contributes, the project-wide `sources`/`outputs`, and the per-target
-`magus.inputs`/`magus.outputs`. Per-target declarations only ever _add_ to the
+`magus\inputs`/`magus\outputs`. Per-target declarations only ever _add_ to the
 footprint - they never shrink the project-wide baseline.
 
 So a per-target glob that repeats one already present project-wide changes
@@ -31,7 +31,7 @@ if it narrowed or specialized the target's footprint when it did not - a
 misleading no-op worth removing.
 
 This most often happens by copy-paste: the same glob declared both in
-`magus.project({sources = [...]})` and in a target body, or a `magus.inputs`
+`magus\project({sources = [...]})` and in a target body, or a `magus\inputs`
 glob that a bound spell's `needs` already covers.
 
 This is a **warning**, not a load error: a duplicate is a no-op, not a fault.
@@ -43,18 +43,18 @@ Keep the declaration in exactly one place, chosen by scope:
 - if the glob is relevant to **every** target, keep the project-wide
   `sources`/`outputs` and drop the per-target copy;
 - if it is relevant to **one** target, drop the project-wide declaration and keep
-  the `magus.inputs`/`magus.outputs` in that target's body.
+  the `magus\inputs`/`magus\outputs` in that target's body.
 
 ```buzz
 // Before: "src/**" declared twice - the per-target copy is a no-op.
-magus.project({sources = ["src/**"]});
+magus\project({sources = ["src/**"]});
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.inputs("src/**");
     go["go-build"]();
 }
 
 // After: one home. Here it affects every target, so keep it project-wide.
-magus.project({sources = ["src/**"]});
+magus\project({sources = ["src/**"]});
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 ```
 

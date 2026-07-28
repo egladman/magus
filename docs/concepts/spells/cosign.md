@@ -38,7 +38,7 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 import "magus";
 import "magus/spell/cosign";
 
-magus.project({ "spells": [cosign] });
+magus\project({ "spells": [cosign] });
 
 export fun attest(ctx: magus\Context, args: [str]) > void {
     cosign["cosign-attest"]({ "args": ["--predicate", "sbom.json", "--type", "cyclonedx", "app:latest"] });
@@ -60,7 +60,7 @@ export fun attest(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/cosign";
 
-magus.project({ "spells": [cosign] });
+magus\project({ "spells": [cosign] });
 
 export fun sign(ctx: magus\Context, args: [str]) > void {
     cosign["cosign-sign"]({ "args": ["app:latest"] });
@@ -80,7 +80,7 @@ export fun sign(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/cosign";
 
-magus.project({ "spells": [cosign] });
+magus\project({ "spells": [cosign] });
 
 export fun verify(ctx: magus\Context, args: [str]) > void {
     cosign["cosign-verify"]({ "args": ["app:latest"] });

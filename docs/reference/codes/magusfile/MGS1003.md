@@ -29,7 +29,7 @@ tools. A standalone `typecheck` (or `vet`, `audit`, `security`, `style`,
 name.
 
 The practical cost is that `ci` is composed from the canonical phases via
-`magus.needs`. A bespoke `typecheck` target sitting beside `lint` is invisible to
+`magus\needs`. A bespoke `typecheck` target sitting beside `lint` is invisible to
 any `ci` that only needs `lint` - the type-check silently never runs in CI unless
 someone remembers to add it separately. Folding the op into `lint` means it rides
 along automatically wherever `lint` already does.

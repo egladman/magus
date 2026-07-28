@@ -39,7 +39,7 @@ check type-checks every Buzz source without running it (buzz --check). buzz take
 import "magus";
 import "magus/spell/buzz";
 
-magus.project({ "spells": [buzz] });
+magus\project({ "spells": [buzz] });
 
 export fun check(ctx: magus\Context, args: [str]) > void {
     buzz["buzz-check"]();
@@ -60,7 +60,7 @@ test runs each source's Buzz `test {}` blocks (buzz --test).
 import "magus";
 import "magus/spell/buzz";
 
-magus.project({ "spells": [buzz] });
+magus\project({ "spells": [buzz] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     buzz["buzz-test"]();
@@ -81,7 +81,7 @@ magus-buzz executes each source through `magus buzz`, magus's own embedded Buzz 
 import "magus";
 import "magus/spell/buzz";
 
-magus.project({ "spells": [buzz] });
+magus\project({ "spells": [buzz] });
 
 export fun run_buzz(ctx: magus\Context, args: [str]) > void {
     buzz["magus-buzz"]();

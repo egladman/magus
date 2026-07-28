@@ -44,7 +44,7 @@ appear only in the `magus doctor` audit).
 ## Fix
 
 - If they are meant to be one instance, extract a single shared service target and
-  have each project `magus.needs` it, so the dependency graph runs it once.
+  have each project `magus\needs` it, so the dependency graph runs it once.
 - If the difference is intentional (for example, a test that pins a different
   Postgres major version), mark the service distinct with a reason so the warning
   stays meaningful and the decision is auditable.
