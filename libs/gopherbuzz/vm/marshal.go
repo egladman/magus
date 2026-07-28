@@ -33,7 +33,24 @@ import (
 //
 // v7 adds Instr.C (4 bytes, compile-time destination register). An older VM would
 // read C's bytes as the next instruction's Op/A fields, silently mis-executing.
-const BytecodeVersion uint16 = 9
+//
+// v10 gives OpIs.B a meaning: 1 marks a nullable annotation (`x is int?`), and A
+// now holds a compile-time-reduced base name rather than the raw identifier. An
+// older VM ignores B, so `null is int?` would answer false instead of true - a
+// wrong answer rather than a crash, which is exactly the case the version guard
+// exists to catch.
+//
+// v11 adds the bitwise opcodes OpBAnd/OpBOr/OpBXor/OpShl/OpShr/OpBNot. An older
+// VM has no case and no default handler for them, so it would abort with
+// "unknown opcode" partway through a chunk - after any side effects already
+// executed. The guard turns that into a clean load-time rejection.
+//
+// v12 adds static object fields: ObjectDecl serializes a second ObjField block,
+// and OpNewObject's C operand now carries a static-field count whose (name,
+// value) pairs the compiler pushes ahead of the instruction. An older VM reads
+// neither, so it would strand those pairs on the stack and run the rest of the
+// chunk against a misaligned one.
+const BytecodeVersion uint16 = 12
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -564,6 +581,14 @@ func (e *enc) node(n ast.Node) error {
 				return err
 			}
 		}
+		e.u32(uint32(len(v.StaticFields)))
+		for _, f := range v.StaticFields {
+			e.str(f.Name)
+			e.str(f.TypeAnnot)
+			if err := e.node(f.Default); err != nil {
+				return err
+			}
+		}
 		e.u32(uint32(len(v.Methods)))
 		for _, m := range v.Methods {
 			if err := e.node(m); err != nil {
@@ -740,6 +765,31 @@ func (d *dec) strs() ([]string, error) {
 		}
 	}
 	return ss, nil
+}
+
+// objFields reads one length-prefixed ObjField block. An ObjectDecl carries two
+// of them (instance fields, then static fields) in the same shape.
+func (d *dec) objFields() ([]ast.ObjField, error) {
+	n, err := d.u32()
+	if err != nil {
+		return nil, err
+	}
+	if err := d.checkCount(n); err != nil {
+		return nil, err
+	}
+	fields := make([]ast.ObjField, int(n))
+	for i := range fields {
+		if fields[i].Name, err = d.str(); err != nil {
+			return nil, err
+		}
+		if fields[i].TypeAnnot, err = d.str(); err != nil {
+			return nil, err
+		}
+		if fields[i].Default, err = d.node(); err != nil {
+			return nil, err
+		}
+	}
+	return fields, nil
 }
 
 func (d *dec) chunk() (*Chunk, error) {
@@ -1373,24 +1423,13 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		fcount, err := d.u32()
+		fields, err := d.objFields()
 		if err != nil {
 			return nil, err
 		}
-		if err := d.checkCount(fcount); err != nil {
+		statics, err := d.objFields()
+		if err != nil {
 			return nil, err
-		}
-		fields := make([]ast.ObjField, int(fcount))
-		for i := range fields {
-			if fields[i].Name, err = d.str(); err != nil {
-				return nil, err
-			}
-			if fields[i].TypeAnnot, err = d.str(); err != nil {
-				return nil, err
-			}
-			if fields[i].Default, err = d.node(); err != nil {
-				return nil, err
-			}
 		}
 		mcount, err := d.u32()
 		if err != nil {
@@ -1411,7 +1450,7 @@ func (d *dec) node() (ast.Node, error) {
 			}
 			methods[i] = fd
 		}
-		return &ast.ObjectDecl{Pos: p, Name: name, Fields: fields, Methods: methods}, nil
+		return &ast.ObjectDecl{Pos: p, Name: name, Fields: fields, StaticFields: statics, Methods: methods}, nil
 	case nodeEnumDecl:
 		name, err := d.str()
 		if err != nil {

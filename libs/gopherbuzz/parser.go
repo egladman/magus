@@ -377,6 +377,12 @@ func (p *parser) skipType() error {
 	t := p.peek()
 	switch t.Kind {
 	case token.Ident, token.Void:
+		// `obj{ field: T }` is an anonymous (structural) object type. Types are erased
+		// here, so the shape only has to be consumed.
+		if t.Kind == token.Ident && t.Val == "obj" && p.peekAt(1).Kind == token.LBrace {
+			p.advance()
+			return p.skipBalancedBraces()
+		}
 		p.advance()
 		// Namespace-qualified type: serialize\Boxed, foo\bar\Baz.
 		for p.check(token.Backslash) {
@@ -423,6 +429,11 @@ func (p *parser) skipType() error {
 		}
 	case token.Fun:
 		p.advance()
+		// A function TYPE may itself be generic: `fun::<C, D>() > int`. Erased like
+		// every other type parameter, so it only has to parse.
+		if _, err := p.skipTypeParams(); err != nil {
+			return err
+		}
 		if _, err := p.eat(token.LParen); err != nil {
 			return err
 		}
@@ -525,6 +536,46 @@ func tokenText(t token.Token) string {
 }
 
 // skipGenericArgs skips a balanced <...> generic argument list.
+// skipTypeParams consumes an upstream `::<T, U>` clause and reports whether one was
+// present. Type parameters are ERASED: nothing in the language reflects on them at
+// runtime, so a generic function compiles to exactly the code its non-generic twin
+// would, and a call site's type arguments only have to parse.
+//
+// `::` is two Colon tokens - there is no distinct token for it - and the argument
+// list reuses skipGenericArgs, so nested `::<A::<B>>` fails for the same reason it
+// does upstream: the trailing `>>` lexes as a shift.
+func (p *parser) skipTypeParams() (bool, error) {
+	if !(p.check(token.Colon) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind == token.Lt) {
+		return false, nil
+	}
+	p.advance()
+	p.advance()
+	if err := p.skipGenericArgs(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// skipBalancedBraces consumes a { ... } group, nesting included.
+func (p *parser) skipBalancedBraces() error {
+	if _, err := p.eat(token.LBrace); err != nil {
+		return err
+	}
+	for depth := 1; depth > 0; {
+		switch p.peek().Kind {
+		case token.LBrace:
+			depth++
+		case token.RBrace:
+			depth--
+		case token.EOF:
+			t := p.peek()
+			return fmt.Errorf("buzz: line %d:%d: unterminated anonymous object type", t.Line, t.Col)
+		}
+		p.advance()
+	}
+	return nil
+}
+
 func (p *parser) skipGenericArgs() error {
 	if _, err := p.eat(token.Lt); err != nil {
 		return err
@@ -786,7 +837,45 @@ func (p *parser) parseForInit() (ast.Node, error) {
 	if p.check(token.Final) || p.check(token.Var) {
 		return p.parseDeclNoSemi()
 	}
+	// `for (i: int = 0; ...)` - upstream declares the loop variable with a type and
+	// no final/var keyword. The `ident :` shape is unambiguous here: an assignment
+	// tail can never carry a type annotation, so nothing else in for-init position
+	// starts this way. It binds mutable, since a for-loop's own post clause assigns
+	// to it.
+	if p.check(token.Ident) && p.peekAt(1).Kind == token.Colon {
+		return p.parseTypedForDecl()
+	}
 	return p.parseAssignTail()
+}
+
+// parseTypedForDecl parses a keyword-less typed declaration (`i: int = 0`) for a
+// for-loop initializer. Separate from parseDecl only because that one opens by
+// consuming the final/var token this form does not have.
+func (p *parser) parseTypedForDecl() (*ast.DeclStmt, error) {
+	nameTok, err := p.eatBindingIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.Colon); err != nil {
+		return nil, err
+	}
+	typeAnnot, err := p.readType()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.Assign); err != nil {
+		return nil, err
+	}
+	val, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.DeclStmt{
+		Pos:       ast.Pos{Line: nameTok.Line, Col: nameTok.Col},
+		Name:      nameTok.Val,
+		TypeAnnot: typeAnnot,
+		Value:     val,
+	}, nil
 }
 
 // parseDeclNoSemi parses a const/var declaration without consuming a semicolon.
@@ -832,7 +921,57 @@ func (p *parser) parseAssignTail() (ast.Node, error) {
 		}
 		return &ast.AssignStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Target: expr, Value: val}, nil
 	}
+	if op, ok := compoundAssignOp(p.peek().Kind); ok {
+		p.advance()
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		if !isAssignable(expr) {
+			return nil, fmt.Errorf("buzz: line %d:%d: invalid assignment target", t.Line, t.Col)
+		}
+		// Desugar `x op= v` into `x = x op v`, sharing the target node so the
+		// checker and compiler see the ordinary assignment they already handle.
+		// The target is therefore evaluated twice, so a receiver with side effects
+		// (`f().n += 1`) would call f() twice where upstream calls it once; every
+		// assignable target is an identifier, field, or subscript, and only a call
+		// in that position makes the difference observable.
+		pos := ast.Pos{Line: t.Line, Col: t.Col}
+		return &ast.AssignStmt{
+			Pos:    pos,
+			Target: expr,
+			Value:  &ast.BinaryExpr{Pos: pos, Op: op, Left: expr, Right: val},
+		}, nil
+	}
 	return &ast.ExprStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Expr: expr}, nil
+}
+
+// compoundAssignOp maps a compound-assignment token to the binary operator it
+// applies, or reports false when k is not one.
+func compoundAssignOp(k token.Kind) (string, bool) {
+	switch k {
+	case token.PlusAssign:
+		return "+", true
+	case token.MinusAssign:
+		return "-", true
+	case token.StarAssign:
+		return "*", true
+	case token.SlashAssign:
+		return "/", true
+	case token.PercentAssign:
+		return "%", true
+	case token.AmpAssign:
+		return "&", true
+	case token.PipeAssign:
+		return "|", true
+	case token.CaretAssign:
+		return "^", true
+	case token.ShlAssign:
+		return "<<", true
+	case token.ShrAssign:
+		return ">>", true
+	}
+	return "", false
 }
 
 func (p *parser) parseForeach() (*ast.ForEachStmt, error) {
@@ -906,6 +1045,9 @@ func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, err := p.skipTypeParams(); err != nil {
+		return nil, err
+	}
 	params, paramAnnots, retAnnot, yieldAnnot, body, err := p.parseFunRest()
 	if err != nil {
 		return nil, err
@@ -940,11 +1082,13 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	}
 	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
-		// `static fun` declares a method called on the type (Foo.make()), with no
-		// receiver. `static` is not a keyword here (it lexes as an identifier), so
-		// match it by value only in the leading `static fun` shape.
+		// `static` marks a member that lives on the type rather than an instance:
+		// `static fun` is a method called as Foo.make() with no receiver, and a
+		// static field is one mutable value shared by every instance. It is not a
+		// keyword here (it lexes as an identifier), so match it by value; that is
+		// unambiguous because `static` is reserved and so can never be a member name.
 		isStatic := false
-		if p.check(token.Ident) && p.peek().Val == "static" && p.peekAt(1).Kind == token.Fun {
+		if p.check(token.Ident) && p.peek().Val == "static" {
 			p.advance()
 			isStatic = true
 		}
@@ -985,7 +1129,11 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 			}
 			field.Default = def
 		}
-		decl.Fields = append(decl.Fields, field)
+		if isStatic {
+			decl.StaticFields = append(decl.StaticFields, field)
+		} else {
+			decl.Fields = append(decl.Fields, field)
+		}
 		if p.check(token.Comma) || p.check(token.Semicolon) {
 			p.advance()
 		}
@@ -1182,17 +1330,27 @@ func (p *parser) parseComparison() (ast.Node, error) {
 			left = &ast.BinaryExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Op: op, Left: left, Right: right}
 		case token.Is:
 			t := p.advance()
-			typeTok, err := p.eatIdent()
+			// readType, not eatIdent: upstream tests `x is [int]`, `x is {str: int}`,
+			// `x is int?`, `x is a\Hello`, and `x is fun (id: int) > int`. A bare
+			// identifier covers none of those. `as` one case below already reads the
+			// full type; `is` had simply never been widened to match it.
+			typStr, err := p.readType()
 			if err != nil {
 				return nil, err
 			}
-			left = &ast.IsExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Expr: left, TypeName: typeTok.Val}
+			left = &ast.IsExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Expr: left, TypeName: typStr}
 		case token.As:
 			t := p.advance()
 			optional := false
 			if p.check(token.Question) { // `as?` — null on mismatch (upstream Buzz)
 				p.advance()
 				optional = true
+			} else if p.check(token.Bang) {
+				// `as!` — force the cast, raise on mismatch. That is already what a
+				// bare `as` does here, so this only accepts the spelling: upstream
+				// distinguishes them because its bare `as` is statically checked,
+				// while gopherbuzz resolves the cast at runtime either way.
+				p.advance()
 			}
 			typStr, err := p.readType()
 			if err != nil {
@@ -1206,7 +1364,7 @@ func (p *parser) parseComparison() (ast.Node, error) {
 }
 
 func (p *parser) parseAdditive() (ast.Node, error) {
-	left, err := p.parseMultiplicative()
+	left, err := p.parseBitwise()
 	if err != nil {
 		return nil, err
 	}
@@ -1216,13 +1374,67 @@ func (p *parser) parseAdditive() (ast.Node, error) {
 		if t.Kind == token.Minus {
 			op = "-"
 		}
-		right, err := p.parseMultiplicative()
+		right, err := p.parseBitwise()
 		if err != nil {
 			return nil, err
 		}
 		left = &ast.BinaryExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Op: op, Left: left, Right: right}
 	}
 	return left, nil
+}
+
+// parseBitwise parses `&`, `|`, and `^` at one shared level, which is upstream
+// Buzz's Precedence.Bitwise: tighter than `+`/`-`, looser than the shifts. An
+// `&` only reaches here in infix position; the prefix `&call()` fiber form is
+// parsed by parseUnary, so the two uses never compete.
+func (p *parser) parseBitwise() (ast.Node, error) {
+	left, err := p.parseShift()
+	if err != nil {
+		return nil, err
+	}
+	for {
+		var op string
+		switch p.peek().Kind {
+		case token.Amp:
+			op = "&"
+		case token.Pipe:
+			op = "|"
+		case token.Caret:
+			op = "^"
+		default:
+			return left, nil
+		}
+		t := p.advance()
+		right, err := p.parseShift()
+		if err != nil {
+			return nil, err
+		}
+		left = &ast.BinaryExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Op: op, Left: left, Right: right}
+	}
+}
+
+func (p *parser) parseShift() (ast.Node, error) {
+	left, err := p.parseMultiplicative()
+	if err != nil {
+		return nil, err
+	}
+	for {
+		var op string
+		switch p.peek().Kind {
+		case token.Shl:
+			op = "<<"
+		case token.Shr:
+			op = ">>"
+		default:
+			return left, nil
+		}
+		t := p.advance()
+		right, err := p.parseMultiplicative()
+		if err != nil {
+			return nil, err
+		}
+		left = &ast.BinaryExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Op: op, Left: left, Right: right}
+	}
 }
 
 func (p *parser) parseMultiplicative() (ast.Node, error) {
@@ -1272,11 +1484,14 @@ func (p *parser) parseUnary() (ast.Node, error) {
 		}
 		return expr, nil
 	}
-	if p.check(token.Bang) || p.check(token.Minus) {
+	if p.check(token.Bang) || p.check(token.Minus) || p.check(token.Tilde) {
 		t := p.advance()
 		op := "!"
-		if t.Kind == token.Minus {
+		switch t.Kind {
+		case token.Minus:
 			op = "-"
+		case token.Tilde:
+			op = "~"
 		}
 		operand, err := p.parseUnary()
 		if err != nil {
@@ -1456,7 +1671,10 @@ func (p *parser) parseArgList() ([]ast.Node, []string, error) {
 	sawName := false
 	for !p.check(token.RParen) && !p.check(token.EOF) {
 		name := ""
-		if p.check(token.Ident) && p.peekAt(1).Kind == token.Colon {
+		// `ident :` is a label, but `ident ::` opens a generic call argument
+		// (count::<int>(...)), so the second colon has to be excluded or every
+		// generic call nested inside another call's arguments is misread as a label.
+		if p.check(token.Ident) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind != token.Colon {
 			name = p.advance().Val
 			p.advance() // ':'
 			sawName = true
@@ -1494,6 +1712,25 @@ func (p *parser) parseArgList() ([]ast.Node, []string, error) {
 func (p *parser) parsePrimary() (ast.Node, error) {
 	t := p.peek()
 	switch t.Kind {
+	case token.Dot:
+		// Inferred enum case: `.one` with no receiver. Unambiguous in primary
+		// position, since member access always has an expression to its left and so
+		// never reaches here. Which enum it names is not knowable yet; the checker
+		// fills that in from the expected type.
+		if p.peekAt(1).Kind == token.LBrace {
+			// Anonymous object literal `.{ name = expr }`. Its type is structural, and
+			// gopherbuzz has no structural object runtime - but a map already is one:
+			// stored keys are reachable as members, so `.{ list = l }.list` works with
+			// no new value kind. Fields use `=`, unlike a map literal's `:`.
+			p.advance() // '.'
+			return p.parseAnonObjectLit()
+		}
+		if p.peekAt(1).Kind != token.Ident {
+			return nil, fmt.Errorf("buzz: line %d:%d: expected an enum case name after '.'", t.Line, t.Col)
+		}
+		p.advance()
+		name := p.advance()
+		return &ast.EnumCaseExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: name.Val}, nil
 	case token.Fun:
 		return p.parseFunExpr()
 	case token.LBrace:
@@ -1589,6 +1826,10 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 // parseFunExpr parses `fun(params) rettype { body }` as an expression.
 func (p *parser) parseFunExpr() (*ast.FunExpr, error) {
 	t, _ := p.eat(token.Fun)
+	// A lambda can declare type parameters too: `fun::<E, F>() > int => 12`.
+	if _, err := p.skipTypeParams(); err != nil {
+		return nil, err
+	}
 	params, paramAnnots, retAnnot, yieldAnnot, body, err := p.parseFunRest()
 	if err != nil {
 		return nil, err
@@ -1704,6 +1945,39 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 }
 
 // parseMapLit parses {"key": val, ...}; an empty {} is an empty map.
+// parseAnonObjectLit parses `{ name = expr, ... }` (the brace of a `.{...}` literal)
+// into a map keyed by the field names.
+func (p *parser) parseAnonObjectLit() (*ast.MapExpr, error) {
+	t, err := p.eat(token.LBrace)
+	if err != nil {
+		return nil, err
+	}
+	m := &ast.MapExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
+	for !p.check(token.RBrace) && !p.check(token.EOF) {
+		nameTok, err := p.eatIdent()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.eat(token.Assign); err != nil {
+			return nil, err
+		}
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		m.Keys = append(m.Keys, &ast.StringLit{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}, Val: nameTok.Val})
+		m.Values = append(m.Values, val)
+		if !p.check(token.Comma) {
+			break
+		}
+		p.advance()
+	}
+	if _, err := p.eat(token.RBrace); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (p *parser) parseMapLit() (*ast.MapExpr, error) {
 	t, err := p.eat(token.LBrace)
 	if err != nil {

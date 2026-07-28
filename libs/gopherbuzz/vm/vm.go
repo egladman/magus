@@ -1168,7 +1168,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpNewObject:
 			cv := f.chunk.Consts[ins.A]
 			if cv.tag() == tagObjDecl {
-				if err := vm.buildObjectDef(vm.asObjDecl(cv), int(ins.B), f.env); err != nil {
+				if err := vm.buildObjectDef(vm.asObjDecl(cv), int(ins.B), int(ins.C), f.env); err != nil {
 					return Null, err
 				}
 			} else {
@@ -1188,6 +1188,10 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			switch iter.tag() {
 			case tagList:
 				st.list = vm.asList(iter)
+			case tagStr:
+				st.strRunes = []rune(vm.asStr(iter).V)
+			case tagEnumDef:
+				st.enumDef = vm.asEnumDef(iter)
 			case tagMap:
 				st.mapObj = vm.asMap(iter)
 			case tagRange:
@@ -1211,6 +1215,32 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 						vm.push(IntValue(int64(state.idx)))
 					}
 					vm.push(state.list.Items[state.idx])
+					state.idx++
+				} else {
+					done = true
+				}
+			} else if state.enumDef != nil {
+				if state.idx < len(state.enumDef.Cases) {
+					if wantKey {
+						vm.push(IntValue(int64(state.idx)))
+					}
+					vm.push(vm.allocEnumVal(&enumValObj{
+						Enum:    state.enumDef.Name,
+						Case:    state.enumDef.Cases[state.idx],
+						Ordinal: int64(state.idx),
+					}))
+					state.idx++
+				} else {
+					done = true
+				}
+			} else if state.strRunes != nil {
+				// Yields one-character strings, not codepoints: upstream's foreach.buzz
+				// interpolates each element back together and compares to the original.
+				if state.idx < len(state.strRunes) {
+					if wantKey {
+						vm.push(IntValue(int64(state.idx)))
+					}
+					vm.push(StrValue(string(state.strRunes[state.idx])))
 					state.idx++
 				} else {
 					done = true
@@ -1285,7 +1315,9 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpIs:
 			name := vm.asStr(f.chunk.Consts[ins.A]).V
 			val := vm.pop()
-			vm.push(BoolValue(vm.buzzIsType(val, name)))
+			// B=1 marks a nullable annotation (`x is int?`). The compiler already
+			// stripped the "?" and reduced the name, so this stays a flag test.
+			vm.push(BoolValue((ins.B == 1 && val.tag() == tagNull) || vm.buzzIsType(val, name)))
 
 		case OpAs:
 			name := vm.asStr(f.chunk.Consts[ins.A]).V
@@ -1744,7 +1776,13 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			}
 
 		default:
-			return Null, errUnknownOpcode(ins.Op)
+			// Cold-opcode arm. The bitwise family has no case of its own (a new
+			// case body costs the whole suite 25-55% — README, "Performance
+			// design"), so it rides the jump table's fall-through into a
+			// //go:noinline helper, which also reports a genuinely unknown opcode.
+			if err := vm.execCold(ins.Op); err != nil {
+				return Null, err
+			}
 		}
 	}
 }
@@ -1780,6 +1818,12 @@ func errAssignUndefined(name string) error {
 
 //go:noinline
 func errCannotNegate(v Value) error { return fmt.Errorf("buzz: cannot negate %s", v.buzzKind()) }
+
+//go:noinline
+func errCannotBitwise(op OpCode, v Value) error {
+	return fmt.Errorf("buzz: cannot apply %q to %s: bitwise operators require int operands",
+		opSymbol(op), v.buzzKind())
+}
 
 //go:noinline
 func errNoChunk() error { return fmt.Errorf("buzz: function has no compiled chunk") }
@@ -1994,8 +2038,19 @@ func (vm *VM) Call(callee Value, args []Value) error {
 	}
 }
 
-// buildObjectDef pops (name, closure) pairs and creates an objectDefObj.
-func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount int, env *Env) error {
+// buildObjectDef pops (name, closure) pairs and creates an objectDefObj. The
+// static-field (name, value) pairs sit above them on the stack, so they come off
+// first (see compileObjectDecl).
+func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount, staticFieldCount int, env *Env) error {
+	statics := make([]staticFieldEntry, staticFieldCount)
+	for i := staticFieldCount - 1; i >= 0; i-- {
+		val := vm.pop()
+		name := vm.pop()
+		if name.tag() != tagStr {
+			return fmt.Errorf("buzz: object static field name is not a string")
+		}
+		statics[i] = staticFieldEntry{Name: vm.asStr(name).V, Val: val}
+	}
 	type method struct {
 		name string
 		fun  *funObj
@@ -2013,9 +2068,10 @@ func (vm *VM) buildObjectDef(decl *ast.ObjectDecl, methodCount int, env *Env) er
 		methods[i] = method{vm.asStr(name).V, vm.asFun(fn)}
 	}
 	def := &objectDefObj{
-		Name:   decl.Name,
-		Fields: decl.Fields,
-		Env:    env,
+		Name:         decl.Name,
+		Fields:       decl.Fields,
+		StaticFields: statics,
+		Env:          env,
 	}
 	// Emitted closures align by index with decl.Methods (see compileObjectDecl),
 	// so route each into the instance vtable or the statics table accordingly.

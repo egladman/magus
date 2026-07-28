@@ -1,0 +1,22 @@
+// @expect: 4
+// Static object fields: type-level state, initialised from the declared default,
+// read and written through the type value and shared by every instance. The
+// counter proves the write sticks across calls; `first` proves an immutable
+// instance still reads the current static. This fixture is also round-tripped
+// through bytecode by TestBytecodeRoundTrip, which verifies the static-field
+// block and OpNewObject's C operand survive serialization.
+object Counter {
+    static next: int = -1;
+    id: int,
+
+    static fun make() > Counter {
+        Counter.next = Counter.next + 1;
+        return Counter{ id = Counter.next };
+    }
+}
+
+final first = Counter.make();
+Counter.make();
+final third = Counter.make();
+
+final __r = third.id - first.id + Counter.next;

@@ -3,10 +3,84 @@
 A pure-Go bytecode VM for the [Buzz](https://buzz-lang.dev/) scripting
 language with JIT support. It targets Buzz 0.6.0-dev, tracking upstream
 `buzz-language/buzz` `main` at the commit pinned in [`version.go`](version.go)
-(`UpstreamRef`); the released 0.5.0 baseline stays compatible.
+(`UpstreamRef`).
+
+It implements a **subset** of the language. The goal is 100% compatibility; the
+running record of how far along that is lives in [Upstream parity](#upstream-parity),
+and is enforced by a test rather than asserted by this file.
 
 - Reference: <https://buzz-lang.dev/0.5.0/reference/> (latest published; 0.6.0 is unreleased)
 - Hot-path notes: [Performance design](#performance-design) · JIT: [Baseline JIT](#baseline-jit)
+
+## Upstream parity
+
+**27 of 83** upstream behavior tests pass, measured against `UpstreamRef`
+(`0.5.0-251-ged42f47`) on 2026-07-28.
+
+The baseline when this record started was 12; `is` grammar, typed for-init, and
+the bitwise family, the inferred enum case, char literals plus `as!`, and string
+iteration/subscripting, the iterator protocol, decimal string escapes, ordered
+JSON encoding, and static object fields have banked fifteen since. Measure against the PINNED commit,
+not a local `main` checkout: a newer checkout has files that do not exist at the
+pin, which is how an earlier hand-count reached a wrong 13-of-84.
+
+That number is the honest headline, and it is lower than this file used to imply.
+It is produced by running every file in upstream's `tests/behavior/` through this
+VM. Nothing is copied into this repo: `magus run conformance gopherbuzz` fetches
+`buzz-language/buzz` at the pinned sha into a cache directory and runs the suite
+against it, so the record is reproducible and always measured against the ref this
+VM claims to track.
+
+`testdata/upstream-behavior-allowlist.txt` is the enforced source of truth. The
+test fails in **both** directions: an allowlisted test that regresses, and a
+non-allowlisted test that starts passing without being recorded. Parity can
+therefore only go up, and closing a gap forces the gain to be banked.
+
+### What works
+
+Objects (fields with defaults, methods, `static fun` and static fields, `mut` instances, optional
+unwrap `if (x -> y)`), enums, namespaces and imports, optionals with `??` and
+`as?`, error sets on declarations plus `try`/`catch`, fibers with `resolve`,
+ranges, string interpolation, pattern literals, `zdef` FFI, closures, and the
+collection/loop core. Two deliberate supersets: the contextual `test` keyword
+(below) and named-argument labels.
+
+### What does not, ranked by upstream tests blocked
+
+| Gap | Blocks | Example |
+| --- | ---: | --- |
+| Type-value literal `<T>` | 4 | `typeof x == <mut [int]>` |
+| Generics `::<T>` | 3 | `fun count::<T>(l: [T])` |
+| Optional chaining `?.` | 2 | `list?.len()` |
+| Labeled loops | 2 | `while (true) :outer { break :outer; }` |
+| Multiple/typed `catch` | 2 | `catch (e: str) {} catch (e: Err) {}` |
+| Raw identifiers `@"..."` | 2 | `tuple.@"0"` |
+| `protocol` declarations | 1 | `protocol Shape { fun area() > int }` |
+
+Plus a long tail of single-test gaps (block expressions, selective imports,
+inline `catch void`, if-expressions, field punning, checked subscripts, anonymous
+object types, `enum<str>` backing types). Two remaining differences are
+deliberate, not pending:
+
+- **`math\deg` will not be matched.** Upstream's result implies a degrees-per-radian
+  constant of 57.295779513082195; the correctly-rounded f64 value is
+  57.29577951308232, which is what gopherbuzz returns. Matching upstream here would
+  mean shipping a less accurate constant to satisfy a test.
+- **GC collector callbacks** depend on Buzz's own collector running at points a Go
+  program does not control. Upstream's test asserts a collector ran after dropping a
+  reference; Go's GC gives no such guarantee.
+
+One known divergence is ours rather than a missing feature: a compound assign
+(`x op= v`) desugars to `x = x op v` sharing the target node, so the target is
+evaluated twice. `f().n += 1` calls `f()` twice where upstream calls it once.
+Harmless for the plain-variable and field cases that make up ordinary use, wrong
+for a call or any other side-effecting target.
+
+A test is often blocked by more than one gap, so closing a single entry does not
+always flip a file green. The allowlist reports real progress; this table only
+explains it. Widening the `is` type grammar is the worked example: it unblocked
+`is.buzz`, while `maps.buzz` and `mutual-import.buzz` stayed red behind other
+gaps even though their `is` usage now parses.
 
 ## Performance
 
