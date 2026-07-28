@@ -61,7 +61,7 @@ A provider is an ordinary spell, selected in your magusfile:
 ```buzz
 import "spells/github/actions" as github;
 
-magus\ci\provider(github);
+magus\ci.provider(github);
 ```
 
 magus ships two: `spells/github/actions` (which also carries the Actions remote
@@ -201,4 +201,4 @@ Method names are `camelCase` even where the [module reference](../reference/buzz
 declares them otherwise, and namespace access is a backslash.
 
 Gate everything on `enabled()`. A provider that returns false outside its own
-system makes an unconditional `magus\ci\provider(...)` free everywhere else.
+system makes an unconditional `magus\ci.provider(...)` free everywhere else.
