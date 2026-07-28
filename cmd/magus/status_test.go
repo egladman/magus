@@ -113,7 +113,8 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	var buf bytes.Buffer
 	printStatusCompact(&buf, r, now)
 	out := buf.String()
-	assert.Contains(t, out, "…", "expected truncation ellipsis")
+	assert.Contains(t, out, "...", "expected truncation ellipsis")
+	assert.NotContains(t, out, "…", "the ellipsis is three ASCII dots, not U+2026")
 	for _, part := range strings.Split(strings.TrimRight(out, "\n"), " · ") {
 		assert.LessOrEqual(t, utf8.RuneCountInString(part), compactRunningBudget,
 			"part %q exceeds compactRunningBudget=%d", part, compactRunningBudget)

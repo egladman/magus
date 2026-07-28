@@ -4,14 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"golang.org/x/term"
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
@@ -408,7 +407,7 @@ func serverJob(ctx context.Context, args []string) error {
 // runs `server job sync-graph` on every history change and would otherwise write the token into
 // hook logs. Best-effort: a disabled console or an unreadable token means no hint.
 func printJobWatchHint(w *os.File) {
-	if !term.IsTerminal(int(w.Fd())) {
+	if !tty.IsTerminalWriter(w, tty.SystemProbe) {
 		return
 	}
 	if u := consoleWatchURL(); u != "" {

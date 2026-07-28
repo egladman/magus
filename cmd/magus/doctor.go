@@ -4,12 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"os"
 
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
-	"golang.org/x/term"
 )
 
 func doctorCmd(ctx context.Context, root string, args []string) error {
@@ -73,7 +73,7 @@ func emitDoctor(opts OutputOptions, out doctor.Report) error {
 	// Doctor's report stays on stdout (it is the command's primary output, meant to be
 	// piped/grepped) but shares the cache's coloured [pass]/[fail] status glyphs so the
 	// whole tool reads consistently. Colour only when stdout is a TTY and NO_COLOR is unset.
-	color := term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("NO_COLOR") == ""
+	color := tty.WantsColor(os.Stdout, tty.SystemProbe)
 
 	if out.Workspace != "" {
 		fmt.Printf("workspace: %s\n\n", out.Workspace)

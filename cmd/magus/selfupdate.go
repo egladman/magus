@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"net/http"
 	"os"
 	"runtime"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/egladman/magus/internal/selfupdate"
 	minioselfupdate "github.com/minio/selfupdate"
-	"golang.org/x/term"
 )
 
 // Overridable for tests (unexported; test files set them directly).
@@ -207,7 +207,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	}
 
 	if !yes {
-		if !term.IsTerminal(int(os.Stdin.Fd())) {
+		if !tty.StdinIsTerminal() {
 			return errors.New("non-interactive terminal: use --yes / -y to confirm the update")
 		}
 		fmt.Printf("Install magus %s -> %s? [y/N] ", manifest.Version, targetPath)

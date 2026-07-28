@@ -3,11 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"os"
 	"strings"
 	"sync"
-
-	"golang.org/x/term"
 
 	"github.com/egladman/magus/internal/proc/run"
 )
@@ -28,8 +27,7 @@ func newStepGate() run.StepGate {
 			fmt.Fprintf(os.Stderr, "\n→ %s  (cwd: %s)\n", strings.Join(argv, " "), dir)
 			fmt.Fprintf(os.Stderr, "  [s]tep  [c]ontinue  s[k]ip  [r]epl  [a]bort: ")
 
-			fd := int(os.Stderr.Fd())
-			oldState, err := term.MakeRaw(fd)
+			restoreTTY, err := tty.MakeRaw(os.Stderr.Fd())
 			if err != nil {
 				// Can't go raw: fall back to step-always so the user still sees commands.
 				fmt.Fprintln(os.Stderr, "(terminal unavailable, stepping)")
@@ -37,8 +35,8 @@ func newStepGate() run.StepGate {
 			}
 
 			restore := func() {
-				if err := term.Restore(fd, oldState); err != nil {
-					fmt.Fprintf(os.Stderr, "magus: terminal restore failed: %v\n", err)
+				if err := restoreTTY(); err != nil {
+					fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 				}
 			}
 
