@@ -65,11 +65,11 @@ func buildCacheNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 	ns := vm.NewMap()
 	ns.MapSet("remote", directVal(obs, "magus.cache.remote", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
-			return vm.Null, fmt.Errorf(`magus\cache\remote: expected an imported spell handle`)
+			return vm.Null, fmt.Errorf(`magus\cache.remote: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
 		if !ok || !nv.IsStr() || nv.AsString() == "" {
-			return vm.Null, fmt.Errorf(`magus\cache\remote: argument is not a spell handle (no name)`)
+			return vm.Null, fmt.Errorf(`magus\cache.remote: argument is not a spell handle (no name)`)
 		}
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
 			reg.SetRemoteBackend(nv.AsString())
@@ -97,11 +97,11 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 	ns := vm.NewMap()
 	ns.MapSet("provider", directVal(obs, "magus.ci.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
-			return vm.Null, fmt.Errorf(`magus\ci\provider: expected an imported spell handle`)
+			return vm.Null, fmt.Errorf(`magus\ci.provider: expected an imported spell handle`)
 		}
 		nv, ok := args[0].MapGet("name")
 		if !ok || !nv.IsStr() || nv.AsString() == "" {
-			return vm.Null, fmt.Errorf(`magus\ci\provider: argument is not a spell handle (no name)`)
+			return vm.Null, fmt.Errorf(`magus\ci.provider: argument is not a spell handle (no name)`)
 		}
 		SetCIProvider(nv.AsString())
 		return vm.Null, nil
