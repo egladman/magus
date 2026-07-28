@@ -207,5 +207,9 @@ jobs:
                 ;;
             esac
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Postflight (insight report → step summary)
-        run: magus run postflight --no-default-charms .
+      - name: Insight report to step summary
+        run: |
+          {
+            echo "## Insight report"
+            magus insight report --workspace -o markdown
+          } >> "$GITHUB_STEP_SUMMARY"
