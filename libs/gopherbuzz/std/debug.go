@@ -95,11 +95,15 @@ func nodeToMap(n ast.Node) any {
 		for i, f := range v.Fields {
 			fields[i] = map[string]any{"name": f.Name, "typeAnnot": f.TypeAnnot, "default": nodeToMap(f.Default)}
 		}
+		statics := make([]any, len(v.StaticFields))
+		for i, f := range v.StaticFields {
+			statics[i] = map[string]any{"name": f.Name, "typeAnnot": f.TypeAnnot, "default": nodeToMap(f.Default)}
+		}
 		methods := make([]any, len(v.Methods))
 		for i, meth := range v.Methods {
 			methods[i] = nodeToMap(meth)
 		}
-		return map[string]any{"kind": "ObjectDecl", "pos": pos(v.Pos), "name": v.Name, "fields": fields, "methods": methods}
+		return map[string]any{"kind": "ObjectDecl", "pos": pos(v.Pos), "name": v.Name, "fields": fields, "staticFields": statics, "methods": methods}
 	case *ast.EnumDecl:
 		return map[string]any{"kind": "EnumDecl", "pos": pos(v.Pos), "name": v.Name, "cases": v.Cases}
 	case *ast.DoStmt:

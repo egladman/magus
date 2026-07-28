@@ -8,8 +8,9 @@ package vm
 //
 // The +1 bias lets the zero value keep the old push-to-stack semantics so every
 // Instr literal that omits C defaults to stack form with no migration work.
-// Only OpBinLL and OpBinLC currently use C; all other opcodes leave
-// it zero.
+// Only OpBinLL and OpBinLC use C as a destination register. OpNewObject reuses
+// the word as a plain count (static fields) because A and B are both taken; all
+// other opcodes leave it zero.
 type Instr struct {
 	Op OpCode
 	A  int32 // primary operand

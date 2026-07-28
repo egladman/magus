@@ -1,0 +1,10 @@
+// @expect: 121
+// Shift-count edges upstream's bitwise.buzz does not reach: a count wider than
+// the integer collapses to 0 rather than panicking (Go) or wrapping, and a
+// negative count reverses direction.
+final a = 15;
+final wide = 1 << 100; // 0
+final wideNeg = -1 >> 100; // 0
+final backwards = a << -3; // 1
+final forwards = a >> -3; // 120
+final __r = wide + wideNeg + backwards + forwards;

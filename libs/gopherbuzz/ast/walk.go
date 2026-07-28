@@ -60,6 +60,9 @@ func Inspect(n Node, fn func(Node) bool) {
 		for i := range s.Fields {
 			Inspect(s.Fields[i].Default, fn)
 		}
+		for i := range s.StaticFields {
+			Inspect(s.StaticFields[i].Default, fn)
+		}
 		for _, m := range s.Methods {
 			Inspect(m, fn)
 		}

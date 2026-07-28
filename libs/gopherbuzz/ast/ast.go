@@ -144,7 +144,12 @@ type ObjectDecl struct {
 	IsExported bool
 	Name       string
 	Fields     []ObjField
-	Methods    []*FunDecl
+	// StaticFields are `static name: T = default` declarations. They are kept out
+	// of Fields because Fields IS the instance layout: its index order is the flat
+	// field-slot order every instance and every this.field lookup indexes by, and a
+	// static holds one value on the type, not a slot per instance.
+	StaticFields []ObjField
+	Methods      []*FunDecl
 }
 
 // ObjField is a single object field declaration with an optional default.
@@ -326,6 +331,17 @@ type RangeExpr struct {
 }
 
 // IsExpr: expr is TypeName
+// EnumCaseExpr is the inferred enum-case shorthand: a leading-dot case with no
+// receiver, as in `fun f(c: Suit = .one)` or `final l: [Locale] = [.fr, .it]`.
+// Enum is empty at parse time and filled by the checker from the type expected at
+// the use site, which is the only place that information exists - the expression
+// itself names no enum.
+type EnumCaseExpr struct {
+	Pos
+	Name string
+	Enum string
+}
+
 type IsExpr struct {
 	Pos
 	Expr     Node

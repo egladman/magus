@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -177,6 +178,9 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 	case *ast.ObjectDecl:
 		for i := range v.Fields {
 			collectFuncRefs(v.Fields[i].Default, inFunc, keep)
+		}
+		for i := range v.StaticFields {
+			collectFuncRefs(v.StaticFields[i].Default, inFunc, keep)
 		}
 		for _, m := range v.Methods {
 			collectFuncRefs(m, inFunc, keep)
@@ -370,6 +374,10 @@ func (c *compiler) staticType(n ast.Node) styp {
 			if t := c.staticType(v.Operand); t == sInt || t == sFloat {
 				return t
 			}
+		case "~":
+			if c.staticType(v.Operand) == sInt {
+				return sInt
+			}
 		case "not":
 			return sBool
 		}
@@ -388,6 +396,10 @@ func (c *compiler) staticType(n ast.Node) styp {
 			}
 			if v.Op == "+" && lt == sStr {
 				return sStr
+			}
+		case "&", "|", "^", "<<", ">>":
+			if c.staticType(v.Left) == sInt && c.staticType(v.Right) == sInt {
+				return sInt
 			}
 		}
 		return sUnknown
@@ -1264,11 +1276,31 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		c.chunk.Emit(vmpackage.OpLoadConst, c.nameConst(m.Name), 0)
 		c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
 	}
+	// Static-field defaults are emitted as (name, value) pairs the same way an
+	// instance literal emits its fields, because buildObjectDef, like
+	// buildObjectVal, evaluates nothing itself: whatever the type-level state
+	// starts as has to arrive on the stack. They follow the methods so the def
+	// builder can pop them first.
+	for _, f := range v.StaticFields {
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(f.Name)), 0)
+		if f.Default != nil {
+			if err := c.compileExpr(f.Default); err != nil {
+				return err
+			}
+		} else {
+			c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
+		}
+	}
 	c.typeDecls[v.Name] = v
 	nameIdx := c.nameConst(v.Name)
 	// Store the ObjectDecl as a const so the VM can access field info.
 	declIdx := c.chunk.AddConst(vmpackage.ObjDeclValue(v))
-	c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
+	newObj := c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
+	// A and B are both spoken for (decl const, method count), so the static-field
+	// count rides in C rather than sharing B with the method count: B's high bits
+	// already carry InstrMutBit on this opcode's literal path, and a second packed
+	// count there would add a masking rule for every reader of that operand.
+	c.chunk.Code[newObj].C = int32(len(v.StaticFields))
 	c.chunk.Emit(vmpackage.OpDefName, nameIdx, 0)
 	if c.depth == 0 {
 		if v.IsExported {
@@ -1425,11 +1457,33 @@ func (c *compiler) compileExpr(n ast.Node) error {
 			return err
 		}
 		c.chunk.Emit(vmpackage.OpRange, 0, 0)
+	case *ast.EnumCaseExpr:
+		// The checker resolved which enum this belongs to; emit exactly what an
+		// explicit Enum.case would, so there is one code path for enum access and
+		// nothing new at runtime.
+		if v.Enum == "" {
+			return fmt.Errorf("buzz: line %d:%d: unresolved enum case .%s", v.Line, v.Col, v.Name)
+		}
+		return c.compileExpr(&ast.MemberExpr{
+			Pos:    v.Pos,
+			Object: &ast.IdentExpr{Pos: v.Pos, Name: v.Enum},
+			Name:   v.Name,
+		})
 	case *ast.IsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
 		}
-		c.chunk.Emit(vmpackage.OpIs, c.nameConst(v.TypeName), 0)
+		// Reduce the annotation to the runtime shape HERE, once, rather than parsing
+		// a type string on every evaluation: `is` can sit inside a loop, and OpIs is
+		// dispatched from the I-cache-bound Exec switch where per-execution string
+		// work is exactly what the hot path cannot afford. B carries nullability so
+		// the VM spends one branch instead of a scan.
+		base, nullable := isTypeShape(v.TypeName)
+		var nul int32
+		if nullable {
+			nul = 1
+		}
+		c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
 	case *ast.AsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
@@ -1549,6 +1603,16 @@ func (c *compiler) compileBinary(v *ast.BinaryExpr) error {
 		c.chunk.Emit(vmpackage.OpDiv, 0, 0)
 	case "%":
 		c.chunk.Emit(vmpackage.OpMod, 0, 0)
+	case "&":
+		c.chunk.Emit(vmpackage.OpBAnd, 0, 0)
+	case "|":
+		c.chunk.Emit(vmpackage.OpBOr, 0, 0)
+	case "^":
+		c.chunk.Emit(vmpackage.OpBXor, 0, 0)
+	case "<<":
+		c.chunk.Emit(vmpackage.OpShl, 0, 0)
+	case ">>":
+		c.chunk.Emit(vmpackage.OpShr, 0, 0)
 	case "==":
 		c.chunk.Emit(vmpackage.OpEqual, 0, 0)
 	case "!=":
@@ -1576,6 +1640,8 @@ func (c *compiler) compileUnary(v *ast.UnaryExpr) error {
 		c.chunk.Emit(vmpackage.OpNeg, 0, 0)
 	case "!":
 		c.chunk.Emit(vmpackage.OpNot, 0, 0)
+	case "~":
+		c.chunk.Emit(vmpackage.OpBNot, 0, 0)
 	default:
 		return fmt.Errorf("buzz: compile: unknown unary op %q", v.Op)
 	}
@@ -1654,4 +1720,39 @@ func mutFlag(mut bool) int32 {
 		return vmpackage.InstrMutBit
 	}
 	return 0
+}
+
+// isTypeShape reduces a source type annotation to the base name vm.buzzIsType
+// compares against, plus whether the annotation admits null. It runs at compile
+// time so OpIs stays a constant compare at runtime.
+//
+// Only the OUTER shape survives, because that is all a runtime tag can answer:
+// `[int]` and `[str]` are both a list to a value that carries no element type.
+// Element types are the checker's business, and it has the full annotation.
+func isTypeShape(annot string) (base string, nullable bool) {
+	s := strings.TrimSpace(annot)
+	s = strings.TrimPrefix(s, "mut ")
+	s = strings.TrimSpace(s)
+	if t := strings.TrimSuffix(s, "?"); t != s {
+		s, nullable = strings.TrimSpace(t), true
+	}
+	switch {
+	case strings.HasPrefix(s, "["):
+		return "list", nullable
+	case strings.HasPrefix(s, "{"):
+		return "map", nullable
+	case s == "fun" || strings.HasPrefix(s, "fun ") || strings.HasPrefix(s, "fun("):
+		// Function types carry no runtime signature, so every arity and return
+		// type collapses to "is it callable".
+		return "fun", nullable
+	}
+	if s := s[strings.LastIndex(s, `\`)+1:]; s != "" {
+		// Namespace-qualified names (a\Hello) match on the declared name, which is
+		// what an object or enum definition stores.
+		if i := strings.IndexByte(s, '<'); i >= 0 {
+			return s[:i], nullable // generic instantiation matches its base type
+		}
+		return s, nullable
+	}
+	return s, nullable
 }

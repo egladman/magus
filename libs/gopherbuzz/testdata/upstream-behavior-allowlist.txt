@@ -1,0 +1,40 @@
+# Upstream Buzz behavior-test allowlist.
+#
+# One base filename per line, sorted, naming files under upstream
+# <buzz-checkout>/tests/behavior/*.buzz that currently pass when run through
+# gopherbuzz (see ../conformance_test.go). This is the parity contract: the
+# set may only GROW. TestConformance fails if any listed file stops passing
+# (a regression) or if any non-listed file starts passing (an unrecorded
+# improvement - add it here instead).
+#
+# Regenerate by running the suite and diffing:
+#   GOPHERBUZZ_UPSTREAM_DIR=~/Repos/buzz go test ./libs/gopherbuzz/ -run TestUpstreamConformance -v
+# then add newly-passing files (never remove a line without confirming a
+# real regression).
+basic-types.buzz
+bitwise.buzz
+break-continue.buzz
+checked-subscript.buzz
+dead-branches.buzz
+discarded-value.buzz
+foreach.buzz
+if-arrow.buzz
+inferred-var-type.buzz
+interpolation.buzz
+invoke.buzz
+is.buzz
+iterator.buzz
+jit-hotspot-string-interpolation.buzz
+json.buzz
+lambda.buzz
+list-map-properties.buzz
+long-namespace.buzz
+namespace.buzz
+objects.buzz
+operators.buzz
+placeholder-cycle.buzz
+placeholder-nested-call.buzz
+scope.buzz
+str.buzz
+tail-call.buzz
+utf8.buzz

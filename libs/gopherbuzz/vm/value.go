@@ -184,7 +184,30 @@ type objectDefObj struct {
 	// Statics are `static fun` methods, dispatched on the type value (Foo.make())
 	// rather than an instance, so they are kept out of the instance vtable above.
 	Statics []methodEntry
-	Env     *Env
+	// StaticFields is the type's own mutable state: one value per `static` field,
+	// read and written through the type value (Foo.next). It makes a def mutable,
+	// which is sound because buildObjectDef allocates a fresh def per execution of
+	// the declaration rather than sharing one across VMs.
+	StaticFields []staticFieldEntry
+	Env          *Env
+}
+
+// staticFieldEntry is one slot of a type's static state. Like methodEntry it is
+// an ordered slice scanned linearly: a type declares a handful of statics, so a
+// name compare over contiguous entries beats a map probe.
+type staticFieldEntry struct {
+	Name string
+	Val  Value
+}
+
+// staticFieldIndex returns the index of static field name, or -1 if absent.
+func (d *objectDefObj) staticFieldIndex(name string) int {
+	for i := range d.StaticFields {
+		if d.StaticFields[i].Name == name {
+			return i
+		}
+	}
+	return -1
 }
 
 // fieldIndex returns the declaration-order index of field name, or -1 if absent.
@@ -232,6 +255,10 @@ type enumDefObj struct {
 type enumValObj struct {
 	Enum string
 	Case string
+	// Ordinal is the case's 0-based position in its declaration, exposed as
+	// `.value`. Stored at construction because the value carries only names, and
+	// recovering the position later would mean finding the enum definition again.
+	Ordinal int64
 }
 type rangeObj struct{ Lo, Hi int64 }
 
@@ -268,7 +295,14 @@ type fibObj struct {
 }
 
 type iterStateObj struct {
-	list     *listObj
+	list *listObj
+	// enumDef holds an enum being iterated; its cases become enum VALUES, so the
+	// loop variable behaves the same as one written Enum.case.
+	enumDef *enumDefObj
+	// strRunes holds a string being iterated, pre-split into runes. Split once at
+	// OpIterInit rather than decoded per step so idx stays a plain index like every
+	// other iterable, and so a multi-byte character counts as one element.
+	strRunes []rune
 	mapObj   *mapObj
 	rng      *rangeObj
 	fib      *fibObj
