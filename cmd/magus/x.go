@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os"
 
-	"golang.org/x/term"
-
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
@@ -168,5 +166,5 @@ func pickTarget(last string) (string, error) {
 
 // isInteractiveTTY reports whether stdin and stderr are both terminals.
 func isInteractiveTTY() bool {
-	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stderr.Fd()))
+	return tty.StdinIsTerminal() && tty.IsTerminalWriter(os.Stderr, tty.SystemProbe)
 }
