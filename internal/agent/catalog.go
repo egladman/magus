@@ -4,6 +4,8 @@
 package agent
 
 import (
+	"archive/tar"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // SkillVersion changes when the installed skill contract changes. It is part
@@ -97,8 +100,86 @@ func (c *Catalog) RenderSkill(skill AgentSkill) []byte {
 	return []byte(fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\n%s\n", skill.Name, strconv.Quote(skill.Description), skill.Body))
 }
 
-// InstallSkillTree renders the standard Agent Skills format into <dir>/<dest>.
-func (c *Catalog) InstallSkillTree(dir, dest string, force bool) ([]string, error) {
+// SkillBytes returns the rendered+stamped bytes for one named skill.
+// Pure rendering: callers decide what to do with the bytes (write to a
+// file, embed in a tar, hash, log).
+func (c *Catalog) SkillBytes(name string) ([]byte, error) {
+	skills, err := c.EmbeddedSkills()
+	if err != nil {
+		return nil, err
+	}
+	for _, skill := range skills {
+		if skill.Name == name {
+			return c.StampSkill(c.RenderSkill(skill)), nil
+		}
+	}
+	return nil, fmt.Errorf("unknown skill %q", name)
+}
+
+// SkillNames returns the embedded skill names in deterministic order.
+func (c *Catalog) SkillNames() ([]string, error) {
+	skills, err := c.EmbeddedSkills()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(skills))
+	for _, skill := range skills {
+		names = append(names, skill.Name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// SkillTar returns a tar archive of every embedded skill at the path
+// `<dest>/<skill-name>/SKILL.md`. The archive is reproducible: tar headers
+// carry a fixed mtime and deterministic mode bits so byte-equal output is
+// possible when the binary and skill content are unchanged. Piping the
+// result to `tar -xf - -C <dir>` is the supported way to install skills
+// outside the workspace root - the shell sees the command, the sandbox sees
+// it, and the user gets to choose the destination.
+func (c *Catalog) SkillTar(dest string) ([]byte, error) {
+	skills, err := c.EmbeddedSkills()
+	if err != nil {
+		return nil, err
+	}
+	if dest == "" {
+		dest = "."
+	}
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	epoch := time.Unix(0, 0).UTC()
+	for _, skill := range skills {
+		body := c.StampSkill(c.RenderSkill(skill))
+		hdr := &tar.Header{
+			Name:    filepath.ToSlash(filepath.Join(dest, skill.Name, "SKILL.md")),
+			Mode:    0o644,
+			Size:    int64(len(body)),
+			ModTime: epoch,
+			Uname:   "",
+			Gname:   "",
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return nil, fmt.Errorf("agent install: tar header: %w", err)
+		}
+		if _, err := tw.Write(body); err != nil {
+			return nil, fmt.Errorf("agent install: tar body: %w", err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("agent install: tar close: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// WriteSkillTree renders the standard Agent Skills format into <dir>/<dest>.
+// The destination must be a path relative to <dir>; absolute paths are
+// refused so magus never silently writes outside the working tree. The
+// caller is responsible for that guard at the CLI surface; this method
+// enforces it for safety.
+func (c *Catalog) WriteSkillTree(dir, dest string, force bool) ([]string, error) {
+	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
+		return nil, fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
+	}
 	skills, err := c.EmbeddedSkills()
 	if err != nil {
 		return nil, err
@@ -133,17 +214,18 @@ const agentsSectionEnd = "<!-- magus:skills:end -->"
 
 var agentsSectionRe = regexp.MustCompile(`(?s)<!-- magus:skills:begin .*?-->.*?<!-- magus:skills:end -->`)
 
-// InstallAgentsSection writes (or replaces) the managed magus section in
-// <dir>/AGENTS.md. Bytes outside the markers are never touched.
-func (c *Catalog) InstallAgentsSection(dir string) ([]string, error) {
+// RenderAgentsSection returns the merged AGENTS.md content for <dir>: the
+// managed magus block placed between its begin/end markers, with everything
+// outside the markers preserved from any existing file. If no file exists
+// at <dir>/AGENTS.md, the result starts with a `# AGENTS.md\n\n` header.
+// Pure rendering: callers decide what to do with the bytes.
+func (c *Catalog) RenderAgentsSection(dir string) ([]byte, error) {
 	path := filepath.Join(dir, "AGENTS.md")
 	block := c.agentsSectionBegin() + "\n\n" + strings.TrimSpace(c.agentsSection) + "\n\n" + agentsSectionEnd
 	existing, err := os.ReadFile(path)
 	switch {
 	case os.IsNotExist(err):
-		if werr := os.WriteFile(path, []byte("# AGENTS.md\n\n"+block+"\n"), 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
+		return []byte("# AGENTS.md\n\n" + block + "\n"), nil
 	case err != nil:
 		return nil, fmt.Errorf("agent install: read %s: %w", path, err)
 	case agentsSectionRe.Match(existing):
@@ -151,14 +233,52 @@ func (c *Catalog) InstallAgentsSection(dir string) ([]string, error) {
 		if strings.HasPrefix(strings.TrimSpace(string(out)), "<!-- magus:skills:begin") {
 			out = []byte("# AGENTS.md\n\n" + string(out))
 		}
-		if werr := os.WriteFile(path, out, 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
+		return out, nil
 	default:
 		out := strings.TrimRight(string(existing), "\n") + "\n\n" + block + "\n"
-		if werr := os.WriteFile(path, []byte(out), 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
+		return []byte(out), nil
+	}
+}
+
+// AgentsSectionTar returns a tar archive containing one file,
+// `AGENTS.md`, with the merged content of the managed magus block for <dir>.
+// Use it the same way as SkillTar: `magus agent install-agents-md
+// --tar --dir . | tar -xf - -C <path>`.
+func (c *Catalog) AgentsSectionTar(dir string) ([]byte, error) {
+	body, err := c.RenderAgentsSection(dir)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	hdr := &tar.Header{
+		Name:    "AGENTS.md",
+		Mode:    0o644,
+		Size:    int64(len(body)),
+		ModTime: time.Unix(0, 0).UTC(),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return nil, fmt.Errorf("agent install: tar header: %w", err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		return nil, fmt.Errorf("agent install: tar body: %w", err)
+	}
+	if err := tw.Close(); err != nil {
+		return nil, fmt.Errorf("agent install: tar close: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// WriteAgentsSection renders and writes the merged AGENTS.md content back
+// to <dir>/AGENTS.md.
+func (c *Catalog) WriteAgentsSection(dir string) ([]string, error) {
+	body, err := c.RenderAgentsSection(dir)
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		return nil, fmt.Errorf("agent install: write %s: %w", path, err)
 	}
 	return []string{"AGENTS.md"}, nil
 }

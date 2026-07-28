@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/tar"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +43,7 @@ func TestAgentsSectionIsPlainASCII(t *testing.T) {
 
 func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 	dir := t.TempDir()
-	written, err := agentSkills.InstallSkillTree(dir, ".claude/skills", false)
+	written, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
 	require.NotEmpty(t, written)
 
@@ -70,7 +72,7 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 	dir := t.TempDir()
 	dests := agent.WellKnownSkillDirs()
 	for _, dest := range dests {
-		_, err := agentSkills.InstallSkillTree(dir, dest, false)
+		_, err := agentSkills.WriteSkillTree(dir, dest, false)
 		require.NoError(t, err)
 	}
 	first, err := os.ReadFile(filepath.Join(dir, dests[0], "magus-query/SKILL.md"))
@@ -84,15 +86,50 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 
 func TestInstallSkillTreeRefusesThenForces(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.InstallSkillTree(dir, ".claude/skills", false)
+	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
 
-	_, err = agentSkills.InstallSkillTree(dir, ".claude/skills", false)
+	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", false)
 	require.Error(t, err, "a second install without --force must refuse")
 	assert.Contains(t, err.Error(), "already exists")
 
-	_, err = agentSkills.InstallSkillTree(dir, ".claude/skills", true)
+	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true)
 	assert.NoError(t, err, "--force overwrites")
+}
+
+func TestInstallSkillTreeRefusesAbsoluteDestination(t *testing.T) {
+	dir := t.TempDir()
+	_, err := agentSkills.WriteSkillTree(dir, "/tmp/abs/skills", false)
+	require.Error(t, err, "an absolute destination must be refused")
+	assert.Contains(t, err.Error(), "outside the working tree")
+
+	_, err = agentSkills.WriteSkillTree(dir, "~/.config/skills", false)
+	require.Error(t, err, "a tilde-prefixed destination must be refused")
+	assert.Contains(t, err.Error(), "outside the working tree")
+}
+
+func TestSkillTarIsReproducibleAndExtracts(t *testing.T) {
+	dir := t.TempDir()
+	body, err := agentSkills.SkillTar(".claude/skills")
+	require.NoError(t, err)
+	require.NotEmpty(t, body)
+
+	// Piping to tar -xf - -C <dir> is the supported install path; simulate it
+	// by writing body to a tempfile and extracting with archive/tar.
+	tmp := filepath.Join(dir, "skills.tar")
+	require.NoError(t, os.WriteFile(tmp, body, 0o644))
+	out := filepath.Join(dir, "out")
+	require.NoError(t, os.MkdirAll(out, 0o755))
+	extractTar(t, tmp, out)
+
+	first, err := os.ReadFile(filepath.Join(out, ".claude/skills", "magus-query", "SKILL.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(first), "name: magus-query")
+
+	// Reproducibility: identical bytes on a second call (no timestamps in body).
+	body2, err := agentSkills.SkillTar(".claude/skills")
+	require.NoError(t, err)
+	assert.Equal(t, body, body2, "SkillTar must be byte-stable across calls")
 }
 
 func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
@@ -100,7 +137,7 @@ func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
 	path := filepath.Join(dir, "AGENTS.md")
 
 	// No AGENTS.md: created holding just the managed section.
-	written, err := agentSkills.InstallAgentsSection(dir)
+	written, err := agentSkills.WriteAgentsSection(dir)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"AGENTS.md"}, written)
 	body, err := os.ReadFile(path)
@@ -111,7 +148,7 @@ func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
 
 	// Existing AGENTS.md with other content: section appended, content preserved.
 	require.NoError(t, os.WriteFile(path, []byte("# My agents notes\n\nkeep me\n"), 0o644))
-	_, err = agentSkills.InstallAgentsSection(dir)
+	_, err = agentSkills.WriteAgentsSection(dir)
 	require.NoError(t, err)
 	body, err = os.ReadFile(path)
 	require.NoError(t, err)
@@ -119,7 +156,7 @@ func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
 	assert.Contains(t, string(body), "magus:skills:begin")
 
 	// Re-install: the section is replaced in place, not duplicated.
-	_, err = agentSkills.InstallAgentsSection(dir)
+	_, err = agentSkills.WriteAgentsSection(dir)
 	require.NoError(t, err)
 	body, err = os.ReadFile(path)
 	require.NoError(t, err)
@@ -151,9 +188,9 @@ func TestCheckSkillStatusesNothingInstalled(t *testing.T) {
 
 func TestCheckSkillStatusesCurrent(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.InstallSkillTree(dir, ".claude/skills", false)
+	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
-	_, err = agentSkills.InstallAgentsSection(dir)
+	_, err = agentSkills.WriteAgentsSection(dir)
 	require.NoError(t, err)
 
 	statuses := agentSkills.CheckStatuses(dir)
@@ -318,5 +355,35 @@ func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
 	assert.Contains(t, doc, vcsSafetyRule) // the shared safety rule
 	for _, r := range doc {
 		require.Less(t, r, rune(128), "sample AGENTS.md must be plain ASCII")
+	}
+}
+
+// extractTar reads a tar archive at src and writes its entries under dst,
+// creating parent directories. Mirrors the user-facing `tar -xf - -C <dst>`
+// pipe that the tar output mode is designed for.
+func extractTar(t *testing.T, src, dst string) {
+	t.Helper()
+	f, err := os.Open(src)
+	require.NoError(t, err)
+	defer f.Close()
+	tr := tar.NewReader(f)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return
+		}
+		require.NoError(t, err)
+		target := filepath.Join(dst, hdr.Name)
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			require.NoError(t, os.MkdirAll(target, 0o755))
+		case tar.TypeReg:
+			require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+			body, err := io.ReadAll(tr)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(target, body, 0o644))
+		default:
+			t.Fatalf("unexpected tar entry type %v for %s", hdr.Typeflag, hdr.Name)
+		}
 	}
 }
