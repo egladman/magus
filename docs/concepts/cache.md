@@ -20,7 +20,7 @@ magus's build cache is **content-addressed**: a target's outputs are keyed by th
 SHA-256 of its inputs, so an unchanged target replays its previous outputs instead
 of rerunning. This page is the **local** model: what magus hashes, what invalidates
 a key, what "replay" restores, and where it all lives on disk. The [remote
-cache](remote-cache.md) shares these same artifacts across machines and layers a
+cache](cache/remote.md) shares these same artifacts across machines and layers a
 signed trust model on top; this page is the substrate it references, so we describe
 it once here and link there for the distributed story.
 
@@ -341,7 +341,7 @@ evicts entries older than a cutoff. To force a clean rebuild of specific project
 
 ## Connecting to the remote cache
 
-Everything above is local to one machine. A [remote cache](remote-cache.md) shares
+Everything above is local to one machine. A [remote cache](cache/remote.md) shares
 these exact artifacts across CI runners: on a **local** miss magus asks the remote
 backend for the artifact keyed by the same `(projectPath, hash)`, and if found
 imports it into the local store so the ordinary hit path replays it - no rebuild.
@@ -354,7 +354,7 @@ that it adds a **signed trust model**: because a replayed artifact injects files
 into a consumer's build, every remote artifact is verified against an Ed25519 trust
 set before it is allowed to replay, and an unsigned or untrusted one falls back to a
 local build. That trust boundary, the backend contract, and CI wiring are covered
-in full in [remote-cache.md](remote-cache.md); this page's model is what it builds
+in full in [remote-cache.md](cache/remote.md); this page's model is what it builds
 on.
 
 ## Glossary
@@ -380,4 +380,4 @@ on.
 - [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
 - [charms.md](charms.md): the execution modifiers that key into the cache as `charm:` lines.
-- [remote-cache.md](remote-cache.md): sharing these artifacts across machines under a signed trust model.
+- [remote-cache.md](cache/remote.md): sharing these artifacts across machines under a signed trust model.

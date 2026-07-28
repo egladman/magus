@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
+  <title>Editor setup - magus</title>
+  <meta name="description" content="Wire your editor to the magus language server (magus buzz lsp) for completion, hover, and signature help in magusfiles and spells.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/guides/integrations/editor/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="Editor setup - magus">
+  <meta property="og:description" content="Wire your editor to the magus language server (magus buzz lsp) for completion, hover, and signature help in magusfiles and spells.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/guides/integrations/editor/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../../../assets/pico.min.css">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="../../../ui-panels.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.3.0" data-released="2026-07-25">
+    <div class="container">
+      <span>magus <strong>v0.3.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.3.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../guides/download/">Download</a></li>
+        <li><a href="../../../tour/">Tour</a></li>
+        <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
+          <h2 class="settings-title">Settings</h2>
+          <p class="settings-note">Saved locally.</p>
+          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li><a href="../../../guides/">Guides</a></li><li><a href="../../../guides/integrations/">Integrations</a></li><li aria-current="page">Editor setup</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/guides/integrations/editor.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../../../guides/integrations/agents/" title="Agents">Agents</a></li>
+          <li><a href="../../../guides/integrations/daemon/" title="Daemon and concurrency">Daemon and concurrency</a></li>
+          <li><a href="../../../guides/integrations/editor/" aria-current="page" title="Editor setup">Editor setup</a></li>
+          <li><a href="../../../guides/integrations/mcp/" title="MCP">MCP</a></li>
+        </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#prerequisites" title="Prerequisites">Prerequisites</a></li><li><a href="#neovim" title="Neovim">Neovim</a></li><li><a href="#helix" title="Helix">Helix</a></li><li><a href="#vs-code" title="VS Code">VS Code</a></li><li><a href="#what-it-does-not-do-yet" title="What it does not do (yet)">What it does not do (yet)</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <article>
+<h1 id="editor-setup">Editor setup</h1>
+<p>magus ships a language <a class="code-xref" href="../../../reference/manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> for the <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> files you author: magusfiles and
+spells. <code>magus buzz lsp</code> speaks the Language Server Protocol over stdio, so any editor
+with a generic LSP client can offer, for a <code>*.buzz</code> file:</p>
+<ul>
+<li><strong><a class="code-xref" href="../../../reference/manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">Completion</a></strong> - <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> names on <code>import &quot;...&quot;</code>, module members after a <code>.</code>
+(<code>fs.</code>, <code>os.</code>, <code>charm.</code>), and bare identifiers, each with its signature and doc.</li>
+<li><strong>Hover</strong> - the signature and documentation of the symbol under the cursor.</li>
+<li><strong>Signature help</strong> - the callee's parameter list while you type inside a call.</li>
+</ul>
+<p>The analysis is the same <a class="glossary-term" href="../../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> the <a href="../../../playground/">interactive playground</a>
+uses; <code>magus buzz lsp</code> is just the transport that hands it to your editor. It reads the
+document text the editor sends and needs no <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, <a class="code-xref" href="../../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>, or <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>
+<p><code>magus</code> on your <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a></code> (see the <a href="../../download/">Download guide</a>). Confirm with
+<code><a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="Print the magus version string, git commit hash, and build date for the currently installed binary.">magus version</a></code>.</p>
+</li>
+<li>
+<p>Confirm the server starts (it waits for LSP input, so this just checks the
+subcommand resolves):</p>
+<pre><code class="language-sh">echo &quot;&quot; | magus buzz lsp    # exits immediately on empty input; no error means it is wired
+</code></pre>
+</li>
+</ul>
+<p>The server is registered for the <code>buzz</code> language and the <code>.buzz</code> file extension.
+A <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> is <code>magusfile.buzz</code>; a <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> is <code>spells/&lt;name&gt;/spell.buzz</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>.</p>
+<h2 id="neovim">Neovim</h2>
+<p>Using the built-in LSP client (Neovim 0.8+), no plugin required. Add to your
+config:</p>
+<pre><code class="language-lua">vim.filetype.add({ extension = { buzz = &quot;buzz&quot; } })
+
+vim.api.nvim_create_autocmd(&quot;FileType&quot;, {
+  pattern = &quot;buzz&quot;,
+  callback = function(args)
+    vim.lsp.start({
+      name = &quot;magus&quot;,
+      cmd = { &quot;magus&quot;, &quot;buzz&quot;, &quot;lsp&quot; },
+      root_dir = vim.fs.root(args.buf, { &quot;magus.yaml&quot;, &quot;magusfile.buzz&quot;, &quot;.git&quot; }),
+    })
+  end,
+})
+</code></pre>
+<p>Completion is then available through <code>vim.lsp.completion</code> (or your completion
+plugin), <code>K</code> triggers hover, and signature help fires inside a call.</p>
+<h2 id="helix">Helix</h2>
+<p>Helix has a built-in LSP client. Add to <code>~/.config/helix/languages.toml</code>:</p>
+<pre><code class="language-toml">[language-server.magus]
+command = &quot;magus&quot;
+args = [&quot;buzz&quot;, &quot;lsp&quot;]
+
+[[language]]
+name = &quot;buzz&quot;
+scope = &quot;source.buzz&quot;
+file-types = [&quot;buzz&quot;]
+roots = [&quot;magus.yaml&quot;, &quot;magusfile.buzz&quot;]
+language-servers = [&quot;magus&quot;]
+</code></pre>
+<p>Restart Helix; open a <code>.buzz</code> file and completion, hover (<code>space k</code>), and
+signature help work immediately.</p>
+<h2 id="vs-code">VS Code</h2>
+<p>VS Code has no built-in generic LSP client, so a thin extension is the usual
+route: register the <code>buzz</code> language for <code>.buzz</code> files and start
+<code>magus buzz lsp</code> as a <code>LanguageClient</code> with a stdio transport. The essential glue in an
+extension's <code>activate</code>:</p>
+<pre><code class="language-ts">import { LanguageClient, TransportKind } from &quot;vscode-languageclient/node&quot;;
+
+const client = new LanguageClient(
+  &quot;magus&quot;,
+  &quot;magus language server&quot;,
+  { command: &quot;magus&quot;, args: [&quot;buzz&quot;, &quot;lsp&quot;], transport: TransportKind.stdio },
+  { documentSelector: [{ scheme: &quot;file&quot;, language: &quot;buzz&quot; }] },
+);
+client.start();
+</code></pre>
+<p>Pair it with a <code>languages</code> contribution in <code>package.json</code> mapping the <code>.buzz</code>
+extension to a <code>buzz</code> language id. Any editor that speaks generic LSP (Sublime via
+LSP, Emacs via <code>eglot</code>/<code>lsp-mode</code>, Zed via an extension) wires up the same way:
+<a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> <code>magus buzz lsp</code>, stdio transport, <code>buzz</code> documents.</p>
+<h2 id="what-it-does-not-do-yet">What it does not do (yet)</h2>
+<p>The server is scoped to the three edit-time features above. It does not publish
+diagnostics, format on save, or resolve cross-file go-to-definition. For those,
+reach for the run-time surfaces: <code><a class="code-xref" href="../../../reference/manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> for workspace <a class="glossary-term" href="../../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a>, <code><a class="code-xref" href="../../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a></code> to preview a resolved <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> or command, and <code>magus buzz -t</code> to run a
+spell's test blocks (see <a href="../../../concepts/spells/">spells</a>).</p>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../../download/">download</a>: install and update the <code>magus</code> binary.</li>
+<li><a href="../../../concepts/spells/">spells</a>: authoring spells, and testing them with <code>magus buzz -t</code>.</li>
+<li><a href="../../../concepts/targets/">targets</a>: the magusfile targets the server completes.</li>
+<li><a href="../../../playground/">playground.html</a>: the same analysis engine, in the browser.</li>
+</ul>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../daemon/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Daemon and concurrency</span></a>
+      <a class="page-nav-next" href="../mcp/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MCP</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../../guides/integrations/"><span class="related-card-title">Integrations</span><span class="related-card-desc">Pages in this section.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22editor%22">editor</a><a class="tag" href="../../../search/?q=tag%3A%22lsp%22">lsp</a><a class="tag" href="../../../search/?q=tag%3A%22language-server%22">language-server</a><a class="tag" href="../../../search/?q=tag%3A%22completion%22">completion</a><a class="tag" href="../../../search/?q=tag%3A%22hover%22">hover</a><a class="tag" href="../../../search/?q=tag%3A%22neovim%22">neovim</a><a class="tag" href="../../../search/?q=tag%3A%22vscode%22">vscode</a><a class="tag" href="../../../search/?q=tag%3A%22helix%22">helix</a></div>
+    <small>Last updated <time datetime="2026-07-28T16:08:23Z">July 28, 2026, 4:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d371df6bc7420bf2418692b5f0f894d2e744f1b2" data-tooltip="d371df6bc7420bf2418692b5f0f894d2e744f1b2" title="d371df6bc7420bf2418692b5f0f894d2e744f1b2">d371df6b</a>)</small>
+  </div>
+  <details class="ref-section" open>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="magusfile">Magusfile</h3>
+<p>The <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and
+binds its spells. See <a href="../../../concepts/targets/">targets</a>.</p>
+<h3 id="target">Target</h3>
+<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
+may compose a spell's tool-native operations and depend on other targets. See
+<a href="../../../concepts/targets/">targets</a>.</p>
+<h3 id="spell">Spell</h3>
+<p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
+toolchain's real commands. See <a href="../../../concepts/spells/">spells</a>.</p>
+<h3 id="charm">Charm</h3>
+<p>An execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target
+runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in
+place, and <code>ci</code> always strips it. See <a href="../../../concepts/charms/">charms</a>.</p>
+<h3 id="module">Module</h3>
+<p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
+exec, vcs, and more. See <a href="../../../reference/buzz/">the module reference</a>.</p>
+<h3 id="buzz">Buzz</h3>
+<p>The language magusfiles are written in (the <code>.buzz</code> engine). See
+<a href="../../../concepts/engines/">engines</a>.</p>
+<h3 id="engine">Engine</h3>
+<p>The interpreter a magusfile runs on; magus embeds the Buzz engine. See
+<a href="../../../concepts/engines/">engines</a>.</p>
+<h3 id="daemon">Daemon</h3>
+<p>The background magus host that owns shared state such as services and the warm
+knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="health">Health</h3>
+<p>The at-a-glance daemon state derived from the pool: <strong>healthy</strong> when the pool is
+reporting, <strong>degraded</strong> when it reports an error, <strong>down</strong> when there is no pool.
+The dashboard color-codes each state. See <a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="surface">Surface</h3>
+<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
+Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
+you navigate to: it is mounted into a tab, or into a pane beside another one.
+Each is single-instance - opening one you already have focuses it instead of
+duplicating it. See <a href="../../../reference/console/">reference/console</a>.</p>
+</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed"><h1 id="documentation-conventions">Documentation conventions</h1>
+<p>A few conventions run through every page on this site. This page is the key.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Angle brackets mark a value you replace with your own - never type the brackets:</p>
+<pre><code class="language-sh">magus run &lt;target&gt;
+magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
+</code></pre>
+<p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="shell-commands">Shell commands</h2>
+<p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
+<code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>
+<pre><code class="language-sh">magus version
+# magus 0.4.2
+</code></pre>
+<p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="runnable-examples">Runnable examples</h2>
+<p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
+the snippet in the in-browser <a href="../../../playground/">playground</a> via WebAssembly - no
+install needed. Blocks without the button are illustrative only. (With JavaScript
+off, every block is plain, copyable text.)</p>
+<h2 id="admonitions">Admonitions</h2>
+<p>Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent
+per type:</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note</p>
+<p>Context worth knowing, but not a warning.</p>
+</div>
+<!-- -->
+<div class="admonition admonition-warning"><p class="admonition-title">Warning</p>
+<p>Something that can bite you if ignored.</p>
+</div>
+<p>The types are <code>NOTE</code>, <code>TIP</code>, <code>IMPORTANT</code>, <code>WARNING</code>, and <code>CAUTION</code>.</p>
+<h2 id="footnotes">Footnotes</h2>
+<p>An aside that would break the flow inline is written as a footnote: a bracketed
+superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
+links back. The generated module reference uses them to flag methods that also exist
+in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
+<h2 id="code-block-titles">Code-block titles</h2>
+<p>A fenced block can carry a filename or label in a small caption bar above it, so you
+know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
+<h2 id="diffs">Diffs</h2>
+<p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
+removed lines (leading <code>-</code>) as a red one.</p>
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
+ }
+</code></pre>
+<h2 id="auto-generated-pages">Auto-generated pages</h2>
+<p>Pages built from source - the <a href="../../../reference/buzz/">module reference</a>, the
+<a href="../../../concepts/spells/">spell reference</a>, the <a href="../../../reference/manpage/magus/">man pages</a>, and the
+<a href="../../../reference/config/">configuration reference</a> - carry an <strong>auto-generated</strong> chip. Edit the
+generator, not the page; a hand edit is overwritten on the next build.</p>
+<h2 id="reading-time">Reading time</h2>
+<p>Longer pages show an estimated reading time near the top. It is a word count of the
+source, not a tracker - nothing is measured about you.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>Authored as <code>text[^label]</code> in the prose, with a matching <code>[^label]: note</code>
+line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+</div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="../../../console/">Console</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

@@ -96,6 +96,108 @@ branch that notices is whichever one fails next.
 workflow consumes a value instead of a list. A branch that gains or loses a
 project changes its plan output, not its workflow.
 
+### The gate is a commit hook, so it is not a gate
+
+A pre-commit hook that runs lint or type-checking feels like enforcement. It is
+not. It runs on the machine of the person being checked, which means it is
+advisory by construction:
+
+- `git commit --no-verify` skips it, and people reach for that when they are in a
+  hurry, which is exactly when the check matters.
+- A fresh clone has no hooks until someone remembers to install them. Hooks are
+  not versioned with the code they guard.
+- Commits that never touch a working copy - a web UI edit, a bot, a merge queue,
+  an agent - never run one at all.
+- It checks the files in front of it, not the state of the branch after the merge.
+
+This is the same mistake as validating in the client and trusting the result.
+The check has to run somewhere the person being checked does not control,
+or it is a suggestion wearing a gate's clothing. The failure mode is
+characteristic: an error reaches the main branch, and now it fails for
+*everyone* - including people whose change had nothing to do with it - until
+somebody volunteers to fix a break they did not cause.
+
+**magus:** keep the hook, demote it. Its job is fast feedback while you work, not
+admission control. The gate is one line, running where nobody can pass `--no-verify`:
+
+```yaml
+- run: magus affected ci
+```
+
+Two properties make that a real boundary rather than a second copy of the hook:
+
+**It runs the same target the hook runs.** A hook that invokes `magus run lint`
+and CI that invokes `magus affected ci` reach the identical target definition from
+the magusfile, versioned with the code. There is no separate CI script to drift
+out of sync, so "passes locally, fails in CI" stops being a category of bug.
+
+**It cannot silently check nothing.** `magus affected ci` errors when no project in
+scope declares a `ci` target, rather than exiting 0 - see
+[the gate goes green having run nothing](#the-gate-goes-green-having-run-nothing).
+A gate that can be trivially bypassed and a gate that quietly does nothing fail the
+same way; both need to be loud.
+
+For anything derived rather than authored - generated files, formatting, lockfiles -
+do not check it in a hook at all. Check for **drift**: regenerate and fail if the
+tree changed. That is the next pitfall, and it is the same principle applied to
+files instead of commits.
+
+### The merge is the first time a step runs
+
+A pull request runs one workflow. The main branch runs a different one. Somewhere
+in the second is a step the first never had - building types, a codegen pass, a
+stricter lint - and the first time it executes on a given change is *after* that
+change has already landed.
+
+When it fails, it fails on main, which means it fails for everyone. The author who
+broke it has moved on; the next person to pull is the one who finds out. Reverting
+is a merge commit and a conversation, where a red PR would have been a rebase.
+
+The subtle part is that the PR gate is not weak. It is passing honestly - it is
+just gating a pipeline that is not the one protecting main. Two workflows drift
+apart the way any two copies do, and nothing in either file says the other exists.
+
+**The distinction that matters is not PR versus main, it is verification versus
+delivery.** Publishing a package, pushing an image, tagging a release, deploying -
+those genuinely cannot happen before the merge, and keeping them on main is
+correct. But a step that *builds*, *checks*, *generates*, or *type-checks* can
+fail for a reason a pull request could have caught, and every one of those belongs
+in front of the merge. If a step can go red for a code reason, running it only on
+main means you have chosen to find out late.
+
+A useful test: **could you run the main-branch pipeline against a pull request?**
+If the honest answer is no, ask which part is actually delivery. Usually it is a
+small tail, and everything before it could have run on the PR all along.
+
+**magus:** both branches run the same contract.
+
+```yaml
+- run: magus affected ci
+```
+
+There is one `ci` target, composed in the magusfile and versioned with the code.
+A PR and a main build reach the identical definition, so there is no second
+pipeline to drift.
+
+What legitimately differs between them is **scope and permission, not steps**:
+
+- **Scope** comes from the diff. A PR's affected set is computed against the merge
+  base, main's against the previous commit. Different projects, same target.
+- **Permission** comes from [charms](../charms.md). Locally a `generate` target
+  carries `rw` and writes; CI strips the default charm and the same target becomes a
+  drift gate. That is one target with two intents, rather than two pipelines that
+  happen to share a name.
+- **Trust** is a variable, not a workflow. Gate cache writes on the event, and PRs
+  replay the shared cache without publishing to it - while running exactly the same
+  steps:
+
+  ```yaml
+  MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
+  ```
+
+Keep delivery in its own job, gated on the merge, and let it depend on the same
+`ci` target rather than re-deriving what to check.
+
 ### Generated files pass locally and fail in CI
 
 Codegen that runs locally and rewrites the tree makes a dirty checkout look
@@ -159,4 +261,4 @@ A complementary defense is to open the cache **read-only on untrusted refs**: re
 MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
 ```
 
-To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own backend) and generate signing keys, see [Remote caching](../remote-cache.md).
+To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own backend) and generate signing keys, see [Remote caching](../cache/remote.md).

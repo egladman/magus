@@ -252,7 +252,7 @@ depth), click a legend color to isolate a kind, and use the **hubs**/**orphans**
 lenses (the visual twin of `magus graph stats`). The page is fully client-side and
 data-agnostic - it also loads any `graph.json` from `magus graph export -o json`
 via the Open-file button or drag-and-drop. This site's own graph is the
-[demo](../console/graph/#demo).
+[demo](../console/).
 
 ## Schema
 

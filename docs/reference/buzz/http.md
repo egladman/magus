@@ -22,7 +22,7 @@ HTTP client with automatic retry on transient errors.
 
 Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
 
-**Signature:** `http\get(url, [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L112)
+**Signature:** `http\get(url, [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L111)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -47,7 +47,7 @@ std\print(r.body.sub(0, 80) + "...");
 
 Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
 
-**Signature:** `http\post(url, body, [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L118)
+**Signature:** `http\post(url, body, [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L117)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -77,7 +77,7 @@ final r = http\post(
 
 Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).
 
-**Signature:** `http\request(method, url, [body], [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L124)
+**Signature:** `http\request(method, url, [body], [headers], [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L123)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -108,7 +108,7 @@ final r = http\request(
 
 Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {"/": "docs/gen", "/console/": "console/gen"}) serves multiple roots where a request routes to the LONGEST matching prefix, so "/console/" wins over "/" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.
 
-**Signature:** `http\server(opts) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L136)
+**Signature:** `http\server(opts) → int` · [source](https://github.com/egladman/magus/blob/main/std/http.go#L135)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

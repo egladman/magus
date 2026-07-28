@@ -36,12 +36,15 @@
 // The short version: a cache key answers "did this change?", a ref answers "what
 // happened that time?". Reach for `magus tail` to follow a run live, and a ref
 // when you want the exact bytes of one that already finished.
+//
+// (The body below uses os.exec, which runs a real command. magus.cmd is the escape
+// hatch for invoking magus ITSELF - `magus\cmd(["sh", ...])` would run `magus sh`.)
 
 import "magus";
+import "os";
 
 magus\project({});
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    // Fails on purpose, so the run mints a ref you can inspect.
-    magus\cmd(["sh", "-c", "echo 'compiling widget...'; echo 'error: undefined symbol' >&2; exit 1"]);
+    os\exec("sh", ["-c", "echo 'compiling widget...'; echo 'error: undefined symbol' >&2; exit 1"], ".", {});
 }

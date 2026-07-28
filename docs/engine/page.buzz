@@ -290,7 +290,12 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // Page tools: plain links on the right of the secondary row, middot-separated. "View
     // source" only appears for pages backed by a real .md on disk (synthesized pages like
     // the blog index and /public/* have none).
-    final hasSource = srcRel.endsWith(".md") and srcRel.startsWith("public/") == false
+    // A page has a markdown source only if a reader could actually open one. The
+    // "/_index.md" suffix is the marker for a SYNTHESIZED page (section overviews,
+    // development pages): the path exists to give rootPrefix and the breadcrumb the
+    // right depth, not to name a file, so there is nothing to view or edit.
+    final hasSource = srcRel.endsWith(".md") and srcRel.endsWith("/_index.md") == false
+        and srcRel.startsWith("public/") == false
         and srcRel != site.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md";
     var edit = "<small class=\"page-tools-edit\">";
     if (hasSource) {
@@ -409,7 +414,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "pager": pager,
         "related": site.renderRelated(srcRel, root),
         "provenance": provenance,
-        "refdrawer": renderReferenceDrawer(root, site),
+        "refdrawer": renderReferenceDrawer(root, canonUrl, site),
         "footer": renderSiteFooter(root, site),
     });
 }

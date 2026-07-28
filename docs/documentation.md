@@ -81,7 +81,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [CI](concepts/targets/ci.md) - compose a `ci` target with `magus\needs`, and the shared-cache trust model.
 - [Daemon and concurrency](guides/daemon.md) - one persistent process, one shared pool across every client.
 - [Concurrency](concepts/concurrency.md) - the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations (with `MAGUS_NO_WAIT`).
-- [Remote caching](concepts/remote-cache.md) - share the build cache across machines and CI, with a signing-based trust model.
+- [Remote caching](concepts/cache/remote.md) - share the build cache across machines and CI, with a signing-based trust model.
 - [Editor setup](guides/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
 - [Debugging](guides/debugging.md) - the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
 - [Tips and tricks](guides/tips.md) - non-obvious ways to combine subcommands.

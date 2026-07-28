@@ -65,6 +65,7 @@ import "engine/page" as _;
 import "site/public" as _;
 import "engine/blog" as _;
 import "engine/search" as _;
+import "site/sections" as _;
 import "site/tour" as _;
 import "site/development" as _;
 // The concrete site configuration (base URL, title, nav, generated-tree names) - the only
@@ -216,6 +217,13 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // Map each concept to the tour step that demos it, for the "see the demo" callout.
     collectDemos(site);
 
+    // A directory with pages but no page of its own is a URL you cannot visit.
+    // Synthesize one before anything renders, so breadcrumbs, the section nav,
+    // Related, and the subtree all see it as a real page. It has to come AFTER
+    // the collect* passes above: those read each page's markdown off disk, and a
+    // synthesized page has no file behind its srcRel marker.
+    collectSectionIndexes(site);
+
     renderPlayground(site);
 
     // Load release manifests from releases/*.yaml BEFORE the walk so renderPage() knows
@@ -234,6 +242,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
     // Build /development/ before writeAliases so its pages are in site.pageUrls for the
     // collision guard, and its collectAlias redirects (retired /development/projects/ URLs)
     // get stubs in the same pass.
+    // After the walk: every child's title and description is known by now.
+    renderSectionIndexes(site);
+
     renderDevelopment(site);
 
     // Emit a redirect stub per frontmatter alias (after the walk, so every real page URL is

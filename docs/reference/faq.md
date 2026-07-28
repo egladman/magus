@@ -78,7 +78,7 @@ surface; a target is the normal way in. See [operations.md](../concepts/operatio
 
 No. magus operates on your files and your infrastructure. Telemetry is off by
 default and, when enabled, ships to _your_ OTLP collector, not a magus-operated
-backend. The [remote cache](../concepts/remote-cache.md) is your storage. See
+backend. The [remote cache](../concepts/cache/remote.md) is your storage. See
 [telemetry.md](../concepts/telemetry.md).
 
 ## How do I see what a target will actually run before running it?

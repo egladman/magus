@@ -21,7 +21,7 @@ magus version
 ```
 
 `${VERSION}` above is the current release. This is the static build, the default for
-the installer. Dynamic builds are also listed at [/public/release/](../../../public/release/)
+the installer. Dynamic builds are also attached to each [GitHub release](https://github.com/egladman/magus/releases)
 when you need one.
 
 ## Verify the download

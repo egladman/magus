@@ -41,6 +41,9 @@ export fun renderBlogAtom(site: Site) > void {
     body = body + "</feed>\n";
     fs\makeDirectory(site.outDir + "/public/atom");
     fs\writeFile(site.outDir + "/public/atom/blog.atom.xml", body);
+    // Register it: pruneStaleOutputs deletes a directory whose index.html is no
+    // longer produced, and /public/atom/ has no page of its own.
+    site.writtenPaths["public/atom/blog.atom.xml"] = true;
 }
 
 
@@ -74,4 +77,7 @@ export fun renderReleasesAtom(site: Site) > void {
     body = body + "</feed>\n";
     fs\makeDirectory(site.outDir + "/public/atom");
     fs\writeFile(site.outDir + "/public/atom/releases.atom.xml", body);
+    // Register it: pruneStaleOutputs deletes a directory whose index.html is no
+    // longer produced, and /public/atom/ has no page of its own.
+    site.writtenPaths["public/atom/releases.atom.xml"] = true;
 }

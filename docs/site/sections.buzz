@@ -1,0 +1,127 @@
+// site/sections.buzz - synthesized section overview pages. A docs directory that
+// holds pages but has no page of its own is a dead end: /concepts/ was a URL you
+// could not visit, so the only way to learn what a section contained was to
+// already know a page inside it. Search and tags help the reader who can name
+// what they want; a section index is what serves the one who cannot.
+//
+// The idea is the /public/ autoindex's (site/public.buzz), applied to prose: emit
+// a page where the tree implies one. The rendering differs because the audience
+// does - a directory listing wants names and sizes, a docs section wants titles
+// and descriptions.
+//
+// Two passes, because the corpus has to settle first:
+//   collectSectionIndexes  runs right after collectDocPages, so a synthesized
+//                          overview is in docPages before anything renders and
+//                          every page can link to, rank against, and nest under it.
+//   renderSectionIndexes   runs after the walk, when every child's title and
+//                          description are known.
+namespace sections;
+
+import "fs";
+import "std";
+import "strings";
+import "template";
+import "engine/types" as _;
+import "engine/page" as _;
+
+// sectionTitle turns a URL segment into a heading: "targets" -> "Targets",
+// "ci-providers" -> "Ci providers". Deliberately dumb - a section that wants a
+// better name should get a real authored page, which this then steps aside for.
+fun sectionTitle(seg: str) > str {
+    if (seg == "") { return "Documentation"; }
+    final spaced = seg.replace("-", " ");
+    return strings\capitalize(spaced);
+}
+
+// parentPrefixes returns every ancestor directory URL of a page URL, each with a
+// trailing slash: "a/b/c/" -> ["a/", "a/b/"]. The page's own URL is excluded; a
+// page is not its own parent.
+fun parentPrefixes(url: str) > [str] {
+    var dirs: [str] = mut [<str>];
+    final segs = splitPath(url);
+    var acc = "";
+    var i = 0;
+    while (i < segs.len() - 1) {
+        acc = acc + segs[i] + "/";
+        dirs.append(acc);
+        i = i + 1;
+    }
+    return dirs;
+}
+
+// collectSectionIndexes appends a DocPage for every directory that has pages
+// beneath it but no page of its own. Registering before the walk is what makes
+// the synthesized page a first-class citizen: breadcrumbs resolve through it, the
+// section nav lists its children, Related can rank against it, and the subtree
+// finally has something to hang off.
+//
+// An authored overview always wins - if concepts.md exists, nothing is
+// synthesized for concepts/.
+export fun collectSectionIndexes(site: Site) > void {
+    // Every URL that already has a page, so an authored overview is never shadowed.
+    var have: {str: bool} = mut {};
+    foreach (p in site.docPages) { have[p.url] = true; }
+
+    // Directories implied by the corpus, and how many pages sit beneath each.
+    var implied: {str: bool} = mut {};
+    foreach (p in site.docPages) {
+        foreach (dir in parentPrefixes(p.url)) {
+            if (have[dir] == null) { implied[dir] = true; }
+        }
+    }
+
+    foreach (dir in implied.keys()) {
+        final segs = splitPath(dir);
+        final title = sectionTitle(segs[segs.len() - 1]);
+        site.docPages.append(DocPage{
+            url = dir,
+            title = title,
+            desc = "Pages in this section.",
+            // The marker srcRel the page pipeline expects for a synthesized page;
+            // no .md exists on disk, so "View source" correctly stays hidden.
+            srcRel = dir + "_index.md",
+            section = segs[0],
+            overview = true,
+        });
+    }
+}
+
+// renderSectionIndexes writes each synthesized overview: a card per direct child,
+// title and description, same shape as the Related grid so the two read as one
+// vocabulary rather than two.
+//
+// Only DIRECT children get cards. The full branch is already in the sidebar's
+// "Everything here" list, which this page now qualifies for, so repeating the
+// whole subtree in the body would say the same thing twice at different sizes.
+export fun renderSectionIndexes(site: Site) > void {
+    foreach (p in site.docPages) {
+        if (p.srcRel.endsWith("/_index.md") == false) { continue; }
+
+        var cards: [{str: any}] = mut [<{str: any}>];
+        foreach (c in site.docPages) {
+            if (c.url == p.url or c.url.startsWith(p.url) == false) { continue; }
+            if (splitPath(c.url.sub(p.url.len())).len() != 1) { continue; }
+            cards.append(mut {"url": c.url, "title": c.title, "desc": c.desc, "hasDesc": c.desc != ""});
+        }
+        if (cards.len() == 0) { continue; }
+
+        final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
+            return strLess("" + a["title"], "" + b["title"]);
+        });
+
+        final root = rootPrefix(p.srcRel, site);
+        final body = template\render(`  <div class="related-grid section-index-grid">
+{{#cards}}
+    <a class="related-card" href="{{root}}{{url}}"><span class="related-card-title">{{title}}</span>{{#hasDesc}}<span class="related-card-desc">{{desc}}</span>{{/hasDesc}}</a>
+{{/cards}}
+  </div>
+`, {"root": root, "cards": ordered});
+
+        final doc = renderPage(p.title, p.desc, body, p.srcRel, "", p.url, "", mut [], site);
+        final dir = site.outDir + "/" + p.url.sub(0, p.url.len() - 1);
+        fs\makeDirectory(dir);
+        fs\writeFile(dir + "/index.html", doc);
+        site.addRecord(p.url, p.title, p.desc, p.title + " " + p.desc);
+        site.pageUrls[p.url] = true;
+    }
+}

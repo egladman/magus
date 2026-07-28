@@ -11,7 +11,7 @@ magus ships as a single self-contained binary. Download it with `curl`, extract 
 ## Quick install
 
 ```sh
-VERSION=v0.2.1
+VERSION=v0.3.0
 ASSET=magus_${VERSION}_darwin_arm64-static.tar.gz       # Apple Silicon
 # Intel Macs:
 #   ASSET=magus_${VERSION}_darwin_amd64-static.tar.gz
@@ -23,7 +23,7 @@ magus version
 ```
 
 `${VERSION}` above is the current release. The static build is the installer default;
-[/public/release/](../../../public/release/) also lists dynamic builds when available.
+[GitHub Releases](https://github.com/egladman/magus/releases) also lists dynamic builds when available.
 
 ## Verify the download
 

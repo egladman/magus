@@ -147,3 +147,19 @@ volatility/
 wards/
 workspace/
 buzz/modules/xml/
+
+# retired with the /public/ autoindex rework: the four nested Apache-style listing
+# pages (and one per release) are gone. The FILES under these paths still serve -
+# public/atom/*.atom.xml and public/release/index.json are unchanged - so what 404s
+# is only the directory listing, exactly as a server with autoindex off behaves.
+public/atom/
+public/release/
+public/release/v0.1.0/
+public/release/v0.2.0/
+public/release/v0.2.1/
+
+# MGS2009 retired with the network-egress audit log. The hook observed only the
+# http.* Buzz binding - not magus's own traffic, not any subprocess - so the code
+# documented a coverage that never existed. No successor page: there is no network
+# sandbox to describe.
+reference/codes/sandbox/MGS2009/

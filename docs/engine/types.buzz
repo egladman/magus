@@ -819,13 +819,31 @@ export object Site {
         foreach (anchor in this.glossaryRefs.keys()) {
             final urls = this.glossaryRefs[anchor];
             if (urls == null) { continue; }
-            var links = "";
-            var first = true;
+            // A URL with no docs page behind it cannot be rendered as a link a reader
+            // can act on. The home page reaches here under two spellings - "" from the
+            // walk and "index.html" from the root render - and only one of them is a
+            // docPages URL, so the other used to emit <a href="../index.html"></a>:
+            // an anchor with no text, unclickable and silent to a screen reader.
+            // Dropping the untitled spelling both fixes that and de-duplicates the
+            // home page, which would otherwise be listed twice under one term.
+            var seen: {str: bool} = mut {};
+            var items = "";
+            var count = 0;
             foreach (u in urls!) {
-                if (first) { first = false; } else { links = links + ", "; }
-                links = links + "<a href=\"" + relativePath("glossary", u) + "\">" + this.lookupTitle(u) + "</a>";
+                final title = this.lookupTitle(u);
+                if (title == "") { continue; }
+                if (seen[u] != null) { continue; }
+                seen[u] = true;
+                items = items + "<li><a href=\"" + relativePath("glossary", u) + "\">" + title + "</a></li>";
+                count = count + 1;
             }
-            byAnchor[anchor] = "<p class=\"glossary-backlinks\"><span class=\"glossary-backlinks-label\">Referenced on</span> " + links + "</p>\n";
+            if (count == 0) { continue; }
+            // A list, marked up as one. The busiest terms are referenced on ~70 pages,
+            // and comma-joining those into a <p> produced a wall of prose where the
+            // reader wanted a scannable index - so this is a <nav> landmark with a real
+            // heading, matching how every other set-of-page-links on the site is built.
+            byAnchor[anchor] = "<nav class=\"glossary-backlinks\" aria-label=\"Pages referencing this term\">"
+                + "<h4>Referenced on</h4><ul>" + items + "</ul></nav>\n";
         }
         return byAnchor;
     }
