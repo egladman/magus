@@ -28,6 +28,36 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return host.AnyMapVal(ret0.ToMap()), nil
 	}))
+	m.MapSet("ls", vm.DirectValue("magus.ls", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusLs(ctx)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.AnyMapVal(ret0.ToMap()), nil
+	}))
+	m.MapSet("affected", vm.DirectValue("magus.affected", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		base := host.Str(bzArgs, 0)
+		ret0, err := std.MagusAffected(ctx, base)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.AnyMapVal(ret0.ToMap()), nil
+	}))
+	m.MapSet("graph", vm.DirectValue("magus.graph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusGraph(ctx)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.AnyMapVal(ret0.ToMap()), nil
+	}))
+	m.MapSet("where", vm.DirectValue("magus.where", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		dir := host.Str(bzArgs, 0)
+		ret0, err := std.MagusWhere(ctx, dir)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.StrVal(ret0), nil
+	}))
 	m.MapSet("run", vm.DirectValue("magus.run", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := host.StrSlice(bzArgs, 0)
 		opts := host.AnyMap(bzArgs, 1)

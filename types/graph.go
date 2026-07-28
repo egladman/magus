@@ -86,3 +86,56 @@ func (g *Graph) Successors(path string) []string   { return g.repo.Successors(pa
 func (g *Graph) Predecessors(path string) []string { return g.repo.Predecessors(path) }
 func (g *Graph) Nodes() []string                   { return g.repo.Nodes() }
 func (g *Graph) Project(path string) *Project      { return g.projects[path] }
+
+// GraphView is the boundary record magus.graph returns: the project dependency
+// DAG flattened to plain data a magusfile can walk.
+//
+// Nodes are in topological order, so a caller that just iterates gets a valid
+// build order without sorting anything itself - which is the question a magusfile
+// asks the graph most often. dependsOn is the direct-predecessor set per node, so
+// the caller can still reconstruct the edges.
+type GraphView struct {
+	Nodes     []string
+	DependsOn map[string][]string
+	// BlastRadius is how many projects each node can affect, transitively. It is
+	// the number a magusfile branches on to decide whether a change is safe to
+	// batch, and it is already computed by the graph.
+	BlastRadius map[string]int
+}
+
+// ToMap is the Buzz boundary map magus.graph returns.
+func (g GraphView) ToMap() map[string]any {
+	dependsOn := make(map[string]any, len(g.DependsOn))
+	for k, v := range g.DependsOn {
+		dependsOn[k] = v
+	}
+	blast := make(map[string]any, len(g.BlastRadius))
+	for k, v := range g.BlastRadius {
+		blast[k] = v
+	}
+	return map[string]any{
+		"nodes":       g.Nodes,
+		"dependsOn":   dependsOn,
+		"blastRadius": blast,
+	}
+}
+
+// View flattens the graph into the boundary record above.
+//
+// Edges in this graph run DEPENDENT -> DEPENDENCY, so Successors(web) is what web
+// depends on and TopoSort yields dependents before dependencies. A caller wanting a
+// build order needs the reverse, which is what Nodes gives. (Measured, not assumed:
+// for web depending on api, TopoSort returns [. web api] and Successors(web) is
+// [api]. Note TopoSort's own doc comment claims the opposite order.)
+func (g *Graph) View() GraphView {
+	topo := g.TopoSort()
+	nodes := make([]string, len(topo))
+	for i, n := range topo {
+		nodes[len(topo)-1-i] = n
+	}
+	dependsOn := make(map[string][]string, len(nodes))
+	for _, n := range nodes {
+		dependsOn[n] = g.Successors(n)
+	}
+	return GraphView{Nodes: nodes, DependsOn: dependsOn, BlastRadius: g.BlastRadius()}
+}

@@ -149,6 +149,37 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		}))
 	}
 
+	// The in-process read-only verbs return workspace data on the real module. A dry
+	// run has no workspace, so each is stubbed with its result SHAPE - an empty but
+	// correctly-keyed record - so field access (magus.ls().projects, .affected) still
+	// resolves instead of blowing up on null.
+	m.MapSet("ls", fn("magus.ls", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("projects", vm.ListValue(nil))
+		return res, nil
+	}))
+	m.MapSet("affected", fn("magus.affected", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("base", vm.StrValue(""))
+		res.MapSet("changed", vm.ListValue(nil))
+		res.MapSet("seed", vm.ListValue(nil))
+		res.MapSet("filesBySeed", vm.NewMap())
+		res.MapSet("affected", vm.ListValue(nil))
+		return res, nil
+	}))
+	m.MapSet("where", fn("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StrValue(""), nil
+	}))
+	m.MapSet("graph", fn("magus.graph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("nodes", vm.ListValue(nil))
+		res.MapSet("dependsOn", vm.NewMap())
+		res.MapSet("blastRadius", vm.NewMap())
+		return res, nil
+	}))
+
 	// magus.modules()/magus.module(name) introspect the real host module registry,
 	// which the sandbox doesn't wire (pulling host/std in would bloat the playground).
 	// Stub them as empty-but-shaped so a reference and field access (e.g.
