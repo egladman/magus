@@ -17,15 +17,23 @@ import (
 // Diagnostic codes (MGS####): 1000=magusfile authoring, 2000=sandbox, 3000=workspace-scope, 4000=race detection, 5000=services, 6000=charms, 7000=knowledge-graph extraction, 8000=output references, 9000=auth/connector.
 
 // Base URLs for diagnostic documentation, keyed by code-prefix subdir.
+//
+// These point at the rendered docs SITE, not at the Markdown source on the repo host.
+// A code in a terminal is something a reader clicks while stuck, so it should land on a
+// styled page with its navigation, search, and cross-links intact - not on a raw file
+// view. It also means the URL survives the source moving, since the site keeps a
+// redirect for a page that relocates and the blob URL would simply 404.
+//
+// No ".md": the site serves each code as a directory URL.
 const (
-	diagnosticSandboxBase   = "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/"
-	diagnosticRaceBase      = "https://github.com/egladman/magus/blob/main/docs/reference/codes/race/"
-	diagnosticMagusfileBase = "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/"
-	diagnosticServicesBase  = "https://github.com/egladman/magus/blob/main/docs/reference/codes/services/"
-	diagnosticCharmsBase    = "https://github.com/egladman/magus/blob/main/docs/reference/codes/charms/"
-	diagnosticKnowledgeBase = "https://github.com/egladman/magus/blob/main/docs/reference/codes/knowledge/"
-	diagnosticOutputRefBase = "https://github.com/egladman/magus/blob/main/docs/reference/codes/outputref/"
-	diagnosticAuthBase      = "https://github.com/egladman/magus/blob/main/docs/reference/codes/auth/"
+	diagnosticSandboxBase   = "https://eli.gladman.cc/magus/reference/codes/sandbox/"
+	diagnosticRaceBase      = "https://eli.gladman.cc/magus/reference/codes/race/"
+	diagnosticMagusfileBase = "https://eli.gladman.cc/magus/reference/codes/magusfile/"
+	diagnosticServicesBase  = "https://eli.gladman.cc/magus/reference/codes/services/"
+	diagnosticCharmsBase    = "https://eli.gladman.cc/magus/reference/codes/charms/"
+	diagnosticKnowledgeBase = "https://eli.gladman.cc/magus/reference/codes/knowledge/"
+	diagnosticOutputRefBase = "https://eli.gladman.cc/magus/reference/codes/outputref/"
+	diagnosticAuthBase      = "https://eli.gladman.cc/magus/reference/codes/auth/"
 )
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code). It aliases the framework's Code type, so
@@ -51,21 +59,21 @@ var ErrDiag = diag.ErrSentinel
 var mgs = diag.New(func(c DiagnosticCode) string {
 	switch {
 	case strings.HasPrefix(string(c), "MGS9"):
-		return diagnosticAuthBase + string(c) + ".md"
+		return diagnosticAuthBase + string(c) + "/"
 	case strings.HasPrefix(string(c), "MGS8"):
-		return diagnosticOutputRefBase + string(c) + ".md"
+		return diagnosticOutputRefBase + string(c) + "/"
 	case strings.HasPrefix(string(c), "MGS7"):
-		return diagnosticKnowledgeBase + string(c) + ".md"
+		return diagnosticKnowledgeBase + string(c) + "/"
 	case strings.HasPrefix(string(c), "MGS6"):
-		return diagnosticCharmsBase + string(c) + ".md"
+		return diagnosticCharmsBase + string(c) + "/"
 	case strings.HasPrefix(string(c), "MGS5"):
-		return diagnosticServicesBase + string(c) + ".md"
+		return diagnosticServicesBase + string(c) + "/"
 	case strings.HasPrefix(string(c), "MGS4"):
-		return diagnosticRaceBase + string(c) + ".md"
+		return diagnosticRaceBase + string(c) + "/"
 	case strings.HasPrefix(string(c), "MGS1"):
-		return diagnosticMagusfileBase + string(c) + ".md"
+		return diagnosticMagusfileBase + string(c) + "/"
 	default:
-		return diagnosticSandboxBase + string(c) + ".md"
+		return diagnosticSandboxBase + string(c) + "/"
 	}
 })
 
@@ -82,6 +90,12 @@ const (
 	UnknownTarget             DiagnosticCode = "MGS1006"
 	TargetDependencyCycle     DiagnosticCode = "MGS1007"
 	TargetMissingContext      DiagnosticCode = "MGS1008"
+	TargetNeverReplays        DiagnosticCode = "MGS1009"
+	AffectedSetUncomputable   DiagnosticCode = "MGS1010"
+	CrossOutputOwnerUnknown   DiagnosticCode = "MGS1011"
+	CrossOutputCycle          DiagnosticCode = "MGS1012"
+	CrossOutputGlobEscapes    DiagnosticCode = "MGS1013"
+	CrossOutputNotProduced    DiagnosticCode = "MGS1014"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -90,7 +104,6 @@ const (
 	PathShimSuspected         DiagnosticCode = "MGS2006"
 	ExecDenied                DiagnosticCode = "MGS2007"
 	DaemonSocketWithheld      DiagnosticCode = "MGS2008"
-	NetEgress                 DiagnosticCode = "MGS2009"
 	SandboxPolicyMismatch     DiagnosticCode = "MGS2010"
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 	RaceDetected              DiagnosticCode = "MGS4001"
@@ -123,10 +136,11 @@ const (
 var allDiagnosticCodes = []DiagnosticCode{
 	NoCITarget, SpellShadowed, BespokePhaseFragmentName,
 	UnreachedFootprintDecl, RedundantFootprintGlob, UnknownTarget, TargetDependencyCycle,
-	TargetMissingContext,
+	TargetMissingContext, TargetNeverReplays, AffectedSetUncomputable,
+	CrossOutputOwnerUnknown, CrossOutputCycle, CrossOutputGlobEscapes, CrossOutputNotProduced,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
-	NetEgress, SandboxPolicyMismatch,
+	SandboxPolicyMismatch,
 	DescendantBoundaryCrossed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput,

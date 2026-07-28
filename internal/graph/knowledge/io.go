@@ -61,10 +61,16 @@ func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]strin
 	for _, p := range projects {
 		for _, n := range p.Nodes {
 			tID := targetID(p.Path, n.Name)
-			// Outputs: project-relative globs joined to the project path (workspace-relative).
+			// Outputs carry their OWNING project the same way inputs do, so a
+			// cross-project output produces an edge into the tree it actually writes
+			// rather than a phantom path under the declaring project.
 			outPats := make([]string, len(n.Outputs))
-			for i, g := range n.Outputs {
-				outPats[i] = path.Join(p.Path, g)
+			for i, ref := range n.Outputs {
+				owner := ref.Project
+				if owner == "" {
+					owner = p.Path
+				}
+				outPats[i] = path.Join(owner, ref.Glob)
 			}
 			linkPat(tID, p.Path, types.RelationProduces, outPats)
 			// Every input carries its OWNING project's workspace-relative path (resolved

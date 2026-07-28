@@ -1,0 +1,64 @@
+---
+title: "MGS1013: cross-project output glob escapes its owner"
+description: Fires at load when the glob half of a cross-project ctx.outputs is absolute or contains .., so it would resolve outside the project that owns it.
+tags: [MGS1013, magusfile, outputs, cross-project, globs, containment]
+---
+
+# MGS1013: cross-project output glob escapes its owner
+
+The glob in a cross-project `ctx.outputs` is absolute or contains `..`, so it
+does not name a path inside the project it is declared against.
+
+```text
+[MGS1013] workspace://producer: target "build": ctx.outputs glob "../../etc/x"
+must be relative to "site" and must not contain ..
+```
+
+## Why
+
+A cross-project output has two halves, and they are validated for different
+reasons:
+
+```buzz
+ctx.outputs(site.file("generated.txt"));
+//          ^^^^      ^^^^^^^^^^^^^^
+//          owner     glob, relative to the OWNER's root
+```
+
+The owner half says which project's tree the file lands in. The glob half is
+relative to **that** project's root, not the declaring one - which is exactly why
+magus can file it on the owner and let `clean`, `watch`, ownership lookup and the
+merge driver all resolve it against a single root.
+
+That only holds if the glob stays inside the owner. An absolute path or a `..`
+escape resolves somewhere else entirely, and every consumer that joins it to the
+owner's directory then reads a path the declaration never meant. Outputs in magus
+are confined to a project subtree; this is that rule applied to the glob.
+
+The cache enforces the same rule when it snapshots. Checking at load only moves
+the failure earlier, and it moves it somewhere much better:
+
+- Before, the glob was accepted, the target **ran**, and the error appeared only
+  once work had been done.
+- Worse, `magus clean` expands output globs for every project in one loop, so a
+  single unexpandable pattern aborted the clean for the **whole workspace** - a
+  failure in one project's declaration taking out an unrelated command.
+
+## Resolution
+
+Write the path as the owner sees it. If `site` is at `site/` and the file belongs
+at `site/gen/api.ts`, the owner is `site` and the glob is `gen/api.ts`:
+
+```buzz
+ctx.outputs(site.file("gen/api.ts"));
+```
+
+If you find yourself reaching for `..` to get somewhere, the owner is wrong, not
+the glob. Import the project that actually contains the destination and declare
+against that one. If nothing owns it, it is not a tracked output - see
+[MGS1011](MGS1011.md).
+
+## See also
+
+- [MGS1011](MGS1011.md) - a cross-project output naming a project magus cannot use
+- [Outputs and the cache](../../../concepts/cache.md)

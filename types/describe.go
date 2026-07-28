@@ -143,10 +143,10 @@ type TargetGraphNode struct {
 	// cross-project input only; a same-project one seeds by directory containment), and
 	// the consumes edge to the file node in the owning project.
 	Inputs []InputRef `json:"inputs,omitempty" yaml:"inputs,omitempty"`
-	// Outputs are the per-target ctx.outputs(...) globs, captured statically as string
-	// literals (project-relative). They ADD to the target's snapshot/replay set - unioned
-	// onto the project-wide and spell-contributed globs, never replacing them.
-	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	// Outputs are the per-target ctx.outputs(...) refs, each carrying its owning project
+	// (empty means this target's own). They ADD to the target's snapshot/replay set -
+	// unioned onto the project-wide and spell-contributed globs, never replacing them.
+	Outputs []OutputRef `json:"outputs,omitempty" yaml:"outputs,omitempty"`
 	// DynamicIO is set when a ctx.inputs/outputs call carries a non-literal
 	// argument. A computed glob is invisible to this static read, so the load path
 	// rejects it loudly rather than silently caching an under-declared footprint.
@@ -173,6 +173,21 @@ type CrossTargetRef struct {
 // workspace-relative, mirroring CrossTargetRef). Folding into the cache key, the
 // affected-tracking depends_on edge, and the consumes edge all read this one shape.
 type InputRef struct {
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Glob    string `json:"glob" yaml:"glob"`
+}
+
+// OutputRef names one file output a target declares via ctx.outputs, in the same shape
+// as InputRef: Project is the OWNING project (the tree written into) and Glob is relative
+// to that root. For a same-project output (ctx.outputs("glob")) Project is empty at
+// extraction and filled to the project's own path when resolved.
+//
+// A separate type from InputRef despite the identical shape, because the dependency edge
+// each implies runs the OTHER WAY. A cross-project INPUT means "I read you, so I run
+// after you". A cross-project OUTPUT means "I write your tree, so YOU run after ME" -
+// the owner gains the edge, not the declarer. Sharing one type would let a caller pass
+// an input where an output belongs and silently invert a build order.
+type OutputRef struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Glob    string `json:"glob" yaml:"glob"`
 }
@@ -245,12 +260,40 @@ type ProjectEntry struct {
 	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
 }
 
+// ToMap is the Buzz boundary map for one project (magus.ls's entries).
+func (p ProjectEntry) ToMap() map[string]any {
+	return map[string]any{
+		"path":      p.Path,
+		"dir":       p.Dir,
+		"spell":     p.Spell,
+		"spells":    p.Spells,
+		"sources":   p.Sources,
+		"outputs":   p.Outputs,
+		"dependsOn": p.DependsOn,
+		"exclusive": p.Exclusive,
+	}
+}
+
 // ProjectsOutput is the top-level result for "describe projects".
 type ProjectsOutput struct {
 	Definition string         `json:"definition" yaml:"definition"`
 	Workspace  string         `json:"workspace"  yaml:"workspace"`
 	Count      int            `json:"count"      yaml:"count"`
 	Projects   []ProjectEntry `json:"projects"   yaml:"projects"`
+}
+
+// ToMap is the Buzz boundary map magus.ls returns. Definition is dropped: it is
+// prose for a human reading `magus describe`, not something a magusfile branches on.
+func (o ProjectsOutput) ToMap() map[string]any {
+	projects := make([]any, len(o.Projects))
+	for i, p := range o.Projects {
+		projects[i] = p.ToMap()
+	}
+	return map[string]any{
+		"workspace": o.Workspace,
+		"count":     o.Count,
+		"projects":  projects,
+	}
 }
 
 // ModuleDefinition is the human-readable description shown by "magus describe modules".

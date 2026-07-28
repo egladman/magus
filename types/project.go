@@ -129,28 +129,62 @@ type Project struct {
 	// is also unioned into DependsOn so a change to it marks this project affected; a
 	// same-project input needs no such edge (it seeds by directory containment).
 	// Populated statically at load from describe.Extract.
-	TargetInputs   map[string][]InputRef
-	TargetOutputs  map[string][]string // per-target ctx.outputs globs (project-root relative), added to the snapshot/replay set
-	ResolvedSpells []*Spell            // set at the end of magus.Open; immutable thereafter
+	TargetInputs  map[string][]InputRef
+	TargetOutputs map[string][]OutputRef // per-target ctx.outputs refs, each carrying its owning project; added to the snapshot/replay set
+	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
+	// via ctx.outputs(<alias>.file(...)), keyed by the WRITING project's path. Globs are
+	// relative to THIS project's root, so they compose with Outputs directly - which is
+	// the whole reason they are filed here rather than left on the writer, whose own
+	// globs are relative to a different root. Without this a cross-project output would
+	// be invisible to every consumer that asks a project what lands in its tree: clean,
+	// watch's rebuild-loop guard, ownership lookup, and the merge driver. The writer key
+	// is what lets the merge driver regenerate the file, since only the writer can.
+	// Populated at load, after the walk, once every project is known (the owner may not
+	// be discovered yet when the writer declares it).
+	InboundOutputs map[string][]string
+	ResolvedSpells []*Spell // set at the end of magus.Open; immutable thereafter
 }
 
-// AllOutputs is the project's full set of declared output globs: the project-wide
-// Outputs plus every per-target ctx.outputs glob (TargetOutputs), deduplicated and
-// project-root relative. It is the "what files does this project generate" view -
-// consumed by `magus clean --outputs`, output-ownership lookup, and the merge driver -
-// as opposed to the per-target cache view (buildStep's step.Outputs), which stays scoped
-// to the one target being run. Per-target contributions are sorted so the result is
-// deterministic despite TargetOutputs being a map.
+// AllOutputs is every output glob that lands in this project's tree, deduplicated and
+// PROJECT-ROOT RELATIVE: the project-wide Outputs, every per-target ctx.outputs glob
+// this project declares for itself (TargetOutputs), and every glob another project
+// declares into it (InboundOutputs). It is the "what files appear in this tree" view -
+// consumed by `magus clean --outputs`, watch's rebuild-loop guard, output-ownership
+// lookup, and the merge driver - as opposed to the per-target cache view (buildStep's
+// step.Outputs), which stays scoped to the one target being run.
+//
+// A cross-project ref in TargetOutputs is skipped here and counted on the OWNER instead,
+// through that project's InboundOutputs: its glob is relative to the tree it writes
+// into, so returning it from the writer would have every caller resolve it against the
+// wrong root. The two halves meet on the owner, where the glob is already relative.
+//
+// The result never aliases p.Outputs. Callers treat it as their own slice (the merge
+// driver builds workspace-relative globs from it, clean ranges it), and p.Outputs carries
+// spare capacity from AttachSpell, so handing the live backing array out of an exported
+// method lets one append reach into the project record.
+//
+// Contributions are sorted so the result is deterministic despite the maps.
 func (p *Project) AllOutputs() []string {
-	if len(p.TargetOutputs) == 0 {
-		return p.Outputs
+	if len(p.TargetOutputs) == 0 && len(p.InboundOutputs) == 0 {
+		return slices.Clone(p.Outputs)
 	}
 	var extra []string
-	for _, globs := range p.TargetOutputs {
-		for _, g := range globs {
-			if !slices.Contains(p.Outputs, g) && !slices.Contains(extra, g) {
-				extra = append(extra, g)
+	add := func(glob string) {
+		if !slices.Contains(p.Outputs, glob) && !slices.Contains(extra, glob) {
+			extra = append(extra, glob)
+		}
+	}
+	for _, refs := range p.TargetOutputs {
+		for _, ref := range refs {
+			if ref.Project != "" && ref.Project != p.Path {
+				continue // written into another tree; that project counts it
 			}
+			add(ref.Glob)
+		}
+	}
+	for _, globs := range p.InboundOutputs {
+		for _, glob := range globs {
+			add(glob)
 		}
 	}
 	slices.Sort(extra)

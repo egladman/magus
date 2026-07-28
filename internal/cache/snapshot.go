@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache/reflink"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/types"
 )
 
 // snapshot records the project's declared outputs into the cache and writes the manifest.
@@ -29,6 +30,20 @@ func (c *Cache) snapshot(s Step, hash string) ([]string, error) {
 	}
 	if len(matches) == 0 && len(s.Outputs) > 0 {
 		return nil, fmt.Errorf("snapshot: no files matched declared outputs (project %q)", s.ProjectPath)
+	}
+	// Each required glob is checked on its own, not folded into the all-or-nothing test
+	// above: a target declaring its own outputs alongside a cross-project one passes that
+	// test on its own outputs alone, and the missing foreign file goes unnoticed.
+	for _, g := range s.RequiredOutputs {
+		found, err := expandOutputGlobs([]string{g}, root)
+		if err != nil {
+			return nil, err
+		}
+		if len(found) == 0 {
+			return nil, types.DiagnosticErrorf(types.CrossOutputNotProduced,
+				"target %q declared an output into another project (%q) but produced no file matching it; check the path the target actually writes",
+				s.Target, g)
+		}
 	}
 	manifest := &Manifest{
 		ProjectPath: s.ProjectPath,

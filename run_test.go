@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -291,4 +292,99 @@ func TestWithTargetDeadlineCancelReleasesTheTimer(t *testing.T) {
 		assert.NotPanics(t, func() { cancel() })
 		assert.NotPanics(t, func() { cancel() }, "cancel is idempotent")
 	}
+}
+
+// verifyReadOnly gates a FailOnDrift target, so the distinction that matters is
+// "no VCS to check against" (a legitimate pass) versus "the check could not run"
+// (which must not be reported as clean). These pin that split; collapsing them is
+// how the gate previously failed open.
+func TestVerifyReadOnlySkipsWhenVCSDisabled(t *testing.T) {
+	t.Setenv("MAGUS_VCS_ENABLED", "false")
+
+	ran := false
+	err := verifyReadOnly(t.Context(), t.TempDir(), "generate", func() error { ran = true; return nil })
+
+	require.NoError(t, err, "no VCS means nothing to diff against, so the check does not apply")
+	require.True(t, ran, "the target still runs; only the drift check is skipped")
+}
+
+func TestVerifyReadOnlyErrorsOnUnresolvableVCS(t *testing.T) {
+	t.Setenv("MAGUS_VCS_NAME", "nosuchvcs")
+
+	err := verifyReadOnly(t.Context(), t.TempDir(), "generate", func() error { return nil })
+
+	require.Error(t, err, "an unknown MAGUS_VCS_NAME is misconfiguration, not an absent VCS")
+	require.Contains(t, err.Error(), "FailOnDrift",
+		"the message must name the guarantee that could not be honored, not just the VCS failure")
+}
+
+func TestVerifyReadOnlyPropagatesTargetError(t *testing.T) {
+	t.Setenv("MAGUS_VCS_ENABLED", "false")
+
+	want := errors.New("target blew up")
+	err := verifyReadOnly(t.Context(), t.TempDir(), "generate", func() error { return want })
+
+	require.ErrorIs(t, err, want, "the target's own failure is returned before any drift check")
+}
+
+// The affected fallback selects EVERY project when the VCS cannot produce a changed-file
+// set. That is the safe direction, but it silently turns an incremental run into a full
+// build, so RunAffected announces it. ExpandAffected has always returned the signal;
+// every one of its five callers discarded it, which is the gap this pins.
+func TestExpandAffectedSignalsFallbackWithoutVCS(t *testing.T) {
+	root := mkGlobalWS(t, "build")
+
+	m, err := Open(t.Context(), root)
+	require.NoError(t, err)
+
+	targets, source, fellBack, err := m.ExpandAffected(t.Context(), "build", "")
+
+	require.NoError(t, err, "an uncomputable diff is a fallback, not a failure")
+	require.True(t, fellBack, "a workspace with no VCS cannot diff, so every project is selected")
+	require.NotEmpty(t, targets, "the fallback selects everything rather than nothing")
+	require.NotEmpty(t, source, "source carries the reason, which is what the warning shows the user")
+}
+
+func TestWithReportWriter(t *testing.T) {
+	var buf bytes.Buffer
+	var r run
+	WithReportWriter(&buf)(&r)
+	assert.Same(t, &buf, r.ReportWriter, "WithReportWriter: run.ReportWriter not set to provided writer")
+}
+
+func TestRunOptions(t *testing.T) {
+	var r run
+	WithDryRun()(&r)
+	assert.True(t, r.DryRun, "WithDryRun: DryRun = false, want true")
+	WithCharms("write", "debug")(&r)
+	assert.Equal(t, []string{"write", "debug"}, r.Charms)
+	WithBaseRef("main")(&r)
+	assert.Equal(t, "main", r.BaseRef)
+	WithSpellFilter("go")(&r)
+	assert.Equal(t, "go", r.Spell)
+	WithNoVolatilityRetry()(&r)
+	assert.True(t, r.NoVolatilityRetry, "WithNoVolatilityRetry: NoVolatilityRetry = false, want true")
+}
+
+func TestWithWrite_SetsWriteCharm(t *testing.T) {
+	var r run
+	WithWrite()(&r)
+	assert.Equal(t, []string{"rw"}, r.Charms)
+}
+
+// TestOutputWatchDirsSpansOwnerRoots pins the reason outputWatchDirs returns directories
+// instead of globs: one target's outputs can now land in two different project roots, so
+// a cross-project glob must resolve against the OWNER's dir. Resolving it against the
+// writer's would watch a path that does not exist, and the previous behavior - dropping
+// it - left the one file two projects can both write as the only output the race,
+// overlap, replay, and missing-dependency checks never looked at.
+func TestOutputWatchDirsSpansOwnerRoots(t *testing.T) {
+	m, _ := writeCrossOutputWorkspace(t)
+	producer := m.Get("producer")
+	require.NotNil(t, producer)
+
+	dirs := outputWatchDirs(m.ws, producer, "build")
+
+	assert.Equal(t, []string{filepath.Join(m.Root(), "site")}, dirs,
+		"the watched dir is the OWNER's tree, not the declaring project's")
 }

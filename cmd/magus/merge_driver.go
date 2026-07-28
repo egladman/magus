@@ -151,7 +151,7 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	wsRoot := m.Root()
 	absPath := filepath.Join(wsRoot, filepath.FromSlash(relPath))
 
-	p := m.FindOutputOwner(absPath)
+	p := m.FindOutputProducer(absPath)
 	if p == nil {
 		return fmt.Errorf("merge-driver: no project declares %q as an output; cannot regenerate", relPath)
 	}
