@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/project"
@@ -79,11 +80,23 @@ type spellAnnotator struct {
 	prefixKnown bool
 }
 
-// ctx is the context spell ops run under. The annotator is reached from
-// output paths that do not thread one (a deferred failure dump), and
-// these ops are short, local, and side-effect-only, so a background
-// context is honest rather than a shortcut.
-func (a *spellAnnotator) ctx() context.Context { return context.Background() }
+// opTimeout bounds every spell op. These are meant to be a few bytes of
+// formatting, so any op still running after this is misbehaving - and a
+// provider spell is third-party code that may call out to a network the
+// build has no reason to wait on. Exceeding it degrades to "no
+// annotation", never to a hung build.
+const opTimeout = 5 * time.Second
+
+// spellCtx is the context a spell op runs under.
+//
+// The Annotator methods take no context: the annotator is reached from a
+// deferred failure dump that genuinely has none to thread. Rather than
+// run unbounded, each op gets its own deadline, so a spell that blocks
+// costs one timeout instead of the whole run. Cancel is returned so the
+// caller releases the timer.
+func spellCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), opTimeout)
+}
 
 // Active probes the spell's optional enabled() op once and caches it, so
 // a provider that no-ops outside its environment costs one probe per
@@ -95,7 +108,9 @@ func (a *spellAnnotator) Active() bool {
 	if a.activeKnown {
 		return a.active
 	}
-	resp, err := a.drv.Invoke(a.ctx(), types.InvokeRequest{Target: "enabled"})
+	ctx, cancel := spellCtx()
+	defer cancel()
+	resp, err := a.drv.Invoke(ctx, types.InvokeRequest{Target: "enabled"})
 	if err != nil {
 		return false
 	}
@@ -109,6 +124,7 @@ func (a *spellAnnotator) Active() bool {
 }
 
 func (a *spellAnnotator) StartGroup(g annotate.Group) error {
+	g = annotate.SanitizeGroup(g)
 	return a.call("group_start", map[string]any{
 		"id":        g.ID,
 		"title":     g.Title,
@@ -121,6 +137,9 @@ func (a *spellAnnotator) EndGroup(id string) error {
 }
 
 func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
+	// Bound and de-fang before it crosses into third-party code: Message
+	// carries a failing process's own output. See annotate.Annotation.
+	an = annotate.Sanitize(an)
 	return a.call("annotate", map[string]any{
 		"level":    an.Level.String(),
 		"message":  an.Message,
@@ -155,16 +174,23 @@ func (a *spellAnnotator) quotePrefixes() []string {
 	if a.prefixKnown {
 		return a.prefixes
 	}
-	resp, err := a.drv.Invoke(a.ctx(), types.InvokeRequest{Target: "quote_prefixes"})
+	ctx, cancel := spellCtx()
+	defer cancel()
+	resp, err := a.drv.Invoke(ctx, types.InvokeRequest{Target: "quote_prefixes"})
 	if err != nil {
 		return nil // transient: do not latch an empty list
 	}
 	if list, ok := resp.Data.([]any); ok {
+		raw := make([]string, 0, len(list))
 		for _, v := range list {
-			if s, ok := v.(string); ok && s != "" {
-				a.prefixes = append(a.prefixes, s)
+			if s, ok := v.(string); ok {
+				raw = append(raw, s)
 			}
 		}
+		// A provider could otherwise make magus match an unbounded list
+		// against every replayed line, or hand over an empty prefix that
+		// matches all of them.
+		a.prefixes = annotate.ClampPrefixes(raw)
 	}
 	a.prefixKnown = true
 	return a.prefixes
@@ -174,9 +200,11 @@ func (a *spellAnnotator) quotePrefixes() []string {
 // spell implements only the verbs its provider supports, and the missing
 // rest are not errors: annotations do not exist at all on some providers.
 func (a *spellAnnotator) call(op string, params map[string]any) error {
-	_, err := a.drv.Invoke(a.ctx(), types.InvokeRequest{Target: op, Params: params})
+	ctx, cancel := spellCtx()
+	defer cancel()
+	_, err := a.drv.Invoke(ctx, types.InvokeRequest{Target: op, Params: params})
 	if err != nil {
-		return nil //nolint:nilerr // an unsupported verb is normal, not a failure
+		return nil
 	}
 	return nil
 }

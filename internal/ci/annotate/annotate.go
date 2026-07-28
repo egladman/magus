@@ -83,6 +83,15 @@ type Group struct {
 // Annotation is a message surfaced outside the job log, typically on a
 // pull request. Every field beyond Message is optional; a provider uses
 // what it supports.
+//
+// SECURITY: Message and Title are UNTRUSTED. They carry a failing
+// process's own output, so their content is whatever some test, compiler,
+// or transitive dependency chose to print. A provider implementation must
+// never interpolate them into a shell command, a URL, or anything else
+// where their content becomes syntax - a dependency that printed a
+// payload would otherwise be executing it on every CI machine that builds
+// the project. [Sanitize] bounds and de-fangs them before they reach a
+// provider, but that is a floor, not a licence to be careless downstream.
 type Annotation struct {
 	Level   Level
 	Message string
@@ -230,3 +239,88 @@ func QuoteWith(text string, prefixes []string) string {
 // to know "is a human at this terminal" - to suppress a hint whose
 // command addresses local state, say - should not require one.
 func OnCI() bool { return os.Getenv("CI") != "" }
+
+// Limits on what crosses into a provider. A provider is third-party code
+// and the values it receives are attacker-influenced (see [Annotation]),
+// so the boundary is bounded rather than trusting either side to cope.
+const (
+	// maxMessageLen is generous enough for a real failure cause and far
+	// below what would make a spell's string handling a denial-of-service
+	// vector. Callers already excerpt; this is the backstop.
+	maxMessageLen = 4096
+	// maxFieldLen bounds the short fields, which are headings and paths.
+	maxFieldLen = 512
+	// maxQuotePrefixes bounds what a provider can make magus match against
+	// every replayed line. QuoteWith is O(lines x prefixes), so an
+	// unbounded list turns a failing build into a hang.
+	maxQuotePrefixes = 16
+)
+
+// Sanitize returns a copy of a bounded to the limits above and stripped
+// of control characters.
+//
+// Control characters are the sharp edge: an annotation's message comes
+// from a failing process, so it can contain escape sequences that would
+// re-take control of the terminal or the job log when a provider echoes
+// it. Tab is kept because it is ordinary in compiler output; newline is
+// kept because providers encode it themselves and losing it would mangle
+// multi-line causes.
+//
+// Truncation is marked, so a reader can tell a bounded message from a
+// process that simply printed that much.
+func Sanitize(a Annotation) Annotation {
+	a.Message = clampText(a.Message, maxMessageLen)
+	a.Title = clampText(a.Title, maxFieldLen)
+	a.Code = clampText(a.Code, maxFieldLen)
+	a.File = clampText(a.File, maxFieldLen)
+	return a
+}
+
+// clampText strips control characters and truncates to n bytes on a rune
+// boundary, appending a marker when it cut.
+func clampText(s string, n int) string {
+	s = strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+	if len(s) <= n {
+		return s
+	}
+	cut := n
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + " ... (truncated)"
+}
+
+// ClampPrefixes bounds a provider's declared quote prefixes, dropping
+// empty entries (which would match every line) and over-long ones.
+func ClampPrefixes(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, p := range in {
+		if p == "" || len(p) > maxFieldLen {
+			continue
+		}
+		out = append(out, p)
+		if len(out) == maxQuotePrefixes {
+			break
+		}
+	}
+	return out
+}
+
+// SanitizeGroup bounds a group's fields the way [Sanitize] bounds an
+// annotation's. A group's title embeds a project and target name, which
+// come from a magusfile rather than from process output, so this is a
+// weaker threat than an annotation - but the same boundary applies, and
+// a title is echoed into the job log all the same.
+func SanitizeGroup(g Group) Group {
+	g.ID = clampText(g.ID, maxFieldLen)
+	g.Title = clampText(g.Title, maxFieldLen)
+	return g
+}
