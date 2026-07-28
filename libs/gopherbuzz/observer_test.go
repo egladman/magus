@@ -40,14 +40,14 @@ func (o *observerStub) snapshot() map[string]error {
 // exercises the observer hook without compiling a magusfile.
 func observerTestPool(t *testing.T) *Pool {
 	t.Helper()
-	factory := func(ctx context.Context) (*Session, map[string]vmpackage.Callable, error) {
+	factory := func(ctx context.Context) (*WorkerSession, error) {
 		targets := map[string]vmpackage.Callable{
 			"ok": func(context.Context, []vmpackage.Value) (vmpackage.Value, error) { return vmpackage.Null, nil },
 			"boom": func(context.Context, []vmpackage.Value) (vmpackage.Value, error) {
 				return vmpackage.Null, errors.New("kaboom")
 			},
 		}
-		return NewSession(ctx), targets, nil
+		return &WorkerSession{Session: NewSession(ctx), Targets: targets}, nil
 	}
 	return newPool(factory, nil, 2)
 }
