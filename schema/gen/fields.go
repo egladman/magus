@@ -333,6 +333,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_LOG_SILENT: Silent suppresses progress like --quiet, and additionally bounds the failing-project",
 	},
 	{
+		GoPath:   "Log.Stream",
+		YamlPath: "log.stream",
+		EnvVar:   "MAGUS_LOG_STREAM",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindBoolPtr,
+		Usage:    "MAGUS_LOG_STREAM: Stream shows every target's subprocess output live and interleaved, instead of",
+	},
+	{
 		GoPath:   "Hints.Enabled",
 		YamlPath: "hints.enabled",
 		EnvVar:   "MAGUS_HINTS_ENABLED",

@@ -47,6 +47,42 @@ type VCSDriver interface {
 	// "no describe available" and fall back (e.g. to a short hash); a magus author
 	// needing backend-specific behavior reaches for vcs.exe().
 	Describe(ctx context.Context, dir string) (string, error)
+	// Tags lists the repository's tags, newest first. Tags are shared prior art,
+	// not a git import: Mercurial versions them in .hgtags, and Fossil, Bazaar,
+	// and Darcs each have the same concept under the same name. A backend that
+	// genuinely lacks one returns none rather than faking it.
+	//
+	// pattern is a path.Match glob over the tag name ("v*"); "" lists every tag.
+	// Wildcards stop at "/", so "v*" skips a namespaced tag like backup/x.
+	//
+	// An empty result means "no tags visible here", which is NOT "never
+	// released": a shallow or single-branch clone commonly fetches none, so a
+	// caller deciding what shipped must treat empty as unknown.
+	Tags(ctx context.Context, dir, pattern string) ([]Tag, error)
+}
+
+// Tag is a VCS-agnostic release marker: a name pinned to a revision. Only the
+// facts every tagging backend agrees on are modeled - an annotated tag's tagger
+// and message are not, since a lightweight tag has neither. Reach for vcs.exe()
+// for backend-specific tag work.
+type Tag struct {
+	// Name is the tag as a user writes it ("v0.3.0"), without a refs/tags/ prefix.
+	Name string
+	// Date is when an annotated tag was created, else when its revision was
+	// recorded. Zero if the VCS reported no timestamp.
+	Date time.Time
+	// ID is the revision identifier the tag resolves to.
+	ID string
+}
+
+// ToMap is the Buzz boundary map vcs.tags entries return: {name, date, id}.
+// date is RFC3339, empty when the VCS reported no timestamp.
+func (t Tag) ToMap() map[string]any {
+	date := ""
+	if !t.Date.IsZero() {
+		date = t.Date.Format(time.RFC3339)
+	}
+	return map[string]any{"name": t.Name, "date": date, "id": t.ID}
 }
 
 // Person identifies who authored a revision.
