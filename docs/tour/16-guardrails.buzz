@@ -1,0 +1,55 @@
+// Try to break it. A build tool earns trust by refusing what you should not be
+// able to do, and naming why - not by trusting you never to try. This magusfile
+// is a deliberate contradiction: `build` needs `bundle`, and `bundle` needs
+// `build`. Run it and magus refuses before either one forks a process:
+//
+//   target build: ctx.needs: bundle: ctx.needs: build: ctx.needs: bundle:
+//   buzzpool: dispatch: stack contains "bundle" (cycle detected)
+//
+// The cycle is named, not merely detected. The message is the path magus walked
+// to find the loop, so the fix is whichever edge you recognise as the wrong one.
+// Delete the ctx.needs(build) inside bundle and run again to watch it clear -
+// build then runs ONCE, for both callers, because dedup is per plan and not per
+// caller. A diamond in your graph costs one build, not two.
+//
+// Three more refusals worth having in your back pocket, none of which need a run
+// to discover:
+//
+//   Escaping the workspace. Declare "outputs": ["../../../etc/**"] and the cache
+//   rejects it outright: `output glob must be repo-relative without ".."`. A
+//   target cannot claim, snapshot, or replay a path the workspace does not own,
+//   so a cache entry can never write outside the repo.
+//
+//   Contradicting the shape. A service op whose command detaches (`docker run
+//   -d`) is rejected at resolution with MGS5002 - see the Wards step. An
+//   unsupervisable service is a shape error, not a runtime surprise.
+//
+//   Gating nothing. `magus affected ci` errors when no project in scope declares
+//   a ci target, rather than exiting 0 having run nothing. A green pipeline that
+//   checked nothing is the most expensive failure of the four.
+//
+// The pattern in all of them: the check runs at resolution, against the declared
+// graph, and the error names the specific thing that is wrong. A tool that only
+// noticed mid-run would leave you with half a build and a stack trace.
+
+import "magus";
+
+magus\project({});
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    // The contradiction: build needs bundle, and bundle needs build.
+    ctx.needs(bundle);
+}
+
+export fun bundle(ctx: magus\Context, args: [str]) > void {
+    // Delete this line and the cycle clears.
+    ctx.needs(build);
+}
+
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(test, bundle);
+}
