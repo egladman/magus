@@ -2,7 +2,9 @@ package annotate
 
 import (
 	"io"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -111,4 +113,79 @@ func TestQuoteWithNoPrefixesIsIdentity(t *testing.T) {
 		"a provider that declares no command syntax quotes nothing")
 	assert.Equal(t, "::error::x", QuoteWith("::error::x", []string{""}),
 		"an empty prefix matches nothing rather than everything")
+}
+
+// TestSanitizeStripsControlCharacters is a security property. An
+// annotation's message is a failing process's own output, so it can carry
+// escape sequences that would re-take control of the terminal or the job
+// log when a provider echoes it.
+func TestSanitizeStripsControlCharacters(t *testing.T) {
+	t.Parallel()
+	got := Sanitize(Annotation{Message: "before\x1b[2Jafter\x00\x07"})
+	assert.Equal(t, "before[2Jafter", got.Message,
+		"escape and other control bytes are removed, visible text survives")
+	assert.NotContains(t, got.Message, "\x1b")
+}
+
+func TestSanitizeKeepsTabAndNewline(t *testing.T) {
+	t.Parallel()
+	got := Sanitize(Annotation{Message: "line one\n\tindented"})
+	assert.Equal(t, "line one\n\tindented", got.Message,
+		"compiler output is full of tabs, and providers encode newlines themselves")
+}
+
+// TestSanitizeBoundsMessageLength keeps a process that printed megabytes
+// from making a provider's string handling a denial-of-service vector.
+func TestSanitizeBoundsMessageLength(t *testing.T) {
+	t.Parallel()
+	got := Sanitize(Annotation{Message: strings.Repeat("x", maxMessageLen*2)})
+	assert.LessOrEqual(t, len(got.Message), maxMessageLen+len(" ... (truncated)"))
+	assert.Contains(t, got.Message, "(truncated)", "a bounded message says so")
+}
+
+func TestSanitizeBoundsShortFields(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("y", maxFieldLen*2)
+	got := Sanitize(Annotation{Title: long, Code: long, File: long})
+	for _, f := range []string{got.Title, got.Code, got.File} {
+		assert.LessOrEqual(t, len(f), maxFieldLen+len(" ... (truncated)"))
+	}
+}
+
+func TestSanitizeNeverSplitsARune(t *testing.T) {
+	t.Parallel()
+	got := Sanitize(Annotation{Title: strings.Repeat("日", maxFieldLen)})
+	assert.True(t, utf8.ValidString(got.Title), "truncation must land on a rune boundary")
+}
+
+func TestSanitizeGroupBoundsItsFields(t *testing.T) {
+	t.Parallel()
+	got := SanitizeGroup(Group{ID: strings.Repeat("a", maxFieldLen*2), Title: "t\x1b[2J"})
+	assert.LessOrEqual(t, len(got.ID), maxFieldLen+len(" ... (truncated)"))
+	assert.NotContains(t, got.Title, "\x1b")
+}
+
+// TestClampPrefixesRejectsAMatchEverythingPrefix is the sharpest of these:
+// an empty prefix would make QuoteWith rewrite the first character of
+// every line of replayed output.
+func TestClampPrefixesRejectsAMatchEverythingPrefix(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, ClampPrefixes([]string{""}))
+	assert.Equal(t, []string{"::"}, ClampPrefixes([]string{"", "::", ""}))
+}
+
+// TestClampPrefixesBoundsTheList keeps a provider from making magus match
+// an unbounded list against every line; QuoteWith is O(lines x prefixes).
+func TestClampPrefixesBoundsTheList(t *testing.T) {
+	t.Parallel()
+	many := make([]string, 100)
+	for i := range many {
+		many[i] = "p"
+	}
+	assert.Len(t, ClampPrefixes(many), maxQuotePrefixes)
+}
+
+func TestClampPrefixesDropsOverlongEntries(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, ClampPrefixes([]string{strings.Repeat("x", maxFieldLen+1)}))
 }
