@@ -29,10 +29,16 @@ export function statusToken(raw: string): string {
 }
 
 // --- ANSI SGR parsing ---------------------------------------------------------
-const ANSI_RE = /\x1b\[([0-9;]*)m/g;
+// Every CSI sequence, not just SGR. Cursor moves, line/screen erases, and
+// scroll-margin sets carry no colour but would otherwise survive into the
+// DOM as literal text. magus only emits them to a real terminal, so a
+// captured log should never contain them - but a log captured through a
+// pty (script, docker -t, some CI runners) can, and rendering "[20;1H" at
+// the reader is worse than dropping it.
+const CSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 
 export function stripAnsi(s: string): string {
-  return s.replace(ANSI_RE, "");
+  return s.replace(CSI_RE, "");
 }
 
 const FG: Record<number, string> = {
@@ -56,21 +62,25 @@ const FG: Record<number, string> = {
 
 // parseAnsi splits a line into {text, cls[]} runs by tracking SGR state across the
 // line. Only the attributes magus emits (bold, dim, italic, underline, basic fg
-// colors) are mapped; anything else is ignored so unknown codes never leak through.
+// colors) are mapped; every other CSI sequence is consumed and dropped, so neither
+// an unknown SGR parameter nor a cursor-control escape can leak through as text.
 export function parseAnsi(line: string): AnsiSeg[] {
   const out: AnsiSeg[] = [];
   const state: SgrState = { bold: false, dim: false, italic: false, underline: false, fg: null };
   let last = 0;
   let m: RegExpExecArray | null;
-  ANSI_RE.lastIndex = 0;
+  CSI_RE.lastIndex = 0;
   const push = (text: string): void => {
     if (!text) return;
     out.push({ text, cls: classesFor(state) });
   };
-  while ((m = ANSI_RE.exec(line)) !== null) {
+  while ((m = CSI_RE.exec(line)) !== null) {
     push(line.slice(last, m.index));
-    applySGR(state, m[1]);
-    last = ANSI_RE.lastIndex;
+    // Only SGR (final byte "m") changes colour state; every other CSI is
+    // cursor or screen control that has no meaning in a scrollback pane and
+    // is dropped rather than rendered.
+    if (m[0].endsWith("m")) applySGR(state, m[0].slice(2, -1));
+    last = CSI_RE.lastIndex;
   }
   push(line.slice(last));
   if (!out.length) out.push({ text: "", cls: [] });
