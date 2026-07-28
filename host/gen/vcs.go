@@ -115,6 +115,14 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return host.StrVal(ret0), nil
 	}))
+	m.MapSet("tags", vm.DirectValue("vcs.tags", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		pattern := host.Str(bzArgs, 0)
+		ret0, err := std.VcsTags(ctx, pattern)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.MapsVal(ret0), nil
+	}))
 	m.MapSet("describe", vm.DirectValue("vcs.describe", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsDescribe(ctx)
 		if err != nil {

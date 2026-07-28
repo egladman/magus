@@ -123,10 +123,22 @@ type Log struct {
 	// notice ("magus:notice:"). Normally set via -s/--silent; MAGUS_LOG_SILENT=1 is the env equivalent.
 	// Pointer to distinguish "not set" from explicit false.
 	Silent *bool `yaml:"silent"`
+	// Stream shows every target's subprocess output live and interleaved, instead of
+	// withholding a passing target's output until it fails. This is deliberately NOT
+	// derived from Level: what gets logged and whether a target's own output is
+	// withheld are separate questions, and conflating them is why -v used to ambush
+	// people with a wall of concurrent output when they wanted a little more detail.
+	// Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent.
+	// Pointer to distinguish "not set" from explicit false.
+	Stream *bool `yaml:"stream"`
 }
 
 // IsSilent reports whether silent output mode is enabled.
 func (l Log) IsSilent() bool { return l.Silent != nil && *l.Silent }
+
+// IsStream reports whether target output is streamed live rather than withheld
+// until failure.
+func (l Log) IsStream() bool { return l.Stream != nil && *l.Stream }
 
 // Hints controls whether hint messages are emitted to the user.
 type Hints struct {

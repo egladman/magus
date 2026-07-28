@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/retry"
-	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
 )
 
@@ -335,14 +334,14 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	if types.Tracing(ctx) {
 		return types.HTTPResponse{}, nil
 	}
-	// Outbound egress is AUDITED BUT NOT BLOCKED: with the sandbox active the
-	// request is logged, but every URL is still fetched, including localhost,
-	// RFC1918 ranges, and the cloud metadata endpoint (169.254.169.254). No SSRF
-	// enforcement yet; treat any URL a magusfile reaches as trusted. See the http
-	// module Doc.
-	if p := sandbox.FromContext(ctx); p != nil {
-		p.RecordConnect(ctx, method, url)
-	}
+	// There is NO network sandboxing: every URL a magusfile reaches is fetched,
+	// including localhost, RFC1918 ranges, and the cloud metadata endpoint
+	// (169.254.169.254). Treat any URL a magusfile can reach as trusted.
+	//
+	// An audit log used to sit here. It was removed because it claimed a coverage it
+	// never had: it saw only this binding, so it missed magus's own traffic (self
+	// update, remote cache) and every subprocess. A record of one narrow slice, framed
+	// as network auditing, is worse than an honest absence.
 
 	o := parseHTTPOpts(opts)
 

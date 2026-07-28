@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -119,4 +120,76 @@ func TestExportRevisionBadRev(t *testing.T) {
 	err := gitVCS{}.ExportRevision(context.Background(), repo, "no-such-rev", t.TempDir())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no-such-rev")
+}
+
+func TestWriteManagedHookNewFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "post-checkout")
+	changed, err := writeManagedHook(path, gitHookBody("post-checkout", "magus server sync"))
+	require.NoError(t, err)
+	assert.True(t, changed)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	s := string(body)
+	assert.True(t, strings.HasPrefix(s, "#!/bin/sh"), "a new hook gets a shebang")
+	assert.Contains(t, s, gitHookBegin)
+	assert.Contains(t, s, "magus server sync")
+	assert.Contains(t, s, `[ "$3" = "1" ]`, "post-checkout guards on the branch-checkout flag")
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.NotZero(t, info.Mode()&0o100, "the hook is executable")
+}
+
+func TestWriteManagedHookIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "post-merge")
+	_, err := writeManagedHook(path, gitHookBody("post-merge", "magus server sync"))
+	require.NoError(t, err)
+
+	changed, err := writeManagedHook(path, gitHookBody("post-merge", "magus server sync"))
+	require.NoError(t, err)
+	assert.False(t, changed, "re-installing an unchanged section is a no-op")
+}
+
+func TestWriteManagedHookPreservesUserContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "post-rewrite")
+	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho 'my own hook'\n"), 0o755))
+
+	changed, err := writeManagedHook(path, gitHookBody("post-rewrite", "magus server sync"))
+	require.NoError(t, err)
+	assert.True(t, changed)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	s := string(body)
+	assert.Contains(t, s, "echo 'my own hook'", "the user's hook body is preserved")
+	assert.Contains(t, s, gitHookBegin, "the managed section is appended")
+}
+
+// TestParseChangesByCommit verifies the NUL-delimited `git log --name-only` parse:
+// a NUL line opens a commit (hash, author, date); following non-empty lines are files.
+func TestParseChangesByCommit(t *testing.T) {
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\napi/main.go\napi/util.go\n" +
+		"\x00def456\x00Babbage\x002026-06-19T09:00:00Z\n\nweb/app.ts\n"
+
+	got := parseChangesByCommit(out)
+	require.Len(t, got, 2)
+
+	assert.Equal(t, "abc123", got[0].ID)
+	assert.Equal(t, "Ada", got[0].Author)
+	assert.Equal(t, time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC), got[0].Date.UTC())
+	assert.Equal(t, []string{"api/main.go", "api/util.go"}, got[0].Files)
+
+	assert.Equal(t, "def456", got[1].ID)
+	assert.Equal(t, "Babbage", got[1].Author)
+	assert.Equal(t, []string{"web/app.ts"}, got[1].Files)
+}
+
+// TestParseChangesByCommitEmpty covers a commit that touched no files and a bad date.
+func TestParseChangesByCommitEmpty(t *testing.T) {
+	got := parseChangesByCommit("\x00abc123\x00Ada\x00not-a-date\n\n")
+	require.Len(t, got, 1)
+	assert.Equal(t, "abc123", got[0].ID)
+	assert.True(t, got[0].Date.IsZero(), "unparseable date is zero, not an error")
+	assert.Empty(t, got[0].Files)
 }

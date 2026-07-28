@@ -622,3 +622,29 @@ func TestPrettyHandlerKeepsInspectHintOffCI(t *testing.T) {
 	)))
 	assert.Contains(t, buf.String(), "inspect: magus query output outdeadbeef")
 }
+
+// remoteSuffix decides whether a step's line gains a "remote" qualifier. The whole value
+// is in staying silent: a suffix on every line is one nobody reads, so these pin the
+// cases that must NOT render as hard as the case that must.
+func TestRemoteSuffix(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name          string
+		remote, total time.Duration
+		want          string
+	}{
+		{"most of the wait was the network", 4200 * time.Millisecond, 6100 * time.Millisecond, ", 4.2s remote"},
+		{"exactly at the share threshold", 1 * time.Second, 4 * time.Second, ", 1.0s remote"},
+		{"a trivial probe on a fast step", 30 * time.Millisecond, 40 * time.Millisecond, ""},
+		{"material but a small share of a long build", 600 * time.Millisecond, 10 * time.Second, ""},
+		{"no remote work at all", 0, 5 * time.Second, ""},
+		{"no duration recorded", 2 * time.Second, 0, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, remoteSuffix(tc.remote, tc.total))
+		})
+	}
+}

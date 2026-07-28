@@ -6,12 +6,18 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	runPkg "github.com/egladman/magus/internal/proc/run"
 )
 
 // newMutableCache opens a mutable cache at <tmp>/.magus and
@@ -472,4 +478,256 @@ func TestExportImportUnsafePath(t *testing.T) {
 	_ = gz.Close()
 
 	assert.Error(t, c.Import(context.Background(), &buf), "Import with path traversal must return error")
+}
+
+// collapseCache builds a Cache in collapse-on-success mode at default verbosity.
+func collapseCache(t *testing.T) *Cache {
+	t.Helper()
+	return &Cache{dir: t.TempDir(), log: slog.Default(), logLevel: slog.LevelInfo, collapse: true}
+}
+
+// TestCaptureRunCollapseSuppressesOutputOnSuccess verifies a passing project's
+// subprocess output is withheld rather than streamed to stderr.
+func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
+	c := collapseCache(t)
+	lp := c.logPath("svc/api", "deadbeef")
+
+	out := captureStderr(t, func() {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, "compiling lots of noisy output...")
+			return nil
+		})
+		require.NoError(t, err)
+	})
+
+	assert.Empty(t, out, "collapse mode should withhold subprocess output on success")
+}
+
+// TestCaptureRunCollapseShowsFailureExcerpt verifies that on failure collapse
+// displays a bounded diagnostic excerpt on stderr, while retaining the full log.
+func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
+	c := collapseCache(t)
+	lp := c.logPath("svc/api", "cafef00d")
+	want := errors.New("boom")
+
+	stderrOut := captureStderr(t, func() {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, "lint: undefined symbol foo")
+			return want
+		})
+		require.ErrorIs(t, err, want)
+	})
+
+	// Header and concise diagnostic are both on the human-facing stderr stream.
+	assert.Contains(t, stderrOut, "-- svc/api (failed) --")
+	assert.Contains(t, stderrOut, "lint: undefined symbol foo")
+	// The failure log is retained (Run persists it to the output store under a ref
+	// so `magus query ref...` can replay a failing target's exact output).
+	data, statErr := os.ReadFile(lp)
+	require.NoError(t, statErr, "collapse failure log should be retained after replay")
+	assert.Contains(t, string(data), "lint: undefined symbol foo")
+}
+
+// captureStderr redirects os.Stderr for the duration of fn and returns what was written.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	orig := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = orig }()
+
+	fn()
+	require.NoError(t, w.Close())
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(out)
+}
+
+// silentCache builds a Cache in silent mode with a log dir under t.TempDir.
+func silentCache(t *testing.T) *Cache {
+	t.Helper()
+	c := &Cache{dir: t.TempDir(), log: slog.Default(), logLevel: slog.LevelError, silent: true}
+	return c
+}
+
+func TestCaptureRunSilentBubblesNotices(t *testing.T) {
+	c := silentCache(t)
+	lp := c.logPath("svc/api", "deadbeef")
+
+	out := captureStderr(t, func() {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, "compiling...")
+			fmt.Fprintln(stdout, "magus:notice: deployed api v1.2.3")
+			return nil
+		})
+		require.NoError(t, err)
+	})
+
+	assert.Equal(t, "notice: svc/api: deployed api v1.2.3\n", out)
+	// Successful-run log is retained (replayable).
+	_, statErr := os.Stat(lp)
+	assert.NoError(t, statErr)
+}
+
+func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
+	c := silentCache(t)
+	lp := c.logPath("svc/api", "cafef00d")
+	want := errors.New("boom")
+
+	out := captureStderr(t, func() {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			for i := 0; i < maxFailTailLines+10; i++ {
+				fmt.Fprintf(stdout, "line %d\n", i)
+			}
+			return want
+		})
+		require.ErrorIs(t, err, want)
+	})
+
+	assert.Contains(t, out, "-- svc/api (failed) --")
+	assert.Contains(t, out, "earlier line(s) omitted; full log: "+lp)
+	assert.Contains(t, out, fmt.Sprintf("line %d", maxFailTailLines+9)) // last line present
+	assert.NotContains(t, out, "line 0\n")                              // earliest line trimmed
+	// Failure log is retained in silent mode so the printed path resolves.
+	_, statErr := os.Stat(lp)
+	assert.NoError(t, statErr)
+}
+
+// In quiet-but-not-silent mode the failure output is fully dumped to stderr; the
+// log is now retained (not removed) so Run can persist it under a target-output ref.
+func TestCaptureRunQuietRetainsFailureLog(t *testing.T) {
+	c := &Cache{dir: t.TempDir(), log: slog.Default(), logLevel: slog.LevelError}
+	lp := c.logPath("svc/api", "0badf00d")
+	want := errors.New("boom")
+
+	_ = captureStderr(t, func() {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, "line 0")
+			return want
+		})
+		require.ErrorIs(t, err, want)
+	})
+
+	data, statErr := os.ReadFile(lp)
+	require.NoError(t, statErr, "quiet-mode failure log should be retained for the output store")
+	assert.Contains(t, string(data), "line 0")
+}
+
+func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
+	c := silentCache(t)
+	lp := c.logPath("svc/api", "feedface")
+
+	out := captureStderr(t, func() {
+		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, "all good, nothing to report")
+			return nil
+		})
+		require.NoError(t, err)
+	})
+
+	assert.Empty(t, out, "a passing run with no notice lines should print nothing")
+}
+
+// atomicStoreMax stores v into dst iff it is greater than the current value.
+func atomicStoreMax(dst *atomic.Int32, v int32) {
+	for {
+		cur := dst.Load()
+		if v <= cur || dst.CompareAndSwap(cur, v) {
+			return
+		}
+	}
+}
+
+// TestRunAllSlotsThrottles verifies that a step whose Slots equals the whole
+// slot budget runs alone: while it holds every slot no other step can be in fn,
+// yet lighter steps still saturate the budget when the heavy one is idle.
+func TestRunAllSlotsThrottles(t *testing.T) {
+	root, c := openCache(t)
+
+	var running atomic.Int32
+	var duringHeavy atomic.Int32 // peak concurrency observed while the heavy step is in fn
+	var lightPeak atomic.Int32   // peak concurrency observed among the light steps
+
+	heavy := depStep(root, "heavy")
+	heavy.NoCache = true
+	heavy.Slots = 2 // == WithConcurrency below, so it holds every slot
+
+	steps := []Step{heavy}
+	for _, p := range []string{"l1", "l2", "l3"} {
+		s := depStep(root, p)
+		s.NoCache = true
+		steps = append(steps, s)
+	}
+
+	fn := func(_ context.Context, s Step) error {
+		cur := running.Add(1)
+		defer running.Add(-1)
+		if s.ProjectPath == "heavy" {
+			time.Sleep(30 * time.Millisecond)
+			atomicStoreMax(&duringHeavy, running.Load())
+			return nil
+		}
+		atomicStoreMax(&lightPeak, cur)
+		time.Sleep(15 * time.Millisecond)
+		return nil
+	}
+
+	_, err := c.RunAll(context.Background(), steps, fn, WithConcurrency(2))
+	require.NoError(t, err, "RunAll")
+
+	assert.Equal(t, int32(1), duringHeavy.Load(), "no step may run while a slots==budget step holds every slot")
+	assert.Equal(t, int32(2), lightPeak.Load(), "light steps should saturate the 2-slot budget when the heavy step is idle")
+}
+
+// TestRunAllSlotsHandbackNoDeadlock guards against a multi-slot step self-deadlocking
+// when its fn hands back its build slot to reserve internally-parallel slots
+// (the os.with_slots / archive.* pattern). A step holding N slots must hand back
+// *all* N, not one, or an AcquireN inside fn blocks forever on slots the step
+// itself is pinning.
+func TestRunAllSlotsHandbackNoDeadlock(t *testing.T) {
+	root, c := openCache(t)
+
+	heavy := depStep(root, "heavy")
+	heavy.NoCache = true
+	heavy.Slots = 2 // holds the whole 2-slot budget
+
+	fn := func(ctx context.Context, _ Step) error {
+		lim := LimiterFromContext(ctx)
+		if lim == nil {
+			return nil
+		}
+		// Mirror OsWithSlots: hand back the slots we hold, then reserve `threads`.
+		// With the whole budget held, reserving 2 can only succeed if the handback
+		// released both of our slots.
+		held := SlotsHeld(ctx)
+		if held > 0 {
+			lim.ReleaseN(held)
+			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
+		}
+		if err := lim.AcquireN(ctx, 2); err != nil {
+			return err
+		}
+		defer lim.ReleaseN(2)
+		return nil
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.RunAll(context.Background(), []Step{heavy}, fn, WithConcurrency(2))
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err, "RunAll")
+	case <-time.After(5 * time.Second):
+		t.Fatal("weighted step deadlocked handing back its slot to reserve more")
+	}
 }

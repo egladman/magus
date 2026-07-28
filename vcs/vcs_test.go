@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -431,4 +432,61 @@ func TestIsSecondaryCheckout(t *testing.T) {
 	t.Run("plain directory", func(t *testing.T) {
 		assert.False(t, IsSecondaryCheckout(t.TempDir()))
 	})
+}
+
+// parseTagLines is the shared boundary between two backends' very different tag
+// commands, so the cases that matter are the malformed ones: a backend that
+// omits a field must not drop the tag or shift its columns.
+func TestParseTagLines(t *testing.T) {
+	t.Parallel()
+
+	got, err := parseTags("v0.3.0\t2026-07-25T10:14:05-04:00\tabc123\n" +
+		"no-date\t\tdef456\n" +
+		"bad-date\tnot-a-timestamp\tghi789\n" +
+		"\t2026-01-01T00:00:00Z\tskipped\n" +
+		"name-only", "")
+	require.NoError(t, err)
+
+	want := []types.Tag{
+		{Name: "v0.3.0", Date: time.Date(2026, 7, 25, 10, 14, 5, 0, time.FixedZone("", -4*60*60)), ID: "abc123"},
+		{Name: "no-date", ID: "def456"},
+		{Name: "bad-date", ID: "ghi789"},
+	}
+	require.Len(t, got, len(want), "a nameless line is skipped; a line with no tab is not a tag")
+	for i := range want {
+		require.Equal(t, want[i].Name, got[i].Name)
+		require.Equal(t, want[i].ID, got[i].ID)
+		require.True(t, want[i].Date.Equal(got[i].Date), "tag %q date", want[i].Name)
+	}
+}
+
+func TestParseTagLinesEmpty(t *testing.T) {
+	t.Parallel()
+	got, err := parseTags("", "")
+	require.NoError(t, err)
+	require.Nil(t, got, "no tags is nil, not a one-element slice of blank")
+}
+
+// The whole point of the pattern is separating releases from namespaced tags a
+// repository accumulates (backup/, pre-rebase-*), so that separation is the test.
+func TestParseTagsPattern(t *testing.T) {
+	t.Parallel()
+
+	const lines = "v0.3.0\t\ta\nbackup/pre-reword\t\tb\npre-rebase-main\t\tc\nv0.1.0\t\td\n"
+
+	got, err := parseTags(lines, "v*")
+	require.NoError(t, err)
+	names := make([]string, len(got))
+	for i, tag := range got {
+		names[i] = tag.Name
+	}
+	require.Equal(t, []string{"v0.3.0", "v0.1.0"}, names,
+		`"v*" keeps releases; its wildcard stops at "/" so backup/pre-reword is excluded`)
+
+	all, err := parseTags(lines, "")
+	require.NoError(t, err)
+	require.Len(t, all, 4, "an empty pattern filters nothing")
+
+	_, err = parseTags(lines, "v[")
+	require.Error(t, err, "a malformed glob is a caller bug, not a silent match-nothing")
 }
