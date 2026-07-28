@@ -156,6 +156,12 @@ export fun tourSteps() > [TourStep] {
     steps.append(TourStep{ file = "15-charms-custom.buzz", title = "Custom charms: patch the argv",
         desc = "Declare your own charm as a JSON Patch over a spell op's argv; run op:charm to watch the flag splice in.",
         docLabel = "Charms", docSlug = "concepts/charms" });
+    steps.append(TourStep{ file = "16-guardrails.buzz", title = "Guardrails: try to break it",
+        desc = "A deliberate cycle, caught at resolution before anything forks - plus the three other refusals worth knowing.",
+        docLabel = "Wards", docSlug = "concepts/wards" });
+    steps.append(TourStep{ file = "17-output-refs.buzz", title = "Output refs: what they are, and are not",
+        desc = "A failure mints a handle to that run's exact bytes - not a cache key, not deterministic, and not portable off your machine.",
+        docLabel = "Output references", docSlug = "concepts/output-refs" });
     return steps;
 }
 

@@ -199,6 +199,11 @@ The full-command convention is enforced even for streamlined toolchains like Go,
 
 A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listClaimedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionCommand`, `mgs_isOpaque`, and `mgs_listTargets`.
 
+A spell is the layer that carries logic, so it is also the layer worth testing -
+unlike the magusfile that binds it, which should stay thin enough that the
+question never arises. See [Testing](../guides/testing.md) for where that line
+sits and how to write in-file `test "..." {}` blocks.
+
 `mgs_listIgnoreDirs` names the non-source directories your ecosystem generates (a Rust spell returns `["target"]`; a Node spell, `["node_modules"]`). magus prunes them from the input-hashing walk of any project this spell resolves, so a build tree never counts toward the cache key. Dot-directories are always skipped, so only non-dot names belong here.
 
 Buzz (`spells/ruby.buzz`):
@@ -230,6 +235,71 @@ export fun lint(ctx: magus\Context, args: [str]) > void { rb.rubocop({ "cwd": "g
 ```
 
 For cache-correctness rules (declare every input in `needs`, declare `provides` so outputs replay, toolchain-version footguns), see [Spells in the README](../../README.md#custom-spells).
+
+## What magus bounds, and what it does not
+
+A spell is code. That is the design, not a compromise: a build system whose
+configuration cannot express a loop or a conditional pushes that logic into shell
+scripts nobody can cache, or into the CI provider nobody can run locally. Config
+as code means the config is code, and code runs.
+
+So the question is not "how do we stop a spell doing things" - it is "which
+things does magus govern, and which are yours". Being explicit about that line is
+the point of this section.
+
+### What magus does not restrict
+
+A spell has the whole [host module](../reference/buzz/index.md) surface:
+`os\exec`, `http`, `fs`, `crypto`, the lot. It can run any command your shell
+can, reach the network, and read and write files. Nothing here is sandboxed
+per-spell, and importing a spell is trusting it, the same way adding a dependency
+is trusting it.
+
+magus does not attempt to make an untrusted spell safe. It cannot: the feature
+being asked for is arbitrary code execution. What it does instead is make the
+governed path the convenient one, so a spell that behaves ordinarily is
+automatically accounted for.
+
+### What magus bounds
+
+| Bound | Applies to | Default |
+| --- | --- | --- |
+| Concurrency slot | every `os\exec`, so parallel work respects `-j` | on |
+| Own process group | subprocesses, so Ctrl+C reaches magus and not them | on |
+| Target deadline | a whole target, subprocesses included | **off** (`target_timeout`) |
+| Filesystem sandbox | the magus process, where the platform supports it | per [sandbox](sandbox.md) config |
+| CI provider op deadline | each provider spell op | 5s, fixed |
+
+### The runaway guard
+
+A magusfile can express a loop, so a loop that never terminates is something
+someone can write by accident. Nothing else reclaims a CI runner that hit one, so
+`target_timeout` bounds a single target:
+
+```yaml
+# magus.yaml
+target_timeout: 30m
+```
+
+The Buzz VM samples cancellation on loop back edges, so a spinning target notices
+promptly without the interpreter paying for a check on every instruction.
+
+It is **off by default**, deliberately. The deadline covers the whole target,
+subprocesses included - cancelling the context kills what the target spawned - so
+a value set near a legitimate target's runtime turns a slow compile into a failed
+build. Set it well above your slowest target, as a runaway guard rather than a
+performance budget.
+
+### A gap worth knowing
+
+The Buzz language stdlib ships its own `os\execute`, separate from magus's
+`os\exec`. It spawns a subprocess without taking a concurrency slot, without its
+own process group, and without appearing in the run log. It is the one way a
+spell can run work that magus does not account for, and telling the two apart by
+name alone is not obvious.
+
+Prefer `os\exec`. It is the governed path, and everything in the table above
+applies to it.
 
 ## Lifecycle: bind → contribute → compose → run
 
