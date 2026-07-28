@@ -9,7 +9,7 @@ tags: [fmt, module, stdlib, magusfile]
 
 String formatting (printf-style).
 
-> **Naming convention:** import the module under its bare name (`import "fmt"`) and call methods in `camelCase` (`fmt.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "fmt"`), reach members with a backslash, and call methods in `camelCase`: `fmt\someMethod`.
 
 ## Methods
 
@@ -17,7 +17,7 @@ String formatting (printf-style).
 
 Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.
 
-**Signature:** `fmt.sprintf(format, args...) → string` · [source](https://github.com/egladman/magus/blob/main/std/fmt.go#L32)
+**Signature:** `fmt\sprintf(format, args...) → string` · [source](https://github.com/egladman/magus/blob/main/std/fmt.go#L32)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
