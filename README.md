@@ -375,7 +375,7 @@ Full detail, including which tools exist and how to connect, is on the [Agents](
 Full docs live at **[eli.gladman.cc/magus](https://eli.gladman.cc/magus/)**.[^docs-source] The major sections:
 
 - Core concepts: [Targets](docs/concepts/targets.md), [Spells](docs/concepts/spells.md), [Charms](docs/concepts/charms.md), [Operations](docs/concepts/operations.md), [Services](docs/concepts/services.md)
-- Running at scale: [CI](docs/concepts/targets/ci.md), [Daemon](docs/guides/daemon.md), [Remote caching](docs/concepts/remote-cache.md), [MCP](docs/guides/mcp.md), [Telemetry](docs/concepts/telemetry.md)
+- Running at scale: [CI](docs/concepts/targets/ci.md), [CI providers](docs/concepts/ci-providers.md), [Daemon](docs/guides/daemon.md), [Remote caching](docs/concepts/remote-cache.md), [MCP](docs/guides/mcp.md), [Telemetry](docs/concepts/telemetry.md)
 - Reference: [Man pages](docs/reference/manpage/magus.md), [Standard library modules](docs/reference/buzz/index.md), [Debugging](docs/guides/debugging.md), [Output references](docs/concepts/output-refs.md), [Tips and tricks](docs/guides/tips.md)
 
 Inside a workspace, the entry point is the committed [`MAGUS.md`](https://github.com/egladman/magus/blob/main/MAGUS.md): a
