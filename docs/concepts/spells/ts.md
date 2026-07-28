@@ -82,7 +82,7 @@ Inserts `--write`.
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ts["biome-check"]();
@@ -124,7 +124,7 @@ Inserts `--write`.
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     ts["biome-format"]();
@@ -147,7 +147,7 @@ dev-server runs the project's package.json "dev" script via the package manager 
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun serve(ctx: magus\Context, args: [str]) > void {
     ts["dev-server"]();
@@ -206,7 +206,7 @@ Inserts `--fix`.
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ts["eslint"]();
@@ -227,7 +227,7 @@ preflight is a no-op marker op (no command).
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun preflight(ctx: magus\Context, args: [str]) > void {
     ts["preflight"]();
@@ -265,7 +265,7 @@ Replaces `--check` with `--write`.
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     ts["prettier"]();
@@ -292,7 +292,7 @@ scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge 
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ts["tsc"]();
@@ -314,7 +314,7 @@ tsc-build uses TypeScript's project-references incremental build mode (works eve
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ts["tsc-build"]();
@@ -336,7 +336,7 @@ tsc-clean mirrors tsc-build's project-references mode: --clean removes the decla
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
     ts["tsc-clean"]();
@@ -374,7 +374,7 @@ Appends `--reporter=github-actions`.
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     ts["vitest"]();

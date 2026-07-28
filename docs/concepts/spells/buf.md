@@ -63,7 +63,7 @@ Appends `--error-format=github-actions`.
 import "magus";
 import "magus/spell/buf";
 
-magus.project({ "spells": [buf] });
+magus\project({ "spells": [buf] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     buf["buf-lint"]();
@@ -83,7 +83,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/buf";
 
-magus.project({ "spells": [buf] });
+magus\project({ "spells": [buf] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     buf["buf-build"]();
@@ -123,7 +123,7 @@ Replaces `--exit-code` with `-w`.
 import "magus";
 import "magus/spell/buf";
 
-magus.project({ "spells": [buf] });
+magus\project({ "spells": [buf] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     buf["buf-format"]();
@@ -142,7 +142,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/buf";
 
-magus.project({ "spells": [buf] });
+magus\project({ "spells": [buf] });
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     buf["buf-generate"]();
@@ -180,7 +180,7 @@ Appends `--error-format=github-actions`.
 import "magus";
 import "magus/spell/buf";
 
-magus.project({ "spells": [buf] });
+magus\project({ "spells": [buf] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     buf["buf-lint"]();

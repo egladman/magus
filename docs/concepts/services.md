@@ -38,7 +38,7 @@ A service behaves differently depending on how it is reached:
 
 - **Run directly** (`magus run dev`) it is forked in the **foreground** and magus
   **blocks** on it; Ctrl-C signals the process. This is the "run my dev server" case.
-- **Reached as a dependency** (some target's `magus.needs` pulls it in) it is
+- **Reached as a dependency** (some target's `magus\needs` pulls it in) it is
   **supervised in the background**: magus starts it, waits for its readiness probe to
   pass, then lets the dependent run against it. It does not block. The service stops
   when the run ends (or stays warm on the daemon, below).

@@ -1,6 +1,6 @@
 ---
 title: Debugging magusfiles
-description: Drop into an interactive Buzz REPL with magusfile bindings preloaded, or set magus.pry() breakpoints mid-target to inspect frames, locals, and state.
+description: Drop into an interactive Buzz REPL with magusfile bindings preloaded, or set magus\pry() breakpoints mid-target to inspect frames, locals, and state.
 tags:
   [
     debugging,
@@ -19,7 +19,7 @@ tags:
 Magus has two entry points into an interactive debugging REPL:
 
 - [`magus repl`](#interactive-repl): standalone shell with magusfile bindings preloaded.
-- [`magus.pry()`](#maguspry-breakpoint-in-a-magusfile): `binding.pry`-style breakpoint, opens the same REPL mid-target with frame context attached.
+- [`magus\pry()`](#maguspry-breakpoint-in-a-magusfile): `binding.pry`-style breakpoint, opens the same REPL mid-target with frame context attached.
 
 Both share the same evaluator. Pry adds stack-introspection commands (`.where`, `.locals`, `.up`/`.down`, `.step`, ...) on top of the base REPL surface. The [meta-commands](#meta-commands) and [multiline input](#multiline-input) sections apply to both unless noted.
 
@@ -31,11 +31,11 @@ The REPL accepts Buzz expressions and evaluates them against the magusfile runti
 
 ```buzz
 // example session
-> os.execSh("git rev-parse --short HEAD").stdout
+> os\execSh("git rev-parse --short HEAD").stdout
 abc1234
 > go.name
 go
-> os.exec("go", ["build", "./..."])
+> os\exec("go", ["build", "./..."])
 ```
 
 The REPL treats lines starting with `//` as comments and skips them. Type `.help` for the meta-command list, `.exit` (or Ctrl-D) to quit.
@@ -52,16 +52,16 @@ Set the working directory for `import` resolution (default: cwd).
 magus repl -C internal/auth
 ```
 
-## `magus.pry()`: breakpoint in a magusfile
+## `magus\pry()`: breakpoint in a magusfile
 
-Call `magus.pry()` anywhere in a magusfile target to suspend execution and drop into the REPL at that exact point. The REPL inherits the calling Runner's bindings and exposes the surrounding scope.
+Call `magus\pry()` anywhere in a magusfile target to suspend execution and drop into the REPL at that exact point. The REPL inherits the calling Runner's bindings and exposes the surrounding scope.
 
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
     const outputs = ["bin/foo", "bin/bar"];
-    os.exec("go", ["generate", "./..."]);
-    magus.pry();   // execution pauses here; inspect or modify state
-    os.exec("go", ["build", "./..."]);
+    os\exec("go", ["generate", "./..."]);
+    magus\pry();   // execution pauses here; inspect or modify state
+    os\exec("go", ["build", "./..."]);
 }
 ```
 
@@ -74,7 +74,7 @@ magus run build
 
 The prompt is `pry>` at the innermost frame; `pry[N]>` after `.up`/`.down` to frame N.
 
-`magus.pry()` is a no-op during `magus ls` and `magus describe` so it is safe to leave in place during development. Remove it before committing.
+`magus\pry()` is a no-op during `magus ls` and `magus describe` so it is safe to leave in place during development. Remove it before committing.
 
 ## Meta-commands
 

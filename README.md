@@ -116,7 +116,7 @@ bind:[^playground]
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 // Every exported function is a runnable target. It receives a magus\Context,
 // the handle it uses to declare what it needs. magus caches each target's
