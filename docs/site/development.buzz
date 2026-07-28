@@ -14,11 +14,34 @@ import "engine/path" as _;
 import "engine/types" as _;
 import "engine/page" as _;
 
+// registerDevPage adds a synthesized /development/ page to docPages, the corpus
+// every navigation helper walks. addRecord alone only feeds the search index, so
+// without this these pages were reachable by search and invisible to Related,
+// the section list, and the subtree.
+//
+// The landing page is the section's overview, so it anchors the others rather
+// than listing itself.
+fun registerDevPage(title: str, desc: str, url: str, srcRel: str, site: Site) > void {
+    site.docPages.append(DocPage{
+        url = url,
+        title = title,
+        desc = desc,
+        srcRel = srcRel,
+        section = "development",
+        overview = url == "development/",
+    });
+}
+
 // renderDevelopmentPage renders one /development/ page from markdown through the
 // shared renderPage() pipeline (nav, TOC, theme, search index). url ends in "/";
 // srcRel uses the "<dir>/_index.md" marker so rootPrefix/renderBreadcrumb derive the
 // right depth and trail.
 fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void {
+    // Register before rendering. renderRelated looks the CURRENT page up in
+    // docPages and bails when it is absent, so a synthesized page that only
+    // called addRecord (the search index) was searchable but had no Related
+    // section, no section nav, and no subtree entry.
+    registerDevPage(title, desc, url, srcRel, site);
     final html = renderContentHTML(markdown\toHtml(md), "", "");
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
@@ -35,6 +58,7 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
 // slash-terminated and resolve without a directory redirect. searchText is the plain
 // text to index, since the HTML carries no useful prose.
 fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void {
+    registerDevPage(title, desc, url, srcRel, site);
     final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
     final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
     fs\makeDirectory(dir);
